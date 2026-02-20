@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: eco-it-control-center
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    disks:
+      - name: eco-data
+        mountPath: /var/data
+        sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATA_ROOT
+        value: /var/data

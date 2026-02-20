@@ -1,0 +1,1401 @@
+const http = require("http");
+const fs = require("fs/promises");
+const path = require("path");
+const crypto = require("crypto");
+const { URL } = require("url");
+
+const HOST = process.env.HOST || "0.0.0.0";
+const PORT = Number(process.env.PORT || 4000);
+const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : __dirname;
+const DB_PATH = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.join(DATA_ROOT, "db.json");
+const UPLOADS_DIR = process.env.UPLOADS_DIR ? path.resolve(process.env.UPLOADS_DIR) : path.join(DATA_ROOT, "uploads");
+const BACKUPS_DIR = process.env.BACKUPS_DIR ? path.resolve(process.env.BACKUPS_DIR) : path.join(DATA_ROOT, "backups");
+const BUILD_DIR = path.join(__dirname, "..", "build");
+const INDEX_FILE = path.join(BUILD_DIR, "index.html");
+const CAMPUS_MAP = {
+  C1: "Samdach Pan Campus",
+  "C2.1": "Chaktomuk Campus",
+  "C2.2": "Chaktomuk Campus (C2.2)",
+  C3: "Boeung Snor Campus",
+  C4: "Veng Sreng Campus",
+};
+const CAMPUS_NAMES = Object.values(CAMPUS_MAP);
+const TYPE_CODES = {
+  IT: ["PC", "LAP", "TAB", "TV", "SPK", "PRN", "SW", "AP", "CAM"],
+  SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
+};
+const TYPE_LABELS = {
+  PC: "Computer",
+  LAP: "Laptop",
+  TAB: "iPad / Tablet",
+  TV: "TV",
+  SPK: "Speaker",
+  PRN: "Printer",
+  SW: "Switch",
+  AP: "Access Point",
+  CAM: "CCTV Camera",
+  FE: "Fire Extinguisher",
+  SD: "Smoke Detector",
+  EL: "Emergency Light",
+  FB: "Fire Bell",
+  FCP: "Fire Control Panel",
+};
+const CATEGORY_CODE = {
+  IT: "IT",
+  SAFETY: "SF",
+};
+const SHARED_LOCATION_KEYWORDS = [
+  "teacher office",
+  "itc room",
+  "computer lab",
+  "compuer lab",
+  "compuer lap",
+];
+const DEFAULT_USERS = [
+  {
+    id: 1,
+    username: "admin",
+    password: "EcoAdmin@2026!",
+    displayName: "Eco Admin",
+    role: "Admin",
+    campuses: ["ALL"],
+  },
+  {
+    id: 2,
+    username: "viewer",
+    password: "EcoViewer@2026!",
+    displayName: "Eco Viewer",
+    role: "Viewer",
+    campuses: ["Chaktomuk Campus (C2.2)"],
+  },
+];
+const sessions = new Map();
+
+function pad(n, size = 3) {
+  return String(n).padStart(size, "0");
+}
+
+function sendJson(res, status, payload) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,PATCH,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function contentTypeFor(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+      return "application/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".ico":
+      return "image/x-icon";
+    case ".map":
+      return "application/json; charset=utf-8";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function sendStaticFile(req, res, filePath) {
+  const raw = await fs.readFile(filePath);
+  const isCacheableAsset = filePath.includes(`${path.sep}static${path.sep}`);
+  res.writeHead(200, {
+    "Content-Type": contentTypeFor(filePath),
+    "Cache-Control": isCacheableAsset ? "public, max-age=31536000, immutable" : "no-cache",
+  });
+  if (req.method === "HEAD") {
+    res.end();
+    return true;
+  }
+  res.end(raw);
+  return true;
+}
+
+async function maybeServeFrontend(req, res, pathname) {
+  const decodedPath = decodeURIComponent(pathname);
+
+  if (decodedPath.startsWith("/uploads/")) {
+    const uploadRelative = decodedPath.replace(/^\/uploads\//, "");
+    const safeUploadRelative = path
+      .normalize(uploadRelative)
+      .replace(/^(\.\.[/\\])+/, "");
+    const uploadFile = path.join(UPLOADS_DIR, safeUploadRelative);
+    const uploadResolved = path.resolve(uploadFile);
+    const uploadRoot = path.resolve(UPLOADS_DIR) + path.sep;
+    if (!uploadResolved.startsWith(uploadRoot) || !(await fileExists(uploadResolved))) {
+      return false;
+    }
+    return sendStaticFile(req, res, uploadResolved);
+  }
+
+  const normalized = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, "");
+  const safePath = normalized.startsWith(path.sep) ? normalized.slice(1) : normalized;
+  const requestedFile = path.join(BUILD_DIR, safePath);
+
+  if (safePath && (await fileExists(requestedFile))) {
+    return sendStaticFile(req, res, requestedFile);
+  }
+
+  if (await fileExists(INDEX_FILE)) {
+    return sendStaticFile(req, res, INDEX_FILE);
+  }
+  return false;
+}
+
+async function readDb() {
+  try {
+    const raw = await fs.readFile(DB_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+      tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
+      locations: Array.isArray(parsed.locations) ? parsed.locations : [],
+      users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
+      auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+    };
+  } catch {
+    return { assets: [], tickets: [], locations: [], users: DEFAULT_USERS, auditLogs: [] };
+  }
+}
+
+async function writeDb(db) {
+  await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+  await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2));
+}
+
+async function ensureBackupsDir() {
+  await fs.mkdir(BACKUPS_DIR, { recursive: true });
+}
+
+function normalizeImportedDb(input) {
+  const parsed = input && typeof input === "object" ? input : {};
+  return {
+    assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+    tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
+    locations: Array.isArray(parsed.locations) ? parsed.locations : [],
+    users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
+    auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+  };
+}
+
+function appendAuditLog(db, user, action, entity, entityId, summary = "") {
+  const actor = user
+    ? {
+        id: Number(user.id) || 0,
+        username: toText(user.username) || "unknown",
+        displayName: toText(user.displayName) || toText(user.username) || "Unknown",
+        role: toText(user.role) || "Unknown",
+      }
+    : {
+        id: 0,
+        username: "system",
+        displayName: "System",
+        role: "System",
+      };
+  const entry = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    date: new Date().toISOString(),
+    action: toText(action),
+    entity: toText(entity),
+    entityId: toText(entityId),
+    summary: toText(summary),
+    actor,
+  };
+  db.auditLogs = Array.isArray(db.auditLogs) ? db.auditLogs : [];
+  db.auditLogs.unshift(entry);
+  if (db.auditLogs.length > 3000) db.auditLogs = db.auditLogs.slice(0, 3000);
+}
+
+async function ensureUploadsDir() {
+  await fs.mkdir(UPLOADS_DIR, { recursive: true });
+}
+
+function extFromMime(mime) {
+  switch (mime) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return "jpg";
+  }
+}
+
+async function saveDataUrlPhoto(dataUrl, group = "assets") {
+  const raw = toText(dataUrl);
+  const m = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) return "";
+  const mime = m[1].toLowerCase();
+  const base64 = m[2];
+  const ext = extFromMime(mime);
+  const folder = toText(group).replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "assets";
+  await ensureUploadsDir();
+  const folderPath = path.join(UPLOADS_DIR, folder);
+  await fs.mkdir(folderPath, { recursive: true });
+  const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+  const abs = path.join(folderPath, fileName);
+  await fs.writeFile(abs, Buffer.from(base64, "base64"));
+  return `/uploads/${folder}/${fileName}`;
+}
+
+async function normalizePhotoValue(photo, group = "assets") {
+  const raw = toText(photo);
+  if (!raw) return "";
+  if (raw.startsWith("/uploads/")) return raw;
+  if (raw.startsWith("data:image/")) {
+    const saved = await saveDataUrlPhoto(raw, group);
+    return saved || "";
+  }
+  return raw;
+}
+
+async function normalizeHistoryEntries(entries, group = "maintenance") {
+  if (!Array.isArray(entries)) return [];
+  const out = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const photo = await normalizePhotoValue(entry.photo, group);
+    out.push({ ...entry, photo });
+  }
+  return out;
+}
+
+function toUpper(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function toText(value) {
+  return String(value || "").trim();
+}
+
+function normalizeCampusInput(value) {
+  const raw = toText(value);
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (CAMPUS_MAP[upper]) return CAMPUS_MAP[upper];
+  const found = CAMPUS_NAMES.find((name) => name.toUpperCase() === upper);
+  return found || "";
+}
+
+function campusCode(name) {
+  const hit = Object.entries(CAMPUS_MAP).find(([, full]) => full === name);
+  return hit ? hit[0] : "CX";
+}
+
+function validateAsset(body) {
+  const campus = normalizeCampusInput(body.campus);
+  const category = toUpper(body.category);
+  const type = toUpper(body.type);
+  const location = toText(body.location);
+  const assignedTo = toText(body.assignedTo);
+  const brand = toText(body.brand);
+  const model = toText(body.model);
+  const serialNumber = toText(body.serialNumber);
+  const specs = toText(body.specs);
+  const purchaseDate = toText(body.purchaseDate);
+  const warrantyUntil = toText(body.warrantyUntil);
+  const vendor = toText(body.vendor);
+  const notes = toText(body.notes);
+  const nextMaintenanceDate = toText(body.nextMaintenanceDate);
+  const scheduleNote = toText(body.scheduleNote);
+  const repeatMode = toUpper(body.repeatMode) || "NONE";
+  const repeatWeekOfMonth = Number(body.repeatWeekOfMonth || 0);
+  const repeatWeekday = Number(body.repeatWeekday || 0);
+  const photo = toText(body.photo);
+  const status = toText(body.status) || "Active";
+  const requiresUser = ["PC", "TAB", "SPK"].includes(type);
+  const sharedLocation = SHARED_LOCATION_KEYWORDS.some((k) =>
+    location.toLowerCase().includes(k)
+  );
+
+  if (!campus) return "Campus is required";
+  if (!category) return "Category is required";
+  if (!TYPE_CODES[category]) return "Category must be IT or SAFETY";
+  if (!type) return "Type code is required";
+  if (!TYPE_CODES[category].includes(type)) {
+    return `Type code '${type}' is not allowed for ${category}`;
+  }
+  if (requiresUser && !sharedLocation && !assignedTo) {
+    return `User is required for type ${type}`;
+  }
+  if (!["NONE", "MONTHLY_WEEKDAY"].includes(repeatMode)) {
+    return "repeatMode must be NONE or MONTHLY_WEEKDAY";
+  }
+  if (repeatMode === "MONTHLY_WEEKDAY") {
+    if (!(repeatWeekOfMonth >= 1 && repeatWeekOfMonth <= 5)) {
+      return "repeatWeekOfMonth must be between 1 and 5";
+    }
+    if (!(repeatWeekday >= 0 && repeatWeekday <= 6)) {
+      return "repeatWeekday must be between 0 and 6";
+    }
+  }
+
+  return {
+    campus,
+    category,
+    type,
+    location,
+    assignedTo,
+    brand,
+    model,
+    serialNumber,
+    specs,
+    purchaseDate,
+    warrantyUntil,
+    vendor,
+    notes,
+    nextMaintenanceDate,
+    scheduleNote,
+    repeatMode,
+    repeatWeekOfMonth,
+    repeatWeekday,
+    photo,
+    status,
+  };
+}
+
+function validateLocation(body) {
+  const campus = normalizeCampusInput(body.campus);
+  const name = toText(body.name);
+
+  if (!campus) return "Campus is required";
+  if (!name) return "Location name is required";
+
+  return { campus, name };
+}
+
+function validateTicket(body) {
+  const campus = normalizeCampusInput(body.campus);
+  const category = toUpper(body.category);
+  const assetId = toText(body.assetId);
+  const title = toText(body.title);
+  const description = toText(body.description);
+  const requestedBy = toText(body.requestedBy);
+  const priority = toText(body.priority) || "Normal";
+  const status = toText(body.status) || "Open";
+
+  if (!campus) return "Campus is required";
+  if (!category) return "Category is required";
+  if (!title) return "Ticket title is required";
+  if (!requestedBy) return "Requester is required";
+
+  return {
+    campus,
+    category,
+    assetId,
+    title,
+    description,
+    requestedBy,
+    priority,
+    status,
+  };
+}
+
+function normalizeCompletion(value) {
+  const text = toText(value);
+  if (!text) return "Not Yet";
+  if (text === "Done" || text === "Not Yet") return text;
+  return "Not Yet";
+}
+
+function getAuthUser(req) {
+  const authHeader = String(req.headers.authorization || "");
+  if (!authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token) return null;
+  if (token === "local-admin-token") {
+    return sanitizeUser(DEFAULT_USERS[0]);
+  }
+  if (token === "local-viewer-token") {
+    return sanitizeUser(DEFAULT_USERS[1]);
+  }
+  return sessions.get(token) || null;
+}
+
+function requireAdmin(req, res) {
+  const user = getAuthUser(req);
+  if (!user) {
+    sendJson(res, 401, { error: "Unauthorized" });
+    return null;
+  }
+  if (user.role !== "Admin") {
+    sendJson(res, 403, { error: "Admin role required" });
+    return null;
+  }
+  return user;
+}
+
+function normalizeCampusPermissions(input) {
+  const raw = Array.isArray(input) ? input : [input];
+  const out = [];
+  for (const value of raw) {
+    const text = toText(value);
+    if (!text) continue;
+    if (text.toUpperCase() === "ALL") return ["ALL"];
+    const campus = normalizeCampusInput(text);
+    if (campus && !out.includes(campus)) out.push(campus);
+  }
+  return out;
+}
+
+function userCanAccessCampus(user, campusName) {
+  if (!user) return false;
+  if (user.role === "Admin") return true;
+  const campuses = normalizeCampusPermissions(user.campuses);
+  if (!campuses.length) return false;
+  if (campuses.includes("ALL")) return true;
+  return campuses.includes(campusName);
+}
+
+function filterByCampusPermission(list, user, getter) {
+  if (!user) return [];
+  if (user.role === "Admin") return list;
+  const campuses = normalizeCampusPermissions(user.campuses);
+  if (!campuses.length) return [];
+  if (campuses.includes("ALL")) return list;
+  return list.filter((row) => campuses.includes(getter(row)));
+}
+
+function sanitizeUser(user) {
+  const campuses = normalizeCampusPermissions(user.campuses);
+  return {
+    id: Number(user.id),
+    username: toText(user.username),
+    displayName: toText(user.displayName) || toText(user.username),
+    role: toText(user.role) === "Admin" ? "Admin" : "Viewer",
+    campuses: campuses.length ? campuses : ["ALL"],
+  };
+}
+
+function nextAssetSeq(assets, campus, category, type) {
+  const same = assets.filter(
+    (a) => a.campus === campus && a.category === category && a.type === type
+  );
+  if (!same.length) return 1;
+  return Math.max(...same.map((a) => Number(a.seq) || 0)) + 1;
+}
+
+function nextTicketCode(tickets, campus) {
+  const prefix = `${campusCode(campus)}-TCK-`;
+  const nums = tickets
+    .filter((t) => typeof t.ticketNo === "string" && t.ticketNo.startsWith(prefix))
+    .map((t) => Number(String(t.ticketNo).split("-").pop() || 0))
+    .filter((n) => Number.isFinite(n));
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `${prefix}${pad(next, 3)}`;
+}
+
+function dashboard(db, campus) {
+  const campusAssets = campus
+    ? db.assets.filter((a) => a.campus === campus)
+    : db.assets;
+  const campusTickets = campus
+    ? db.tickets.filter((t) => t.campus === campus)
+    : db.tickets;
+
+  const totalAssets = campusAssets.length;
+  const itAssets = campusAssets.filter((a) => a.category === "IT").length;
+  const safetyAssets = campusAssets.filter((a) => a.category === "SAFETY").length;
+  const openTickets = campusTickets.filter((t) => t.status !== "Resolved").length;
+
+  const byCampus = CAMPUS_NAMES
+    .map((name) => {
+      const assets = db.assets.filter((a) => a.campus === name).length;
+      const tickets = db.tickets.filter(
+        (t) => t.campus === name && t.status !== "Resolved"
+      ).length;
+      return { campus: name, assets, openTickets: tickets };
+    })
+    .filter((row) => row.assets || row.openTickets);
+
+  return { totalAssets, itAssets, safetyAssets, openTickets, byCampus };
+}
+
+async function parseBody(req) {
+  const chunks = [];
+  let size = 0;
+
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 20 * 1024 * 1024) {
+      throw new Error("Payload too large");
+    }
+    chunks.push(chunk);
+  }
+
+  if (!chunks.length) return {};
+  const raw = Buffer.concat(chunks).toString("utf8");
+  return JSON.parse(raw);
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    if (!req.url || !req.method) {
+      sendJson(res, 400, { error: "Bad request" });
+      return;
+    }
+
+    if (req.method === "OPTIONS") {
+      sendJson(res, 204, {});
+      return;
+    }
+
+    const url = new URL(req.url, `http://${HOST}:${PORT}`);
+
+    if (
+      !url.pathname.startsWith("/api/") &&
+      (req.method === "GET" || req.method === "HEAD")
+    ) {
+      const served = await maybeServeFrontend(req, res, url.pathname);
+      if (served) return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/health") {
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/backup/export") {
+      if (!requireAdmin(req, res)) return;
+      const db = await readDb();
+      sendJson(res, 200, {
+        generatedAt: new Date().toISOString(),
+        db: normalizeImportedDb(db),
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/backup/create") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const db = await readDb();
+      await ensureBackupsDir();
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const name = `backup-${stamp}.json`;
+      const filePath = path.join(BACKUPS_DIR, name);
+      await fs.writeFile(filePath, JSON.stringify(normalizeImportedDb(db), null, 2));
+      appendAuditLog(db, admin, "BACKUP_CREATE", "backup", name, "Server backup file created");
+      await writeDb(db);
+      sendJson(res, 201, { ok: true, file: name });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/backup/import") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const imported = normalizeImportedDb(body && body.db ? body.db : body);
+      appendAuditLog(imported, admin, "BACKUP_IMPORT", "system", "db", "Database restored from backup");
+      await writeDb(imported);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/audit-logs") {
+      if (!requireAdmin(req, res)) return;
+      const db = await readDb();
+      const logs = Array.isArray(db.auditLogs) ? db.auditLogs : [];
+      sendJson(res, 200, { logs: logs.slice(0, 300) });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/upload-photo") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const folder = toText(body.folder) || "assets";
+      const photoInput = toText(body.photo || body.dataUrl);
+      if (!photoInput.startsWith("data:image/")) {
+        sendJson(res, 400, { error: "image dataUrl is required" });
+        return;
+      }
+      const photo = await normalizePhotoValue(photoInput, folder);
+      if (!photo) {
+        sendJson(res, 400, { error: "Invalid image dataUrl" });
+        return;
+      }
+      const db = await readDb();
+      appendAuditLog(
+        db,
+        admin,
+        "UPLOAD_PHOTO",
+        "photo",
+        photo,
+        `folder=${folder}`
+      );
+      await writeDb(db);
+      sendJson(res, 201, { photo });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/login") {
+      const body = await parseBody(req);
+      const username = toText(body.username);
+      const password = toText(body.password);
+      if (!username || !password) {
+        sendJson(res, 400, { error: "Username and password are required" });
+        return;
+      }
+      const db = await readDb();
+      const user = db.users.find(
+        (u) =>
+          toText(u.username).toLowerCase() === username.toLowerCase() &&
+          toText(u.password) === password
+      );
+      if (!user) {
+        sendJson(res, 401, { error: "Invalid username or password" });
+        return;
+      }
+      const token = crypto.randomBytes(24).toString("hex");
+      const safeUser = sanitizeUser(user);
+      sessions.set(token, safeUser);
+      sendJson(res, 200, { token, user: safeUser });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/auth/me") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      sendJson(res, 200, { user });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/logout") {
+      const authHeader = String(req.headers.authorization || "");
+      if (authHeader.startsWith("Bearer ")) {
+        const token = authHeader.slice(7).trim();
+        sessions.delete(token);
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/auth/users") {
+      if (!requireAdmin(req, res)) return;
+      const db = await readDb();
+      const users = (Array.isArray(db.users) ? db.users : DEFAULT_USERS).map(sanitizeUser);
+      sendJson(res, 200, { users });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/users") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const username = toText(body.username).toLowerCase();
+      const password = toText(body.password);
+      const displayName = toText(body.displayName) || username;
+      const role = toText(body.role) === "Admin" ? "Admin" : "Viewer";
+      const campuses = normalizeCampusPermissions(body.campuses);
+
+      if (!username || !password) {
+        sendJson(res, 400, { error: "Username and password are required" });
+        return;
+      }
+      if (role !== "Admin" && !campuses.length) {
+        sendJson(res, 400, { error: "At least one campus is required for Viewer" });
+        return;
+      }
+
+      const db = await readDb();
+      const users = Array.isArray(db.users) ? db.users : DEFAULT_USERS;
+      const exists = users.some((u) => toText(u.username).toLowerCase() === username);
+      if (exists) {
+        sendJson(res, 409, { error: "Username already exists" });
+        return;
+      }
+
+      const nextId = users.length
+        ? Math.max(...users.map((u) => Number(u.id) || 0)) + 1
+        : 1;
+      const newUser = {
+        id: nextId,
+        username,
+        password,
+        displayName,
+        role,
+        campuses: role === "Admin" ? ["ALL"] : campuses,
+      };
+
+      users.push(newUser);
+      db.users = users;
+      appendAuditLog(
+        db,
+        admin,
+        "CREATE",
+        "auth_user",
+        String(newUser.id),
+        `username=${newUser.username}; role=${newUser.role}; campuses=${newUser.campuses.join(",")}`
+      );
+      await writeDb(db);
+      sendJson(res, 201, { user: sanitizeUser(newUser) });
+      return;
+    }
+
+    if (req.method === "PATCH" && url.pathname.startsWith("/api/auth/users/")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/auth/users/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const body = await parseBody(req);
+      const role = toText(body.role) === "Admin" ? "Admin" : "Viewer";
+      const campuses = normalizeCampusPermissions(body.campuses);
+      if (role !== "Admin" && !campuses.length) {
+        sendJson(res, 400, { error: "At least one campus is required for Viewer" });
+        return;
+      }
+
+      const db = await readDb();
+      const users = Array.isArray(db.users) ? db.users : DEFAULT_USERS;
+      const idx = users.findIndex((u) => Number(u.id) === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "User not found" });
+        return;
+      }
+      users[idx].role = role;
+      users[idx].campuses = role === "Admin" ? ["ALL"] : campuses;
+      db.users = users;
+      appendAuditLog(
+        db,
+        admin,
+        "UPDATE",
+        "auth_user_permission",
+        String(id),
+        `role=${role}; campuses=${(role === "Admin" ? ["ALL"] : campuses).join(",")}`
+      );
+      await writeDb(db);
+
+      const safeUser = sanitizeUser(users[idx]);
+      for (const [token, sessionUser] of sessions.entries()) {
+        if (Number(sessionUser.id) === id) {
+          sessions.set(token, safeUser);
+        }
+      }
+      sendJson(res, 200, { user: safeUser });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/dashboard") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const campus = normalizeCampusInput(url.searchParams.get("campus"));
+      const db = await readDb();
+      const scopedAssets = filterByCampusPermission(db.assets, user, (a) => a.campus);
+      const scopedTickets = filterByCampusPermission(db.tickets, user, (t) => t.campus);
+      const scopedDb = { ...db, assets: scopedAssets, tickets: scopedTickets };
+      const selectedCampus =
+        campus && userCanAccessCampus(user, campus) ? campus : "";
+      sendJson(res, 200, { stats: dashboard(scopedDb, selectedCampus || "") });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/assets") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const campus = normalizeCampusInput(url.searchParams.get("campus"));
+      const category = toUpper(url.searchParams.get("category"));
+      const search = toText(url.searchParams.get("q")).toLowerCase();
+
+      const db = await readDb();
+      let assets = filterByCampusPermission(db.assets, user, (a) => a.campus);
+      if (campus && !userCanAccessCampus(user, campus)) {
+        sendJson(res, 200, { assets: [] });
+        return;
+      }
+      if (campus) assets = assets.filter((a) => a.campus === campus);
+      if (category) assets = assets.filter((a) => a.category === category);
+      if (search) {
+        assets = assets.filter((a) => {
+          const hay = `${a.assetId} ${a.name} ${a.location}`.toLowerCase();
+          return hay.includes(search);
+        });
+      }
+      sendJson(res, 200, { assets });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/assets") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const cleaned = validateAsset(body);
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+
+      const assetPhoto = await normalizePhotoValue(cleaned.photo, "assets");
+      const initialHistory = await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
+      const db = await readDb();
+      const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
+      const assetId = `${campusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || cleaned.category}-${cleaned.type}-${pad(seq, 4)}`;
+
+      const asset = {
+        id: Date.now(),
+        seq,
+        assetId,
+        name: assetId,
+        maintenanceHistory: initialHistory,
+        created: new Date().toISOString(),
+        ...cleaned,
+        photo: assetPhoto,
+      };
+
+      db.assets.unshift(asset);
+      appendAuditLog(db, admin, "CREATE", "asset", asset.assetId, `${asset.campus} | ${asset.location}`);
+      await writeDb(db);
+      sendJson(res, 201, { asset });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/locations") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const campus = normalizeCampusInput(url.searchParams.get("campus"));
+      const db = await readDb();
+      let locations = filterByCampusPermission(db.locations, user, (l) => l.campus);
+      if (campus && !userCanAccessCampus(user, campus)) {
+        sendJson(res, 200, { locations: [] });
+        return;
+      }
+      if (campus) locations = locations.filter((l) => l.campus === campus);
+      sendJson(res, 200, { locations });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/locations") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const cleaned = validateLocation(body);
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+
+      const db = await readDb();
+      const duplicate = db.locations.some(
+        (l) =>
+          l.campus === cleaned.campus &&
+          String(l.name).toLowerCase() === cleaned.name.toLowerCase()
+      );
+      if (duplicate) {
+        sendJson(res, 400, { error: "Location already exists for this campus" });
+        return;
+      }
+
+      const location = {
+        id: Date.now(),
+        campus: cleaned.campus,
+        name: cleaned.name,
+      };
+      db.locations.unshift(location);
+      appendAuditLog(db, admin, "CREATE", "location", String(location.id), `${location.campus} | ${location.name}`);
+      await writeDb(db);
+      sendJson(res, 201, { location });
+      return;
+    }
+
+    if (req.method === "PATCH" && url.pathname.startsWith("/api/locations/")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/locations/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const cleaned = validateLocation(body);
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+
+      const db = await readDb();
+      const idx = db.locations.findIndex((l) => l.id === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Location not found" });
+        return;
+      }
+
+      db.locations[idx].campus = cleaned.campus;
+      db.locations[idx].name = cleaned.name;
+      appendAuditLog(db, admin, "UPDATE", "location", String(id), `${cleaned.campus} | ${cleaned.name}`);
+      await writeDb(db);
+      sendJson(res, 200, { location: db.locations[idx] });
+      return;
+    }
+
+    if (req.method === "DELETE" && url.pathname.startsWith("/api/locations/")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/locations/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const db = await readDb();
+      const target = db.locations.find((l) => l.id === id);
+      const before = db.locations.length;
+      db.locations = db.locations.filter((l) => l.id !== id);
+      if (db.locations.length === before) {
+        sendJson(res, 404, { error: "Location not found" });
+        return;
+      }
+      appendAuditLog(
+        db,
+        admin,
+        "DELETE",
+        "location",
+        String(id),
+        target ? `${target.campus} | ${target.name}` : ""
+      );
+      await writeDb(db);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "PATCH" && url.pathname.startsWith("/api/assets/") && url.pathname.endsWith("/status")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/assets/", "").replace("/status", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const status = toText(body.status);
+      if (!status) {
+        sendJson(res, 400, { error: "Status is required" });
+        return;
+      }
+
+      const db = await readDb();
+      const idx = db.assets.findIndex((a) => a.id === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+
+      const incomingHistory = Array.isArray(body.statusHistory) ? body.statusHistory : [];
+      const currentStatusHistory = Array.isArray(db.assets[idx].statusHistory)
+        ? db.assets[idx].statusHistory
+        : [];
+      const statusHistory =
+        incomingHistory.length > 0
+          ? incomingHistory
+          : [
+              {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                fromStatus: toText(body.fromStatus) || toText(db.assets[idx].status) || "Unknown",
+                toStatus: status,
+                reason: toText(body.reason),
+                by: toText(body.by),
+              },
+              ...currentStatusHistory,
+            ];
+
+      db.assets[idx].status = status;
+      db.assets[idx].statusHistory = statusHistory;
+      appendAuditLog(db, admin, "UPDATE_STATUS", "asset", db.assets[idx].assetId || String(id), status);
+      await writeDb(db);
+      sendJson(res, 200, { asset: db.assets[idx] });
+      return;
+    }
+
+    const historyPatchMatch = url.pathname.match(/^\/api\/assets\/(\d+)\/history\/(\d+)$/);
+    if (req.method === "PATCH" && historyPatchMatch) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const assetId = Number(historyPatchMatch[1]);
+      const entryId = Number(historyPatchMatch[2]);
+      if (!assetId || !entryId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const nextDate = toText(body.date);
+      const nextType = toText(body.type);
+      const nextNote = toText(body.note);
+      const nextCost = toText(body.cost);
+      const nextBy = toText(body.by);
+      const nextPhoto = await normalizePhotoValue(body.photo, "maintenance");
+      const nextCompletion = normalizeCompletion(body.completion);
+      const nextCondition = toText(body.condition);
+
+      const db = await readDb();
+      const idx = db.assets.findIndex((a) => a.id === assetId);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+
+      const history = Array.isArray(db.assets[idx].maintenanceHistory)
+        ? db.assets[idx].maintenanceHistory
+        : [];
+      const hIdx = history.findIndex((h) => Number(h.id) === entryId);
+      if (hIdx === -1) {
+        sendJson(res, 404, { error: "History record not found" });
+        return;
+      }
+
+      const current = history[hIdx] || {};
+      const updated = {
+        ...current,
+        date: nextDate || toText(current.date),
+        type: nextType || toText(current.type),
+        completion: nextCompletion || normalizeCompletion(current.completion),
+        condition: nextCondition,
+        note: nextNote || toText(current.note),
+        cost: nextCost,
+        by: nextBy,
+        photo: nextPhoto,
+      };
+      if (!updated.date || !updated.type || !updated.note) {
+        sendJson(res, 400, { error: "date, type, note are required" });
+        return;
+      }
+
+      history[hIdx] = updated;
+      db.assets[idx].maintenanceHistory = history;
+      appendAuditLog(
+        db,
+        admin,
+        "UPDATE",
+        "maintenance_record",
+        `${db.assets[idx].assetId || assetId}#${entryId}`,
+        `${updated.type} | ${updated.completion || "Not Yet"}`
+      );
+      await writeDb(db);
+      sendJson(res, 200, { asset: db.assets[idx], entry: history[hIdx] });
+      return;
+    }
+
+    const historyDeleteMatch = url.pathname.match(/^\/api\/assets\/(\d+)\/history\/(\d+)$/);
+    if (req.method === "DELETE" && historyDeleteMatch) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const assetId = Number(historyDeleteMatch[1]);
+      const entryId = Number(historyDeleteMatch[2]);
+      if (!assetId || !entryId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const db = await readDb();
+      const idx = db.assets.findIndex((a) => a.id === assetId);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+
+      const history = Array.isArray(db.assets[idx].maintenanceHistory)
+        ? db.assets[idx].maintenanceHistory
+        : [];
+      const before = history.length;
+      db.assets[idx].maintenanceHistory = history.filter((h) => Number(h.id) !== entryId);
+      if (db.assets[idx].maintenanceHistory.length === before) {
+        sendJson(res, 404, { error: "History record not found" });
+        return;
+      }
+
+      appendAuditLog(
+        db,
+        admin,
+        "DELETE",
+        "maintenance_record",
+        `${db.assets[idx].assetId || assetId}#${entryId}`,
+        "Maintenance record deleted"
+      );
+      await writeDb(db);
+      sendJson(res, 200, { asset: db.assets[idx], ok: true });
+      return;
+    }
+
+    if (
+      req.method === "PATCH" &&
+      url.pathname.startsWith("/api/assets/") &&
+      !url.pathname.endsWith("/status") &&
+      !url.pathname.endsWith("/history") &&
+      !url.pathname.includes("/history/")
+    ) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/assets/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const db = await readDb();
+      const idx = db.assets.findIndex((a) => a.id === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const current = db.assets[idx];
+      const cleaned = validateAsset({
+        ...current,
+        ...body,
+      });
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+
+      const nextPhoto = await normalizePhotoValue(cleaned.photo, "assets");
+      const nextHistory =
+        body.maintenanceHistory === undefined
+          ? current.maintenanceHistory
+          : await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
+      const photoChanged = toText(current.photo) !== toText(nextPhoto);
+      db.assets[idx] = {
+        ...current,
+        ...cleaned,
+        photo: nextPhoto,
+        maintenanceHistory: nextHistory,
+        name: current.assetId,
+      };
+      appendAuditLog(
+        db,
+        admin,
+        "UPDATE",
+        "asset",
+        db.assets[idx].assetId || String(id),
+        `${db.assets[idx].campus} | ${db.assets[idx].location}${photoChanged ? " | photo updated" : ""}`
+      );
+      await writeDb(db);
+      sendJson(res, 200, { asset: db.assets[idx] });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname.startsWith("/api/assets/") && url.pathname.endsWith("/history")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/assets/", "").replace("/history", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const date = toText(body.date);
+      const type = toText(body.type);
+      const note = toText(body.note);
+      const cost = toText(body.cost);
+      const by = toText(body.by);
+      const photo = await normalizePhotoValue(body.photo, "maintenance");
+      const completion = normalizeCompletion(body.completion);
+      const condition = toText(body.condition);
+      if (!date || !type || !note) {
+        sendJson(res, 400, { error: "date, type, note are required" });
+        return;
+      }
+
+      const db = await readDb();
+      const idx = db.assets.findIndex((a) => a.id === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+
+      const entry = {
+        id: Date.now(),
+        date,
+        type,
+        completion,
+        condition,
+        note,
+        cost,
+        by,
+        photo,
+      };
+      db.assets[idx].maintenanceHistory = Array.isArray(db.assets[idx].maintenanceHistory)
+        ? [entry, ...db.assets[idx].maintenanceHistory]
+        : [entry];
+      appendAuditLog(
+        db,
+        admin,
+        "CREATE",
+        "maintenance_record",
+        `${db.assets[idx].assetId || id}#${entry.id}`,
+        `${entry.type} | ${entry.completion || "Not Yet"}`
+      );
+      await writeDb(db);
+      sendJson(res, 201, { asset: db.assets[idx], entry });
+      return;
+    }
+
+    if (req.method === "DELETE" && url.pathname.startsWith("/api/assets/")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/assets/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const db = await readDb();
+      const target = db.assets.find((a) => a.id === id);
+      const before = db.assets.length;
+      db.assets = db.assets.filter((a) => a.id !== id);
+
+      if (db.assets.length === before) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+
+      appendAuditLog(
+        db,
+        admin,
+        "DELETE",
+        "asset",
+        target?.assetId || String(id),
+        target ? `${target.campus} | ${target.location}` : ""
+      );
+      await writeDb(db);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/tickets") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const campus = normalizeCampusInput(url.searchParams.get("campus"));
+      const status = toText(url.searchParams.get("status"));
+
+      const db = await readDb();
+      let tickets = filterByCampusPermission(db.tickets, user, (t) => t.campus);
+      if (campus && !userCanAccessCampus(user, campus)) {
+        sendJson(res, 200, { tickets: [] });
+        return;
+      }
+      if (campus) tickets = tickets.filter((t) => t.campus === campus);
+      if (status) tickets = tickets.filter((t) => t.status === status);
+      sendJson(res, 200, { tickets });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/tickets") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const cleaned = validateTicket(body);
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+
+      const db = await readDb();
+      const ticket = {
+        id: Date.now(),
+        ticketNo: nextTicketCode(db.tickets, cleaned.campus),
+        created: new Date().toISOString(),
+        ...cleaned,
+      };
+
+      db.tickets.unshift(ticket);
+      appendAuditLog(db, admin, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title}`);
+      await writeDb(db);
+      sendJson(res, 201, { ticket });
+      return;
+    }
+
+    if (req.method === "PATCH" && url.pathname.startsWith("/api/tickets/") && url.pathname.endsWith("/status")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/tickets/", "").replace("/status", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const status = toText(body.status);
+      if (!status) {
+        sendJson(res, 400, { error: "Status is required" });
+        return;
+      }
+
+      const db = await readDb();
+      const idx = db.tickets.findIndex((t) => t.id === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Ticket not found" });
+        return;
+      }
+
+      db.tickets[idx].status = status;
+      appendAuditLog(db, admin, "UPDATE_STATUS", "ticket", db.tickets[idx].ticketNo || String(id), status);
+      await writeDb(db);
+      sendJson(res, 200, { ticket: db.tickets[idx] });
+      return;
+    }
+
+    sendJson(res, 404, { error: "Not found" });
+  } catch (err) {
+    sendJson(res, 500, {
+      error: err instanceof Error ? err.message : "Server error",
+    });
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  const bindHost = HOST === "0.0.0.0" ? "localhost" : HOST;
+  console.log(`API running at http://${bindHost}:${PORT}`);
+});

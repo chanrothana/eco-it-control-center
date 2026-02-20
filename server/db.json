@@ -1,0 +1,28 @@
+{
+  "assets": [],
+  "tickets": [],
+  "locations": [],
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password": "EcoAdmin@2026!",
+      "displayName": "Eco Admin",
+      "role": "Admin",
+      "campuses": [
+        "ALL"
+      ]
+    },
+    {
+      "id": 2,
+      "username": "viewer",
+      "password": "EcoViewer@2026!",
+      "displayName": "Eco Viewer",
+      "role": "Viewer",
+      "campuses": [
+        "Chaktomuk Campus (C2.2)"
+      ]
+    }
+  ],
+  "auditLogs": []
+}
