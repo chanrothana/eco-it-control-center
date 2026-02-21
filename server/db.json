@@ -24,5 +24,20 @@
       ]
     }
   ],
-  "auditLogs": []
+  "auditLogs": [
+    {
+      "id": 1771582800972,
+      "date": "2026-02-20T10:20:00.656Z",
+      "action": "BACKUP_IMPORT",
+      "entity": "system",
+      "entityId": "db",
+      "summary": "Database restored from backup",
+      "actor": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Admin"
+      }
+    }
+  ]
 }

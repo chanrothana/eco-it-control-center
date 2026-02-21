@@ -23,8 +23,9 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "sh -c 'node server/server.js & react-scripts start'",
-    "start:phone": "sh -c 'HOST=0.0.0.0 node server/server.js & HOST=0.0.0.0 react-scripts start'",
+    "start": "node scripts/start-safe.js",
+    "start:safe": "node scripts/start-safe.js",
+    "start:phone": "node scripts/start-safe.js --phone",
     "api": "node server/server.js",
     "start:prod": "node server/server.js",
     "start:all": "npm run start",

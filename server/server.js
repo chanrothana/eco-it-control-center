@@ -1,13 +1,16 @@
 const http = require("http");
+const fsSync = require("fs");
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const { DatabaseSync } = require("node:sqlite");
 const { URL } = require("url");
 
-const HOST = process.env.HOST || "0.0.0.0";
+const HOST = process.env.API_HOST || process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 4000);
 const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : __dirname;
 const DB_PATH = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.join(DATA_ROOT, "db.json");
+const SQLITE_PATH = process.env.SQLITE_PATH ? path.resolve(process.env.SQLITE_PATH) : path.join(DATA_ROOT, "data.sqlite");
 const UPLOADS_DIR = process.env.UPLOADS_DIR ? path.resolve(process.env.UPLOADS_DIR) : path.join(DATA_ROOT, "uploads");
 const BACKUPS_DIR = process.env.BACKUPS_DIR ? path.resolve(process.env.BACKUPS_DIR) : path.join(DATA_ROOT, "backups");
 const BUILD_DIR = path.join(__dirname, "..", "build");
@@ -21,13 +24,16 @@ const CAMPUS_MAP = {
 };
 const CAMPUS_NAMES = Object.values(CAMPUS_MAP);
 const TYPE_CODES = {
-  IT: ["PC", "LAP", "TAB", "TV", "SPK", "PRN", "SW", "AP", "CAM"],
+  IT: ["PC", "LAP", "TAB", "MON", "KBD", "MSE", "TV", "SPK", "PRN", "SW", "AP", "CAM"],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
 };
 const TYPE_LABELS = {
   PC: "Computer",
   LAP: "Laptop",
   TAB: "iPad / Tablet",
+  MON: "Monitor",
+  KBD: "Keyboard",
+  MSE: "Mouse",
   TV: "TV",
   SPK: "Speaker",
   PRN: "Printer",
@@ -70,6 +76,174 @@ const DEFAULT_USERS = [
   },
 ];
 const sessions = new Map();
+const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs"];
+const PASSWORD_PREFIX = "scrypt$";
+
+let sqliteDb;
+
+function mapDbToSqlRows(db) {
+  return {
+    assets: Array.isArray(db.assets) ? db.assets : [],
+    tickets: Array.isArray(db.tickets) ? db.tickets : [],
+    locations: Array.isArray(db.locations) ? db.locations : [],
+    users: Array.isArray(db.users) ? db.users : [],
+    audit_logs: Array.isArray(db.auditLogs) ? db.auditLogs : [],
+  };
+}
+
+function mapSqlRowsToDb(rowsByTable) {
+  return {
+    assets: Array.isArray(rowsByTable.assets) ? rowsByTable.assets : [],
+    tickets: Array.isArray(rowsByTable.tickets) ? rowsByTable.tickets : [],
+    locations: Array.isArray(rowsByTable.locations) ? rowsByTable.locations : [],
+    users: Array.isArray(rowsByTable.users) ? rowsByTable.users : [],
+    auditLogs: Array.isArray(rowsByTable.audit_logs) ? rowsByTable.audit_logs : [],
+  };
+}
+
+function parseSqlPayload(raw, tableName) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    console.warn(`Skipping invalid JSON row in table ${tableName}`);
+    return null;
+  }
+}
+
+function readLegacyJsonDbSync() {
+  try {
+    const raw = fsSync.readFileSync(DB_PATH, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function openSqlite() {
+  if (sqliteDb) return sqliteDb;
+  fsSync.mkdirSync(path.dirname(SQLITE_PATH), { recursive: true });
+  sqliteDb = new DatabaseSync(SQLITE_PATH);
+  sqliteDb.exec("PRAGMA journal_mode = WAL;");
+  sqliteDb.exec("PRAGMA synchronous = NORMAL;");
+  sqliteDb.exec(`
+    CREATE TABLE IF NOT EXISTS assets (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tickets (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS locations (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS users (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+  `);
+  return sqliteDb;
+}
+
+function isHashedPassword(value) {
+  return toText(value).startsWith(PASSWORD_PREFIX);
+}
+
+function hashPassword(password) {
+  const plain = toText(password);
+  if (!plain) return "";
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = crypto.scryptSync(plain, salt, 64).toString("hex");
+  return `${PASSWORD_PREFIX}${salt}$${derived}`;
+}
+
+function verifyPassword(stored, input) {
+  const source = toText(stored);
+  const plain = toText(input);
+  if (!source || !plain) return false;
+
+  if (!isHashedPassword(source)) {
+    return source === plain;
+  }
+
+  const parts = source.split("$");
+  if (parts.length !== 3) return false;
+  const salt = parts[1];
+  const digest = parts[2];
+  if (!salt || !digest) return false;
+
+  const expected = Buffer.from(digest, "hex");
+  const actual = crypto.scryptSync(plain, salt, expected.length);
+  if (expected.length !== actual.length) return false;
+  return crypto.timingSafeEqual(expected, actual);
+}
+
+function looksLikeBackupPayload(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const obj = input;
+  return (
+    Object.prototype.hasOwnProperty.call(obj, "assets") ||
+    Object.prototype.hasOwnProperty.call(obj, "tickets") ||
+    Object.prototype.hasOwnProperty.call(obj, "locations") ||
+    Object.prototype.hasOwnProperty.call(obj, "users") ||
+    Object.prototype.hasOwnProperty.call(obj, "auditLogs")
+  );
+}
+
+function replaceSqliteDataSync(dbObject) {
+  const db = openSqlite();
+  const dbRows = mapDbToSqlRows(dbObject);
+  const insertStmt = {};
+  const deleteStmt = {};
+  for (const table of SQLITE_TABLES) {
+    insertStmt[table] = db.prepare(`INSERT INTO ${table} (position, payload) VALUES (?, ?)`);
+    deleteStmt[table] = db.prepare(`DELETE FROM ${table}`);
+  }
+
+  db.exec("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    for (const table of SQLITE_TABLES) {
+      deleteStmt[table].run();
+      const rows = Array.isArray(dbRows[table]) ? dbRows[table] : [];
+      for (let i = 0; i < rows.length; i += 1) {
+        insertStmt[table].run(i, JSON.stringify(rows[i]));
+      }
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+function isSqliteEmptySync() {
+  const db = openSqlite();
+  const countStmt = {};
+  for (const table of SQLITE_TABLES) {
+    countStmt[table] = db.prepare(`SELECT COUNT(*) AS c FROM ${table}`);
+  }
+  return SQLITE_TABLES.every((table) => Number(countStmt[table].get().c || 0) === 0);
+}
+
+function initStorageSync() {
+  openSqlite();
+  if (!isSqliteEmptySync()) return;
+  const legacy = readLegacyJsonDbSync();
+  if (!legacy) return;
+  const imported = normalizeImportedDb(legacy);
+  replaceSqliteDataSync(imported);
+  console.log(`Imported legacy JSON database into SQLite: ${path.basename(SQLITE_PATH)}`);
+}
 
 function pad(n, size = 3) {
   return String(n).padStart(size, "0");
@@ -170,24 +344,33 @@ async function maybeServeFrontend(req, res, pathname) {
 }
 
 async function readDb() {
-  try {
-    const raw = await fs.readFile(DB_PATH, "utf8");
-    const parsed = JSON.parse(raw);
-    return {
-      assets: Array.isArray(parsed.assets) ? parsed.assets : [],
-      tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
-      locations: Array.isArray(parsed.locations) ? parsed.locations : [],
-      users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
-      auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
-    };
-  } catch {
-    return { assets: [], tickets: [], locations: [], users: DEFAULT_USERS, auditLogs: [] };
+  const db = openSqlite();
+  const selectStmt = {};
+  for (const table of SQLITE_TABLES) {
+    selectStmt[table] = db.prepare(`SELECT payload FROM ${table} ORDER BY position ASC, row_id ASC`);
   }
+
+  const rowsByTable = {};
+  for (const table of SQLITE_TABLES) {
+    const rows = selectStmt[table].all();
+    rowsByTable[table] = rows
+      .map((row) => parseSqlPayload(row.payload, table))
+      .filter((row) => row && typeof row === "object");
+  }
+
+  const mapped = normalizeImportedDb(mapSqlRowsToDb(rowsByTable));
+  if (!Array.isArray(mapped.users) || !mapped.users.length) {
+    mapped.users = [...DEFAULT_USERS];
+  }
+  return mapped;
 }
 
 async function writeDb(db) {
-  await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-  await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2));
+  const normalized = normalizeImportedDb(db);
+  if (!Array.isArray(normalized.users) || !normalized.users.length) {
+    normalized.users = [...DEFAULT_USERS];
+  }
+  replaceSqliteDataSync(normalized);
 }
 
 async function ensureBackupsDir() {
@@ -204,6 +387,8 @@ function normalizeImportedDb(input) {
     auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
   };
 }
+
+initStorageSync();
 
 function appendAuditLog(db, user, action, entity, entityId, summary = "") {
   const actor = user
@@ -317,7 +502,10 @@ function validateAsset(body) {
   const campus = normalizeCampusInput(body.campus);
   const category = toUpper(body.category);
   const type = toUpper(body.type);
+  const pcType = type === "PC" ? (toText(body.pcType) || "Desktop") : "";
   const location = toText(body.location);
+  const setCode = toText(body.setCode);
+  const parentAssetId = toUpper(body.parentAssetId);
   const assignedTo = toText(body.assignedTo);
   const brand = toText(body.brand);
   const model = toText(body.model);
@@ -365,7 +553,10 @@ function validateAsset(body) {
     campus,
     category,
     type,
+    pcType,
     location,
+    setCode,
+    parentAssetId,
     assignedTo,
     brand,
     model,
@@ -556,7 +747,13 @@ async function parseBody(req) {
 
   if (!chunks.length) return {};
   const raw = Buffer.concat(chunks).toString("utf8");
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const err = new Error("Invalid JSON payload");
+    err.statusCode = 400;
+    throw err;
+  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -615,7 +812,12 @@ const server = http.createServer(async (req, res) => {
       const admin = requireAdmin(req, res);
       if (!admin) return;
       const body = await parseBody(req);
-      const imported = normalizeImportedDb(body && body.db ? body.db : body);
+      const payload = body && Object.prototype.hasOwnProperty.call(body, "db") ? body.db : body;
+      if (!looksLikeBackupPayload(payload)) {
+        sendJson(res, 400, { error: "Invalid backup format. Please select a valid backup JSON file." });
+        return;
+      }
+      const imported = normalizeImportedDb(payload);
       appendAuditLog(imported, admin, "BACKUP_IMPORT", "system", "db", "Database restored from backup");
       await writeDb(imported);
       sendJson(res, 200, { ok: true });
@@ -668,14 +870,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const db = await readDb();
-      const user = db.users.find(
-        (u) =>
-          toText(u.username).toLowerCase() === username.toLowerCase() &&
-          toText(u.password) === password
-      );
+      const users = Array.isArray(db.users) ? db.users : [];
+      const user = users.find((u) => toText(u.username).toLowerCase() === username.toLowerCase());
       if (!user) {
         sendJson(res, 401, { error: "Invalid username or password" });
         return;
+      }
+      if (!verifyPassword(user.password, password)) {
+        sendJson(res, 401, { error: "Invalid username or password" });
+        return;
+      }
+      if (!isHashedPassword(user.password)) {
+        user.password = hashPassword(password);
+        db.users = users;
+        await writeDb(db);
       }
       const token = crypto.randomBytes(24).toString("hex");
       const safeUser = sanitizeUser(user);
@@ -745,7 +953,7 @@ const server = http.createServer(async (req, res) => {
       const newUser = {
         id: nextId,
         username,
-        password,
+        password: hashPassword(password),
         displayName,
         role,
         campuses: role === "Admin" ? ["ALL"] : campuses,
@@ -849,7 +1057,7 @@ const server = http.createServer(async (req, res) => {
       if (category) assets = assets.filter((a) => a.category === category);
       if (search) {
         assets = assets.filter((a) => {
-          const hay = `${a.assetId} ${a.name} ${a.location}`.toLowerCase();
+          const hay = `${a.assetId} ${a.name} ${a.location} ${a.setCode || ""} ${a.parentAssetId || ""}`.toLowerCase();
           return hay.includes(search);
         });
       }
@@ -1389,6 +1597,12 @@ const server = http.createServer(async (req, res) => {
 
     sendJson(res, 404, { error: "Not found" });
   } catch (err) {
+    if (err && typeof err === "object" && Number(err.statusCode) >= 400) {
+      sendJson(res, Number(err.statusCode), {
+        error: err.message || "Request error",
+      });
+      return;
+    }
     sendJson(res, 500, {
       error: err instanceof Error ? err.message : "Server error",
     });

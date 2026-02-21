@@ -6,10 +6,13 @@ type Asset = {
   campus: string;
   category: string;
   type: string;
+  pcType?: string;
   seq: number;
   assetId: string;
   name: string;
   location: string;
+  setCode?: string;
+  parentAssetId?: string;
   assignedTo?: string;
   brand?: string;
   model?: string;
@@ -72,6 +75,13 @@ type StatusEntry = {
   toStatus: string;
   reason?: string;
   by?: string;
+};
+type PendingStatusChange = {
+  assetId: number;
+  fromStatus: string;
+  toStatus: string;
+  reason: string;
+  verifiedBy: string;
 };
 
 type Ticket = {
@@ -291,6 +301,9 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Computer", itemKm: "កុំព្យូទ័រ", code: "PC" },
     { itemEn: "Laptop", itemKm: "ឡេបថប", code: "LAP" },
     { itemEn: "iPad / Tablet", itemKm: "អាយផេត / ថេប្លេត", code: "TAB" },
+    { itemEn: "Monitor", itemKm: "ម៉ូនីទ័រ", code: "MON" },
+    { itemEn: "Keyboard", itemKm: "ក្តារចុច", code: "KBD" },
+    { itemEn: "Mouse", itemKm: "កណ្ដុរ", code: "MSE" },
     { itemEn: "TV", itemKm: "ទូរទស្សន៍", code: "TV" },
     { itemEn: "Speaker", itemKm: "ឧបករណ៍បំពងសំឡេង", code: "SPK" },
     { itemEn: "Printer", itemKm: "ម៉ាស៊ីនបោះពុម្ព", code: "PRN" },
@@ -320,6 +333,58 @@ const SHARED_LOCATION_KEYWORDS = [
   "compuer lab",
   "compuer lap",
 ];
+const DESKTOP_PARENT_TYPE = "PC";
+const PC_TYPE_OPTIONS = [
+  { value: "Desktop", en: "Desktop", km: "កុំព្យូទ័រ Desktop" },
+  { value: "AIO", en: "All-in-One (AIO)", km: "All-in-One (AIO)" },
+  { value: "Mini PC", en: "Mini PC", km: "Mini PC" },
+  { value: "iMac", en: "iMac", km: "iMac" },
+  { value: "Mac Mini", en: "Mac Mini", km: "Mac Mini" },
+  { value: "Other", en: "Other", km: "ផ្សេងៗ" },
+] as const;
+type SetPackChildType = "MON" | "KBD" | "MSE";
+const SET_PACK_CHILD_ORDER: Record<string, number> = {
+  MON: 1,
+  KBD: 2,
+  MSE: 3,
+};
+type SetPackChildDraft = {
+  enabled: boolean;
+  status: string;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  purchaseDate: string;
+  warrantyUntil: string;
+  vendor: string;
+  specs: string;
+  notes: string;
+  photo: string;
+};
+
+function defaultSetPackChildDraft(): SetPackChildDraft {
+  return {
+    enabled: true,
+    status: "Active",
+    brand: "",
+    model: "",
+    serialNumber: "",
+    purchaseDate: "",
+    warrantyUntil: "",
+    vendor: "",
+    specs: "",
+    notes: "",
+    photo: "",
+  };
+}
+
+function defaultSetPackDraft(): Record<SetPackChildType, SetPackChildDraft> {
+  return {
+    MON: defaultSetPackChildDraft(),
+    KBD: defaultSetPackChildDraft(),
+    MSE: defaultSetPackChildDraft(),
+  };
+}
 
 const TEXT = {
   en: {
@@ -328,11 +393,16 @@ const TEXT = {
     subhead: "Centralized operations for assets, maintenance, and campus incidents.",
     view: "View",
     language: "Language",
+    menu: "Menu",
+    more: "More",
+    options: "Options",
+    phoneHint: "Choose a module from the menu, then open Options for campus, language, and account settings.",
     english: "English",
     khmer: "Khmer",
     allCampuses: "All Campuses",
     dashboard: "Dashboard",
     assets: "Assets",
+    inventory: "Inventory",
     workOrders: "Work Orders",
     maintenanceHistory: "Maintenance History",
     setup: "Setup",
@@ -347,8 +417,30 @@ const TEXT = {
     registerAsset: "Register Asset",
     category: "Category",
     typeCode: "Type Code",
+    pcType: "PC Type",
+    selectPcType: "Select PC Type",
+    pcTypeRequired: "Please select PC Type.",
     status: "Status",
+    statusChangeConfirm: "Confirm Status Change",
+    statusReason: "Reason",
+    statusVerifiedBy: "Verified By",
+    statusReasonRequired: "Reason is required.",
+    statusVerifiedByRequired: "Verified By is required.",
+    confirm: "Confirm",
     assetName: "Asset Name",
+    setCode: "Set Code",
+    parentAssetId: "Parent Asset ID",
+    createAsSetPack: "Create as Set Pack",
+    setPackItems: "Set Pack Items",
+    setPackHint: "Enable each item below, then fill full details for each asset.",
+    addDetails: "Add Details",
+    hideDetails: "Hide Details",
+    includeMonitor: "Include Monitor",
+    includeKeyboard: "Include Keyboard",
+    includeMouse: "Include Mouse",
+    linkToDesktopSet: "Link to existing desktop set",
+    selectDesktopUnit: "Select Desktop Unit",
+    desktopSetAutoNote: "Desktop Unit set code is auto-generated.",
     location: "Location",
     locationSetup: "Location Setup by Campus",
     locationName: "Location Name",
@@ -377,7 +469,7 @@ const TEXT = {
     workOrderQueue: "Work Order Queue",
     ticketNo: "Ticket No",
     noWorkOrders: "No work orders found.",
-    dataStored: "Data is stored in server database file server/db.json",
+    dataStored: "Data is stored in server SQLite database file server/data.sqlite",
     systemError: "System error",
     noDataYet: "No data yet.",
     openTickets: "Open Tickets",
@@ -493,11 +585,16 @@ const TEXT = {
     subhead: "គ្រប់គ្រងទ្រព្យសម្បត្តិ ការថែទាំ និងបញ្ហាតាមគ្រប់ Campus ជាកណ្តាល។",
     view: "មើល",
     language: "ភាសា",
+    menu: "ម៉ឺនុយ",
+    more: "បន្ថែម",
+    options: "ជម្រើស",
+    phoneHint: "ជ្រើសរើសមុខងារពីម៉ឺនុយ ហើយបើក ជម្រើស សម្រាប់ Campus, ភាសា និងគណនី។",
     english: "អង់គ្លេស",
     khmer: "ខ្មែរ",
     allCampuses: "គ្រប់ Campus",
     dashboard: "ផ្ទាំងសង្ខេប",
     assets: "ទ្រព្យសម្បត្តិ",
+    inventory: "ស្តុក",
     workOrders: "ការងារជួសជុល",
     maintenanceHistory: "ប្រវត្តិថែទាំ",
     setup: "កំណត់រចនាសម្ព័ន្ធ",
@@ -512,8 +609,30 @@ const TEXT = {
     registerAsset: "ចុះបញ្ជីទ្រព្យសម្បត្តិ",
     category: "ប្រភេទ",
     typeCode: "កូដប្រភេទ",
+    pcType: "ប្រភេទកុំព្យូទ័រ",
+    selectPcType: "ជ្រើសប្រភេទកុំព្យូទ័រ",
+    pcTypeRequired: "សូមជ្រើសប្រភេទកុំព្យូទ័រ។",
     status: "ស្ថានភាព",
+    statusChangeConfirm: "បញ្ជាក់ការប្តូរស្ថានភាព",
+    statusReason: "មូលហេតុ",
+    statusVerifiedBy: "បញ្ជាក់ដោយ",
+    statusReasonRequired: "ត្រូវបំពេញមូលហេតុ។",
+    statusVerifiedByRequired: "ត្រូវបំពេញអ្នកបញ្ជាក់។",
+    confirm: "បញ្ជាក់",
     assetName: "ឈ្មោះទ្រព្យសម្បត្តិ",
+    setCode: "លេខក្រុមឧបករណ៍",
+    parentAssetId: "លេខសម្គាល់មេ",
+    createAsSetPack: "បង្កើតជា Set Pack",
+    setPackItems: "ធាតុក្នុង Set Pack",
+    setPackHint: "ជ្រើសធាតុខាងក្រោម ហើយបំពេញព័ត៌មានលម្អិតសម្រាប់ទ្រព្យនីមួយៗ។",
+    addDetails: "បន្ថែមព័ត៌មានលម្អិត",
+    hideDetails: "លាក់ព័ត៌មានលម្អិត",
+    includeMonitor: "រួមបញ្ចូល Monitor",
+    includeKeyboard: "រួមបញ្ចូល Keyboard",
+    includeMouse: "រួមបញ្ចូល Mouse",
+    linkToDesktopSet: "ភ្ជាប់ទៅក្រុម Desktop ដែលមានស្រាប់",
+    selectDesktopUnit: "ជ្រើស Desktop Unit",
+    desktopSetAutoNote: "លេខក្រុម Desktop Unit បង្កើតស្វ័យប្រវត្តិ។",
     location: "ទីតាំង",
     locationSetup: "កំណត់ទីតាំងតាម Campus",
     locationName: "ឈ្មោះទីតាំង",
@@ -542,7 +661,7 @@ const TEXT = {
     workOrderQueue: "បញ្ជីការងារជួសជុល",
     ticketNo: "លេខការងារ",
     noWorkOrders: "មិនមានការងារជួសជុល។",
-    dataStored: "ទិន្នន័យរក្សាទុកក្នុង server/db.json",
+    dataStored: "ទិន្នន័យរក្សាទុកក្នុង SQLite server/data.sqlite",
     systemError: "កំហុសប្រព័ន្ធ",
     noDataYet: "មិនទាន់មានទិន្នន័យ។",
     openTickets: "ការងារបើក",
@@ -1076,6 +1195,11 @@ function isApiUnavailableError(err: unknown) {
   return m.includes("route not found") || m.includes("cannot connect to api server");
 }
 
+function isHistoryRecordNotFoundError(err: unknown) {
+  if (!(err instanceof Error)) return false;
+  return err.message.toLowerCase().includes("history record not found");
+}
+
 function formatDate(value: string) {
   if (!value || value === "-") return "-";
   const date = new Date(value);
@@ -1261,8 +1385,9 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
     if (!a.vendor && prev.vendor) next.vendor = prev.vendor;
 
     const prevHistory = Array.isArray(prev.maintenanceHistory) ? prev.maintenanceHistory : [];
+    const hasIncomingMaintenanceHistory = Object.prototype.hasOwnProperty.call(a, "maintenanceHistory");
     const nextHistory = Array.isArray(a.maintenanceHistory) ? a.maintenanceHistory : [];
-    if (!nextHistory.length && prevHistory.length) {
+    if (!hasIncomingMaintenanceHistory && prevHistory.length) {
       next.maintenanceHistory = prevHistory;
     } else if (nextHistory.length && prevHistory.length) {
       const prevById = new Map<number, MaintenanceEntry>(prevHistory.map((h) => [h.id, h]));
@@ -1278,8 +1403,9 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
     }
 
     const prevVerification = Array.isArray(prev.verificationHistory) ? prev.verificationHistory : [];
+    const hasIncomingVerificationHistory = Object.prototype.hasOwnProperty.call(a, "verificationHistory");
     const nextVerification = Array.isArray(a.verificationHistory) ? a.verificationHistory : [];
-    if (!nextVerification.length && prevVerification.length) {
+    if (!hasIncomingVerificationHistory && prevVerification.length) {
       next.verificationHistory = prevVerification;
     } else if (nextVerification.length && prevVerification.length) {
       const prevById = new Map<number, VerificationEntry>(prevVerification.map((h) => [h.id, h]));
@@ -1303,11 +1429,13 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
 
     const prevStatus = Array.isArray(prev.statusHistory) ? prev.statusHistory : [];
     const nextStatus = Array.isArray(a.statusHistory) ? a.statusHistory : [];
-    if (nextStatus.length < prevStatus.length) next.statusHistory = prevStatus;
+    const hasIncomingStatusHistory = Object.prototype.hasOwnProperty.call(a, "statusHistory");
+    if (!hasIncomingStatusHistory && nextStatus.length < prevStatus.length) next.statusHistory = prevStatus;
 
     const prevTransfer = Array.isArray(prev.transferHistory) ? prev.transferHistory : [];
     const nextTransfer = Array.isArray(a.transferHistory) ? a.transferHistory : [];
-    if (nextTransfer.length < prevTransfer.length) next.transferHistory = prevTransfer;
+    const hasIncomingTransferHistory = Object.prototype.hasOwnProperty.call(a, "transferHistory");
+    if (!hasIncomingTransferHistory && nextTransfer.length < prevTransfer.length) next.transferHistory = prevTransfer;
 
     merged.set(key, next);
   }
@@ -1390,6 +1518,7 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const prevValueRef = useRef(value);
   const selected = assets.find((a) => String(a.id) === value) || null;
 
   useEffect(() => {
@@ -1400,9 +1529,26 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
         setOpen(false);
       }
     };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        setOpen(false);
+      }
+    };
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setOpen(false);
+      setSearch("");
+    }
+  }, [value]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1412,6 +1558,15 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
     );
   }, [assets, search]);
 
+  const selectAsset = useCallback(
+    (assetId: string) => {
+      onChange(assetId);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange]
+  );
+
   return (
     <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
       <button
@@ -1419,6 +1574,15 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
         className="asset-picker-trigger input"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
+        onBlur={() => {
+          window.setTimeout(() => {
+            if (!wrapRef.current) return;
+            const active = document.activeElement;
+            if (!active || !wrapRef.current.contains(active)) {
+              setOpen(false);
+            }
+          }, 0);
+        }}
       >
         {selected ? (
           <span className="asset-picker-selected">
@@ -1445,11 +1609,12 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
                   type="button"
                   key={`asset-picker-${asset.id}`}
                   className={`asset-picker-option ${String(asset.id) === value ? "asset-picker-option-active" : ""}`}
-                  onClick={() => {
-                    onChange(String(asset.id));
-                    setOpen(false);
-                    setSearch("");
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectAsset(String(asset.id));
                   }}
+                  onClick={() => selectAsset(String(asset.id))}
                 >
                   {asset.photo ? <img src={asset.photo} alt={asset.assetId} className="asset-picker-thumb" /> : <span className="asset-picker-thumb-empty">-</span>}
                   <span>{getLabel(asset)}</span>
@@ -1495,7 +1660,38 @@ export default function App() {
   );
   const isAdmin = authUser?.role === "Admin";
 
-  const [tab, setTab] = useState<"dashboard" | "assets" | "inventory" | "tickets" | "schedule" | "transfer" | "maintenance" | "verification" | "reports" | "setup">("dashboard");
+  const [tab, setTab] = useState<NavModule>("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navItems = useMemo<Array<{ id: NavModule; label: string }>>(
+    () => [
+      { id: "dashboard", label: t.dashboard },
+      { id: "assets", label: t.assets },
+      { id: "inventory", label: t.inventory },
+      { id: "tickets", label: t.workOrders },
+      { id: "schedule", label: t.schedule },
+      { id: "transfer", label: t.transfer },
+      { id: "maintenance", label: t.maintenance },
+      { id: "verification", label: t.verification },
+      { id: "reports", label: t.reports },
+      ...(isAdmin ? [{ id: "setup" as NavModule, label: t.setup }] : []),
+    ],
+    [isAdmin, t]
+  );
+  const allowedNavModules = useMemo(() => {
+    const modules = authUser?.modules?.length ? authUser.modules : ALL_NAV_MODULES;
+    return new Set<NavModule>(modules);
+  }, [authUser?.modules]);
+  const navMenuItems = useMemo(
+    () => navItems.filter((item) => allowedNavModules.has(item.id)),
+    [navItems, allowedNavModules]
+  );
+  const activeNavLabel = useMemo(
+    () => navMenuItems.find((item) => item.id === tab)?.label || t.dashboard,
+    [navMenuItems, tab, t.dashboard]
+  );
+  const handleNavChange = useCallback((nextTab: NavModule) => {
+    setTab(nextTab);
+  }, []);
   const [dashboardView, setDashboardView] = useState<"overview" | "schedule" | "activity">("overview");
   const [assetsView, setAssetsView] = useState<"register" | "list">("register");
   const [campusFilter, setCampusFilter] = useState("ALL");
@@ -1527,6 +1723,16 @@ export default function App() {
   const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
   const [reportTerm, setReportTerm] = useState<"Term 1" | "Term 2" | "Term 3">("Term 1");
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!navMenuItems.some((item) => item.id === tab)) {
+      setTab(navMenuItems[0]?.id || "dashboard");
+    }
+  }, [navMenuItems, tab]);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [tab]);
 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() => readInventoryItemFallback());
@@ -1571,7 +1777,12 @@ export default function App() {
     campus: CAMPUS_LIST[0],
     category: "IT",
     type: "PC",
+    pcType: PC_TYPE_OPTIONS[0].value as string,
     location: "",
+    setCode: "",
+    parentAssetId: "",
+    useExistingSet: false,
+    createSetPack: false,
     assignedTo: "",
     brand: "",
     model: "",
@@ -1586,6 +1797,24 @@ export default function App() {
     photo: "",
     status: "Active",
   });
+  const [setPackDraft, setSetPackDraft] = useState<Record<SetPackChildType, SetPackChildDraft>>(
+    () => defaultSetPackDraft()
+  );
+  const [setPackFileKey, setSetPackFileKey] = useState<Record<SetPackChildType, number>>({
+    MON: 0,
+    KBD: 0,
+    MSE: 0,
+  });
+  const setPackPhotoInputRefs = useRef<Record<SetPackChildType, HTMLInputElement | null>>({
+    MON: null,
+    KBD: null,
+    MSE: null,
+  });
+  const [setPackDetailOpen, setSetPackDetailOpen] = useState<Record<SetPackChildType, boolean>>({
+    MON: false,
+    KBD: false,
+    MSE: false,
+  });
   const [assetFileKey, setAssetFileKey] = useState(0);
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [assetDetailId, setAssetDetailId] = useState<number | null>(null);
@@ -1593,6 +1822,10 @@ export default function App() {
   const [editAssetFileKey, setEditAssetFileKey] = useState(0);
   const [assetEditForm, setAssetEditForm] = useState({
     location: "",
+    pcType: "",
+    setCode: "",
+    parentAssetId: "",
+    useExistingSet: false,
     assignedTo: "",
     brand: "",
     model: "",
@@ -1609,6 +1842,7 @@ export default function App() {
   const [historyAssetId, setHistoryAssetId] = useState<number | null>(null);
   const [quickRecordAssetId, setQuickRecordAssetId] = useState<number | null>(null);
   const [transferQuickAssetId, setTransferQuickAssetId] = useState<number | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
   const [maintenanceRecordFileKey, setMaintenanceRecordFileKey] = useState(0);
   const [maintenanceRecordForm, setMaintenanceRecordForm] = useState({
     assetId: "",
@@ -1925,15 +2159,25 @@ export default function App() {
     [campusNames]
   );
   const assetItemName = useCallback(
-    (category: string, typeCode: string) => {
+    (category: string, typeCode: string, pcType = "") => {
       const key = `${category}:${typeCode}`;
       const custom = (itemNames[key] || "").trim();
-      if (custom) return custom;
+      const normalizedPcType = pcType.trim();
+      if (custom) {
+        if (category === "IT" && typeCode === DESKTOP_PARENT_TYPE && normalizedPcType) {
+          return `${custom} (${normalizedPcType})`;
+        }
+        return custom;
+      }
       const option = (allTypeOptions[category] || allTypeOptions.IT || TYPE_OPTIONS.IT).find(
         (opt) => opt.code === typeCode
       );
       if (!option) return typeCode;
-      return lang === "km" ? option.itemKm : option.itemEn;
+      const base = lang === "km" ? option.itemKm : option.itemEn;
+      if (category === "IT" && typeCode === DESKTOP_PARENT_TYPE && normalizedPcType) {
+        return `${base} (${normalizedPcType})`;
+      }
+      return base;
     },
     [itemNames, lang, allTypeOptions]
   );
@@ -1942,6 +2186,56 @@ export default function App() {
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === assetForm.campus)),
     [locations, assetForm.campus]
   );
+  const desktopSetParentsForCreate = useMemo(
+    () =>
+      assets
+        .filter(
+          (a) =>
+            a.category === "IT" &&
+            a.type === DESKTOP_PARENT_TYPE &&
+            a.campus === assetForm.campus
+        )
+        .sort((a, b) => a.assetId.localeCompare(b.assetId)),
+    [assets, assetForm.campus]
+  );
+  const suggestedDesktopSetCode = useMemo(() => {
+    const campusCodeValue = CAMPUS_CODE[assetForm.campus] || "CX";
+    const prefix = `SET-${campusCodeValue}-`;
+    let max = 0;
+    for (const asset of assets) {
+      if (asset.campus !== assetForm.campus) continue;
+      const raw = String(asset.setCode || "");
+      if (!raw.startsWith(prefix)) continue;
+      const n = Number(raw.slice(prefix.length));
+      if (Number.isFinite(n)) max = Math.max(max, n);
+    }
+    return `${prefix}${String(max + 1).padStart(3, "0")}`;
+  }, [assets, assetForm.campus]);
+  const suggestedAssetId = useMemo(() => {
+    const type = assetForm.type.toUpperCase();
+    const seq = calcNextSeq(assets, assetForm.campus, assetForm.category, type);
+    return `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode(assetForm.category)}-${type}-${pad4(seq)}`;
+  }, [assets, assetForm.campus, assetForm.category, assetForm.type]);
+  const setPackSuggestedAssetId = useMemo<Record<SetPackChildType, string>>(() => {
+    return {
+      MON: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-MON-${pad4(calcNextSeq(assets, assetForm.campus, "IT", "MON"))}`,
+      KBD: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-KBD-${pad4(calcNextSeq(assets, assetForm.campus, "IT", "KBD"))}`,
+      MSE: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-MSE-${pad4(calcNextSeq(assets, assetForm.campus, "IT", "MSE"))}`,
+    };
+  }, [assets, assetForm.campus]);
+  const desktopSetParentsForEdit = useMemo(() => {
+    const editing = assets.find((a) => a.id === editingAssetId);
+    if (!editing) return [] as Asset[];
+    return assets
+      .filter(
+        (a) =>
+          a.id !== editing.id &&
+          a.category === "IT" &&
+          a.type === DESKTOP_PARENT_TYPE &&
+          a.campus === editing.campus
+      )
+      .sort((a, b) => a.assetId.localeCompare(b.assetId));
+  }, [assets, editingAssetId]);
   const inventoryLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === inventoryItemForm.campus)),
     [locations, inventoryItemForm.campus]
@@ -2011,6 +2305,58 @@ export default function App() {
     () => USER_REQUIRED_TYPES.includes(assetForm.type) && !isSharedLocation(assetForm.location),
     [assetForm.type, assetForm.location]
   );
+  const isPcAssetForCreate = useMemo(
+    () => assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE,
+    [assetForm.category, assetForm.type]
+  );
+
+  useEffect(() => {
+    setAssetForm((prev) => {
+      const isDesktop = prev.category === "IT" && prev.type === DESKTOP_PARENT_TYPE;
+      if (isDesktop) {
+        const next = {
+          ...prev,
+          setCode: suggestedDesktopSetCode,
+          parentAssetId: "",
+          useExistingSet: false,
+        };
+        if (
+          next.setCode !== prev.setCode ||
+          next.parentAssetId !== prev.parentAssetId ||
+          next.useExistingSet !== prev.useExistingSet
+        ) {
+          return next;
+        }
+        return prev;
+      }
+      if (prev.createSetPack) {
+        return {
+          ...prev,
+          createSetPack: false,
+        };
+      }
+      if (!prev.useExistingSet && (prev.setCode || prev.parentAssetId)) {
+        return { ...prev, setCode: "", parentAssetId: "" };
+      }
+      return prev;
+    });
+  }, [suggestedDesktopSetCode]);
+
+  useEffect(() => {
+    const isDesktop = assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE;
+    if (isDesktop) return;
+    setSetPackDraft(defaultSetPackDraft());
+    setSetPackDetailOpen({
+      MON: false,
+      KBD: false,
+      MSE: false,
+    });
+    setSetPackFileKey((prev) => ({
+      MON: prev.MON + 1,
+      KBD: prev.KBD + 1,
+      MSE: prev.MSE + 1,
+    }));
+  }, [assetForm.category, assetForm.type]);
 
   const itemSetupRows = useMemo(() => {
     const rows: Array<{ category: string; code: string; key: string }> = [];
@@ -2022,6 +2368,14 @@ export default function App() {
       return a.code.localeCompare(b.code);
     });
   }, [allTypeOptions]);
+  const setPackChildMeta = useMemo<Array<{ type: SetPackChildType; label: string }>>(
+    () => [
+      { type: "MON", label: t.includeMonitor },
+      { type: "KBD", label: t.includeKeyboard },
+      { type: "MSE", label: t.includeMouse },
+    ],
+    [t.includeMonitor, t.includeKeyboard, t.includeMouse]
+  );
 
   useEffect(() => {
     const campusKey = CODE_TO_CAMPUS[campusEditCode];
@@ -2051,6 +2405,14 @@ export default function App() {
       setAssetForm((f) => ({ ...f, type: currentTypeOptions[0].code }));
     }
   }, [assetForm.type, currentTypeOptions]);
+
+  useEffect(() => {
+    setAssetForm((prev) => {
+      const nextPcType = isPcAssetForCreate ? (prev.pcType || PC_TYPE_OPTIONS[0].value) : "";
+      if (nextPcType === prev.pcType) return prev;
+      return { ...prev, pcType: nextPcType };
+    });
+  }, [isPcAssetForCreate]);
 
   useEffect(() => {
     if (!campusLocations.length) {
@@ -2173,8 +2535,30 @@ export default function App() {
 
   async function createAsset() {
     if (!requireAdminAction()) return;
+    const isDesktopAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DESKTOP_PARENT_TYPE;
+    const createPack = isDesktopAsset && assetForm.createSetPack;
+    const packItems = (Object.entries(setPackDraft) as Array<[SetPackChildType, SetPackChildDraft]>)
+      .filter(([, draft]) => draft.enabled);
+    const createSetCode = isDesktopAsset
+      ? suggestedDesktopSetCode
+      : (assetForm.useExistingSet ? assetForm.setCode.trim() : "");
+    const createParentAssetId = isDesktopAsset
+      ? ""
+      : (assetForm.useExistingSet ? assetForm.parentAssetId.trim().toUpperCase() : "");
     if (!assetForm.location) {
       alert(t.locationRequired);
+      return;
+    }
+    if (isDesktopAsset && !assetForm.pcType.trim()) {
+      alert(t.pcTypeRequired);
+      return;
+    }
+    if (!isDesktopAsset && assetForm.useExistingSet && !createParentAssetId) {
+      alert(t.selectDesktopUnit);
+      return;
+    }
+    if (createPack && !packItems.length) {
+      alert("Please select at least one item in set pack.");
       return;
     }
     if (userRequired && !assetForm.assignedTo.trim()) {
@@ -2187,12 +2571,51 @@ export default function App() {
     try {
       const created = await requestJson<{ asset: Asset }>("/api/assets", {
         method: "POST",
-        body: JSON.stringify({ ...assetForm, type: assetForm.type.toUpperCase() }),
+        body: JSON.stringify({
+          ...assetForm,
+          type: assetForm.type.toUpperCase(),
+          setCode: createSetCode,
+          parentAssetId: createParentAssetId,
+        }),
       });
+
+      if (createPack && created.asset?.assetId) {
+        for (const [typeCode, draft] of packItems) {
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: "IT",
+              type: typeCode,
+              location: assetForm.location,
+              setCode: createSetCode,
+              parentAssetId: created.asset.assetId,
+              assignedTo: "",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate,
+              warrantyUntil: draft.warrantyUntil,
+              vendor: draft.vendor,
+              notes: draft.notes || `Auto-created from set pack: ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: draft.photo || "",
+              status: draft.status || assetForm.status,
+            }),
+          });
+        }
+      }
 
       setAssetForm((f) => ({
         ...f,
         type: defaultTypeForCategory(f.category).code,
+        pcType: f.category === "IT" ? PC_TYPE_OPTIONS[0].value : "",
+        setCode: "",
+        parentAssetId: "",
+        useExistingSet: false,
+        createSetPack: false,
         assignedTo: "",
         brand: "",
         model: "",
@@ -2206,6 +2629,17 @@ export default function App() {
         scheduleNote: "",
         photo: "",
         status: "Active",
+      }));
+      setSetPackDraft(defaultSetPackDraft());
+      setSetPackDetailOpen({
+        MON: false,
+        KBD: false,
+        MSE: false,
+      });
+      setSetPackFileKey((prev) => ({
+        MON: prev.MON + 1,
+        KBD: prev.KBD + 1,
+        MSE: prev.MSE + 1,
       }));
       setAssetFileKey((k) => k + 1);
       appendUiAudit(
@@ -2229,10 +2663,13 @@ export default function App() {
           campus: assetForm.campus,
           category: assetForm.category,
           type: assetForm.type.toUpperCase(),
+          pcType: isDesktopAsset ? assetForm.pcType.trim() : "",
           seq,
           assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode(assetForm.category)}-${assetForm.type.toUpperCase()}-${pad4(seq)}`,
           name: assetItemName(assetForm.category, assetForm.type.toUpperCase()),
           location: assetForm.location,
+          setCode: createSetCode,
+          parentAssetId: createParentAssetId,
           assignedTo: assetForm.assignedTo,
           brand: assetForm.brand,
           model: assetForm.model,
@@ -2265,7 +2702,57 @@ export default function App() {
           status: assetForm.status,
           created: new Date().toISOString(),
         };
-        const nextLocal = [newAsset, ...allLocal];
+        let nextLocal = [newAsset, ...allLocal];
+        if (createPack) {
+          for (const [typeCode, draft] of packItems) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", typeCode);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: "IT",
+              type: typeCode,
+              pcType: "",
+              seq: childSeq,
+              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${typeCode}-${pad4(childSeq)}`,
+              name: assetItemName("IT", typeCode),
+              location: assetForm.location,
+              setCode: createSetCode,
+              parentAssetId: newAsset.assetId,
+              assignedTo: "",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate,
+              warrantyUntil: draft.warrantyUntil,
+              vendor: draft.vendor,
+              notes: draft.notes || `Auto-created from set pack: ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: draft.status || assetForm.status,
+                  reason: "Asset created from set pack",
+                },
+              ],
+              photo: draft.photo || "",
+              status: draft.status || assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
         writeAssetFallback(nextLocal);
         setAssets(
           effectiveAssetCampusFilter === "ALL"
@@ -2276,6 +2763,11 @@ export default function App() {
         setAssetForm((f) => ({
           ...f,
           type: defaultTypeForCategory(f.category).code,
+          pcType: f.category === "IT" ? PC_TYPE_OPTIONS[0].value : "",
+          setCode: "",
+          parentAssetId: "",
+          useExistingSet: false,
+          createSetPack: false,
           assignedTo: "",
           brand: "",
           model: "",
@@ -2289,6 +2781,17 @@ export default function App() {
           scheduleNote: "",
           photo: "",
           status: "Active",
+        }));
+        setSetPackDraft(defaultSetPackDraft());
+        setSetPackDetailOpen({
+          MON: false,
+          KBD: false,
+          MSE: false,
+        });
+        setSetPackFileKey((prev) => ({
+          MON: prev.MON + 1,
+          KBD: prev.KBD + 1,
+          MSE: prev.MSE + 1,
         }));
         setAssetFileKey((k) => k + 1);
         setError("");
@@ -2526,7 +3029,24 @@ export default function App() {
     setSetupMessage("Restoring backup...");
     try {
       const raw = await file.text();
-      const parsed = JSON.parse(raw);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error("Selected file is not valid JSON.");
+      }
+      const hasBackupShape =
+        !!parsed &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed) &&
+        (Object.prototype.hasOwnProperty.call(parsed, "assets") ||
+          Object.prototype.hasOwnProperty.call(parsed, "tickets") ||
+          Object.prototype.hasOwnProperty.call(parsed, "locations") ||
+          Object.prototype.hasOwnProperty.call(parsed, "users") ||
+          Object.prototype.hasOwnProperty.call(parsed, "auditLogs"));
+      if (!hasBackupShape) {
+        throw new Error("Selected file is not a valid backup format.");
+      }
       await requestJson<{ ok: boolean }>("/api/backup/import", {
         method: "POST",
         body: JSON.stringify({ db: parsed }),
@@ -2537,7 +3057,7 @@ export default function App() {
       await loadAuditLogs();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to import backup";
-      setError(msg);
+      setError("");
       setSetupMessage(`Restore backup failed: ${msg}`);
     } finally {
       setBusy(false);
@@ -3164,8 +3684,15 @@ export default function App() {
 
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
+    const isDesktopAsset = asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE;
     setAssetEditForm({
       location: asset.location || "",
+      pcType: asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
+        ? asset.pcType || PC_TYPE_OPTIONS[0].value
+        : "",
+      setCode: asset.setCode || "",
+      parentAssetId: asset.parentAssetId || "",
+      useExistingSet: !isDesktopAsset && !!asset.parentAssetId,
       assignedTo: asset.assignedTo || "",
       brand: asset.brand || "",
       model: asset.model || "",
@@ -3209,6 +3736,8 @@ export default function App() {
     }
 
     const editingAsset = assets.find((a) => a.id === editingAssetId);
+    const editingIsDesktop =
+      !!editingAsset && editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     const needsUser =
       !!editingAsset &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
@@ -3217,9 +3746,24 @@ export default function App() {
       alert(t.userRequired);
       return;
     }
+    if (!editingIsDesktop && assetEditForm.useExistingSet && !assetEditForm.parentAssetId.trim()) {
+      alert(t.selectDesktopUnit);
+      return;
+    }
+    if (editingIsDesktop && !assetEditForm.pcType.trim()) {
+      alert(t.pcTypeRequired);
+      return;
+    }
 
     const payload = {
       location: assetEditForm.location.trim(),
+      pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
+      setCode: editingIsDesktop
+        ? assetEditForm.setCode.trim()
+        : (assetEditForm.useExistingSet ? assetEditForm.setCode.trim() : ""),
+      parentAssetId: editingIsDesktop
+        ? ""
+        : (assetEditForm.useExistingSet ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
       assignedTo: assetEditForm.assignedTo.trim(),
       brand: assetEditForm.brand.trim(),
       model: assetEditForm.model.trim(),
@@ -3317,7 +3861,7 @@ export default function App() {
       setScheduleForm((f) => ({
         ...f,
         note: "",
-        date: f.repeatMode === "NONE" ? f.date : "",
+        date: "",
       }));
       await loadData();
     } catch (err) {
@@ -3433,6 +3977,11 @@ export default function App() {
       setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       setSetupMessage(`Bulk schedule updated for ${matched.length} asset(s).`);
+      setBulkScheduleForm((f) => ({
+        ...f,
+        date: "",
+        note: "",
+      }));
       appendUiAudit(
         "SCHEDULE_BULK_UPDATE",
         "asset",
@@ -3485,6 +4034,12 @@ export default function App() {
       by: maintenanceRecordForm.by.trim(),
       photo: maintenanceRecordForm.photo || "",
     };
+    const sourceAsset = assets.find((a) => a.id === assetId) || null;
+    const shouldAutoRetire =
+      entry.completion === "Done" && entry.type.trim().toLowerCase() === "replacement";
+    const shouldApplyRetireStatus =
+      shouldAutoRetire && (sourceAsset?.status || "Active") !== "Retired";
+    const retireReason = `Auto retired after replacement maintenance on ${entry.date}`;
 
     setBusy(true);
     setError("");
@@ -3500,10 +4055,26 @@ export default function App() {
             nextMaintenanceDate = "";
           }
         }
+        const statusHistory = Array.isArray(asset.statusHistory) ? asset.statusHistory : [];
+        const nextStatusHistory =
+          shouldApplyRetireStatus && asset.status !== "Retired"
+            ? [
+                {
+                  id: Date.now() + 1,
+                  date: new Date().toISOString(),
+                  fromStatus: asset.status || "Active",
+                  toStatus: "Retired",
+                  reason: retireReason,
+                },
+                ...statusHistory,
+              ]
+            : statusHistory;
 
         return {
           ...asset,
           nextMaintenanceDate,
+          status: shouldApplyRetireStatus ? "Retired" : asset.status,
+          statusHistory: nextStatusHistory,
           maintenanceHistory: [entry, ...(asset.maintenanceHistory || [])],
         };
       });
@@ -3517,8 +4088,25 @@ export default function App() {
         if (savedAsset) {
           await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
             method: "PATCH",
-            body: JSON.stringify({ nextMaintenanceDate: savedAsset.nextMaintenanceDate || "" }),
+            body: JSON.stringify({
+              nextMaintenanceDate: savedAsset.nextMaintenanceDate || "",
+              status: shouldApplyRetireStatus ? "Retired" : savedAsset.status || "Active",
+            }),
           });
+          if (shouldApplyRetireStatus) {
+            try {
+              await requestJson<{ asset: Asset }>(`/api/assets/${assetId}/status`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  status: "Retired",
+                  fromStatus: sourceAsset?.status || "Active",
+                  reason: retireReason,
+                }),
+              });
+            } catch {
+              // Status is already set via /api/assets PATCH above; keep flow successful.
+            }
+          }
         }
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
@@ -3528,6 +4116,9 @@ export default function App() {
       setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
+      if (shouldApplyRetireStatus) {
+        appendUiAudit("UPDATE_STATUS", "asset", String(assetId), "Retired (auto from replacement)");
+      }
       setMaintenanceRecordForm((f) => ({
         ...f,
         date: "",
@@ -3540,6 +4131,7 @@ export default function App() {
         photo: "",
       }));
       setMaintenanceRecordFileKey((k) => k + 1);
+      setMaintenanceView("history");
       await loadData();
       return true;
     } catch (err) {
@@ -3612,12 +4204,13 @@ export default function App() {
       appendUiAudit("VERIFICATION_CREATE", "asset", String(assetId), `${entry.result} | ${entry.note.slice(0, 60)}`);
       setVerificationRecordForm((f) => ({
         ...f,
-        date: toYmd(new Date()),
+        date: "",
         result: "Verified",
         condition: "",
         note: "",
         by: "",
         photo: "",
+        nextVerificationDate: "",
       }));
       setVerificationRecordFileKey((k) => k + 1);
       await loadData();
@@ -3815,7 +4408,7 @@ export default function App() {
       appendUiAudit("TRANSFER", "asset", String(assetId), `${transferEntry.fromCampus} -> ${transferEntry.toCampus}`);
       setTransferForm((f) => ({
         ...f,
-        date: toYmd(new Date()),
+        date: "",
         reason: "",
         by: "",
         note: "",
@@ -3910,7 +4503,7 @@ export default function App() {
       const nextLocal = readAssetFallback().map((asset) => {
         if (asset.id !== maintenanceDetailAssetId) return asset;
         const nextHistory = (asset.maintenanceHistory || []).map((h) =>
-          h.id === entryId ? { ...h, ...payload } : h
+          Number(h.id) === Number(entryId) ? { ...h, ...payload } : h
         );
         return { ...asset, maintenanceHistory: nextHistory };
       });
@@ -3949,7 +4542,9 @@ export default function App() {
         if (asset.id !== maintenanceDetailAssetId) return asset;
         return {
           ...asset,
-          maintenanceHistory: (asset.maintenanceHistory || []).filter((h) => h.id !== entryId),
+          maintenanceHistory: (asset.maintenanceHistory || []).filter(
+            (h) => Number(h.id) !== Number(entryId)
+          ),
         };
       });
 
@@ -3958,16 +4553,23 @@ export default function App() {
           method: "DELETE",
         });
       } catch (err) {
-        if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+        if (
+          !isApiUnavailableError(err) &&
+          !isMissingRouteError(err) &&
+          !isHistoryRecordNotFoundError(err)
+        ) {
+          throw err;
+        }
       }
 
       writeAssetFallback(nextLocal);
       setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_DELETE", "maintenance_record", String(entryId), "Deleted");
-      if (maintenanceEditingEntryId === entryId) {
+      if (Number(maintenanceEditingEntryId) === Number(entryId)) {
         cancelMaintenanceEntryEdit();
       }
+      setMaintenanceDetailAssetId(null);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete maintenance record");
@@ -3977,8 +4579,28 @@ export default function App() {
   }
 
 
-  async function changeAssetStatus(id: number, status: string) {
+  function openAssetStatusChangeDialog(id: number, status: string) {
     if (!requireAdminAction()) return;
+    const current = assets.find((a) => a.id === id);
+    if (!current) return;
+    const fromStatus = current.status || "Unknown";
+    if (fromStatus === status) return;
+    setPendingStatusChange({
+      assetId: id,
+      fromStatus,
+      toStatus: status,
+      reason: "",
+      verifiedBy: authUser?.displayName || authUser?.username || "",
+    });
+  }
+
+  async function changeAssetStatus(
+    id: number,
+    status: string,
+    reason = "",
+    verifiedBy = ""
+  ): Promise<boolean> {
+    if (!requireAdminAction()) return false;
     setBusy(true);
     setError("");
     try {
@@ -3988,13 +4610,17 @@ export default function App() {
         date: new Date().toISOString(),
         fromStatus: current?.status || "Unknown",
         toStatus: status,
-        reason: "",
+        reason,
+        by: verifiedBy,
       };
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${id}/status`, {
           method: "PATCH",
           body: JSON.stringify({
             status,
+            fromStatus: current?.status || "Unknown",
+            reason,
+            by: verifiedBy,
             statusHistory: [nextStatusEntry, ...((current?.statusHistory) || [])],
           }),
         });
@@ -4011,8 +4637,10 @@ export default function App() {
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("UPDATE_STATUS", "asset", String(id), status);
       await loadData();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update asset status");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -4046,6 +4674,27 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setAssetForm((f) => ({ ...f, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    }
+  }
+
+  async function onSetPackPhotoFile(type: SetPackChildType, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setSetPackDraft((prev) => ({
+        ...prev,
+        [type]: {
+          ...prev[type],
+          photo,
+        },
+      }));
     } catch {
       alert(t.photoProcessError);
     }
@@ -4100,6 +4749,46 @@ export default function App() {
     () => assets.find((a) => a.id === maintenanceDetailAssetId) || null,
     [assets, maintenanceDetailAssetId]
   );
+  const assetStatusRowClass = useCallback((statusRaw: string) => {
+    const status = String(statusRaw || "").trim().toLowerCase();
+    if (status === "retired") return "row-asset-retired";
+    if (status === "maintenance") return "row-asset-maintenance";
+    return "";
+  }, []);
+  const isReplacementDone = useCallback((typeRaw: string, completionRaw: string) => {
+    const type = String(typeRaw || "").trim().toLowerCase();
+    const completion = String(completionRaw || "").trim().toLowerCase();
+    return type === "replacement" && completion === "done";
+  }, []);
+  const isBrokenMaintenance = useCallback((conditionRaw: string, noteRaw: string) => {
+    const text = `${conditionRaw || ""} ${noteRaw || ""}`.toLowerCase();
+    return [
+      "broken",
+      "not working",
+      "damage",
+      "damaged",
+      "fault",
+      "failed",
+      "dead",
+    ].some((k) => text.includes(k));
+  }, []);
+  const maintenanceHistoryRowClass = useCallback(
+    (
+      typeRaw: string,
+      completionRaw: string,
+      statusRaw: string,
+      conditionRaw = "",
+      noteRaw = ""
+    ) => {
+      if (isReplacementDone(typeRaw, completionRaw)) return "row-maint-replacement";
+      if (isBrokenMaintenance(conditionRaw, noteRaw)) return "row-maint-broken";
+      const statusClass = assetStatusRowClass(statusRaw);
+      if (statusClass === "row-asset-retired") return "row-maint-retired";
+      if (statusClass === "row-asset-maintenance") return "row-maint-maintenance";
+      return "";
+    },
+    [assetStatusRowClass, isBrokenMaintenance, isReplacementDone]
+  );
   const transferAsset = useMemo(
     () => assets.find((a) => String(a.id) === transferForm.assetId) || null,
     [assets, transferForm.assetId]
@@ -4114,7 +4803,7 @@ export default function App() {
   );
   const scheduleSelectAssets = useMemo(() => {
     return [...assets].sort((a, b) => {
-      const aName = assetItemName(a.category, a.type).toLowerCase();
+      const aName = assetItemName(a.category, a.type, a.pcType || "").toLowerCase();
       const bName = assetItemName(b.category, b.type).toLowerCase();
       if (aName !== bName) return aName.localeCompare(bName);
       return a.assetId.localeCompare(b.assetId);
@@ -4623,7 +5312,7 @@ export default function App() {
       row.total += 1;
       if (asset.category === "IT") row.it += 1;
       if (asset.category === "SAFETY") row.safety += 1;
-      const itemName = assetItemName(asset.category, asset.type);
+      const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
       row.items[itemName] = (row.items[itemName] || 0) + 1;
     }
 
@@ -4641,6 +5330,77 @@ export default function App() {
           a.location.localeCompare(b.location)
       );
   }, [assets, assetItemName, campusLabel]);
+  const assetMasterSetRows = useMemo(() => {
+    const grouped = new Map<string, Asset[]>();
+    const noSetAssets: Asset[] = [];
+
+    for (const asset of assets) {
+      const setCode = String(asset.setCode || "").trim();
+      if (setCode) {
+        const list = grouped.get(setCode) || [];
+        list.push(asset);
+        grouped.set(setCode, list);
+      } else {
+        noSetAssets.push(asset);
+      }
+    }
+
+    const rows = Array.from(grouped.entries()).map(([setCode, list]) => {
+      const sorted = [...list].sort((a, b) => a.assetId.localeCompare(b.assetId));
+      const mainPc =
+        sorted.find((a) => a.category === "IT" && a.type === DESKTOP_PARENT_TYPE) ||
+        sorted.find((a) => !a.parentAssetId) ||
+        sorted[0];
+      const children = sorted
+        .filter((a) => a.id !== mainPc.id)
+        .sort(
+          (a, b) =>
+            (SET_PACK_CHILD_ORDER[a.type] || 99) - (SET_PACK_CHILD_ORDER[b.type] || 99) ||
+            a.assetId.localeCompare(b.assetId)
+        );
+
+      return {
+        key: `set-${setCode}`,
+        setCode,
+        campus: mainPc.campus,
+        location: mainPc.location || "-",
+        mainAssetId: mainPc.assetId,
+        mainType: mainPc.type === DESKTOP_PARENT_TYPE && mainPc.pcType
+          ? `${mainPc.type} (${mainPc.pcType})`
+          : mainPc.type,
+        mainStatus: mainPc.status || "-",
+        mainPhoto: mainPc.photo || "",
+        totalItems: sorted.length,
+        childSummary: children.length
+          ? children.map((child) => `${child.type} (${child.assetId})`).join(", ")
+          : "-",
+        category: mainPc.category || "-",
+      };
+    });
+
+    const standaloneRows = noSetAssets.map((asset) => ({
+      key: `single-${asset.id}`,
+      setCode: "-",
+      campus: asset.campus,
+      location: asset.location || "-",
+      mainAssetId: asset.assetId,
+      mainType: asset.type === DESKTOP_PARENT_TYPE && asset.pcType
+        ? `${asset.type} (${asset.pcType})`
+        : asset.type,
+      mainStatus: asset.status || "-",
+      mainPhoto: asset.photo || "",
+      totalItems: 1,
+      childSummary: "-",
+      category: asset.category || "-",
+    }));
+
+    return [...rows, ...standaloneRows].sort(
+      (a, b) =>
+        campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
+        a.location.localeCompare(b.location) ||
+        a.mainAssetId.localeCompare(b.mainAssetId)
+    );
+  }, [assets, campusLabel]);
 
   function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
@@ -4650,17 +5410,18 @@ export default function App() {
 
     if (reportType === "asset_master") {
       title = "Asset Master Register Report";
-      columns = ["Asset ID", "Asset Photo", "Campus", "Category", "Type", "Status", "Location", "Purchase Date", "Warranty Until"];
-      rows = assets.map((a) => [
-        a.assetId,
-        a.photo || "",
-        campusLabel(a.campus),
-        a.category,
-        a.type,
-        a.status || "-",
-        a.location || "-",
-        formatDate(a.purchaseDate || "-"),
-        formatDate(a.warrantyUntil || "-"),
+      columns = ["Set Code", "Main Asset ID", "Photo", "Campus", "Location", "Category", "Main Type", "Status", "Items in Set", "Components"];
+      rows = assetMasterSetRows.map((row) => [
+        row.setCode,
+        row.mainAssetId,
+        row.mainPhoto || "",
+        campusLabel(row.campus),
+        row.location || "-",
+        row.category,
+        row.mainType,
+        row.mainStatus,
+        String(row.totalItems),
+        row.childSummary,
       ]);
     } else if (reportType === "asset_by_location") {
       title = "Asset by Campus and Location Report";
@@ -4754,6 +5515,8 @@ export default function App() {
         ? `<p><strong>Total:</strong> ${verificationSummary.total} | <strong>Verified:</strong> ${verificationSummary.verified} | <strong>Issue Found:</strong> ${verificationSummary.issue} | <strong>Missing:</strong> ${verificationSummary.missing}</p>`
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
+        : reportType === "asset_master"
+        ? `<p><strong>Total Rows:</strong> ${assetMasterSetRows.length} | <strong>Set Packs:</strong> ${assetMasterSetRows.filter((r) => r.setCode !== "-").length}</p>`
         : "";
 
     const html = `
@@ -5028,19 +5791,71 @@ export default function App() {
 
         <section className="workspace-shell">
           <aside className="main-nav-rail">
-            <button className={`main-nav-btn ${tab === "dashboard" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("dashboard")}>{t.dashboard}</button>
-            <button className={`main-nav-btn ${tab === "assets" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("assets")}>{t.assets}</button>
-            <button className={`main-nav-btn ${tab === "inventory" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("inventory")}>Inventory</button>
-            <button className={`main-nav-btn ${tab === "tickets" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("tickets")}>{t.workOrders}</button>
-            <button className={`main-nav-btn ${tab === "schedule" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("schedule")}>{t.schedule}</button>
-            <button className={`main-nav-btn ${tab === "transfer" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("transfer")}>{t.transfer}</button>
-            <button className={`main-nav-btn ${tab === "maintenance" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("maintenance")}>{t.maintenance}</button>
-            <button className={`main-nav-btn ${tab === "verification" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("verification")}>{t.verification}</button>
-            <button className={`main-nav-btn ${tab === "reports" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("reports")}>{t.reports}</button>
-            <button className={`main-nav-btn ${tab === "setup" ? "main-nav-btn-active" : ""}`} onClick={() => setTab("setup")}>{t.setup}</button>
+            {navMenuItems.map((item) => (
+              <button
+                key={item.id}
+                className={`main-nav-btn ${tab === item.id ? "main-nav-btn-active" : ""}`}
+                onClick={() => handleNavChange(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
           </aside>
 
           <section className="workspace-main">
+            <div className="mobile-nav-hud">
+              <p className="mobile-nav-hint">{t.phoneHint}</p>
+              <label className="field mobile-nav-field">
+                <span>{t.menu}</span>
+                <select
+                  className="input mobile-nav-select"
+                  value={tab}
+                  onChange={(e) => handleNavChange(e.target.value as NavModule)}
+                >
+                  {navMenuItems.map((item) => (
+                    <option key={`mobile-nav-${item.id}`} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className={`mobile-settings-toggle ${mobileMenuOpen ? "mobile-settings-toggle-active" : ""}`}
+                type="button"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                aria-expanded={mobileMenuOpen}
+              >
+                <span>{activeNavLabel}</span>
+                <span>{mobileMenuOpen ? t.close : t.options}</span>
+              </button>
+              {mobileMenuOpen ? (
+                <div className="mobile-settings-panel">
+                  <label className="field">
+                    <span>{t.view}</span>
+                    <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
+                      {authUser.role === "Admin" ? <option value="ALL">{t.allCampuses}</option> : null}
+                      {allowedCampuses.map((campus) => (
+                        <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="field">
+                    <span>{t.language}</span>
+                    <select value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="input">
+                      <option value="en">{t.english}</option>
+                      <option value="km">{t.khmer}</option>
+                    </select>
+                  </label>
+
+                  <label className="field">
+                    <span>{t.account}</span>
+                    <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
+                  </label>
+                  <button className="tab" type="button" onClick={handleLogout}>{t.logout}</button>
+                </div>
+              ) : null}
+            </div>
             {error ? <p className="alert alert-error">{error}</p> : null}
             {!isAdmin ? <p className="alert">{t.viewerMode}</p> : null}
             {loading ? <p className="alert">{t.loading}</p> : null}
@@ -5313,7 +6128,13 @@ export default function App() {
                         setAssetForm((f) => {
                           const category = e.target.value;
                           const type = defaultTypeForCategory(category);
-                          return { ...f, category, type: type.code, assignedTo: "" };
+                          return {
+                            ...f,
+                            category,
+                            type: type.code,
+                            pcType: category === "IT" && type.code === DESKTOP_PARENT_TYPE ? PC_TYPE_OPTIONS[0].value : "",
+                            assignedTo: "",
+                          };
                         })
                       }
                     >
@@ -5330,6 +6151,22 @@ export default function App() {
                       ))}
                     </select>
                   </label>
+                  {isPcAssetForCreate ? (
+                    <label className="field">
+                      <span>{t.pcType}</span>
+                      <select
+                        className="input"
+                        value={assetForm.pcType}
+                        onChange={(e) => setAssetForm((f) => ({ ...f, pcType: e.target.value }))}
+                      >
+                        {PC_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {lang === "km" ? opt.km : opt.en}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <label className="field">
                     <span>{t.status}</span>
                     <select className="input" value={assetForm.status} onChange={(e) => setAssetForm((f) => ({ ...f, status: e.target.value }))}>
@@ -5338,11 +6175,11 @@ export default function App() {
                       ))}
                     </select>
                   </label>
-                  <label className="field field-wide">
-                    <span>{t.assetName}</span>
+                  <label className="field">
+                    <span>{t.assetId}</span>
                     <input
                       className="input"
-                      value={`${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode(assetForm.category)}-${assetForm.type}-0001`}
+                      value={suggestedAssetId}
                       readOnly
                     />
                   </label>
@@ -5355,6 +6192,351 @@ export default function App() {
                       ))}
                     </select>
                   </label>
+                  {assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE ? (
+                    <>
+                      <label className="field">
+                        <span>{t.setCode}</span>
+                        <input className="input" value={suggestedDesktopSetCode} readOnly />
+                      </label>
+                      <div className="field">
+                        <span>{t.createAsSetPack}</span>
+                        <div className="setpack-toggle-row">
+                          <span className="tiny">{t.setPackHint}</span>
+                          <label className="switch-toggle">
+                            <input
+                              type="checkbox"
+                              checked={assetForm.createSetPack}
+                              onChange={(e) =>
+                                setAssetForm((f) => ({
+                                  ...f,
+                                  createSetPack: e.target.checked,
+                                }))
+                              }
+                            />
+                            <span className="switch-slider" />
+                          </label>
+                        </div>
+                      </div>
+                      {assetForm.createSetPack ? (
+                        <div className="field field-wide">
+                          <span>{t.setPackItems}</span>
+                          <div className="setpack-include-grid">
+                            {setPackChildMeta.map((item) => (
+                              <label key={`pack-toggle-${item.type}`} className="tab setpack-include-item">
+                                <input
+                                  type="checkbox"
+                                  checked={setPackDraft[item.type].enabled}
+                                  onChange={(e) =>
+                                    setSetPackDraft((prev) => ({
+                                      ...prev,
+                                      [item.type]: {
+                                        ...prev[item.type],
+                                        enabled: e.target.checked,
+                                      },
+                                    }))
+                                  }
+                                />{" "}
+                                {item.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {assetForm.createSetPack
+                        ? (
+                          <div className="field field-wide">
+                            <div className="setpack-card-grid">
+                              {setPackChildMeta.map((item) => (
+                                setPackDraft[item.type].enabled ? (
+                                  <div
+                                    key={`pack-fields-${item.type}`}
+                                    className={`setpack-item-card${setPackDetailOpen[item.type] ? " setpack-item-card-open" : ""}`}
+                                  >
+                                    <div className="setpack-item-head">
+                                      <div>
+                                        <strong>{item.label}</strong>
+                                        <div className="tiny">
+                                          {t.assetId}: {setPackSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="tab setpack-detail-btn"
+                                        onClick={() =>
+                                          setSetPackDetailOpen((prev) => ({
+                                            ...prev,
+                                            [item.type]: !prev[item.type],
+                                          }))
+                                        }
+                                      >
+                                        {setPackDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                      </button>
+                                    </div>
+                                    {setPackDetailOpen[item.type] ? (
+                                      <div className="form-grid">
+                                    <label className="field">
+                                      <span>{t.status}</span>
+                                      <select
+                                        className="input"
+                                        value={setPackDraft[item.type].status}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              status: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      >
+                                        {ASSET_STATUS_OPTIONS.map((status) => (
+                                          <option key={`${item.type}-status-${status.value}`} value={status.value}>
+                                            {lang === "km" ? status.km : status.en}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.brand}</span>
+                                      <input
+                                        className="input"
+                                        value={setPackDraft[item.type].brand}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              brand: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.model}</span>
+                                      <input
+                                        className="input"
+                                        value={setPackDraft[item.type].model}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              model: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.serialNumber}</span>
+                                      <input
+                                        className="input"
+                                        value={setPackDraft[item.type].serialNumber}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              serialNumber: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.purchaseDate}</span>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        value={setPackDraft[item.type].purchaseDate}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              purchaseDate: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.warrantyUntil}</span>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        value={setPackDraft[item.type].warrantyUntil}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              warrantyUntil: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.vendor}</span>
+                                      <input
+                                        className="input"
+                                        value={setPackDraft[item.type].vendor}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              vendor: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field field-wide">
+                                      <span>{t.specs}</span>
+                                      <textarea
+                                        className="textarea"
+                                        value={setPackDraft[item.type].specs}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              specs: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field field-wide">
+                                      <span>{t.notes}</span>
+                                      <textarea
+                                        className="textarea"
+                                        value={setPackDraft[item.type].notes}
+                                        onChange={(e) =>
+                                          setSetPackDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              notes: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <div className="field field-wide">
+                                      <span>{t.photo}</span>
+                                      <input
+                                        key={setPackFileKey[item.type]}
+                                        ref={(el) => {
+                                          setPackPhotoInputRefs.current[item.type] = el;
+                                        }}
+                                        className="file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => onSetPackPhotoFile(item.type, e)}
+                                      />
+                                      <div className="photo-preview-wrap">
+                                        {setPackDraft[item.type].photo ? (
+                                          <img
+                                            src={setPackDraft[item.type].photo}
+                                            alt={`${item.label} preview`}
+                                            className="photo-preview"
+                                          />
+                                        ) : (
+                                          <div className="photo-placeholder">{t.noPhoto}</div>
+                                        )}
+                                        <div className="photo-preview-actions">
+                                          <button
+                                            className="btn-icon-edit"
+                                            type="button"
+                                            title="Change Photo"
+                                            aria-label="Change Photo"
+                                            onClick={() => setPackPhotoInputRefs.current[item.type]?.click()}
+                                          >
+                                            ✎
+                                          </button>
+                                          <button
+                                            className="btn-danger"
+                                            type="button"
+                                            title="Delete Photo"
+                                            aria-label="Delete Photo"
+                                            disabled={!setPackDraft[item.type].photo}
+                                            onClick={() => {
+                                              setSetPackDraft((prev) => ({
+                                                ...prev,
+                                                [item.type]: {
+                                                  ...prev[item.type],
+                                                  photo: "",
+                                                },
+                                              }));
+                                              setSetPackFileKey((prev) => ({
+                                                ...prev,
+                                                [item.type]: prev[item.type] + 1,
+                                              }));
+                                            }}
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <div key={`pack-slot-${item.type}`} className="setpack-item-slot" aria-hidden="true" />
+                                )
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <label className="field field-wide">
+                        <span>{t.linkToDesktopSet}</span>
+                        <input
+                          type="checkbox"
+                          checked={assetForm.useExistingSet}
+                          onChange={(e) =>
+                            setAssetForm((f) => ({
+                              ...f,
+                              useExistingSet: e.target.checked,
+                              setCode: e.target.checked ? f.setCode : "",
+                              parentAssetId: e.target.checked ? f.parentAssetId : "",
+                            }))
+                          }
+                        />
+                      </label>
+                      {assetForm.useExistingSet ? (
+                        <label className="field field-wide">
+                          <span>{t.selectDesktopUnit}</span>
+                          <select
+                            className="input"
+                            value={assetForm.parentAssetId}
+                            onChange={(e) => {
+                              const parent = desktopSetParentsForCreate.find((a) => a.assetId === e.target.value);
+                              setAssetForm((f) => ({
+                                ...f,
+                                parentAssetId: e.target.value,
+                                setCode: parent?.setCode || "",
+                              }));
+                            }}
+                          >
+                            <option value="">-</option>
+                            {desktopSetParentsForCreate.map((asset) => (
+                              <option key={`desktop-parent-${asset.id}`} value={asset.assetId}>
+                                {asset.assetId} - {asset.location} ({asset.setCode || "-"})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </>
+                  )}
                   {userRequired && (
                     <label className="field field-wide">
                       <span>{t.user}</span>
@@ -5411,6 +6593,9 @@ export default function App() {
                   </label>
                 </div>
                 {!campusLocations.length ? <p className="tiny">{t.noLocationsConfigured}</p> : null}
+                {assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE ? (
+                  <p className="tiny">{t.desktopSetAutoNote}</p>
+                ) : null}
                 {userRequired ? <p className="tiny">{t.userRequired}</p> : null}
                 <div className="asset-actions">
                   <div className="photo-preview-wrap">
@@ -5489,7 +6674,7 @@ export default function App() {
                     <tbody>
                       {assets.length ? (
                         assets.map((asset) => (
-                          <tr key={asset.id}>
+                          <tr key={asset.id} className={assetStatusRowClass(asset.status || "")}>
                             <td>
                               <button className="tab" onClick={() => setAssetDetailId(asset.id)}>
                                 <strong>{asset.assetId}</strong>
@@ -5500,7 +6685,7 @@ export default function App() {
                             <td>
                               {renderAssetPhoto(asset.photo || "", asset.assetId)}
                             </td>
-                            <td>{assetItemName(asset.category, asset.type)}</td>
+                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
                             <td>{asset.location || "-"}</td>
                             <td>
                               {isAdmin ? (
@@ -5529,7 +6714,7 @@ export default function App() {
                             </td>
                             <td>
                               {isAdmin ? (
-                                <select className="status-select" value={asset.status || "Active"} onChange={(e) => changeAssetStatus(asset.id, e.target.value)}>
+                                <select className="status-select" value={asset.status || "Active"} onChange={(e) => openAssetStatusChangeDialog(asset.id, e.target.value)}>
                                   {ASSET_STATUS_OPTIONS.map((status) => (
                                     <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
                                   ))}
@@ -5572,9 +6757,14 @@ export default function App() {
                     <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(detailAsset.campus)}</div></div>
                     <div className="field"><span>{t.category}</span><div className="detail-value">{detailAsset.category}</div></div>
                     <div className="field"><span>{t.typeCode}</span><div className="detail-value">{detailAsset.type}</div></div>
+                    {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
+                      <div className="field"><span>{t.pcType}</span><div className="detail-value">{detailAsset.pcType || "-"}</div></div>
+                    ) : null}
                     <div className="field"><span>{t.status}</span><div className="detail-value">{detailAsset.status}</div></div>
-                    <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(detailAsset.category, detailAsset.type)}</div></div>
+                    <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</div></div>
                     <div className="field"><span>{t.location}</span><div className="detail-value">{detailAsset.location || "-"}</div></div>
+                    <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
+                    <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{detailAsset.parentAssetId || "-"}</div></div>
                     <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
                     <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
                     <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
@@ -5721,6 +6911,22 @@ export default function App() {
                       <span>{t.typeCode}</span>
                       <div className="detail-value">{editingAsset.type}</div>
                     </div>
+                    {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
+                      <label className="field">
+                        <span>{t.pcType}</span>
+                        <select
+                          className="input"
+                          value={assetEditForm.pcType}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, pcType: e.target.value }))}
+                        >
+                          {PC_TYPE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {lang === "km" ? opt.km : opt.en}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                     <label className="field">
                       <span>{t.status}</span>
                       <select
@@ -5743,6 +6949,59 @@ export default function App() {
                         onChange={(e) => setAssetEditForm((f) => ({ ...f, location: e.target.value }))}
                       />
                     </label>
+                    {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
+                      <label className="field field-wide">
+                        <span>{t.setCode}</span>
+                        <input
+                          className="input"
+                          value={assetEditForm.setCode}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, setCode: e.target.value }))}
+                          placeholder="SET-C2.2-001"
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <label className="field field-wide">
+                          <span>{t.linkToDesktopSet}</span>
+                          <input
+                            type="checkbox"
+                            checked={assetEditForm.useExistingSet}
+                            onChange={(e) =>
+                              setAssetEditForm((f) => ({
+                                ...f,
+                                useExistingSet: e.target.checked,
+                                setCode: e.target.checked ? f.setCode : "",
+                                parentAssetId: e.target.checked ? f.parentAssetId : "",
+                              }))
+                            }
+                          />
+                        </label>
+                        {assetEditForm.useExistingSet ? (
+                          <label className="field field-wide">
+                            <span>{t.selectDesktopUnit}</span>
+                            <select
+                              className="input"
+                              value={assetEditForm.parentAssetId}
+                              onChange={(e) => {
+                                const parent = desktopSetParentsForEdit.find((a) => a.assetId === e.target.value);
+                                setAssetEditForm((f) => ({
+                                  ...f,
+                                  parentAssetId: e.target.value,
+                                  setCode: parent?.setCode || "",
+                                }));
+                              }}
+                            >
+                              <option value="">-</option>
+                              {desktopSetParentsForEdit.map((asset) => (
+                                <option key={`desktop-parent-edit-${asset.id}`} value={asset.assetId}>
+                                  {asset.assetId} - {asset.location} ({asset.setCode || "-"})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                      </>
+                    )}
                     <label className="field field-wide">
                       <span>{t.user}</span>
                       <select
@@ -6045,7 +7304,7 @@ export default function App() {
                   <div className="form-grid">
                     <label className="field">
                       <span>Asset</span>
-                      <input className="input" value={`${transferQuickAsset.assetId} - ${assetItemName(transferQuickAsset.category, transferQuickAsset.type)}`} readOnly />
+                      <input className="input" value={`${transferQuickAsset.assetId} - ${assetItemName(transferQuickAsset.category, transferQuickAsset.type, transferQuickAsset.pcType || "")}`} readOnly />
                     </label>
                     <label className="field">
                       <span>Transfer Date</span>
@@ -6799,7 +8058,7 @@ export default function App() {
                 <AssetPicker
                   value={scheduleForm.assetId}
                   assets={scheduleSelectAssets}
-                  getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type)} (${asset.type})`}
+                  getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.type})`}
                   onChange={(assetId) => {
                     const asset = assets.find((a) => String(a.id) === assetId);
                     setScheduleForm((f) => ({
@@ -7017,7 +8276,7 @@ export default function App() {
                   <AssetPicker
                     value={transferForm.assetId}
                     assets={assets}
-                    getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type)} • ${campusLabel(asset.campus)}`}
+                    getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
                     onChange={(assetId) => {
                       const asset = assets.find((a) => String(a.id) === assetId);
                       setTransferForm((f) => ({
@@ -7038,7 +8297,7 @@ export default function App() {
                         <span className="asset-picker-thumb-empty">-</span>
                       )}
                       <span>
-                        {transferAsset.assetId} - {assetItemName(transferAsset.category, transferAsset.type)} •{" "}
+                        {transferAsset.assetId} - {assetItemName(transferAsset.category, transferAsset.type, transferAsset.pcType || "")} •{" "}
                         {campusLabel(transferAsset.campus)}
                       </span>
                     </span>
@@ -7166,7 +8425,7 @@ export default function App() {
                 <AssetPicker
                   value={maintenanceRecordForm.assetId}
                   assets={assets}
-                  getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type)} • ${campusLabel(asset.campus)}`}
+                  getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
                   onChange={(assetId) => setMaintenanceRecordForm((f) => ({ ...f, assetId }))}
                 />
               </label>
@@ -7336,7 +8595,16 @@ export default function App() {
                 <tbody>
                   {sortedMaintenanceRows.length ? (
                     sortedMaintenanceRows.map((row) => (
-                      <tr key={row.rowId}>
+                      <tr
+                        key={row.rowId}
+                        className={maintenanceHistoryRowClass(
+                          row.type || "",
+                          row.completion || "",
+                          row.status || "",
+                          row.condition || "",
+                          row.note || ""
+                        )}
+                      >
                         <td>
                           <button
                             className="tab"
@@ -7405,7 +8673,16 @@ export default function App() {
                     <tbody>
                       {(maintenanceDetailAsset.maintenanceHistory || []).length ? (
                         (maintenanceDetailAsset.maintenanceHistory || []).map((entry) => (
-                          <tr key={`maintenance-detail-${entry.id}`}>
+                          <tr
+                            key={`maintenance-detail-${entry.id}`}
+                            className={maintenanceHistoryRowClass(
+                              entry.type || "",
+                              entry.completion || "",
+                              maintenanceDetailAsset.status || "",
+                              entry.condition || "",
+                              entry.note || ""
+                            )}
+                          >
                             <td>
                               {maintenanceEditingEntryId === entry.id ? (
                                 <input
@@ -7578,7 +8855,7 @@ export default function App() {
                     <AssetPicker
                       value={verificationRecordForm.assetId}
                       assets={assets}
-                      getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type)} • ${campusLabel(asset.campus)}`}
+                      getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
                       onChange={(assetId) => setVerificationRecordForm((f) => ({ ...f, assetId }))}
                     />
                   </label>
@@ -7966,39 +9243,46 @@ export default function App() {
             </div>
 
             {reportType === "asset_master" && (
+              <div className="panel-note">
+                <strong>Set-first view:</strong> each row is one main asset/set, with all linked components shown in one line.
+              </div>
+            )}
+            {reportType === "asset_master" && (
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>{t.assetId}</th>
+                      <th>{t.setCode}</th>
+                      <th>Main {t.assetId}</th>
                       <th>{t.photo}</th>
                       <th>{t.campus}</th>
-                      <th>{t.category}</th>
-                      <th>{t.typeCode}</th>
-                      <th>{t.status}</th>
                       <th>{t.location}</th>
-                      <th>Purchase</th>
-                      <th>Warranty</th>
+                      <th>{t.category}</th>
+                      <th>Main {t.typeCode}</th>
+                      <th>{t.status}</th>
+                      <th>Items in Set</th>
+                      <th>Components</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {assets.length ? (
-                      assets.map((a) => (
-                        <tr key={`report-asset-${a.id}`}>
-                          <td><strong>{a.assetId}</strong></td>
-                          <td>{renderAssetPhoto(a.photo || "", a.assetId)}</td>
-                          <td>{campusLabel(a.campus)}</td>
-                          <td>{a.category}</td>
-                          <td>{a.type}</td>
-                          <td>{a.status || "-"}</td>
-                          <td>{a.location || "-"}</td>
-                          <td>{formatDate(a.purchaseDate || "-")}</td>
-                          <td>{formatDate(a.warrantyUntil || "-")}</td>
+                    {assetMasterSetRows.length ? (
+                      assetMasterSetRows.map((row) => (
+                        <tr key={`report-asset-master-${row.key}`} className={row.setCode !== "-" ? "row-set-parent" : ""}>
+                          <td><strong>{row.setCode}</strong></td>
+                          <td><strong>{row.mainAssetId}</strong></td>
+                          <td>{renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.location || "-"}</td>
+                          <td>{row.category}</td>
+                          <td>{row.mainType}</td>
+                          <td>{row.mainStatus || "-"}</td>
+                          <td>{row.totalItems}</td>
+                          <td className="report-components-cell">{row.childSummary}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={9}>No assets found.</td>
+                        <td colSpan={10}>No assets found.</td>
                       </tr>
                     )}
                   </tbody>
@@ -8904,7 +10188,7 @@ export default function App() {
                             <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
                             <td>{campusLabel(asset.campus)}</td>
                             <td>{asset.category}</td>
-                            <td>{assetItemName(asset.category, asset.type)}</td>
+                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
                             <td>{asset.location || "-"}</td>
                             <td>{asset.status || "-"}</td>
                           </tr>
@@ -8952,6 +10236,82 @@ export default function App() {
                     </tbody>
                   </table>
                 )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {pendingStatusChange && (
+          <div className="modal-backdrop" onClick={() => setPendingStatusChange(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{t.statusChangeConfirm}</h2>
+                <button className="tab" onClick={() => setPendingStatusChange(null)}>{t.close}</button>
+              </div>
+              <div className="form-grid">
+                <div className="field">
+                  <span>From</span>
+                  <input className="input" value={pendingStatusChange.fromStatus} readOnly />
+                </div>
+                <div className="field">
+                  <span>To</span>
+                  <input className="input" value={pendingStatusChange.toStatus} readOnly />
+                </div>
+                <label className="field field-wide">
+                  <span>{t.statusReason}</span>
+                  <textarea
+                    className="textarea"
+                    value={pendingStatusChange.reason}
+                    onChange={(e) =>
+                      setPendingStatusChange((prev) =>
+                        prev ? { ...prev, reason: e.target.value } : prev
+                      )
+                    }
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span>{t.statusVerifiedBy}</span>
+                  <input
+                    className="input"
+                    value={pendingStatusChange.verifiedBy}
+                    onChange={(e) =>
+                      setPendingStatusChange((prev) =>
+                        prev ? { ...prev, verifiedBy: e.target.value } : prev
+                      )
+                    }
+                  />
+                </label>
+              </div>
+              <div className="asset-actions">
+                <div className="tiny">
+                  {pendingStatusChange.fromStatus} {"->"} {pendingStatusChange.toStatus}
+                </div>
+                <div className="row-actions">
+                  <button className="tab" onClick={() => setPendingStatusChange(null)}>{t.cancelEdit}</button>
+                  <button
+                    className="btn-primary"
+                    disabled={busy}
+                    onClick={async () => {
+                      if (!pendingStatusChange.reason.trim()) {
+                        alert(t.statusReasonRequired);
+                        return;
+                      }
+                      if (!pendingStatusChange.verifiedBy.trim()) {
+                        alert(t.statusVerifiedByRequired);
+                        return;
+                      }
+                      const ok = await changeAssetStatus(
+                        pendingStatusChange.assetId,
+                        pendingStatusChange.toStatus,
+                        pendingStatusChange.reason.trim(),
+                        pendingStatusChange.verifiedBy.trim()
+                      );
+                      if (ok) setPendingStatusChange(null);
+                    }}
+                  >
+                    {t.confirm}
+                  </button>
+                </div>
               </div>
             </section>
           </div>
