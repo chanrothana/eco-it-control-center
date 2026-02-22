@@ -205,6 +205,7 @@ const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
 const INVENTORY_ITEM_FALLBACK_KEY = "it_inventory_items_v1";
 const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
+const SERVER_ONLY_STORAGE = true;
 const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "dashboard",
   "assets",
@@ -810,9 +811,11 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     return { res, data };
   }
 
-  const apiBaseOverride = String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "")
-    .trim()
-    .replace(/\/+$/, "");
+  const apiBaseOverride = SERVER_ONLY_STORAGE
+    ? ""
+    : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "")
+        .trim()
+        .replace(/\/+$/, "");
   const autoApiBase = getAutoApiBaseForHost().replace(/\/+$/, "");
   const candidates: string[] = url.startsWith("/api/") ? [] : [url];
 
@@ -820,13 +823,10 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     if (apiBaseOverride) candidates.push(`${apiBaseOverride}${url}`);
     if (ENV_API_BASE_URL) candidates.push(`${ENV_API_BASE_URL}${url}`);
     if (autoApiBase) candidates.push(`${autoApiBase}${url}`);
-    candidates.push(url);
-    candidates.push(`http://127.0.0.1:4000${url}`);
-    candidates.push(`http://localhost:4000${url}`);
     if (typeof window !== "undefined") {
-      const host = window.location.hostname;
+      const host = String(window.location.hostname || "").toLowerCase();
       if (host && host !== "localhost" && host !== "127.0.0.1") {
-        candidates.push(`http://${host}:4000${url}`);
+        candidates.push(url);
       }
     }
   }
@@ -859,6 +859,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function readLocationFallback(): LocationEntry[] {
+  if (SERVER_ONLY_STORAGE) return [];
   try {
     const raw = localStorage.getItem(LOCATION_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
@@ -869,6 +870,7 @@ function readLocationFallback(): LocationEntry[] {
 }
 
 function trySetLocalStorage(key: string, value: string) {
+  if (SERVER_ONLY_STORAGE) return true;
   try {
     localStorage.setItem(key, value);
     return true;
@@ -883,6 +885,7 @@ function writeLocationFallback(list: LocationEntry[]) {
 }
 
 function readAssetFallback(): Asset[] {
+  if (SERVER_ONLY_STORAGE) return [];
   try {
     const raw = localStorage.getItem(ASSET_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
@@ -904,6 +907,7 @@ function readAssetFallback(): Asset[] {
 }
 
 function writeAssetFallback(list: Asset[]) {
+  if (SERVER_ONLY_STORAGE) return;
   const normalizedList = list.map((asset) => {
     const photos = normalizeAssetPhotos(asset);
     return { ...asset, photo: photos[0] || "", photos };
@@ -960,78 +964,18 @@ function writeAssetFallback(list: Asset[]) {
   console.warn("Asset fallback storage is full. Existing stored data was kept to avoid photo loss.");
 }
 
-function readUserFallback(): StaffUser[] {
-  try {
-    const raw = localStorage.getItem(USER_FALLBACK_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-
-    // Backward compatibility: old version stored users as string[]
-    if (parsed.every((v) => typeof v === "string")) {
-      return parsed.map((fullName: string, idx: number) => ({
-        id: Date.now() + idx,
-        fullName,
-        position: "-",
-        email: "",
-      }));
-    }
-
-    return parsed
-      .filter((u) => u && typeof u === "object")
-      .map((u) => ({
-        id: Number(u.id) || Date.now(),
-        fullName: String(u.fullName || "").trim(),
-        position: String(u.position || "").trim(),
-        email: String(u.email || "").trim(),
-      }))
-      .filter((u) => u.fullName);
-  } catch {
-    return [];
-  }
-}
-
 function writeUserFallback(list: StaffUser[]) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(USER_FALLBACK_KEY, JSON.stringify(list));
 }
 
-function readStringMap(key: string): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 function writeStringMap(key: string, map: Record<string, string>) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(key, JSON.stringify(map));
 }
 
-function readItemTypeFallback(): Record<string, Array<{ itemEn: string; itemKm: string; code: string }>> {
-  try {
-    const raw = localStorage.getItem(ITEM_TYPE_FALLBACK_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    const out: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>> = {};
-    for (const [category, list] of Object.entries(parsed || {})) {
-      if (!Array.isArray(list)) continue;
-      const clean = list
-        .filter((x) => x && typeof x === "object")
-        .map((x) => ({
-          itemEn: String((x as { itemEn?: string }).itemEn || "").trim(),
-          itemKm: String((x as { itemKm?: string }).itemKm || "").trim(),
-          code: String((x as { code?: string }).code || "").trim().toUpperCase(),
-        }))
-        .filter((x) => x.code && x.itemEn);
-      if (clean.length) out[category] = clean;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
 function writeItemTypeFallback(map: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(ITEM_TYPE_FALLBACK_KEY, JSON.stringify(map));
 }
 
@@ -1043,6 +987,7 @@ function normalizeModulesByRole(role: "Admin" | "Viewer", modules?: unknown): Na
 }
 
 function readAuthPermissionFallback(): Record<string, { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[] }> {
+  if (SERVER_ONLY_STORAGE) return {};
   try {
     const raw = localStorage.getItem(AUTH_PERMISSION_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
@@ -1063,10 +1008,12 @@ function readAuthPermissionFallback(): Record<string, { role: "Admin" | "Viewer"
 }
 
 function writeAuthPermissionFallback(map: Record<string, { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[] }>) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(AUTH_PERMISSION_FALLBACK_KEY, JSON.stringify(map));
 }
 
 function readAuthAccountsFallback(): AuthAccount[] {
+  if (SERVER_ONLY_STORAGE) return [];
   try {
     const raw = localStorage.getItem(AUTH_ACCOUNTS_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
@@ -1092,6 +1039,7 @@ function readAuthAccountsFallback(): AuthAccount[] {
 }
 
 function writeAuthAccountsFallback(rows: AuthAccount[]) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(AUTH_ACCOUNTS_FALLBACK_KEY, JSON.stringify(rows));
 }
 
@@ -1120,6 +1068,7 @@ function mergeAuthAccounts(serverRows: AuthAccount[], localRows: AuthAccount[]) 
 }
 
 function readAuditFallback(): AuditLog[] {
+  if (SERVER_ONLY_STORAGE) return [];
   try {
     const raw = localStorage.getItem(AUDIT_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
@@ -1130,6 +1079,7 @@ function readAuditFallback(): AuditLog[] {
 }
 
 function writeAuditFallback(list: AuditLog[]) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(AUDIT_FALLBACK_KEY, JSON.stringify(list.slice(0, 500)));
 }
 
@@ -1156,70 +1106,13 @@ function clearAllFallbackCaches() {
   }
 }
 
-function readInventoryItemFallback(): InventoryItem[] {
-  try {
-    const raw = localStorage.getItem(INVENTORY_ITEM_FALLBACK_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((v) => v && typeof v === "object")
-      .map((v) => {
-        const row = v as Partial<InventoryItem>;
-        return {
-          id: Number(row.id) || Date.now(),
-          campus: String(row.campus || ""),
-          category: (row.category === "CLEAN_TOOL" || row.category === "MAINT_TOOL" ? row.category : "SUPPLY"),
-          itemCode: String(row.itemCode || "").trim().toUpperCase(),
-          itemName: String(row.itemName || "").trim(),
-          unit: String(row.unit || "").trim() || "pcs",
-          openingQty: Number(row.openingQty || 0),
-          minStock: Number(row.minStock || 0),
-          location: String(row.location || "").trim(),
-          vendor: String(row.vendor || "").trim(),
-          notes: String(row.notes || "").trim(),
-          photo: String(row.photo || ""),
-          created: String(row.created || new Date().toISOString()),
-        } as InventoryItem;
-      })
-      .filter((x) => x.campus && x.itemCode && x.itemName);
-  } catch {
-    return [];
-  }
-}
-
 function writeInventoryItemFallback(rows: InventoryItem[]) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(INVENTORY_ITEM_FALLBACK_KEY, JSON.stringify(rows));
 }
 
-function readInventoryTxnFallback(): InventoryTxn[] {
-  try {
-    const raw = localStorage.getItem(INVENTORY_TXN_FALLBACK_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((v) => v && typeof v === "object")
-      .map((v) => {
-        const row = v as Partial<InventoryTxn>;
-        return {
-          id: Number(row.id) || Date.now(),
-          itemId: Number(row.itemId) || 0,
-          campus: String(row.campus || ""),
-          itemCode: String(row.itemCode || "").trim().toUpperCase(),
-          itemName: String(row.itemName || "").trim(),
-          date: String(row.date || ""),
-          type: row.type === "OUT" ? "OUT" : "IN",
-          qty: Math.max(0, Number(row.qty || 0)),
-          by: String(row.by || "").trim(),
-          note: String(row.note || "").trim(),
-        } as InventoryTxn;
-      })
-      .filter((x) => x.itemId && x.date && x.qty > 0);
-  } catch {
-    return [];
-  }
-}
-
 function writeInventoryTxnFallback(rows: InventoryTxn[]) {
+  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(INVENTORY_TXN_FALLBACK_KEY, JSON.stringify(rows.slice(0, 5000)));
 }
 
@@ -1759,7 +1652,10 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [apiBaseInput, setApiBaseInput] = useState(
-    () => String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
+    () =>
+      SERVER_ONLY_STORAGE
+        ? String(ENV_API_BASE_URL || getAutoApiBaseForHost())
+        : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
   );
   const isAdmin = authUser?.role === "Admin";
 
@@ -1838,31 +1734,25 @@ export default function App() {
   }, [tab]);
 
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() => readInventoryItemFallback());
-  const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>(() => readInventoryTxnFallback());
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [locations, setLocations] = useState<LocationEntry[]>([]);
-  const [users, setUsers] = useState<StaffUser[]>(() => readUserFallback());
+  const [users, setUsers] = useState<StaffUser[]>([]);
   const [campusNames, setCampusNames] = useState<Record<string, string>>(() => {
-    const saved = readStringMap(CAMPUS_NAME_FALLBACK_KEY);
     const out: Record<string, string> = {};
-    for (const campus of CAMPUS_LIST) out[campus] = saved[campus] || campus;
+    for (const campus of CAMPUS_LIST) out[campus] = campus;
     return out;
   });
   const [customTypeOptions, setCustomTypeOptions] = useState<
     Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>
-  >(() => readItemTypeFallback());
+  >({});
   const [itemNames, setItemNames] = useState<Record<string, string>>(() => {
     const defaults: Record<string, string> = {};
-    const custom = readItemTypeFallback();
     for (const [category, items] of Object.entries(TYPE_OPTIONS)) {
       for (const item of items) defaults[`${category}:${item.code}`] = item.itemEn;
     }
-    for (const [category, items] of Object.entries(custom)) {
-      for (const item of items) defaults[`${category}:${item.code}`] = item.itemEn;
-    }
-    const saved = readStringMap(ITEM_NAME_FALLBACK_KEY);
-    return { ...defaults, ...saved };
+    return defaults;
   });
   const [stats, setStats] = useState<DashboardStats>({
     totalAssets: 0,
@@ -2127,6 +2017,11 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
+    if (!SERVER_ONLY_STORAGE) return;
+    clearAllFallbackCaches();
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     async function initAuth() {
       const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -2134,7 +2029,7 @@ export default function App() {
         if (mounted) setAuthLoading(false);
         return;
       }
-      if (token === LOCAL_ADMIN_TOKEN) {
+      if (!SERVER_ONLY_STORAGE && token === LOCAL_ADMIN_TOKEN) {
         const perm = readAuthPermissionFallback().admin || {
           role: "Admin" as const,
           campuses: ["ALL"],
@@ -2153,7 +2048,7 @@ export default function App() {
         }
         return;
       }
-      if (token === LOCAL_VIEWER_TOKEN) {
+      if (!SERVER_ONLY_STORAGE && token === LOCAL_VIEWER_TOKEN) {
         const perm = readAuthPermissionFallback().viewer || {
           role: "Viewer" as const,
           campuses: ["Chaktomuk Campus (C2.2)"],
@@ -2570,7 +2465,6 @@ export default function App() {
       if (assetCategoryFilter !== "ALL") assetParams.set("category", assetCategoryFilter);
       if (search.trim()) assetParams.set("q", search.trim());
 
-      const localAssets = readAssetFallback();
       const [assetRes, ticketRes, statsRes] = await Promise.all([
         requestJson<{ assets: Asset[] }>(`/api/assets?${assetParams.toString()}`),
         requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
@@ -2591,22 +2485,8 @@ export default function App() {
         // Keep local settings if /api/settings is unavailable.
       }
 
-      let locationList: LocationEntry[] = [];
-      const localLocations = readLocationFallback();
-      try {
-        const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
-        const serverLocations = normalizeArray<LocationEntry>(locationRes.locations);
-        locationList = serverLocations.length
-          ? mergeLocations(serverLocations, localLocations)
-          : localLocations;
-        writeLocationFallback(locationList);
-      } catch (err) {
-        if (isMissingRouteError(err)) {
-          locationList = localLocations;
-        } else {
-          throw err;
-        }
-      }
+      const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
+      const locationList = normalizeArray<LocationEntry>(locationRes.locations);
 
       const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
       // Server-first sync: when API is reachable, use server data as single source of truth.
@@ -2629,22 +2509,9 @@ export default function App() {
           byCampus: [],
         };
       setStats(
-        serverStats.totalAssets === 0 && localAssets.length
-          ? buildStatsFromAssets(localAssets, campusFilter)
-          : serverStats
+        serverStats
       );
     } catch (err) {
-      if (isApiUnavailableError(err)) {
-        const fallbackAssets = readAssetFallback();
-        setAssets(effectiveAssetCampusFilter === "ALL"
-          ? fallbackAssets
-          : fallbackAssets.filter((a) => a.campus === effectiveAssetCampusFilter));
-        setTickets([]);
-        setLocations(readLocationFallback());
-        setStats(buildStatsFromAssets(fallbackAssets, campusFilter));
-        setError("");
-        return;
-      }
       setError(err instanceof Error ? err.message : "Cannot load data");
     } finally {
       setLoading(false);
@@ -5962,8 +5829,8 @@ export default function App() {
       setLoginForm({ username: "", password: "" });
       await loadData();
     } catch (err) {
-      // Fallback for local practice when backend auth route is unavailable.
-      if (isApiUnavailableError(err) || isMissingRouteError(err)) {
+      // Local fallback login is disabled in server-only mode.
+      if (!SERVER_ONLY_STORAGE && (isApiUnavailableError(err) || isMissingRouteError(err))) {
         const username = loginForm.username.trim().toLowerCase();
         const password = loginForm.password;
         if (username === "admin" && password === "EcoAdmin@2026!") {
@@ -5998,6 +5865,11 @@ export default function App() {
 
   function saveApiServerUrl() {
     const next = apiBaseInput.trim().replace(/\/+$/, "");
+    if (SERVER_ONLY_STORAGE) {
+      setApiBaseInput(ENV_API_BASE_URL || getAutoApiBaseForHost() || "");
+      setError("");
+      return;
+    }
     if (next) {
       trySetLocalStorage(API_BASE_OVERRIDE_KEY, next);
       setApiBaseInput(next);
