@@ -12,6 +12,20 @@ services:
         sizeGB: 1
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: 22
       - key: DATA_ROOT
         value: /var/data
+      - key: DB_PATH
+        value: /var/data/db.json
+      - key: SQLITE_PATH
+        value: /var/data/data.sqlite
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+      - key: BACKUPS_DIR
+        value: /var/data/backups
+      - key: AUTO_BACKUP_ENABLED
+        value: "true"
+      - key: AUTO_BACKUP_INTERVAL_HOURS
+        value: "24"
+      - key: AUTO_BACKUP_RETENTION_DAYS
+        value: "30"

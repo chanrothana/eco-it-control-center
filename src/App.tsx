@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import "./App.css";
 
 type Asset = {
@@ -84,6 +85,14 @@ type PendingStatusChange = {
   reason: string;
   verifiedBy: string;
 };
+type ReportType =
+  | "asset_master"
+  | "asset_by_location"
+  | "overdue"
+  | "transfer"
+  | "maintenance_completion"
+  | "verification_summary"
+  | "qr_labels";
 
 type Ticket = {
   id: number;
@@ -199,6 +208,7 @@ const CAMPUS_NAME_FALLBACK_KEY = "it_campus_names_fallback_v1";
 const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
 const ITEM_TYPE_FALLBACK_KEY = "it_item_types_fallback_v1";
 const AUTH_TOKEN_KEY = "it_auth_token_v1";
+const AUTH_USER_KEY = "it_auth_user_v1";
 const AUTH_PERMISSION_FALLBACK_KEY = "it_auth_permissions_fallback_v1";
 const AUTH_ACCOUNTS_FALLBACK_KEY = "it_auth_accounts_fallback_v1";
 const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
@@ -874,7 +884,13 @@ function readLocationFallback(): LocationEntry[] {
 }
 
 function trySetLocalStorage(key: string, value: string) {
-  if (SERVER_ONLY_STORAGE) return true;
+  const allowInServerOnlyMode = new Set<string>([
+    AUTH_TOKEN_KEY,
+    AUTH_USER_KEY,
+    API_BASE_OVERRIDE_KEY,
+    "ui_lang",
+  ]);
+  if (SERVER_ONLY_STORAGE && !allowInServerOnlyMode.has(key)) return true;
   try {
     localStorage.setItem(key, value);
     return true;
@@ -1147,6 +1163,12 @@ function isApiUnavailableError(err: unknown) {
   if (!(err instanceof Error)) return false;
   const m = err.message.toLowerCase();
   return m.includes("route not found") || m.includes("cannot connect to api server");
+}
+
+function isUnauthorizedError(err: unknown) {
+  if (!(err instanceof Error)) return false;
+  const m = err.message.toLowerCase();
+  return m.includes("unauthorized") || m.includes("request failed (401)") || m.includes("request failed (403)");
 }
 
 function isHistoryRecordNotFoundError(err: unknown) {
@@ -1711,6 +1733,7 @@ export default function App() {
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("bulk");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations">("campus");
   const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance">("items");
+  const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"record" | "history">("history");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
   const [maintenanceSort, setMaintenanceSort] = useState<{
@@ -1720,7 +1743,7 @@ export default function App() {
     key: "date",
     direction: "desc",
   });
-  const [reportType, setReportType] = useState<"asset_master" | "asset_by_location" | "overdue" | "transfer" | "maintenance_completion" | "verification_summary">("asset_master");
+  const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
   const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
@@ -1826,6 +1849,17 @@ export default function App() {
   const [assetFileKey, setAssetFileKey] = useState(0);
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [assetDetailId, setAssetDetailId] = useState<number | null>(null);
+  const [pendingQrAssetId, setPendingQrAssetId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return (
+      new URLSearchParams(window.location.search).get("assetId") ||
+      new URLSearchParams(window.location.search).get("asset") ||
+      ""
+    )
+      .trim()
+      .toUpperCase();
+  });
+  const [qrCodeMap, setQrCodeMap] = useState<Record<string, string>>({});
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [editAssetFileKey, setEditAssetFileKey] = useState(0);
   const [assetEditForm, setAssetEditForm] = useState({
@@ -2025,6 +2059,14 @@ export default function App() {
   }, [lang]);
 
   useEffect(() => {
+    if (authUser) {
+      trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(authUser));
+    } else {
+      localStorage.removeItem(AUTH_USER_KEY);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
     if (!SERVER_ONLY_STORAGE) return;
     clearAllFallbackCaches();
   }, []);
@@ -2036,6 +2078,18 @@ export default function App() {
       if (!token) {
         if (mounted) setAuthLoading(false);
         return;
+      }
+      const cachedUserRaw = localStorage.getItem(AUTH_USER_KEY);
+      let cachedUser: AuthUser | null = null;
+      if (cachedUserRaw) {
+        try {
+          cachedUser = JSON.parse(cachedUserRaw) as AuthUser;
+        } catch {
+          cachedUser = null;
+        }
+      }
+      if (mounted && cachedUser) {
+        setAuthUser(cachedUser);
       }
       runtimeAuthToken = token;
       if (!SERVER_ONLY_STORAGE && token === LOCAL_ADMIN_TOKEN) {
@@ -2078,11 +2132,21 @@ export default function App() {
       }
       try {
         const res = await requestJson<{ user: AuthUser }>("/api/auth/me");
+        if (res.user) {
+          trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(res.user));
+        }
         if (mounted) setAuthUser(res.user || null);
-      } catch {
-        runtimeAuthToken = "";
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        if (mounted) setAuthUser(null);
+      } catch (err) {
+        // Only clear auth on real unauthorized response.
+        if (isUnauthorizedError(err)) {
+          runtimeAuthToken = "";
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          localStorage.removeItem(AUTH_USER_KEY);
+          if (mounted) setAuthUser(null);
+        } else if (mounted && cachedUser) {
+          // Keep prior login state on temporary API/network issues.
+          setAuthUser(cachedUser);
+        }
       } finally {
         if (mounted) setAuthLoading(false);
       }
@@ -2475,15 +2539,8 @@ export default function App() {
       const params = new URLSearchParams();
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
 
-      const assetParams = new URLSearchParams();
-      if (effectiveAssetCampusFilter !== "ALL") {
-        assetParams.set("campus", effectiveAssetCampusFilter);
-      }
-      if (assetCategoryFilter !== "ALL") assetParams.set("category", assetCategoryFilter);
-      if (search.trim()) assetParams.set("q", search.trim());
-
       const [assetRes, ticketRes, statsRes] = await Promise.all([
-        requestJson<{ assets: Asset[] }>(`/api/assets?${assetParams.toString()}`),
+        requestJson<{ assets: Asset[] }>(`/api/assets`),
         requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
         requestJson<{ stats: DashboardStats }>(`/api/dashboard?${params.toString()}`),
       ]);
@@ -4633,6 +4690,7 @@ export default function App() {
         note: "",
       }));
       await loadData();
+      setTransferView("history");
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to transfer asset");
@@ -4968,6 +5026,42 @@ export default function App() {
     () => assets.find((a) => a.id === assetDetailId) || null,
     [assets, assetDetailId]
   );
+  const sortByNewestDate = useCallback(
+    (aDate?: string, bDate?: string) => {
+      const aTime = Date.parse(aDate || "");
+      const bTime = Date.parse(bDate || "");
+      if (!Number.isNaN(aTime) && !Number.isNaN(bTime)) return bTime - aTime;
+      return String(bDate || "").localeCompare(String(aDate || ""));
+    },
+    []
+  );
+  const detailMaintenanceEntries = useMemo(
+    () =>
+      detailAsset
+        ? [...(detailAsset.maintenanceHistory || [])].sort((a, b) =>
+            sortByNewestDate(a.date, b.date)
+          )
+        : [],
+    [detailAsset, sortByNewestDate]
+  );
+  const detailTransferEntries = useMemo(
+    () =>
+      detailAsset
+        ? [...(detailAsset.transferHistory || [])].sort((a, b) =>
+            sortByNewestDate(a.date, b.date)
+          )
+        : [],
+    [detailAsset, sortByNewestDate]
+  );
+  const detailStatusEntries = useMemo(
+    () =>
+      detailAsset
+        ? [...(detailAsset.statusHistory || [])].sort((a, b) =>
+            sortByNewestDate(a.date, b.date)
+          )
+        : [],
+    [detailAsset, sortByNewestDate]
+  );
   const editingAsset = useMemo(
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
@@ -5024,6 +5118,15 @@ export default function App() {
   const maintenanceDetailAsset = useMemo(
     () => assets.find((a) => a.id === maintenanceDetailAssetId) || null,
     [assets, maintenanceDetailAssetId]
+  );
+  const maintenanceDetailEntries = useMemo(
+    () =>
+      maintenanceDetailAsset
+        ? [...(maintenanceDetailAsset.maintenanceHistory || [])].sort((a, b) =>
+            sortByNewestDate(a.date, b.date)
+          )
+        : [],
+    [maintenanceDetailAsset, sortByNewestDate]
   );
   const assetStatusRowClass = useCallback((statusRaw: string) => {
     const status = String(statusRaw || "").trim().toLowerCase();
@@ -5503,6 +5606,8 @@ export default function App() {
   }, [transferForm.assetId]);
 
   const allTransferRows = useMemo(() => {
+    const cachedAssets = readAssetFallback();
+    const sourceAssets = cachedAssets.length ? cachedAssets : assets;
     const rows: Array<{
       rowId: string;
       assetId: string;
@@ -5515,7 +5620,7 @@ export default function App() {
       reason: string;
       note: string;
     }> = [];
-    for (const asset of assets) {
+    for (const asset of sourceAssets) {
       for (const entry of asset.transferHistory || []) {
         rows.push({
           rowId: `${asset.id}-${entry.id}`,
@@ -5655,6 +5760,7 @@ export default function App() {
         }
         return {
           key: `asset-${asset.id}`,
+          assetDbId: asset.id,
           assetId: asset.assetId,
           setCode,
           linkedTo,
@@ -5678,7 +5784,91 @@ export default function App() {
       );
   }, [assets, assetItemName, campusLabel]);
 
-  function printCurrentReport() {
+  const qrLabelRows = useMemo(
+    () =>
+      assetMasterSetRows.map((row) => ({
+        assetDbId: row.assetDbId,
+        assetId: row.assetId,
+        itemName: row.itemName,
+        campus: row.campus,
+        location: row.location,
+        status: row.status,
+      })),
+    [assetMasterSetRows]
+  );
+
+  const qrScanBase = useMemo(() => {
+    const manual = String(apiBaseInput || "").trim().replace(/\/+$/, "");
+    if (manual) return manual;
+    if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
+    const host = String(window.location.hostname || "").toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") {
+      return DEFAULT_CLOUD_API_BASE;
+    }
+    return String(window.location.origin || DEFAULT_CLOUD_API_BASE).replace(/\/+$/, "");
+  }, [apiBaseInput]);
+
+  const buildAssetQrUrl = useCallback((assetId: string) => {
+    const id = String(assetId || "").trim();
+    if (!id) return "";
+    return `${qrScanBase}/?assetId=${encodeURIComponent(id)}`;
+  }, [qrScanBase]);
+
+  useEffect(() => {
+    if (reportType !== "qr_labels") return;
+    const missing = qrLabelRows.filter((row) => !qrCodeMap[row.assetId]);
+    if (!missing.length) return;
+    let cancelled = false;
+    (async () => {
+      const generated: Array<[string, string]> = [];
+      for (const row of missing) {
+        try {
+          const dataUrl = await QRCode.toDataURL(buildAssetQrUrl(row.assetId), {
+            width: 220,
+            margin: 1,
+            errorCorrectionLevel: "M",
+          });
+          generated.push([row.assetId, dataUrl]);
+        } catch {
+          // skip invalid value
+        }
+      }
+      if (cancelled || !generated.length) return;
+      setQrCodeMap((prev) => {
+        const next = { ...prev };
+        for (const [assetId, dataUrl] of generated) next[assetId] = dataUrl;
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reportType, qrLabelRows, qrCodeMap, buildAssetQrUrl]);
+
+  useEffect(() => {
+    if (!pendingQrAssetId || !authUser || !assets.length) return;
+    const found = assets.find(
+      (a) => String(a.assetId || "").trim().toUpperCase() === pendingQrAssetId
+    );
+    if (found) {
+      setTab("assets");
+      setAssetsView("list");
+      setAssetDetailId(found.id);
+    } else {
+      setError(`QR asset not found: ${pendingQrAssetId}`);
+    }
+    setPendingQrAssetId("");
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("assetId") || url.searchParams.has("asset")) {
+        url.searchParams.delete("assetId");
+        url.searchParams.delete("asset");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      }
+    }
+  }, [pendingQrAssetId, authUser, assets]);
+
+  async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
     let title = "";
     let columns: string[] = [];
@@ -5765,7 +5955,7 @@ export default function App() {
         r.condition || "-",
         r.note || "-",
       ]);
-    } else {
+    } else if (reportType === "verification_summary") {
       const periodLabel =
         reportPeriodMode === "month"
           ? reportMonth
@@ -5782,6 +5972,41 @@ export default function App() {
         r.condition || "-",
         r.note || "-",
         r.by || "-",
+      ]);
+    } else {
+      title = "Asset ID + QR Labels";
+      columns = ["QR", "Asset ID", "Item Name", "Campus", "Location", "Status", "Scan Link"];
+      const missingRows = qrLabelRows.filter((row) => !qrCodeMap[row.assetId]);
+      if (missingRows.length) {
+        const generated: Array<[string, string]> = [];
+        for (const row of missingRows) {
+          try {
+            const dataUrl = await QRCode.toDataURL(buildAssetQrUrl(row.assetId), {
+              width: 220,
+              margin: 1,
+              errorCorrectionLevel: "M",
+            });
+            generated.push([row.assetId, dataUrl]);
+          } catch {
+            // skip invalid value
+          }
+        }
+        if (generated.length) {
+          setQrCodeMap((prev) => {
+            const next = { ...prev };
+            for (const [assetId, dataUrl] of generated) next[assetId] = dataUrl;
+            return next;
+          });
+        }
+      }
+      rows = qrLabelRows.map((row) => [
+        qrCodeMap[row.assetId] || "",
+        row.assetId,
+        row.itemName,
+        campusLabel(row.campus),
+        row.location || "-",
+        row.status || "-",
+        buildAssetQrUrl(row.assetId),
       ]);
     }
 
@@ -5814,6 +6039,8 @@ export default function App() {
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
         : reportType === "asset_master"
         ? `<p><strong>Total Assets:</strong> ${assetMasterSetRows.length}</p>`
+        : reportType === "qr_labels"
+        ? `<p><strong>Total QR Labels:</strong> ${qrLabelRows.length}</p>`
         : "";
 
     const html = `
@@ -5872,6 +6099,7 @@ export default function App() {
       });
       runtimeAuthToken = res.token;
       trySetLocalStorage(AUTH_TOKEN_KEY, res.token);
+      trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(res.user));
       setAuthUser(res.user);
       setLoginForm({ username: "", password: "" });
       await loadData();
@@ -5883,20 +6111,24 @@ export default function App() {
         if (username === "admin" && password === "EcoAdmin@2026!") {
           runtimeAuthToken = LOCAL_ADMIN_TOKEN;
           trySetLocalStorage(AUTH_TOKEN_KEY, LOCAL_ADMIN_TOKEN);
-          setAuthUser({ id: 1, username: "admin", displayName: "Eco Admin", role: "Admin", campuses: ["ALL"] });
+          const adminUser: AuthUser = { id: 1, username: "admin", displayName: "Eco Admin", role: "Admin", campuses: ["ALL"] };
+          trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(adminUser));
+          setAuthUser(adminUser);
           setLoginForm({ username: "", password: "" });
           setError("");
           await loadData();
         } else if (username === "viewer" && password === "EcoViewer@2026!") {
           runtimeAuthToken = LOCAL_VIEWER_TOKEN;
           trySetLocalStorage(AUTH_TOKEN_KEY, LOCAL_VIEWER_TOKEN);
-          setAuthUser({
+          const viewerUser: AuthUser = {
             id: 2,
             username: "viewer",
             displayName: "Eco Viewer",
             role: "Viewer",
             campuses: ["Chaktomuk Campus (C2.2)"],
-          });
+          };
+          trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(viewerUser));
+          setAuthUser(viewerUser);
           setLoginForm({ username: "", password: "" });
           setError("");
           await loadData();
@@ -5940,6 +6172,7 @@ export default function App() {
     } finally {
       runtimeAuthToken = "";
       localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(AUTH_USER_KEY);
       setAuthUser(null);
       setBusy(false);
     }
@@ -7157,8 +7390,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(detailAsset.maintenanceHistory || []).length ? (
-                          (detailAsset.maintenanceHistory || []).map((h) => (
+                        {detailMaintenanceEntries.length ? (
+                          detailMaintenanceEntries.map((h) => (
                             <tr key={`detail-history-${h.id}`}>
                               <td>{formatDate(h.date)}</td>
                               <td>{h.type}</td>
@@ -7194,8 +7427,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(detailAsset.transferHistory || []).length ? (
-                          (detailAsset.transferHistory || []).map((h) => (
+                        {detailTransferEntries.length ? (
+                          detailTransferEntries.map((h) => (
                             <tr key={`detail-transfer-${h.id}`}>
                               <td>{formatDate(h.date)}</td>
                               <td>{campusLabel(h.fromCampus)}</td>
@@ -7227,8 +7460,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(detailAsset.statusHistory || []).length ? (
-                          (detailAsset.statusHistory || []).map((h) => (
+                        {detailStatusEntries.length ? (
+                          detailStatusEntries.map((h) => (
                             <tr key={`detail-status-${h.id}`}>
                               <td>{formatDate(h.date)}</td>
                               <td>{h.fromStatus}</td>
@@ -8747,7 +8980,24 @@ export default function App() {
 
         {tab === "transfer" && (
           <section className="panel">
-            <h2>Asset Transfer</h2>
+            <div className="tabs">
+              <button
+                className={`tab ${transferView === "history" ? "tab-active" : ""}`}
+                onClick={() => setTransferView("history")}
+              >
+                History View
+              </button>
+              <button
+                className={`tab ${transferView === "record" ? "tab-active" : ""}`}
+                onClick={() => setTransferView("record")}
+              >
+                Record Transfer
+              </button>
+            </div>
+
+            {transferView === "record" && (
+              <>
+            <h3 className="section-title">Asset Transfer</h3>
             <div className="form-grid">
               <label className="field">
                 <span>Asset</span>
@@ -8874,6 +9124,52 @@ export default function App() {
                 Save Transfer
               </button>
             </div>
+              </>
+            )}
+
+            {transferView === "history" && (
+              <>
+            <h3 className="section-title">Transfer History</h3>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t.date}</th>
+                    <th>{t.assetId}</th>
+                    <th>From Campus</th>
+                    <th>From Location</th>
+                    <th>To Campus</th>
+                    <th>To Location</th>
+                    <th>By</th>
+                    <th>Reason</th>
+                    <th>{t.notes}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allTransferRows.length ? (
+                    allTransferRows.map((row) => (
+                      <tr key={`transfer-history-tab-${row.rowId}`}>
+                        <td>{formatDate(row.date || "-")}</td>
+                        <td><strong>{row.assetId}</strong></td>
+                        <td>{campusLabel(row.fromCampus)}</td>
+                        <td>{row.fromLocation || "-"}</td>
+                        <td>{campusLabel(row.toCampus)}</td>
+                        <td>{row.toLocation || "-"}</td>
+                        <td>{row.by || "-"}</td>
+                        <td>{row.reason || "-"}</td>
+                        <td>{row.note || "-"}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={9}>No transfer history yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+              </>
+            )}
           </section>
         )}
 
@@ -9150,8 +9446,8 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(maintenanceDetailAsset.maintenanceHistory || []).length ? (
-                        (maintenanceDetailAsset.maintenanceHistory || []).map((entry) => (
+                      {maintenanceDetailEntries.length ? (
+                        maintenanceDetailEntries.map((entry) => (
                           <tr
                             key={`maintenance-detail-${entry.id}`}
                             className={maintenanceHistoryRowClass(
@@ -9665,9 +9961,7 @@ export default function App() {
                 <select
                   className="input"
                   value={reportType}
-                  onChange={(e) =>
-                    setReportType(e.target.value as "asset_master" | "asset_by_location" | "overdue" | "transfer" | "maintenance_completion" | "verification_summary")
-                  }
+                  onChange={(e) => setReportType(e.target.value as ReportType)}
                 >
                   <option value="asset_master">Asset Master Register</option>
                   <option value="asset_by_location">Asset by Campus and Location</option>
@@ -9675,6 +9969,7 @@ export default function App() {
                   <option value="transfer">Asset Transfer Log</option>
                   <option value="maintenance_completion">Maintenance Completion</option>
                   <option value="verification_summary">Verification Summary</option>
+                  <option value="qr_labels">Asset ID + QR Labels</option>
                 </select>
                 {reportType === "maintenance_completion" || (reportType === "verification_summary" && reportPeriodMode === "month") ? (
                   <input
@@ -9726,6 +10021,11 @@ export default function App() {
                 <strong>Asset register view:</strong> one row per asset with quick item/service information.
               </div>
             )}
+            {reportType === "qr_labels" && (
+              <div className="panel-note">
+                <strong>QR label view:</strong> scan QR to open this asset detail page directly.
+              </div>
+            )}
             {reportType === "asset_master" && (
               <div className="table-wrap">
                 <table>
@@ -9755,10 +10055,29 @@ export default function App() {
                           <td>{row.linkedTo || "-"}</td>
                           <td>{row.itemName}</td>
                           <td>{row.category}</td>
-                          <td>{row.itemDescription || "-"}</td>
+                          <td className="report-item-description" title={row.itemDescription || "-"}>
+                            {row.itemDescription || "-"}
+                          </td>
                           <td>{row.location || "-"}</td>
                           <td>{formatDate(row.purchaseDate || "-")}</td>
-                          <td>{formatDate(row.lastServiceDate || "-")}</td>
+                          <td>
+                            {row.lastServiceDate && row.lastServiceDate !== "-" ? (
+                              <button
+                                type="button"
+                                className="report-service-link"
+                                onClick={() => {
+                                  setTab("maintenance");
+                                  setMaintenanceView("history");
+                                  setMaintenanceDetailAssetId(row.assetDbId);
+                                }}
+                                title="Open maintenance history"
+                              >
+                                {formatDate(row.lastServiceDate)}
+                              </button>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                           <td>{row.assignedTo || "-"}</td>
                           <td>{row.status || "-"}</td>
                         </tr>
@@ -9877,6 +10196,32 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {reportType === "qr_labels" && (
+              <div className="qr-label-grid">
+                {qrLabelRows.length ? (
+                  qrLabelRows.map((row) => (
+                    <article className="qr-label-card" key={`qr-label-${row.assetDbId}`}>
+                      <div className="qr-label-image-wrap">
+                        {qrCodeMap[row.assetId] ? (
+                          <img src={qrCodeMap[row.assetId]} alt={`QR ${row.assetId}`} className="qr-label-image" />
+                        ) : (
+                          <div className="qr-label-image qr-label-placeholder">Generating QR...</div>
+                        )}
+                      </div>
+                      <div className="qr-label-meta">
+                        <div className="qr-label-asset-id">{row.assetId}</div>
+                        <div>{row.itemName}</div>
+                        <div>{campusLabel(row.campus)} | {row.location || "-"}</div>
+                        <div>Status: {row.status || "-"}</div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">No assets available for QR labels.</div>
+                )}
               </div>
             )}
 

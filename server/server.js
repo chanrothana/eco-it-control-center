@@ -15,10 +15,21 @@ try {
 const HOST = process.env.API_HOST || process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 4000);
 const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : __dirname;
-const DB_PATH = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : path.join(DATA_ROOT, "db.json");
-const SQLITE_PATH = process.env.SQLITE_PATH ? path.resolve(process.env.SQLITE_PATH) : path.join(DATA_ROOT, "data.sqlite");
-const UPLOADS_DIR = process.env.UPLOADS_DIR ? path.resolve(process.env.UPLOADS_DIR) : path.join(DATA_ROOT, "uploads");
-const BACKUPS_DIR = process.env.BACKUPS_DIR ? path.resolve(process.env.BACKUPS_DIR) : path.join(DATA_ROOT, "backups");
+function resolveStoragePath(envValue, fallbackName) {
+  if (!envValue) return path.join(DATA_ROOT, fallbackName);
+  return path.isAbsolute(envValue)
+    ? path.resolve(envValue)
+    : path.resolve(DATA_ROOT, envValue);
+}
+const DB_PATH = resolveStoragePath(process.env.DB_PATH, "db.json");
+const SQLITE_PATH = resolveStoragePath(process.env.SQLITE_PATH, "data.sqlite");
+const UPLOADS_DIR = resolveStoragePath(process.env.UPLOADS_DIR, "uploads");
+const BACKUPS_DIR = resolveStoragePath(process.env.BACKUPS_DIR, "backups");
+const AUTO_BACKUP_ENABLED = String(process.env.AUTO_BACKUP_ENABLED || "true").toLowerCase() !== "false";
+const AUTO_BACKUP_INTERVAL_HOURS = Math.max(1, Number(process.env.AUTO_BACKUP_INTERVAL_HOURS || 24));
+const AUTO_BACKUP_INTERVAL_MS = AUTO_BACKUP_INTERVAL_HOURS * 60 * 60 * 1000;
+const AUTO_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.AUTO_BACKUP_RETENTION_DAYS || 30));
+const AUTO_BACKUP_RETENTION_MS = AUTO_BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const INDEX_FILE = path.join(BUILD_DIR, "index.html");
 const CAMPUS_MAP = {
@@ -82,10 +93,12 @@ const DEFAULT_USERS = [
   },
 ];
 const sessions = new Map();
-const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs", "app_settings"];
+const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs", "app_settings", "auth_sessions"];
 const PASSWORD_PREFIX = "scrypt$";
 
 let sqliteDb;
+let autoBackupTimer = null;
+let autoBackupRunning = false;
 const HAS_NATIVE_SQLITE = Boolean(DatabaseSync);
 
 function mapDbToSqlRows(db) {
@@ -96,6 +109,7 @@ function mapDbToSqlRows(db) {
     users: Array.isArray(db.users) ? db.users : [],
     audit_logs: Array.isArray(db.auditLogs) ? db.auditLogs : [],
     app_settings: [db.settings && typeof db.settings === "object" ? db.settings : {}],
+    auth_sessions: Array.isArray(db.authSessions) ? db.authSessions : [],
   };
 }
 
@@ -108,6 +122,7 @@ function mapSqlRowsToDb(rowsByTable) {
     users: Array.isArray(rowsByTable.users) ? rowsByTable.users : [],
     auditLogs: Array.isArray(rowsByTable.audit_logs) ? rowsByTable.audit_logs : [],
     settings: settingsRow && typeof settingsRow === "object" ? settingsRow : {},
+    authSessions: Array.isArray(rowsByTable.auth_sessions) ? rowsByTable.auth_sessions : [],
   };
 }
 
@@ -127,6 +142,64 @@ function readLegacyJsonDbSync() {
   } catch {
     return null;
   }
+}
+
+function readLatestBackupDbSync() {
+  try {
+    if (!fsSync.existsSync(BACKUPS_DIR)) return null;
+    const backupFiles = fsSync
+      .readdirSync(BACKUPS_DIR)
+      .filter((name) => /^backup-.*\.json$/i.test(name))
+      .map((name) => {
+        const fullPath = path.join(BACKUPS_DIR, name);
+        const stat = fsSync.statSync(fullPath);
+        return { name, fullPath, mtimeMs: stat.mtimeMs || 0 };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    for (const file of backupFiles) {
+      try {
+        const raw = fsSync.readFileSync(file.fullPath, "utf8");
+        const parsed = JSON.parse(raw);
+        return { source: file.name, db: normalizeImportedDb(parsed) };
+      } catch {
+        // Skip invalid backup file and continue.
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function countDbRows(db) {
+  const safe = normalizeImportedDb(db);
+  return {
+    assets: Array.isArray(safe.assets) ? safe.assets.length : 0,
+    tickets: Array.isArray(safe.tickets) ? safe.tickets.length : 0,
+    locations: Array.isArray(safe.locations) ? safe.locations.length : 0,
+    users: Array.isArray(safe.users) ? safe.users.length : 0,
+    auditLogs: Array.isArray(safe.auditLogs) ? safe.auditLogs.length : 0,
+    authSessions: Array.isArray(safe.authSessions) ? safe.authSessions.length : 0,
+  };
+}
+
+function dbScore(db) {
+  const counts = countDbRows(db);
+  return (
+    counts.assets * 1000 +
+    counts.tickets * 500 +
+    counts.locations * 200 +
+    counts.users * 50 +
+    counts.auditLogs * 10 +
+    counts.authSessions
+  );
+}
+
+function looksLikeDataLoss(db) {
+  const counts = countDbRows(db);
+  const looksEmptyCore = counts.assets === 0 && counts.tickets === 0;
+  const hasPartialSideData = counts.locations > 0 || counts.users <= DEFAULT_USERS.length;
+  return looksEmptyCore && hasPartialSideData;
 }
 
 function openSqlite() {
@@ -165,6 +238,11 @@ function openSqlite() {
       payload TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS app_settings (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS auth_sessions (
       row_id INTEGER PRIMARY KEY AUTOINCREMENT,
       position INTEGER NOT NULL,
       payload TEXT NOT NULL
@@ -253,6 +331,22 @@ function isSqliteEmptySync() {
   return SQLITE_TABLES.every((table) => Number(countStmt[table].get().c || 0) === 0);
 }
 
+function readSqliteDbSync() {
+  const db = openSqlite();
+  const selectStmt = {};
+  for (const table of SQLITE_TABLES) {
+    selectStmt[table] = db.prepare(`SELECT payload FROM ${table} ORDER BY position ASC, row_id ASC`);
+  }
+  const rowsByTable = {};
+  for (const table of SQLITE_TABLES) {
+    const rows = selectStmt[table].all();
+    rowsByTable[table] = rows
+      .map((row) => parseSqlPayload(row.payload, table))
+      .filter((row) => row && typeof row === "object");
+  }
+  return normalizeImportedDb(mapSqlRowsToDb(rowsByTable));
+}
+
 function initStorageSync() {
   if (!HAS_NATIVE_SQLITE) {
     fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -263,12 +357,46 @@ function initStorageSync() {
     return;
   }
   openSqlite();
-  if (!isSqliteEmptySync()) return;
+  let sqliteCurrent = readSqliteDbSync();
+  const sqliteRowEmpty = isSqliteEmptySync();
+  const sqliteScore = dbScore(sqliteCurrent);
+  const candidates = [];
+
   const legacy = readLegacyJsonDbSync();
-  if (!legacy) return;
-  const imported = normalizeImportedDb(legacy);
-  replaceSqliteDataSync(imported);
-  console.log(`Imported legacy JSON database into SQLite: ${path.basename(SQLITE_PATH)}`);
+  if (legacy) {
+    candidates.push({ label: "legacy JSON", db: normalizeImportedDb(legacy) });
+  }
+  const backup = readLatestBackupDbSync();
+  if (backup && backup.db) {
+    candidates.push({ label: `backup ${backup.source}`, db: backup.db });
+  }
+
+  let best = null;
+  for (const candidate of candidates) {
+    const score = dbScore(candidate.db);
+    if (!best || score > best.score) {
+      best = { ...candidate, score };
+    }
+  }
+
+  const shouldRecover =
+    Boolean(best) &&
+    best.score > sqliteScore &&
+    (sqliteRowEmpty || sqliteScore === 0 || looksLikeDataLoss(sqliteCurrent));
+
+  if (shouldRecover && best) {
+    replaceSqliteDataSync(best.db);
+    sqliteCurrent = normalizeImportedDb(best.db);
+    console.log(`Recovered SQLite data from ${best.label}`);
+  }
+
+  // Keep JSON in sync with SQLite as emergency mirror/fallback.
+  try {
+    fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    fsSync.writeFileSync(DB_PATH, JSON.stringify(sqliteCurrent, null, 2), "utf8");
+  } catch (err) {
+    console.warn("Could not mirror SQLite to JSON:", err instanceof Error ? err.message : err);
+  }
 }
 
 function pad(n, size = 3) {
@@ -422,10 +550,59 @@ async function writeDb(db) {
     return;
   }
   replaceSqliteDataSync(normalized);
+  try {
+    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+    await fs.writeFile(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
+  } catch (err) {
+    console.warn("Could not mirror SQLite to JSON:", err instanceof Error ? err.message : err);
+  }
 }
 
 async function ensureBackupsDir() {
   await fs.mkdir(BACKUPS_DIR, { recursive: true });
+}
+
+async function createBackupSnapshot(requestedByUser = null, summary = "Server backup file created") {
+  const db = await readDb();
+  await ensureBackupsDir();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const name = `backup-${stamp}.json`;
+  const filePath = path.join(BACKUPS_DIR, name);
+  await fs.writeFile(filePath, JSON.stringify(normalizeImportedDb(db), null, 2));
+  appendAuditLog(db, requestedByUser, "BACKUP_CREATE", "backup", name, summary);
+  await writeDb(db);
+  return name;
+}
+
+async function pruneOldBackups() {
+  await ensureBackupsDir();
+  const entries = await fs.readdir(BACKUPS_DIR, { withFileTypes: true });
+  const now = Date.now();
+  await Promise.all(
+    entries.map(async (entry) => {
+      if (!entry.isFile()) return;
+      if (!entry.name.startsWith("backup-") || !entry.name.endsWith(".json")) return;
+      const fullPath = path.join(BACKUPS_DIR, entry.name);
+      const stat = await fs.stat(fullPath).catch(() => null);
+      if (!stat) return;
+      if (now - stat.mtimeMs > AUTO_BACKUP_RETENTION_MS) {
+        await fs.rm(fullPath, { force: true });
+      }
+    })
+  );
+}
+
+async function maybeRunAutoBackup() {
+  if (!AUTO_BACKUP_ENABLED || autoBackupRunning) return;
+  autoBackupRunning = true;
+  try {
+    await createBackupSnapshot(null, "Automatic scheduled backup");
+    await pruneOldBackups();
+  } catch (err) {
+    console.warn("Auto backup failed:", err instanceof Error ? err.message : err);
+  } finally {
+    autoBackupRunning = false;
+  }
 }
 
 async function resetDirContents(dirPath) {
@@ -458,6 +635,7 @@ function normalizeImportedDb(input) {
     locations: Array.isArray(parsed.locations) ? parsed.locations : [],
     users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
     auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+    authSessions: Array.isArray(parsed.authSessions) ? parsed.authSessions : [],
     settings: {
       campusNames,
     },
@@ -571,6 +749,33 @@ async function normalizeHistoryEntries(entries, group = "maintenance") {
     if (!entry || typeof entry !== "object") continue;
     const photo = await normalizePhotoValue(entry.photo, group);
     out.push({ ...entry, photo });
+  }
+  return out;
+}
+
+function normalizeTransferEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  const out = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = Number(entry.id) || Date.now();
+    const date = toText(entry.date);
+    const fromCampus = normalizeCampusInput(entry.fromCampus);
+    const fromLocation = toText(entry.fromLocation);
+    const toCampus = normalizeCampusInput(entry.toCampus);
+    const toLocation = toText(entry.toLocation);
+    if (!date || !toCampus || !toLocation) continue;
+    out.push({
+      id,
+      date,
+      fromCampus,
+      fromLocation,
+      toCampus,
+      toLocation,
+      reason: toText(entry.reason),
+      by: toText(entry.by),
+      note: toText(entry.note),
+    });
   }
   return out;
 }
@@ -790,6 +995,33 @@ function sanitizeUser(user) {
   };
 }
 
+function sessionRowsFromMap() {
+  return Array.from(sessions.entries())
+    .map(([token, user]) => ({
+      token: toText(token),
+      user: sanitizeUser(user),
+    }))
+    .filter((row) => row.token && row.user && row.user.id);
+}
+
+async function persistSessionsToDb() {
+  const db = await readDb();
+  db.authSessions = sessionRowsFromMap();
+  await writeDb(db);
+}
+
+async function restoreSessionsFromDb() {
+  const db = await readDb();
+  const rows = Array.isArray(db.authSessions) ? db.authSessions : [];
+  sessions.clear();
+  for (const row of rows) {
+    const token = toText(row && row.token);
+    const user = sanitizeUser((row && row.user) || {});
+    if (!token || !user || !user.id) continue;
+    sessions.set(token, user);
+  }
+}
+
 function nextAssetSeq(assets, campus, category, type) {
   const same = assets.filter(
     (a) => a.campus === campus && a.category === category && a.type === type
@@ -897,14 +1129,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/backup/create") {
       const admin = requireAdmin(req, res);
       if (!admin) return;
-      const db = await readDb();
-      await ensureBackupsDir();
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const name = `backup-${stamp}.json`;
-      const filePath = path.join(BACKUPS_DIR, name);
-      await fs.writeFile(filePath, JSON.stringify(normalizeImportedDb(db), null, 2));
-      appendAuditLog(db, admin, "BACKUP_CREATE", "backup", name, "Server backup file created");
-      await writeDb(db);
+      const name = await createBackupSnapshot(admin, "Server backup file created");
       sendJson(res, 201, { ok: true, file: name });
       return;
     }
@@ -944,6 +1169,7 @@ const server = http.createServer(async (req, res) => {
       await resetDirContents(UPLOADS_DIR);
       await resetDirContents(BACKUPS_DIR);
       sessions.clear();
+      await persistSessionsToDb();
       sendJson(res, 200, { ok: true });
       return;
     }
@@ -1053,6 +1279,7 @@ const server = http.createServer(async (req, res) => {
       const token = crypto.randomBytes(24).toString("hex");
       const safeUser = sanitizeUser(user);
       sessions.set(token, safeUser);
+      await persistSessionsToDb();
       sendJson(res, 200, { token, user: safeUser });
       return;
     }
@@ -1072,6 +1299,7 @@ const server = http.createServer(async (req, res) => {
       if (authHeader.startsWith("Bearer ")) {
         const token = authHeader.slice(7).trim();
         sessions.delete(token);
+        await persistSessionsToDb();
       }
       sendJson(res, 200, { ok: true });
       return;
@@ -1181,6 +1409,7 @@ const server = http.createServer(async (req, res) => {
           sessions.set(token, safeUser);
         }
       }
+      await persistSessionsToDb();
       sendJson(res, 200, { user: safeUser });
       return;
     }
@@ -1248,6 +1477,7 @@ const server = http.createServer(async (req, res) => {
       const assetPhotos = normalizedPhotos.slice(0, 5);
       const mainPhoto = assetPhotos[0] || assetPhoto || "";
       const initialHistory = await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
+      const initialTransferHistory = normalizeTransferEntries(body.transferHistory);
       const db = await readDb();
       const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
       const assetId = `${campusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || cleaned.category}-${cleaned.type}-${pad(seq, 4)}`;
@@ -1258,6 +1488,7 @@ const server = http.createServer(async (req, res) => {
         assetId,
         name: assetId,
         maintenanceHistory: initialHistory,
+        transferHistory: initialTransferHistory,
         created: new Date().toISOString(),
         ...cleaned,
         photo: mainPhoto,
@@ -1587,6 +1818,10 @@ const server = http.createServer(async (req, res) => {
         body.maintenanceHistory === undefined
           ? current.maintenanceHistory
           : await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
+      const nextTransferHistory =
+        body.transferHistory === undefined
+          ? current.transferHistory
+          : normalizeTransferEntries(body.transferHistory);
       const photoChanged = toText(current.photo) !== toText(mainPhoto);
       db.assets[idx] = {
         ...current,
@@ -1594,6 +1829,7 @@ const server = http.createServer(async (req, res) => {
         photo: mainPhoto,
         photos: nextPhotos,
         maintenanceHistory: nextHistory,
+        transferHistory: nextTransferHistory,
         name: current.assetId,
       };
       appendAuditLog(
@@ -1788,7 +2024,34 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  const bindHost = HOST === "0.0.0.0" ? "localhost" : HOST;
-  console.log(`API running at http://${bindHost}:${PORT}`);
-});
+async function startServer() {
+  try {
+    await restoreSessionsFromDb();
+  } catch (err) {
+    console.warn("Could not restore auth sessions from database:", err instanceof Error ? err.message : err);
+  }
+
+  if (AUTO_BACKUP_ENABLED) {
+    // Run once at startup, then on interval.
+    await maybeRunAutoBackup();
+    autoBackupTimer = setInterval(() => {
+      void maybeRunAutoBackup();
+    }, AUTO_BACKUP_INTERVAL_MS);
+  }
+
+  server.listen(PORT, HOST, () => {
+    const bindHost = HOST === "0.0.0.0" ? "localhost" : HOST;
+    console.log(`API running at http://${bindHost}:${PORT}`);
+    console.log(`Storage paths: DATA_ROOT=${DATA_ROOT} SQLITE_PATH=${SQLITE_PATH} DB_PATH=${DB_PATH}`);
+    console.log(`Uploads=${UPLOADS_DIR} Backups=${BACKUPS_DIR}`);
+    if (AUTO_BACKUP_ENABLED) {
+      console.log(
+        `Auto backup enabled: every ${AUTO_BACKUP_INTERVAL_HOURS}h, retention ${AUTO_BACKUP_RETENTION_DAYS} days`
+      );
+    } else {
+      console.log("Auto backup disabled");
+    }
+  });
+}
+
+void startServer();
