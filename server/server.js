@@ -3,8 +3,14 @@ const fsSync = require("fs");
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
-const { DatabaseSync } = require("node:sqlite");
 const { URL } = require("url");
+
+let DatabaseSync;
+try {
+  ({ DatabaseSync } = require("node:sqlite"));
+} catch {
+  DatabaseSync = null;
+}
 
 const HOST = process.env.API_HOST || process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 4000);
@@ -80,6 +86,7 @@ const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs"];
 const PASSWORD_PREFIX = "scrypt$";
 
 let sqliteDb;
+const HAS_NATIVE_SQLITE = Boolean(DatabaseSync);
 
 function mapDbToSqlRows(db) {
   return {
@@ -120,6 +127,9 @@ function readLegacyJsonDbSync() {
 }
 
 function openSqlite() {
+  if (!HAS_NATIVE_SQLITE) {
+    throw new Error("SQLite storage unavailable on this Node.js runtime");
+  }
   if (sqliteDb) return sqliteDb;
   fsSync.mkdirSync(path.dirname(SQLITE_PATH), { recursive: true });
   sqliteDb = new DatabaseSync(SQLITE_PATH);
@@ -236,6 +246,14 @@ function isSqliteEmptySync() {
 }
 
 function initStorageSync() {
+  if (!HAS_NATIVE_SQLITE) {
+    fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    if (!fsSync.existsSync(DB_PATH)) {
+      const initial = normalizeImportedDb({});
+      fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
+    }
+    return;
+  }
   openSqlite();
   if (!isSqliteEmptySync()) return;
   const legacy = readLegacyJsonDbSync();
@@ -344,6 +362,26 @@ async function maybeServeFrontend(req, res, pathname) {
 }
 
 async function readDb() {
+  if (!HAS_NATIVE_SQLITE) {
+    try {
+      const raw = await fs.readFile(DB_PATH, "utf8");
+      const parsed = JSON.parse(raw);
+      const normalized = normalizeImportedDb(parsed);
+      if (!Array.isArray(normalized.users) || !normalized.users.length) {
+        normalized.users = [...DEFAULT_USERS];
+      }
+      return normalized;
+    } catch {
+      const fallback = normalizeImportedDb({});
+      if (!Array.isArray(fallback.users) || !fallback.users.length) {
+        fallback.users = [...DEFAULT_USERS];
+      }
+      await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+      await fs.writeFile(DB_PATH, JSON.stringify(fallback, null, 2), "utf8");
+      return fallback;
+    }
+  }
+
   const db = openSqlite();
   const selectStmt = {};
   for (const table of SQLITE_TABLES) {
@@ -369,6 +407,11 @@ async function writeDb(db) {
   const normalized = normalizeImportedDb(db);
   if (!Array.isArray(normalized.users) || !normalized.users.length) {
     normalized.users = [...DEFAULT_USERS];
+  }
+  if (!HAS_NATIVE_SQLITE) {
+    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+    await fs.writeFile(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
+    return;
   }
   replaceSqliteDataSync(normalized);
 }
