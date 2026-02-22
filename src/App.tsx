@@ -5623,21 +5623,53 @@ export default function App() {
       const latest = [...history].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
       return latest?.date || "-";
     };
+    const assetsById = new Map<string, Asset>();
+    for (const asset of assets) assetsById.set(asset.assetId, asset);
+    const setMainByCode = new Map<string, string>();
+    const groupedBySet = new Map<string, Asset[]>();
+    for (const asset of assets) {
+      const code = String(asset.setCode || "").trim();
+      if (!code) continue;
+      const list = groupedBySet.get(code) || [];
+      list.push(asset);
+      groupedBySet.set(code, list);
+    }
+    for (const [setCode, list] of Array.from(groupedBySet.entries())) {
+      const main =
+        list.find((a) => a.category === "IT" && a.type === DESKTOP_PARENT_TYPE) ||
+        list.find((a) => !a.parentAssetId) ||
+        list[0];
+      if (main?.assetId) setMainByCode.set(setCode, main.assetId);
+    }
     return [...assets]
-      .map((asset) => ({
-        key: `asset-${asset.id}`,
-        assetId: asset.assetId,
-        category: asset.category || "-",
-        itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
-        itemDescription: toItemDescription(asset),
-        location: asset.location || "-",
-        purchaseDate: asset.purchaseDate || "-",
-        lastServiceDate: toLastServiceDate(asset),
-        assignedTo: asset.assignedTo || "-",
-        status: asset.status || "-",
-        photo: asset.photo || "",
-        campus: asset.campus || "-",
-      }))
+      .map((asset) => {
+        const setCode = String(asset.setCode || "").trim() || "-";
+        const parentAssetId = String(asset.parentAssetId || "").trim();
+        let linkedTo = "-";
+        if (parentAssetId && assetsById.has(parentAssetId)) {
+          linkedTo = parentAssetId;
+        } else if (parentAssetId) {
+          linkedTo = parentAssetId;
+        } else if (setCode !== "-") {
+          linkedTo = setMainByCode.get(setCode) || "-";
+        }
+        return {
+          key: `asset-${asset.id}`,
+          assetId: asset.assetId,
+          setCode,
+          linkedTo,
+          category: asset.category || "-",
+          itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+          itemDescription: toItemDescription(asset),
+          location: asset.location || "-",
+          purchaseDate: asset.purchaseDate || "-",
+          lastServiceDate: toLastServiceDate(asset),
+          assignedTo: asset.assignedTo || "-",
+          status: asset.status || "-",
+          photo: asset.photo || "",
+          campus: asset.campus || "-",
+        };
+      })
       .sort(
         (a, b) =>
           campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
@@ -5670,10 +5702,12 @@ export default function App() {
 
     if (reportType === "asset_master") {
       title = "Asset Master Register Report";
-      columns = ["Photo", "Asset ID", "Item Name", "Category", "Item Description", "Location", "Purchase Date", "Last Service", "Assigned To", "Status"];
+      columns = ["Photo", "Asset ID", "Set Code", "Linked To (Main Asset)", "Item Name", "Category", "Item Description", "Location", "Purchase Date", "Last Service", "Assigned To", "Status"];
       rows = assetMasterSetRows.map((row) => [
         toPrintablePhotoUrl(row.photo || ""),
         row.assetId,
+        row.setCode,
+        row.linkedTo,
         row.itemName,
         row.category,
         row.itemDescription,
@@ -9699,6 +9733,8 @@ export default function App() {
                     <tr>
                       <th>{t.photo}</th>
                       <th>{t.assetId}</th>
+                      <th>{t.setCode}</th>
+                      <th>Linked To (Main Asset)</th>
                       <th>Item Name</th>
                       <th>{t.category}</th>
                       <th>Item Description</th>
@@ -9715,6 +9751,8 @@ export default function App() {
                         <tr key={`report-asset-master-${row.key}`}>
                           <td>{renderAssetPhoto(row.photo || "", row.assetId)}</td>
                           <td><strong>{row.assetId}</strong></td>
+                          <td>{row.setCode || "-"}</td>
+                          <td>{row.linkedTo || "-"}</td>
                           <td>{row.itemName}</td>
                           <td>{row.category}</td>
                           <td>{row.itemDescription || "-"}</td>
@@ -9727,7 +9765,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={10}>No assets found.</td>
+                        <td colSpan={12}>No assets found.</td>
                       </tr>
                     )}
                   </tbody>
