@@ -5639,6 +5639,12 @@ export default function App() {
             (SET_PACK_CHILD_ORDER[a.type] || 99) - (SET_PACK_CHILD_ORDER[b.type] || 99) ||
             a.assetId.localeCompare(b.assetId)
         );
+      const childRows = children.map((child, index) => ({
+        no: index + 1,
+        type: child.type,
+        assetId: child.assetId,
+        photo: child.photo || "",
+      }));
 
       return {
         key: `set-${setCode}`,
@@ -5652,9 +5658,7 @@ export default function App() {
         mainStatus: mainPc.status || "-",
         mainPhoto: mainPc.photo || "",
         totalItems: sorted.length,
-        childSummary: children.length
-          ? children.map((child) => `${child.type} (${child.assetId})`).join(", ")
-          : "-",
+        childRows,
         category: mainPc.category || "-",
       };
     });
@@ -5671,7 +5675,7 @@ export default function App() {
       mainStatus: asset.status || "-",
       mainPhoto: asset.photo || "",
       totalItems: 1,
-      childSummary: "-",
+      childRows: [] as Array<{ no: number; type: string; assetId: string; photo: string }>,
       category: asset.category || "-",
     }));
 
@@ -5689,20 +5693,46 @@ export default function App() {
     let columns: string[] = [];
     let rows: string[][] = [];
 
+    const printPhotoBase =
+      (apiBaseInput || ENV_API_BASE_URL || getAutoApiBaseForHost() || (typeof window !== "undefined" ? window.location.origin : ""))
+        .trim()
+        .replace(/\/+$/, "");
+    const toPrintablePhotoUrl = (value: string) => {
+      const text = String(value || "").trim();
+      if (!text) return "";
+      if (text.startsWith("data:image")) return text;
+      if (/^https?:\/\//i.test(text)) return text;
+      if (text.startsWith("/")) {
+        if (printPhotoBase) return `${printPhotoBase}${text}`;
+        if (typeof window !== "undefined") return `${window.location.origin}${text}`;
+      }
+      return text;
+    };
+
     if (reportType === "asset_master") {
       title = "Asset Master Register Report";
       columns = ["Set Code", "Main Asset ID", "Photo", "Campus", "Location", "Category", "Main Type", "Status", "Items in Set", "Components"];
       rows = assetMasterSetRows.map((row) => [
         row.setCode,
         row.mainAssetId,
-        row.mainPhoto || "",
+        toPrintablePhotoUrl(row.mainPhoto || ""),
         campusLabel(row.campus),
         row.location || "-",
         row.category,
         row.mainType,
         row.mainStatus,
         String(row.totalItems),
-        row.childSummary,
+        row.childRows.length
+          ? row.childRows
+              .map((child) => {
+                const img = toPrintablePhotoUrl(child.photo || "");
+                const imgHtml = img
+                  ? `<img src="${img}" alt="component" style="width:32px;height:32px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;vertical-align:middle;margin-right:6px;" />`
+                  : "";
+                return `<div style="margin:2px 0;">${child.no}. ${imgHtml}${escapeHtml(`${child.type} (${child.assetId})`)}</div>`;
+              })
+              .join("")
+          : "-",
       ]);
     } else if (reportType === "asset_by_location") {
       title = "Asset by Campus and Location Report";
@@ -5744,8 +5774,8 @@ export default function App() {
       rows = maintenanceCompletionRows.map((r) => [
         formatDate(r.date || "-"),
         r.assetId,
-        r.assetPhoto || "",
-        r.photo || "",
+        toPrintablePhotoUrl(r.assetPhoto || ""),
+        toPrintablePhotoUrl(r.photo || ""),
         campusLabel(r.campus),
         r.type || "-",
         r.completion || "-",
@@ -5762,8 +5792,8 @@ export default function App() {
       rows = verificationSummaryRows.map((r) => [
         formatDate(r.date || "-"),
         r.assetId,
-        r.assetPhoto || "",
-        r.photo || "",
+        toPrintablePhotoUrl(r.assetPhoto || ""),
+        toPrintablePhotoUrl(r.photo || ""),
         campusLabel(r.campus),
         r.result || "-",
         r.condition || "-",
@@ -5779,8 +5809,11 @@ export default function App() {
               `<tr>${row
                 .map((cell) => {
                   const text = String(cell || "");
-                  if (text.startsWith("data:image")) {
+                  if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
                     return `<td><img src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
+                  }
+                  if (text.startsWith("<div")) {
+                    return `<td>${text}</td>`;
                   }
                   return `<td>${escapeHtml(text || "-")}</td>`;
                 })
@@ -9740,7 +9773,21 @@ export default function App() {
                           <td>{row.mainType}</td>
                           <td>{row.mainStatus || "-"}</td>
                           <td>{row.totalItems}</td>
-                          <td className="report-components-cell">{row.childSummary}</td>
+                          <td className="report-components-cell">
+                            {row.childRows.length ? (
+                              <div className="report-components-list">
+                                {row.childRows.map((child) => (
+                                  <div key={`${row.key}-child-${child.no}-${child.assetId}`} className="report-component-row">
+                                    <span className="report-component-index">{child.no}.</span>
+                                    {renderAssetPhoto(child.photo || "", child.assetId)}
+                                    <span>{child.type} ({child.assetId})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                         </tr>
                       ))
                     ) : (

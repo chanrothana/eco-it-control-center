@@ -1111,6 +1111,23 @@ tr.row-maint-maintenance:hover td {
   line-height: 1.4;
 }
 
+.report-components-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.report-component-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-component-index {
+  min-width: 20px;
+  font-weight: 700;
+}
+
 .table-photo {
   width: 52px;
   height: 52px;
