@@ -1066,6 +1066,34 @@ function dashboard(db, campus) {
   return { totalAssets, itAssets, safetyAssets, openTickets, byCampus };
 }
 
+function toPublicAssetView(asset) {
+  const source = asset && typeof asset === "object" ? asset : {};
+  return {
+    assetId: toText(source.assetId),
+    campus: toText(source.campus),
+    category: toText(source.category),
+    type: toText(source.type),
+    pcType: toText(source.pcType),
+    name: toText(source.name),
+    location: toText(source.location),
+    setCode: toText(source.setCode),
+    parentAssetId: toText(source.parentAssetId),
+    assignedTo: toText(source.assignedTo),
+    brand: toText(source.brand),
+    model: toText(source.model),
+    serialNumber: toText(source.serialNumber),
+    specs: toText(source.specs),
+    purchaseDate: toText(source.purchaseDate),
+    warrantyUntil: toText(source.warrantyUntil),
+    vendor: toText(source.vendor),
+    notes: toText(source.notes),
+    status: toText(source.status) || "Active",
+    photo: toText(source.photo),
+    photos: Array.isArray(source.photos) ? source.photos.map((p) => toText(p)).filter(Boolean) : [],
+    created: toText(source.created),
+  };
+}
+
 async function parseBody(req) {
   const chunks = [];
   let size = 0;
@@ -1113,6 +1141,24 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/health") {
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/public/assets/")) {
+      const rawAssetId = decodeURIComponent(url.pathname.replace("/api/public/assets/", ""));
+      const assetId = toText(rawAssetId);
+      if (!assetId) {
+        sendJson(res, 400, { error: "Asset ID is required" });
+        return;
+      }
+      const db = await readDb();
+      const assets = Array.isArray(db.assets) ? db.assets : [];
+      const found = assets.find((a) => toText(a.assetId).toUpperCase() === assetId.toUpperCase());
+      if (!found) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      sendJson(res, 200, { asset: toPublicAssetView(found) });
       return;
     }
 

@@ -85,6 +85,30 @@ type PendingStatusChange = {
   reason: string;
   verifiedBy: string;
 };
+type PublicQrAsset = {
+  assetId: string;
+  campus: string;
+  category: string;
+  type: string;
+  pcType?: string;
+  name: string;
+  location: string;
+  setCode?: string;
+  parentAssetId?: string;
+  assignedTo?: string;
+  brand?: string;
+  model?: string;
+  serialNumber?: string;
+  specs?: string;
+  purchaseDate?: string;
+  warrantyUntil?: string;
+  vendor?: string;
+  notes?: string;
+  status: string;
+  photo?: string;
+  photos?: string[];
+  created?: string;
+};
 type ReportType =
   | "asset_master"
   | "asset_by_location"
@@ -1860,6 +1884,9 @@ export default function App() {
       .toUpperCase();
   });
   const [qrCodeMap, setQrCodeMap] = useState<Record<string, string>>({});
+  const [publicQrAsset, setPublicQrAsset] = useState<PublicQrAsset | null>(null);
+  const [publicQrBusy, setPublicQrBusy] = useState(false);
+  const [publicQrError, setPublicQrError] = useState("");
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [editAssetFileKey, setEditAssetFileKey] = useState(0);
   const [assetEditForm, setAssetEditForm] = useState({
@@ -5868,6 +5895,31 @@ export default function App() {
     }
   }, [pendingQrAssetId, authUser, assets]);
 
+  useEffect(() => {
+    if (!pendingQrAssetId || authUser) return;
+    let cancelled = false;
+    setPublicQrBusy(true);
+    setPublicQrError("");
+    setPublicQrAsset(null);
+    (async () => {
+      try {
+        const res = await requestJson<{ asset: PublicQrAsset }>(
+          `/api/public/assets/${encodeURIComponent(pendingQrAssetId)}`
+        );
+        if (cancelled) return;
+        setPublicQrAsset(res.asset || null);
+      } catch (err) {
+        if (cancelled) return;
+        setPublicQrError(err instanceof Error ? err.message : "Asset not found");
+      } finally {
+        if (!cancelled) setPublicQrBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingQrAssetId, authUser]);
+
   async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
     let title = "";
@@ -6176,6 +6228,77 @@ export default function App() {
       setAuthUser(null);
       setBusy(false);
     }
+  }
+
+  if (pendingQrAssetId && !authUser && !authLoading) {
+    const asset = publicQrAsset;
+    const photos = Array.isArray(asset?.photos) && asset?.photos?.length
+      ? asset.photos
+      : asset?.photo
+      ? [asset.photo]
+      : [];
+    return (
+      <main className="app-shell">
+        <div className="bg-orb bg-orb-a" aria-hidden="true" />
+        <div className="bg-orb bg-orb-b" aria-hidden="true" />
+        <section className="app-card">
+          <header className="topbar">
+            <div className="brand-block">
+              <p className="eyebrow">{t.school}</p>
+              <h1>Asset QR View</h1>
+              <p className="subhead">Read-only asset information from QR code.</p>
+            </div>
+          </header>
+          <section className="panel">
+            {publicQrBusy ? (
+              <p className="tiny">Loading asset from QR...</p>
+            ) : publicQrError ? (
+              <p className="alert">{publicQrError}</p>
+            ) : asset ? (
+              <div className="form-grid">
+                <div className="field"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
+                <div className="field"><span>{t.status}</span><div className="detail-value">{asset.status || "-"}</div></div>
+                <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
+                <div className="field"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
+                <div className="field"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
+                <div className="field"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
+                <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
+                <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
+                <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
+                <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
+                <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
+                <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
+                <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
+                <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
+                <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
+                <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
+                <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
+                <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
+                <div className="field field-wide">
+                  <span>{t.photo}</span>
+                  <div className="row-actions">
+                    {photos.length ? (
+                      photos.slice(0, MAX_ASSET_PHOTOS).map((photo, idx) => (
+                        <img
+                          key={`public-qr-photo-${asset.assetId}-${idx}`}
+                          src={photo}
+                          alt={`${asset.assetId} ${idx + 1}`}
+                          className="photo-preview"
+                        />
+                      ))
+                    ) : (
+                      <div className="photo-placeholder">{t.noPhoto}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="tiny">No data.</p>
+            )}
+          </section>
+        </section>
+      </main>
+    );
   }
 
   if (authLoading) {
