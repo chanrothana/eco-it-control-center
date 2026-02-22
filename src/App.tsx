@@ -34,6 +34,7 @@ type Asset = {
   transferHistory?: TransferEntry[];
   statusHistory?: StatusEntry[];
   photo: string;
+  photos?: string[];
   status: string;
   created: string;
 };
@@ -248,6 +249,7 @@ const CAMPUS_CODE: Record<string, string> = {
 const CODE_TO_CAMPUS: Record<string, string> = Object.fromEntries(
   Object.entries(CAMPUS_CODE).map(([name, code]) => [code, name])
 );
+const MAX_ASSET_PHOTOS = 5;
 
 const CATEGORY_OPTIONS = [
   { value: "IT", en: "IT", km: "IT" },
@@ -868,18 +870,33 @@ function readAssetFallback(): Asset[] {
   try {
     const raw = localStorage.getItem(ASSET_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? (parsed as Asset[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((row) => row && typeof row === "object")
+      .map((row) => {
+        const asset = row as Asset;
+        const photos = normalizeAssetPhotos(asset);
+        return {
+          ...asset,
+          photo: photos[0] || "",
+          photos,
+        } as Asset;
+      });
   } catch {
     return [];
   }
 }
 
 function writeAssetFallback(list: Asset[]) {
-  const full = JSON.stringify(list);
+  const normalizedList = list.map((asset) => {
+    const photos = normalizeAssetPhotos(asset);
+    return { ...asset, photo: photos[0] || "", photos };
+  });
+  const full = JSON.stringify(normalizedList);
   if (trySetLocalStorage(ASSET_FALLBACK_KEY, full)) return;
 
   // Step 2: keep asset photos, drop only maintenance photos.
-  const medium = list.map((asset) => ({
+  const medium = normalizedList.map((asset) => ({
     ...asset,
     maintenanceHistory: Array.isArray(asset.maintenanceHistory)
       ? asset.maintenanceHistory.map((h) => ({
@@ -897,9 +914,10 @@ function writeAssetFallback(list: Asset[]) {
   if (trySetLocalStorage(ASSET_FALLBACK_KEY, JSON.stringify(medium as Asset[]))) return;
 
   // Step 3: compact fallback with trimmed history and text fields.
-  const compact = list.map((asset) => ({
+  const compact = normalizedList.map((asset) => ({
     ...asset,
     photo: asset.photo || "",
+    photos: (asset.photos || []).slice(0, 2),
     specs: "",
     notes: "",
     statusHistory: Array.isArray(asset.statusHistory) ? asset.statusHistory.slice(0, 30) : [],
@@ -1374,7 +1392,12 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
     }
 
     const next: Asset = { ...prev, ...a };
-    if (!a.photo && prev.photo) next.photo = prev.photo;
+    const mergedPhotos = normalizeAssetPhotos({
+      photos: [...(Array.isArray(prev.photos) ? prev.photos : []), ...(Array.isArray(a.photos) ? a.photos : [])],
+      photo: a.photo || prev.photo || "",
+    });
+    next.photos = mergedPhotos;
+    next.photo = mergedPhotos[0] || "";
     if (!a.specs && prev.specs) next.specs = prev.specs;
     if (!a.notes && prev.notes) next.notes = prev.notes;
     if (!a.brand && prev.brand) next.brand = prev.brand;
@@ -1503,6 +1526,25 @@ async function compressImageDataUrl(
 async function optimizeUploadPhoto(file: File): Promise<string> {
   const source = await fileToDataUrl(file);
   return compressImageDataUrl(source, 1280, 1280, 0.75);
+}
+
+function normalizeAssetPhotos(input: { photo?: string; photos?: string[] }) {
+  const out: string[] = [];
+  const list = Array.isArray(input.photos) ? input.photos : [];
+  for (const item of list) {
+    const url = String(item || "").trim();
+    if (!url) continue;
+    if (!out.includes(url)) out.push(url);
+    if (out.length >= MAX_ASSET_PHOTOS) break;
+  }
+  const single = String(input.photo || "").trim();
+  if (single) {
+    if (out.includes(single)) {
+      out.splice(out.indexOf(single), 1);
+    }
+    out.unshift(single);
+  }
+  return out.slice(0, MAX_ASSET_PHOTOS);
 }
 
 type AssetPickerProps = {
@@ -1795,6 +1837,7 @@ export default function App() {
     nextMaintenanceDate: "",
     scheduleNote: "",
     photo: "",
+    photos: [] as string[],
     status: "Active",
   });
   const [setPackDraft, setSetPackDraft] = useState<Record<SetPackChildType, SetPackChildDraft>>(
@@ -1836,6 +1879,7 @@ export default function App() {
     vendor: "",
     notes: "",
     photo: "",
+    photos: [] as string[],
     status: "Active",
   });
   const editPhotoInputRef = useRef<HTMLInputElement | null>(null);
@@ -2573,6 +2617,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({
           ...assetForm,
+          photos: normalizeAssetPhotos(assetForm),
           type: assetForm.type.toUpperCase(),
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
@@ -2628,6 +2673,7 @@ export default function App() {
         nextMaintenanceDate: "",
         scheduleNote: "",
         photo: "",
+        photos: [],
         status: "Active",
       }));
       setSetPackDraft(defaultSetPackDraft());
@@ -2658,6 +2704,7 @@ export default function App() {
           assetForm.category,
           assetForm.type.toUpperCase()
         );
+        const createPhotos = normalizeAssetPhotos(assetForm);
         const newAsset: Asset = {
           id: Date.now(),
           campus: assetForm.campus,
@@ -2698,7 +2745,8 @@ export default function App() {
               reason: "Asset created",
             },
           ],
-          photo: assetForm.photo,
+          photo: createPhotos[0] || "",
+          photos: createPhotos,
           status: assetForm.status,
           created: new Date().toISOString(),
         };
@@ -2780,6 +2828,7 @@ export default function App() {
           nextMaintenanceDate: "",
           scheduleNote: "",
           photo: "",
+          photos: [],
           status: "Active",
         }));
         setSetPackDraft(defaultSetPackDraft());
@@ -3685,6 +3734,7 @@ export default function App() {
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
     const isDesktopAsset = asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE;
+    const photos = normalizeAssetPhotos(asset);
     setAssetEditForm({
       location: asset.location || "",
       pcType: asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
@@ -3702,7 +3752,8 @@ export default function App() {
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
       notes: asset.notes || "",
-      photo: asset.photo || "",
+      photo: photos[0] || "",
+      photos,
       status: asset.status || "Active",
     });
     setEditAssetFileKey((k) => k + 1);
@@ -3713,17 +3764,26 @@ export default function App() {
   }
 
   async function onEditAssetPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
       alert(t.photoLimit);
+      e.target.value = "";
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
-      setAssetEditForm((f) => ({ ...f, photo }));
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setAssetEditForm((f) => {
+        const merged = normalizeAssetPhotos({
+          photo: f.photo,
+          photos: [...(f.photos || []), ...optimized],
+        });
+        return { ...f, photo: merged[0] || "", photos: merged };
+      });
     } catch {
       alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -3774,6 +3834,7 @@ export default function App() {
       vendor: assetEditForm.vendor.trim(),
       notes: assetEditForm.notes.trim(),
       photo: assetEditForm.photo || "",
+      photos: normalizeAssetPhotos(assetEditForm),
       status: assetEditForm.status,
     };
 
@@ -3795,7 +3856,8 @@ export default function App() {
               ...(a.statusHistory || []),
             ]
           : a.statusHistory || [];
-        return { ...a, ...payload, statusHistory };
+        const normalizedPhotos = normalizeAssetPhotos(payload);
+        return { ...a, ...payload, photo: normalizedPhotos[0] || "", photos: normalizedPhotos, statusHistory };
       });
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${editingAssetId}`, {
@@ -4664,18 +4726,26 @@ export default function App() {
   }
 
   async function onPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 15 * 1024 * 1024) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
       alert(t.photoLimit);
+      e.target.value = "";
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
-      setAssetForm((f) => ({ ...f, photo }));
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setAssetForm((f) => {
+        const merged = normalizeAssetPhotos({
+          photo: f.photo,
+          photos: [...(f.photos || []), ...optimized],
+        });
+        return { ...f, photo: merged[0] || "", photos: merged };
+      });
     } catch {
       alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -6588,6 +6658,8 @@ export default function App() {
                       className="file-input"
                       type="file"
                       accept="image/*"
+                      multiple
+                      capture="environment"
                       onChange={onPhotoFile}
                     />
                   </label>
@@ -6599,8 +6671,8 @@ export default function App() {
                 {userRequired ? <p className="tiny">{t.userRequired}</p> : null}
                 <div className="asset-actions">
                   <div className="photo-preview-wrap">
-                    {assetForm.photo ? (
-                      <img src={assetForm.photo} alt="preview" className="photo-preview" />
+                    {normalizeAssetPhotos(assetForm).length ? (
+                      <img src={normalizeAssetPhotos(assetForm)[0]} alt="preview" className="photo-preview" />
                     ) : (
                       <div className="photo-placeholder">{t.noPhoto}</div>
                     )}
@@ -6620,15 +6692,54 @@ export default function App() {
                         type="button"
                         title="Delete Photo"
                         aria-label="Delete Photo"
-                        disabled={!isAdmin || !assetForm.photo}
+                        disabled={!isAdmin || !normalizeAssetPhotos(assetForm).length}
                         onClick={() => {
-                          setAssetForm((f) => ({ ...f, photo: "" }));
+                          setAssetForm((f) => ({ ...f, photo: "", photos: [] }));
                           setAssetFileKey((k) => k + 1);
                         }}
                       >
                         ✕
                       </button>
                     </div>
+                  </div>
+                  <div className="asset-photo-gallery">
+                    {normalizeAssetPhotos(assetForm).slice(0, MAX_ASSET_PHOTOS).map((url, index) => (
+                      <div key={`create-photo-${index}`} className="asset-photo-chip">
+                        <img src={url} alt={`asset-${index + 1}`} className="asset-photo-chip-img" />
+                        <div className="asset-photo-chip-actions">
+                          <button
+                            className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                            type="button"
+                            disabled={!isAdmin}
+                            onClick={() =>
+                              setAssetForm((f) => {
+                                const next = [...normalizeAssetPhotos(f)];
+                                const hit = next.indexOf(url);
+                                if (hit <= 0) return f;
+                                next.splice(hit, 1);
+                                next.unshift(url);
+                                return { ...f, photo: next[0] || "", photos: next };
+                              })
+                            }
+                          >
+                            {index === 0 ? "Main" : "Set Main"}
+                          </button>
+                          <button
+                            className="btn-danger"
+                            type="button"
+                            disabled={!isAdmin}
+                            onClick={() =>
+                              setAssetForm((f) => {
+                                const next = normalizeAssetPhotos(f).filter((item) => item !== url);
+                                return { ...f, photo: next[0] || "", photos: next };
+                              })
+                            }
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                   <button className="btn-primary" disabled={busy || !isAdmin} onClick={createAsset}>{t.createAsset}</button>
                 </div>
@@ -7057,14 +7168,16 @@ export default function App() {
                         className="file-input"
                         type="file"
                         accept="image/*"
+                        multiple
+                        capture="environment"
                         onChange={onEditAssetPhotoFile}
                       />
                     </label>
                   </div>
                   <div className="asset-actions">
                     <div className="photo-preview-wrap">
-                      {assetEditForm.photo ? (
-                        <img src={assetEditForm.photo} alt="edit preview" className="photo-preview" />
+                      {normalizeAssetPhotos(assetEditForm).length ? (
+                        <img src={normalizeAssetPhotos(assetEditForm)[0]} alt="edit preview" className="photo-preview" />
                       ) : (
                         <div className="photo-placeholder">{t.noPhoto}</div>
                       )}
@@ -7084,15 +7197,54 @@ export default function App() {
                           type="button"
                           title="Delete Photo"
                           aria-label="Delete Photo"
-                          disabled={!isAdmin || !assetEditForm.photo}
+                          disabled={!isAdmin || !normalizeAssetPhotos(assetEditForm).length}
                           onClick={() => {
-                            setAssetEditForm((f) => ({ ...f, photo: "" }));
+                            setAssetEditForm((f) => ({ ...f, photo: "", photos: [] }));
                             setEditAssetFileKey((k) => k + 1);
                           }}
                         >
                           ✕
                         </button>
                       </div>
+                    </div>
+                    <div className="asset-photo-gallery">
+                      {normalizeAssetPhotos(assetEditForm).slice(0, MAX_ASSET_PHOTOS).map((url, index) => (
+                        <div key={`edit-photo-${index}`} className="asset-photo-chip">
+                          <img src={url} alt={`asset-edit-${index + 1}`} className="asset-photo-chip-img" />
+                          <div className="asset-photo-chip-actions">
+                            <button
+                              className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                              type="button"
+                              disabled={!isAdmin}
+                              onClick={() =>
+                                setAssetEditForm((f) => {
+                                  const next = [...normalizeAssetPhotos(f)];
+                                  const hit = next.indexOf(url);
+                                  if (hit <= 0) return f;
+                                  next.splice(hit, 1);
+                                  next.unshift(url);
+                                  return { ...f, photo: next[0] || "", photos: next };
+                                })
+                              }
+                            >
+                              {index === 0 ? "Main" : "Set Main"}
+                            </button>
+                            <button
+                              className="btn-danger"
+                              type="button"
+                              disabled={!isAdmin}
+                              onClick={() =>
+                                setAssetEditForm((f) => {
+                                  const next = normalizeAssetPhotos(f).filter((item) => item !== url);
+                                  return { ...f, photo: next[0] || "", photos: next };
+                                })
+                              }
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                     <div className="row-actions">
                       <button className="tab" onClick={cancelEditAsset}>Cancel</button>

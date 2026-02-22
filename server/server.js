@@ -508,6 +508,18 @@ async function normalizePhotoValue(photo, group = "assets") {
   return raw;
 }
 
+async function normalizePhotoList(photos, group = "assets", maxCount = 5) {
+  const out = [];
+  if (!Array.isArray(photos)) return out;
+  for (const item of photos) {
+    const normalized = await normalizePhotoValue(item, group);
+    if (!normalized) continue;
+    if (!out.includes(normalized)) out.push(normalized);
+    if (out.length >= maxCount) break;
+  }
+  return out;
+}
+
 async function normalizeHistoryEntries(entries, group = "maintenance") {
   if (!Array.isArray(entries)) return [];
   const out = [];
@@ -564,6 +576,7 @@ function validateAsset(body) {
   const repeatWeekOfMonth = Number(body.repeatWeekOfMonth || 0);
   const repeatWeekday = Number(body.repeatWeekday || 0);
   const photo = toText(body.photo);
+  const photos = Array.isArray(body.photos) ? body.photos : [];
   const status = toText(body.status) || "Active";
   const requiresUser = ["PC", "TAB", "SPK"].includes(type);
   const sharedLocation = SHARED_LOCATION_KEYWORDS.some((k) =>
@@ -615,6 +628,7 @@ function validateAsset(body) {
     repeatWeekOfMonth,
     repeatWeekday,
     photo,
+    photos,
     status,
   };
 }
@@ -1119,6 +1133,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       const assetPhoto = await normalizePhotoValue(cleaned.photo, "assets");
+      const normalizedPhotos = await normalizePhotoList(cleaned.photos, "assets", 5);
+      if (assetPhoto && !normalizedPhotos.includes(assetPhoto)) {
+        normalizedPhotos.unshift(assetPhoto);
+      }
+      const assetPhotos = normalizedPhotos.slice(0, 5);
+      const mainPhoto = assetPhotos[0] || assetPhoto || "";
       const initialHistory = await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
       const db = await readDb();
       const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
@@ -1132,7 +1152,8 @@ const server = http.createServer(async (req, res) => {
         maintenanceHistory: initialHistory,
         created: new Date().toISOString(),
         ...cleaned,
-        photo: assetPhoto,
+        photo: mainPhoto,
+        photos: assetPhotos,
       };
 
       db.assets.unshift(asset);
@@ -1448,15 +1469,22 @@ const server = http.createServer(async (req, res) => {
       }
 
       const nextPhoto = await normalizePhotoValue(cleaned.photo, "assets");
+      const normalizedPhotos = await normalizePhotoList(cleaned.photos, "assets", 5);
+      if (nextPhoto && !normalizedPhotos.includes(nextPhoto)) {
+        normalizedPhotos.unshift(nextPhoto);
+      }
+      const nextPhotos = normalizedPhotos.slice(0, 5);
+      const mainPhoto = nextPhotos[0] || nextPhoto || "";
       const nextHistory =
         body.maintenanceHistory === undefined
           ? current.maintenanceHistory
           : await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
-      const photoChanged = toText(current.photo) !== toText(nextPhoto);
+      const photoChanged = toText(current.photo) !== toText(mainPhoto);
       db.assets[idx] = {
         ...current,
         ...cleaned,
-        photo: nextPhoto,
+        photo: mainPhoto,
+        photos: nextPhotos,
         maintenanceHistory: nextHistory,
         name: current.assetId,
       };
