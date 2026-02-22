@@ -232,6 +232,7 @@ const LOCAL_ADMIN_TOKEN = "local-admin-token";
 const LOCAL_VIEWER_TOKEN = "local-viewer-token";
 const ENV_API_BASE_URL = String(process.env.REACT_APP_API_BASE_URL || "").trim().replace(/\/+$/, "");
 const DEFAULT_CLOUD_API_BASE = "https://eco-it-control-center.onrender.com";
+let runtimeAuthToken = "";
 
 function getAutoApiBaseForHost() {
   if (typeof window === "undefined") return "";
@@ -795,7 +796,7 @@ function normalizeArray<T>(input: unknown): T[] {
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const authToken = localStorage.getItem(AUTH_TOKEN_KEY);
+  const authToken = localStorage.getItem(AUTH_TOKEN_KEY) || runtimeAuthToken;
   const requestInit: RequestInit = {
     headers: {
       "Content-Type": "application/json",
@@ -2029,6 +2030,7 @@ export default function App() {
         if (mounted) setAuthLoading(false);
         return;
       }
+      runtimeAuthToken = token;
       if (!SERVER_ONLY_STORAGE && token === LOCAL_ADMIN_TOKEN) {
         const perm = readAuthPermissionFallback().admin || {
           role: "Admin" as const,
@@ -2071,6 +2073,7 @@ export default function App() {
         const res = await requestJson<{ user: AuthUser }>("/api/auth/me");
         if (mounted) setAuthUser(res.user || null);
       } catch {
+        runtimeAuthToken = "";
         localStorage.removeItem(AUTH_TOKEN_KEY);
         if (mounted) setAuthUser(null);
       } finally {
@@ -5824,6 +5827,7 @@ export default function App() {
           password: loginForm.password,
         }),
       });
+      runtimeAuthToken = res.token;
       trySetLocalStorage(AUTH_TOKEN_KEY, res.token);
       setAuthUser(res.user);
       setLoginForm({ username: "", password: "" });
@@ -5834,12 +5838,14 @@ export default function App() {
         const username = loginForm.username.trim().toLowerCase();
         const password = loginForm.password;
         if (username === "admin" && password === "EcoAdmin@2026!") {
+          runtimeAuthToken = LOCAL_ADMIN_TOKEN;
           trySetLocalStorage(AUTH_TOKEN_KEY, LOCAL_ADMIN_TOKEN);
           setAuthUser({ id: 1, username: "admin", displayName: "Eco Admin", role: "Admin", campuses: ["ALL"] });
           setLoginForm({ username: "", password: "" });
           setError("");
           await loadData();
         } else if (username === "viewer" && password === "EcoViewer@2026!") {
+          runtimeAuthToken = LOCAL_VIEWER_TOKEN;
           trySetLocalStorage(AUTH_TOKEN_KEY, LOCAL_VIEWER_TOKEN);
           setAuthUser({
             id: 2,
@@ -5889,6 +5895,7 @@ export default function App() {
     } catch {
       // ignore logout network errors
     } finally {
+      runtimeAuthToken = "";
       localStorage.removeItem(AUTH_TOKEN_KEY);
       setAuthUser(null);
       setBusy(false);
