@@ -2675,6 +2675,7 @@ export default function App() {
         `${assetForm.campus} | ${assetForm.location}`
       );
       await loadData();
+      setAssetsView("list");
     } catch (err) {
       if (isApiUnavailableError(err)) {
         const allLocal = readAssetFallback();
@@ -2828,6 +2829,7 @@ export default function App() {
         setAssetFileKey((k) => k + 1);
         setError("");
         appendUiAudit("CREATE", "asset", newAsset.assetId, `${newAsset.campus} | ${newAsset.location}`);
+        setAssetsView("list");
       } else {
         setError(err instanceof Error ? err.message : "Failed to create asset");
       }
