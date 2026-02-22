@@ -360,12 +360,6 @@ const PC_TYPE_OPTIONS = [
   { value: "Other", en: "Other", km: "ផ្សេងៗ" },
 ] as const;
 type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE";
-const SET_PACK_CHILD_ORDER: Record<string, number> = {
-  MON: 1,
-  MON2: 2,
-  KBD: 3,
-  MSE: 4,
-};
 type SetPackChildDraft = {
   enabled: boolean;
   status: string;
@@ -5613,80 +5607,44 @@ export default function App() {
       );
   }, [assets, assetItemName, campusLabel]);
   const assetMasterSetRows = useMemo(() => {
-    const grouped = new Map<string, Asset[]>();
-    const noSetAssets: Asset[] = [];
-
-    for (const asset of assets) {
-      const setCode = String(asset.setCode || "").trim();
-      if (setCode) {
-        const list = grouped.get(setCode) || [];
-        list.push(asset);
-        grouped.set(setCode, list);
-      } else {
-        noSetAssets.push(asset);
-      }
-    }
-
-    const rows = Array.from(grouped.entries()).map(([setCode, list]) => {
-      const sorted = [...list].sort((a, b) => a.assetId.localeCompare(b.assetId));
-      const mainPc =
-        sorted.find((a) => a.category === "IT" && a.type === DESKTOP_PARENT_TYPE) ||
-        sorted.find((a) => !a.parentAssetId) ||
-        sorted[0];
-      const children = sorted
-        .filter((a) => a.id !== mainPc.id)
-        .sort(
-          (a, b) =>
-            (SET_PACK_CHILD_ORDER[a.type] || 99) - (SET_PACK_CHILD_ORDER[b.type] || 99) ||
-            a.assetId.localeCompare(b.assetId)
-        );
-      const childRows = children.map((child, index) => ({
-        no: index + 1,
-        type: child.type,
-        assetId: child.assetId,
-        photo: child.photo || "",
-      }));
-
-      return {
-        key: `set-${setCode}`,
-        setCode,
-        campus: mainPc.campus,
-        location: mainPc.location || "-",
-        mainAssetId: mainPc.assetId,
-        mainType: mainPc.type === DESKTOP_PARENT_TYPE && mainPc.pcType
-          ? `${mainPc.type} (${mainPc.pcType})`
-          : mainPc.type,
-        mainStatus: mainPc.status || "-",
-        mainPhoto: mainPc.photo || "",
-        totalItems: sorted.length,
-        childRows,
-        category: mainPc.category || "-",
-      };
-    });
-
-    const standaloneRows = noSetAssets.map((asset) => ({
-      key: `single-${asset.id}`,
-      setCode: "-",
-      campus: asset.campus,
-      location: asset.location || "-",
-      mainAssetId: asset.assetId,
-      mainType: asset.type === DESKTOP_PARENT_TYPE && asset.pcType
-        ? `${asset.type} (${asset.pcType})`
-        : asset.type,
-      mainStatus: asset.status || "-",
-      mainPhoto: asset.photo || "",
-      totalItems: 1,
-      childRows: [] as Array<{ no: number; type: string; assetId: string; photo: string }>,
-      category: asset.category || "-",
-    }));
-
-    return [...rows, ...standaloneRows].sort(
-      (a, b) =>
-        campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
-        a.location.localeCompare(b.location) ||
-        a.mainAssetId.localeCompare(b.mainAssetId)
-    );
-  }, [assets, campusLabel]);
+    const toItemDescription = (asset: Asset) => {
+      const chunks = [
+        asset.specs || "",
+        [asset.brand || "", asset.model || ""].filter(Boolean).join(" "),
+        asset.serialNumber ? `SN: ${asset.serialNumber}` : "",
+      ]
+        .map((x) => String(x || "").trim())
+        .filter(Boolean);
+      return chunks.join(" | ") || "-";
+    };
+    const toLastServiceDate = (asset: Asset) => {
+      const history = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+      if (!history.length) return "-";
+      const latest = [...history].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+      return latest?.date || "-";
+    };
+    return [...assets]
+      .map((asset) => ({
+        key: `asset-${asset.id}`,
+        assetId: asset.assetId,
+        category: asset.category || "-",
+        itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+        itemDescription: toItemDescription(asset),
+        location: asset.location || "-",
+        purchaseDate: asset.purchaseDate || "-",
+        lastServiceDate: toLastServiceDate(asset),
+        assignedTo: asset.assignedTo || "-",
+        status: asset.status || "-",
+        photo: asset.photo || "",
+        campus: asset.campus || "-",
+      }))
+      .sort(
+        (a, b) =>
+          campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
+          a.location.localeCompare(b.location) ||
+          a.assetId.localeCompare(b.assetId)
+      );
+  }, [assets, assetItemName, campusLabel]);
 
   function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
@@ -5712,28 +5670,18 @@ export default function App() {
 
     if (reportType === "asset_master") {
       title = "Asset Master Register Report";
-      columns = ["Set Code", "Main Asset ID", "Photo", "Campus", "Location", "Category", "Main Type", "Status", "Items in Set", "Components"];
+      columns = ["Photo", "Asset ID", "Item Name", "Category", "Item Description", "Location", "Purchase Date", "Last Service", "Assigned To", "Status"];
       rows = assetMasterSetRows.map((row) => [
-        row.setCode,
-        row.mainAssetId,
-        toPrintablePhotoUrl(row.mainPhoto || ""),
-        campusLabel(row.campus),
-        row.location || "-",
+        toPrintablePhotoUrl(row.photo || ""),
+        row.assetId,
+        row.itemName,
         row.category,
-        row.mainType,
-        row.mainStatus,
-        String(row.totalItems),
-        row.childRows.length
-          ? row.childRows
-              .map((child) => {
-                const img = toPrintablePhotoUrl(child.photo || "");
-                const imgHtml = img
-                  ? `<img src="${img}" alt="component" style="width:32px;height:32px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;vertical-align:middle;margin-right:6px;" />`
-                  : "";
-                return `<div style="margin:2px 0;">${child.no}. ${imgHtml}${escapeHtml(`${child.type} (${child.assetId})`)}</div>`;
-              })
-              .join("")
-          : "-",
+        row.itemDescription,
+        row.location || "-",
+        formatDate(row.purchaseDate || "-"),
+        formatDate(row.lastServiceDate || "-"),
+        row.assignedTo,
+        row.status,
       ]);
     } else if (reportType === "asset_by_location") {
       title = "Asset by Campus and Location Report";
@@ -5831,7 +5779,7 @@ export default function App() {
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
         : reportType === "asset_master"
-        ? `<p><strong>Total Rows:</strong> ${assetMasterSetRows.length} | <strong>Set Packs:</strong> ${assetMasterSetRows.filter((r) => r.setCode !== "-").length}</p>`
+        ? `<p><strong>Total Assets:</strong> ${assetMasterSetRows.length}</p>`
         : "";
 
     const html = `
@@ -9741,7 +9689,7 @@ export default function App() {
 
             {reportType === "asset_master" && (
               <div className="panel-note">
-                <strong>Set-first view:</strong> each row is one main asset/set, with all linked components shown in one line.
+                <strong>Asset register view:</strong> one row per asset with quick item/service information.
               </div>
             )}
             {reportType === "asset_master" && (
@@ -9749,46 +9697,32 @@ export default function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>{t.setCode}</th>
-                      <th>Main {t.assetId}</th>
                       <th>{t.photo}</th>
-                      <th>{t.campus}</th>
-                      <th>{t.location}</th>
+                      <th>{t.assetId}</th>
+                      <th>Item Name</th>
                       <th>{t.category}</th>
-                      <th>Main {t.typeCode}</th>
+                      <th>Item Description</th>
+                      <th>{t.location}</th>
+                      <th>Purchase Date</th>
+                      <th>Last Service</th>
+                      <th>Assigned To</th>
                       <th>{t.status}</th>
-                      <th>Items in Set</th>
-                      <th>Components</th>
                     </tr>
                   </thead>
                   <tbody>
                     {assetMasterSetRows.length ? (
                       assetMasterSetRows.map((row) => (
-                        <tr key={`report-asset-master-${row.key}`} className={row.setCode !== "-" ? "row-set-parent" : ""}>
-                          <td><strong>{row.setCode}</strong></td>
-                          <td><strong>{row.mainAssetId}</strong></td>
-                          <td>{renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}</td>
-                          <td>{campusLabel(row.campus)}</td>
-                          <td>{row.location || "-"}</td>
+                        <tr key={`report-asset-master-${row.key}`}>
+                          <td>{renderAssetPhoto(row.photo || "", row.assetId)}</td>
+                          <td><strong>{row.assetId}</strong></td>
+                          <td>{row.itemName}</td>
                           <td>{row.category}</td>
-                          <td>{row.mainType}</td>
-                          <td>{row.mainStatus || "-"}</td>
-                          <td>{row.totalItems}</td>
-                          <td className="report-components-cell">
-                            {row.childRows.length ? (
-                              <div className="report-components-list">
-                                {row.childRows.map((child) => (
-                                  <div key={`${row.key}-child-${child.no}-${child.assetId}`} className="report-component-row">
-                                    <span className="report-component-index">{child.no}.</span>
-                                    {renderAssetPhoto(child.photo || "", child.assetId)}
-                                    <span>{child.type} ({child.assetId})</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
+                          <td>{row.itemDescription || "-"}</td>
+                          <td>{row.location || "-"}</td>
+                          <td>{formatDate(row.purchaseDate || "-")}</td>
+                          <td>{formatDate(row.lastServiceDate || "-")}</td>
+                          <td>{row.assignedTo || "-"}</td>
+                          <td>{row.status || "-"}</td>
                         </tr>
                       ))
                     ) : (
