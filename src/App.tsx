@@ -227,6 +227,16 @@ const ALL_NAV_MODULES: NavModule[] = [
 const LOCAL_ADMIN_TOKEN = "local-admin-token";
 const LOCAL_VIEWER_TOKEN = "local-viewer-token";
 const ENV_API_BASE_URL = String(process.env.REACT_APP_API_BASE_URL || "").trim().replace(/\/+$/, "");
+const DEFAULT_CLOUD_API_BASE = "https://eco-it-control-center.onrender.com";
+
+function getAutoApiBaseForHost() {
+  if (typeof window === "undefined") return "";
+  const host = String(window.location.hostname || "").toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1") {
+    return DEFAULT_CLOUD_API_BASE;
+  }
+  return "";
+}
 const LOCAL_AUTH_ACCOUNTS: AuthAccount[] = [
   { id: 1, username: "admin", displayName: "Eco Admin", role: "Admin", campuses: ["ALL"], modules: [...ALL_NAV_MODULES] },
   { id: 2, username: "viewer", displayName: "Eco Viewer", role: "Viewer", campuses: ["Chaktomuk Campus (C2.2)"], modules: [...DEFAULT_VIEWER_MODULES] },
@@ -800,11 +810,14 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const apiBaseOverride = String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "")
     .trim()
     .replace(/\/+$/, "");
-  const candidates: string[] = [url];
+  const autoApiBase = getAutoApiBaseForHost().replace(/\/+$/, "");
+  const candidates: string[] = url.startsWith("/api/") ? [] : [url];
 
   if (url.startsWith("/api/")) {
     if (apiBaseOverride) candidates.push(`${apiBaseOverride}${url}`);
     if (ENV_API_BASE_URL) candidates.push(`${ENV_API_BASE_URL}${url}`);
+    if (autoApiBase) candidates.push(`${autoApiBase}${url}`);
+    candidates.push(url);
     candidates.push(`http://127.0.0.1:4000${url}`);
     candidates.push(`http://localhost:4000${url}`);
     if (typeof window !== "undefined") {
@@ -1743,7 +1756,7 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [apiBaseInput, setApiBaseInput] = useState(
-    () => String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL)
+    () => String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
   );
   const isAdmin = authUser?.role === "Admin";
 
@@ -5915,7 +5928,7 @@ export default function App() {
       return;
     }
     localStorage.removeItem(API_BASE_OVERRIDE_KEY);
-    setApiBaseInput("");
+    setApiBaseInput(ENV_API_BASE_URL || getAutoApiBaseForHost() || "");
     setError("");
   }
 
@@ -6014,7 +6027,7 @@ export default function App() {
               <div className="tiny">
                 Admin: admin / EcoAdmin@2026! | Viewer: viewer / EcoViewer@2026!
                 <br />
-                Leave API URL blank for local web. On iPhone, set your Mac IP (port 4000).
+                Leave API URL blank to use default cloud server. For LAN testing, set your Mac IP (port 4000).
               </div>
               <div className="row-actions">
                 <button className="tab" type="button" onClick={saveApiServerUrl}>{t.saveApiUrl}</button>
