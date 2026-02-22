@@ -359,11 +359,12 @@ const PC_TYPE_OPTIONS = [
   { value: "Mac Mini", en: "Mac Mini", km: "Mac Mini" },
   { value: "Other", en: "Other", km: "ផ្សេងៗ" },
 ] as const;
-type SetPackChildType = "MON" | "KBD" | "MSE";
+type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE";
 const SET_PACK_CHILD_ORDER: Record<string, number> = {
   MON: 1,
-  KBD: 2,
-  MSE: 3,
+  MON2: 2,
+  KBD: 3,
+  MSE: 4,
 };
 type SetPackChildDraft = {
   enabled: boolean;
@@ -398,9 +399,15 @@ function defaultSetPackChildDraft(): SetPackChildDraft {
 function defaultSetPackDraft(): Record<SetPackChildType, SetPackChildDraft> {
   return {
     MON: defaultSetPackChildDraft(),
+    MON2: { ...defaultSetPackChildDraft(), enabled: false },
     KBD: defaultSetPackChildDraft(),
     MSE: defaultSetPackChildDraft(),
   };
+}
+
+function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" {
+  if (type === "MON2") return "MON";
+  return type;
 }
 
 const TEXT = {
@@ -453,6 +460,7 @@ const TEXT = {
     addDetails: "Add Details",
     hideDetails: "Hide Details",
     includeMonitor: "Include Monitor",
+    includeMonitor2: "Include 2nd Monitor",
     includeKeyboard: "Include Keyboard",
     includeMouse: "Include Mouse",
     linkToDesktopSet: "Link to existing desktop set",
@@ -645,6 +653,7 @@ const TEXT = {
     addDetails: "បន្ថែមព័ត៌មានលម្អិត",
     hideDetails: "លាក់ព័ត៌មានលម្អិត",
     includeMonitor: "រួមបញ្ចូល Monitor",
+    includeMonitor2: "រួមបញ្ចូល Monitor ទី២",
     includeKeyboard: "រួមបញ្ចូល Keyboard",
     includeMouse: "រួមបញ្ចូល Mouse",
     linkToDesktopSet: "ភ្ជាប់ទៅក្រុម Desktop ដែលមានស្រាប់",
@@ -1797,21 +1806,25 @@ export default function App() {
   );
   const [setPackFileKey, setSetPackFileKey] = useState<Record<SetPackChildType, number>>({
     MON: 0,
+    MON2: 0,
     KBD: 0,
     MSE: 0,
   });
   const setPackPhotoInputRefs = useRef<Record<SetPackChildType, HTMLInputElement | null>>({
     MON: null,
+    MON2: null,
     KBD: null,
     MSE: null,
   });
   const [setPackDetailOpen, setSetPackDetailOpen] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
+    MON2: false,
     KBD: false,
     MSE: false,
   });
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
+    MON2: false,
     KBD: false,
     MSE: false,
   });
@@ -2226,10 +2239,15 @@ export default function App() {
     return `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode(assetForm.category)}-${type}-${pad4(seq)}`;
   }, [assets, assetForm.campus, assetForm.category, assetForm.type]);
   const setPackSuggestedAssetId = useMemo<Record<SetPackChildType, string>>(() => {
+    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
+    const baseMon = calcNextSeq(assets, assetForm.campus, "IT", "MON");
+    const baseKbd = calcNextSeq(assets, assetForm.campus, "IT", "KBD");
+    const baseMse = calcNextSeq(assets, assetForm.campus, "IT", "MSE");
     return {
-      MON: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-MON-${pad4(calcNextSeq(assets, assetForm.campus, "IT", "MON"))}`,
-      KBD: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-KBD-${pad4(calcNextSeq(assets, assetForm.campus, "IT", "KBD"))}`,
-      MSE: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-MSE-${pad4(calcNextSeq(assets, assetForm.campus, "IT", "MSE"))}`,
+      MON: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon)}`,
+      MON2: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon + 1)}`,
+      KBD: `${campusCode}-${categoryCode("IT")}-KBD-${pad4(baseKbd)}`,
+      MSE: `${campusCode}-${categoryCode("IT")}-MSE-${pad4(baseMse)}`,
     };
   }, [assets, assetForm.campus]);
   const desktopSetParentsForEdit = useMemo(() => {
@@ -2357,11 +2375,13 @@ export default function App() {
     setSetPackDraft(defaultSetPackDraft());
     setSetPackDetailOpen({
       MON: false,
+      MON2: false,
       KBD: false,
       MSE: false,
     });
     setSetPackFileKey((prev) => ({
       MON: prev.MON + 1,
+      MON2: prev.MON2 + 1,
       KBD: prev.KBD + 1,
       MSE: prev.MSE + 1,
     }));
@@ -2380,10 +2400,11 @@ export default function App() {
   const setPackChildMeta = useMemo<Array<{ type: SetPackChildType; label: string }>>(
     () => [
       { type: "MON", label: t.includeMonitor },
+      { type: "MON2", label: t.includeMonitor2 },
       { type: "KBD", label: t.includeKeyboard },
       { type: "MSE", label: t.includeMouse },
     ],
-    [t.includeMonitor, t.includeKeyboard, t.includeMouse]
+    [t.includeMonitor, t.includeMonitor2, t.includeKeyboard, t.includeMouse]
   );
 
   useEffect(() => {
@@ -2582,12 +2603,13 @@ export default function App() {
 
       if (createPack && created.asset?.assetId) {
         for (const [typeCode, draft] of packItems) {
+          const assetType = setPackAssetType(typeCode);
           await requestJson<{ asset: Asset }>("/api/assets", {
             method: "POST",
             body: JSON.stringify({
               campus: assetForm.campus,
               category: "IT",
-              type: typeCode,
+              type: assetType,
               location: assetForm.location,
               setCode: createSetCode,
               parentAssetId: created.asset.assetId,
@@ -2635,11 +2657,13 @@ export default function App() {
       setSetPackDraft(defaultSetPackDraft());
       setSetPackDetailOpen({
         MON: false,
+        MON2: false,
         KBD: false,
         MSE: false,
       });
       setSetPackFileKey((prev) => ({
         MON: prev.MON + 1,
+        MON2: prev.MON2 + 1,
         KBD: prev.KBD + 1,
         MSE: prev.MSE + 1,
       }));
@@ -2709,16 +2733,17 @@ export default function App() {
         let nextLocal = [newAsset, ...allLocal];
         if (createPack) {
           for (const [typeCode, draft] of packItems) {
-            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", typeCode);
+            const assetType = setPackAssetType(typeCode);
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", assetType);
             const child: Asset = {
               id: Date.now() + Math.floor(Math.random() * 10000),
               campus: assetForm.campus,
               category: "IT",
-              type: typeCode,
+              type: assetType,
               pcType: "",
               seq: childSeq,
-              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${typeCode}-${pad4(childSeq)}`,
-              name: assetItemName("IT", typeCode),
+              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${assetType}-${pad4(childSeq)}`,
+              name: assetItemName("IT", assetType),
               location: assetForm.location,
               setCode: createSetCode,
               parentAssetId: newAsset.assetId,
@@ -2790,11 +2815,13 @@ export default function App() {
         setSetPackDraft(defaultSetPackDraft());
         setSetPackDetailOpen({
           MON: false,
+          MON2: false,
           KBD: false,
           MSE: false,
         });
         setSetPackFileKey((prev) => ({
           MON: prev.MON + 1,
+          MON2: prev.MON2 + 1,
           KBD: prev.KBD + 1,
           MSE: prev.MSE + 1,
         }));
@@ -3801,7 +3828,7 @@ export default function App() {
     const payload = {
       campus: editingAsset.campus,
       category: "IT",
-      type,
+      type: setPackAssetType(type),
       location: editingAsset.location,
       setCode: editingAsset.setCode || "",
       parentAssetId: editingAsset.assetId,
@@ -4955,46 +4982,46 @@ export default function App() {
     const isDesktopParent = editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     if (!isDesktopParent) return {};
     const map: Partial<Record<SetPackChildType, Asset>> = {};
-    for (const meta of setPackChildMeta) {
-      const byParent = assets.find(
-        (a) => a.parentAssetId === editingAsset.assetId && a.type === meta.type
-      );
-      const bySetCode =
-        !byParent && editingAsset.setCode
-          ? assets.find(
-              (a) =>
-                a.assetId !== editingAsset.assetId &&
-                a.setCode === editingAsset.setCode &&
-                a.type === meta.type &&
-                a.campus === editingAsset.campus
-            )
-          : null;
-      if (byParent || bySetCode) {
-        map[meta.type] = byParent || bySetCode || undefined;
-      }
-    }
+    const childrenByScope = assets.filter(
+      (a) =>
+        a.assetId !== editingAsset.assetId &&
+        a.campus === editingAsset.campus &&
+        (a.parentAssetId === editingAsset.assetId ||
+          (editingAsset.setCode && a.setCode === editingAsset.setCode))
+    );
+    const monitors = childrenByScope
+      .filter((a) => a.type === "MON")
+      .sort((a, b) => (Number(a.seq) || 0) - (Number(b.seq) || 0) || a.assetId.localeCompare(b.assetId));
+    if (monitors[0]) map.MON = monitors[0];
+    if (monitors[1]) map.MON2 = monitors[1];
+    const keyboard = childrenByScope.find((a) => a.type === "KBD");
+    const mouse = childrenByScope.find((a) => a.type === "MSE");
+    if (keyboard) map.KBD = keyboard;
+    if (mouse) map.MSE = mouse;
     return map;
-  }, [assets, editingAsset, setPackChildMeta]);
+  }, [assets, editingAsset]);
 
   useEffect(() => {
     if (!editingAsset) {
       setEditCreateSetPack(false);
-      setEditSetPackEnabled({ MON: false, KBD: false, MSE: false });
+      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false });
       return;
     }
     const isDesktopParent = editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     if (!isDesktopParent) {
       setEditCreateSetPack(false);
-      setEditSetPackEnabled({ MON: false, KBD: false, MSE: false });
+      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false });
       return;
     }
     const hasAnyChild =
       Boolean(editingSetPackChildren.MON) ||
+      Boolean(editingSetPackChildren.MON2) ||
       Boolean(editingSetPackChildren.KBD) ||
       Boolean(editingSetPackChildren.MSE);
     setEditCreateSetPack(hasAnyChild);
     setEditSetPackEnabled({
       MON: Boolean(editingSetPackChildren.MON),
+      MON2: Boolean(editingSetPackChildren.MON2),
       KBD: Boolean(editingSetPackChildren.KBD),
       MSE: Boolean(editingSetPackChildren.MSE),
     });
@@ -6490,13 +6517,23 @@ export default function App() {
                                   type="checkbox"
                                   checked={setPackDraft[item.type].enabled}
                                   onChange={(e) =>
-                                    setSetPackDraft((prev) => ({
-                                      ...prev,
-                                      [item.type]: {
-                                        ...prev[item.type],
-                                        enabled: e.target.checked,
-                                      },
-                                    }))
+                                    setSetPackDraft((prev) => {
+                                      const checked = e.target.checked;
+                                      const next = {
+                                        ...prev,
+                                        [item.type]: {
+                                          ...prev[item.type],
+                                          enabled: checked,
+                                        },
+                                      };
+                                      if (item.type === "MON2" && checked) {
+                                        next.MON = { ...next.MON, enabled: true };
+                                      }
+                                      if (item.type === "MON" && !checked) {
+                                        next.MON2 = { ...next.MON2, enabled: false };
+                                      }
+                                      return next;
+                                    })
                                   }
                                 />{" "}
                                 {item.label}
@@ -6519,7 +6556,7 @@ export default function App() {
                                       <div>
                                         <strong>{item.label}</strong>
                                         <div className="tiny">
-                                          {t.assetId}: {setPackSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
+                                          {t.assetId}: {setPackSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", setPackAssetType(item.type))}
                                         </div>
                                       </div>
                                       <button
@@ -7334,10 +7371,16 @@ export default function App() {
                                     checked={editSetPackEnabled[item.type]}
                                     disabled={!isAdmin || busy}
                                     onChange={(e) =>
-                                      setEditSetPackEnabled((prev) => ({
-                                        ...prev,
-                                        [item.type]: e.target.checked,
-                                      }))
+                                      setEditSetPackEnabled((prev) => {
+                                        const checked = e.target.checked;
+                                        const next = {
+                                          ...prev,
+                                          [item.type]: checked,
+                                        };
+                                        if (item.type === "MON2" && checked) next.MON = true;
+                                        if (item.type === "MON" && !checked) next.MON2 = false;
+                                        return next;
+                                      })
                                     }
                                     style={{ marginRight: 8 }}
                                   />
