@@ -1547,6 +1547,28 @@ function normalizeAssetPhotos(input: { photo?: string; photos?: string[] }) {
   return out.slice(0, MAX_ASSET_PHOTOS);
 }
 
+function normalizeAssetForUi(asset: Asset): Asset {
+  const photos = normalizeAssetPhotos(asset);
+  const normalizeUrl = (raw: string) => {
+    const text = String(raw || "").trim();
+    if (!text) return "";
+    if (text.startsWith("/uploads/")) return text;
+    try {
+      const parsed = new URL(text);
+      if (parsed.pathname.startsWith("/uploads/")) return parsed.pathname;
+    } catch {
+      // keep original if not URL
+    }
+    return text;
+  };
+  const normalizedPhotos = photos.map(normalizeUrl).filter(Boolean);
+  return {
+    ...asset,
+    photos: normalizedPhotos,
+    photo: normalizeUrl(normalizedPhotos[0] || ""),
+  };
+}
+
 type AssetPickerProps = {
   value: string;
   assets: Asset[];
@@ -2527,10 +2549,15 @@ export default function App() {
         }
       }
 
-      const serverAssets = normalizeArray<Asset>(assetRes.assets);
-      writeAssetFallback(mergeAssets(serverAssets, localAssets));
-      const localFiltered = filterAssets(localAssets, effectiveAssetCampusFilter, assetCategoryFilter, search);
-      const effectiveAssets = mergeAssets(serverAssets, localFiltered);
+      const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
+      // Server-first sync: when API is reachable, use server data as single source of truth.
+      writeAssetFallback(serverAssets);
+      const effectiveAssets = filterAssets(
+        serverAssets,
+        effectiveAssetCampusFilter,
+        assetCategoryFilter,
+        search
+      );
       setAssets(effectiveAssets);
       setTickets(normalizeArray<Ticket>(ticketRes.tickets));
       setLocations(locationList);

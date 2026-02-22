@@ -501,6 +501,17 @@ async function normalizePhotoValue(photo, group = "assets") {
   const raw = toText(photo);
   if (!raw) return "";
   if (raw.startsWith("/uploads/")) return raw;
+  // Normalize absolute URLs that point to uploads so they work across environments.
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname.startsWith("/uploads/")) {
+        return parsed.pathname;
+      }
+    } catch {
+      // Keep legacy value as-is if URL parsing fails.
+    }
+  }
   if (raw.startsWith("data:image/")) {
     const saved = await saveDataUrlPhoto(raw, group);
     return saved || "";
