@@ -1919,6 +1919,12 @@ export default function App() {
     KBD: false,
     MSE: false,
   });
+  const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
+    MON: false,
+    KBD: false,
+    MSE: false,
+  });
+  const [editCreateSetPack, setEditCreateSetPack] = useState(false);
   const [assetFileKey, setAssetFileKey] = useState(0);
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [assetDetailId, setAssetDetailId] = useState<number | null>(null);
@@ -5099,6 +5105,30 @@ export default function App() {
     }
     return map;
   }, [assets, editingAsset, setPackChildMeta]);
+
+  useEffect(() => {
+    if (!editingAsset) {
+      setEditCreateSetPack(false);
+      setEditSetPackEnabled({ MON: false, KBD: false, MSE: false });
+      return;
+    }
+    const isDesktopParent = editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
+    if (!isDesktopParent) {
+      setEditCreateSetPack(false);
+      setEditSetPackEnabled({ MON: false, KBD: false, MSE: false });
+      return;
+    }
+    const hasAnyChild =
+      Boolean(editingSetPackChildren.MON) ||
+      Boolean(editingSetPackChildren.KBD) ||
+      Boolean(editingSetPackChildren.MSE);
+    setEditCreateSetPack(hasAnyChild);
+    setEditSetPackEnabled({
+      MON: Boolean(editingSetPackChildren.MON),
+      KBD: Boolean(editingSetPackChildren.KBD),
+      MSE: Boolean(editingSetPackChildren.MSE),
+    });
+  }, [editingAsset, editingSetPackChildren]);
   const maintenanceDetailAsset = useMemo(
     () => assets.find((a) => a.id === maintenanceDetailAssetId) || null,
     [assets, maintenanceDetailAssetId]
@@ -7398,38 +7428,79 @@ export default function App() {
                       </>
                     )}
                     {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
-                      <div className="field field-wide">
-                        <span>{t.setPackItems}</span>
-                        <div className="setpack-card-grid">
-                          {setPackChildMeta.map((item) => {
-                            const child = editingSetPackChildren[item.type];
-                            return (
-                              <div key={`edit-setpack-${item.type}`} className="setpack-item-card">
-                                <div className="setpack-item-head">
-                                  <div>
-                                    <strong>{item.label}</strong>
-                                    <div className="tiny">
-                                      {child
-                                        ? `${t.assetId}: ${child.assetId} | ${t.status}: ${child.status || "-"}`
-                                        : "Not created yet for this set"}
+                      <>
+                        <div className="field">
+                          <span>{t.createAsSetPack}</span>
+                          <div className="setpack-toggle-row">
+                            <span className="tiny">{t.setPackHint}</span>
+                            <label className="switch-toggle">
+                              <input
+                                type="checkbox"
+                                checked={editCreateSetPack}
+                                disabled={!isAdmin || busy}
+                                onChange={(e) => setEditCreateSetPack(e.target.checked)}
+                              />
+                              <span className="switch-slider" />
+                            </label>
+                          </div>
+                        </div>
+                        {editCreateSetPack ? (
+                          <div className="field field-wide">
+                            <span>{t.setPackItems}</span>
+                            <div className="setpack-include-grid">
+                              {setPackChildMeta.map((item) => (
+                                <label key={`edit-setpack-include-${item.type}`} className="tab setpack-include-item">
+                                  <input
+                                    type="checkbox"
+                                    checked={editSetPackEnabled[item.type]}
+                                    disabled={!isAdmin || busy}
+                                    onChange={(e) =>
+                                      setEditSetPackEnabled((prev) => ({
+                                        ...prev,
+                                        [item.type]: e.target.checked,
+                                      }))
+                                    }
+                                    style={{ marginRight: 8 }}
+                                  />
+                                  {item.label}
+                                </label>
+                              ))}
+                            </div>
+                            <div className="setpack-card-grid">
+                              {setPackChildMeta.map((item) => {
+                                if (!editSetPackEnabled[item.type]) {
+                                  return <div key={`edit-setpack-empty-${item.type}`} className="setpack-item-slot" />;
+                                }
+                                const child = editingSetPackChildren[item.type];
+                                return (
+                                  <div key={`edit-setpack-${item.type}`} className="setpack-item-card">
+                                    <div className="setpack-item-head">
+                                      <div>
+                                        <strong>{item.label}</strong>
+                                        <div className="tiny">
+                                          {child
+                                            ? `${t.assetId}: ${child.assetId} | ${t.status}: ${child.status || "-"}`
+                                            : "Not created yet for this set"}
+                                        </div>
+                                      </div>
+                                      <button
+                                        className="setpack-detail-btn"
+                                        type="button"
+                                        disabled={!isAdmin || busy}
+                                        onClick={() => {
+                                          void editOrCreateSetPackChild(item.type);
+                                        }}
+                                      >
+                                        {child ? "Edit Details" : "Add + Edit"}
+                                      </button>
                                     </div>
                                   </div>
-                                  <button
-                                    className="setpack-detail-btn"
-                                    type="button"
-                                    disabled={!isAdmin || busy}
-                                    onClick={() => {
-                                      void editOrCreateSetPackChild(item.type);
-                                    }}
-                                  >
-                                    {child ? "Edit Details" : "Add + Edit"}
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
                     ) : null}
                     <label className="field field-wide">
                       <span>{t.user}</span>
