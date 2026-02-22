@@ -420,6 +420,20 @@ async function ensureBackupsDir() {
   await fs.mkdir(BACKUPS_DIR, { recursive: true });
 }
 
+async function resetDirContents(dirPath) {
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    await Promise.all(
+      entries.map((entry) =>
+        fs.rm(path.join(dirPath, entry.name), { recursive: true, force: true })
+      )
+    );
+  } catch {
+    // Directory may not exist yet.
+  }
+  await fs.mkdir(dirPath, { recursive: true });
+}
+
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
   return {
@@ -888,6 +902,29 @@ const server = http.createServer(async (req, res) => {
       const imported = normalizeImportedDb(payload);
       appendAuditLog(imported, admin, "BACKUP_IMPORT", "system", "db", "Database restored from backup");
       await writeDb(imported);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/admin/factory-reset") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+
+      const freshDb = normalizeImportedDb({});
+      freshDb.users = [...DEFAULT_USERS];
+      appendAuditLog(
+        freshDb,
+        admin,
+        "FACTORY_RESET",
+        "system",
+        "all-data",
+        "Factory reset completed: records and uploads cleared"
+      );
+
+      await writeDb(freshDb);
+      await resetDirContents(UPLOADS_DIR);
+      await resetDirContents(BACKUPS_DIR);
+      sessions.clear();
       sendJson(res, 200, { ok: true });
       return;
     }

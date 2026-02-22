@@ -1117,6 +1117,29 @@ function writeAuditFallback(list: AuditLog[]) {
   trySetLocalStorage(AUDIT_FALLBACK_KEY, JSON.stringify(list.slice(0, 500)));
 }
 
+function clearAllFallbackCaches() {
+  const keys = [
+    LOCATION_FALLBACK_KEY,
+    ASSET_FALLBACK_KEY,
+    USER_FALLBACK_KEY,
+    CAMPUS_NAME_FALLBACK_KEY,
+    ITEM_NAME_FALLBACK_KEY,
+    ITEM_TYPE_FALLBACK_KEY,
+    AUTH_PERMISSION_FALLBACK_KEY,
+    AUTH_ACCOUNTS_FALLBACK_KEY,
+    AUDIT_FALLBACK_KEY,
+    INVENTORY_ITEM_FALLBACK_KEY,
+    INVENTORY_TXN_FALLBACK_KEY,
+  ];
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Ignore storage errors.
+    }
+  }
+}
+
 function readInventoryItemFallback(): InventoryItem[] {
   try {
     const raw = localStorage.getItem(INVENTORY_ITEM_FALLBACK_KEY);
@@ -3139,6 +3162,45 @@ export default function App() {
       setBusy(false);
       setBackupImportKey((k) => k + 1);
       if (e.target) e.target.value = "";
+    }
+  }
+
+  async function factoryResetSystem() {
+    if (!requireAdminAction()) return;
+    const confirmed = window.confirm(
+      "Factory Reset will delete all assets, records, users, uploads, and backups. Continue?"
+    );
+    if (!confirmed) return;
+    const phrase = window.prompt("Type RESET to confirm full reset:");
+    if (String(phrase || "").trim().toUpperCase() !== "RESET") return;
+
+    setBusy(true);
+    setError("");
+    setSetupMessage("Factory reset in progress...");
+    try {
+      await requestJson<{ ok: boolean }>("/api/admin/factory-reset", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      clearAllFallbackCaches();
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      setAssets([]);
+      setTickets([]);
+      setLocations([]);
+      setUsers([]);
+      setAuditLogs([]);
+      setInventoryItems([]);
+      setInventoryTxns([]);
+      setSetupMessage("Factory reset completed. Please login again.");
+      alert("Factory reset completed. Please login again.");
+      window.location.reload();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Factory reset failed";
+      setError(msg);
+      setSetupMessage(`Factory reset failed: ${msg}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -10256,6 +10318,14 @@ export default function App() {
                     style={{ display: "none" }}
                   />
                 </label>
+                <button
+                  className="btn-danger"
+                  disabled={!isAdmin || busy}
+                  onClick={factoryResetSystem}
+                  title="Delete all records and restart from zero"
+                >
+                  Factory Reset
+                </button>
               </div>
             </div>
             {setupMessage ? <p className="tiny" style={{ marginTop: 8 }}>{setupMessage}</p> : null}
