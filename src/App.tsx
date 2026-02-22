@@ -3763,6 +3763,116 @@ export default function App() {
     setEditingAssetId(null);
   }
 
+  async function editOrCreateSetPackChild(type: SetPackChildType) {
+    if (!editingAsset) return;
+    const existing = editingSetPackChildren[type];
+    if (existing) {
+      startEditAsset(existing);
+      return;
+    }
+    if (!requireAdminAction()) return;
+    if (!(editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE)) return;
+
+    const payload = {
+      campus: editingAsset.campus,
+      category: "IT",
+      type,
+      location: editingAsset.location,
+      setCode: editingAsset.setCode || "",
+      parentAssetId: editingAsset.assetId,
+      assignedTo: "",
+      brand: "",
+      model: "",
+      serialNumber: "",
+      specs: "",
+      purchaseDate: "",
+      warrantyUntil: "",
+      vendor: "",
+      notes: `Linked to set ${editingAsset.assetId}`,
+      nextMaintenanceDate: "",
+      scheduleNote: "",
+      photo: "",
+      photos: [],
+      status: editingAsset.status || "Active",
+    };
+
+    setBusy(true);
+    setError("");
+    try {
+      let childAsset: Asset | null = null;
+      try {
+        const created = await requestJson<{ asset: Asset }>("/api/assets", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        childAsset = created.asset;
+      } catch (err) {
+        if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+        const allLocal = readAssetFallback();
+        const seq = calcNextSeq(allLocal, payload.campus, payload.category, payload.type);
+        childAsset = {
+          id: Date.now(),
+          campus: payload.campus,
+          category: payload.category,
+          type: payload.type,
+          pcType: "",
+          seq,
+          assetId: `${CAMPUS_CODE[payload.campus] || "CX"}-${categoryCode(payload.category)}-${payload.type}-${pad4(seq)}`,
+          name: assetItemName(payload.category, payload.type),
+          location: payload.location,
+          setCode: payload.setCode,
+          parentAssetId: payload.parentAssetId,
+          assignedTo: payload.assignedTo,
+          brand: payload.brand,
+          model: payload.model,
+          serialNumber: payload.serialNumber,
+          specs: payload.specs,
+          purchaseDate: payload.purchaseDate,
+          warrantyUntil: payload.warrantyUntil,
+          vendor: payload.vendor,
+          notes: payload.notes,
+          nextMaintenanceDate: payload.nextMaintenanceDate,
+          nextVerificationDate: "",
+          verificationFrequency: "NONE",
+          scheduleNote: payload.scheduleNote,
+          repeatMode: "NONE",
+          repeatWeekOfMonth: 0,
+          repeatWeekday: 0,
+          maintenanceHistory: [],
+          verificationHistory: [],
+          transferHistory: [],
+          statusHistory: [
+            {
+              id: Date.now(),
+              date: new Date().toISOString(),
+              fromStatus: "New",
+              toStatus: payload.status,
+              reason: "Asset created from set pack in edit",
+            },
+          ],
+          photo: "",
+          photos: [],
+          status: payload.status,
+          created: new Date().toISOString(),
+        };
+        const nextLocal = [childAsset, ...allLocal];
+        writeAssetFallback(nextLocal);
+        setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+        setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      }
+
+      if (childAsset) {
+        appendUiAudit("CREATE", "asset", childAsset.assetId, `${childAsset.campus} | ${childAsset.location}`);
+        startEditAsset(childAsset);
+      }
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create set pack child");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onEditAssetPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -4815,6 +4925,31 @@ export default function App() {
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
   );
+  const editingSetPackChildren = useMemo<Partial<Record<SetPackChildType, Asset>>>(() => {
+    if (!editingAsset) return {};
+    const isDesktopParent = editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
+    if (!isDesktopParent) return {};
+    const map: Partial<Record<SetPackChildType, Asset>> = {};
+    for (const meta of setPackChildMeta) {
+      const byParent = assets.find(
+        (a) => a.parentAssetId === editingAsset.assetId && a.type === meta.type
+      );
+      const bySetCode =
+        !byParent && editingAsset.setCode
+          ? assets.find(
+              (a) =>
+                a.assetId !== editingAsset.assetId &&
+                a.setCode === editingAsset.setCode &&
+                a.type === meta.type &&
+                a.campus === editingAsset.campus
+            )
+          : null;
+      if (byParent || bySetCode) {
+        map[meta.type] = byParent || bySetCode || undefined;
+      }
+    }
+    return map;
+  }, [assets, editingAsset, setPackChildMeta]);
   const maintenanceDetailAsset = useMemo(
     () => assets.find((a) => a.id === maintenanceDetailAssetId) || null,
     [assets, maintenanceDetailAssetId]
@@ -7113,6 +7248,40 @@ export default function App() {
                         ) : null}
                       </>
                     )}
+                    {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
+                      <div className="field field-wide">
+                        <span>{t.setPackItems}</span>
+                        <div className="setpack-card-grid">
+                          {setPackChildMeta.map((item) => {
+                            const child = editingSetPackChildren[item.type];
+                            return (
+                              <div key={`edit-setpack-${item.type}`} className="setpack-item-card">
+                                <div className="setpack-item-head">
+                                  <div>
+                                    <strong>{item.label}</strong>
+                                    <div className="tiny">
+                                      {child
+                                        ? `${t.assetId}: ${child.assetId} | ${t.status}: ${child.status || "-"}`
+                                        : "Not created yet for this set"}
+                                    </div>
+                                  </div>
+                                  <button
+                                    className="setpack-detail-btn"
+                                    type="button"
+                                    disabled={!isAdmin || busy}
+                                    onClick={() => {
+                                      void editOrCreateSetPackChild(item.type);
+                                    }}
+                                  >
+                                    {child ? "Edit Details" : "Add + Edit"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
                     <label className="field field-wide">
                       <span>{t.user}</span>
                       <select
