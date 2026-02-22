@@ -82,7 +82,7 @@ const DEFAULT_USERS = [
   },
 ];
 const sessions = new Map();
-const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs"];
+const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs", "app_settings"];
 const PASSWORD_PREFIX = "scrypt$";
 
 let sqliteDb;
@@ -95,16 +95,19 @@ function mapDbToSqlRows(db) {
     locations: Array.isArray(db.locations) ? db.locations : [],
     users: Array.isArray(db.users) ? db.users : [],
     audit_logs: Array.isArray(db.auditLogs) ? db.auditLogs : [],
+    app_settings: [db.settings && typeof db.settings === "object" ? db.settings : {}],
   };
 }
 
 function mapSqlRowsToDb(rowsByTable) {
+  const settingsRow = Array.isArray(rowsByTable.app_settings) ? rowsByTable.app_settings[0] : {};
   return {
     assets: Array.isArray(rowsByTable.assets) ? rowsByTable.assets : [],
     tickets: Array.isArray(rowsByTable.tickets) ? rowsByTable.tickets : [],
     locations: Array.isArray(rowsByTable.locations) ? rowsByTable.locations : [],
     users: Array.isArray(rowsByTable.users) ? rowsByTable.users : [],
     auditLogs: Array.isArray(rowsByTable.audit_logs) ? rowsByTable.audit_logs : [],
+    settings: settingsRow && typeof settingsRow === "object" ? settingsRow : {},
   };
 }
 
@@ -157,6 +160,11 @@ function openSqlite() {
       payload TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS audit_logs (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS app_settings (
       row_id INTEGER PRIMARY KEY AUTOINCREMENT,
       position INTEGER NOT NULL,
       payload TEXT NOT NULL
@@ -436,12 +444,23 @@ async function resetDirContents(dirPath) {
 
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
+  const settings =
+    parsed.settings && typeof parsed.settings === "object" && !Array.isArray(parsed.settings)
+      ? parsed.settings
+      : {};
+  const campusNames =
+    settings.campusNames && typeof settings.campusNames === "object" && !Array.isArray(settings.campusNames)
+      ? settings.campusNames
+      : {};
   return {
     assets: Array.isArray(parsed.assets) ? parsed.assets : [],
     tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
     locations: Array.isArray(parsed.locations) ? parsed.locations : [],
     users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
     auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+    settings: {
+      campusNames,
+    },
   };
 }
 
@@ -934,6 +953,47 @@ const server = http.createServer(async (req, res) => {
       const db = await readDb();
       const logs = Array.isArray(db.auditLogs) ? db.auditLogs : [];
       sendJson(res, 200, { logs: logs.slice(0, 300) });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/settings") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const db = await readDb();
+      const settings =
+        db.settings && typeof db.settings === "object"
+          ? db.settings
+          : { campusNames: {} };
+      sendJson(res, 200, { settings });
+      return;
+    }
+
+    if (req.method === "PATCH" && url.pathname === "/api/settings") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const db = await readDb();
+      const current =
+        db.settings && typeof db.settings === "object" ? db.settings : { campusNames: {} };
+      const incoming =
+        body.settings && typeof body.settings === "object" ? body.settings : body;
+      const nextCampusNames =
+        incoming &&
+        incoming.campusNames &&
+        typeof incoming.campusNames === "object" &&
+        !Array.isArray(incoming.campusNames)
+          ? incoming.campusNames
+          : current.campusNames || {};
+      db.settings = {
+        ...current,
+        campusNames: nextCampusNames,
+      };
+      appendAuditLog(db, admin, "UPDATE", "settings", "campusNames", "Updated campus name settings");
+      await writeDb(db);
+      sendJson(res, 200, { ok: true, settings: db.settings });
       return;
     }
 

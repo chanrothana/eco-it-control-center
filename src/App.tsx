@@ -189,6 +189,9 @@ type AuditLog = {
     role?: string;
   };
 };
+type ServerSettings = {
+  campusNames?: Record<string, string>;
+};
 const LOCATION_FALLBACK_KEY = "it_locations_fallback_v1";
 const ASSET_FALLBACK_KEY = "it_assets_fallback_v1";
 const USER_FALLBACK_KEY = "it_users_fallback_v1";
@@ -2567,6 +2570,20 @@ export default function App() {
         requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
         requestJson<{ stats: DashboardStats }>(`/api/dashboard?${params.toString()}`),
       ]);
+      try {
+        const settingsRes = await requestJson<{ settings?: ServerSettings }>("/api/settings");
+        const fromServer = settingsRes.settings?.campusNames || {};
+        if (fromServer && typeof fromServer === "object") {
+          const mergedCampusNames: Record<string, string> = {};
+          for (const campus of CAMPUS_LIST) {
+            mergedCampusNames[campus] = String(fromServer[campus] || campus);
+          }
+          setCampusNames(mergedCampusNames);
+          writeStringMap(CAMPUS_NAME_FALLBACK_KEY, mergedCampusNames);
+        }
+      } catch {
+        // Keep local settings if /api/settings is unavailable.
+      }
 
       let locationList: LocationEntry[] = [];
       const localLocations = readLocationFallback();
@@ -2921,6 +2938,18 @@ export default function App() {
       ...prev,
       [campus]: value.trim() || campus,
     }));
+  }
+
+  async function saveCampusNamesToServer(nextMap: Record<string, string>) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: { campusNames: nextMap } }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
   }
 
   function createOrUpdateUser() {
@@ -3387,18 +3416,36 @@ export default function App() {
     }
   }
 
-  function saveCampusNameByCode() {
+  async function saveCampusNameByCode() {
     if (!requireAdminAction()) return;
     const canonicalCampus = CODE_TO_CAMPUS[campusEditCode];
     if (!canonicalCampus) return;
+    const nextMap = {
+      ...campusNames,
+      [canonicalCampus]: campusEditName.trim() || canonicalCampus,
+    };
     saveCampusLabel(canonicalCampus, campusEditName);
-    setSetupMessage(`Saved ${campusEditCode} name.`);
+    try {
+      await saveCampusNamesToServer(nextMap);
+      setSetupMessage(`Saved ${campusEditCode} name.`);
+    } catch (err) {
+      setSetupMessage(`Save failed: ${err instanceof Error ? err.message : "Cannot save campus name"}`);
+    }
   }
 
-  function saveCampusNameByRow(campus: string) {
+  async function saveCampusNameByRow(campus: string) {
     if (!requireAdminAction()) return;
+    const nextMap = {
+      ...campusNames,
+      [campus]: (campusDraftNames[campus] || campus).trim() || campus,
+    };
     saveCampusLabel(campus, campusDraftNames[campus] || campus);
-    setSetupMessage(`Saved ${CAMPUS_CODE[campus] || "CX"} name.`);
+    try {
+      await saveCampusNamesToServer(nextMap);
+      setSetupMessage(`Saved ${CAMPUS_CODE[campus] || "CX"} name.`);
+    } catch (err) {
+      setSetupMessage(`Save failed: ${err instanceof Error ? err.message : "Cannot save campus name"}`);
+    }
   }
 
   function addItemType() {
