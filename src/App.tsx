@@ -2400,11 +2400,10 @@ export default function App() {
   const setPackChildMeta = useMemo<Array<{ type: SetPackChildType; label: string }>>(
     () => [
       { type: "MON", label: t.includeMonitor },
-      { type: "MON2", label: t.includeMonitor2 },
       { type: "KBD", label: t.includeKeyboard },
       { type: "MSE", label: t.includeMouse },
     ],
-    [t.includeMonitor, t.includeMonitor2, t.includeKeyboard, t.includeMouse]
+    [t.includeMonitor, t.includeKeyboard, t.includeMouse]
   );
 
   useEffect(() => {
