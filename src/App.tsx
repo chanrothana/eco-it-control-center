@@ -1768,6 +1768,9 @@ export default function App() {
     direction: "desc",
   });
   const [reportType, setReportType] = useState<ReportType>("asset_master");
+  const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
+  const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
+  const [qrItemFilter, setQrItemFilter] = useState("ALL");
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
   const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
@@ -1873,7 +1876,7 @@ export default function App() {
   const [assetFileKey, setAssetFileKey] = useState(0);
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [assetDetailId, setAssetDetailId] = useState<number | null>(null);
-  const [pendingQrAssetId, setPendingQrAssetId] = useState(() => {
+  const [pendingQrAssetId] = useState(() => {
     if (typeof window === "undefined") return "";
     return (
       new URLSearchParams(window.location.search).get("assetId") ||
@@ -5818,11 +5821,26 @@ export default function App() {
         assetId: row.assetId,
         itemName: row.itemName,
         campus: row.campus,
+        category: row.category,
         location: row.location,
         status: row.status,
       })),
     [assetMasterSetRows]
   );
+
+  const qrItemFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
+    return options.sort((a, b) => a.localeCompare(b));
+  }, [qrLabelRows]);
+
+  const qrFilteredRows = useMemo(() => {
+    return qrLabelRows.filter((row) => {
+      if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
+      if (qrCategoryFilter !== "ALL" && row.category !== qrCategoryFilter) return false;
+      if (qrItemFilter !== "ALL" && row.itemName !== qrItemFilter) return false;
+      return true;
+    });
+  }, [qrLabelRows, qrCampusFilter, qrCategoryFilter, qrItemFilter]);
 
   const qrScanBase = useMemo(() => {
     const manual = String(apiBaseInput || "").trim().replace(/\/+$/, "");
@@ -5843,7 +5861,7 @@ export default function App() {
 
   useEffect(() => {
     if (reportType !== "qr_labels") return;
-    const missing = qrLabelRows.filter((row) => !qrCodeMap[row.assetId]);
+    const missing = qrFilteredRows.filter((row) => !qrCodeMap[row.assetId]);
     if (!missing.length) return;
     let cancelled = false;
     (async () => {
@@ -5870,33 +5888,10 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [reportType, qrLabelRows, qrCodeMap, buildAssetQrUrl]);
+  }, [reportType, qrFilteredRows, qrCodeMap, buildAssetQrUrl]);
 
   useEffect(() => {
-    if (!pendingQrAssetId || !authUser || !assets.length) return;
-    const found = assets.find(
-      (a) => String(a.assetId || "").trim().toUpperCase() === pendingQrAssetId
-    );
-    if (found) {
-      setTab("assets");
-      setAssetsView("list");
-      setAssetDetailId(found.id);
-    } else {
-      setError(`QR asset not found: ${pendingQrAssetId}`);
-    }
-    setPendingQrAssetId("");
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (url.searchParams.has("assetId") || url.searchParams.has("asset")) {
-        url.searchParams.delete("assetId");
-        url.searchParams.delete("asset");
-        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-      }
-    }
-  }, [pendingQrAssetId, authUser, assets]);
-
-  useEffect(() => {
-    if (!pendingQrAssetId || authUser) return;
+    if (!pendingQrAssetId) return;
     let cancelled = false;
     setPublicQrBusy(true);
     setPublicQrError("");
@@ -5918,7 +5913,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [pendingQrAssetId, authUser]);
+  }, [pendingQrAssetId]);
 
   async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
@@ -6028,7 +6023,7 @@ export default function App() {
     } else {
       title = "Asset ID + QR Labels";
       columns = ["QR", "Asset ID", "Item Name", "Campus", "Location", "Status", "Scan Link"];
-      const missingRows = qrLabelRows.filter((row) => !qrCodeMap[row.assetId]);
+      const missingRows = qrFilteredRows.filter((row) => !qrCodeMap[row.assetId]);
       if (missingRows.length) {
         const generated: Array<[string, string]> = [];
         for (const row of missingRows) {
@@ -6051,7 +6046,7 @@ export default function App() {
           });
         }
       }
-      rows = qrLabelRows.map((row) => [
+      rows = qrFilteredRows.map((row) => [
         qrCodeMap[row.assetId] || "",
         row.assetId,
         row.itemName,
@@ -6092,7 +6087,7 @@ export default function App() {
         : reportType === "asset_master"
         ? `<p><strong>Total Assets:</strong> ${assetMasterSetRows.length}</p>`
         : reportType === "qr_labels"
-        ? `<p><strong>Total QR Labels:</strong> ${qrLabelRows.length}</p>`
+        ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length}</p>`
         : "";
 
     const html = `
@@ -6230,7 +6225,7 @@ export default function App() {
     }
   }
 
-  if (pendingQrAssetId && !authUser && !authLoading) {
+  if (pendingQrAssetId) {
     const asset = publicQrAsset;
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
@@ -6239,19 +6234,11 @@ export default function App() {
       : [];
     return (
       <main className="app-shell">
-        <div className="bg-orb bg-orb-a" aria-hidden="true" />
-        <div className="bg-orb bg-orb-b" aria-hidden="true" />
-        <section className="app-card">
-          <header className="topbar">
-            <div className="brand-block">
-              <p className="eyebrow">{t.school}</p>
-              <h1>Asset QR View</h1>
-              <p className="subhead">Read-only asset information from QR code.</p>
-            </div>
-          </header>
+        <section className="app-card" style={{ maxWidth: 980, margin: "24px auto" }}>
           <section className="panel">
+            <h2>Asset Detail</h2>
             {publicQrBusy ? (
-              <p className="tiny">Loading asset from QR...</p>
+              <p className="tiny">Loading asset...</p>
             ) : publicQrError ? (
               <p className="alert">{publicQrError}</p>
             ) : asset ? (
@@ -10135,6 +10122,44 @@ export default function App() {
                     ) : null}
                   </>
                 ) : null}
+                {reportType === "qr_labels" ? (
+                  <>
+                    <select
+                      className="input"
+                      value={qrCampusFilter}
+                      onChange={(e) => setQrCampusFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Campuses</option>
+                      {CAMPUS_LIST.map((campus) => (
+                        <option key={`qr-campus-${campus}`} value={campus}>
+                          {campusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="input"
+                      value={qrCategoryFilter}
+                      onChange={(e) => setQrCategoryFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Categories</option>
+                      <option value="IT">IT</option>
+                      <option value="SAFETY">Safety</option>
+                      <option value="FACILITY">Facility</option>
+                    </select>
+                    <select
+                      className="input"
+                      value={qrItemFilter}
+                      onChange={(e) => setQrItemFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Item Names</option>
+                      {qrItemFilterOptions.map((itemName) => (
+                        <option key={`qr-item-${itemName}`} value={itemName}>
+                          {itemName}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : null}
                 <button className="btn-primary report-print-btn" onClick={printCurrentReport}>Print Report</button>
               </div>
             </div>
@@ -10324,8 +10349,8 @@ export default function App() {
 
             {reportType === "qr_labels" && (
               <div className="qr-label-grid">
-                {qrLabelRows.length ? (
-                  qrLabelRows.map((row) => (
+                {qrFilteredRows.length ? (
+                  qrFilteredRows.map((row) => (
                     <article className="qr-label-card" key={`qr-label-${row.assetDbId}`}>
                       <div className="qr-label-image-wrap">
                         {qrCodeMap[row.assetId] ? (
@@ -10343,7 +10368,7 @@ export default function App() {
                     </article>
                   ))
                 ) : (
-                  <div className="panel-note">No assets available for QR labels.</div>
+                  <div className="panel-note">No assets match selected filters.</div>
                 )}
               </div>
             )}
