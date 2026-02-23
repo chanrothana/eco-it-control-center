@@ -1160,6 +1160,28 @@ tr.row-maint-maintenance:hover td {
   border-radius: 4px;
 }
 
+.report-sort-link {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.report-sort-link:hover {
+  color: #6b4f2d;
+}
+
+.report-sort-link:focus-visible {
+  outline: 2px solid #c88d48;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .table-photo {
   width: 52px;
   height: 52px;

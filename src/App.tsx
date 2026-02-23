@@ -107,6 +107,9 @@ type PublicQrAsset = {
   status: string;
   photo?: string;
   photos?: string[];
+  maintenanceHistory?: MaintenanceEntry[];
+  transferHistory?: TransferEntry[];
+  statusHistory?: StatusEntry[];
   created?: string;
 };
 type ReportType =
@@ -377,6 +380,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 };
 
 const USER_REQUIRED_TYPES = ["PC", "TAB", "SPK"];
+const DESKTOP_SET_COMPONENT_TYPES = ["MON", "KBD", "MSE"] as const;
 const SHARED_LOCATION_KEYWORDS = [
   "teacher office",
   "itc room",
@@ -436,6 +440,10 @@ function defaultSetPackDraft(): Record<SetPackChildType, SetPackChildDraft> {
 function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" {
   if (type === "MON2") return "MON";
   return type;
+}
+
+function isDesktopSetComponent(category: string, type: string): boolean {
+  return category === "IT" && (DESKTOP_SET_COMPONENT_TYPES as readonly string[]).includes(type.toUpperCase());
 }
 
 const TEXT = {
@@ -1691,6 +1699,20 @@ export default function App() {
     | "cost"
     | "by"
     | "status";
+  type AssetMasterSortKey =
+    | "photo"
+    | "assetId"
+    | "setCode"
+    | "linkedTo"
+    | "itemName"
+    | "category"
+    | "campus"
+    | "itemDescription"
+    | "location"
+    | "purchaseDate"
+    | "lastServiceDate"
+    | "assignedTo"
+    | "status";
 
   const [lang, setLang] = useState<Lang>(() => {
     const saved = localStorage.getItem("ui_lang");
@@ -1768,6 +1790,16 @@ export default function App() {
     direction: "desc",
   });
   const [reportType, setReportType] = useState<ReportType>("asset_master");
+  const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState("ALL");
+  const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState("ALL");
+  const [assetMasterItemFilter, setAssetMasterItemFilter] = useState("ALL");
+  const [assetMasterSort, setAssetMasterSort] = useState<{
+    key: AssetMasterSortKey;
+    direction: "asc" | "desc";
+  }>({
+    key: "assetId",
+    direction: "asc",
+  });
   const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
   const [qrItemFilter, setQrItemFilter] = useState("ALL");
@@ -2424,6 +2456,10 @@ export default function App() {
     () => assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE,
     [assetForm.category, assetForm.type]
   );
+  const isDesktopComponentForCreate = useMemo(
+    () => isDesktopSetComponent(assetForm.category, assetForm.type),
+    [assetForm.category, assetForm.type]
+  );
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -2449,6 +2485,9 @@ export default function App() {
           ...prev,
           createSetPack: false,
         };
+      }
+      if (!isDesktopSetComponent(prev.category, prev.type) && (prev.useExistingSet || prev.setCode || prev.parentAssetId)) {
+        return { ...prev, useExistingSet: false, setCode: "", parentAssetId: "" };
       }
       if (!prev.useExistingSet && (prev.setCode || prev.parentAssetId)) {
         return { ...prev, setCode: "", parentAssetId: "" };
@@ -2642,10 +2681,10 @@ export default function App() {
       .filter(([, draft]) => draft.enabled);
     const createSetCode = isDesktopAsset
       ? suggestedDesktopSetCode
-      : (assetForm.useExistingSet ? assetForm.setCode.trim() : "");
+      : (isDesktopComponentForCreate && assetForm.useExistingSet ? assetForm.setCode.trim() : "");
     const createParentAssetId = isDesktopAsset
       ? ""
-      : (assetForm.useExistingSet ? assetForm.parentAssetId.trim().toUpperCase() : "");
+      : (isDesktopComponentForCreate && assetForm.useExistingSet ? assetForm.parentAssetId.trim().toUpperCase() : "");
     if (!assetForm.location) {
       alert(t.locationRequired);
       return;
@@ -2654,7 +2693,7 @@ export default function App() {
       alert(t.pcTypeRequired);
       return;
     }
-    if (!isDesktopAsset && assetForm.useExistingSet && !createParentAssetId) {
+    if (isDesktopComponentForCreate && assetForm.useExistingSet && !createParentAssetId) {
       alert(t.selectDesktopUnit);
       return;
     }
@@ -3867,7 +3906,7 @@ export default function App() {
 
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
-    const isDesktopAsset = asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE;
+    const isDesktopComponent = isDesktopSetComponent(asset.category, asset.type);
     const photos = normalizeAssetPhotos(asset);
     setAssetEditForm({
       location: asset.location || "",
@@ -3876,7 +3915,7 @@ export default function App() {
         : "",
       setCode: asset.setCode || "",
       parentAssetId: asset.parentAssetId || "",
-      useExistingSet: !isDesktopAsset && !!asset.parentAssetId,
+      useExistingSet: isDesktopComponent && !!asset.parentAssetId,
       assignedTo: asset.assignedTo || "",
       brand: asset.brand || "",
       model: asset.model || "",
@@ -4042,6 +4081,8 @@ export default function App() {
     const editingAsset = assets.find((a) => a.id === editingAssetId);
     const editingIsDesktop =
       !!editingAsset && editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
+    const editingIsDesktopComponent =
+      !!editingAsset && isDesktopSetComponent(editingAsset.category, editingAsset.type);
     const needsUser =
       !!editingAsset &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
@@ -4050,7 +4091,7 @@ export default function App() {
       alert(t.userRequired);
       return;
     }
-    if (!editingIsDesktop && assetEditForm.useExistingSet && !assetEditForm.parentAssetId.trim()) {
+    if (editingIsDesktopComponent && assetEditForm.useExistingSet && !assetEditForm.parentAssetId.trim()) {
       alert(t.selectDesktopUnit);
       return;
     }
@@ -4064,10 +4105,10 @@ export default function App() {
       pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
       setCode: editingIsDesktop
         ? assetEditForm.setCode.trim()
-        : (assetEditForm.useExistingSet ? assetEditForm.setCode.trim() : ""),
+        : (editingIsDesktopComponent && assetEditForm.useExistingSet ? assetEditForm.setCode.trim() : ""),
       parentAssetId: editingIsDesktop
         ? ""
-        : (assetEditForm.useExistingSet ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
+        : (editingIsDesktopComponent && assetEditForm.useExistingSet ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
       assignedTo: assetEditForm.assignedTo.trim(),
       brand: assetEditForm.brand.trim(),
       model: assetEditForm.model.trim(),
@@ -4341,8 +4382,10 @@ export default function App() {
       photo: maintenanceRecordForm.photo || "",
     };
     const sourceAsset = assets.find((a) => a.id === assetId) || null;
+    const maintenanceType = entry.type.trim().toLowerCase();
     const shouldAutoRetire =
-      entry.completion === "Done" && entry.type.trim().toLowerCase() === "replacement";
+      entry.completion === "Done" &&
+      (maintenanceType === "replacement" || maintenanceType === "replacment");
     const shouldApplyRetireStatus =
       shouldAutoRetire && (sourceAsset?.status || "Active") !== "Retired";
     const retireReason = `Auto retired after replacement maintenance on ${entry.date}`;
@@ -4738,6 +4781,7 @@ export default function App() {
       toCampus: asset.campus,
       toLocation: asset.location || "",
       reason: "",
+      by: "",
       note: "",
     }));
     setTransferQuickAssetId(asset.id);
@@ -5167,7 +5211,7 @@ export default function App() {
   const isReplacementDone = useCallback((typeRaw: string, completionRaw: string) => {
     const type = String(typeRaw || "").trim().toLowerCase();
     const completion = String(completionRaw || "").trim().toLowerCase();
-    return type === "replacement" && completion === "done";
+    return (type === "replacement" || type === "replacment") && completion === "done";
   }, []);
   const isBrokenMaintenance = useCallback((conditionRaw: string, noteRaw: string) => {
     const text = `${conditionRaw || ""} ${noteRaw || ""}`.toLowerCase();
@@ -5828,6 +5872,46 @@ export default function App() {
     [assetMasterSetRows]
   );
 
+  const assetMasterItemFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(assetMasterSetRows.map((row) => row.itemName).filter(Boolean)));
+    return options.sort((a, b) => a.localeCompare(b));
+  }, [assetMasterSetRows]);
+
+  const filteredAssetMasterRows = useMemo(() => {
+    return assetMasterSetRows.filter((row) => {
+      if (assetMasterCampusFilter !== "ALL" && row.campus !== assetMasterCampusFilter) return false;
+      if (assetMasterCategoryFilter !== "ALL" && row.category !== assetMasterCategoryFilter) return false;
+      if (assetMasterItemFilter !== "ALL" && row.itemName !== assetMasterItemFilter) return false;
+      return true;
+    });
+  }, [assetMasterSetRows, assetMasterCampusFilter, assetMasterCategoryFilter, assetMasterItemFilter]);
+
+  const sortedAssetMasterRows = useMemo(() => {
+    const direction = assetMasterSort.direction === "asc" ? 1 : -1;
+    return [...filteredAssetMasterRows].sort((a, b) => {
+      const aVal = String(a[assetMasterSort.key] || "");
+      const bVal = String(b[assetMasterSort.key] || "");
+      if (assetMasterSort.key === "campus") {
+        return campusLabel(aVal).localeCompare(campusLabel(bVal)) * direction;
+      }
+      return aVal.localeCompare(bVal) * direction;
+    });
+  }, [filteredAssetMasterRows, assetMasterSort, campusLabel]);
+
+  const toggleAssetMasterSort = useCallback((key: AssetMasterSortKey) => {
+    setAssetMasterSort((prev) =>
+      prev.key === key
+        ? { key, direction: prev.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: "asc" }
+    );
+  }, []);
+
+  const assetMasterSortMark = useCallback(
+    (key: AssetMasterSortKey) =>
+      assetMasterSort.key === key ? (assetMasterSort.direction === "asc" ? " ▲" : " ▼") : "",
+    [assetMasterSort]
+  );
+
   const qrItemFilterOptions = useMemo(() => {
     const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
@@ -5939,14 +6023,15 @@ export default function App() {
 
     if (reportType === "asset_master") {
       title = "Asset Master Register Report";
-      columns = ["Photo", "Asset ID", "Set Code", "Linked To (Main Asset)", "Item Name", "Category", "Item Description", "Location", "Purchase Date", "Last Service", "Assigned To", "Status"];
-      rows = assetMasterSetRows.map((row) => [
+      columns = ["Photo", "Asset ID", "Set Code", "Linked To (Main Asset)", "Item Name", "Category", "Campus", "Item Description", "Location", "Purchase Date", "Last Service", "Assigned To", "Status"];
+      rows = sortedAssetMasterRows.map((row) => [
         toPrintablePhotoUrl(row.photo || ""),
         row.assetId,
         row.setCode,
         row.linkedTo,
         row.itemName,
         row.category,
+        campusLabel(row.campus),
         row.itemDescription,
         row.location || "-",
         formatDate(row.purchaseDate || "-"),
@@ -6022,8 +6107,9 @@ export default function App() {
       ]);
     } else {
       title = "Asset ID + QR Labels";
-      columns = ["QR", "Asset ID", "Item Name", "Campus", "Location", "Status", "Scan Link"];
+      columns = ["QR", "Asset ID"];
       const missingRows = qrFilteredRows.filter((row) => !qrCodeMap[row.assetId]);
+      const qrPrintMap: Record<string, string> = { ...qrCodeMap };
       if (missingRows.length) {
         const generated: Array<[string, string]> = [];
         for (const row of missingRows) {
@@ -6039,6 +6125,7 @@ export default function App() {
           }
         }
         if (generated.length) {
+          for (const [assetId, dataUrl] of generated) qrPrintMap[assetId] = dataUrl;
           setQrCodeMap((prev) => {
             const next = { ...prev };
             for (const [assetId, dataUrl] of generated) next[assetId] = dataUrl;
@@ -6047,13 +6134,8 @@ export default function App() {
         }
       }
       rows = qrFilteredRows.map((row) => [
-        qrCodeMap[row.assetId] || "",
+        qrPrintMap[row.assetId] || "",
         row.assetId,
-        row.itemName,
-        campusLabel(row.campus),
-        row.location || "-",
-        row.status || "-",
-        buildAssetQrUrl(row.assetId),
       ]);
     }
 
@@ -6085,10 +6167,28 @@ export default function App() {
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
         : reportType === "asset_master"
-        ? `<p><strong>Total Assets:</strong> ${assetMasterSetRows.length}</p>`
+        ? `<p><strong>Total Assets:</strong> ${sortedAssetMasterRows.length}</p>`
         : reportType === "qr_labels"
         ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length}</p>`
         : "";
+
+    const reportContentHtml =
+      reportType === "qr_labels"
+        ? qrFilteredRows.length
+          ? `<div class="qr-sticker-grid">${qrFilteredRows
+              .map((row) => {
+                const qr = String(rows.find((r) => r[1] === row.assetId)?.[0] || "");
+                return `<div class="qr-sticker">
+                  <div class="qr-sticker-qr">${qr ? `<img src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
+                  <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
+                </div>`;
+              })
+              .join("")}</div>`
+          : `<p>No data.</p>`
+        : `<table>
+          <thead><tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+          <tbody>${tableHtml}</tbody>
+        </table>`;
 
     const html = `
       <html>
@@ -6101,6 +6201,11 @@ export default function App() {
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; }
+          .qr-sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+          .qr-sticker { border: 1px solid #cfded0; border-radius: 8px; padding: 10px; display: grid; gap: 10px; justify-items: center; page-break-inside: avoid; }
+          .qr-sticker-qr { width: 120px; height: 120px; border: 1px solid #e1e8e1; border-radius: 6px; display: grid; place-items: center; }
+          .qr-sticker-qr img { width: 110px; height: 110px; object-fit: contain; }
+          .qr-sticker-id { width: 100%; text-align: center; border: 1.5px solid #1b2d23; border-radius: 999px; padding: 6px 8px; font-size: 14px; font-weight: 800; letter-spacing: 0.02em; }
           @media print { body { margin: 8mm; } }
         </style>
       </head>
@@ -6109,10 +6214,7 @@ export default function App() {
         <h2>${escapeHtml(title)}</h2>
         <p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>
         ${summaryHtml}
-        <table>
-          <thead><tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
-          <tbody>${tableHtml}</tbody>
-        </table>
+        ${reportContentHtml}
       </body>
       </html>
     `;
@@ -6232,6 +6334,15 @@ export default function App() {
       : asset?.photo
       ? [asset.photo]
       : [];
+    const publicMaintenanceHistory = [...(asset?.maintenanceHistory || [])].sort(
+      (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
+    );
+    const publicTransferHistory = [...(asset?.transferHistory || [])].sort(
+      (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
+    );
+    const publicStatusHistory = [...(asset?.statusHistory || [])].sort(
+      (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
+    );
     return (
       <main className="app-shell">
         <section className="app-card" style={{ maxWidth: 980, margin: "24px auto" }}>
@@ -6276,6 +6387,109 @@ export default function App() {
                     ) : (
                       <div className="photo-placeholder">{t.noPhoto}</div>
                     )}
+                  </div>
+                </div>
+                <div className="field field-wide">
+                  <span>Maintenance History</span>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Type</th>
+                          <th>Work Status</th>
+                          <th>Condition</th>
+                          <th>Note</th>
+                          <th>By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {publicMaintenanceHistory.length ? (
+                          publicMaintenanceHistory.map((entry) => (
+                            <tr key={`public-maint-${entry.id}`}>
+                              <td>{formatDate(entry.date || "-")}</td>
+                              <td>{entry.type || "-"}</td>
+                              <td>{entry.completion || "-"}</td>
+                              <td>{entry.condition || "-"}</td>
+                              <td>{entry.note || "-"}</td>
+                              <td>{entry.by || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6}>No maintenance history yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="field field-wide">
+                  <span>Transfer History</span>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>From Campus</th>
+                          <th>From Location</th>
+                          <th>To Campus</th>
+                          <th>To Location</th>
+                          <th>By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {publicTransferHistory.length ? (
+                          publicTransferHistory.map((entry) => (
+                            <tr key={`public-transfer-${entry.id}`}>
+                              <td>{formatDate(entry.date || "-")}</td>
+                              <td>{campusLabel(entry.fromCampus || "-")}</td>
+                              <td>{entry.fromLocation || "-"}</td>
+                              <td>{campusLabel(entry.toCampus || "-")}</td>
+                              <td>{entry.toLocation || "-"}</td>
+                              <td>{entry.by || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6}>No transfer history yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="field field-wide">
+                  <span>Status Timeline</span>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>From</th>
+                          <th>To</th>
+                          <th>Reason</th>
+                          <th>By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {publicStatusHistory.length ? (
+                          publicStatusHistory.map((entry) => (
+                            <tr key={`public-status-${entry.id}`}>
+                              <td>{formatDate(entry.date || "-")}</td>
+                              <td>{entry.fromStatus || "-"}</td>
+                              <td>{entry.toStatus || "-"}</td>
+                              <td>{entry.reason || "-"}</td>
+                              <td>{entry.by || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5}>No status timeline yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -7153,7 +7367,7 @@ export default function App() {
                           </div>
                         ) : null}
                     </>
-                  ) : (
+                  ) : isDesktopComponentForCreate ? (
                     <>
                       <label className="field field-wide">
                         <span>{t.linkToDesktopSet}</span>
@@ -7195,7 +7409,7 @@ export default function App() {
                         </label>
                       ) : null}
                     </>
-                  )}
+                  ) : null}
                   {userRequired && (
                     <label className="field field-wide">
                       <span>{t.user}</span>
@@ -7659,7 +7873,7 @@ export default function App() {
                           placeholder="SET-C2.2-001"
                         />
                       </label>
-                    ) : (
+                    ) : isDesktopSetComponent(editingAsset.category, editingAsset.type) ? (
                       <>
                         <label className="field field-wide">
                           <span>{t.linkToDesktopSet}</span>
@@ -7701,7 +7915,7 @@ export default function App() {
                           </label>
                         ) : null}
                       </>
-                    )}
+                    ) : null}
                     {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
                       <>
                         <div className="field">
@@ -8177,6 +8391,14 @@ export default function App() {
                         value={transferForm.reason}
                         onChange={(e) => setTransferForm((f) => ({ ...f, reason: e.target.value }))}
                         placeholder="Example: Room move / Campus reallocation"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{t.by}</span>
+                      <input
+                        className="input"
+                        value={transferForm.by}
+                        onChange={(e) => setTransferForm((f) => ({ ...f, by: e.target.value }))}
                       />
                     </label>
                     <label className="field field-wide">
@@ -10160,6 +10382,44 @@ export default function App() {
                     </select>
                   </>
                 ) : null}
+                {reportType === "asset_master" ? (
+                  <>
+                    <select
+                      className="input"
+                      value={assetMasterCampusFilter}
+                      onChange={(e) => setAssetMasterCampusFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Campuses</option>
+                      {CAMPUS_LIST.map((campus) => (
+                        <option key={`master-campus-${campus}`} value={campus}>
+                          {campusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="input"
+                      value={assetMasterCategoryFilter}
+                      onChange={(e) => setAssetMasterCategoryFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Categories</option>
+                      <option value="IT">IT</option>
+                      <option value="SAFETY">Safety</option>
+                      <option value="FACILITY">Facility</option>
+                    </select>
+                    <select
+                      className="input"
+                      value={assetMasterItemFilter}
+                      onChange={(e) => setAssetMasterItemFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Item Names</option>
+                      {assetMasterItemFilterOptions.map((itemName) => (
+                        <option key={`master-item-${itemName}`} value={itemName}>
+                          {itemName}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : null}
                 <button className="btn-primary report-print-btn" onClick={printCurrentReport}>Print Report</button>
               </div>
             </div>
@@ -10179,23 +10439,24 @@ export default function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>{t.photo}</th>
-                      <th>{t.assetId}</th>
-                      <th>{t.setCode}</th>
-                      <th>Linked To (Main Asset)</th>
-                      <th>Item Name</th>
-                      <th>{t.category}</th>
-                      <th>Item Description</th>
-                      <th>{t.location}</th>
-                      <th>Purchase Date</th>
-                      <th>Last Service</th>
-                      <th>Assigned To</th>
-                      <th>{t.status}</th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("photo")}>{t.photo}{assetMasterSortMark("photo")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("assetId")}>{t.assetId}{assetMasterSortMark("assetId")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("setCode")}>{t.setCode}{assetMasterSortMark("setCode")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("linkedTo")}>Linked To (Main Asset){assetMasterSortMark("linkedTo")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("itemName")}>Item Name{assetMasterSortMark("itemName")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("category")}>{t.category}{assetMasterSortMark("category")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("campus")}>{t.campus}{assetMasterSortMark("campus")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("itemDescription")}>Item Description{assetMasterSortMark("itemDescription")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("location")}>{t.location}{assetMasterSortMark("location")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("purchaseDate")}>Purchase Date{assetMasterSortMark("purchaseDate")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("lastServiceDate")}>Last Service{assetMasterSortMark("lastServiceDate")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("assignedTo")}>Assigned To{assetMasterSortMark("assignedTo")}</button></th>
+                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("status")}>{t.status}{assetMasterSortMark("status")}</button></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {assetMasterSetRows.length ? (
-                      assetMasterSetRows.map((row) => (
+                    {sortedAssetMasterRows.length ? (
+                      sortedAssetMasterRows.map((row) => (
                         <tr key={`report-asset-master-${row.key}`}>
                           <td>{renderAssetPhoto(row.photo || "", row.assetId)}</td>
                           <td><strong>{row.assetId}</strong></td>
@@ -10203,6 +10464,7 @@ export default function App() {
                           <td>{row.linkedTo || "-"}</td>
                           <td>{row.itemName}</td>
                           <td>{row.category}</td>
+                          <td>{campusLabel(row.campus)}</td>
                           <td className="report-item-description" title={row.itemDescription || "-"}>
                             {row.itemDescription || "-"}
                           </td>
@@ -10232,7 +10494,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={12}>No assets found.</td>
+                        <td colSpan={13}>No assets found.</td>
                       </tr>
                     )}
                   </tbody>
