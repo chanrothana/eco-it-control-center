@@ -3147,6 +3147,12 @@ export default function App() {
       );
       setError("");
     } catch (err) {
+      if (SERVER_ONLY_STORAGE) {
+        setAuthAccounts([]);
+        setAuthPermissionDraft({});
+        setError(err instanceof Error ? err.message : "Cannot load account permissions");
+        return;
+      }
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (
         isApiUnavailableError(err) ||
@@ -3393,16 +3399,18 @@ export default function App() {
     const modules: NavModule[] = draft.role === "Admin"
       ? [...ALL_NAV_MODULES]
       : (draft.modules.length ? draft.modules : (["dashboard"] as NavModule[]));
-    const nextMap = {
-      ...readAuthPermissionFallback(),
-      [target.username]: { role: draft.role, campuses, modules },
-    };
-    const nextRows = authAccounts.map((u) => (u.id === userId ? { ...u, role: draft.role, campuses, modules } : u));
-    writeAuthPermissionFallback(nextMap);
-    writeAuthAccountsFallback(nextRows);
-    setAuthAccounts(nextRows);
-    if (authUser && authUser.id === userId) {
-      setAuthUser({ ...authUser, role: draft.role, campuses, modules });
+    if (!SERVER_ONLY_STORAGE) {
+      const nextMap = {
+        ...readAuthPermissionFallback(),
+        [target.username]: { role: draft.role, campuses, modules },
+      };
+      const nextRows = authAccounts.map((u) => (u.id === userId ? { ...u, role: draft.role, campuses, modules } : u));
+      writeAuthPermissionFallback(nextMap);
+      writeAuthAccountsFallback(nextRows);
+      setAuthAccounts(nextRows);
+      if (authUser && authUser.id === userId) {
+        setAuthUser({ ...authUser, role: draft.role, campuses, modules });
+      }
     }
     try {
       await requestJson<{ user: AuthAccount }>(`/api/auth/users/${userId}`, {
@@ -3412,6 +3420,11 @@ export default function App() {
       await loadAuthAccounts();
       setSetupMessage("Saved account permission.");
     } catch (err) {
+      if (SERVER_ONLY_STORAGE) {
+        setError(err instanceof Error ? err.message : "Failed to save account permission");
+        setSetupMessage("Failed to save account permission.");
+        return;
+      }
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (
         isApiUnavailableError(err) ||
@@ -3501,6 +3514,11 @@ export default function App() {
       });
       setSetupMessage("Login account created.");
     } catch (err) {
+      if (SERVER_ONLY_STORAGE) {
+        setError(err instanceof Error ? err.message : "Failed to create login account");
+        setSetupMessage("Failed to create login account.");
+        return;
+      }
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
       if (
         isApiUnavailableError(err) ||

@@ -43,6 +43,7 @@ const CAMPUS_NAMES = Object.values(CAMPUS_MAP);
 const TYPE_CODES = {
   IT: ["PC", "LAP", "TAB", "MON", "KBD", "MSE", "TV", "SPK", "PRN", "SW", "AP", "CAM"],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
+  FACILITY: ["AC", "TBL", "CHR"],
 };
 const TYPE_LABELS = {
   PC: "Computer",
@@ -62,10 +63,14 @@ const TYPE_LABELS = {
   EL: "Emergency Light",
   FB: "Fire Bell",
   FCP: "Fire Control Panel",
+  AC: "Air Conditioner",
+  TBL: "Table",
+  CHR: "Chair",
 };
 const CATEGORY_CODE = {
   IT: "IT",
   SAFETY: "SF",
+  FACILITY: "FC",
 };
 const SHARED_LOCATION_KEYWORDS = [
   "teacher office",
@@ -629,8 +634,16 @@ function normalizeImportedDb(input) {
     settings.campusNames && typeof settings.campusNames === "object" && !Array.isArray(settings.campusNames)
       ? settings.campusNames
       : {};
+  const normalizedAssets = Array.isArray(parsed.assets)
+    ? parsed.assets.map((asset) => {
+        if (!asset || typeof asset !== "object") return asset;
+        const cloned = { ...asset };
+        syncAssetStatusFromMaintenance(cloned);
+        return cloned;
+      })
+    : [];
   return {
-    assets: Array.isArray(parsed.assets) ? parsed.assets : [],
+    assets: normalizedAssets,
     tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
     locations: Array.isArray(parsed.locations) ? parsed.locations : [],
     users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
@@ -788,6 +801,14 @@ function toText(value) {
   return String(value || "").trim();
 }
 
+function normalizeCategoryInput(value) {
+  const raw = toUpper(value);
+  if (!raw) return "";
+  if (raw === "IT" || raw === "SAFETY" || raw === "FACILITY") return raw;
+  if (raw === "FC" || raw === "FACILITIES" || raw === "FACITY") return "FACILITY";
+  return raw;
+}
+
 function normalizeCampusInput(value) {
   const raw = toText(value);
   if (!raw) return "";
@@ -804,7 +825,7 @@ function campusCode(name) {
 
 function validateAsset(body) {
   const campus = normalizeCampusInput(body.campus);
-  const category = toUpper(body.category);
+  const category = normalizeCategoryInput(body.category);
   const type = toUpper(body.type);
   const pcType = type === "PC" ? (toText(body.pcType) || "Desktop") : "";
   const location = toText(body.location);
@@ -834,7 +855,7 @@ function validateAsset(body) {
 
   if (!campus) return "Campus is required";
   if (!category) return "Category is required";
-  if (!TYPE_CODES[category]) return "Category must be IT or SAFETY";
+  if (!TYPE_CODES[category]) return "Category must be IT, SAFETY, or FACILITY";
   if (!type) return "Type code is required";
   if (!TYPE_CODES[category].includes(type)) {
     return `Type code '${type}' is not allowed for ${category}`;
@@ -894,7 +915,7 @@ function validateLocation(body) {
 
 function validateTicket(body) {
   const campus = normalizeCampusInput(body.campus);
-  const category = toUpper(body.category);
+  const category = normalizeCategoryInput(body.category);
   const assetId = toText(body.assetId);
   const title = toText(body.title);
   const description = toText(body.description);
@@ -924,6 +945,37 @@ function normalizeCompletion(value) {
   if (!text) return "Not Yet";
   if (text === "Done" || text === "Not Yet") return text;
   return "Not Yet";
+}
+
+function isReplacementDone(typeValue, completionValue) {
+  const type = toText(typeValue).trim().toLowerCase();
+  const completion = normalizeCompletion(completionValue);
+  if (completion !== "Done") return false;
+  return type === "replacement" || type === "replacment";
+}
+
+function syncAssetStatusFromMaintenance(asset) {
+  if (!asset || typeof asset !== "object") return false;
+  const maintenanceHistory = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+  const latestReplacement = maintenanceHistory.find((entry) =>
+    isReplacementDone(entry?.type, entry?.completion)
+  );
+  if (!latestReplacement) return false;
+  const currentStatus = toText(asset.status) || "Active";
+  if (currentStatus === "Retired") return false;
+  asset.status = "Retired";
+  const statusEntry = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    date: new Date().toISOString(),
+    fromStatus: currentStatus,
+    toStatus: "Retired",
+    reason: `Auto retired after replacement maintenance on ${toText(latestReplacement?.date) || "unknown date"}`,
+    by: toText(latestReplacement?.by),
+  };
+  asset.statusHistory = Array.isArray(asset.statusHistory)
+    ? [statusEntry, ...asset.statusHistory]
+    : [statusEntry];
+  return true;
 }
 
 function getAuthUser(req) {
@@ -1068,6 +1120,42 @@ function dashboard(db, campus) {
 
 function toPublicAssetView(asset) {
   const source = asset && typeof asset === "object" ? asset : {};
+  const maintenanceHistory = Array.isArray(source.maintenanceHistory)
+    ? source.maintenanceHistory.map((entry) => ({
+        id: Number(entry?.id || 0),
+        date: toText(entry?.date),
+        type: toText(entry?.type),
+        note: toText(entry?.note),
+        completion: toText(entry?.completion),
+        condition: toText(entry?.condition),
+        cost: toText(entry?.cost),
+        by: toText(entry?.by),
+        photo: toText(entry?.photo),
+      }))
+    : [];
+  const transferHistory = Array.isArray(source.transferHistory)
+    ? source.transferHistory.map((entry) => ({
+        id: Number(entry?.id || 0),
+        date: toText(entry?.date),
+        fromCampus: toText(entry?.fromCampus),
+        fromLocation: toText(entry?.fromLocation),
+        toCampus: toText(entry?.toCampus),
+        toLocation: toText(entry?.toLocation),
+        reason: toText(entry?.reason),
+        by: toText(entry?.by),
+        note: toText(entry?.note),
+      }))
+    : [];
+  const statusHistory = Array.isArray(source.statusHistory)
+    ? source.statusHistory.map((entry) => ({
+        id: Number(entry?.id || 0),
+        date: toText(entry?.date),
+        fromStatus: toText(entry?.fromStatus),
+        toStatus: toText(entry?.toStatus),
+        reason: toText(entry?.reason),
+        by: toText(entry?.by),
+      }))
+    : [];
   return {
     assetId: toText(source.assetId),
     campus: toText(source.campus),
@@ -1090,6 +1178,9 @@ function toPublicAssetView(asset) {
     status: toText(source.status) || "Active",
     photo: toText(source.photo),
     photos: Array.isArray(source.photos) ? source.photos.map((p) => toText(p)).filter(Boolean) : [],
+    maintenanceHistory,
+    transferHistory,
+    statusHistory,
     created: toText(source.created),
   };
 }
@@ -1766,6 +1857,16 @@ const server = http.createServer(async (req, res) => {
 
       history[hIdx] = updated;
       db.assets[idx].maintenanceHistory = history;
+      if (syncAssetStatusFromMaintenance(db.assets[idx])) {
+        appendAuditLog(
+          db,
+          admin,
+          "UPDATE_STATUS",
+          "asset",
+          db.assets[idx].assetId || String(assetId),
+          "Retired (auto from replacement)"
+        );
+      }
       appendAuditLog(
         db,
         admin,
@@ -1805,6 +1906,16 @@ const server = http.createServer(async (req, res) => {
       if (db.assets[idx].maintenanceHistory.length === before) {
         sendJson(res, 404, { error: "History record not found" });
         return;
+      }
+      if (syncAssetStatusFromMaintenance(db.assets[idx])) {
+        appendAuditLog(
+          db,
+          admin,
+          "UPDATE_STATUS",
+          "asset",
+          db.assets[idx].assetId || String(assetId),
+          "Retired (auto from replacement)"
+        );
       }
 
       appendAuditLog(
@@ -1935,6 +2046,16 @@ const server = http.createServer(async (req, res) => {
       db.assets[idx].maintenanceHistory = Array.isArray(db.assets[idx].maintenanceHistory)
         ? [entry, ...db.assets[idx].maintenanceHistory]
         : [entry];
+      if (syncAssetStatusFromMaintenance(db.assets[idx])) {
+        appendAuditLog(
+          db,
+          admin,
+          "UPDATE_STATUS",
+          "asset",
+          db.assets[idx].assetId || String(id),
+          "Retired (auto from replacement)"
+        );
+      }
       appendAuditLog(
         db,
         admin,
