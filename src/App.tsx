@@ -1804,8 +1804,12 @@ export default function App() {
   const [assetsView, setAssetsView] = useState<"register" | "list">("register");
   const [campusFilter, setCampusFilter] = useState("ALL");
   const [assetCampusFilter, setAssetCampusFilter] = useState("ALL");
-  const [assetCategoryFilter, setAssetCategoryFilter] = useState("ALL");
+  const [assetCategoryFilter] = useState("ALL");
   const [assetNameFilter, setAssetNameFilter] = useState("ALL");
+  const [assetCampusMultiFilter, setAssetCampusMultiFilter] = useState<string[]>(["ALL"]);
+  const [assetCategoryMultiFilter, setAssetCategoryMultiFilter] = useState<string[]>(["ALL"]);
+  const [assetNameMultiFilter, setAssetNameMultiFilter] = useState<string[]>(["ALL"]);
+  const [assetLocationMultiFilter, setAssetLocationMultiFilter] = useState<string[]>(["ALL"]);
   const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
   const [maintenanceDateFrom, setMaintenanceDateFrom] = useState("");
@@ -2392,6 +2396,55 @@ export default function App() {
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [assets, assetItemName]);
+  const assetCampusFilterOptions = useMemo(
+    () => [...allowedCampuses].sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
+    [allowedCampuses, campusLabel]
+  );
+  const assetCategoryFilterOptions = useMemo(
+    () => CATEGORY_OPTIONS.map((category) => category.value),
+    []
+  );
+  const assetLocationFilterOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        assets
+          .map((asset) => String(asset.location || "").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [assets]);
+  const applyMultiFilterSelection = useCallback(
+    (
+      prev: string[],
+      checked: boolean,
+      value: string,
+      allOptions: string[]
+    ) => {
+      if (value === "ALL") {
+        return ["ALL"];
+      }
+      if (checked) {
+        const base = prev.includes("ALL") ? [] : prev.filter((item) => item !== "ALL");
+        const next = Array.from(new Set([...base, value]));
+        return next.length >= allOptions.length ? ["ALL"] : next;
+      }
+      if (prev.includes("ALL")) {
+        const next = allOptions.filter((item) => item !== value);
+        return next.length ? next : ["ALL"];
+      }
+      const next = prev.filter((item) => item !== value);
+      return next.length ? next : ["ALL"];
+    },
+    []
+  );
+  const summarizeMultiFilter = useCallback(
+    (selected: string[], allLabel: string, resolveLabel?: (value: string) => string) => {
+      if (selected.includes("ALL")) return allLabel;
+      if (selected.length === 1) return resolveLabel ? resolveLabel(selected[0]) : selected[0];
+      return `${selected.length} selected`;
+    },
+    []
+  );
 
   const campusLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === assetForm.campus)),
@@ -2687,6 +2740,35 @@ export default function App() {
       setAssetNameFilter("ALL");
     }
   }, [assetNameFilter, assetNameFilterOptions]);
+  useEffect(() => {
+    setAssetCampusMultiFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      const valid = prev.filter((item) => assetCampusFilterOptions.includes(item));
+      return valid.length ? valid : ["ALL"];
+    });
+  }, [assetCampusFilterOptions]);
+  useEffect(() => {
+    setAssetCategoryMultiFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      const valid = prev.filter((item) => assetCategoryFilterOptions.includes(item));
+      return valid.length ? valid : ["ALL"];
+    });
+  }, [assetCategoryFilterOptions]);
+  useEffect(() => {
+    const validNameValues = assetNameFilterOptions.map((option) => option.value);
+    setAssetNameMultiFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      const valid = prev.filter((item) => validNameValues.includes(item));
+      return valid.length ? valid : ["ALL"];
+    });
+  }, [assetNameFilterOptions]);
+  useEffect(() => {
+    setAssetLocationMultiFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      const valid = prev.filter((item) => assetLocationFilterOptions.includes(item));
+      return valid.length ? valid : ["ALL"];
+    });
+  }, [assetLocationFilterOptions]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -5642,6 +5724,37 @@ export default function App() {
       .sort((a, b) => b.entry.date.localeCompare(a.entry.date))
       .slice(0, 6);
   }, [assets]);
+  const assetListRows = useMemo(() => {
+    let list = [...assets];
+    if (!assetCampusMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
+    }
+    if (!assetCategoryMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetCategoryMultiFilter.includes(asset.category));
+    }
+    if (!assetNameMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => {
+        const pcPart =
+          asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
+            ? String(asset.pcType || "").trim().toUpperCase()
+            : "";
+        const key = `${asset.category}:${asset.type}:${pcPart}`;
+        return assetNameMultiFilter.includes(key);
+      });
+    }
+    if (!assetLocationMultiFilter.includes("ALL")) {
+      list = list.filter((asset) =>
+        assetLocationMultiFilter.includes(String(asset.location || "").trim())
+      );
+    }
+    return list;
+  }, [
+    assets,
+    assetCampusMultiFilter,
+    assetCategoryMultiFilter,
+    assetNameMultiFilter,
+    assetLocationMultiFilter,
+  ]);
   const topCampusByAssets = useMemo(() => {
     if (!stats.byCampus.length) return null;
     return [...stats.byCampus].sort((a, b) => b.assets - a.assets)[0] || null;
@@ -7864,26 +7977,192 @@ export default function App() {
                 <div className="panel-row asset-list-toolbar">
                   <h2 className="asset-list-title">{t.assetRegistry}</h2>
                   <div className="panel-filters asset-list-filters">
-                    <select className="input" value={assetCampusFilter} onChange={(e) => setAssetCampusFilter(e.target.value)}>
-                      <option value="ALL">{t.allCampuses}</option>
-                      {allowedCampuses.map((campus) => (
-                        <option key={campus} value={campus}>{campusLabel(campus)}</option>
-                      ))}
-                    </select>
-                    <select className="input" value={assetCategoryFilter} onChange={(e) => setAssetCategoryFilter(e.target.value)}>
-                      <option value="ALL">{t.allCategories}</option>
-                      {CATEGORY_OPTIONS.map((category) => (
-                        <option key={category.value} value={category.value}>{lang === "km" ? category.km : category.en}</option>
-                      ))}
-                    </select>
-                    <select className="input" value={assetNameFilter} onChange={(e) => setAssetNameFilter(e.target.value)}>
-                      <option value="ALL">{t.name}</option>
-                      {assetNameFilterOptions.map((option) => (
-                        <option key={`asset-name-filter-${option.value}`} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    <details className="filter-menu">
+                      <summary>{summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}</summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetCampusMultiFilter.includes("ALL")}
+                            onChange={(e) =>
+                              setAssetCampusMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  "ALL",
+                                  assetCampusFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          {t.allCampuses}
+                        </label>
+                        {assetCampusFilterOptions.map((campus) => (
+                          <label key={`asset-campus-filter-${campus}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={
+                                assetCampusMultiFilter.includes("ALL") ||
+                                assetCampusMultiFilter.includes(campus)
+                              }
+                              onChange={(e) =>
+                                setAssetCampusMultiFilter((prev) =>
+                                  applyMultiFilterSelection(
+                                    prev,
+                                    e.target.checked,
+                                    campus,
+                                    assetCampusFilterOptions
+                                  )
+                                )
+                              }
+                            />
+                            {campusLabel(campus)}
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                    <details className="filter-menu">
+                      <summary>
+                        {summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
+                          const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                          return row ? (lang === "km" ? row.km : row.en) : value;
+                        })}
+                      </summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetCategoryMultiFilter.includes("ALL")}
+                            onChange={(e) =>
+                              setAssetCategoryMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  "ALL",
+                                  assetCategoryFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          {t.allCategories}
+                        </label>
+                        {CATEGORY_OPTIONS.map((category) => (
+                          <label key={`asset-category-filter-${category.value}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={
+                                assetCategoryMultiFilter.includes("ALL") ||
+                                assetCategoryMultiFilter.includes(category.value)
+                              }
+                              onChange={(e) =>
+                                setAssetCategoryMultiFilter((prev) =>
+                                  applyMultiFilterSelection(
+                                    prev,
+                                    e.target.checked,
+                                    category.value,
+                                    assetCategoryFilterOptions
+                                  )
+                                )
+                              }
+                            />
+                            {lang === "km" ? category.km : category.en}
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                    <details className="filter-menu">
+                      <summary>
+                        {summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
+                          const row = assetNameFilterOptions.find((option) => option.value === value);
+                          return row ? row.label : value;
+                        })}
+                      </summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetNameMultiFilter.includes("ALL")}
+                            onChange={(e) =>
+                              setAssetNameMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  "ALL",
+                                  assetNameFilterOptions.map((option) => option.value)
+                                )
+                              )
+                            }
+                          />
+                          {`All ${t.name}s`}
+                        </label>
+                        {assetNameFilterOptions.map((option) => (
+                          <label key={`asset-name-filter-${option.value}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={
+                                assetNameMultiFilter.includes("ALL") ||
+                                assetNameMultiFilter.includes(option.value)
+                              }
+                              onChange={(e) =>
+                                setAssetNameMultiFilter((prev) =>
+                                  applyMultiFilterSelection(
+                                    prev,
+                                    e.target.checked,
+                                    option.value,
+                                    assetNameFilterOptions.map((item) => item.value)
+                                  )
+                                )
+                              }
+                            />
+                            {option.label}
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                    <details className="filter-menu">
+                      <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetLocationMultiFilter.includes("ALL")}
+                            onChange={(e) =>
+                              setAssetLocationMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  "ALL",
+                                  assetLocationFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          All Locations
+                        </label>
+                        {assetLocationFilterOptions.map((location) => (
+                          <label key={`asset-location-filter-${location}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={
+                                assetLocationMultiFilter.includes("ALL") ||
+                                assetLocationMultiFilter.includes(location)
+                              }
+                              onChange={(e) =>
+                                setAssetLocationMultiFilter((prev) =>
+                                  applyMultiFilterSelection(
+                                    prev,
+                                    e.target.checked,
+                                    location,
+                                    assetLocationFilterOptions
+                                  )
+                                )
+                              }
+                            />
+                            {location}
+                          </label>
+                        ))}
+                      </div>
+                    </details>
                     <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
                   </div>
                 </div>
@@ -7904,8 +8183,8 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {assets.length ? (
-                        assets.map((asset) => (
+                      {assetListRows.length ? (
+                        assetListRows.map((asset) => (
                           <tr key={asset.id} className={assetStatusRowClass(asset.status || "")}>
                             <td>
                               <button className="tab" onClick={() => setAssetDetailId(asset.id)}>

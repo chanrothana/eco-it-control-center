@@ -1185,6 +1185,56 @@ function toPublicAssetView(asset) {
   };
 }
 
+function toMillis(value) {
+  const time = Date.parse(String(value || ""));
+  return Number.isFinite(time) ? time : 0;
+}
+
+function latestHistoryMillis(asset) {
+  const lists = [
+    Array.isArray(asset?.maintenanceHistory) ? asset.maintenanceHistory : [],
+    Array.isArray(asset?.transferHistory) ? asset.transferHistory : [],
+    Array.isArray(asset?.statusHistory) ? asset.statusHistory : [],
+  ];
+  let latest = 0;
+  for (const list of lists) {
+    for (const row of list) {
+      const t = toMillis(row?.date);
+      if (t > latest) latest = t;
+    }
+  }
+  return latest;
+}
+
+function selectBestAssetByAssetId(assets, assetId) {
+  const key = toText(assetId).toUpperCase();
+  const matched = (Array.isArray(assets) ? assets : []).filter(
+    (a) => toText(a?.assetId).toUpperCase() === key
+  );
+  if (!matched.length) return null;
+  if (matched.length === 1) return matched[0];
+
+  const sorted = [...matched].sort((a, b) => {
+    const aFresh = Math.max(toMillis(a?.created), latestHistoryMillis(a), Number(a?.id) || 0);
+    const bFresh = Math.max(toMillis(b?.created), latestHistoryMillis(b), Number(b?.id) || 0);
+    if (aFresh !== bFresh) return bFresh - aFresh;
+
+    const aDepth =
+      (Array.isArray(a?.maintenanceHistory) ? a.maintenanceHistory.length : 0) +
+      (Array.isArray(a?.transferHistory) ? a.transferHistory.length : 0) +
+      (Array.isArray(a?.statusHistory) ? a.statusHistory.length : 0);
+    const bDepth =
+      (Array.isArray(b?.maintenanceHistory) ? b.maintenanceHistory.length : 0) +
+      (Array.isArray(b?.transferHistory) ? b.transferHistory.length : 0) +
+      (Array.isArray(b?.statusHistory) ? b.statusHistory.length : 0);
+    if (aDepth !== bDepth) return bDepth - aDepth;
+
+    return (Number(b?.id) || 0) - (Number(a?.id) || 0);
+  });
+
+  return sorted[0];
+}
+
 async function parseBody(req) {
   const chunks = [];
   let size = 0;
@@ -1244,11 +1294,14 @@ const server = http.createServer(async (req, res) => {
       }
       const db = await readDb();
       const assets = Array.isArray(db.assets) ? db.assets : [];
-      const found = assets.find((a) => toText(a.assetId).toUpperCase() === assetId.toUpperCase());
+      const found = selectBestAssetByAssetId(assets, assetId);
       if (!found) {
         sendJson(res, 404, { error: "Asset not found" });
         return;
       }
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       sendJson(res, 200, { asset: toPublicAssetView(found) });
       return;
     }
