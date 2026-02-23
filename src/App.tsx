@@ -1357,11 +1357,22 @@ function filterAssets(
   list: Asset[],
   campusFilter: string,
   categoryFilter: string,
+  nameFilter: string,
   searchText: string
 ) {
   let out = [...list];
   if (campusFilter !== "ALL") out = out.filter((a) => a.campus === campusFilter);
   if (categoryFilter !== "ALL") out = out.filter((a) => a.category === categoryFilter);
+  if (nameFilter !== "ALL") {
+    out = out.filter((a) => {
+      const pcPart =
+        a.category === "IT" && a.type === DESKTOP_PARENT_TYPE
+          ? String(a.pcType || "").trim().toUpperCase()
+          : "";
+      const key = `${a.category}:${a.type}:${pcPart}`;
+      return key === nameFilter;
+    });
+  }
   const q = searchText.trim().toLowerCase();
   if (q) {
     out = out.filter((a) =>
@@ -1552,10 +1563,35 @@ function normalizeAssetForUi(asset: Asset): Asset {
     return text;
   };
   const normalizedPhotos = photos.map(normalizeUrl).filter(Boolean);
+  const isReplacementDone = (typeRaw: string, completionRaw: string) => {
+    const type = String(typeRaw || "").trim().toLowerCase();
+    const completion = String(completionRaw || "").trim().toLowerCase();
+    return (type === "replacement" || type === "replacment") && completion === "done";
+  };
+  const hasReplacementDone = Array.isArray(asset.maintenanceHistory)
+    ? asset.maintenanceHistory.some((entry) => isReplacementDone(entry?.type || "", entry?.completion || ""))
+    : false;
+  const currentStatus = String(asset.status || "Active");
+  const shouldAutoRetire = hasReplacementDone && currentStatus !== "Retired";
+  const nextStatusHistory = shouldAutoRetire
+    ? [
+        {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          date: new Date().toISOString(),
+          fromStatus: currentStatus || "Active",
+          toStatus: "Retired",
+          reason: "Auto corrected in UI: replacement maintenance is marked Done",
+          by: "System",
+        },
+        ...(Array.isArray(asset.statusHistory) ? asset.statusHistory : []),
+      ]
+    : asset.statusHistory;
   return {
     ...asset,
     photos: normalizedPhotos,
     photo: normalizeUrl(normalizedPhotos[0] || ""),
+    status: shouldAutoRetire ? "Retired" : asset.status,
+    statusHistory: nextStatusHistory,
   };
 }
 
@@ -1768,6 +1804,7 @@ export default function App() {
   const [campusFilter, setCampusFilter] = useState("ALL");
   const [assetCampusFilter, setAssetCampusFilter] = useState("ALL");
   const [assetCategoryFilter, setAssetCategoryFilter] = useState("ALL");
+  const [assetNameFilter, setAssetNameFilter] = useState("ALL");
   const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
   const [maintenanceDateFrom, setMaintenanceDateFrom] = useState("");
@@ -1907,6 +1944,7 @@ export default function App() {
   const [editCreateSetPack, setEditCreateSetPack] = useState(false);
   const [assetFileKey, setAssetFileKey] = useState(0);
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const [modelTemplateNote, setModelTemplateNote] = useState("");
   const [assetDetailId, setAssetDetailId] = useState<number | null>(null);
   const [pendingQrAssetId] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -2323,6 +2361,21 @@ export default function App() {
     },
     [itemNames, lang, allTypeOptions]
   );
+  const assetNameFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const asset of assets) {
+      const pcPart =
+        asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
+          ? String(asset.pcType || "").trim().toUpperCase()
+          : "";
+      const key = `${asset.category}:${asset.type}:${pcPart}`;
+      if (map.has(key)) continue;
+      map.set(key, assetItemName(asset.category, asset.type, asset.pcType || ""));
+    }
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [assets, assetItemName]);
 
   const campusLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === assetForm.campus)),
@@ -2460,6 +2513,57 @@ export default function App() {
     () => isDesktopSetComponent(assetForm.category, assetForm.type),
     [assetForm.category, assetForm.type]
   );
+  const modelTemplates = useMemo(() => {
+    const byModel = new Map<
+      string,
+      {
+        model: string;
+        specs: string;
+        brand: string;
+        vendor: string;
+        count: number;
+      }
+    >();
+    for (const asset of assets) {
+      const model = String(asset.model || "").trim();
+      const specs = String(asset.specs || "").trim();
+      if (!model || !specs) continue;
+      const key = model.toLowerCase();
+      const existing = byModel.get(key);
+      if (!existing) {
+        byModel.set(key, {
+          model,
+          specs,
+          brand: String(asset.brand || "").trim(),
+          vendor: String(asset.vendor || "").trim(),
+          count: 1,
+        });
+      } else {
+        existing.count += 1;
+      }
+    }
+    return Array.from(byModel.values()).sort((a, b) => a.model.localeCompare(b.model));
+  }, [assets]);
+  const applyModelTemplate = useCallback((rawModel: string) => {
+    const input = String(rawModel || "").trim();
+    if (!input) {
+      setModelTemplateNote("");
+      return;
+    }
+    const tpl = modelTemplates.find((m) => m.model.toLowerCase() === input.toLowerCase());
+    if (!tpl) {
+      setModelTemplateNote("");
+      return;
+    }
+    setAssetForm((prev) => {
+      const next = { ...prev };
+      if (!String(prev.specs || "").trim()) next.specs = tpl.specs;
+      if (!String(prev.brand || "").trim() && tpl.brand) next.brand = tpl.brand;
+      if (!String(prev.vendor || "").trim() && tpl.vendor) next.vendor = tpl.vendor;
+      return next;
+    });
+    setModelTemplateNote(`Model template matched: ${tpl.model}. Specs auto-filled`);
+  }, [modelTemplates]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -2561,6 +2665,12 @@ export default function App() {
       setAssetForm((f) => ({ ...f, type: currentTypeOptions[0].code }));
     }
   }, [assetForm.type, currentTypeOptions]);
+  useEffect(() => {
+    if (assetNameFilter === "ALL") return;
+    if (!assetNameFilterOptions.some((option) => option.value === assetNameFilter)) {
+      setAssetNameFilter("ALL");
+    }
+  }, [assetNameFilter, assetNameFilterOptions]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -2638,6 +2748,7 @@ export default function App() {
         serverAssets,
         effectiveAssetCampusFilter,
         assetCategoryFilter,
+        assetNameFilter,
         search
       );
       setAssets(effectiveAssets);
@@ -2659,7 +2770,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [campusFilter, effectiveAssetCampusFilter, assetCategoryFilter, search]);
+  }, [campusFilter, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search]);
 
   useEffect(() => {
     void loadData();
@@ -2786,6 +2897,7 @@ export default function App() {
         KBD: prev.KBD + 1,
         MSE: prev.MSE + 1,
       }));
+      setModelTemplateNote("");
       setAssetFileKey((k) => k + 1);
       appendUiAudit(
         "CREATE",
@@ -2945,6 +3057,7 @@ export default function App() {
           KBD: prev.KBD + 1,
           MSE: prev.MSE + 1,
         }));
+        setModelTemplateNote("");
         setAssetFileKey((k) => k + 1);
         setError("");
         appendUiAudit("CREATE", "asset", newAsset.assetId, `${newAsset.campus} | ${newAsset.location}`);
@@ -3892,7 +4005,7 @@ export default function App() {
       }
       writeAssetFallback(nextLocal);
       setAssets(
-        filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search)
+        filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search)
       );
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("DELETE", "asset", String(id), "Asset deleted");
@@ -4030,7 +4143,7 @@ export default function App() {
         };
         const nextLocal = [childAsset, ...allLocal];
         writeAssetFallback(nextLocal);
-        setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+        setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
         setStats(buildStatsFromAssets(nextLocal, campusFilter));
       }
 
@@ -4154,7 +4267,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("UPDATE", "asset", String(editingAssetId), `location=${payload.location}`);
       setEditingAssetId(null);
@@ -4202,7 +4315,7 @@ export default function App() {
         if (!isApiUnavailableError(err)) throw err;
       }
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("SCHEDULE_UPDATE", "asset", String(assetId), payload.nextMaintenanceDate || "repeat schedule");
       setScheduleForm((f) => ({
@@ -4259,7 +4372,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("SCHEDULE_DELETE", "asset", String(assetId), "Schedule removed");
       if (scheduleForm.assetId === String(assetId)) {
@@ -4321,7 +4434,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       setSetupMessage(`Bulk schedule updated for ${matched.length} asset(s).`);
       setBulkScheduleForm((f) => ({
@@ -4462,7 +4575,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
       if (shouldApplyRetireStatus) {
@@ -4548,7 +4661,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("VERIFICATION_CREATE", "asset", String(assetId), `${entry.result} | ${entry.note.slice(0, 60)}`);
       setVerificationRecordForm((f) => ({
@@ -4656,7 +4769,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("VERIFICATION_UPDATE", "verification_record", String(entryId), `${payload.result}`);
       cancelVerificationRowEdit();
@@ -4692,7 +4805,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("VERIFICATION_DELETE", "verification_record", String(entryId), "Deleted");
       if (verificationEditingRowId?.endsWith(`-${entryId}`)) {
@@ -4752,7 +4865,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("TRANSFER", "asset", String(assetId), `${transferEntry.fromCampus} -> ${transferEntry.toCampus}`);
       setTransferForm((f) => ({
@@ -4800,6 +4913,32 @@ export default function App() {
       photo: entry.photo || "",
     });
     setMaintenanceEditFileKey((k) => k + 1);
+  }
+
+  function editMaintenanceEntryFromHistoryRow(row: {
+    assetDbId: number;
+    entryId: number;
+    date: string;
+    type: string;
+    completion: string;
+    condition: string;
+    note: string;
+    cost: string;
+    by: string;
+    photo: string;
+  }) {
+    setMaintenanceDetailAssetId(row.assetDbId);
+    startMaintenanceEntryEdit({
+      id: row.entryId,
+      date: row.date,
+      type: row.type,
+      completion: (row.completion === "Done" ? "Done" : "Not Yet") as "Done" | "Not Yet",
+      condition: row.condition,
+      note: row.note,
+      cost: row.cost,
+      by: row.by,
+      photo: row.photo,
+    });
   }
 
   function cancelMaintenanceEntryEdit() {
@@ -4856,7 +4995,7 @@ export default function App() {
         const nextHistory = (asset.maintenanceHistory || []).map((h) =>
           Number(h.id) === Number(entryId) ? { ...h, ...payload } : h
         );
-        return { ...asset, maintenanceHistory: nextHistory };
+        return normalizeAssetForUi({ ...asset, maintenanceHistory: nextHistory });
       });
 
       try {
@@ -4869,7 +5008,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_UPDATE", "maintenance_record", String(entryId), `${payload.type} | ${payload.completion || "-"}`);
       cancelMaintenanceEntryEdit();
@@ -4881,26 +5020,26 @@ export default function App() {
     }
   }
 
-  async function deleteMaintenanceEntry(entryId: number) {
+  async function deleteMaintenanceEntryByAsset(assetDbId: number, entryId: number, closeDetail = false) {
     if (!requireAdminAction()) return;
-    if (!maintenanceDetailAssetId) return;
+    if (!assetDbId) return;
     if (!window.confirm("Delete this maintenance record?")) return;
 
     setBusy(true);
     setError("");
     try {
       const nextLocal = readAssetFallback().map((asset) => {
-        if (asset.id !== maintenanceDetailAssetId) return asset;
-        return {
+        if (asset.id !== assetDbId) return asset;
+        return normalizeAssetForUi({
           ...asset,
           maintenanceHistory: (asset.maintenanceHistory || []).filter(
             (h) => Number(h.id) !== Number(entryId)
           ),
-        };
+        });
       });
 
       try {
-        await requestJson<{ ok: boolean }>(`/api/assets/${maintenanceDetailAssetId}/history/${entryId}`, {
+        await requestJson<{ ok: boolean }>(`/api/assets/${assetDbId}/history/${entryId}`, {
           method: "DELETE",
         });
       } catch (err) {
@@ -4914,19 +5053,24 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_DELETE", "maintenance_record", String(entryId), "Deleted");
       if (Number(maintenanceEditingEntryId) === Number(entryId)) {
         cancelMaintenanceEntryEdit();
       }
-      setMaintenanceDetailAssetId(null);
+      if (closeDetail) setMaintenanceDetailAssetId(null);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete maintenance record");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function deleteMaintenanceEntry(entryId: number) {
+    if (!maintenanceDetailAssetId) return;
+    await deleteMaintenanceEntryByAsset(maintenanceDetailAssetId, entryId, true);
   }
 
 
@@ -4984,7 +5128,7 @@ export default function App() {
             : asset
         );
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, search));
+      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("UPDATE_STATUS", "asset", String(id), status);
       await loadData();
@@ -5927,15 +6071,13 @@ export default function App() {
   }, [qrLabelRows, qrCampusFilter, qrCategoryFilter, qrItemFilter]);
 
   const qrScanBase = useMemo(() => {
-    const manual = String(apiBaseInput || "").trim().replace(/\/+$/, "");
-    if (manual) return manual;
     if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
     const host = String(window.location.hostname || "").toLowerCase();
     if (host === "localhost" || host === "127.0.0.1") {
       return DEFAULT_CLOUD_API_BASE;
     }
     return String(window.location.origin || DEFAULT_CLOUD_API_BASE).replace(/\/+$/, "");
-  }, [apiBaseInput]);
+  }, []);
 
   const buildAssetQrUrl = useCallback((assetId: string) => {
     const id = String(assetId || "").trim();
@@ -7427,7 +7569,22 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>{t.model}</span>
-                    <input className="input" value={assetForm.model} onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))} />
+                    <input
+                      className="input"
+                      list="asset-model-options"
+                      value={assetForm.model}
+                      onChange={(e) => {
+                        const model = e.target.value;
+                        setAssetForm((f) => ({ ...f, model }));
+                        if (!model.trim()) setModelTemplateNote("");
+                      }}
+                      onBlur={(e) => applyModelTemplate(e.target.value)}
+                    />
+                    <datalist id="asset-model-options">
+                      {modelTemplates.map((row) => (
+                        <option key={`model-template-${row.model.toLowerCase()}`} value={row.model} />
+                      ))}
+                    </datalist>
                   </label>
                   <label className="field">
                     <span>{t.serialNumber}</span>
@@ -7468,6 +7625,7 @@ export default function App() {
                   </label>
                 </div>
                 {!campusLocations.length ? <p className="tiny">{t.noLocationsConfigured}</p> : null}
+                {modelTemplateNote ? <p className="tiny">{modelTemplateNote}. You can edit it anytime.</p> : null}
                 {assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE ? (
                   <p className="tiny">{t.desktopSetAutoNote}</p>
                 ) : null}
@@ -7564,6 +7722,14 @@ export default function App() {
                       <option value="ALL">{t.allCategories}</option>
                       {CATEGORY_OPTIONS.map((category) => (
                         <option key={category.value} value={category.value}>{lang === "km" ? category.km : category.en}</option>
+                      ))}
+                    </select>
+                    <select className="input" value={assetNameFilter} onChange={(e) => setAssetNameFilter(e.target.value)}>
+                      <option value="ALL">{t.name}</option>
+                      {assetNameFilterOptions.map((option) => (
+                        <option key={`asset-name-filter-${option.value}`} value={option.value}>
+                          {option.label}
+                        </option>
                       ))}
                     </select>
                     <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
@@ -9697,6 +9863,8 @@ export default function App() {
                     <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("cost")}>Cost {maintenanceSort.key === "cost" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
                     <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("by")}>By {maintenanceSort.key === "by" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
                     <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("status")}>{t.status} {maintenanceSort.key === "status" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                    <th>{t.edit}</th>
+                    <th>{t.delete}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -9737,11 +9905,29 @@ export default function App() {
                         <td>{row.cost || "-"}</td>
                         <td>{row.by || "-"}</td>
                         <td>{row.status}</td>
+                        <td>
+                          <button
+                            className="tab"
+                            disabled={!isAdmin}
+                            onClick={() => editMaintenanceEntryFromHistoryRow(row)}
+                          >
+                            {t.edit}
+                          </button>
+                        </td>
+                        <td>
+                          <button
+                            className="btn-danger"
+                            disabled={busy || !isAdmin}
+                            onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
+                          >
+                            X
+                          </button>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={15}>No maintenance records yet.</td>
+                      <td colSpan={17}>No maintenance records yet.</td>
                     </tr>
                   )}
                 </tbody>
