@@ -399,6 +399,55 @@ h2 {
   flex-wrap: wrap;
 }
 
+.report-toolbar {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.report-filters {
+  margin-left: auto;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.report-filters > * {
+  flex: 0 0 auto;
+}
+
+.report-filters .input,
+.report-filters .filter-menu {
+  min-width: 210px;
+}
+
+.report-filters .report-type-input {
+  min-width: 270px;
+}
+
+.maintenance-toolbar {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.maintenance-filters {
+  margin-left: auto;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.maintenance-filters > * {
+  flex: 0 0 auto;
+}
+
+.maintenance-filters .input {
+  min-width: 190px;
+}
+
 .filter-menu {
   position: relative;
   min-width: 210px;
@@ -1216,13 +1265,17 @@ tr.row-maint-maintenance:hover td {
 .report-table-wrap td {
   text-align: center;
   vertical-align: middle;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .report-table-wrap td {
   line-height: 1.35;
+}
+
+.report-table-wrap table {
+  min-width: 1480px;
 }
 
 .report-table-wrap td strong {
@@ -1235,12 +1288,13 @@ tr.row-maint-maintenance:hover td {
 }
 
 .report-table-wrap .report-item-description {
-  max-width: none;
-  overflow: visible;
-  text-overflow: clip;
-  display: table-cell;
-  -webkit-line-clamp: unset;
-  -webkit-box-orient: initial;
+  min-width: 260px;
+  max-width: 460px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-align: left;
+  margin: 0 auto;
 }
 
 .report-service-link {
@@ -1689,6 +1743,19 @@ tr.row-maint-maintenance:hover td {
     flex-direction: column;
   }
 
+  .maintenance-toolbar {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .maintenance-filters {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    margin-left: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
   .topbar {
     grid-template-columns: 1fr;
   }
@@ -1707,6 +1774,11 @@ tr.row-maint-maintenance:hover td {
   .panel-filters .input,
   .panel-filters .filter-menu {
     width: 100%;
+  }
+
+  .maintenance-filters .input {
+    width: auto;
+    min-width: 190px;
   }
 
   .top-controls-grid {
@@ -1953,6 +2025,35 @@ tr.row-maint-maintenance:hover td {
   color: #1f2a4a;
 }
 
+.public-asset-shell {
+  overflow: visible;
+}
+
+.app-card-public-asset {
+  max-width: 980px;
+  margin: 24px auto;
+}
+
+.public-asset-grid .detail-value {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.public-asset-photo-row {
+  align-items: flex-start;
+}
+
+.public-asset-table-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.public-asset-table-wrap table {
+  min-width: 760px;
+}
+
 @media (max-width: 768px) {
   .app-shell {
     padding: 8px 6px;
@@ -2038,6 +2139,60 @@ tr.row-maint-maintenance:hover td {
     padding: 6px;
     gap: 6px;
   }
+
+  .public-asset-shell {
+    overflow: visible;
+  }
+
+  .app-card-public-asset {
+    margin: 10px auto;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .public-asset-panel {
+    padding: 12px;
+  }
+
+  .public-asset-panel h2 {
+    font-size: clamp(24px, 7vw, 30px);
+  }
+
+  .public-asset-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .public-asset-grid .field {
+    gap: 4px;
+  }
+
+  .public-asset-grid .field-wide {
+    grid-column: auto;
+  }
+
+  .public-asset-grid .detail-value {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 15px;
+    line-height: 1.35;
+  }
+
+  .public-asset-photo-row .photo-preview,
+  .public-asset-photo-row .photo-placeholder {
+    width: 72px;
+    height: 72px;
+  }
+
+  .public-asset-table-wrap table {
+    min-width: 640px;
+  }
+
+  .public-asset-table-wrap th,
+  .public-asset-table-wrap td {
+    padding: 8px 9px;
+    font-size: 13px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2101,5 +2256,28 @@ tr.row-maint-maintenance:hover td {
   .photo-placeholder {
     width: 80px;
     height: 80px;
+  }
+
+  .app-card-public-asset {
+    margin: 8px auto;
+    padding: 8px;
+  }
+
+  .public-asset-panel {
+    padding: 10px;
+  }
+
+  .public-asset-panel h2 {
+    font-size: clamp(22px, 7.2vw, 28px);
+  }
+
+  .public-asset-photo-row .photo-preview,
+  .public-asset-photo-row .photo-placeholder {
+    width: 64px;
+    height: 64px;
+  }
+
+  .public-asset-table-wrap table {
+    min-width: 560px;
   }
 }

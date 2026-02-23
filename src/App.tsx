@@ -6638,16 +6638,16 @@ export default function App() {
       (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
     );
     return (
-      <main className="app-shell">
-        <section className="app-card" style={{ maxWidth: 980, margin: "24px auto" }}>
-          <section className="panel">
+      <main className="app-shell public-asset-shell">
+        <section className="app-card app-card-public-asset">
+          <section className="panel public-asset-panel">
             <h2>Asset Detail</h2>
             {publicQrBusy ? (
               <p className="tiny">Loading asset...</p>
             ) : publicQrError ? (
               <p className="alert">{publicQrError}</p>
             ) : asset ? (
-              <div className="form-grid">
+              <div className="form-grid public-asset-grid">
                 <div className="field"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
                 <div className="field"><span>{t.status}</span><div className="detail-value">{asset.status || "-"}</div></div>
                 <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
@@ -6668,7 +6668,7 @@ export default function App() {
                 <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
                 <div className="field field-wide">
                   <span>{t.photo}</span>
-                  <div className="row-actions">
+                  <div className="row-actions public-asset-photo-row">
                     {photos.length ? (
                       photos.slice(0, MAX_ASSET_PHOTOS).map((photo, idx) => (
                         <img
@@ -6685,7 +6685,7 @@ export default function App() {
                 </div>
                 <div className="field field-wide">
                   <span>Maintenance History</span>
-                  <div className="table-wrap">
+                  <div className="table-wrap public-asset-table-wrap">
                     <table>
                       <thead>
                         <tr>
@@ -6720,7 +6720,7 @@ export default function App() {
                 </div>
                 <div className="field field-wide">
                   <span>Transfer History</span>
-                  <div className="table-wrap">
+                  <div className="table-wrap public-asset-table-wrap">
                     <table>
                       <thead>
                         <tr>
@@ -6755,7 +6755,7 @@ export default function App() {
                 </div>
                 <div className="field field-wide">
                   <span>Status Timeline</span>
-                  <div className="table-wrap">
+                  <div className="table-wrap public-asset-table-wrap">
                     <table>
                       <thead>
                         <tr>
@@ -9955,9 +9955,9 @@ export default function App() {
 
             {maintenanceView === "history" && (
             <>
-            <div className="panel-row">
+            <div className="panel-row maintenance-toolbar">
               <h2>{t.maintenanceHistory}</h2>
-              <div className="panel-filters">
+              <div className="panel-filters maintenance-filters">
                 <select
                   className="input"
                   value={maintenanceCategoryFilter}
@@ -10625,11 +10625,11 @@ export default function App() {
 
         {tab === "reports" && (
           <section className="panel">
-            <div className="panel-row">
+            <div className="panel-row report-toolbar">
               <h2>Reports</h2>
-              <div className="panel-filters">
+              <div className="panel-filters report-filters">
                 <select
-                  className="input"
+                  className="input report-type-input"
                   value={reportType}
                   onChange={(e) => setReportType(e.target.value as ReportType)}
                 >
