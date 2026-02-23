@@ -1749,6 +1749,7 @@ export default function App() {
     | "lastServiceDate"
     | "assignedTo"
     | "status";
+  type AssetMasterColumnKey = AssetMasterSortKey;
 
   const [lang, setLang] = useState<Lang>(() => {
     const saved = localStorage.getItem("ui_lang");
@@ -1827,9 +1828,24 @@ export default function App() {
     direction: "desc",
   });
   const [reportType, setReportType] = useState<ReportType>("asset_master");
-  const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState("ALL");
-  const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState("ALL");
-  const [assetMasterItemFilter, setAssetMasterItemFilter] = useState("ALL");
+  const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
+  const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState<string[]>(["ALL"]);
+  const [assetMasterItemFilter, setAssetMasterItemFilter] = useState<string[]>(["ALL"]);
+  const [assetMasterVisibleColumns, setAssetMasterVisibleColumns] = useState<AssetMasterColumnKey[]>([
+    "photo",
+    "assetId",
+    "setCode",
+    "linkedTo",
+    "itemName",
+    "category",
+    "campus",
+    "itemDescription",
+    "location",
+    "purchaseDate",
+    "lastServiceDate",
+    "assignedTo",
+    "status",
+  ]);
   const [assetMasterSort, setAssetMasterSort] = useState<{
     key: AssetMasterSortKey;
     direction: "asc" | "desc";
@@ -6039,11 +6055,21 @@ export default function App() {
     return options.sort((a, b) => a.localeCompare(b));
   }, [assetMasterSetRows]);
 
+  const assetMasterCampusFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(assetMasterSetRows.map((row) => row.campus).filter(Boolean)));
+    return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
+  }, [assetMasterSetRows, campusLabel]);
+
+  const assetMasterCategoryFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(assetMasterSetRows.map((row) => row.category).filter(Boolean)));
+    return options.sort((a, b) => a.localeCompare(b));
+  }, [assetMasterSetRows]);
+
   const filteredAssetMasterRows = useMemo(() => {
     return assetMasterSetRows.filter((row) => {
-      if (assetMasterCampusFilter !== "ALL" && row.campus !== assetMasterCampusFilter) return false;
-      if (assetMasterCategoryFilter !== "ALL" && row.category !== assetMasterCategoryFilter) return false;
-      if (assetMasterItemFilter !== "ALL" && row.itemName !== assetMasterItemFilter) return false;
+      if (!assetMasterCampusFilter.includes("ALL") && !assetMasterCampusFilter.includes(row.campus)) return false;
+      if (!assetMasterCategoryFilter.includes("ALL") && !assetMasterCategoryFilter.includes(row.category)) return false;
+      if (!assetMasterItemFilter.includes("ALL") && !assetMasterItemFilter.includes(row.itemName)) return false;
       return true;
     });
   }, [assetMasterSetRows, assetMasterCampusFilter, assetMasterCategoryFilter, assetMasterItemFilter]);
@@ -6074,10 +6100,97 @@ export default function App() {
     [assetMasterSort]
   );
 
+  const assetMasterColumnDefs = useMemo<
+    Array<{ key: AssetMasterColumnKey; label: string; sortable?: boolean }>
+  >(
+    () => [
+      { key: "photo", label: t.photo, sortable: true },
+      { key: "assetId", label: t.assetId, sortable: true },
+      { key: "setCode", label: t.setCode, sortable: true },
+      { key: "linkedTo", label: "Linked To (Main Asset)", sortable: true },
+      { key: "itemName", label: "Item Name", sortable: true },
+      { key: "category", label: t.category, sortable: true },
+      { key: "campus", label: t.campus, sortable: true },
+      { key: "itemDescription", label: "Item Description", sortable: true },
+      { key: "location", label: t.location, sortable: true },
+      { key: "purchaseDate", label: "Purchase Date", sortable: true },
+      { key: "lastServiceDate", label: "Last Service", sortable: true },
+      { key: "assignedTo", label: "Assigned To", sortable: true },
+      { key: "status", label: t.status, sortable: true },
+    ],
+    [t.photo, t.assetId, t.setCode, t.category, t.campus, t.location, t.status]
+  );
+
+  const isAssetMasterColumnVisible = useCallback(
+    (key: AssetMasterColumnKey) => assetMasterVisibleColumns.includes(key),
+    [assetMasterVisibleColumns]
+  );
+
+  const updateMultiSelect = useCallback(
+    (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
+      setter((prev) => {
+        if (value === "ALL") return ["ALL"];
+        const current = prev.includes("ALL") ? [] : [...prev];
+        const exists = current.includes(value);
+        const next = exists ? current.filter((item) => item !== value) : [...current, value];
+        return next.length ? next : ["ALL"];
+      });
+    },
+    []
+  );
+
+  const updateAssetMasterColumnSelection = useCallback((column: AssetMasterColumnKey) => {
+    setAssetMasterVisibleColumns((prev) => {
+      const exists = prev.includes(column);
+      if (exists) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((item) => item !== column);
+      }
+      const withColumn = [...prev, column];
+      const order = assetMasterColumnDefs.map((d) => d.key);
+      return [...withColumn].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    });
+  }, [assetMasterColumnDefs]);
+
+  const campusFilterSummary = assetMasterCampusFilter.includes("ALL")
+    ? "All Campuses"
+    : `${assetMasterCampusFilter.length} campus selected`;
+  const categoryFilterSummary = assetMasterCategoryFilter.includes("ALL")
+    ? "All Categories"
+    : `${assetMasterCategoryFilter.length} category selected`;
+  const itemFilterSummary = assetMasterItemFilter.includes("ALL")
+    ? "All Item Names"
+    : `${assetMasterItemFilter.length} item selected`;
+  const columnFilterSummary = `${assetMasterVisibleColumns.length} columns`;
+
   const qrItemFilterOptions = useMemo(() => {
     const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrLabelRows]);
+
+  useEffect(() => {
+    setAssetMasterCampusFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const next = prev.filter((item) => assetMasterCampusFilterOptions.includes(item));
+      return next.length ? next : ["ALL"];
+    });
+  }, [assetMasterCampusFilterOptions]);
+
+  useEffect(() => {
+    setAssetMasterCategoryFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const next = prev.filter((item) => assetMasterCategoryFilterOptions.includes(item));
+      return next.length ? next : ["ALL"];
+    });
+  }, [assetMasterCategoryFilterOptions]);
+
+  useEffect(() => {
+    setAssetMasterItemFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const next = prev.filter((item) => assetMasterItemFilterOptions.includes(item));
+      return next.length ? next : ["ALL"];
+    });
+  }, [assetMasterItemFilterOptions]);
 
   const qrFilteredRows = useMemo(() => {
     return qrLabelRows.filter((row) => {
@@ -6142,8 +6255,9 @@ export default function App() {
     setPublicQrAsset(null);
     (async () => {
       try {
+        const ts = Date.now();
         const res = await requestJson<{ asset: PublicQrAsset }>(
-          `/api/public/assets/${encodeURIComponent(pendingQrAssetId)}`
+          `/api/public/assets/${encodeURIComponent(pendingQrAssetId)}?ts=${ts}`
         );
         if (cancelled) return;
         setPublicQrAsset(res.asset || null);
@@ -6183,22 +6297,42 @@ export default function App() {
 
     if (reportType === "asset_master") {
       title = "Asset Master Register Report";
-      columns = ["Photo", "Asset ID", "Set Code", "Linked To (Main Asset)", "Item Name", "Category", "Campus", "Item Description", "Location", "Purchase Date", "Last Service", "Assigned To", "Status"];
-      rows = sortedAssetMasterRows.map((row) => [
-        toPrintablePhotoUrl(row.photo || ""),
-        row.assetId,
-        row.setCode,
-        row.linkedTo,
-        row.itemName,
-        row.category,
-        campusLabel(row.campus),
-        row.itemDescription,
-        row.location || "-",
-        formatDate(row.purchaseDate || "-"),
-        formatDate(row.lastServiceDate || "-"),
-        row.assignedTo,
-        row.status,
-      ]);
+      const visibleDefs = assetMasterColumnDefs.filter((def) => isAssetMasterColumnVisible(def.key));
+      columns = visibleDefs.map((def) => def.label);
+      rows = sortedAssetMasterRows.map((row) =>
+        visibleDefs.map((def) => {
+          switch (def.key) {
+            case "photo":
+              return toPrintablePhotoUrl(row.photo || "");
+            case "assetId":
+              return row.assetId;
+            case "setCode":
+              return row.setCode;
+            case "linkedTo":
+              return row.linkedTo;
+            case "itemName":
+              return row.itemName;
+            case "category":
+              return row.category;
+            case "campus":
+              return campusLabel(row.campus);
+            case "itemDescription":
+              return row.itemDescription;
+            case "location":
+              return row.location || "-";
+            case "purchaseDate":
+              return formatDate(row.purchaseDate || "-");
+            case "lastServiceDate":
+              return formatDate(row.lastServiceDate || "-");
+            case "assignedTo":
+              return row.assignedTo;
+            case "status":
+              return row.status;
+            default:
+              return "-";
+          }
+        })
+      );
     } else if (reportType === "asset_by_location") {
       title = "Asset by Campus and Location Report";
       columns = ["Campus", "Location", "Total Units", "IT Units", "Safety Units", "Item Breakdown"];
@@ -7754,7 +7888,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="table-wrap">
+                <div className="table-wrap asset-list-scroll">
                   <table className="table-compact">
                     <thead>
                       <tr>
@@ -8668,7 +8802,7 @@ export default function App() {
 
             <section className="panel">
               <h2>{t.workOrderQueue}</h2>
-              <div className="table-wrap">
+              <div className="table-wrap report-table-wrap">
                 <table>
                   <thead>
                     <tr>
@@ -10588,40 +10722,90 @@ export default function App() {
                 ) : null}
                 {reportType === "asset_master" ? (
                   <>
-                    <select
-                      className="input"
-                      value={assetMasterCampusFilter}
-                      onChange={(e) => setAssetMasterCampusFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Campuses</option>
-                      {CAMPUS_LIST.map((campus) => (
-                        <option key={`master-campus-${campus}`} value={campus}>
-                          {campusLabel(campus)}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="input"
-                      value={assetMasterCategoryFilter}
-                      onChange={(e) => setAssetMasterCategoryFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Categories</option>
-                      <option value="IT">IT</option>
-                      <option value="SAFETY">Safety</option>
-                      <option value="FACILITY">Facility</option>
-                    </select>
-                    <select
-                      className="input"
-                      value={assetMasterItemFilter}
-                      onChange={(e) => setAssetMasterItemFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Item Names</option>
-                      {assetMasterItemFilterOptions.map((itemName) => (
-                        <option key={`master-item-${itemName}`} value={itemName}>
-                          {itemName}
-                        </option>
-                      ))}
-                    </select>
+                    <details className="filter-menu">
+                      <summary>{campusFilterSummary}</summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetMasterCampusFilter.includes("ALL")}
+                            onChange={() => updateMultiSelect(setAssetMasterCampusFilter, "ALL")}
+                          />
+                          <span>All Campuses</span>
+                        </label>
+                        {assetMasterCampusFilterOptions.map((campus) => (
+                          <label key={`master-campus-${campus}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={assetMasterCampusFilter.includes(campus)}
+                              onChange={() => updateMultiSelect(setAssetMasterCampusFilter, campus)}
+                            />
+                            <span>{campusLabel(campus)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                    <details className="filter-menu">
+                      <summary>{categoryFilterSummary}</summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetMasterCategoryFilter.includes("ALL")}
+                            onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, "ALL")}
+                          />
+                          <span>All Categories</span>
+                        </label>
+                        {assetMasterCategoryFilterOptions.map((category) => (
+                          <label key={`master-category-${category}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={assetMasterCategoryFilter.includes(category)}
+                              onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, category)}
+                            />
+                            <span>{category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                    <details className="filter-menu">
+                      <summary>{itemFilterSummary}</summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetMasterItemFilter.includes("ALL")}
+                            onChange={() => updateMultiSelect(setAssetMasterItemFilter, "ALL")}
+                          />
+                          <span>All Item Names</span>
+                        </label>
+                        {assetMasterItemFilterOptions.map((itemName) => (
+                          <label key={`master-item-${itemName}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={assetMasterItemFilter.includes(itemName)}
+                              onChange={() => updateMultiSelect(setAssetMasterItemFilter, itemName)}
+                            />
+                            <span>{itemName}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                    <details className="filter-menu filter-menu-columns">
+                      <summary>{columnFilterSummary}</summary>
+                      <div className="filter-menu-list">
+                        {assetMasterColumnDefs.map((column) => (
+                          <label key={`master-col-${column.key}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={isAssetMasterColumnVisible(column.key)}
+                              onChange={() => updateAssetMasterColumnSelection(column.key)}
+                            />
+                            <span>{column.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
                   </>
                 ) : null}
                 <button className="btn-primary report-print-btn" onClick={printCurrentReport}>Print Report</button>
@@ -10639,66 +10823,103 @@ export default function App() {
               </div>
             )}
             {reportType === "asset_master" && (
-              <div className="table-wrap">
+              <div className="table-wrap report-table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("photo")}>{t.photo}{assetMasterSortMark("photo")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("assetId")}>{t.assetId}{assetMasterSortMark("assetId")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("setCode")}>{t.setCode}{assetMasterSortMark("setCode")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("linkedTo")}>Linked To (Main Asset){assetMasterSortMark("linkedTo")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("itemName")}>Item Name{assetMasterSortMark("itemName")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("category")}>{t.category}{assetMasterSortMark("category")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("campus")}>{t.campus}{assetMasterSortMark("campus")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("itemDescription")}>Item Description{assetMasterSortMark("itemDescription")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("location")}>{t.location}{assetMasterSortMark("location")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("purchaseDate")}>Purchase Date{assetMasterSortMark("purchaseDate")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("lastServiceDate")}>Last Service{assetMasterSortMark("lastServiceDate")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("assignedTo")}>Assigned To{assetMasterSortMark("assignedTo")}</button></th>
-                      <th><button type="button" className="report-sort-link" onClick={() => toggleAssetMasterSort("status")}>{t.status}{assetMasterSortMark("status")}</button></th>
+                      {assetMasterColumnDefs
+                        .filter((column) => isAssetMasterColumnVisible(column.key))
+                        .map((column) => (
+                          <th key={`report-master-col-${column.key}`}>
+                            {column.sortable ? (
+                              <button
+                                type="button"
+                                className="report-sort-link"
+                                onClick={() => toggleAssetMasterSort(column.key)}
+                              >
+                                {column.label}
+                                {assetMasterSortMark(column.key)}
+                              </button>
+                            ) : (
+                              column.label
+                            )}
+                          </th>
+                        ))}
                     </tr>
                   </thead>
                   <tbody>
                     {sortedAssetMasterRows.length ? (
                       sortedAssetMasterRows.map((row) => (
                         <tr key={`report-asset-master-${row.key}`}>
-                          <td>{renderAssetPhoto(row.photo || "", row.assetId)}</td>
-                          <td><strong>{row.assetId}</strong></td>
-                          <td>{row.setCode || "-"}</td>
-                          <td>{row.linkedTo || "-"}</td>
-                          <td>{row.itemName}</td>
-                          <td>{row.category}</td>
-                          <td>{campusLabel(row.campus)}</td>
-                          <td className="report-item-description" title={row.itemDescription || "-"}>
-                            {row.itemDescription || "-"}
-                          </td>
-                          <td>{row.location || "-"}</td>
-                          <td>{formatDate(row.purchaseDate || "-")}</td>
-                          <td>
-                            {row.lastServiceDate && row.lastServiceDate !== "-" ? (
-                              <button
-                                type="button"
-                                className="report-service-link"
-                                onClick={() => {
-                                  setTab("maintenance");
-                                  setMaintenanceView("history");
-                                  setMaintenanceDetailAssetId(row.assetDbId);
-                                }}
-                                title="Open maintenance history"
-                              >
-                                {formatDate(row.lastServiceDate)}
-                              </button>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td>{row.assignedTo || "-"}</td>
-                          <td>{row.status || "-"}</td>
+                          {assetMasterColumnDefs
+                            .filter((column) => isAssetMasterColumnVisible(column.key))
+                            .map((column) => {
+                              if (column.key === "photo") {
+                                return <td key={`${row.key}-photo`}>{renderAssetPhoto(row.photo || "", row.assetId)}</td>;
+                              }
+                              if (column.key === "assetId") {
+                                return <td key={`${row.key}-assetId`}><strong>{row.assetId}</strong></td>;
+                              }
+                              if (column.key === "setCode") {
+                                return <td key={`${row.key}-setCode`}>{row.setCode || "-"}</td>;
+                              }
+                              if (column.key === "linkedTo") {
+                                return <td key={`${row.key}-linkedTo`}>{row.linkedTo || "-"}</td>;
+                              }
+                              if (column.key === "itemName") {
+                                return <td key={`${row.key}-itemName`}>{row.itemName || "-"}</td>;
+                              }
+                              if (column.key === "category") {
+                                return <td key={`${row.key}-category`}>{row.category || "-"}</td>;
+                              }
+                              if (column.key === "campus") {
+                                return <td key={`${row.key}-campus`}>{campusLabel(row.campus)}</td>;
+                              }
+                              if (column.key === "itemDescription") {
+                                return (
+                                  <td key={`${row.key}-itemDescription`} className="report-item-description" title={row.itemDescription || "-"}>
+                                    {row.itemDescription || "-"}
+                                  </td>
+                                );
+                              }
+                              if (column.key === "location") {
+                                return <td key={`${row.key}-location`}>{row.location || "-"}</td>;
+                              }
+                              if (column.key === "purchaseDate") {
+                                return <td key={`${row.key}-purchaseDate`}>{formatDate(row.purchaseDate || "-")}</td>;
+                              }
+                              if (column.key === "lastServiceDate") {
+                                return (
+                                  <td key={`${row.key}-lastServiceDate`}>
+                                    {row.lastServiceDate && row.lastServiceDate !== "-" ? (
+                                      <button
+                                        type="button"
+                                        className="report-service-link"
+                                        onClick={() => {
+                                          setTab("maintenance");
+                                          setMaintenanceView("history");
+                                          setMaintenanceDetailAssetId(row.assetDbId);
+                                        }}
+                                        title="Open maintenance history"
+                                      >
+                                        {formatDate(row.lastServiceDate)}
+                                      </button>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </td>
+                                );
+                              }
+                              if (column.key === "assignedTo") {
+                                return <td key={`${row.key}-assignedTo`}>{row.assignedTo || "-"}</td>;
+                              }
+                              return <td key={`${row.key}-status`}>{row.status || "-"}</td>;
+                            })}
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={13}>No assets found.</td>
+                        <td colSpan={Math.max(assetMasterVisibleColumns.length, 1)}>No assets found.</td>
                       </tr>
                     )}
                   </tbody>
@@ -10707,7 +10928,7 @@ export default function App() {
             )}
 
             {reportType === "overdue" && (
-              <div className="table-wrap">
+              <div className="table-wrap report-table-wrap">
                 <table>
                   <thead>
                     <tr>
@@ -10740,7 +10961,7 @@ export default function App() {
             )}
 
             {reportType === "asset_by_location" && (
-              <div className="table-wrap">
+              <div className="table-wrap report-table-wrap">
                 <table>
                   <thead>
                     <tr>
@@ -10775,7 +10996,7 @@ export default function App() {
             )}
 
             {reportType === "transfer" && (
-              <div className="table-wrap">
+              <div className="table-wrap report-table-wrap">
                 <table>
                   <thead>
                     <tr>
@@ -10855,7 +11076,7 @@ export default function App() {
                     <div className="stat-value">{maintenanceCompletionSummary.notYet}</div>
                   </article>
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
+                <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
                       <tr>
@@ -10916,7 +11137,7 @@ export default function App() {
                     <div className="stat-value">{verificationSummary.missing}</div>
                   </article>
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
+                <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
                       <tr>
