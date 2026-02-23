@@ -7861,9 +7861,9 @@ export default function App() {
 
             {assetsView === "list" && (
               <section className="panel">
-                <div className="panel-row">
-                  <h2>{t.assetRegistry}</h2>
-                  <div className="panel-filters">
+                <div className="panel-row asset-list-toolbar">
+                  <h2 className="asset-list-title">{t.assetRegistry}</h2>
+                  <div className="panel-filters asset-list-filters">
                     <select className="input" value={assetCampusFilter} onChange={(e) => setAssetCampusFilter(e.target.value)}>
                       <option value="ALL">{t.allCampuses}</option>
                       {allowedCampuses.map((campus) => (
