@@ -2611,6 +2611,10 @@ tr.row-maint-maintenance:hover td {
   margin: 24px auto;
 }
 
+.public-asset-action-panel {
+  margin-bottom: 12px;
+}
+
 .public-asset-grid .detail-value {
   min-width: 0;
   white-space: normal;

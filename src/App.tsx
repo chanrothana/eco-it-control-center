@@ -86,6 +86,7 @@ type PendingStatusChange = {
   verifiedBy: string;
 };
 type PublicQrAsset = {
+  id: number;
   assetId: string;
   campus: string;
   category: string;
@@ -2369,6 +2370,21 @@ export default function App() {
   const [publicQrAsset, setPublicQrAsset] = useState<PublicQrAsset | null>(null);
   const [publicQrBusy, setPublicQrBusy] = useState(false);
   const [publicQrError, setPublicQrError] = useState("");
+  const [publicQrLogin, setPublicQrLogin] = useState({ username: "", password: "" });
+  const [publicQrRecordBusy, setPublicQrRecordBusy] = useState(false);
+  const [publicQrRecordError, setPublicQrRecordError] = useState("");
+  const [publicQrRecordMessage, setPublicQrRecordMessage] = useState("");
+  const [publicQrRecordFileKey, setPublicQrRecordFileKey] = useState(0);
+  const [publicQrRecordForm, setPublicQrRecordForm] = useState({
+    date: toYmd(new Date()),
+    type: "Preventive",
+    completion: "Done" as "Done" | "Not Yet",
+    condition: "",
+    note: "",
+    cost: "",
+    by: "",
+    photo: "",
+  });
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [editAssetFileKey, setEditAssetFileKey] = useState(0);
   const [assetEditForm, setAssetEditForm] = useState({
@@ -7354,6 +7370,8 @@ export default function App() {
     setPublicQrBusy(true);
     setPublicQrError("");
     setPublicQrAsset(null);
+    setPublicQrRecordError("");
+    setPublicQrRecordMessage("");
     (async () => {
       try {
         const ts = Date.now();
@@ -7373,6 +7391,14 @@ export default function App() {
       cancelled = true;
     };
   }, [pendingQrAssetId]);
+
+  useEffect(() => {
+    setPublicQrRecordForm((prev) => {
+      if (prev.by.trim()) return prev;
+      if (!authUser?.displayName) return prev;
+      return { ...prev, by: authUser.displayName };
+    });
+  }, [authUser?.displayName]);
 
   async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
@@ -7744,8 +7770,109 @@ export default function App() {
     }
   }
 
+  async function handlePublicQrLogin() {
+    if (!publicQrLogin.username.trim() || !publicQrLogin.password.trim()) {
+      setPublicQrRecordError("Username and password are required.");
+      return;
+    }
+    setPublicQrRecordBusy(true);
+    setPublicQrRecordError("");
+    setPublicQrRecordMessage("");
+    try {
+      const res = await requestJson<{ token: string; user: AuthUser }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          username: publicQrLogin.username.trim(),
+          password: publicQrLogin.password,
+        }),
+      });
+      runtimeAuthToken = res.token;
+      trySetLocalStorage(AUTH_TOKEN_KEY, res.token);
+      trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(res.user));
+      setAuthUser(res.user);
+      setPublicQrLogin({ username: "", password: "" });
+      setPublicQrRecordMessage("Logged in. You can now record maintenance.");
+    } catch (err) {
+      setPublicQrRecordError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setPublicQrRecordBusy(false);
+    }
+  }
+
+  async function onPublicQrRecordPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setPublicQrRecordForm((f) => ({ ...f, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    }
+  }
+
+  async function addMaintenanceRecordFromPublicQr(asset: PublicQrAsset) {
+    if (!asset?.id) {
+      setPublicQrRecordError("Asset ID is invalid.");
+      return;
+    }
+    if (!publicQrRecordForm.date || !publicQrRecordForm.type.trim() || !publicQrRecordForm.note.trim()) {
+      setPublicQrRecordError("Date, type, and note are required.");
+      return;
+    }
+    setPublicQrRecordBusy(true);
+    setPublicQrRecordError("");
+    setPublicQrRecordMessage("");
+    try {
+      await requestJson<{ entry: MaintenanceEntry }>(`/api/assets/${asset.id}/history`, {
+        method: "POST",
+        body: JSON.stringify({
+          date: publicQrRecordForm.date,
+          type: publicQrRecordForm.type.trim(),
+          completion: publicQrRecordForm.completion,
+          condition: publicQrRecordForm.condition.trim(),
+          note: publicQrRecordForm.note.trim(),
+          cost: publicQrRecordForm.cost.trim(),
+          by: publicQrRecordForm.by.trim(),
+          photo: publicQrRecordForm.photo || "",
+        }),
+      });
+      const ts = Date.now();
+      const refreshed = await requestJson<{ asset: PublicQrAsset }>(
+        `/api/public/assets/${encodeURIComponent(asset.assetId)}?ts=${ts}`
+      );
+      setPublicQrAsset(refreshed.asset || null);
+      setPublicQrRecordForm({
+        date: toYmd(new Date()),
+        type: "Preventive",
+        completion: "Done",
+        condition: "",
+        note: "",
+        cost: "",
+        by: authUser?.displayName || "",
+        photo: "",
+      });
+      setPublicQrRecordFileKey((k) => k + 1);
+      setPublicQrRecordMessage("Maintenance record saved.");
+    } catch (err) {
+      setPublicQrRecordError(err instanceof Error ? err.message : "Failed to save maintenance record");
+    } finally {
+      setPublicQrRecordBusy(false);
+    }
+  }
+
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
+    const publicQrCampusAllowed = authUser?.role === "Admin" || (asset?.campus ? allowedCampuses.includes(asset.campus) : true);
+    const publicQrCanRecordMaintenance = Boolean(
+      authUser &&
+      asset &&
+      publicQrCampusAllowed &&
+      (authUser.role === "Admin" || canAccessMenu("maintenance.record", "maintenance"))
+    );
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
       : asset?.photo
@@ -7770,43 +7897,169 @@ export default function App() {
             ) : publicQrError ? (
               <p className="alert">{publicQrError}</p>
             ) : asset ? (
-              <div className="form-grid public-asset-grid">
-                <div className="field"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
-                <div className="field"><span>{t.status}</span><div className="detail-value">{asset.status || "-"}</div></div>
-                <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
-                <div className="field"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
-                <div className="field"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
-                <div className="field"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
-                <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
-                <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
-                <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
-                <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
-                <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
-                <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
-                <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
-                <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
-                <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
-                <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
-                <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
-                <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
-                <div className="field field-wide">
-                  <span>{t.photo}</span>
-                  <div className="row-actions public-asset-photo-row">
-                    {photos.length ? (
-                      photos.slice(0, MAX_ASSET_PHOTOS).map((photo, idx) => (
-                        <img
-                          key={`public-qr-photo-${asset.assetId}-${idx}`}
-                          src={photo}
-                          alt={`${asset.assetId} ${idx + 1}`}
-                          className="photo-preview"
+              <>
+                <div className="panel public-asset-action-panel">
+                  <h3 className="section-title" style={{ marginTop: 0 }}>Maintenance Record</h3>
+                  {!authUser ? (
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>{t.username}</span>
+                        <input
+                          className="input"
+                          value={publicQrLogin.username}
+                          onChange={(e) => setPublicQrLogin((f) => ({ ...f, username: e.target.value }))}
+                          autoComplete="username"
                         />
-                      ))
-                    ) : (
-                      <div className="photo-placeholder">{t.noPhoto}</div>
-                    )}
-                  </div>
+                      </label>
+                      <label className="field">
+                        <span>{t.password}</span>
+                        <input
+                          className="input"
+                          type="password"
+                          value={publicQrLogin.password}
+                          onChange={(e) => setPublicQrLogin((f) => ({ ...f, password: e.target.value }))}
+                          autoComplete="current-password"
+                        />
+                      </label>
+                      <div className="field field-wide">
+                        <button className="tab" type="button" onClick={handlePublicQrLogin} disabled={publicQrRecordBusy}>
+                          {publicQrRecordBusy ? `${t.login}...` : t.login}
+                        </button>
+                        <div className="tiny" style={{ marginTop: 8 }}>Login required to record maintenance from QR.</div>
+                      </div>
+                    </div>
+                  ) : publicQrCanRecordMaintenance ? (
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Date</span>
+                        <input
+                          className="input"
+                          type="date"
+                          value={publicQrRecordForm.date}
+                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, date: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Type</span>
+                        <input
+                          className="input"
+                          value={publicQrRecordForm.type}
+                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, type: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Work Status</span>
+                        <select
+                          className="input"
+                          value={publicQrRecordForm.completion}
+                          onChange={(e) =>
+                            setPublicQrRecordForm((f) => ({ ...f, completion: e.target.value as "Done" | "Not Yet" }))
+                          }
+                        >
+                          <option value="Done">Done</option>
+                          <option value="Not Yet">Not Yet</option>
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Condition</span>
+                        <input
+                          className="input"
+                          value={publicQrRecordForm.condition}
+                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field field-wide">
+                        <span>Note</span>
+                        <textarea
+                          className="input"
+                          rows={3}
+                          value={publicQrRecordForm.note}
+                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, note: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Cost</span>
+                        <input
+                          className="input"
+                          value={publicQrRecordForm.cost}
+                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>By</span>
+                        <input
+                          className="input"
+                          value={publicQrRecordForm.by}
+                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, by: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field field-wide">
+                        <span>{t.photo}</span>
+                        <input
+                          key={publicQrRecordFileKey}
+                          type="file"
+                          accept="image/*"
+                          onChange={onPublicQrRecordPhotoFile}
+                        />
+                        {publicQrRecordForm.photo ? (
+                          <img src={publicQrRecordForm.photo} alt="maintenance" className="photo-preview" />
+                        ) : null}
+                      </label>
+                      <div className="field field-wide">
+                        <button
+                          className="tab"
+                          type="button"
+                          disabled={publicQrRecordBusy || !publicQrRecordForm.date || !publicQrRecordForm.note.trim()}
+                          onClick={() => void addMaintenanceRecordFromPublicQr(asset)}
+                        >
+                          {publicQrRecordBusy ? "Saving..." : "Save Maintenance Record"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="tiny">Your account does not have maintenance record permission for this asset.</p>
+                  )}
+                  {publicQrRecordError ? <p className="alert alert-error">{publicQrRecordError}</p> : null}
+                  {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
                 </div>
-                <div className="field field-wide">
+
+                <div className="form-grid public-asset-grid">
+                  <div className="field"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
+                  <div className="field"><span>{t.status}</span><div className="detail-value">{asset.status || "-"}</div></div>
+                  <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
+                  <div className="field"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
+                  <div className="field"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
+                  <div className="field"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
+                  <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
+                  <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
+                  <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
+                  <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
+                  <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
+                  <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
+                  <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
+                  <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
+                  <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
+                  <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
+                  <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
+                  <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
+                  <div className="field field-wide">
+                    <span>{t.photo}</span>
+                    <div className="row-actions public-asset-photo-row">
+                      {photos.length ? (
+                        photos.slice(0, MAX_ASSET_PHOTOS).map((photo, idx) => (
+                          <img
+                            key={`public-qr-photo-${asset.assetId}-${idx}`}
+                            src={photo}
+                            alt={`${asset.assetId} ${idx + 1}`}
+                            className="photo-preview"
+                          />
+                        ))
+                      ) : (
+                        <div className="photo-placeholder">{t.noPhoto}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="field field-wide">
                   <span>Maintenance History</span>
                   <div className="table-wrap public-asset-table-wrap">
                     <table>
@@ -7841,7 +8094,7 @@ export default function App() {
                     </table>
                   </div>
                 </div>
-                <div className="field field-wide">
+                  <div className="field field-wide">
                   <span>Transfer History</span>
                   <div className="table-wrap public-asset-table-wrap">
                     <table>
@@ -7876,7 +8129,7 @@ export default function App() {
                     </table>
                   </div>
                 </div>
-                <div className="field field-wide">
+                  <div className="field field-wide">
                   <span>Status Timeline</span>
                   <div className="table-wrap public-asset-table-wrap">
                     <table>
@@ -7909,7 +8162,8 @@ export default function App() {
                     </table>
                   </div>
                 </div>
-              </div>
+                </div>
+              </>
             ) : (
               <p className="tiny">No data.</p>
             )}

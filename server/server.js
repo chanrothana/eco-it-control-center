@@ -1042,6 +1042,18 @@ function requireAdmin(req, res) {
   return user;
 }
 
+function canRecordMaintenance(user) {
+  if (!user) return false;
+  if (user.role === "Admin") return true;
+  const modules = Array.isArray(user.modules) ? user.modules.filter((m) => typeof m === "string") : [];
+  if (modules.length && !modules.includes("maintenance")) return false;
+  const menuAccess = Array.isArray(user.menuAccess) ? user.menuAccess.filter((m) => typeof m === "string") : [];
+  if (menuAccess.length && !menuAccess.includes("maintenance") && !menuAccess.includes("maintenance.record")) {
+    return false;
+  }
+  return true;
+}
+
 function normalizeCampusPermissions(input) {
   const raw = Array.isArray(input) ? input : [input];
   const out = [];
@@ -1205,6 +1217,7 @@ function toPublicAssetView(asset) {
       }))
     : [];
   return {
+    id: Number(source.id || 0),
     assetId: toText(source.assetId),
     campus: toText(source.campus),
     category: toText(source.category),
@@ -2257,8 +2270,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && url.pathname.startsWith("/api/assets/") && url.pathname.endsWith("/history")) {
-      const admin = requireAdmin(req, res);
-      if (!admin) return;
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!canRecordMaintenance(user)) {
+        sendJson(res, 403, { error: "Maintenance record permission required" });
+        return;
+      }
       const id = Number(url.pathname.replace("/api/assets/", "").replace("/history", ""));
       if (!id) {
         sendJson(res, 400, { error: "Invalid ID" });
@@ -2285,6 +2305,10 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: "Asset not found" });
         return;
       }
+      if (!userCanAccessCampus(user, toText(db.assets[idx].campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
 
       const entry = {
         id: Date.now(),
@@ -2303,7 +2327,7 @@ const server = http.createServer(async (req, res) => {
       if (syncAssetStatusFromMaintenance(db.assets[idx])) {
         appendAuditLog(
           db,
-          admin,
+          user,
           "UPDATE_STATUS",
           "asset",
           db.assets[idx].assetId || String(id),
@@ -2312,7 +2336,7 @@ const server = http.createServer(async (req, res) => {
       }
       appendAuditLog(
         db,
-        admin,
+        user,
         "CREATE",
         "maintenance_record",
         `${db.assets[idx].assetId || id}#${entry.id}`,
