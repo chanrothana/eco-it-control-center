@@ -7866,6 +7866,7 @@ export default function App() {
 
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
+    const showPublicQrSetFields = asset?.category === "IT";
     const publicQrCampusAllowed = authUser?.role === "Admin" || (asset?.campus ? allowedCampuses.includes(asset.campus) : true);
     const publicQrCanRecordMaintenance = Boolean(
       authUser &&
@@ -8031,15 +8032,21 @@ export default function App() {
                   <div className="field"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
                   <div className="field"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
                   <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
-                  <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
-                  <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
-                  <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
+                  {showPublicQrSetFields ? (
+                    <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
+                  ) : null}
+                  {showPublicQrSetFields ? (
+                    <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
+                  ) : null}
+                  {asset.category === "IT" ? (
+                    <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
+                  ) : null}
                   <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
                   <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
                   <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
+                  <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
                   <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
                   <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
-                  <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
                   <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
                   <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
                   <div className="field field-wide">
@@ -9627,7 +9634,7 @@ export default function App() {
                     <h2>Asset Detail - {detailAsset.assetId}</h2>
                     <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
                   </div>
-                  <div className="form-grid">
+                  <div className="form-grid asset-detail-grid">
                     <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(detailAsset.campus)}</div></div>
                     <div className="field"><span>{t.category}</span><div className="detail-value">{detailAsset.category}</div></div>
                     <div className="field"><span>{t.typeCode}</span><div className="detail-value">{detailAsset.type}</div></div>
@@ -9637,15 +9644,21 @@ export default function App() {
                     <div className="field"><span>{t.status}</span><div className="detail-value">{detailAsset.status}</div></div>
                     <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</div></div>
                     <div className="field"><span>{t.location}</span><div className="detail-value">{detailAsset.location || "-"}</div></div>
-                    <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
-                    <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{detailAsset.parentAssetId || "-"}</div></div>
-                    <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
+                    {detailAsset.category === "IT" ? (
+                      <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
+                    ) : null}
+                    {detailAsset.category === "IT" ? (
+                      <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{detailAsset.parentAssetId || "-"}</div></div>
+                    ) : null}
+                    {detailAsset.category === "IT" ? (
+                      <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
+                    ) : null}
                     <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
                     <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
                     <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
+                    <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
                     <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
                     <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
-                    <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
                     <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailAsset.specs || "-"}</div></div>
                     <div className="field field-wide"><span>Notes</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
                     <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
