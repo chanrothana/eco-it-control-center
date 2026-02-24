@@ -227,6 +227,7 @@ type AuditLog = {
 };
 type ServerSettings = {
   campusNames?: Record<string, string>;
+  staffUsers?: StaffUser[];
 };
 const LOCATION_FALLBACK_KEY = "it_locations_fallback_v1";
 const ASSET_FALLBACK_KEY = "it_assets_fallback_v1";
@@ -893,11 +894,17 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   if (lastResponse) {
+    const rawError = String(lastResponse.data.error || "").trim();
+    const isGenericNotFound =
+      lastResponse.res.status === 404 &&
+      (!rawError || rawError.toLowerCase() === "not found");
     throw new Error(
-      lastResponse.data.error ||
-        (lastResponse.res.status === 404
-          ? "API route not found. Please restart backend server."
-          : `Request failed (${lastResponse.res.status})`)
+      isGenericNotFound
+        ? "API route not found. Please restart backend server."
+        : (lastResponse.data.error ||
+          (lastResponse.res.status === 404
+            ? "API route not found. Please restart backend server."
+            : `Request failed (${lastResponse.res.status})`))
     );
   }
 
@@ -915,11 +922,35 @@ function readLocationFallback(): LocationEntry[] {
   }
 }
 
+function readUserFallback(): StaffUser[] {
+  try {
+    const raw = localStorage.getItem(USER_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((row) => row && typeof row === "object")
+      .map((row, i) => {
+        const user = row as Partial<StaffUser>;
+        const parsedId = Number(user.id);
+        return {
+          id: Number.isFinite(parsedId) && parsedId > 0 ? parsedId : Date.now() + i,
+          fullName: String(user.fullName || "").trim(),
+          position: String(user.position || "").trim(),
+          email: String(user.email || "").trim().toLowerCase(),
+        } as StaffUser;
+      })
+      .filter((u) => u.fullName && u.position && u.email);
+  } catch {
+    return [];
+  }
+}
+
 function trySetLocalStorage(key: string, value: string) {
   const allowInServerOnlyMode = new Set<string>([
     AUTH_TOKEN_KEY,
     AUTH_USER_KEY,
     API_BASE_OVERRIDE_KEY,
+    USER_FALLBACK_KEY,
     "ui_lang",
   ]);
   if (SERVER_ONLY_STORAGE && !allowInServerOnlyMode.has(key)) return true;
@@ -1017,7 +1048,6 @@ function writeAssetFallback(list: Asset[]) {
 }
 
 function writeUserFallback(list: StaffUser[]) {
-  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(USER_FALLBACK_KEY, JSON.stringify(list));
 }
 
@@ -1881,7 +1911,7 @@ export default function App() {
   const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [locations, setLocations] = useState<LocationEntry[]>([]);
-  const [users, setUsers] = useState<StaffUser[]>([]);
+  const [users, setUsers] = useState<StaffUser[]>(() => readUserFallback());
   const [campusNames, setCampusNames] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     for (const campus of CAMPUS_LIST) out[campus] = campus;
@@ -2809,6 +2839,28 @@ export default function App() {
   const effectiveAssetCampusFilter =
     assetCampusFilter !== "ALL" ? assetCampusFilter : campusFilter;
 
+  const loadStaffUsers = useCallback(async () => {
+    try {
+      const res = await requestJson<{ users: StaffUser[] }>("/api/staff-users");
+      const rows = normalizeArray<StaffUser>(res.users);
+      setUsers(rows);
+      writeUserFallback(rows);
+    } catch (err) {
+      if (
+        isApiUnavailableError(err) ||
+        isMissingRouteError(err)
+      ) {
+        const fallbackUsers = readUserFallback();
+        if (fallbackUsers.length) setUsers(fallbackUsers);
+        return;
+      }
+      if (isUnauthorizedError(err)) {
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Cannot load users");
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -2875,12 +2927,23 @@ export default function App() {
   }, [loadData]);
 
   useEffect(() => {
+    if (!authUser) return;
+    void loadStaffUsers();
+  }, [authUser, loadStaffUsers]);
+
+  useEffect(() => {
     if (tab === "setup" && isAdmin) {
+      void loadStaffUsers();
       void loadAuthAccounts();
       void loadAuditLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, isAdmin]);
+
+  useEffect(() => {
+    if (tab !== "setup" || !isAdmin || setupView !== "users") return;
+    void loadStaffUsers();
+  }, [tab, isAdmin, setupView, loadStaffUsers]);
 
   async function createAsset() {
     if (!requireAdminAction()) return;
@@ -3187,7 +3250,7 @@ export default function App() {
     }
   }
 
-  function createOrUpdateUser() {
+  async function createOrUpdateUser() {
     if (!requireAdminAction()) return;
     const fullName = userForm.fullName.trim();
     const position = userForm.position.trim();
@@ -3202,18 +3265,28 @@ export default function App() {
       return;
     }
 
+    setBusy(true);
     setError("");
-    if (editingUserId !== null) {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === editingUserId ? { ...u, fullName, position, email } : u
-        )
-      );
-      setEditingUserId(null);
-    } else {
-      setUsers((prev) => [{ id: Date.now(), fullName, position, email }, ...prev]);
+    try {
+      if (editingUserId !== null) {
+        await requestJson<{ user: StaffUser }>(`/api/staff-users/${editingUserId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ fullName, position, email }),
+        });
+        setEditingUserId(null);
+      } else {
+        await requestJson<{ user: StaffUser }>("/api/staff-users", {
+          method: "POST",
+          body: JSON.stringify({ fullName, position, email }),
+        });
+      }
+      await loadStaffUsers();
+      setUserForm({ fullName: "", position: "", email: "" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save user");
+    } finally {
+      setBusy(false);
     }
-    setUserForm({ fullName: "", position: "", email: "" });
   }
 
   async function loadAuthAccounts() {
@@ -3734,12 +3807,21 @@ export default function App() {
     });
   }
 
-  function deleteUser(id: number) {
+  async function deleteUser(id: number) {
     if (!requireAdminAction()) return;
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-    if (editingUserId === id) {
-      setEditingUserId(null);
-      setUserForm({ fullName: "", position: "", email: "" });
+    setBusy(true);
+    setError("");
+    try {
+      await requestJson<{ ok: boolean }>(`/api/staff-users/${id}`, { method: "DELETE" });
+      await loadStaffUsers();
+      if (editingUserId === id) {
+        setEditingUserId(null);
+        setUserForm({ fullName: "", position: "", email: "" });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete user");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -6274,7 +6356,7 @@ export default function App() {
   const itemFilterSummary = assetMasterItemFilter.includes("ALL")
     ? "All Item Names"
     : `${assetMasterItemFilter.length} item selected`;
-  const columnFilterSummary = `${assetMasterVisibleColumns.length} columns`;
+  const columnFilterSummary = "Select Column";
 
   const qrItemFilterOptions = useMemo(() => {
     const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
