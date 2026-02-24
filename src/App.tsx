@@ -6387,6 +6387,39 @@ export default function App() {
     });
   }, [assetMasterItemFilterOptions]);
 
+  useEffect(() => {
+    const closeOpenFilterMenus = () => {
+      const openMenus = document.querySelectorAll<HTMLDetailsElement>(".filter-menu[open]");
+      openMenus.forEach((menu) => menu.removeAttribute("open"));
+    };
+
+    const onDocPointerDown = (ev: MouseEvent | TouchEvent) => {
+      const target = ev.target as Node | null;
+      if (!target) return;
+      const clickedInsideMenu = Boolean(
+        (target as Element).closest && (target as Element).closest(".filter-menu")
+      );
+      if (!clickedInsideMenu) {
+        closeOpenFilterMenus();
+      }
+    };
+
+    const onDocKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") {
+        closeOpenFilterMenus();
+      }
+    };
+
+    document.addEventListener("mousedown", onDocPointerDown);
+    document.addEventListener("touchstart", onDocPointerDown, { passive: true });
+    document.addEventListener("keydown", onDocKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocPointerDown);
+      document.removeEventListener("touchstart", onDocPointerDown);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+  }, []);
+
   const qrFilteredRows = useMemo(() => {
     return qrLabelRows.filter((row) => {
       if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;

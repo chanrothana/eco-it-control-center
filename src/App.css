@@ -411,11 +411,11 @@ h2 {
 
 .report-filter-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   justify-content: end;
   align-items: center;
   margin-left: auto;
-  width: min(50%, 860px);
+  width: 100%;
   max-width: 100%;
   gap: 10px;
   margin-bottom: 10px;
