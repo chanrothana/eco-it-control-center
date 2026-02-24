@@ -14,6 +14,8 @@ try {
 
 const HOST = process.env.API_HOST || process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 4000);
+const NODE_ENV = String(process.env.NODE_ENV || "development").toLowerCase();
+const IS_PROD = NODE_ENV === "production";
 const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : __dirname;
 function resolveStoragePath(envValue, fallbackName) {
   if (!envValue) return path.join(DATA_ROOT, fallbackName);
@@ -30,6 +32,15 @@ const AUTO_BACKUP_INTERVAL_HOURS = Math.max(1, Number(process.env.AUTO_BACKUP_IN
 const AUTO_BACKUP_INTERVAL_MS = AUTO_BACKUP_INTERVAL_HOURS * 60 * 60 * 1000;
 const AUTO_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.AUTO_BACKUP_RETENTION_DAYS || 30));
 const AUTO_BACKUP_RETENTION_MS = AUTO_BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const ALLOW_DEV_AUTH_BYPASS =
+  !IS_PROD &&
+  String(process.env.ALLOW_DEV_AUTH_BYPASS || "false").toLowerCase() === "true";
+const DEFAULT_ADMIN_PASSWORD = String(
+  process.env.BOOTSTRAP_ADMIN_PASSWORD || (!IS_PROD ? "EcoAdmin@2026!" : "")
+);
+const DEFAULT_VIEWER_PASSWORD = String(
+  process.env.BOOTSTRAP_VIEWER_PASSWORD || (!IS_PROD ? "EcoViewer@2026!" : "")
+);
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const INDEX_FILE = path.join(BUILD_DIR, "index.html");
 const CAMPUS_MAP = {
@@ -83,7 +94,7 @@ const DEFAULT_USERS = [
   {
     id: 1,
     username: "admin",
-    password: "EcoAdmin@2026!",
+    password: DEFAULT_ADMIN_PASSWORD,
     displayName: "Eco Admin",
     role: "Admin",
     campuses: ["ALL"],
@@ -91,7 +102,7 @@ const DEFAULT_USERS = [
   {
     id: 2,
     username: "viewer",
-    password: "EcoViewer@2026!",
+    password: DEFAULT_VIEWER_PASSWORD,
     displayName: "Eco Viewer",
     role: "Viewer",
     campuses: ["Chaktomuk Campus (C2.2)"],
@@ -105,6 +116,15 @@ let sqliteDb;
 let autoBackupTimer = null;
 let autoBackupRunning = false;
 const HAS_NATIVE_SQLITE = Boolean(DatabaseSync);
+
+if (IS_PROD && (!DEFAULT_ADMIN_PASSWORD || !DEFAULT_VIEWER_PASSWORD)) {
+  console.warn(
+    "[SECURITY] BOOTSTRAP_ADMIN_PASSWORD / BOOTSTRAP_VIEWER_PASSWORD not set. Default users may not be usable."
+  );
+}
+if (ALLOW_DEV_AUTH_BYPASS) {
+  console.warn("[SECURITY] Dev auth bypass tokens are enabled (ALLOW_DEV_AUTH_BYPASS=true).");
+}
 
 function mapDbToSqlRows(db) {
   return {
@@ -1020,10 +1040,10 @@ function getAuthUser(req) {
   if (!authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7).trim();
   if (!token) return null;
-  if (token === "local-admin-token") {
+  if (ALLOW_DEV_AUTH_BYPASS && token === "local-admin-token") {
     return sanitizeUser(DEFAULT_USERS[0]);
   }
-  if (token === "local-viewer-token") {
+  if (ALLOW_DEV_AUTH_BYPASS && token === "local-viewer-token") {
     return sanitizeUser(DEFAULT_USERS[1]);
   }
   return sessions.get(token) || null;

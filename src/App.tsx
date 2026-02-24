@@ -439,6 +439,10 @@ const LOCAL_ADMIN_TOKEN = "local-admin-token";
 const LOCAL_VIEWER_TOKEN = "local-viewer-token";
 const ENV_API_BASE_URL = String(process.env.REACT_APP_API_BASE_URL || "").trim().replace(/\/+$/, "");
 const DEFAULT_CLOUD_API_BASE = "https://eco-it-control-center.onrender.com";
+const ALLOW_LOCAL_AUTH_BYPASS =
+  String(process.env.REACT_APP_ALLOW_LOCAL_AUTH_BYPASS || "false").toLowerCase() === "true" &&
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 let runtimeAuthToken = "";
 
 function getAutoApiBaseForHost() {
@@ -2655,7 +2659,7 @@ export default function App() {
         setAuthUser(cachedUser);
       }
       runtimeAuthToken = token;
-      if (!SERVER_ONLY_STORAGE && token === LOCAL_ADMIN_TOKEN) {
+      if (ALLOW_LOCAL_AUTH_BYPASS && token === LOCAL_ADMIN_TOKEN) {
         const perm = readAuthPermissionFallback().admin || {
           role: "Admin" as const,
           campuses: ["ALL"],
@@ -2678,7 +2682,7 @@ export default function App() {
         }
         return;
       }
-      if (!SERVER_ONLY_STORAGE && token === LOCAL_VIEWER_TOKEN) {
+      if (ALLOW_LOCAL_AUTH_BYPASS && token === LOCAL_VIEWER_TOKEN) {
         const perm = readAuthPermissionFallback().viewer || {
           role: "Viewer" as const,
           campuses: ["Chaktomuk Campus (C2.2)"],
@@ -7754,7 +7758,7 @@ export default function App() {
       await loadData();
     } catch (err) {
       // Local fallback login is disabled in server-only mode.
-      if (!SERVER_ONLY_STORAGE && (isApiUnavailableError(err) || isMissingRouteError(err))) {
+      if (ALLOW_LOCAL_AUTH_BYPASS && (isApiUnavailableError(err) || isMissingRouteError(err))) {
         const username = loginForm.username.trim().toLowerCase();
         const password = loginForm.password;
         if (username === "admin" && password === "EcoAdmin@2026!") {
