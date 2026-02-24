@@ -197,6 +197,7 @@ type NavModule =
   | "verification"
   | "reports"
   | "setup";
+type MenuAccessKey = string;
 type AuthUser = {
   id: number;
   username: string;
@@ -205,6 +206,7 @@ type AuthUser = {
   campuses?: string[];
   modules?: NavModule[];
   assetSubviewAccess?: AssetSubviewAccess;
+  menuAccess?: MenuAccessKey[];
 };
 type AuthAccount = {
   id: number;
@@ -214,6 +216,7 @@ type AuthAccount = {
   campuses: string[];
   modules: NavModule[];
   assetSubviewAccess: AssetSubviewAccess;
+  menuAccess: MenuAccessKey[];
 };
 type AuditLog = {
   id: number;
@@ -270,6 +273,144 @@ const ALL_NAV_MODULES: NavModule[] = [
   "reports",
   "setup",
 ];
+const MENU_ACCESS_TREE: Array<{
+  module: NavModule;
+  labelEn: string;
+  labelKm: string;
+  children: Array<{ key: MenuAccessKey; labelEn: string; labelKm: string }>;
+}> = [
+  {
+    module: "dashboard",
+    labelEn: "Dashboard",
+    labelKm: "ផ្ទាំងសង្ខេប",
+    children: [
+      { key: "dashboard.overview", labelEn: "Overview", labelKm: "ទិដ្ឋភាពទូទៅ" },
+      { key: "dashboard.schedule", labelEn: "Schedule Focus", labelKm: "ផែនការកាលវិភាគ" },
+      { key: "dashboard.activity", labelEn: "Recent Activity", labelKm: "សកម្មភាពថ្មីៗ" },
+    ],
+  },
+  {
+    module: "assets",
+    labelEn: "Assets",
+    labelKm: "ទ្រព្យសម្បត្តិ",
+    children: [
+      { key: "assets.register", labelEn: "Register Asset", labelKm: "ចុះឈ្មោះទ្រព្យសម្បត្តិ" },
+      { key: "assets.list", labelEn: "Asset List", labelKm: "បញ្ជីទ្រព្យសម្បត្តិ" },
+    ],
+  },
+  {
+    module: "inventory",
+    labelEn: "Inventory",
+    labelKm: "ស្តុក",
+    children: [{ key: "inventory.main", labelEn: "Inventory Management", labelKm: "គ្រប់គ្រងស្តុក" }],
+  },
+  {
+    module: "tickets",
+    labelEn: "Work Orders",
+    labelKm: "ការងារបញ្ជា",
+    children: [{ key: "tickets.main", labelEn: "Work Order Queue", labelKm: "បញ្ជីការងារ" }],
+  },
+  {
+    module: "schedule",
+    labelEn: "Schedule",
+    labelKm: "កាលវិភាគ",
+    children: [{ key: "schedule.main", labelEn: "Schedule Calendar", labelKm: "ប្រតិទិនកាលវិភាគ" }],
+  },
+  {
+    module: "transfer",
+    labelEn: "Transfer",
+    labelKm: "ផ្ទេរ",
+    children: [{ key: "transfer.main", labelEn: "Transfer Record", labelKm: "កំណត់ត្រាផ្ទេរ" }],
+  },
+  {
+    module: "maintenance",
+    labelEn: "Maintenance",
+    labelKm: "ថែទាំ",
+    children: [
+      { key: "maintenance.record", labelEn: "Record Maintenance", labelKm: "កត់ត្រាថែទាំ" },
+      { key: "maintenance.history", labelEn: "Maintenance History", labelKm: "ប្រវត្តិថែទាំ" },
+    ],
+  },
+  {
+    module: "verification",
+    labelEn: "Verification",
+    labelKm: "ត្រួតពិនិត្យ",
+    children: [
+      { key: "verification.record", labelEn: "Record Verification", labelKm: "កត់ត្រាត្រួតពិនិត្យ" },
+      { key: "verification.history", labelEn: "Verification History", labelKm: "ប្រវត្តិត្រួតពិនិត្យ" },
+    ],
+  },
+  {
+    module: "reports",
+    labelEn: "Reports",
+    labelKm: "របាយការណ៍",
+    children: [
+      { key: "reports.asset_master", labelEn: "Asset Master Register", labelKm: "បញ្ជីទ្រព្យសម្បត្តិ" },
+      { key: "reports.set_code", labelEn: "Computer Set Detail", labelKm: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
+      { key: "reports.asset_by_location", labelEn: "Asset by Campus and Location", labelKm: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+      { key: "reports.overdue", labelEn: "Overdue Maintenance", labelKm: "ថែទាំលើសកាលកំណត់" },
+      { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
+      { key: "reports.maintenance_completion", labelEn: "Maintenance Completion", labelKm: "លទ្ធផលបញ្ចប់ការថែទាំ" },
+      { key: "reports.verification_summary", labelEn: "Verification Summary", labelKm: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
+      { key: "reports.qr_labels", labelEn: "Asset ID + QR Labels", labelKm: "លេខទ្រព្យ + QR" },
+    ],
+  },
+  {
+    module: "setup",
+    labelEn: "Setup",
+    labelKm: "កំណត់ការគ្រប់គ្រង",
+    children: [
+      { key: "setup.campus", labelEn: "Campus Name Setup", labelKm: "កំណត់ឈ្មោះសាខា" },
+      { key: "setup.users", labelEn: "User Setup", labelKm: "កំណត់អ្នកប្រើ" },
+      { key: "setup.permissions", labelEn: "Account Permission Setup", labelKm: "កំណត់សិទ្ធិគណនី" },
+      { key: "setup.backup", labelEn: "Backup & Audit", labelKm: "បម្រុងទុក និង Audit" },
+      { key: "setup.items", labelEn: "Item Name Setup", labelKm: "កំណត់ឈ្មោះទំនិញ" },
+      { key: "setup.locations", labelEn: "Location Setup by Campus", labelKm: "កំណត់ទីតាំងតាមសាខា" },
+    ],
+  },
+];
+function defaultMenuAccessFor(role: "Admin" | "Viewer", modules: NavModule[], assetSubviewAccess: AssetSubviewAccess) {
+  const allowed = new Set(modules);
+  const out = new Set<MenuAccessKey>();
+  for (const node of MENU_ACCESS_TREE) {
+    if (!allowed.has(node.module)) continue;
+    out.add(node.module);
+    for (const child of node.children) {
+      if (child.key === "assets.register" && (role !== "Admin" || assetSubviewAccess === "list_only")) continue;
+      out.add(child.key);
+    }
+  }
+  return Array.from(out);
+}
+function menuChildKeys(module: NavModule) {
+  return MENU_ACCESS_TREE.find((node) => node.module === module)?.children.map((child) => child.key) || [];
+}
+function isModuleFullyChecked(menuAccess: MenuAccessKey[], module: NavModule) {
+  const children = menuChildKeys(module);
+  if (!children.length) return menuAccess.includes(module);
+  return children.every((key) => menuAccess.includes(key));
+}
+function toggleModuleAccess(menuAccess: MenuAccessKey[], module: NavModule, enabled: boolean) {
+  const next = new Set(menuAccess);
+  const children = menuChildKeys(module);
+  if (enabled) {
+    next.add(module);
+    children.forEach((key) => next.add(key));
+  } else {
+    next.delete(module);
+    children.forEach((key) => next.delete(key));
+  }
+  return Array.from(next);
+}
+function toggleChildAccess(menuAccess: MenuAccessKey[], module: NavModule, childKey: MenuAccessKey, enabled: boolean) {
+  const next = new Set(menuAccess);
+  if (enabled) next.add(childKey);
+  else next.delete(childKey);
+  const children = menuChildKeys(module);
+  if (children.length && children.every((key) => next.has(key))) next.add(module);
+  else next.delete(module);
+  return Array.from(next);
+}
 const LOCAL_ADMIN_TOKEN = "local-admin-token";
 const LOCAL_VIEWER_TOKEN = "local-viewer-token";
 const ENV_API_BASE_URL = String(process.env.REACT_APP_API_BASE_URL || "").trim().replace(/\/+$/, "");
@@ -293,6 +434,7 @@ const LOCAL_AUTH_ACCOUNTS: AuthAccount[] = [
     campuses: ["ALL"],
     modules: [...ALL_NAV_MODULES],
     assetSubviewAccess: "both",
+    menuAccess: defaultMenuAccessFor("Admin", ALL_NAV_MODULES, "both"),
   },
   {
     id: 2,
@@ -302,6 +444,7 @@ const LOCAL_AUTH_ACCOUNTS: AuthAccount[] = [
     campuses: ["Chaktomuk Campus (C2.2)"],
     modules: [...DEFAULT_VIEWER_MODULES],
     assetSubviewAccess: "list_only",
+    menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "list_only"),
   },
 ];
 
@@ -1098,10 +1241,48 @@ function normalizeModulesByRole(role: "Admin" | "Viewer", modules?: unknown): Na
 function normalizeAssetSubviewAccess(value: unknown): AssetSubviewAccess {
   return String(value || "").trim().toLowerCase() === "list_only" ? "list_only" : "both";
 }
+function normalizeMenuAccess(
+  role: "Admin" | "Viewer",
+  modules: NavModule[],
+  assetSubviewAccess: AssetSubviewAccess,
+  input?: unknown
+) {
+  const finalize = (rows: MenuAccessKey[]) => {
+    const next = new Set(rows);
+    const allowedModules = new Set(modules);
+    for (const node of MENU_ACCESS_TREE) {
+      if (!allowedModules.has(node.module)) {
+        next.delete(node.module);
+        node.children.forEach((child) => next.delete(child.key));
+      }
+    }
+    if (role !== "Admin" || assetSubviewAccess === "list_only") {
+      next.delete("assets.register");
+    }
+    return Array.from(next);
+  };
+  if (Array.isArray(input)) {
+    const allowed = new Set<MenuAccessKey>();
+    const valid = new Set(MENU_ACCESS_TREE.flatMap((node) => [node.module, ...node.children.map((child) => child.key)]));
+    for (const raw of input) {
+      const key = String(raw || "").trim();
+      if (!key || !valid.has(key)) continue;
+      allowed.add(key);
+    }
+    if (allowed.size) return finalize(Array.from(allowed));
+  }
+  return finalize(defaultMenuAccessFor(role, modules, assetSubviewAccess));
+}
 
 function readAuthPermissionFallback(): Record<
   string,
-  { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }
+  {
+    role: "Admin" | "Viewer";
+    campuses: string[];
+    modules: NavModule[];
+    assetSubviewAccess: AssetSubviewAccess;
+    menuAccess: MenuAccessKey[];
+  }
 > {
   if (SERVER_ONLY_STORAGE) return {};
   try {
@@ -1110,16 +1291,29 @@ function readAuthPermissionFallback(): Record<
     if (!parsed || typeof parsed !== "object") return {};
     const out: Record<
       string,
-      { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }
+      {
+        role: "Admin" | "Viewer";
+        campuses: string[];
+        modules: NavModule[];
+        assetSubviewAccess: AssetSubviewAccess;
+        menuAccess: MenuAccessKey[];
+      }
     > = {};
     for (const [username, value] of Object.entries(parsed)) {
       if (!value || typeof value !== "object") continue;
-      const v = value as { role?: string; campuses?: string[]; modules?: unknown; assetSubviewAccess?: unknown };
+      const v = value as {
+        role?: string;
+        campuses?: string[];
+        modules?: unknown;
+        assetSubviewAccess?: unknown;
+        menuAccess?: unknown;
+      };
       const role = v.role === "Admin" ? "Admin" : "Viewer";
       const campuses = Array.isArray(v.campuses) && v.campuses.length ? v.campuses : ["ALL"];
       const modules = normalizeModulesByRole(role, v.modules);
       const assetSubviewAccess = normalizeAssetSubviewAccess(v.assetSubviewAccess);
-      out[username] = { role, campuses, modules, assetSubviewAccess };
+      const menuAccess = normalizeMenuAccess(role, modules, assetSubviewAccess, v.menuAccess);
+      out[username] = { role, campuses, modules, assetSubviewAccess, menuAccess };
     }
     return out;
   } catch {
@@ -1130,7 +1324,13 @@ function readAuthPermissionFallback(): Record<
 function writeAuthPermissionFallback(
   map: Record<
     string,
-    { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }
+    {
+      role: "Admin" | "Viewer";
+      campuses: string[];
+      modules: NavModule[];
+      assetSubviewAccess: AssetSubviewAccess;
+      menuAccess: MenuAccessKey[];
+    }
   >
 ) {
   if (SERVER_ONLY_STORAGE) return;
@@ -1155,6 +1355,12 @@ function readAuthAccountsFallback(): AuthAccount[] {
           campuses: Array.isArray(row.campuses) && row.campuses.length ? row.campuses : ["ALL"],
           modules: normalizeModulesByRole(row.role === "Admin" ? "Admin" : "Viewer", row.modules),
           assetSubviewAccess: normalizeAssetSubviewAccess((row as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+          menuAccess: normalizeMenuAccess(
+            row.role === "Admin" ? "Admin" : "Viewer",
+            normalizeModulesByRole(row.role === "Admin" ? "Admin" : "Viewer", row.modules),
+            normalizeAssetSubviewAccess((row as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+            (row as { menuAccess?: unknown }).menuAccess
+          ),
         } as AuthAccount;
       })
       .filter((u) => u.username);
@@ -1188,6 +1394,12 @@ function mergeAuthAccounts(serverRows: AuthAccount[], localRows: AuthAccount[]) 
             modules: Array.isArray(row.modules) && row.modules.length ? row.modules : existing.modules,
             assetSubviewAccess: normalizeAssetSubviewAccess(
               (row as { assetSubviewAccess?: unknown }).assetSubviewAccess || existing.assetSubviewAccess
+            ),
+            menuAccess: normalizeMenuAccess(
+              row.role || existing.role,
+              Array.isArray(row.modules) && row.modules.length ? row.modules : existing.modules,
+              normalizeAssetSubviewAccess((row as { assetSubviewAccess?: unknown }).assetSubviewAccess || existing.assetSubviewAccess),
+              (row as { menuAccess?: unknown }).menuAccess || existing.menuAccess
             ),
           }
         : row
@@ -1740,7 +1952,11 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
         type="button"
         className="asset-picker-trigger input"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onMouseDown={(e) => {
+          // Prevent label re-activation from toggling this twice in wrapped form labels.
+          e.preventDefault();
+        }}
+        onClick={() => setOpen(true)}
       >
         {selected ? (
           <span className="asset-picker-selected">
@@ -1854,9 +2070,34 @@ export default function App() {
   );
   const allowedNavModules = useMemo(() => {
     const modules = authUser?.modules?.length ? authUser.modules : ALL_NAV_MODULES;
-    return new Set<NavModule>(modules);
-  }, [authUser?.modules]);
-  const canOpenAssetRegister = Boolean(isAdmin && authUser?.assetSubviewAccess !== "list_only");
+    const byRole = new Set<NavModule>(modules);
+    const menuAccess = Array.isArray(authUser?.menuAccess) ? authUser?.menuAccess || [] : [];
+    if (!menuAccess.length) return byRole;
+    const byMenu = new Set<NavModule>();
+    for (const module of ALL_NAV_MODULES) {
+      if (menuAccess.includes(module) || menuAccess.some((key) => key.startsWith(`${module}.`))) {
+        byMenu.add(module);
+      }
+    }
+    return new Set<NavModule>(Array.from(byRole).filter((m) => byMenu.has(m)));
+  }, [authUser?.modules, authUser?.menuAccess]);
+  const allowedMenuAccess = useMemo(
+    () => new Set<MenuAccessKey>(Array.isArray(authUser?.menuAccess) ? authUser?.menuAccess || [] : []),
+    [authUser?.menuAccess]
+  );
+  const canAccessMenu = useCallback(
+    (key: MenuAccessKey, module: NavModule) => {
+      if (!allowedNavModules.has(module)) return false;
+      if (!allowedMenuAccess.size) return true;
+      return allowedMenuAccess.has(module) || allowedMenuAccess.has(key);
+    },
+    [allowedNavModules, allowedMenuAccess]
+  );
+  const canOpenAssetRegister = Boolean(
+    isAdmin &&
+      authUser?.assetSubviewAccess !== "list_only" &&
+      canAccessMenu("assets.register", "assets")
+  );
   const navMenuItems = useMemo(
     () => navItems.filter((item) => allowedNavModules.has(item.id)),
     [navItems, allowedNavModules]
@@ -2178,7 +2419,16 @@ export default function App() {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
   const [authPermissionDraft, setAuthPermissionDraft] = useState<
-    Record<number, { role: "Admin" | "Viewer"; campus: string; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }>
+    Record<
+      number,
+      {
+        role: "Admin" | "Viewer";
+        campus: string;
+        modules: NavModule[];
+        assetSubviewAccess: AssetSubviewAccess;
+        menuAccess: MenuAccessKey[];
+      }
+    >
   >({});
   const [authCreateForm, setAuthCreateForm] = useState({
     staffId: "",
@@ -2189,6 +2439,7 @@ export default function App() {
     campus: CAMPUS_LIST[0],
     modules: [...DEFAULT_VIEWER_MODULES] as NavModule[],
     assetSubviewAccess: "both" as AssetSubviewAccess,
+    menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
   });
   const [scheduleAlertModal, setScheduleAlertModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "selected">(null);
   const [overviewModal, setOverviewModal] = useState<null | "total" | "it" | "safety" | "tickets">(null);
@@ -2295,6 +2546,7 @@ export default function App() {
           campuses: ["ALL"],
           modules: [...ALL_NAV_MODULES],
           assetSubviewAccess: "both" as AssetSubviewAccess,
+          menuAccess: defaultMenuAccessFor("Admin", ALL_NAV_MODULES, "both"),
         };
         if (mounted) {
           setAuthUser({
@@ -2305,6 +2557,7 @@ export default function App() {
             campuses: perm.campuses,
             modules: perm.modules,
             assetSubviewAccess: perm.assetSubviewAccess,
+            menuAccess: perm.menuAccess,
           });
           setAuthLoading(false);
         }
@@ -2316,6 +2569,7 @@ export default function App() {
           campuses: ["Chaktomuk Campus (C2.2)"],
           modules: [...DEFAULT_VIEWER_MODULES],
           assetSubviewAccess: "list_only" as AssetSubviewAccess,
+          menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "list_only"),
         };
         if (mounted) {
           setAuthUser({
@@ -2326,6 +2580,7 @@ export default function App() {
             campuses: perm.campuses,
             modules: perm.modules,
             assetSubviewAccess: perm.assetSubviewAccess,
+            menuAccess: perm.menuAccess,
           });
           setAuthLoading(false);
         }
@@ -2889,7 +3144,38 @@ export default function App() {
     if (!canOpenAssetRegister && assetsView === "register") {
       setAssetsView("list");
     }
-  }, [canOpenAssetRegister, assetsView]);
+    if (!canAccessMenu("assets.list", "assets") && canOpenAssetRegister && assetsView === "list") {
+      setAssetsView("register");
+    }
+  }, [canOpenAssetRegister, assetsView, canAccessMenu]);
+  useEffect(() => {
+    if (tab === "maintenance") {
+      if (maintenanceView === "record" && !canAccessMenu("maintenance.record", "maintenance")) {
+        setMaintenanceView("history");
+      }
+      if (maintenanceView === "history" && !canAccessMenu("maintenance.history", "maintenance")) {
+        setMaintenanceView("record");
+      }
+    }
+  }, [tab, maintenanceView, canAccessMenu]);
+  useEffect(() => {
+    if (tab === "verification") {
+      if (verificationView === "record" && !canAccessMenu("verification.record", "verification")) {
+        setVerificationView("history");
+      }
+      if (verificationView === "history" && !canAccessMenu("verification.history", "verification")) {
+        setVerificationView("record");
+      }
+    }
+  }, [tab, verificationView, canAccessMenu]);
+  useEffect(() => {
+    if (tab === "setup" && setupView === "campus" && !canAccessMenu("setup.campus", "setup")) setSetupView("users");
+    if (tab === "setup" && setupView === "users" && !canAccessMenu("setup.users", "setup")) setSetupView("permissions");
+    if (tab === "setup" && setupView === "permissions" && !canAccessMenu("setup.permissions", "setup")) setSetupView("backup");
+    if (tab === "setup" && setupView === "backup" && !canAccessMenu("setup.backup", "setup")) setSetupView("items");
+    if (tab === "setup" && setupView === "items" && !canAccessMenu("setup.items", "setup")) setSetupView("locations");
+    if (tab === "setup" && setupView === "locations" && !canAccessMenu("setup.locations", "setup")) setSetupView("campus");
+  }, [tab, setupView, canAccessMenu]);
 
   const effectiveAssetCampusFilter =
     assetCampusFilter !== "ALL" ? assetCampusFilter : campusFilter;
@@ -2897,7 +3183,17 @@ export default function App() {
   const loadStaffUsers = useCallback(async () => {
     try {
       const res = await requestJson<{ users: StaffUser[] }>("/api/staff-users");
+      if (!res || !Object.prototype.hasOwnProperty.call(res, "users")) {
+        throw new Error("Invalid staff-users API response");
+      }
       const rows = normalizeArray<StaffUser>(res.users);
+      if (!rows.length) {
+        const fallbackUsers = readUserFallback();
+        if (fallbackUsers.length) {
+          setUsers(fallbackUsers);
+          return;
+        }
+      }
       setUsers(rows);
       writeUserFallback(rows);
     } catch (err) {
@@ -3324,18 +3620,41 @@ export default function App() {
     setError("");
     try {
       if (editingUserId !== null) {
-        await requestJson<{ user: StaffUser }>(`/api/staff-users/${editingUserId}`, {
+        const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>(`/api/staff-users/${editingUserId}`, {
           method: "PATCH",
           body: JSON.stringify({ fullName, position, email }),
         });
+        const returnedRows = normalizeArray<StaffUser>(res.users);
+        if (returnedRows.length) {
+          setUsers(returnedRows);
+          writeUserFallback(returnedRows);
+        } else {
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === editingUserId ? { ...u, fullName, position, email: email.toLowerCase() } : u
+            )
+          );
+        }
         setEditingUserId(null);
       } else {
-        await requestJson<{ user: StaffUser }>("/api/staff-users", {
+        const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>("/api/staff-users", {
           method: "POST",
           body: JSON.stringify({ fullName, position, email }),
         });
+        const returnedRows = normalizeArray<StaffUser>(res.users);
+        if (returnedRows.length) {
+          setUsers(returnedRows);
+          writeUserFallback(returnedRows);
+        } else if (res.user) {
+          const created = {
+            ...res.user,
+            email: String(res.user.email || "").toLowerCase(),
+          };
+          setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
+        } else {
+          await loadStaffUsers();
+        }
       }
-      await loadStaffUsers();
       setUserForm({ fullName: "", position: "", email: "" });
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
@@ -3380,6 +3699,7 @@ export default function App() {
               campuses: saved.campuses,
               modules: saved.modules,
               assetSubviewAccess: saved.assetSubviewAccess,
+              menuAccess: saved.menuAccess,
             }
           : u;
       });
@@ -3397,6 +3717,12 @@ export default function App() {
                 "ALL",
                 modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
                 assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+                menuAccess: normalizeMenuAccess(
+                  u.role === "Admin" ? "Admin" : "Viewer",
+                  Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
+                  normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+                  (u as { menuAccess?: unknown }).menuAccess
+                ),
               },
             ])
           )
@@ -3428,6 +3754,7 @@ export default function App() {
                 campuses: saved.campuses,
                 modules: saved.modules,
                 assetSubviewAccess: saved.assetSubviewAccess,
+                menuAccess: saved.menuAccess,
               }
             : u;
         });
@@ -3442,6 +3769,12 @@ export default function App() {
                 campus: (Array.isArray(u.campuses) && u.campuses[0]) || "ALL",
                 modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
                 assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+                menuAccess: normalizeMenuAccess(
+                  u.role === "Admin" ? "Admin" : "Viewer",
+                  Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
+                  normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+                  (u as { menuAccess?: unknown }).menuAccess
+                ),
               },
             ])
           )
@@ -3665,29 +3998,30 @@ export default function App() {
     const modules: NavModule[] = draft.role === "Admin"
       ? [...ALL_NAV_MODULES]
       : (draft.modules.length ? draft.modules : (["dashboard"] as NavModule[]));
+    const menuAccess = normalizeMenuAccess(draft.role, modules, assetSubviewAccess, draft.menuAccess);
     if (!SERVER_ONLY_STORAGE) {
       const nextMap = {
         ...readAuthPermissionFallback(),
-        [target.username]: { role: draft.role, campuses, modules, assetSubviewAccess },
+        [target.username]: { role: draft.role, campuses, modules, assetSubviewAccess, menuAccess },
       };
       const nextRows = authAccounts.map((u) =>
-        u.id === userId ? { ...u, role: draft.role, campuses, modules, assetSubviewAccess } : u
+        u.id === userId ? { ...u, role: draft.role, campuses, modules, assetSubviewAccess, menuAccess } : u
       );
       writeAuthPermissionFallback(nextMap);
       writeAuthAccountsFallback(nextRows);
       setAuthAccounts(nextRows);
       if (authUser && authUser.id === userId) {
-        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess });
+        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess, menuAccess });
       }
     }
     try {
       await requestJson<{ user: AuthAccount }>(`/api/auth/users/${userId}`, {
         method: "PATCH",
-        body: JSON.stringify({ role: draft.role, campuses, modules, assetSubviewAccess }),
+        body: JSON.stringify({ role: draft.role, campuses, modules, assetSubviewAccess, menuAccess }),
       });
       await loadAuthAccounts();
       if (authUser && authUser.id === userId) {
-        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess });
+        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess, menuAccess });
       }
       setSetupMessage("Saved account permission.");
     } catch (err) {
@@ -3735,6 +4069,7 @@ export default function App() {
       ? [...ALL_NAV_MODULES]
       : (authCreateForm.modules.length ? authCreateForm.modules : (["dashboard"] as NavModule[]));
     const assetSubviewAccess = normalizeAssetSubviewAccess(authCreateForm.assetSubviewAccess);
+    const menuAccess = normalizeMenuAccess(authCreateForm.role, modules, assetSubviewAccess, authCreateForm.menuAccess);
 
     setBusy(true);
     setError("");
@@ -3749,6 +4084,7 @@ export default function App() {
           campuses,
           modules,
           assetSubviewAccess,
+          menuAccess,
         }),
       });
       const created: AuthAccount = res.user?.username
@@ -3760,6 +4096,12 @@ export default function App() {
             campuses: Array.isArray(res.user.campuses) && res.user.campuses.length ? res.user.campuses : campuses,
             modules: Array.isArray(res.user.modules) && res.user.modules.length ? res.user.modules : modules,
             assetSubviewAccess: normalizeAssetSubviewAccess((res.user as { assetSubviewAccess?: unknown }).assetSubviewAccess || assetSubviewAccess),
+            menuAccess: normalizeMenuAccess(
+              res.user.role === "Admin" ? "Admin" : authCreateForm.role,
+              Array.isArray(res.user.modules) && res.user.modules.length ? res.user.modules : modules,
+              normalizeAssetSubviewAccess((res.user as { assetSubviewAccess?: unknown }).assetSubviewAccess || assetSubviewAccess),
+              (res.user as { menuAccess?: unknown }).menuAccess || menuAccess
+            ),
           }
         : {
             id: Date.now(),
@@ -3769,6 +4111,7 @@ export default function App() {
             campuses,
             modules,
             assetSubviewAccess,
+            menuAccess,
           };
       const merged = mergeAuthAccounts([created], readAuthAccountsFallback());
       writeAuthAccountsFallback(merged);
@@ -3779,6 +4122,7 @@ export default function App() {
           campuses: created.campuses,
           modules: created.modules,
           assetSubviewAccess: created.assetSubviewAccess,
+          menuAccess: created.menuAccess,
         },
       });
       setAuthAccounts(merged);
@@ -3792,6 +4136,7 @@ export default function App() {
         campus: CAMPUS_LIST[0],
         modules: [...DEFAULT_VIEWER_MODULES],
         assetSubviewAccess: "both",
+        menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
       });
       setSetupMessage("Login account created.");
     } catch (err) {
@@ -3817,12 +4162,13 @@ export default function App() {
           campuses,
           modules,
           assetSubviewAccess,
+          menuAccess,
         };
         const nextRows = [nextAccount, ...readAuthAccountsFallback()];
         writeAuthAccountsFallback(nextRows);
         const nextMap = {
           ...readAuthPermissionFallback(),
-          [username]: { role: authCreateForm.role, campuses, modules, assetSubviewAccess },
+          [username]: { role: authCreateForm.role, campuses, modules, assetSubviewAccess, menuAccess },
         };
         writeAuthPermissionFallback(nextMap);
         setAuthAccounts(nextRows);
@@ -3833,6 +4179,7 @@ export default function App() {
             campus: nextAccount.campuses[0] || "ALL",
             modules: nextAccount.modules,
             assetSubviewAccess: nextAccount.assetSubviewAccess,
+            menuAccess: nextAccount.menuAccess,
           },
         }));
         setAuthCreateForm({
@@ -3844,6 +4191,7 @@ export default function App() {
           campus: CAMPUS_LIST[0],
           modules: [...DEFAULT_VIEWER_MODULES],
           assetSubviewAccess: "both",
+          menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
         });
         setError("");
         setSetupMessage("Login account created.");
@@ -3925,8 +4273,14 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      await requestJson<{ ok: boolean }>(`/api/staff-users/${id}`, { method: "DELETE" });
-      await loadStaffUsers();
+      const res = await requestJson<{ ok?: boolean; users?: StaffUser[] }>(`/api/staff-users/${id}`, { method: "DELETE" });
+      const returnedRows = normalizeArray<StaffUser>(res.users);
+      if (returnedRows.length) {
+        setUsers(returnedRows);
+        writeUserFallback(returnedRows);
+      } else {
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+      }
       if (editingUserId === id) {
         setEditingUserId(null);
         setUserForm({ fullName: "", position: "", email: "" });
@@ -6290,10 +6644,10 @@ export default function App() {
 
   useEffect(() => {
     if (maintenanceRecordForm.assetId) return;
-    if (assets.length) {
-      setMaintenanceRecordForm((f) => ({ ...f, assetId: String(assets[0].id) }));
+    if (maintenanceRecordFilteredAssets.length) {
+      setMaintenanceRecordForm((f) => ({ ...f, assetId: String(maintenanceRecordFilteredAssets[0].id) }));
     }
-  }, [assets, maintenanceRecordForm.assetId]);
+  }, [maintenanceRecordFilteredAssets, maintenanceRecordForm.assetId]);
 
   useEffect(() => {
     if (verificationRecordForm.assetId) return;
@@ -6681,34 +7035,118 @@ export default function App() {
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
   const reportTypeOptions = useMemo(
     () =>
-      lang === "km"
-        ? [
-            { value: "asset_master" as ReportType, label: "បញ្ជីទ្រព្យសម្បត្តិ" },
-            { value: "set_code" as ReportType, label: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
-            { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
-            { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
-            { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
-            { value: "maintenance_completion" as ReportType, label: "លទ្ធផលបញ្ចប់ការថែទាំ" },
-            { value: "verification_summary" as ReportType, label: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
-            { value: "qr_labels" as ReportType, label: "លេខទ្រព្យ + QR" },
-          ]
-        : [
-            { value: "asset_master" as ReportType, label: "Asset Master Register" },
-            { value: "set_code" as ReportType, label: "Computer Set Detail" },
-            { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
-            { value: "overdue" as ReportType, label: "Overdue Maintenance" },
-            { value: "transfer" as ReportType, label: "Asset Transfer Log" },
-            { value: "maintenance_completion" as ReportType, label: "Maintenance Completion" },
-            { value: "verification_summary" as ReportType, label: "Verification Summary" },
-            { value: "qr_labels" as ReportType, label: "Asset ID + QR Labels" },
-          ],
-    [lang]
+      (
+        lang === "km"
+          ? [
+              { value: "asset_master" as ReportType, label: "បញ្ជីទ្រព្យសម្បត្តិ" },
+              { value: "set_code" as ReportType, label: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
+              { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+              { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
+              { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
+              { value: "maintenance_completion" as ReportType, label: "លទ្ធផលបញ្ចប់ការថែទាំ" },
+              { value: "verification_summary" as ReportType, label: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
+              { value: "qr_labels" as ReportType, label: "លេខទ្រព្យ + QR" },
+            ]
+          : [
+              { value: "asset_master" as ReportType, label: "Asset Master Register" },
+              { value: "set_code" as ReportType, label: "Computer Set Detail" },
+              { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
+              { value: "overdue" as ReportType, label: "Overdue Maintenance" },
+              { value: "transfer" as ReportType, label: "Asset Transfer Log" },
+              { value: "maintenance_completion" as ReportType, label: "Maintenance Completion" },
+              { value: "verification_summary" as ReportType, label: "Verification Summary" },
+              { value: "qr_labels" as ReportType, label: "Asset ID + QR Labels" },
+            ]
+      ).filter((option) => canAccessMenu(`reports.${option.value}`, "reports")),
+    [lang, canAccessMenu]
   );
+  const selectedReportTypeLabel =
+    reportTypeOptions.find((option) => option.value === reportType)?.label ||
+    (lang === "km" ? "របាយការណ៍" : "Report");
+  const reportTypeGuideText = useMemo(() => {
+    const guides: Record<ReportType, string> =
+      lang === "km"
+        ? {
+            asset_master: "បញ្ជីទ្រព្យសម្បត្តិលម្អិត តាមអ្វីដែលបានជ្រើស។",
+            set_code: "មើលក្រុមឧបករណ៍ និងសមាសភាគដែលភ្ជាប់ជាមួយគ្នា។",
+            asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
+            overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
+            transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
+            maintenance_completion: "តាមដានលទ្ធផលថែទាំក្នុងចន្លោះកាលបរិច្ឆេទ។",
+            verification_summary: "សង្ខេបលទ្ធផលត្រួតពិនិត្យតាមខែ ឬត្រីមាស។",
+            qr_labels: "បោះពុម្ពស្លាក QR សម្រាប់ទ្រព្យសម្បត្តិ។",
+          }
+        : {
+            asset_master: "Detailed asset list based on selected filters.",
+            set_code: "View each computer set with all connected items.",
+            asset_by_location: "Summary count by campus and location.",
+            overdue: "Show assets that are overdue for maintenance.",
+            transfer: "Transfer history between campuses and locations.",
+            maintenance_completion: "Maintenance completion records in selected date range.",
+            verification_summary: "Verification summary by month or term.",
+            qr_labels: "Print QR labels for selected assets.",
+          };
+    return guides[reportType];
+  }, [lang, reportType]);
+  const hasReportFilters = useMemo(
+    () =>
+      reportType === "asset_master" ||
+      reportType === "maintenance_completion" ||
+      reportType === "verification_summary" ||
+      reportType === "qr_labels",
+    [reportType]
+  );
+  const resetReportFilters = useCallback(() => {
+    if (reportType === "asset_master") {
+      setAssetMasterCampusFilter(["ALL"]);
+      setAssetMasterCategoryFilter(["ALL"]);
+      setAssetMasterItemFilter(["ALL"]);
+      setAssetMasterVisibleColumns([
+        "photo",
+        "assetId",
+        "linkedTo",
+        "itemDescription",
+        "category",
+        "campus",
+        "location",
+        "purchaseDate",
+        "lastServiceDate",
+        "status",
+      ]);
+      return;
+    }
+    if (reportType === "maintenance_completion") {
+      const today = new Date();
+      const ymd = toYmd(today);
+      setReportDateFrom(`${ymd.slice(0, 7)}-01`);
+      setReportDateTo(ymd);
+      return;
+    }
+    if (reportType === "verification_summary") {
+      const today = new Date();
+      setReportPeriodMode("month");
+      setReportMonth(toYmd(today).slice(0, 7));
+      setReportYear(String(today.getFullYear()));
+      setReportTerm("Term 1");
+      return;
+    }
+    if (reportType === "qr_labels") {
+      setQrCampusFilter("ALL");
+      setQrCategoryFilter("ALL");
+      setQrItemFilter("ALL");
+    }
+  }, [reportType]);
 
   const qrItemFilterOptions = useMemo(() => {
     const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrLabelRows]);
+  useEffect(() => {
+    if (!reportTypeOptions.length) return;
+    if (!reportTypeOptions.some((option) => option.value === reportType)) {
+      setReportType(reportTypeOptions[0].value);
+    }
+  }, [reportTypeOptions, reportType]);
 
   useEffect(() => {
     setAssetMasterCampusFilter((prev) => {
@@ -7855,15 +8293,17 @@ export default function App() {
                   {t.registerAsset}
                 </button>
               ) : null}
-              <button
-                className={`tab ${assetsView === "list" ? "tab-active" : ""}`}
-                onClick={() => setAssetsView("list")}
-              >
-                {t.assetRegistry}
-              </button>
+              {canAccessMenu("assets.list", "assets") ? (
+                <button
+                  className={`tab ${assetsView === "list" ? "tab-active" : ""}`}
+                  onClick={() => setAssetsView("list")}
+                >
+                  {t.assetRegistry}
+                </button>
+              ) : null}
             </div>
 
-            {assetsView === "register" && (
+            {assetsView === "register" && canOpenAssetRegister && (
               <section className="panel">
                 <h2>{t.registerAsset}</h2>
                 <div className="form-grid">
@@ -8456,7 +8896,7 @@ export default function App() {
               </section>
             )}
 
-            {assetsView === "list" && (
+            {assetsView === "list" && canAccessMenu("assets.list", "assets") && (
               <section className="panel">
                 <div className="asset-list-toolbar">
                   <h2 className="asset-list-title">{t.assetRegistry}</h2>
@@ -10590,21 +11030,25 @@ export default function App() {
           <>
           <section className="panel">
             <div className="tabs">
-              <button
-                className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
-                onClick={() => setMaintenanceView("history")}
-              >
-                History View
-              </button>
-              <button
-                className={`tab ${maintenanceView === "record" ? "tab-active" : ""}`}
-                onClick={() => setMaintenanceView("record")}
-              >
-                Record History
-              </button>
+              {canAccessMenu("maintenance.history", "maintenance") ? (
+                <button
+                  className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
+                  onClick={() => setMaintenanceView("history")}
+                >
+                  History View
+                </button>
+              ) : null}
+              {canAccessMenu("maintenance.record", "maintenance") ? (
+                <button
+                  className={`tab ${maintenanceView === "record" ? "tab-active" : ""}`}
+                  onClick={() => setMaintenanceView("record")}
+                >
+                  Record History
+                </button>
+              ) : null}
             </div>
 
-            {maintenanceView === "record" && (
+            {maintenanceView === "record" && canAccessMenu("maintenance.record", "maintenance") && (
             <>
             <h3 className="section-title">Record Maintenance Result</h3>
             <div className="form-grid">
@@ -10768,7 +11212,7 @@ export default function App() {
             </>
             )}
 
-            {maintenanceView === "history" && (
+            {maintenanceView === "history" && canAccessMenu("maintenance.history", "maintenance") && (
             <>
             <div className="maintenance-title-row">
               <h2>{t.maintenanceHistory}</h2>
@@ -11092,21 +11536,25 @@ export default function App() {
         {tab === "verification" && (
           <section className="panel">
             <div className="tabs">
-              <button
-                className={`tab ${verificationView === "record" ? "tab-active" : ""}`}
-                onClick={() => setVerificationView("record")}
-              >
-                {t.recordVerification}
-              </button>
-              <button
-                className={`tab ${verificationView === "history" ? "tab-active" : ""}`}
-                onClick={() => setVerificationView("history")}
-              >
-                {t.verificationHistory}
-              </button>
+              {canAccessMenu("verification.record", "verification") ? (
+                <button
+                  className={`tab ${verificationView === "record" ? "tab-active" : ""}`}
+                  onClick={() => setVerificationView("record")}
+                >
+                  {t.recordVerification}
+                </button>
+              ) : null}
+              {canAccessMenu("verification.history", "verification") ? (
+                <button
+                  className={`tab ${verificationView === "history" ? "tab-active" : ""}`}
+                  onClick={() => setVerificationView("history")}
+                >
+                  {t.verificationHistory}
+                </button>
+              ) : null}
             </div>
 
-            {verificationView === "record" && (
+            {verificationView === "record" && canAccessMenu("verification.record", "verification") && (
               <>
                 <h3 className="section-title">{t.recordVerification}</h3>
                 <div className="form-grid">
@@ -11274,7 +11722,7 @@ export default function App() {
               </>
             )}
 
-            {verificationView === "history" && (
+            {verificationView === "history" && canAccessMenu("verification.history", "verification") && (
               <>
                 <div className="panel-row">
                   <h2>{t.verificationHistory}</h2>
@@ -11511,18 +11959,41 @@ export default function App() {
                 </article>
               </div>
             )}
-            <div className="panel-filters report-filters report-filter-row">
-              <select
-                className="input report-type-input"
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value as ReportType)}
-              >
-                {reportTypeOptions.map((option) => (
-                  <option key={`report-type-${option.value}`} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+            <div className="report-builder">
+              <div className="report-builder-top">
+                <label className="field report-type-field">
+                  <span>{lang === "km" ? "ជំហានទី 1៖ ជ្រើសប្រភេទរបាយការណ៍" : "Step 1: Choose Report Type"}</span>
+                  <select
+                    className="input report-type-input"
+                    value={reportType}
+                    onChange={(e) => setReportType(e.target.value as ReportType)}
+                  >
+                    {reportTypeOptions.map((option) => (
+                      <option key={`report-type-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="report-builder-actions">
+                  <button type="button" className="tab" onClick={resetReportFilters}>
+                    {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                  </button>
+                  <button className="btn-primary report-print-btn" onClick={printCurrentReport}>
+                    {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
+                  </button>
+                </div>
+              </div>
+              <div className="report-builder-hint">
+                <strong>{selectedReportTypeLabel}</strong>
+                <span>{reportTypeGuideText}</span>
+              </div>
+              {hasReportFilters ? (
+                <>
+                  <div className="tiny report-filters-title">
+                    {lang === "km" ? "ជំហានទី 2៖ ជ្រើសតម្រង (បើចាំបាច់)" : "Step 2: Set Filters (if needed)"}
+                  </div>
+                  <div className="panel-filters report-filters report-filter-row">
               {reportType === "maintenance_completion" ? (
                 <>
                   <input
@@ -11712,9 +12183,15 @@ export default function App() {
                   </details>
                 </>
               ) : null}
-              <button className="btn-primary report-print-btn" onClick={printCurrentReport}>
-                {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
-              </button>
+                  </div>
+                </>
+              ) : (
+                <div className="tiny report-filters-title">
+                  {lang === "km"
+                    ? "របាយការណ៍នេះមិនចាំបាច់មានតម្រងបន្ថែមទេ។ ជំហានទី 2 អាចរំលង។"
+                    : "No extra filters for this report. You can go directly to print."}
+                </div>
+              )}
             </div>
 
             {reportType === "asset_master" && (
@@ -12127,28 +12604,40 @@ export default function App() {
           <>
           <section className="panel">
             <div className="row-actions">
-              <button className={`tab ${setupView === "campus" ? "tab-active" : ""}`} onClick={() => setSetupView("campus")}>
-                {t.campusNameSetup}
-              </button>
-              <button className={`tab ${setupView === "users" ? "tab-active" : ""}`} onClick={() => setSetupView("users")}>
-                {t.userSetup}
-              </button>
-              <button className={`tab ${setupView === "permissions" ? "tab-active" : ""}`} onClick={() => setSetupView("permissions")}>
-                {t.accountPermissionSetup}
-              </button>
-              <button className={`tab ${setupView === "backup" ? "tab-active" : ""}`} onClick={() => setSetupView("backup")}>
-                Backup & Audit
-              </button>
-              <button className={`tab ${setupView === "items" ? "tab-active" : ""}`} onClick={() => setSetupView("items")}>
-                {t.itemNameSetup}
-              </button>
-              <button className={`tab ${setupView === "locations" ? "tab-active" : ""}`} onClick={() => setSetupView("locations")}>
-                {t.locationSetup}
-              </button>
+              {canAccessMenu("setup.campus", "setup") ? (
+                <button className={`tab ${setupView === "campus" ? "tab-active" : ""}`} onClick={() => setSetupView("campus")}>
+                  {t.campusNameSetup}
+                </button>
+              ) : null}
+              {canAccessMenu("setup.users", "setup") ? (
+                <button className={`tab ${setupView === "users" ? "tab-active" : ""}`} onClick={() => setSetupView("users")}>
+                  {t.userSetup}
+                </button>
+              ) : null}
+              {canAccessMenu("setup.permissions", "setup") ? (
+                <button className={`tab ${setupView === "permissions" ? "tab-active" : ""}`} onClick={() => setSetupView("permissions")}>
+                  {t.accountPermissionSetup}
+                </button>
+              ) : null}
+              {canAccessMenu("setup.backup", "setup") ? (
+                <button className={`tab ${setupView === "backup" ? "tab-active" : ""}`} onClick={() => setSetupView("backup")}>
+                  Backup & Audit
+                </button>
+              ) : null}
+              {canAccessMenu("setup.items", "setup") ? (
+                <button className={`tab ${setupView === "items" ? "tab-active" : ""}`} onClick={() => setSetupView("items")}>
+                  {t.itemNameSetup}
+                </button>
+              ) : null}
+              {canAccessMenu("setup.locations", "setup") ? (
+                <button className={`tab ${setupView === "locations" ? "tab-active" : ""}`} onClick={() => setSetupView("locations")}>
+                  {t.locationSetup}
+                </button>
+              ) : null}
             </div>
           </section>
 
-          {setupView === "campus" && (
+          {setupView === "campus" && canAccessMenu("setup.campus", "setup") && (
           <section className="panel">
             <h2>{t.campusNameSetup}</h2>
             <p className="tiny">{t.campusFixedHelp}</p>
@@ -12233,7 +12722,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "users" && (
+          {setupView === "users" && canAccessMenu("setup.users", "setup") && (
           <section className="panel">
             <h2>{t.userSetup}</h2>
             <div className="form-grid">
@@ -12307,7 +12796,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "permissions" && (
+          {setupView === "permissions" && canAccessMenu("setup.permissions", "setup") && (
           <section className="panel">
             <h2>{t.accountPermissionSetup}</h2>
             <p className="tiny">{t.permissionHelp}</p>
@@ -12376,11 +12865,19 @@ export default function App() {
                   value={authCreateForm.role}
                   disabled={!isAdmin}
                   onChange={(e) =>
-                    setAuthCreateForm((f) => ({
-                      ...f,
-                      role: e.target.value as "Admin" | "Viewer",
-                      campus: e.target.value === "Admin" ? "ALL" : f.campus === "ALL" ? CAMPUS_LIST[0] : f.campus,
-                    }))
+                    setAuthCreateForm((f) => {
+                      const nextRole = e.target.value as "Admin" | "Viewer";
+                      const nextModules = nextRole === "Admin" ? [...ALL_NAV_MODULES] : [...DEFAULT_VIEWER_MODULES];
+                      const nextAssetAccess = nextRole === "Admin" ? f.assetSubviewAccess : "list_only";
+                      return {
+                        ...f,
+                        role: nextRole,
+                        campus: nextRole === "Admin" ? "ALL" : f.campus === "ALL" ? CAMPUS_LIST[0] : f.campus,
+                        modules: nextModules,
+                        assetSubviewAccess: nextAssetAccess,
+                        menuAccess: defaultMenuAccessFor(nextRole, nextModules, nextAssetAccess),
+                      };
+                    })
                   }
                 >
                   <option value="Admin">Admin</option>
@@ -12408,15 +12905,76 @@ export default function App() {
                   value={authCreateForm.assetSubviewAccess}
                   disabled={!isAdmin}
                   onChange={(e) =>
-                    setAuthCreateForm((f) => ({
-                      ...f,
-                      assetSubviewAccess: normalizeAssetSubviewAccess(e.target.value),
-                    }))
+                    setAuthCreateForm((f) => {
+                      const nextAssetAccess = normalizeAssetSubviewAccess(e.target.value);
+                      return {
+                        ...f,
+                        assetSubviewAccess: nextAssetAccess,
+                        menuAccess: normalizeMenuAccess(f.role, f.modules, nextAssetAccess, f.menuAccess),
+                      };
+                    })
                   }
                 >
                   <option value="both">Register + List</option>
                   <option value="list_only">List Only</option>
                 </select>
+              </label>
+              <label className="field field-wide">
+                <span>Menu & Submenu Access</span>
+                <details className="filter-menu">
+                  <summary>{lang === "km" ? "ជ្រើសម៉ឺនុយដែលអាចមើលឃើញ" : "Select visible menus"}</summary>
+                  <div className="filter-menu-list" style={{ maxHeight: 360 }}>
+                    {MENU_ACCESS_TREE.map((node) => {
+                      const moduleChecked = isModuleFullyChecked(authCreateForm.menuAccess, node.module);
+                      return (
+                        <div key={`create-menu-${node.module}`} style={{ padding: "4px 0 8px" }}>
+                          <label className="filter-menu-item" style={{ fontWeight: 700 }}>
+                            <input
+                              type="checkbox"
+                              checked={moduleChecked}
+                              onChange={(e) =>
+                                setAuthCreateForm((f) => ({
+                                  ...f,
+                                  menuAccess: normalizeMenuAccess(
+                                    f.role,
+                                    f.modules,
+                                    f.assetSubviewAccess,
+                                    toggleModuleAccess(f.menuAccess, node.module, e.target.checked)
+                                  ),
+                                }))
+                              }
+                            />
+                            <span>{lang === "km" ? node.labelKm : node.labelEn}</span>
+                          </label>
+                          {node.children.map((child) => (
+                            <label key={`create-menu-child-${child.key}`} className="filter-menu-item" style={{ paddingLeft: 24 }}>
+                              <input
+                                type="checkbox"
+                                checked={authCreateForm.menuAccess.includes(child.key)}
+                                onChange={(e) =>
+                                  setAuthCreateForm((f) => ({
+                                    ...f,
+                                    menuAccess: normalizeMenuAccess(
+                                      f.role,
+                                      f.modules,
+                                      f.assetSubviewAccess,
+                                      toggleChildAccess(f.menuAccess, node.module, child.key, e.target.checked)
+                                    ),
+                                  }))
+                                }
+                                disabled={
+                                  child.key === "assets.register" &&
+                                  (authCreateForm.role !== "Admin" || authCreateForm.assetSubviewAccess === "list_only")
+                                }
+                              />
+                              <span>{lang === "km" ? child.labelKm : child.labelEn}</span>
+                            </label>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
               </label>
             </div>
             <div className="asset-actions">
@@ -12434,6 +12992,7 @@ export default function App() {
                     <th>{t.role}</th>
                     <th>{t.accessCampus}</th>
                     <th>Assets Tab Access</th>
+                    <th>Menu Access</th>
                     <th>{t.save}</th>
                   </tr>
                 </thead>
@@ -12445,6 +13004,12 @@ export default function App() {
                         campus: (u.campuses && u.campuses[0]) || "ALL",
                         modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
                         assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+                        menuAccess: normalizeMenuAccess(
+                          u.role,
+                          Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
+                          normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
+                          (u as { menuAccess?: unknown }).menuAccess
+                        ),
                       };
                       return (
                         <tr key={`auth-perm-${u.id}`}>
@@ -12456,18 +13021,24 @@ export default function App() {
                               value={draft.role}
                               disabled={!isAdmin}
                               onChange={(e) =>
-                                setAuthPermissionDraft((prev) => ({
-                                  ...prev,
-                                  [u.id]: {
-                                    role: e.target.value as "Admin" | "Viewer",
-                                    campus: e.target.value === "Admin" ? "ALL" : draft.campus === "ALL" ? CAMPUS_LIST[0] : draft.campus,
-                                    modules:
-                                      e.target.value === "Admin"
-                                        ? [...ALL_NAV_MODULES]
-                                        : (draft.modules.length ? draft.modules : [...DEFAULT_VIEWER_MODULES]),
-                                    assetSubviewAccess: draft.assetSubviewAccess,
-                                  },
-                                }))
+                                setAuthPermissionDraft((prev) => {
+                                  const nextRole = e.target.value as "Admin" | "Viewer";
+                                  const nextModules =
+                                    nextRole === "Admin"
+                                      ? [...ALL_NAV_MODULES]
+                                      : (draft.modules.length ? draft.modules : [...DEFAULT_VIEWER_MODULES]);
+                                  const nextAssetAccess = nextRole === "Admin" ? draft.assetSubviewAccess : "list_only";
+                                  return {
+                                    ...prev,
+                                    [u.id]: {
+                                      role: nextRole,
+                                      campus: nextRole === "Admin" ? "ALL" : draft.campus === "ALL" ? CAMPUS_LIST[0] : draft.campus,
+                                      modules: nextModules,
+                                      assetSubviewAccess: nextAssetAccess,
+                                      menuAccess: defaultMenuAccessFor(nextRole, nextModules, nextAssetAccess),
+                                    },
+                                  };
+                                })
                               }
                             >
                               <option value="Admin">Admin</option>
@@ -12503,6 +13074,12 @@ export default function App() {
                                   [u.id]: {
                                     ...draft,
                                     assetSubviewAccess: normalizeAssetSubviewAccess(e.target.value),
+                                    menuAccess: normalizeMenuAccess(
+                                      draft.role,
+                                      draft.modules,
+                                      normalizeAssetSubviewAccess(e.target.value),
+                                      draft.menuAccess
+                                    ),
                                   },
                                 }))
                               }
@@ -12510,6 +13087,68 @@ export default function App() {
                               <option value="both">Register + List</option>
                               <option value="list_only">List Only</option>
                             </select>
+                          </td>
+                          <td>
+                            <details className="filter-menu">
+                              <summary>{lang === "km" ? "កំណត់សិទ្ធិម៉ឺនុយ" : "Set Menu Access"}</summary>
+                              <div className="filter-menu-list" style={{ maxHeight: 320 }}>
+                                {MENU_ACCESS_TREE.map((node) => {
+                                  const moduleChecked = isModuleFullyChecked(draft.menuAccess, node.module);
+                                  return (
+                                    <div key={`row-menu-${u.id}-${node.module}`} style={{ padding: "4px 0 8px" }}>
+                                      <label className="filter-menu-item" style={{ fontWeight: 700 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={moduleChecked}
+                                          onChange={(e) =>
+                                            setAuthPermissionDraft((prev) => ({
+                                              ...prev,
+                                              [u.id]: {
+                                                ...draft,
+                                                menuAccess: normalizeMenuAccess(
+                                                  draft.role,
+                                                  draft.modules,
+                                                  draft.assetSubviewAccess,
+                                                  toggleModuleAccess(draft.menuAccess, node.module, e.target.checked)
+                                                ),
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        <span>{lang === "km" ? node.labelKm : node.labelEn}</span>
+                                      </label>
+                                      {node.children.map((child) => (
+                                        <label key={`row-menu-child-${u.id}-${child.key}`} className="filter-menu-item" style={{ paddingLeft: 24 }}>
+                                          <input
+                                            type="checkbox"
+                                            checked={draft.menuAccess.includes(child.key)}
+                                            onChange={(e) =>
+                                              setAuthPermissionDraft((prev) => ({
+                                                ...prev,
+                                                [u.id]: {
+                                                  ...draft,
+                                                  menuAccess: normalizeMenuAccess(
+                                                    draft.role,
+                                                    draft.modules,
+                                                    draft.assetSubviewAccess,
+                                                    toggleChildAccess(draft.menuAccess, node.module, child.key, e.target.checked)
+                                                  ),
+                                                },
+                                              }))
+                                            }
+                                            disabled={
+                                              child.key === "assets.register" &&
+                                              (draft.role !== "Admin" || draft.assetSubviewAccess === "list_only")
+                                            }
+                                          />
+                                          <span>{lang === "km" ? child.labelKm : child.labelEn}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </details>
                           </td>
                           <td>
                             <button className="btn-primary" disabled={!isAdmin} onClick={() => saveAuthPermission(u.id)}>
@@ -12521,7 +13160,7 @@ export default function App() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6}>{t.noLoginUsersFound}</td>
+                      <td colSpan={7}>{t.noLoginUsersFound}</td>
                     </tr>
                   )}
                 </tbody>
@@ -12530,7 +13169,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "backup" && (
+          {setupView === "backup" && canAccessMenu("setup.backup", "setup") && (
           <section className="panel">
             <h2>Backup & Audit</h2>
             <div className="asset-actions">
@@ -12600,7 +13239,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "items" && (
+          {setupView === "items" && canAccessMenu("setup.items", "setup") && (
           <section className="panel">
             <h2>{t.itemNameSetup}</h2>
             <div className="form-grid">
@@ -12685,7 +13324,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "locations" && (
+          {setupView === "locations" && canAccessMenu("setup.locations", "setup") && (
           <section className="panel">
             <h2>{t.locationSetup}</h2>
             <div className="form-grid">

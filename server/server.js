@@ -1080,6 +1080,9 @@ function sanitizeUser(user) {
     : [];
   const assetSubviewAccess =
     toText(user.assetSubviewAccess).toLowerCase() === "list_only" ? "list_only" : "both";
+  const menuAccess = Array.isArray(user.menuAccess)
+    ? user.menuAccess.filter((m) => typeof m === "string")
+    : [];
   return {
     id: Number(user.id),
     username: toText(user.username),
@@ -1088,6 +1091,7 @@ function sanitizeUser(user) {
     campuses: campuses.length ? campuses : ["ALL"],
     modules,
     assetSubviewAccess,
+    menuAccess,
   };
 }
 
@@ -1692,6 +1696,9 @@ const server = http.createServer(async (req, res) => {
         : [];
       const assetSubviewAccess =
         toText(body.assetSubviewAccess).toLowerCase() === "list_only" ? "list_only" : "both";
+      const menuAccess = Array.isArray(body.menuAccess)
+        ? body.menuAccess.filter((m) => typeof m === "string")
+        : [];
 
       if (!username || !password) {
         sendJson(res, 400, { error: "Username and password are required" });
@@ -1722,6 +1729,7 @@ const server = http.createServer(async (req, res) => {
         campuses: role === "Admin" ? ["ALL"] : campuses,
         modules,
         assetSubviewAccess,
+        menuAccess,
       };
 
       users.push(newUser);
@@ -1732,7 +1740,7 @@ const server = http.createServer(async (req, res) => {
         "CREATE",
         "auth_user",
         String(newUser.id),
-        `username=${newUser.username}; role=${newUser.role}; campuses=${newUser.campuses.join(",")}; assetAccess=${newUser.assetSubviewAccess}`
+        `username=${newUser.username}; role=${newUser.role}; campuses=${newUser.campuses.join(",")}; assetAccess=${newUser.assetSubviewAccess}; menuAccess=${newUser.menuAccess.length}`
       );
       await writeDb(db);
       sendJson(res, 201, { user: sanitizeUser(newUser) });
@@ -1755,6 +1763,9 @@ const server = http.createServer(async (req, res) => {
         : [];
       const assetSubviewAccess =
         toText(body.assetSubviewAccess).toLowerCase() === "list_only" ? "list_only" : "both";
+      const menuAccess = Array.isArray(body.menuAccess)
+        ? body.menuAccess.filter((m) => typeof m === "string")
+        : [];
       if (role !== "Admin" && !campuses.length) {
         sendJson(res, 400, { error: "At least one campus is required for Viewer" });
         return;
@@ -1771,6 +1782,7 @@ const server = http.createServer(async (req, res) => {
       users[idx].campuses = role === "Admin" ? ["ALL"] : campuses;
       users[idx].modules = modules;
       users[idx].assetSubviewAccess = assetSubviewAccess;
+      users[idx].menuAccess = menuAccess;
       db.users = users;
       appendAuditLog(
         db,
@@ -1778,7 +1790,7 @@ const server = http.createServer(async (req, res) => {
         "UPDATE",
         "auth_user_permission",
         String(id),
-        `role=${role}; campuses=${(role === "Admin" ? ["ALL"] : campuses).join(",")}; assetAccess=${assetSubviewAccess}`
+        `role=${role}; campuses=${(role === "Admin" ? ["ALL"] : campuses).join(",")}; assetAccess=${assetSubviewAccess}; menuAccess=${menuAccess.length}`
       );
       await writeDb(db);
 
