@@ -8082,13 +8082,39 @@ export default function App() {
                 </div>
 
                 <div className="form-grid public-asset-grid">
-                  <div className="field"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
-                  <div className="field"><span>{t.status}</span><div className="detail-value">{asset.status || "-"}</div></div>
-                  <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
-                  <div className="field"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
-                  <div className="field"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
-                  <div className="field"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
-                  <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
+                  <div className="public-asset-mobile-card">
+                    <div className="public-asset-mobile-head">
+                      <div className="detail-value"><strong>{asset.assetId || "-"}</strong></div>
+                    </div>
+                    <div className="public-asset-mobile-body">
+                      <div className="public-asset-mobile-text">
+                        <div className="public-asset-mobile-name">
+                          <strong>{t.name}:</strong> {asset.name || assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}
+                        </div>
+                        <div className="public-asset-mobile-meta">
+                          <div><strong>{t.campus}:</strong> {campusLabel(asset.campus || "-")}</div>
+                          <div><strong>{t.category}:</strong> {asset.category || "-"}</div>
+                          <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
+                          <div><strong>{t.status}:</strong> {asset.status || "-"}</div>
+                        </div>
+                      </div>
+                      <div className="public-asset-mobile-photo">
+                        {photos[0] ? (
+                          <img src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
+                        ) : (
+                          <div className="photo-placeholder">{t.noPhoto}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="field public-asset-dup-mobile"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
+                  <div className="field public-asset-dup-mobile"><span>{t.status}</span><div className="detail-value">{asset.status || "-"}</div></div>
+                  <div className="field public-asset-dup-mobile"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
+                  <div className="field public-asset-dup-mobile"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
+                  <div className="field public-asset-dup-mobile"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
+                  <div className="field public-asset-dup-mobile"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
+                  <div className="field public-asset-dup-mobile"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
                   {showPublicQrSetFields ? (
                     <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
                   ) : null}
@@ -8106,7 +8132,7 @@ export default function App() {
                   <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
                   <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
                   <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
-                  <div className="field field-wide">
+                  <div className="field field-wide public-asset-dup-mobile">
                     <span>{t.photo}</span>
                     <div className="row-actions public-asset-photo-row">
                       {photos.length ? (
