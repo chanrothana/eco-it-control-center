@@ -1545,11 +1545,17 @@ table {
   text-align: center;
 }
 
-.asset-mobile-name-photo {
+.asset-mobile-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 10px;
+}
+
+.asset-mobile-text {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .asset-mobile-name {

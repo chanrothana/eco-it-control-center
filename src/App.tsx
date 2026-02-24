@@ -2189,6 +2189,7 @@ export default function App() {
   const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
   const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState("ALL");
   const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
+  const [maintenanceRecordScheduleJumpMode, setMaintenanceRecordScheduleJumpMode] = useState(false);
   const [verificationRecordCategoryFilter, setVerificationRecordCategoryFilter] = useState("ALL");
   const [verificationRecordItemFilter, setVerificationRecordItemFilter] = useState("ALL");
   const [verificationRecordLocationFilter, setVerificationRecordLocationFilter] = useState("ALL");
@@ -3259,6 +3260,11 @@ export default function App() {
       }
     }
   }, [tab, maintenanceView, canAccessMenu]);
+  useEffect(() => {
+    if (tab !== "maintenance" || maintenanceView !== "record") {
+      setMaintenanceRecordScheduleJumpMode(false);
+    }
+  }, [tab, maintenanceView]);
   useEffect(() => {
     if (tab === "verification") {
       if (verificationView === "record" && !canAccessMenu("verification.record", "verification")) {
@@ -5285,8 +5291,17 @@ export default function App() {
         if (asset.id !== assetId) return asset;
 
         let nextMaintenanceDate = asset.nextMaintenanceDate || "";
+        let nextRepeatMode = asset.repeatMode || "NONE";
+        let nextRepeatWeekOfMonth = Number(asset.repeatWeekOfMonth || 0);
+        let nextRepeatWeekday = Number(asset.repeatWeekday || 0);
         if (entry.completion === "Done") {
-          if (asset.repeatMode === "MONTHLY_WEEKDAY") {
+          if (maintenanceRecordScheduleJumpMode) {
+            // Jumped from schedule/calendar and completed now: remove this schedule.
+            nextMaintenanceDate = "";
+            nextRepeatMode = "NONE";
+            nextRepeatWeekOfMonth = 0;
+            nextRepeatWeekday = 0;
+          } else if (asset.repeatMode === "MONTHLY_WEEKDAY") {
             nextMaintenanceDate = resolveNextScheduleDate(asset, shiftYmd(entry.date, 1));
           } else if (!nextMaintenanceDate || nextMaintenanceDate <= entry.date) {
             nextMaintenanceDate = "";
@@ -5310,6 +5325,9 @@ export default function App() {
         return {
           ...asset,
           nextMaintenanceDate,
+          repeatMode: nextRepeatMode,
+          repeatWeekOfMonth: nextRepeatWeekOfMonth,
+          repeatWeekday: nextRepeatWeekday,
           status: shouldApplyRetireStatus ? "Retired" : asset.status,
           statusHistory: nextStatusHistory,
           maintenanceHistory: [entry, ...(asset.maintenanceHistory || [])],
@@ -5327,6 +5345,9 @@ export default function App() {
             method: "PATCH",
             body: JSON.stringify({
               nextMaintenanceDate: savedAsset.nextMaintenanceDate || "",
+              repeatMode: savedAsset.repeatMode || "NONE",
+              repeatWeekOfMonth: Number(savedAsset.repeatWeekOfMonth || 0),
+              repeatWeekday: Number(savedAsset.repeatWeekday || 0),
               status: shouldApplyRetireStatus ? "Retired" : savedAsset.status || "Active",
             }),
           });
@@ -5992,6 +6013,18 @@ export default function App() {
     });
     setMaintenanceRecordFileKey((k) => k + 1);
     setQuickRecordAssetId(asset.id);
+  }
+
+  function openMaintenanceRecordFromScheduleAsset(asset: Asset, scheduledDate?: string) {
+    const preferredDate = String(scheduledDate || asset.nextMaintenanceDate || "").trim() || toYmd(new Date());
+    setTab("maintenance");
+    setMaintenanceView("record");
+    setMaintenanceRecordScheduleJumpMode(true);
+    setMaintenanceRecordForm((f) => ({
+      ...f,
+      assetId: String(asset.id),
+      date: preferredDate,
+    }));
   }
 
   const filterLabel = useMemo(
@@ -8591,15 +8624,7 @@ export default function App() {
                             <td>
                               <button
                                 className="tab"
-                                onClick={() => {
-                                  setTab("maintenance");
-                                  setMaintenanceView("record");
-                                  setMaintenanceRecordForm((f) => ({
-                                    ...f,
-                                    assetId: String(asset.id),
-                                    date: toYmd(new Date()),
-                                  }));
-                                }}
+                                onClick={() => openMaintenanceRecordFromScheduleAsset(asset)}
                               >
                                 <strong>{asset.assetId}</strong>
                               </button>
@@ -9487,16 +9512,18 @@ export default function App() {
                               <strong>{asset.assetId}</strong>
                             </button>
                           </div>
-                          <div className="asset-mobile-name-photo">
-                            <div className="asset-mobile-name">
-                              <strong>{t.name}:</strong> {assetItemName(asset.category, asset.type, asset.pcType || "")}
+                          <div className="asset-mobile-body">
+                            <div className="asset-mobile-text">
+                              <div className="asset-mobile-name">
+                                <strong>{t.name}:</strong> {assetItemName(asset.category, asset.type, asset.pcType || "")}
+                              </div>
+                              <div className="asset-mobile-meta">
+                                <div><strong>{t.campus}:</strong> {campusLabel(asset.campus)}</div>
+                                <div><strong>{t.category}:</strong> {asset.category}</div>
+                                <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
+                              </div>
                             </div>
                             <div className="asset-mobile-photo">{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
-                          </div>
-                          <div className="asset-mobile-meta">
-                            <div><strong>{t.campus}:</strong> {campusLabel(asset.campus)}</div>
-                            <div><strong>{t.category}:</strong> {asset.category}</div>
-                            <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
                           </div>
                           <div className="asset-mobile-foot">
                             <div className="asset-mobile-status">
@@ -11243,13 +11270,28 @@ export default function App() {
                       selectedDateItems.map((asset) => (
                         <tr key={`selected-${asset.id}`}>
                           <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
-                          <td><strong>{asset.assetId}</strong></td>
+                          <td>
+                            <button
+                              className="tab btn-small"
+                              disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                              onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
+                            >
+                              <strong>{asset.assetId}</strong>
+                            </button>
+                          </td>
                           <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
                           <td>{campusLabel(asset.campus)}</td>
                           <td>{asset.status}</td>
                           <td>{asset.scheduleNote || "-"}</td>
                           <td>
                             <div className="row-actions">
+                              <button
+                                className="btn-primary btn-small"
+                                disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
+                              >
+                                Record
+                              </button>
                               <button
                                 className="tab btn-small"
                                 disabled={!isAdmin}
@@ -11487,86 +11529,97 @@ export default function App() {
                   className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
                   onClick={() => setMaintenanceView("history")}
                 >
-                  History View
+                  {lang === "km" ? "មើលប្រវត្តិ" : "History View"}
                 </button>
               ) : null}
               {canAccessMenu("maintenance.record", "maintenance") ? (
                 <button
                   className={`tab ${maintenanceView === "record" ? "tab-active" : ""}`}
-                  onClick={() => setMaintenanceView("record")}
+                  onClick={() => {
+                    setMaintenanceRecordScheduleJumpMode(false);
+                    setMaintenanceView("record");
+                  }}
                 >
-                  Record History
+                  {lang === "km" ? "កត់ត្រាថែទាំ" : "Record History"}
                 </button>
               ) : null}
             </div>
 
             {maintenanceView === "record" && canAccessMenu("maintenance.record", "maintenance") && (
             <>
-            <h3 className="section-title">Record Maintenance Result</h3>
+            <h3 className="section-title">{lang === "km" ? "កត់ត្រាលទ្ធផលថែទាំ" : "Record Maintenance Result"}</h3>
             <div className="form-grid">
+              {!maintenanceRecordScheduleJumpMode ? (
+                <>
+                  <label className="field">
+                    <span>{t.category}</span>
+                    <select
+                      className="input"
+                      value={maintenanceRecordCategoryFilter}
+                      onChange={(e) => setMaintenanceRecordCategoryFilter(e.target.value)}
+                    >
+                      <option value="ALL">{t.allCategories}</option>
+                      {maintenanceRecordCategoryOptions.map((category) => (
+                        <option key={`maintenance-record-category-${category}`} value={category}>
+                          {category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "ឈ្មោះទំនិញ" : "Item Name"}</span>
+                    <select
+                      className="input"
+                      value={maintenanceRecordItemFilter}
+                      onChange={(e) => setMaintenanceRecordItemFilter(e.target.value)}
+                    >
+                      <option value="ALL">{lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"}</option>
+                      {maintenanceRecordItemOptions.map((name) => (
+                        <option key={`maintenance-record-item-${name}`} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.location}</span>
+                    <select
+                      className="input"
+                      value={maintenanceRecordLocationFilter}
+                      onChange={(e) => setMaintenanceRecordLocationFilter(e.target.value)}
+                    >
+                      <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
+                      {maintenanceRecordLocationOptions.map((location) => (
+                        <option key={`maintenance-record-location-${location}`} value={location}>
+                          {location}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : null}
               <label className="field">
-                <span>Category</span>
-                <select
-                  className="input"
-                  value={maintenanceRecordCategoryFilter}
-                  onChange={(e) => setMaintenanceRecordCategoryFilter(e.target.value)}
-                >
-                  <option value="ALL">{t.allCategories}</option>
-                  {maintenanceRecordCategoryOptions.map((category) => (
-                    <option key={`maintenance-record-category-${category}`} value={category}>
-                      {category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Item Name</span>
-                <select
-                  className="input"
-                  value={maintenanceRecordItemFilter}
-                  onChange={(e) => setMaintenanceRecordItemFilter(e.target.value)}
-                >
-                  <option value="ALL">All Item Names</option>
-                  {maintenanceRecordItemOptions.map((name) => (
-                    <option key={`maintenance-record-item-${name}`} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Location</span>
-                <select
-                  className="input"
-                  value={maintenanceRecordLocationFilter}
-                  onChange={(e) => setMaintenanceRecordLocationFilter(e.target.value)}
-                >
-                  <option value="ALL">All Locations</option>
-                  {maintenanceRecordLocationOptions.map((location) => (
-                    <option key={`maintenance-record-location-${location}`} value={location}>
-                      {location}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Asset</span>
+                <span>{lang === "km" ? "Asset" : "Asset"}</span>
                 <AssetPicker
                   value={maintenanceRecordForm.assetId}
                   assets={maintenanceRecordFilteredAssets}
                   getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
                   onChange={(assetId) => setMaintenanceRecordForm((f) => ({ ...f, assetId }))}
-                  placeholder="Select filtered asset"
+                  placeholder={lang === "km" ? "ជ្រើស Asset ដែលបានចម្រោះ" : "Select filtered asset"}
                   disabled={!maintenanceRecordFilteredAssets.length}
                 />
                 <div className="tiny">
                   {maintenanceRecordFilteredAssets.length
-                    ? `${maintenanceRecordFilteredAssets.length} assets match current filters`
+                    ? lang === "km"
+                      ? `${maintenanceRecordFilteredAssets.length} assets ត្រូវតាមតម្រងបច្ចុប្បន្ន`
+                      : `${maintenanceRecordFilteredAssets.length} assets match current filters`
+                    : lang === "km"
+                    ? "មិនមាន assets ត្រូវតាមតម្រងបច្ចុប្បន្ន។"
                     : "No assets match current filters."}
                 </div>
               </label>
               <label className="field">
-                <span>Date</span>
+                <span>{t.date}</span>
                 <input
                   type="date"
                   className="input"
@@ -11575,7 +11628,7 @@ export default function App() {
                 />
               </label>
               <label className="field">
-                <span>Type</span>
+                <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
                 <select
                   className="input"
                   value={maintenanceRecordForm.type}
@@ -11587,7 +11640,7 @@ export default function App() {
                 </select>
               </label>
               <label className="field">
-                <span>Work Status</span>
+                <span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span>
                 <select
                   className="input"
                   value={maintenanceRecordForm.completion}
@@ -11606,16 +11659,16 @@ export default function App() {
                 </select>
               </label>
               <label className="field field-wide">
-                <span>Condition Comment</span>
+                <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
                 <input
                   className="input"
                   value={maintenanceRecordForm.condition}
                   onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
-                  placeholder="Example: Working well, battery low, replace soon..."
+                  placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ, ថ្មខ្សោយ, ត្រូវប្តូរឆាប់ៗ..." : "Example: Working well, battery low, replace soon..."}
                 />
               </label>
               <label className="field field-wide">
-                <span>Maintenance Note</span>
+                <span>{lang === "km" ? "កំណត់ចំណាំថែទាំ" : "Maintenance Note"}</span>
                 <textarea
                   className="textarea"
                   value={maintenanceRecordForm.note}
@@ -11623,7 +11676,7 @@ export default function App() {
                 />
               </label>
               <label className="field">
-                <span>Cost</span>
+                <span>{lang === "km" ? "ចំណាយ" : "Cost"}</span>
                 <input
                   className="input"
                   value={maintenanceRecordForm.cost}
@@ -11631,7 +11684,7 @@ export default function App() {
                 />
               </label>
               <label className="field">
-                <span>By</span>
+                <span>{lang === "km" ? "ដោយ" : "By"}</span>
                 <input
                   className="input"
                   value={maintenanceRecordForm.by}
@@ -11651,14 +11704,16 @@ export default function App() {
             </div>
             <div className="asset-actions">
               <div className="tiny">
-                Track maintenance as Already Done or Not Yet Done and add condition comments.
+                {lang === "km"
+                  ? "កត់ត្រាថែទាំជា បានធ្វើរួច ឬ មិនទាន់ធ្វើ ហើយបន្ថែមកំណត់ចំណាំលក្ខខណ្ឌ។"
+                  : "Track maintenance as Already Done or Not Yet Done and add condition comments."}
               </div>
               <button
                 className="btn-primary"
                 disabled={busy || !isAdmin || !maintenanceRecordForm.assetId || !maintenanceRecordForm.date || !maintenanceRecordForm.note.trim()}
                 onClick={addMaintenanceRecordFromTab}
               >
-                Add Maintenance Record
+                {lang === "km" ? "បន្ថែមកំណត់ត្រាថែទាំ" : "Add Maintenance Record"}
               </button>
             </div>
             </>
@@ -13989,13 +14044,7 @@ export default function App() {
                               className="tab"
                               onClick={() => {
                                 setScheduleAlertModal(null);
-                                setTab("maintenance");
-                                setMaintenanceView("record");
-                                setMaintenanceRecordForm((f) => ({
-                                  ...f,
-                                  assetId: String(asset.id),
-                                  date: toYmd(new Date()),
-                                }));
+                                openMaintenanceRecordFromScheduleAsset(asset);
                               }}
                             >
                               <strong>{asset.assetId}</strong>
