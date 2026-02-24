@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import "./App.css";
 
@@ -273,6 +273,19 @@ const ALL_NAV_MODULES: NavModule[] = [
   "reports",
   "setup",
 ];
+type NavSection = "core" | "operations" | "admin";
+const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
+  dashboard: "core",
+  assets: "core",
+  inventory: "core",
+  tickets: "operations",
+  schedule: "operations",
+  transfer: "operations",
+  maintenance: "operations",
+  verification: "operations",
+  reports: "operations",
+  setup: "admin",
+};
 const MENU_ACCESS_TREE: Array<{
   module: NavModule;
   labelEn: string;
@@ -410,6 +423,16 @@ function toggleChildAccess(menuAccess: MenuAccessKey[], module: NavModule, child
   if (children.length && children.every((key) => next.has(key))) next.add(module);
   else next.delete(module);
   return Array.from(next);
+}
+function countEnabledMenuChildren(menuAccess: MenuAccessKey[]) {
+  const enabled = new Set(menuAccess);
+  let count = 0;
+  for (const node of MENU_ACCESS_TREE) {
+    for (const child of node.children) {
+      if (enabled.has(child.key)) count += 1;
+    }
+  }
+  return count;
 }
 const LOCAL_ADMIN_TOKEN = "local-admin-token";
 const LOCAL_VIEWER_TOKEN = "local-viewer-token";
@@ -1671,6 +1694,15 @@ function filterAssets(
   return out;
 }
 
+function useDebouncedValue<T>(value: T, delayMs = 220): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 function mergeAssets(primary: Asset[], secondary: Asset[]) {
   const merged = new Map<string, Asset>();
   for (const a of [...primary, ...secondary]) {
@@ -1896,6 +1928,7 @@ type AssetPickerProps = {
 function AssetPicker({ value, assets, onChange, placeholder = "Select asset", disabled, getLabel }: AssetPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const prevValueRef = useRef(value);
   const selected = assets.find((a) => String(a.id) === value) || null;
@@ -1930,12 +1963,12 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
   }, [value]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     if (!q) return assets;
     return assets.filter((a) =>
       `${a.assetId} ${a.name} ${a.location} ${a.campus} ${a.category} ${a.type}`.toLowerCase().includes(q)
     );
-  }, [assets, search]);
+  }, [assets, deferredSearch]);
 
   const selectAsset = useCallback(
     (assetId: string) => {
@@ -2053,6 +2086,7 @@ export default function App() {
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const navItems = useMemo<Array<{ id: NavModule; label: string }>>(
     () => [
       { id: "dashboard", label: t.dashboard },
@@ -2102,10 +2136,28 @@ export default function App() {
     () => navItems.filter((item) => allowedNavModules.has(item.id)),
     [navItems, allowedNavModules]
   );
-  const activeNavLabel = useMemo(
-    () => navMenuItems.find((item) => item.id === tab)?.label || t.dashboard,
-    [navMenuItems, tab, t.dashboard]
-  );
+  const navSections = useMemo(() => {
+    const labels: Record<NavSection, string> =
+      lang === "km"
+        ? {
+            core: "មុខងារស្នូល",
+            operations: "ប្រតិបត្តិការ",
+            admin: "គ្រប់គ្រង",
+          }
+        : {
+            core: "Core Modules",
+            operations: "Operations",
+            admin: "Administration",
+          };
+    const order: NavSection[] = ["core", "operations", "admin"];
+    return order
+      .map((section) => ({
+        section,
+        label: labels[section],
+        items: navMenuItems.filter((item) => NAV_SECTION_MAP[item.id] === section),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [lang, navMenuItems]);
   const handleNavChange = useCallback((nextTab: NavModule) => {
     setTab(nextTab);
   }, []);
@@ -2181,7 +2233,12 @@ export default function App() {
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
   const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
   const [reportTerm, setReportTerm] = useState<"Term 1" | "Term 2" | "Term 3">("Term 1");
+  const [isPhoneView, setIsPhoneView] = useState(
+    () => (typeof window !== "undefined" ? window.innerWidth <= 768 : false)
+  );
+  const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 260);
 
   useEffect(() => {
     if (!navMenuItems.some((item) => item.id === tab)) {
@@ -2192,6 +2249,21 @@ export default function App() {
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [tab]);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (mobileNavRef.current?.contains(target)) return;
+      setMobileMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideTap);
+    document.addEventListener("touchstart", handleOutsideTap);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTap);
+      document.removeEventListener("touchstart", handleOutsideTap);
+    };
+  }, [mobileMenuOpen]);
 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -2505,6 +2577,19 @@ export default function App() {
   useEffect(() => {
     trySetLocalStorage("ui_lang", lang);
   }, [lang]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setIsPhoneView(window.innerWidth <= 768);
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isPhoneView) setReportMobileFiltersOpen(false);
+  }, [isPhoneView]);
 
   useEffect(() => {
     if (authUser) {
@@ -3250,7 +3335,7 @@ export default function App() {
         effectiveAssetCampusFilter,
         assetCategoryFilter,
         assetNameFilter,
-        search
+        debouncedSearch
       );
       setAssets(effectiveAssets);
       setTickets(normalizeArray<Ticket>(ticketRes.tickets));
@@ -3271,7 +3356,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [campusFilter, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search]);
+  }, [campusFilter, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, debouncedSearch]);
 
   useEffect(() => {
     void loadData();
@@ -7147,6 +7232,9 @@ export default function App() {
       setReportType(reportTypeOptions[0].value);
     }
   }, [reportTypeOptions, reportType]);
+  useEffect(() => {
+    setReportMobileFiltersOpen(false);
+  }, [reportType, tab]);
 
   useEffect(() => {
     setAssetMasterCampusFilter((prev) => {
@@ -7983,48 +8071,53 @@ export default function App() {
 
         <section className="workspace-shell">
           <aside className="main-nav-rail">
-            {navMenuItems.map((item) => (
-              <button
-                key={item.id}
-                className={`main-nav-btn ${tab === item.id ? "main-nav-btn-active" : ""}`}
-                onClick={() => handleNavChange(item.id)}
-              >
-                {item.label}
-              </button>
+            <div className="main-nav-head">
+              <p className="eyebrow">{t.menu}</p>
+              <h3>{lang === "km" ? "ការរុករកប្រព័ន្ធ" : "System Navigation"}</h3>
+            </div>
+            {navSections.map((section) => (
+              <section key={section.section} className="main-nav-section">
+                <p className="main-nav-section-label">{section.label}</p>
+                <div className="main-nav-list">
+                  {section.items.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`main-nav-btn ${tab === item.id ? "main-nav-btn-active" : ""}`}
+                      onClick={() => handleNavChange(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
             ))}
           </aside>
 
           <section className="workspace-main">
-            <div className="mobile-nav-hud">
-              <p className="mobile-nav-hint">{t.phoneHint}</p>
-              <label className="field mobile-nav-field">
-                <span>{t.menu}</span>
-                <select
-                  className="input mobile-nav-select"
-                  value={tab}
-                  onChange={(e) => handleNavChange(e.target.value as NavModule)}
+            <div className="mobile-nav-hud" ref={mobileNavRef}>
+              {!mobileMenuOpen ? (
+                <button
+                  className={`mobile-hamburger-btn ${mobileMenuOpen ? "mobile-hamburger-btn-active" : ""}`}
+                  type="button"
+                  onClick={() => setMobileMenuOpen((open) => !open)}
+                  aria-expanded={mobileMenuOpen}
+                  aria-label={t.menu}
                 >
-                  {navMenuItems.map((item) => (
-                    <option key={`mobile-nav-${item.id}`} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className={`mobile-settings-toggle ${mobileMenuOpen ? "mobile-settings-toggle-active" : ""}`}
-                type="button"
-                onClick={() => setMobileMenuOpen((open) => !open)}
-                aria-expanded={mobileMenuOpen}
-              >
-                <span>{activeNavLabel}</span>
-                <span>{mobileMenuOpen ? t.close : t.options}</span>
-              </button>
+                  <span className="mobile-hamburger-icon" aria-hidden="true">☰</span>
+                </button>
+              ) : null}
               {mobileMenuOpen ? (
                 <div className="mobile-settings-panel">
                   <label className="field">
                     <span>{t.view}</span>
-                    <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
+                    <select
+                      value={campusFilter}
+                      onChange={(e) => {
+                        setCampusFilter(e.target.value);
+                        setMobileMenuOpen(false);
+                      }}
+                      className="input"
+                    >
                       {authUser.role === "Admin" ? <option value="ALL">{t.allCampuses}</option> : null}
                       {allowedCampuses.map((campus) => (
                         <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
@@ -8034,7 +8127,14 @@ export default function App() {
 
                   <label className="field">
                     <span>{t.language}</span>
-                    <select value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="input">
+                    <select
+                      value={lang}
+                      onChange={(e) => {
+                        setLang(e.target.value as Lang);
+                        setMobileMenuOpen(false);
+                      }}
+                      className="input"
+                    >
                       <option value="en">{t.english}</option>
                       <option value="km">{t.khmer}</option>
                     </select>
@@ -8044,9 +8144,34 @@ export default function App() {
                     <span>{t.account}</span>
                     <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
                   </label>
-                  <button className="tab" type="button" onClick={handleLogout}>{t.logout}</button>
+                  <button
+                    className="tab"
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                  >
+                    {t.logout}
+                  </button>
                 </div>
               ) : null}
+            </div>
+            <div className="mobile-module-panel">
+              <label className="field mobile-nav-field">
+                <span>{t.menu}</span>
+                <select
+                  className="input mobile-nav-select"
+                  value={tab}
+                  onChange={(e) => handleNavChange(e.target.value as NavModule)}
+                >
+                  {navMenuItems.map((item) => (
+                    <option key={`mobile-module-${item.id}`} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             {error ? <p className="alert alert-error">{error}</p> : null}
             {!isAdmin ? <p className="alert">{t.viewerMode}</p> : null}
@@ -9091,93 +9216,149 @@ export default function App() {
                   <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
                 </div>
 
-                <div className="table-wrap asset-list-scroll">
-                  <table className="table-compact">
-                    <thead>
-                      <tr>
-                        <th>{t.assetId}</th>
-                        <th>{t.campus}</th>
-                        <th>{t.category}</th>
-                        <th>{t.photo}</th>
-                        <th>{t.name}</th>
-                        <th>{t.location}</th>
-                        <th>{t.actions}</th>
-                        <th>{t.status}</th>
-                        <th>{t.history}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {assetListRows.length ? (
-                        assetListRows.map((asset) => (
-                          <tr key={asset.id} className={assetStatusRowClass(asset.status || "")}>
-                            <td>
-                              <button className="tab" onClick={() => setAssetDetailId(asset.id)}>
-                                <strong>{asset.assetId}</strong>
-                              </button>
-                            </td>
-                            <td>{campusLabel(asset.campus)}</td>
-                            <td>{asset.category}</td>
-                            <td>
-                              {renderAssetPhoto(asset.photo || "", asset.assetId)}
-                            </td>
-                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                            <td>{asset.location || "-"}</td>
-                            <td>
+                {isPhoneView ? (
+                  <div className="asset-mobile-list">
+                    {assetListRows.length ? (
+                      assetListRows.map((asset) => (
+                        <article key={`asset-mobile-${asset.id}`} className={`asset-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                          <div className="asset-mobile-head">
+                            <button className="tab" onClick={() => setAssetDetailId(asset.id)}>
+                              <strong>{asset.assetId}</strong>
+                            </button>
+                            {renderAssetPhoto(asset.photo || "", asset.assetId)}
+                          </div>
+                          <div className="asset-mobile-meta">
+                            <div><strong>{t.name}:</strong> {assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                            <div><strong>{t.campus}:</strong> {campusLabel(asset.campus)}</div>
+                            <div><strong>{t.category}:</strong> {asset.category}</div>
+                            <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
+                          </div>
+                          <div className="asset-mobile-foot">
+                            <div className="asset-mobile-status">
                               {isAdmin ? (
-                                <div className="row-actions">
-                                  <button
-                                    className="btn-icon-transfer"
-                                    onClick={() => openTransferFromAsset(asset)}
-                                    title="Transfer"
-                                    aria-label="Transfer"
-                                  >
-                                    ⇄
-                                  </button>
-                                  <button
-                                    className="btn-icon-edit"
-                                    onClick={() => startEditAsset(asset)}
-                                    title="Edit"
-                                    aria-label="Edit"
-                                  >
-                                    ✎
-                                  </button>
-                                  <button className="btn-danger" onClick={() => removeAsset(asset.id)} title="Delete" aria-label="Delete">✕</button>
-                                </div>
-                              ) : (
-                                <span className="tiny">{t.readOnly}</span>
-                              )}
-                            </td>
-                            <td>
-                              {isAdmin ? (
-                                <select className="status-select" value={asset.status || "Active"} onChange={(e) => openAssetStatusChangeDialog(asset.id, e.target.value)}>
+                                <select
+                                  className="status-select"
+                                  value={asset.status || "Active"}
+                                  onChange={(e) => openAssetStatusChangeDialog(asset.id, e.target.value)}
+                                >
                                   {ASSET_STATUS_OPTIONS.map((status) => (
-                                    <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                                    <option key={status.value} value={status.value}>
+                                      {lang === "km" ? status.km : status.en}
+                                    </option>
                                   ))}
                                 </select>
                               ) : (
                                 <span>{asset.status || "Active"}</span>
                               )}
-                            </td>
-                            <td>
-                              <button
-                                className="tab"
-                                onClick={() => {
-                                  setHistoryAssetId(asset.id);
-                                }}
-                              >
-                                History
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
+                            </div>
+                            {isAdmin ? (
+                              <div className="row-actions">
+                                <button
+                                  className="btn-icon-transfer"
+                                  onClick={() => openTransferFromAsset(asset)}
+                                  title="Transfer"
+                                  aria-label="Transfer"
+                                >
+                                  ⇄
+                                </button>
+                                <button
+                                  className="btn-icon-edit"
+                                  onClick={() => startEditAsset(asset)}
+                                  title="Edit"
+                                  aria-label="Edit"
+                                >
+                                  ✎
+                                </button>
+                                <button className="btn-danger" onClick={() => removeAsset(asset.id)} title="Delete" aria-label="Delete">✕</button>
+                              </div>
+                            ) : (
+                              <span className="tiny">{t.readOnly}</span>
+                            )}
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">{t.noAssets}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="table-wrap asset-list-scroll">
+                    <table className="table-compact asset-list-table">
+                      <thead>
                         <tr>
-                          <td colSpan={9}>{t.noAssets}</td>
+                          <th>{t.assetId}</th>
+                          <th>{t.campus}</th>
+                          <th>{t.category}</th>
+                          <th>{t.photo}</th>
+                          <th>{t.name}</th>
+                          <th>{t.location}</th>
+                          <th>{t.actions}</th>
+                          <th>{t.status}</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {assetListRows.length ? (
+                          assetListRows.map((asset) => (
+                            <tr key={asset.id} className={assetStatusRowClass(asset.status || "")}>
+                              <td>
+                                <button className="tab" onClick={() => setAssetDetailId(asset.id)}>
+                                  <strong>{asset.assetId}</strong>
+                                </button>
+                              </td>
+                              <td>{campusLabel(asset.campus)}</td>
+                              <td>{asset.category}</td>
+                              <td>
+                                {renderAssetPhoto(asset.photo || "", asset.assetId)}
+                              </td>
+                              <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                              <td>{asset.location || "-"}</td>
+                              <td>
+                                {isAdmin ? (
+                                  <div className="row-actions">
+                                    <button
+                                      className="btn-icon-transfer"
+                                      onClick={() => openTransferFromAsset(asset)}
+                                      title="Transfer"
+                                      aria-label="Transfer"
+                                    >
+                                      ⇄
+                                    </button>
+                                    <button
+                                      className="btn-icon-edit"
+                                      onClick={() => startEditAsset(asset)}
+                                      title="Edit"
+                                      aria-label="Edit"
+                                    >
+                                      ✎
+                                    </button>
+                                    <button className="btn-danger" onClick={() => removeAsset(asset.id)} title="Delete" aria-label="Delete">✕</button>
+                                  </div>
+                                ) : (
+                                  <span className="tiny">{t.readOnly}</span>
+                                )}
+                              </td>
+                              <td>
+                                {isAdmin ? (
+                                  <select className="status-select" value={asset.status || "Active"} onChange={(e) => openAssetStatusChangeDialog(asset.id, e.target.value)}>
+                                    {ASSET_STATUS_OPTIONS.map((status) => (
+                                      <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span>{asset.status || "Active"}</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8}>{t.noAssets}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </section>
             )}
 
@@ -11976,10 +12157,23 @@ export default function App() {
                   </select>
                 </label>
                 <div className="report-builder-actions">
+                  <button
+                    type="button"
+                    className="tab report-mobile-filter-btn"
+                    onClick={() => setReportMobileFiltersOpen(true)}
+                  >
+                    {lang === "km" ? "តម្រង" : "Filters"}
+                  </button>
                   <button type="button" className="tab" onClick={resetReportFilters}>
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
-                  <button className="btn-primary report-print-btn" onClick={printCurrentReport}>
+                  <button
+                    className="btn-primary report-print-btn"
+                    onClick={() => {
+                      setReportMobileFiltersOpen(false);
+                      printCurrentReport();
+                    }}
+                  >
                     {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
                   </button>
                 </div>
@@ -11993,7 +12187,26 @@ export default function App() {
                   <div className="tiny report-filters-title">
                     {lang === "km" ? "ជំហានទី 2៖ ជ្រើសតម្រង (បើចាំបាច់)" : "Step 2: Set Filters (if needed)"}
                   </div>
-                  <div className="panel-filters report-filters report-filter-row">
+                  {isPhoneView && reportMobileFiltersOpen ? (
+                    <button
+                      type="button"
+                      className="report-mobile-filter-overlay"
+                      aria-label="Close filters"
+                      onClick={() => setReportMobileFiltersOpen(false)}
+                    />
+                  ) : null}
+                  <div
+                    className={`report-mobile-filter-sheet ${
+                      isPhoneView && reportMobileFiltersOpen ? "report-mobile-filter-sheet-open" : ""
+                    }`}
+                  >
+                    <div className="report-mobile-filter-head">
+                      <strong>{lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters"}</strong>
+                      <button type="button" className="tab" onClick={() => setReportMobileFiltersOpen(false)}>
+                        {lang === "km" ? "រួចរាល់" : "Done"}
+                      </button>
+                    </div>
+                    <div className="panel-filters report-filters report-filter-row">
               {reportType === "maintenance_completion" ? (
                 <>
                   <input
@@ -12183,6 +12396,7 @@ export default function App() {
                   </details>
                 </>
               ) : null}
+                    </div>
                   </div>
                 </>
               ) : (
@@ -12210,105 +12424,153 @@ export default function App() {
               </div>
             )}
             {reportType === "asset_master" && (
-              <div className="table-wrap report-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      {assetMasterColumnDefs
-                        .filter((column) => isAssetMasterColumnVisible(column.key))
-                        .map((column) => (
-                          <th key={`report-master-col-${column.key}`}>
-                            {column.sortable ? (
-                              <button
-                                type="button"
-                                className="report-sort-link"
-                                onClick={() => toggleAssetMasterSort(column.key)}
-                              >
-                                {column.label}
-                                {assetMasterSortMark(column.key)}
-                              </button>
-                            ) : (
-                              column.label
-                            )}
-                          </th>
-                        ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+              <>
+                {isPhoneView ? (
+                  <div className="report-mobile-only report-card-list">
                     {sortedAssetMasterRows.length ? (
                       sortedAssetMasterRows.map((row) => (
-                        <tr key={`report-asset-master-${row.key}`}>
-                          {assetMasterColumnDefs
-                            .filter((column) => isAssetMasterColumnVisible(column.key))
-                            .map((column) => {
-                              if (column.key === "photo") {
-                                return <td key={`${row.key}-photo`}>{renderAssetPhoto(row.photo || "", row.assetId)}</td>;
-                              }
-                              if (column.key === "assetId") {
-                                return <td key={`${row.key}-assetId`}><strong>{row.assetId}</strong></td>;
-                              }
-                              if (column.key === "linkedTo") {
-                                return <td key={`${row.key}-linkedTo`}>{row.linkedTo || "-"}</td>;
-                              }
-                              if (column.key === "itemName") {
-                                return <td key={`${row.key}-itemName`}>{row.itemName || "-"}</td>;
-                              }
-                              if (column.key === "category") {
-                                return <td key={`${row.key}-category`}>{row.category || "-"}</td>;
-                              }
-                              if (column.key === "campus") {
-                                return <td key={`${row.key}-campus`}>{campusLabel(row.campus)}</td>;
-                              }
-                              if (column.key === "itemDescription") {
-                                return (
-                                  <td key={`${row.key}-itemDescription`} className="report-item-description" title={row.itemDescription || "-"}>
-                                    {row.itemDescription || "-"}
-                                  </td>
-                                );
-                              }
-                              if (column.key === "location") {
-                                return <td key={`${row.key}-location`}>{row.location || "-"}</td>;
-                              }
-                              if (column.key === "purchaseDate") {
-                                return <td key={`${row.key}-purchaseDate`}>{formatDate(row.purchaseDate || "-")}</td>;
-                              }
-                              if (column.key === "lastServiceDate") {
-                                return (
-                                  <td key={`${row.key}-lastServiceDate`}>
-                                    {row.lastServiceDate && row.lastServiceDate !== "-" ? (
-                                      <button
-                                        type="button"
-                                        className="report-service-link"
-                                        onClick={() => {
-                                          setTab("maintenance");
-                                          setMaintenanceView("history");
-                                          setMaintenanceDetailAssetId(row.assetDbId);
-                                        }}
-                                        title="Open maintenance history"
-                                      >
-                                        {formatDate(row.lastServiceDate)}
-                                      </button>
-                                    ) : (
-                                      "-"
-                                    )}
-                                  </td>
-                                );
-                              }
-                              if (column.key === "assignedTo") {
-                                return <td key={`${row.key}-assignedTo`}>{row.assignedTo || "-"}</td>;
-                              }
-                              return <td key={`${row.key}-status`}>{row.status || "-"}</td>;
-                            })}
-                        </tr>
+                        <article key={`report-mobile-asset-${row.key}`} className="report-card">
+                          <div className="report-card-head">
+                            <div>{renderAssetPhoto(row.photo || "", row.assetId)}</div>
+                            <div>
+                              <strong>{row.assetId}</strong>
+                              <div className="tiny">{row.status || "-"}</div>
+                            </div>
+                          </div>
+                          <div className="report-card-meta">
+                            <div><strong>{t.campus}:</strong> {campusLabel(row.campus)}</div>
+                            <div><strong>{t.category}:</strong> {row.category || "-"}</div>
+                            <div><strong>{t.location}:</strong> {row.location || "-"}</div>
+                            <div><strong>Linked:</strong> {row.linkedTo || "-"}</div>
+                            <div><strong>Item:</strong> {row.itemDescription || "-"}</div>
+                            <div><strong>Purchase:</strong> {formatDate(row.purchaseDate || "-")}</div>
+                            <div>
+                              <strong>Last Service:</strong>{" "}
+                              {row.lastServiceDate && row.lastServiceDate !== "-" ? (
+                                <button
+                                  type="button"
+                                  className="report-service-link"
+                                  onClick={() => {
+                                    setTab("maintenance");
+                                    setMaintenanceView("history");
+                                    setMaintenanceDetailAssetId(row.assetDbId);
+                                  }}
+                                >
+                                  {formatDate(row.lastServiceDate)}
+                                </button>
+                              ) : (
+                                "-"
+                              )}
+                            </div>
+                          </div>
+                        </article>
                       ))
                     ) : (
-                      <tr>
-                        <td colSpan={Math.max(assetMasterVisibleColumns.length, 1)}>No assets found.</td>
-                      </tr>
+                      <div className="panel-note">No assets found.</div>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                ) : (
+                  <div className="table-wrap report-table-wrap report-desktop-only">
+                    <table>
+                      <thead>
+                        <tr>
+                          {assetMasterColumnDefs
+                            .filter((column) => isAssetMasterColumnVisible(column.key))
+                            .map((column) => (
+                              <th key={`report-master-col-${column.key}`}>
+                                {column.sortable ? (
+                                  <button
+                                    type="button"
+                                    className="report-sort-link"
+                                    onClick={() => toggleAssetMasterSort(column.key)}
+                                  >
+                                    {column.label}
+                                    {assetMasterSortMark(column.key)}
+                                  </button>
+                                ) : (
+                                  column.label
+                                )}
+                              </th>
+                            ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedAssetMasterRows.length ? (
+                          sortedAssetMasterRows.map((row) => (
+                            <tr key={`report-asset-master-${row.key}`}>
+                              {assetMasterColumnDefs
+                                .filter((column) => isAssetMasterColumnVisible(column.key))
+                                .map((column) => {
+                                  if (column.key === "photo") {
+                                    return <td key={`${row.key}-photo`}>{renderAssetPhoto(row.photo || "", row.assetId)}</td>;
+                                  }
+                                  if (column.key === "assetId") {
+                                    return <td key={`${row.key}-assetId`}><strong>{row.assetId}</strong></td>;
+                                  }
+                                  if (column.key === "linkedTo") {
+                                    return <td key={`${row.key}-linkedTo`}>{row.linkedTo || "-"}</td>;
+                                  }
+                                  if (column.key === "itemName") {
+                                    return <td key={`${row.key}-itemName`}>{row.itemName || "-"}</td>;
+                                  }
+                                  if (column.key === "category") {
+                                    return <td key={`${row.key}-category`}>{row.category || "-"}</td>;
+                                  }
+                                  if (column.key === "campus") {
+                                    return <td key={`${row.key}-campus`}>{campusLabel(row.campus)}</td>;
+                                  }
+                                  if (column.key === "itemDescription") {
+                                    return (
+                                      <td key={`${row.key}-itemDescription`} className="report-item-description" title={row.itemDescription || "-"}>
+                                        {row.itemDescription || "-"}
+                                      </td>
+                                    );
+                                  }
+                                  if (column.key === "location") {
+                                    return <td key={`${row.key}-location`}>{row.location || "-"}</td>;
+                                  }
+                                  if (column.key === "purchaseDate") {
+                                    return <td key={`${row.key}-purchaseDate`}>{formatDate(row.purchaseDate || "-")}</td>;
+                                  }
+                                  if (column.key === "lastServiceDate") {
+                                    return (
+                                      <td key={`${row.key}-lastServiceDate`}>
+                                        {row.lastServiceDate && row.lastServiceDate !== "-" ? (
+                                          <button
+                                            type="button"
+                                            className="report-service-link"
+                                            onClick={() => {
+                                              setTab("maintenance");
+                                              setMaintenanceView("history");
+                                              setMaintenanceDetailAssetId(row.assetDbId);
+                                            }}
+                                            title="Open maintenance history"
+                                          >
+                                            {formatDate(row.lastServiceDate)}
+                                          </button>
+                                        ) : (
+                                          "-"
+                                        )}
+                                      </td>
+                                    );
+                                  }
+                                  if (column.key === "assignedTo") {
+                                    return <td key={`${row.key}-assignedTo`}>{row.assignedTo || "-"}</td>;
+                                  }
+                                  return <td key={`${row.key}-status`}>{row.status || "-"}</td>;
+                                })}
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={Math.max(assetMasterVisibleColumns.length, 1)}>No assets found.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
 
             {reportType === "set_code" && (
@@ -12921,6 +13183,39 @@ export default function App() {
               </label>
               <label className="field field-wide">
                 <span>Menu & Submenu Access</span>
+                <div className="permission-access-tools">
+                  <span className="tiny">
+                    {countEnabledMenuChildren(authCreateForm.menuAccess)} submenu permissions selected
+                  </span>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="tab"
+                      disabled={!isAdmin}
+                      onClick={() =>
+                        setAuthCreateForm((f) => ({
+                          ...f,
+                          menuAccess: defaultMenuAccessFor(f.role, f.modules, f.assetSubviewAccess),
+                        }))
+                      }
+                    >
+                      {lang === "km" ? "ជ្រើសតាមតួនាទី" : "Role Default"}
+                    </button>
+                    <button
+                      type="button"
+                      className="tab"
+                      disabled={!isAdmin}
+                      onClick={() =>
+                        setAuthCreateForm((f) => ({
+                          ...f,
+                          menuAccess: normalizeMenuAccess(f.role, f.modules, f.assetSubviewAccess, []),
+                        }))
+                      }
+                    >
+                      {lang === "km" ? "ដកទាំងអស់" : "Clear"}
+                    </button>
+                  </div>
+                </div>
                 <details className="filter-menu">
                   <summary>{lang === "km" ? "ជ្រើសម៉ឺនុយដែលអាចមើលឃើញ" : "Select visible menus"}</summary>
                   <div className="filter-menu-list" style={{ maxHeight: 360 }}>
@@ -13090,7 +13385,9 @@ export default function App() {
                           </td>
                           <td>
                             <details className="filter-menu">
-                              <summary>{lang === "km" ? "កំណត់សិទ្ធិម៉ឺនុយ" : "Set Menu Access"}</summary>
+                              <summary>
+                                {lang === "km" ? "កំណត់សិទ្ធិម៉ឺនុយ" : "Set Menu Access"} ({countEnabledMenuChildren(draft.menuAccess)})
+                              </summary>
                               <div className="filter-menu-list" style={{ maxHeight: 320 }}>
                                 {MENU_ACCESS_TREE.map((node) => {
                                   const moduleChecked = isModuleFullyChecked(draft.menuAccess, node.module);
