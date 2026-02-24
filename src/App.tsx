@@ -5308,16 +5308,16 @@ export default function App() {
         let nextRepeatWeekOfMonth = Number(asset.repeatWeekOfMonth || 0);
         let nextRepeatWeekday = Number(asset.repeatWeekday || 0);
         if (entry.completion === "Done") {
-          if (maintenanceRecordScheduleJumpMode) {
-            // Jumped from schedule/calendar and completed now: remove this schedule.
+          if (asset.repeatMode === "MONTHLY_WEEKDAY") {
+            const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
+            const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
+            nextMaintenanceDate = resolveNextScheduleDate(asset, shiftYmd(doneRef, 1));
+          } else {
+            // For one-time schedules, a Done record always clears the pending schedule.
             nextMaintenanceDate = "";
             nextRepeatMode = "NONE";
             nextRepeatWeekOfMonth = 0;
             nextRepeatWeekday = 0;
-          } else if (asset.repeatMode === "MONTHLY_WEEKDAY") {
-            nextMaintenanceDate = resolveNextScheduleDate(asset, shiftYmd(entry.date, 1));
-          } else if (!nextMaintenanceDate || nextMaintenanceDate <= entry.date) {
-            nextMaintenanceDate = "";
           }
         }
         const statusHistory = Array.isArray(asset.statusHistory) ? asset.statusHistory : [];
@@ -12473,6 +12473,15 @@ export default function App() {
           <section className="panel">
             <div className="report-title-row">
               <h2>{t.reports}</h2>
+              <button
+                className="btn-primary report-print-btn report-title-print-btn"
+                onClick={() => {
+                  setReportMobileFiltersOpen(false);
+                  printCurrentReport();
+                }}
+              >
+                {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
+              </button>
             </div>
             {reportType === "maintenance_completion" && (
               <div className="stats-grid" style={{ marginBottom: 10 }}>
@@ -12510,27 +12519,16 @@ export default function App() {
                   <button
                     type="button"
                     className="tab report-mobile-filter-btn"
-                    onClick={() => setReportMobileFiltersOpen(true)}
+                    onClick={() => setReportMobileFiltersOpen((open) => !open)}
                   >
-                    {lang === "km" ? "តម្រង" : "Filters"}
+                    {isPhoneView && reportMobileFiltersOpen
+                      ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                      : (lang === "km" ? "តម្រង" : "Filters")}
                   </button>
                   <button type="button" className="tab" onClick={resetReportFilters}>
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
-                  <button
-                    className="btn-primary report-print-btn"
-                    onClick={() => {
-                      setReportMobileFiltersOpen(false);
-                      printCurrentReport();
-                    }}
-                  >
-                    {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
-                  </button>
                 </div>
-              </div>
-              <div className="report-builder-hint">
-                <strong>{selectedReportTypeLabel}</strong>
-                <span>{reportTypeGuideText}</span>
               </div>
               {hasReportFilters ? (
                 <>
@@ -12756,6 +12754,10 @@ export default function App() {
                     : "No extra filters for this report. You can go directly to print."}
                 </div>
               )}
+              <div className="report-builder-hint">
+                <strong>{selectedReportTypeLabel}</strong>
+                <span>{reportTypeGuideText}</span>
+              </div>
             </div>
 
             {reportType === "asset_master" && (
