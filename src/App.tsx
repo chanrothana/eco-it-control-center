@@ -9476,10 +9476,10 @@ export default function App() {
                       assetListRows.map((asset) => (
                         <article key={`asset-mobile-${asset.id}`} className={`asset-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
                           <div className="asset-mobile-head">
-                            <button className="tab" onClick={() => setAssetDetailId(asset.id)}>
+                            <button className="tab asset-mobile-assetid" onClick={() => setAssetDetailId(asset.id)}>
                               <strong>{asset.assetId}</strong>
                             </button>
-                            {renderAssetPhoto(asset.photo || "", asset.assetId)}
+                            <div className="asset-mobile-photo">{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
                           </div>
                           <div className="asset-mobile-meta">
                             <div><strong>{t.name}:</strong> {assetItemName(asset.category, asset.type, asset.pcType || "")}</div>

@@ -1534,10 +1534,27 @@ table {
 }
 
 .asset-mobile-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 8px;
+}
+
+.asset-mobile-assetid {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.asset-mobile-photo {
+  justify-self: end;
+}
+
+.asset-mobile-photo .table-photo {
+  width: 72px;
+  height: 72px;
 }
 
 .asset-mobile-meta {
@@ -2680,33 +2697,40 @@ tr.row-maint-maintenance:hover td {
   }
 
   .workspace-main {
-    padding-top: 56px;
+    padding-top: 0;
     padding-bottom: 0;
   }
 
   .mobile-nav-hud {
     display: block;
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    z-index: 40;
+    position: static !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    z-index: auto;
     width: auto;
-    margin-bottom: 0;
+    margin-bottom: 12px;
     padding: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
     backdrop-filter: none;
+    display: flex;
+    justify-content: flex-end;
   }
 
   .mobile-hamburger-btn {
     width: auto;
-    min-width: 44px;
-    width: 44px;
+    min-width: 52px;
+    width: 52px;
+    min-height: 52px;
     padding: 0;
     justify-content: center;
     gap: 0;
+    font-size: 18px;
   }
 
   .mobile-settings-panel {
@@ -2780,13 +2804,21 @@ tr.row-maint-maintenance:hover td {
   }
 
   .asset-mobile-foot {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .asset-mobile-status {
     min-width: 0;
-    width: 100%;
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  .asset-mobile-foot .row-actions {
+    flex-wrap: nowrap;
+    justify-content: flex-end;
   }
 
   .tabs {
@@ -2950,17 +2982,16 @@ tr.row-maint-maintenance:hover td {
   }
 
   .mobile-nav-hud {
-    top: 8px;
-    right: 8px;
+    margin-bottom: 10px;
   }
 
   .mobile-settings-toggle,
   .mobile-hamburger-btn {
-    min-height: 42px;
+    min-height: 48px;
     width: auto;
-    min-width: 42px;
-    width: 42px;
-    font-size: 14px;
+    min-width: 48px;
+    width: 48px;
+    font-size: 17px;
     padding: 0;
   }
 
