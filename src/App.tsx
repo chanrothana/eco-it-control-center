@@ -1649,6 +1649,19 @@ function resolveNextScheduleDate(asset: Asset, fromYmd: string) {
   return asset.nextMaintenanceDate || "";
 }
 
+function latestDoneDateOnOrAfter(asset: Asset, targetYmd: string) {
+  if (!targetYmd) return "";
+  const doneDates = (asset.maintenanceHistory || [])
+    .map((entry) => ({
+      date: String(entry?.date || "").trim(),
+      completion: String(entry?.completion || "").trim(),
+    }))
+    .filter((entry) => entry.completion === "Done" && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date >= targetYmd)
+    .map((entry) => entry.date);
+  if (!doneDates.length) return "";
+  return doneDates.sort((a, b) => b.localeCompare(a))[0];
+}
+
 function escapeHtml(input: string) {
   return input
     .replace(/&/g, "&amp;")
@@ -6621,7 +6634,18 @@ export default function App() {
     const merged = mergeAssets(assets, readAssetFallback());
     const filtered = campusFilter === "ALL" ? merged : merged.filter((a) => a.campus === campusFilter);
     return filtered
-      .map((a) => ({ ...a, nextMaintenanceDate: resolveNextScheduleDate(a, today) }))
+      .map((a) => {
+        let nextMaintenanceDate = resolveNextScheduleDate(a, today);
+        const doneDate = latestDoneDateOnOrAfter(a, nextMaintenanceDate);
+        if (doneDate) {
+          if (a.repeatMode === "MONTHLY_WEEKDAY") {
+            nextMaintenanceDate = resolveNextScheduleDate(a, shiftYmd(doneDate, 1));
+          } else {
+            nextMaintenanceDate = "";
+          }
+        }
+        return { ...a, nextMaintenanceDate };
+      })
       .filter((a) => a.nextMaintenanceDate)
       .sort((a, b) => (a.nextMaintenanceDate || "").localeCompare(b.nextMaintenanceDate || ""));
   }, [assets, campusFilter]);
