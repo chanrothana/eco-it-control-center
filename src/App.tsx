@@ -7974,197 +7974,197 @@ export default function App() {
 
             {assetsView === "list" && (
               <section className="panel">
-                <div className="panel-row asset-list-toolbar">
+                <div className="asset-list-toolbar">
                   <h2 className="asset-list-title">{t.assetRegistry}</h2>
-                  <div className="panel-filters asset-list-filters">
-                    <details className="filter-menu">
-                      <summary>{summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}</summary>
-                      <div className="filter-menu-list">
-                        <label className="filter-menu-item">
+                </div>
+                <div className="panel-filters asset-list-filters asset-list-filter-row">
+                  <details className="filter-menu">
+                    <summary>{summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetCampusMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetCampusMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetCampusFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        {t.allCampuses}
+                      </label>
+                      {assetCampusFilterOptions.map((campus) => (
+                        <label key={`asset-campus-filter-${campus}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetCampusMultiFilter.includes("ALL")}
+                            checked={
+                              assetCampusMultiFilter.includes("ALL") ||
+                              assetCampusMultiFilter.includes(campus)
+                            }
                             onChange={(e) =>
                               setAssetCampusMultiFilter((prev) =>
                                 applyMultiFilterSelection(
                                   prev,
                                   e.target.checked,
-                                  "ALL",
+                                  campus,
                                   assetCampusFilterOptions
                                 )
                               )
                             }
                           />
-                          {t.allCampuses}
+                          {campusLabel(campus)}
                         </label>
-                        {assetCampusFilterOptions.map((campus) => (
-                          <label key={`asset-campus-filter-${campus}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={
-                                assetCampusMultiFilter.includes("ALL") ||
-                                assetCampusMultiFilter.includes(campus)
-                              }
-                              onChange={(e) =>
-                                setAssetCampusMultiFilter((prev) =>
-                                  applyMultiFilterSelection(
-                                    prev,
-                                    e.target.checked,
-                                    campus,
-                                    assetCampusFilterOptions
-                                  )
-                                )
-                              }
-                            />
-                            {campusLabel(campus)}
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                    <details className="filter-menu">
-                      <summary>
-                        {summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
-                          const row = CATEGORY_OPTIONS.find((option) => option.value === value);
-                          return row ? (lang === "km" ? row.km : row.en) : value;
-                        })}
-                      </summary>
-                      <div className="filter-menu-list">
-                        <label className="filter-menu-item">
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu">
+                    <summary>
+                      {summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
+                        const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                        return row ? (lang === "km" ? row.km : row.en) : value;
+                      })}
+                    </summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetCategoryMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetCategoryMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetCategoryFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        {t.allCategories}
+                      </label>
+                      {CATEGORY_OPTIONS.map((category) => (
+                        <label key={`asset-category-filter-${category.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetCategoryMultiFilter.includes("ALL")}
+                            checked={
+                              assetCategoryMultiFilter.includes("ALL") ||
+                              assetCategoryMultiFilter.includes(category.value)
+                            }
                             onChange={(e) =>
                               setAssetCategoryMultiFilter((prev) =>
                                 applyMultiFilterSelection(
                                   prev,
                                   e.target.checked,
-                                  "ALL",
+                                  category.value,
                                   assetCategoryFilterOptions
                                 )
                               )
                             }
                           />
-                          {t.allCategories}
+                          {lang === "km" ? category.km : category.en}
                         </label>
-                        {CATEGORY_OPTIONS.map((category) => (
-                          <label key={`asset-category-filter-${category.value}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={
-                                assetCategoryMultiFilter.includes("ALL") ||
-                                assetCategoryMultiFilter.includes(category.value)
-                              }
-                              onChange={(e) =>
-                                setAssetCategoryMultiFilter((prev) =>
-                                  applyMultiFilterSelection(
-                                    prev,
-                                    e.target.checked,
-                                    category.value,
-                                    assetCategoryFilterOptions
-                                  )
-                                )
-                              }
-                            />
-                            {lang === "km" ? category.km : category.en}
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                    <details className="filter-menu">
-                      <summary>
-                        {summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
-                          const row = assetNameFilterOptions.find((option) => option.value === value);
-                          return row ? row.label : value;
-                        })}
-                      </summary>
-                      <div className="filter-menu-list">
-                        <label className="filter-menu-item">
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu">
+                    <summary>
+                      {summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
+                        const row = assetNameFilterOptions.find((option) => option.value === value);
+                        return row ? row.label : value;
+                      })}
+                    </summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetNameMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetNameMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetNameFilterOptions.map((option) => option.value)
+                              )
+                            )
+                          }
+                        />
+                        {`All ${t.name}s`}
+                      </label>
+                      {assetNameFilterOptions.map((option) => (
+                        <label key={`asset-name-filter-${option.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetNameMultiFilter.includes("ALL")}
+                            checked={
+                              assetNameMultiFilter.includes("ALL") ||
+                              assetNameMultiFilter.includes(option.value)
+                            }
                             onChange={(e) =>
                               setAssetNameMultiFilter((prev) =>
                                 applyMultiFilterSelection(
                                   prev,
                                   e.target.checked,
-                                  "ALL",
-                                  assetNameFilterOptions.map((option) => option.value)
+                                  option.value,
+                                  assetNameFilterOptions.map((item) => item.value)
                                 )
                               )
                             }
                           />
-                          {`All ${t.name}s`}
+                          {option.label}
                         </label>
-                        {assetNameFilterOptions.map((option) => (
-                          <label key={`asset-name-filter-${option.value}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={
-                                assetNameMultiFilter.includes("ALL") ||
-                                assetNameMultiFilter.includes(option.value)
-                              }
-                              onChange={(e) =>
-                                setAssetNameMultiFilter((prev) =>
-                                  applyMultiFilterSelection(
-                                    prev,
-                                    e.target.checked,
-                                    option.value,
-                                    assetNameFilterOptions.map((item) => item.value)
-                                  )
-                                )
-                              }
-                            />
-                            {option.label}
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                    <details className="filter-menu">
-                      <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
-                      <div className="filter-menu-list">
-                        <label className="filter-menu-item">
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu">
+                    <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetLocationMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetLocationMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetLocationFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        All Locations
+                      </label>
+                      {assetLocationFilterOptions.map((location) => (
+                        <label key={`asset-location-filter-${location}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetLocationMultiFilter.includes("ALL")}
+                            checked={
+                              assetLocationMultiFilter.includes("ALL") ||
+                              assetLocationMultiFilter.includes(location)
+                            }
                             onChange={(e) =>
                               setAssetLocationMultiFilter((prev) =>
                                 applyMultiFilterSelection(
                                   prev,
                                   e.target.checked,
-                                  "ALL",
+                                  location,
                                   assetLocationFilterOptions
                                 )
                               )
                             }
                           />
-                          All Locations
+                          {location}
                         </label>
-                        {assetLocationFilterOptions.map((location) => (
-                          <label key={`asset-location-filter-${location}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={
-                                assetLocationMultiFilter.includes("ALL") ||
-                                assetLocationMultiFilter.includes(location)
-                              }
-                              onChange={(e) =>
-                                setAssetLocationMultiFilter((prev) =>
-                                  applyMultiFilterSelection(
-                                    prev,
-                                    e.target.checked,
-                                    location,
-                                    assetLocationFilterOptions
-                                  )
-                                )
-                              }
-                            />
-                            {location}
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                    <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
-                  </div>
+                      ))}
+                    </div>
+                  </details>
+                  <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
                 </div>
 
                 <div className="table-wrap asset-list-scroll">
@@ -10234,46 +10234,46 @@ export default function App() {
 
             {maintenanceView === "history" && (
             <>
-            <div className="panel-row maintenance-toolbar">
+            <div className="maintenance-title-row">
               <h2>{t.maintenanceHistory}</h2>
-              <div className="panel-filters maintenance-filters">
-                <select
-                  className="input"
-                  value={maintenanceCategoryFilter}
-                  onChange={(e) => setMaintenanceCategoryFilter(e.target.value)}
-                >
-                  <option value="ALL">{t.allCategories}</option>
-                  {CATEGORY_OPTIONS.map((category) => (
-                    <option key={category.value} value={category.value}>
-                      {lang === "km" ? category.km : category.en}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="input"
-                  value={maintenanceTypeFilter}
-                  onChange={(e) => setMaintenanceTypeFilter(e.target.value)}
-                >
-                  <option value="ALL">All Maintenance Types</option>
-                  {maintenanceTypeOptions.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="input"
-                  type="date"
-                  value={maintenanceDateFrom}
-                  onChange={(e) => setMaintenanceDateFrom(e.target.value)}
-                />
-                <input
-                  className="input"
-                  type="date"
-                  value={maintenanceDateTo}
-                  onChange={(e) => setMaintenanceDateTo(e.target.value)}
-                />
-              </div>
+            </div>
+            <div className="panel-filters maintenance-filters maintenance-filter-row">
+              <select
+                className="input"
+                value={maintenanceCategoryFilter}
+                onChange={(e) => setMaintenanceCategoryFilter(e.target.value)}
+              >
+                <option value="ALL">{t.allCategories}</option>
+                {CATEGORY_OPTIONS.map((category) => (
+                  <option key={category.value} value={category.value}>
+                    {lang === "km" ? category.km : category.en}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
+                value={maintenanceTypeFilter}
+                onChange={(e) => setMaintenanceTypeFilter(e.target.value)}
+              >
+                <option value="ALL">All Maintenance Types</option>
+                {maintenanceTypeOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="input"
+                type="date"
+                value={maintenanceDateFrom}
+                onChange={(e) => setMaintenanceDateFrom(e.target.value)}
+              />
+              <input
+                className="input"
+                type="date"
+                value={maintenanceDateTo}
+                onChange={(e) => setMaintenanceDateTo(e.target.value)}
+              />
             </div>
             <div className="table-wrap">
               <table>
@@ -10904,191 +10904,191 @@ export default function App() {
 
         {tab === "reports" && (
           <section className="panel">
-            <div className="panel-row report-toolbar">
+            <div className="report-title-row">
               <h2>Reports</h2>
-              <div className="panel-filters report-filters">
-                <select
-                  className="input report-type-input"
-                  value={reportType}
-                  onChange={(e) => setReportType(e.target.value as ReportType)}
-                >
-                  <option value="asset_master">Asset Master Register</option>
-                  <option value="asset_by_location">Asset by Campus and Location</option>
-                  <option value="overdue">Overdue Maintenance</option>
-                  <option value="transfer">Asset Transfer Log</option>
-                  <option value="maintenance_completion">Maintenance Completion</option>
-                  <option value="verification_summary">Verification Summary</option>
-                  <option value="qr_labels">Asset ID + QR Labels</option>
-                </select>
-                {reportType === "maintenance_completion" || (reportType === "verification_summary" && reportPeriodMode === "month") ? (
-                  <input
+            </div>
+            <div className="panel-filters report-filters report-filter-row">
+              <select
+                className="input report-type-input"
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value as ReportType)}
+              >
+                <option value="asset_master">Asset Master Register</option>
+                <option value="asset_by_location">Asset by Campus and Location</option>
+                <option value="overdue">Overdue Maintenance</option>
+                <option value="transfer">Asset Transfer Log</option>
+                <option value="maintenance_completion">Maintenance Completion</option>
+                <option value="verification_summary">Verification Summary</option>
+                <option value="qr_labels">Asset ID + QR Labels</option>
+              </select>
+              {reportType === "maintenance_completion" || (reportType === "verification_summary" && reportPeriodMode === "month") ? (
+                <input
+                  className="input"
+                  type="month"
+                  value={reportMonth}
+                  onChange={(e) => setReportMonth(e.target.value)}
+                />
+              ) : null}
+              {reportType === "verification_summary" ? (
+                <>
+                  <select
                     className="input"
-                    type="month"
-                    value={reportMonth}
-                    onChange={(e) => setReportMonth(e.target.value)}
-                  />
-                ) : null}
-                {reportType === "verification_summary" ? (
-                  <>
-                    <select
-                      className="input"
-                      value={reportPeriodMode}
-                      onChange={(e) => setReportPeriodMode(e.target.value as "month" | "term")}
-                    >
-                      <option value="month">Month</option>
-                      <option value="term">Term</option>
-                    </select>
-                    {reportPeriodMode === "term" ? (
-                      <>
+                    value={reportPeriodMode}
+                    onChange={(e) => setReportPeriodMode(e.target.value as "month" | "term")}
+                  >
+                    <option value="month">Month</option>
+                    <option value="term">Term</option>
+                  </select>
+                  {reportPeriodMode === "term" ? (
+                    <>
+                      <input
+                        className="input"
+                        type="number"
+                        min="2020"
+                        max="2100"
+                        value={reportYear}
+                        onChange={(e) => setReportYear(e.target.value)}
+                      />
+                      <select
+                        className="input"
+                        value={reportTerm}
+                        onChange={(e) => setReportTerm(e.target.value as "Term 1" | "Term 2" | "Term 3")}
+                      >
+                        <option value="Term 1">Term 1</option>
+                        <option value="Term 2">Term 2</option>
+                        <option value="Term 3">Term 3</option>
+                      </select>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+              {reportType === "qr_labels" ? (
+                <>
+                  <select
+                    className="input"
+                    value={qrCampusFilter}
+                    onChange={(e) => setQrCampusFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Campuses</option>
+                    {CAMPUS_LIST.map((campus) => (
+                      <option key={`qr-campus-${campus}`} value={campus}>
+                        {campusLabel(campus)}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={qrCategoryFilter}
+                    onChange={(e) => setQrCategoryFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Categories</option>
+                    <option value="IT">IT</option>
+                    <option value="SAFETY">Safety</option>
+                    <option value="FACILITY">Facility</option>
+                  </select>
+                  <select
+                    className="input"
+                    value={qrItemFilter}
+                    onChange={(e) => setQrItemFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Item Names</option>
+                    {qrItemFilterOptions.map((itemName) => (
+                      <option key={`qr-item-${itemName}`} value={itemName}>
+                        {itemName}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
+              {reportType === "asset_master" ? (
+                <>
+                  <details className="filter-menu">
+                    <summary>{campusFilterSummary}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
                         <input
-                          className="input"
-                          type="number"
-                          min="2020"
-                          max="2100"
-                          value={reportYear}
-                          onChange={(e) => setReportYear(e.target.value)}
+                          type="checkbox"
+                          checked={assetMasterCampusFilter.includes("ALL")}
+                          onChange={() => updateMultiSelect(setAssetMasterCampusFilter, "ALL")}
                         />
-                        <select
-                          className="input"
-                          value={reportTerm}
-                          onChange={(e) => setReportTerm(e.target.value as "Term 1" | "Term 2" | "Term 3")}
-                        >
-                          <option value="Term 1">Term 1</option>
-                          <option value="Term 2">Term 2</option>
-                          <option value="Term 3">Term 3</option>
-                        </select>
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
-                {reportType === "qr_labels" ? (
-                  <>
-                    <select
-                      className="input"
-                      value={qrCampusFilter}
-                      onChange={(e) => setQrCampusFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Campuses</option>
-                      {CAMPUS_LIST.map((campus) => (
-                        <option key={`qr-campus-${campus}`} value={campus}>
-                          {campusLabel(campus)}
-                        </option>
+                        <span>All Campuses</span>
+                      </label>
+                      {assetMasterCampusFilterOptions.map((campus) => (
+                        <label key={`master-campus-${campus}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetMasterCampusFilter.includes(campus)}
+                            onChange={() => updateMultiSelect(setAssetMasterCampusFilter, campus)}
+                          />
+                          <span>{campusLabel(campus)}</span>
+                        </label>
                       ))}
-                    </select>
-                    <select
-                      className="input"
-                      value={qrCategoryFilter}
-                      onChange={(e) => setQrCategoryFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Categories</option>
-                      <option value="IT">IT</option>
-                      <option value="SAFETY">Safety</option>
-                      <option value="FACILITY">Facility</option>
-                    </select>
-                    <select
-                      className="input"
-                      value={qrItemFilter}
-                      onChange={(e) => setQrItemFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Item Names</option>
-                      {qrItemFilterOptions.map((itemName) => (
-                        <option key={`qr-item-${itemName}`} value={itemName}>
-                          {itemName}
-                        </option>
+                    </div>
+                  </details>
+                  <details className="filter-menu">
+                    <summary>{categoryFilterSummary}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetMasterCategoryFilter.includes("ALL")}
+                          onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, "ALL")}
+                        />
+                        <span>All Categories</span>
+                      </label>
+                      {assetMasterCategoryFilterOptions.map((category) => (
+                        <label key={`master-category-${category}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetMasterCategoryFilter.includes(category)}
+                            onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, category)}
+                          />
+                          <span>{category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}</span>
+                        </label>
                       ))}
-                    </select>
-                  </>
-                ) : null}
-                {reportType === "asset_master" ? (
-                  <>
-                    <details className="filter-menu">
-                      <summary>{campusFilterSummary}</summary>
-                      <div className="filter-menu-list">
-                        <label className="filter-menu-item">
+                    </div>
+                  </details>
+                  <details className="filter-menu">
+                    <summary>{itemFilterSummary}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetMasterItemFilter.includes("ALL")}
+                          onChange={() => updateMultiSelect(setAssetMasterItemFilter, "ALL")}
+                        />
+                        <span>All Item Names</span>
+                      </label>
+                      {assetMasterItemFilterOptions.map((itemName) => (
+                        <label key={`master-item-${itemName}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetMasterCampusFilter.includes("ALL")}
-                            onChange={() => updateMultiSelect(setAssetMasterCampusFilter, "ALL")}
+                            checked={assetMasterItemFilter.includes(itemName)}
+                            onChange={() => updateMultiSelect(setAssetMasterItemFilter, itemName)}
                           />
-                          <span>All Campuses</span>
+                          <span>{itemName}</span>
                         </label>
-                        {assetMasterCampusFilterOptions.map((campus) => (
-                          <label key={`master-campus-${campus}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={assetMasterCampusFilter.includes(campus)}
-                              onChange={() => updateMultiSelect(setAssetMasterCampusFilter, campus)}
-                            />
-                            <span>{campusLabel(campus)}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                    <details className="filter-menu">
-                      <summary>{categoryFilterSummary}</summary>
-                      <div className="filter-menu-list">
-                        <label className="filter-menu-item">
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu filter-menu-columns">
+                    <summary>{columnFilterSummary}</summary>
+                    <div className="filter-menu-list">
+                      {assetMasterColumnDefs.map((column) => (
+                        <label key={`master-col-${column.key}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetMasterCategoryFilter.includes("ALL")}
-                            onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, "ALL")}
+                            checked={isAssetMasterColumnVisible(column.key)}
+                            onChange={() => updateAssetMasterColumnSelection(column.key)}
                           />
-                          <span>All Categories</span>
+                          <span>{column.label}</span>
                         </label>
-                        {assetMasterCategoryFilterOptions.map((category) => (
-                          <label key={`master-category-${category}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={assetMasterCategoryFilter.includes(category)}
-                              onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, category)}
-                            />
-                            <span>{category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                    <details className="filter-menu">
-                      <summary>{itemFilterSummary}</summary>
-                      <div className="filter-menu-list">
-                        <label className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetMasterItemFilter.includes("ALL")}
-                            onChange={() => updateMultiSelect(setAssetMasterItemFilter, "ALL")}
-                          />
-                          <span>All Item Names</span>
-                        </label>
-                        {assetMasterItemFilterOptions.map((itemName) => (
-                          <label key={`master-item-${itemName}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={assetMasterItemFilter.includes(itemName)}
-                              onChange={() => updateMultiSelect(setAssetMasterItemFilter, itemName)}
-                            />
-                            <span>{itemName}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                    <details className="filter-menu filter-menu-columns">
-                      <summary>{columnFilterSummary}</summary>
-                      <div className="filter-menu-list">
-                        {assetMasterColumnDefs.map((column) => (
-                          <label key={`master-col-${column.key}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={isAssetMasterColumnVisible(column.key)}
-                              onChange={() => updateAssetMasterColumnSelection(column.key)}
-                            />
-                            <span>{column.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </details>
-                  </>
-                ) : null}
-                <button className="btn-primary report-print-btn" onClick={printCurrentReport}>Print Report</button>
-              </div>
+                      ))}
+                    </div>
+                  </details>
+                </>
+              ) : null}
+              <button className="btn-primary report-print-btn" onClick={printCurrentReport}>Print Report</button>
             </div>
 
             {reportType === "asset_master" && (
