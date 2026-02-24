@@ -9479,10 +9479,14 @@ export default function App() {
                             <button className="tab asset-mobile-assetid" onClick={() => setAssetDetailId(asset.id)}>
                               <strong>{asset.assetId}</strong>
                             </button>
+                          </div>
+                          <div className="asset-mobile-name-photo">
+                            <div className="asset-mobile-name">
+                              <strong>{t.name}:</strong> {assetItemName(asset.category, asset.type, asset.pcType || "")}
+                            </div>
                             <div className="asset-mobile-photo">{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
                           </div>
                           <div className="asset-mobile-meta">
-                            <div><strong>{t.name}:</strong> {assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
                             <div><strong>{t.campus}:</strong> {campusLabel(asset.campus)}</div>
                             <div><strong>{t.category}:</strong> {asset.category}</div>
                             <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
