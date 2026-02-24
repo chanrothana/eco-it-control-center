@@ -114,6 +114,7 @@ type PublicQrAsset = {
 };
 type ReportType =
   | "asset_master"
+  | "set_code"
   | "asset_by_location"
   | "overdue"
   | "transfer"
@@ -184,6 +185,7 @@ type DashboardStats = {
 
 type ApiError = { error?: string };
 type Lang = "en" | "km";
+type AssetSubviewAccess = "both" | "list_only";
 type NavModule =
   | "dashboard"
   | "assets"
@@ -202,6 +204,7 @@ type AuthUser = {
   role: "Admin" | "Viewer";
   campuses?: string[];
   modules?: NavModule[];
+  assetSubviewAccess?: AssetSubviewAccess;
 };
 type AuthAccount = {
   id: number;
@@ -210,6 +213,7 @@ type AuthAccount = {
   role: "Admin" | "Viewer";
   campuses: string[];
   modules: NavModule[];
+  assetSubviewAccess: AssetSubviewAccess;
 };
 type AuditLog = {
   id: number;
@@ -281,8 +285,24 @@ function getAutoApiBaseForHost() {
   return "";
 }
 const LOCAL_AUTH_ACCOUNTS: AuthAccount[] = [
-  { id: 1, username: "admin", displayName: "Eco Admin", role: "Admin", campuses: ["ALL"], modules: [...ALL_NAV_MODULES] },
-  { id: 2, username: "viewer", displayName: "Eco Viewer", role: "Viewer", campuses: ["Chaktomuk Campus (C2.2)"], modules: [...DEFAULT_VIEWER_MODULES] },
+  {
+    id: 1,
+    username: "admin",
+    displayName: "Eco Admin",
+    role: "Admin",
+    campuses: ["ALL"],
+    modules: [...ALL_NAV_MODULES],
+    assetSubviewAccess: "both",
+  },
+  {
+    id: 2,
+    username: "viewer",
+    displayName: "Eco Viewer",
+    role: "Viewer",
+    campuses: ["Chaktomuk Campus (C2.2)"],
+    modules: [...DEFAULT_VIEWER_MODULES],
+    assetSubviewAccess: "list_only",
+  },
 ];
 
 const CAMPUS_LIST = [
@@ -292,6 +312,13 @@ const CAMPUS_LIST = [
   "Boeung Snor Campus",
   "Veng Sreng Campus",
 ];
+const CAMPUS_KM_LABEL: Record<string, string> = {
+  "Samdach Pan Campus": "សាខាសម្ដេចប៉ាន",
+  "Chaktomuk Campus": "សាខាចតុមុខ",
+  "Chaktomuk Campus (C2.2)": "សាខាចតុមុខ (C2.2)",
+  "Boeung Snor Campus": "សាខាបឹងស្នោរ",
+  "Veng Sreng Campus": "សាខាវេងស្រេង",
+};
 const CAMPUS_CODE: Record<string, string> = {
   "Samdach Pan Campus": "C1",
   "Chaktomuk Campus": "C2.1",
@@ -1068,20 +1095,31 @@ function normalizeModulesByRole(role: "Admin" | "Viewer", modules?: unknown): Na
   return role === "Admin" ? [...ALL_NAV_MODULES] : [...DEFAULT_VIEWER_MODULES];
 }
 
-function readAuthPermissionFallback(): Record<string, { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[] }> {
+function normalizeAssetSubviewAccess(value: unknown): AssetSubviewAccess {
+  return String(value || "").trim().toLowerCase() === "list_only" ? "list_only" : "both";
+}
+
+function readAuthPermissionFallback(): Record<
+  string,
+  { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }
+> {
   if (SERVER_ONLY_STORAGE) return {};
   try {
     const raw = localStorage.getItem(AUTH_PERMISSION_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     if (!parsed || typeof parsed !== "object") return {};
-    const out: Record<string, { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[] }> = {};
+    const out: Record<
+      string,
+      { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }
+    > = {};
     for (const [username, value] of Object.entries(parsed)) {
       if (!value || typeof value !== "object") continue;
-      const v = value as { role?: string; campuses?: string[]; modules?: unknown };
+      const v = value as { role?: string; campuses?: string[]; modules?: unknown; assetSubviewAccess?: unknown };
       const role = v.role === "Admin" ? "Admin" : "Viewer";
       const campuses = Array.isArray(v.campuses) && v.campuses.length ? v.campuses : ["ALL"];
       const modules = normalizeModulesByRole(role, v.modules);
-      out[username] = { role, campuses, modules };
+      const assetSubviewAccess = normalizeAssetSubviewAccess(v.assetSubviewAccess);
+      out[username] = { role, campuses, modules, assetSubviewAccess };
     }
     return out;
   } catch {
@@ -1089,7 +1127,12 @@ function readAuthPermissionFallback(): Record<string, { role: "Admin" | "Viewer"
   }
 }
 
-function writeAuthPermissionFallback(map: Record<string, { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[] }>) {
+function writeAuthPermissionFallback(
+  map: Record<
+    string,
+    { role: "Admin" | "Viewer"; campuses: string[]; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }
+  >
+) {
   if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(AUTH_PERMISSION_FALLBACK_KEY, JSON.stringify(map));
 }
@@ -1111,6 +1154,7 @@ function readAuthAccountsFallback(): AuthAccount[] {
           role: row.role === "Admin" ? "Admin" : "Viewer",
           campuses: Array.isArray(row.campuses) && row.campuses.length ? row.campuses : ["ALL"],
           modules: normalizeModulesByRole(row.role === "Admin" ? "Admin" : "Viewer", row.modules),
+          assetSubviewAccess: normalizeAssetSubviewAccess((row as { assetSubviewAccess?: unknown }).assetSubviewAccess),
         } as AuthAccount;
       })
       .filter((u) => u.username);
@@ -1142,6 +1186,9 @@ function mergeAuthAccounts(serverRows: AuthAccount[], localRows: AuthAccount[]) 
             campuses: Array.isArray(row.campuses) && row.campuses.length ? row.campuses : existing.campuses,
             displayName: row.displayName || existing.displayName,
             modules: Array.isArray(row.modules) && row.modules.length ? row.modules : existing.modules,
+            assetSubviewAccess: normalizeAssetSubviewAccess(
+              (row as { assetSubviewAccess?: unknown }).assetSubviewAccess || existing.assetSubviewAccess
+            ),
           }
         : row
     );
@@ -1694,15 +1741,6 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
         className="asset-picker-trigger input"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
-        onBlur={() => {
-          window.setTimeout(() => {
-            if (!wrapRef.current) return;
-            const active = document.activeElement;
-            if (!active || !wrapRef.current.contains(active)) {
-              setOpen(false);
-            }
-          }, 0);
-        }}
       >
         {selected ? (
           <span className="asset-picker-selected">
@@ -1768,7 +1806,6 @@ export default function App() {
   type AssetMasterSortKey =
     | "photo"
     | "assetId"
-    | "setCode"
     | "linkedTo"
     | "itemName"
     | "category"
@@ -1819,6 +1856,7 @@ export default function App() {
     const modules = authUser?.modules?.length ? authUser.modules : ALL_NAV_MODULES;
     return new Set<NavModule>(modules);
   }, [authUser?.modules]);
+  const canOpenAssetRegister = Boolean(isAdmin && authUser?.assetSubviewAccess !== "list_only");
   const navMenuItems = useMemo(
     () => navItems.filter((item) => allowedNavModules.has(item.id)),
     [navItems, allowedNavModules]
@@ -1854,6 +1892,12 @@ export default function App() {
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"record" | "history">("history");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
+  const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
+  const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState("ALL");
+  const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
+  const [verificationRecordCategoryFilter, setVerificationRecordCategoryFilter] = useState("ALL");
+  const [verificationRecordItemFilter, setVerificationRecordItemFilter] = useState("ALL");
+  const [verificationRecordLocationFilter, setVerificationRecordLocationFilter] = useState("ALL");
   const [maintenanceSort, setMaintenanceSort] = useState<{
     key: MaintenanceSortKey;
     direction: "asc" | "desc";
@@ -1868,16 +1912,13 @@ export default function App() {
   const [assetMasterVisibleColumns, setAssetMasterVisibleColumns] = useState<AssetMasterColumnKey[]>([
     "photo",
     "assetId",
-    "setCode",
     "linkedTo",
-    "itemName",
+    "itemDescription",
     "category",
     "campus",
-    "itemDescription",
     "location",
     "purchaseDate",
     "lastServiceDate",
-    "assignedTo",
     "status",
   ]);
   const [assetMasterSort, setAssetMasterSort] = useState<{
@@ -1891,6 +1932,11 @@ export default function App() {
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
   const [qrItemFilter, setQrItemFilter] = useState("ALL");
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [reportDateFrom, setReportDateFrom] = useState(() => `${toYmd(new Date()).slice(0, 7)}-01`);
+  const [reportDateTo, setReportDateTo] = useState(() => {
+    const now = new Date();
+    return toYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  });
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
   const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
   const [reportTerm, setReportTerm] = useState<"Term 1" | "Term 2" | "Term 3">("Term 1");
@@ -2132,7 +2178,7 @@ export default function App() {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
   const [authPermissionDraft, setAuthPermissionDraft] = useState<
-    Record<number, { role: "Admin" | "Viewer"; campus: string; modules: NavModule[] }>
+    Record<number, { role: "Admin" | "Viewer"; campus: string; modules: NavModule[]; assetSubviewAccess: AssetSubviewAccess }>
   >({});
   const [authCreateForm, setAuthCreateForm] = useState({
     staffId: "",
@@ -2142,6 +2188,7 @@ export default function App() {
     role: "Viewer" as "Admin" | "Viewer",
     campus: CAMPUS_LIST[0],
     modules: [...DEFAULT_VIEWER_MODULES] as NavModule[],
+    assetSubviewAccess: "both" as AssetSubviewAccess,
   });
   const [scheduleAlertModal, setScheduleAlertModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "selected">(null);
   const [overviewModal, setOverviewModal] = useState<null | "total" | "it" | "safety" | "tickets">(null);
@@ -2247,6 +2294,7 @@ export default function App() {
           role: "Admin" as const,
           campuses: ["ALL"],
           modules: [...ALL_NAV_MODULES],
+          assetSubviewAccess: "both" as AssetSubviewAccess,
         };
         if (mounted) {
           setAuthUser({
@@ -2256,6 +2304,7 @@ export default function App() {
             role: perm.role,
             campuses: perm.campuses,
             modules: perm.modules,
+            assetSubviewAccess: perm.assetSubviewAccess,
           });
           setAuthLoading(false);
         }
@@ -2266,6 +2315,7 @@ export default function App() {
           role: "Viewer" as const,
           campuses: ["Chaktomuk Campus (C2.2)"],
           modules: [...DEFAULT_VIEWER_MODULES],
+          assetSubviewAccess: "list_only" as AssetSubviewAccess,
         };
         if (mounted) {
           setAuthUser({
@@ -2275,6 +2325,7 @@ export default function App() {
             role: perm.role,
             campuses: perm.campuses,
             modules: perm.modules,
+            assetSubviewAccess: perm.assetSubviewAccess,
           });
           setAuthLoading(false);
         }
@@ -2385,8 +2436,12 @@ export default function App() {
   );
 
   const campusLabel = useCallback(
-    (campus: string) => campusNames[campus] || campus,
-    [campusNames]
+    (campus: string) => {
+      const base = campusNames[campus] || campus;
+      if (lang !== "km") return base;
+      return CAMPUS_KM_LABEL[base] || CAMPUS_KM_LABEL[campus] || base;
+    },
+    [campusNames, lang]
   );
   const assetItemName = useCallback(
     (category: string, typeCode: string, pcType = "") => {
@@ -2831,10 +2886,10 @@ export default function App() {
   }, [autoInventoryItemCode, inventoryCodeManual]);
 
   useEffect(() => {
-    if (!isAdmin && assetsView === "register") {
+    if (!canOpenAssetRegister && assetsView === "register") {
       setAssetsView("list");
     }
-  }, [isAdmin, assetsView]);
+  }, [canOpenAssetRegister, assetsView]);
 
   const effectiveAssetCampusFilter =
     assetCampusFilter !== "ALL" ? assetCampusFilter : campusFilter;
@@ -3283,6 +3338,27 @@ export default function App() {
       await loadStaffUsers();
       setUserForm({ fullName: "", position: "", email: "" });
     } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) {
+        if (editingUserId !== null) {
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === editingUserId ? { ...u, fullName, position, email: email.toLowerCase() } : u
+            )
+          );
+          setEditingUserId(null);
+        } else {
+          const localUser: StaffUser = {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            fullName,
+            position,
+            email: email.toLowerCase(),
+          };
+          setUsers((prev) => [localUser, ...prev]);
+        }
+        setUserForm({ fullName: "", position: "", email: "" });
+        setError("");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to save user");
     } finally {
       setBusy(false);
@@ -3297,7 +3373,15 @@ export default function App() {
       const permissionMap = readAuthPermissionFallback();
       const localRows = readAuthAccountsFallback().map((u) => {
         const saved = permissionMap[u.username];
-        return saved ? { ...u, role: saved.role, campuses: saved.campuses, modules: saved.modules } : u;
+        return saved
+          ? {
+              ...u,
+              role: saved.role,
+              campuses: saved.campuses,
+              modules: saved.modules,
+              assetSubviewAccess: saved.assetSubviewAccess,
+            }
+          : u;
       });
       const rows = mergeAuthAccounts(serverRows, localRows);
       writeAuthAccountsFallback(rows);
@@ -3312,6 +3396,7 @@ export default function App() {
                   (Array.isArray(u.campuses) && u.campuses[0]) ||
                 "ALL",
                 modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
+                assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
               },
             ])
           )
@@ -3336,7 +3421,15 @@ export default function App() {
         const permissionMap = readAuthPermissionFallback();
         const rows = readAuthAccountsFallback().map((u) => {
           const saved = permissionMap[u.username];
-          return saved ? { ...u, role: saved.role, campuses: saved.campuses, modules: saved.modules } : u;
+          return saved
+            ? {
+                ...u,
+                role: saved.role,
+                campuses: saved.campuses,
+                modules: saved.modules,
+                assetSubviewAccess: saved.assetSubviewAccess,
+              }
+            : u;
         });
         writeAuthAccountsFallback(rows);
         setAuthAccounts(rows);
@@ -3348,6 +3441,7 @@ export default function App() {
                 role: u.role,
                 campus: (Array.isArray(u.campuses) && u.campuses[0]) || "ALL",
                 modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
+                assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
               },
             ])
           )
@@ -3567,28 +3661,34 @@ export default function App() {
     const target = authAccounts.find((u) => u.id === userId);
     if (!target) return;
     const campuses = draft.role === "Admin" || draft.campus === "ALL" ? ["ALL"] : [draft.campus];
+    const assetSubviewAccess = normalizeAssetSubviewAccess(draft.assetSubviewAccess);
     const modules: NavModule[] = draft.role === "Admin"
       ? [...ALL_NAV_MODULES]
       : (draft.modules.length ? draft.modules : (["dashboard"] as NavModule[]));
     if (!SERVER_ONLY_STORAGE) {
       const nextMap = {
         ...readAuthPermissionFallback(),
-        [target.username]: { role: draft.role, campuses, modules },
+        [target.username]: { role: draft.role, campuses, modules, assetSubviewAccess },
       };
-      const nextRows = authAccounts.map((u) => (u.id === userId ? { ...u, role: draft.role, campuses, modules } : u));
+      const nextRows = authAccounts.map((u) =>
+        u.id === userId ? { ...u, role: draft.role, campuses, modules, assetSubviewAccess } : u
+      );
       writeAuthPermissionFallback(nextMap);
       writeAuthAccountsFallback(nextRows);
       setAuthAccounts(nextRows);
       if (authUser && authUser.id === userId) {
-        setAuthUser({ ...authUser, role: draft.role, campuses, modules });
+        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess });
       }
     }
     try {
       await requestJson<{ user: AuthAccount }>(`/api/auth/users/${userId}`, {
         method: "PATCH",
-        body: JSON.stringify({ role: draft.role, campuses, modules }),
+        body: JSON.stringify({ role: draft.role, campuses, modules, assetSubviewAccess }),
       });
       await loadAuthAccounts();
+      if (authUser && authUser.id === userId) {
+        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess });
+      }
       setSetupMessage("Saved account permission.");
     } catch (err) {
       if (SERVER_ONLY_STORAGE) {
@@ -3634,6 +3734,7 @@ export default function App() {
     const modules: NavModule[] = authCreateForm.role === "Admin"
       ? [...ALL_NAV_MODULES]
       : (authCreateForm.modules.length ? authCreateForm.modules : (["dashboard"] as NavModule[]));
+    const assetSubviewAccess = normalizeAssetSubviewAccess(authCreateForm.assetSubviewAccess);
 
     setBusy(true);
     setError("");
@@ -3647,6 +3748,7 @@ export default function App() {
           role: authCreateForm.role,
           campuses,
           modules,
+          assetSubviewAccess,
         }),
       });
       const created: AuthAccount = res.user?.username
@@ -3657,6 +3759,7 @@ export default function App() {
             role: res.user.role === "Admin" ? "Admin" : authCreateForm.role,
             campuses: Array.isArray(res.user.campuses) && res.user.campuses.length ? res.user.campuses : campuses,
             modules: Array.isArray(res.user.modules) && res.user.modules.length ? res.user.modules : modules,
+            assetSubviewAccess: normalizeAssetSubviewAccess((res.user as { assetSubviewAccess?: unknown }).assetSubviewAccess || assetSubviewAccess),
           }
         : {
             id: Date.now(),
@@ -3665,12 +3768,18 @@ export default function App() {
             role: authCreateForm.role,
             campuses,
             modules,
+            assetSubviewAccess,
           };
       const merged = mergeAuthAccounts([created], readAuthAccountsFallback());
       writeAuthAccountsFallback(merged);
       writeAuthPermissionFallback({
         ...readAuthPermissionFallback(),
-        [created.username]: { role: created.role, campuses: created.campuses, modules: created.modules },
+        [created.username]: {
+          role: created.role,
+          campuses: created.campuses,
+          modules: created.modules,
+          assetSubviewAccess: created.assetSubviewAccess,
+        },
       });
       setAuthAccounts(merged);
       await loadAuthAccounts();
@@ -3682,6 +3791,7 @@ export default function App() {
         role: "Viewer",
         campus: CAMPUS_LIST[0],
         modules: [...DEFAULT_VIEWER_MODULES],
+        assetSubviewAccess: "both",
       });
       setSetupMessage("Login account created.");
     } catch (err) {
@@ -3706,12 +3816,13 @@ export default function App() {
           role: authCreateForm.role,
           campuses,
           modules,
+          assetSubviewAccess,
         };
         const nextRows = [nextAccount, ...readAuthAccountsFallback()];
         writeAuthAccountsFallback(nextRows);
         const nextMap = {
           ...readAuthPermissionFallback(),
-          [username]: { role: authCreateForm.role, campuses, modules },
+          [username]: { role: authCreateForm.role, campuses, modules, assetSubviewAccess },
         };
         writeAuthPermissionFallback(nextMap);
         setAuthAccounts(nextRows);
@@ -3721,6 +3832,7 @@ export default function App() {
             role: nextAccount.role,
             campus: nextAccount.campuses[0] || "ALL",
             modules: nextAccount.modules,
+            assetSubviewAccess: nextAccount.assetSubviewAccess,
           },
         }));
         setAuthCreateForm({
@@ -3731,6 +3843,7 @@ export default function App() {
           role: "Viewer",
           campus: CAMPUS_LIST[0],
           modules: [...DEFAULT_VIEWER_MODULES],
+          assetSubviewAccess: "both",
         });
         setError("");
         setSetupMessage("Login account created.");
@@ -3819,6 +3932,15 @@ export default function App() {
         setUserForm({ fullName: "", position: "", email: "" });
       }
     } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) {
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+        if (editingUserId === id) {
+          setEditingUserId(null);
+          setUserForm({ fullName: "", position: "", email: "" });
+        }
+        setError("");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to delete user");
     } finally {
       setBusy(false);
@@ -5588,6 +5710,114 @@ export default function App() {
     () => assets.find((a) => String(a.id) === transferForm.assetId) || null,
     [assets, transferForm.assetId]
   );
+  const maintenanceRecordAssetPool = useMemo(() => {
+    return (campusFilter === "ALL" ? assets : assets.filter((a) => a.campus === campusFilter)).sort((a, b) =>
+      a.assetId.localeCompare(b.assetId)
+    );
+  }, [assets, campusFilter]);
+  const maintenanceRecordCategoryOptions = useMemo(() => {
+    return Array.from(new Set(maintenanceRecordAssetPool.map((a) => a.category).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [maintenanceRecordAssetPool]);
+  const maintenanceRecordItemOptions = useMemo(() => {
+    let list = maintenanceRecordAssetPool;
+    if (maintenanceRecordCategoryFilter !== "ALL") {
+      list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
+    }
+    return Array.from(new Set(list.map((a) => assetItemName(a.category, a.type, a.pcType || "")).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [maintenanceRecordAssetPool, maintenanceRecordCategoryFilter, assetItemName]);
+  const maintenanceRecordLocationOptions = useMemo(() => {
+    let list = maintenanceRecordAssetPool;
+    if (maintenanceRecordCategoryFilter !== "ALL") {
+      list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
+    }
+    if (maintenanceRecordItemFilter !== "ALL") {
+      list = list.filter(
+        (a) => assetItemName(a.category, a.type, a.pcType || "") === maintenanceRecordItemFilter
+      );
+    }
+    return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [maintenanceRecordAssetPool, maintenanceRecordCategoryFilter, maintenanceRecordItemFilter, assetItemName]);
+  const maintenanceRecordFilteredAssets = useMemo(() => {
+    let list = maintenanceRecordAssetPool;
+    if (maintenanceRecordCategoryFilter !== "ALL") {
+      list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
+    }
+    if (maintenanceRecordItemFilter !== "ALL") {
+      list = list.filter(
+        (a) => assetItemName(a.category, a.type, a.pcType || "") === maintenanceRecordItemFilter
+      );
+    }
+    if (maintenanceRecordLocationFilter !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === maintenanceRecordLocationFilter);
+    }
+    return list;
+  }, [
+    maintenanceRecordAssetPool,
+    maintenanceRecordCategoryFilter,
+    maintenanceRecordItemFilter,
+    maintenanceRecordLocationFilter,
+    assetItemName,
+  ]);
+  const verificationRecordAssetPool = useMemo(() => {
+    return (campusFilter === "ALL" ? assets : assets.filter((a) => a.campus === campusFilter)).sort((a, b) =>
+      a.assetId.localeCompare(b.assetId)
+    );
+  }, [assets, campusFilter]);
+  const verificationRecordCategoryOptions = useMemo(() => {
+    return Array.from(new Set(verificationRecordAssetPool.map((a) => a.category).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [verificationRecordAssetPool]);
+  const verificationRecordItemOptions = useMemo(() => {
+    let list = verificationRecordAssetPool;
+    if (verificationRecordCategoryFilter !== "ALL") {
+      list = list.filter((a) => a.category === verificationRecordCategoryFilter);
+    }
+    return Array.from(new Set(list.map((a) => assetItemName(a.category, a.type, a.pcType || "")).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [verificationRecordAssetPool, verificationRecordCategoryFilter, assetItemName]);
+  const verificationRecordLocationOptions = useMemo(() => {
+    let list = verificationRecordAssetPool;
+    if (verificationRecordCategoryFilter !== "ALL") {
+      list = list.filter((a) => a.category === verificationRecordCategoryFilter);
+    }
+    if (verificationRecordItemFilter !== "ALL") {
+      list = list.filter(
+        (a) => assetItemName(a.category, a.type, a.pcType || "") === verificationRecordItemFilter
+      );
+    }
+    return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [verificationRecordAssetPool, verificationRecordCategoryFilter, verificationRecordItemFilter, assetItemName]);
+  const verificationRecordFilteredAssets = useMemo(() => {
+    let list = verificationRecordAssetPool;
+    if (verificationRecordCategoryFilter !== "ALL") {
+      list = list.filter((a) => a.category === verificationRecordCategoryFilter);
+    }
+    if (verificationRecordItemFilter !== "ALL") {
+      list = list.filter(
+        (a) => assetItemName(a.category, a.type, a.pcType || "") === verificationRecordItemFilter
+      );
+    }
+    if (verificationRecordLocationFilter !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === verificationRecordLocationFilter);
+    }
+    return list;
+  }, [
+    verificationRecordAssetPool,
+    verificationRecordCategoryFilter,
+    verificationRecordItemFilter,
+    verificationRecordLocationFilter,
+    assetItemName,
+  ]);
   const transferQuickAsset = useMemo(
     () => assets.find((a) => a.id === transferQuickAssetId) || null,
     [assets, transferQuickAssetId]
@@ -5860,6 +6090,44 @@ export default function App() {
       setMaintenanceTypeFilter("ALL");
     }
   }, [maintenanceTypeFilter, maintenanceTypeOptions]);
+  useEffect(() => {
+    if (maintenanceRecordItemFilter === "ALL") return;
+    if (!maintenanceRecordItemOptions.includes(maintenanceRecordItemFilter)) {
+      setMaintenanceRecordItemFilter("ALL");
+    }
+  }, [maintenanceRecordItemFilter, maintenanceRecordItemOptions]);
+  useEffect(() => {
+    if (maintenanceRecordLocationFilter === "ALL") return;
+    if (!maintenanceRecordLocationOptions.includes(maintenanceRecordLocationFilter)) {
+      setMaintenanceRecordLocationFilter("ALL");
+    }
+  }, [maintenanceRecordLocationFilter, maintenanceRecordLocationOptions]);
+  useEffect(() => {
+    const hasSelectedAsset = maintenanceRecordFilteredAssets.some(
+      (a) => String(a.id) === maintenanceRecordForm.assetId
+    );
+    if (!maintenanceRecordForm.assetId || hasSelectedAsset) return;
+    setMaintenanceRecordForm((f) => ({ ...f, assetId: "" }));
+  }, [maintenanceRecordForm.assetId, maintenanceRecordFilteredAssets]);
+  useEffect(() => {
+    if (verificationRecordItemFilter === "ALL") return;
+    if (!verificationRecordItemOptions.includes(verificationRecordItemFilter)) {
+      setVerificationRecordItemFilter("ALL");
+    }
+  }, [verificationRecordItemFilter, verificationRecordItemOptions]);
+  useEffect(() => {
+    if (verificationRecordLocationFilter === "ALL") return;
+    if (!verificationRecordLocationOptions.includes(verificationRecordLocationFilter)) {
+      setVerificationRecordLocationFilter("ALL");
+    }
+  }, [verificationRecordLocationFilter, verificationRecordLocationOptions]);
+  useEffect(() => {
+    const hasSelectedAsset = verificationRecordFilteredAssets.some(
+      (a) => String(a.id) === verificationRecordForm.assetId
+    );
+    if (!verificationRecordForm.assetId || hasSelectedAsset) return;
+    setVerificationRecordForm((f) => ({ ...f, assetId: "" }));
+  }, [verificationRecordForm.assetId, verificationRecordFilteredAssets]);
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     const merged = mergeAssets(assets, readAssetFallback());
@@ -6029,10 +6297,10 @@ export default function App() {
 
   useEffect(() => {
     if (verificationRecordForm.assetId) return;
-    if (assets.length) {
-      setVerificationRecordForm((f) => ({ ...f, assetId: String(assets[0].id) }));
+    if (verificationRecordFilteredAssets.length) {
+      setVerificationRecordForm((f) => ({ ...f, assetId: String(verificationRecordFilteredAssets[0].id) }));
     }
-  }, [assets, verificationRecordForm.assetId]);
+  }, [verificationRecordFilteredAssets, verificationRecordForm.assetId]);
 
   useEffect(() => {
     if (transferForm.assetId) return;
@@ -6087,14 +6355,24 @@ export default function App() {
   }, [assets]);
 
   const maintenanceCompletionRows = useMemo(() => {
-    return allMaintenanceRows.filter((row) => row.date?.startsWith(reportMonth));
-  }, [allMaintenanceRows, reportMonth]);
+    return allMaintenanceRows.filter((row) => {
+      if (!row.date) return false;
+      if (reportDateFrom && row.date < reportDateFrom) return false;
+      if (reportDateTo && row.date > reportDateTo) return false;
+      return true;
+    });
+  }, [allMaintenanceRows, reportDateFrom, reportDateTo]);
 
   const maintenanceCompletionSummary = useMemo(() => {
     const done = maintenanceCompletionRows.filter((r) => r.completion === "Done").length;
     const notYet = maintenanceCompletionRows.filter((r) => r.completion !== "Done").length;
     return { done, notYet, total: maintenanceCompletionRows.length };
   }, [maintenanceCompletionRows]);
+  const maintenanceCompletionRangeLabel = useMemo(() => {
+    const from = reportDateFrom || "-";
+    const to = reportDateTo || "-";
+    return `${from} to ${to}`;
+  }, [reportDateFrom, reportDateTo]);
   const verificationSummaryRows = useMemo(() => {
     const year = Number(reportYear) || new Date().getFullYear();
     const range =
@@ -6231,6 +6509,47 @@ export default function App() {
       );
   }, [assets, assetItemName, campusLabel]);
 
+  const setCodeReportRows = useMemo(() => {
+    const groupedBySet = new Map<string, Asset[]>();
+    for (const asset of assets) {
+      const setCode = String(asset.setCode || "").trim();
+      if (!setCode) continue;
+      const list = groupedBySet.get(setCode) || [];
+      list.push(asset);
+      groupedBySet.set(setCode, list);
+    }
+    return Array.from(groupedBySet.entries())
+      .map(([setCode, list]) => {
+        const sorted = [...list].sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")));
+        const main =
+          sorted.find((a) => a.category === "IT" && a.type === DESKTOP_PARENT_TYPE) ||
+          sorted.find((a) => !String(a.parentAssetId || "").trim()) ||
+          sorted[0];
+        const mainAssetId = String(main?.assetId || "-");
+        const mainItem = main ? assetItemName(main.category, main.type, main.pcType || "") : "-";
+        const mainPhoto = String(main?.photo || "");
+        const campus = String(main?.campus || sorted[0]?.campus || "-");
+        const connectedItems = sorted
+          .filter((asset) => String(asset.assetId || "") !== mainAssetId)
+          .map((asset) => ({
+            assetId: String(asset.assetId || "-"),
+            itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+            photo: String(asset.photo || ""),
+          }));
+        return {
+          key: `set-code-${setCode}`,
+          setCode,
+          mainAssetId,
+          mainItem,
+          mainPhoto,
+          campus,
+          totalItems: sorted.length,
+          connectedItems,
+        };
+      })
+      .sort((a, b) => a.setCode.localeCompare(b.setCode));
+  }, [assets, assetItemName]);
+
   const qrLabelRows = useMemo(
     () =>
       assetMasterSetRows.map((row) => ({
@@ -6301,19 +6620,16 @@ export default function App() {
     () => [
       { key: "photo", label: t.photo, sortable: true },
       { key: "assetId", label: t.assetId, sortable: true },
-      { key: "setCode", label: t.setCode, sortable: true },
       { key: "linkedTo", label: "Linked To (Main Asset)", sortable: true },
-      { key: "itemName", label: "Item Name", sortable: true },
+      { key: "itemDescription", label: "Item Description", sortable: true },
       { key: "category", label: t.category, sortable: true },
       { key: "campus", label: t.campus, sortable: true },
-      { key: "itemDescription", label: "Item Description", sortable: true },
       { key: "location", label: t.location, sortable: true },
       { key: "purchaseDate", label: "Purchase Date", sortable: true },
       { key: "lastServiceDate", label: "Last Service", sortable: true },
-      { key: "assignedTo", label: "Assigned To", sortable: true },
       { key: "status", label: t.status, sortable: true },
     ],
-    [t.photo, t.assetId, t.setCode, t.category, t.campus, t.location, t.status]
+    [t.photo, t.assetId, t.category, t.campus, t.location, t.status]
   );
 
   const isAssetMasterColumnVisible = useCallback(
@@ -6348,15 +6664,46 @@ export default function App() {
   }, [assetMasterColumnDefs]);
 
   const campusFilterSummary = assetMasterCampusFilter.includes("ALL")
-    ? "All Campuses"
-    : `${assetMasterCampusFilter.length} campus selected`;
+    ? t.allCampuses
+    : lang === "km"
+      ? `បានជ្រើស ${assetMasterCampusFilter.length} សាខា`
+      : `${assetMasterCampusFilter.length} campus selected`;
   const categoryFilterSummary = assetMasterCategoryFilter.includes("ALL")
-    ? "All Categories"
-    : `${assetMasterCategoryFilter.length} category selected`;
+    ? t.allCategories
+    : lang === "km"
+      ? `បានជ្រើស ${assetMasterCategoryFilter.length} ប្រភេទ`
+      : `${assetMasterCategoryFilter.length} category selected`;
   const itemFilterSummary = assetMasterItemFilter.includes("ALL")
-    ? "All Item Names"
-    : `${assetMasterItemFilter.length} item selected`;
-  const columnFilterSummary = "Select Column";
+    ? (lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")
+    : lang === "km"
+      ? `បានជ្រើស ${assetMasterItemFilter.length} ឈ្មោះ`
+      : `${assetMasterItemFilter.length} item selected`;
+  const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
+  const reportTypeOptions = useMemo(
+    () =>
+      lang === "km"
+        ? [
+            { value: "asset_master" as ReportType, label: "បញ្ជីទ្រព្យសម្បត្តិ" },
+            { value: "set_code" as ReportType, label: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
+            { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+            { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
+            { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
+            { value: "maintenance_completion" as ReportType, label: "លទ្ធផលបញ្ចប់ការថែទាំ" },
+            { value: "verification_summary" as ReportType, label: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
+            { value: "qr_labels" as ReportType, label: "លេខទ្រព្យ + QR" },
+          ]
+        : [
+            { value: "asset_master" as ReportType, label: "Asset Master Register" },
+            { value: "set_code" as ReportType, label: "Computer Set Detail" },
+            { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
+            { value: "overdue" as ReportType, label: "Overdue Maintenance" },
+            { value: "transfer" as ReportType, label: "Asset Transfer Log" },
+            { value: "maintenance_completion" as ReportType, label: "Maintenance Completion" },
+            { value: "verification_summary" as ReportType, label: "Verification Summary" },
+            { value: "qr_labels" as ReportType, label: "Asset ID + QR Labels" },
+          ],
+    [lang]
+  );
 
   const qrItemFilterOptions = useMemo(() => {
     const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
@@ -6534,8 +6881,6 @@ export default function App() {
               return toPrintablePhotoUrl(row.photo || "");
             case "assetId":
               return row.assetId;
-            case "setCode":
-              return row.setCode;
             case "linkedTo":
               return row.linkedTo;
             case "itemName":
@@ -6561,6 +6906,28 @@ export default function App() {
           }
         })
       );
+    } else if (reportType === "set_code") {
+      title = "Computer Set Detail Report";
+      columns = ["Set Code", "Main Set Photo", "Main Set Asset", "Main Item", "Campus", "Total Items", "Connected Items"];
+      rows = setCodeReportRows.map((row) => [
+        row.setCode,
+        toPrintablePhotoUrl(row.mainPhoto || ""),
+        row.mainAssetId,
+        row.mainItem,
+        campusLabel(row.campus),
+        String(row.totalItems),
+        row.connectedItems.length
+          ? `<div>${row.connectedItems
+              .map((item) => {
+                const photo = toPrintablePhotoUrl(item.photo || "");
+                const thumb = photo
+                  ? `<img src="${photo}" alt="${escapeHtml(item.assetId)}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" />`
+                  : `<span style="display:inline-grid;place-items:center;width:28px;height:28px;border:1px dashed #cfded0;border-radius:6px;color:#6f7286;font-size:11px;">-</span>`;
+                return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">${thumb}<span>${escapeHtml(item.assetId)} (${escapeHtml(item.itemName)})</span></div>`;
+              })
+              .join("")}</div>`
+          : "-",
+      ]);
     } else if (reportType === "asset_by_location") {
       title = "Asset by Campus and Location Report";
       columns = ["Campus", "Location", "Total Units", "IT Units", "Safety Units", "Item Breakdown"];
@@ -6596,7 +6963,7 @@ export default function App() {
         r.reason || "-",
       ]);
     } else if (reportType === "maintenance_completion") {
-      title = `Maintenance Completion Report (${reportMonth})`;
+      title = `Maintenance Completion Report (${maintenanceCompletionRangeLabel})`;
       columns = ["Date", "Asset ID", "Asset Photo", "Maintenance Photo", "Campus", "Type", "Work Status", "Condition", "Note"];
       rows = maintenanceCompletionRows.map((r) => [
         formatDate(r.date || "-"),
@@ -6690,6 +7057,8 @@ export default function App() {
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
         : reportType === "asset_master"
         ? `<p><strong>Total Assets:</strong> ${sortedAssetMasterRows.length}</p>`
+        : reportType === "set_code"
+        ? `<p><strong>Total Set Codes:</strong> ${setCodeReportRows.length} | <strong>Total Assets in Sets:</strong> ${setCodeReportRows.reduce((sum, row) => sum + row.totalItems, 0)}</p>`
         : reportType === "qr_labels"
         ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length}</p>`
         : "";
@@ -7478,7 +7847,7 @@ export default function App() {
         {tab === "assets" && (
           <>
             <div className="tabs">
-              {isAdmin ? (
+              {canOpenAssetRegister ? (
                 <button
                   className={`tab ${assetsView === "register" ? "tab-active" : ""}`}
                   onClick={() => setAssetsView("register")}
@@ -9809,7 +10178,7 @@ export default function App() {
               <>
             <h3 className="section-title">Fill Maintenance Schedule</h3>
             <div className="form-grid">
-              <label className="field">
+              <label className="field field-wide">
                 <span>Asset</span>
                 <AssetPicker
                   value={scheduleForm.assetId}
@@ -10240,13 +10609,65 @@ export default function App() {
             <h3 className="section-title">Record Maintenance Result</h3>
             <div className="form-grid">
               <label className="field">
+                <span>Category</span>
+                <select
+                  className="input"
+                  value={maintenanceRecordCategoryFilter}
+                  onChange={(e) => setMaintenanceRecordCategoryFilter(e.target.value)}
+                >
+                  <option value="ALL">{t.allCategories}</option>
+                  {maintenanceRecordCategoryOptions.map((category) => (
+                    <option key={`maintenance-record-category-${category}`} value={category}>
+                      {category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Item Name</span>
+                <select
+                  className="input"
+                  value={maintenanceRecordItemFilter}
+                  onChange={(e) => setMaintenanceRecordItemFilter(e.target.value)}
+                >
+                  <option value="ALL">All Item Names</option>
+                  {maintenanceRecordItemOptions.map((name) => (
+                    <option key={`maintenance-record-item-${name}`} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Location</span>
+                <select
+                  className="input"
+                  value={maintenanceRecordLocationFilter}
+                  onChange={(e) => setMaintenanceRecordLocationFilter(e.target.value)}
+                >
+                  <option value="ALL">All Locations</option>
+                  {maintenanceRecordLocationOptions.map((location) => (
+                    <option key={`maintenance-record-location-${location}`} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
                 <span>Asset</span>
                 <AssetPicker
                   value={maintenanceRecordForm.assetId}
-                  assets={assets}
+                  assets={maintenanceRecordFilteredAssets}
                   getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
                   onChange={(assetId) => setMaintenanceRecordForm((f) => ({ ...f, assetId }))}
+                  placeholder="Select filtered asset"
+                  disabled={!maintenanceRecordFilteredAssets.length}
                 />
+                <div className="tiny">
+                  {maintenanceRecordFilteredAssets.length
+                    ? `${maintenanceRecordFilteredAssets.length} assets match current filters`
+                    : "No assets match current filters."}
+                </div>
               </label>
               <label className="field">
                 <span>Date</span>
@@ -10690,13 +11111,65 @@ export default function App() {
                 <h3 className="section-title">{t.recordVerification}</h3>
                 <div className="form-grid">
                   <label className="field">
+                    <span>Category</span>
+                    <select
+                      className="input"
+                      value={verificationRecordCategoryFilter}
+                      onChange={(e) => setVerificationRecordCategoryFilter(e.target.value)}
+                    >
+                      <option value="ALL">{t.allCategories}</option>
+                      {verificationRecordCategoryOptions.map((category) => (
+                        <option key={`verification-record-category-${category}`} value={category}>
+                          {category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Item Name</span>
+                    <select
+                      className="input"
+                      value={verificationRecordItemFilter}
+                      onChange={(e) => setVerificationRecordItemFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Item Names</option>
+                      {verificationRecordItemOptions.map((name) => (
+                        <option key={`verification-record-item-${name}`} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Location</span>
+                    <select
+                      className="input"
+                      value={verificationRecordLocationFilter}
+                      onChange={(e) => setVerificationRecordLocationFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Locations</option>
+                      {verificationRecordLocationOptions.map((location) => (
+                        <option key={`verification-record-location-${location}`} value={location}>
+                          {location}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field field-wide">
                     <span>{t.asset}</span>
                     <AssetPicker
                       value={verificationRecordForm.assetId}
-                      assets={assets}
+                      assets={verificationRecordFilteredAssets}
                       getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
                       onChange={(assetId) => setVerificationRecordForm((f) => ({ ...f, assetId }))}
+                      placeholder="Select filtered asset"
+                      disabled={!verificationRecordFilteredAssets.length}
                     />
+                    <div className="tiny">
+                      {verificationRecordFilteredAssets.length
+                        ? `${verificationRecordFilteredAssets.length} assets match current filters`
+                        : "No assets match current filters."}
+                    </div>
                   </label>
                   <label className="field">
                     <span>{t.date}</span>
@@ -11020,23 +11493,53 @@ export default function App() {
         {tab === "reports" && (
           <section className="panel">
             <div className="report-title-row">
-              <h2>Reports</h2>
+              <h2>{t.reports}</h2>
             </div>
+            {reportType === "maintenance_completion" && (
+              <div className="stats-grid" style={{ marginBottom: 10 }}>
+                <article className="stat-card">
+                  <div className="stat-label">Total Records ({maintenanceCompletionRangeLabel})</div>
+                  <div className="stat-value">{maintenanceCompletionSummary.total}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Done</div>
+                  <div className="stat-value">{maintenanceCompletionSummary.done}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Not Yet</div>
+                  <div className="stat-value">{maintenanceCompletionSummary.notYet}</div>
+                </article>
+              </div>
+            )}
             <div className="panel-filters report-filters report-filter-row">
               <select
                 className="input report-type-input"
                 value={reportType}
                 onChange={(e) => setReportType(e.target.value as ReportType)}
               >
-                <option value="asset_master">Asset Master Register</option>
-                <option value="asset_by_location">Asset by Campus and Location</option>
-                <option value="overdue">Overdue Maintenance</option>
-                <option value="transfer">Asset Transfer Log</option>
-                <option value="maintenance_completion">Maintenance Completion</option>
-                <option value="verification_summary">Verification Summary</option>
-                <option value="qr_labels">Asset ID + QR Labels</option>
+                {reportTypeOptions.map((option) => (
+                  <option key={`report-type-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
-              {reportType === "maintenance_completion" || (reportType === "verification_summary" && reportPeriodMode === "month") ? (
+              {reportType === "maintenance_completion" ? (
+                <>
+                  <input
+                    className="input"
+                    type="date"
+                    value={reportDateFrom}
+                    onChange={(e) => setReportDateFrom(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="date"
+                    value={reportDateTo}
+                    onChange={(e) => setReportDateTo(e.target.value)}
+                  />
+                </>
+              ) : null}
+              {reportType === "verification_summary" && reportPeriodMode === "month" ? (
                 <input
                   className="input"
                   type="month"
@@ -11084,7 +11587,7 @@ export default function App() {
                     value={qrCampusFilter}
                     onChange={(e) => setQrCampusFilter(e.target.value)}
                   >
-                    <option value="ALL">All Campuses</option>
+                    <option value="ALL">{t.allCampuses}</option>
                     {CAMPUS_LIST.map((campus) => (
                       <option key={`qr-campus-${campus}`} value={campus}>
                         {campusLabel(campus)}
@@ -11096,7 +11599,7 @@ export default function App() {
                     value={qrCategoryFilter}
                     onChange={(e) => setQrCategoryFilter(e.target.value)}
                   >
-                    <option value="ALL">All Categories</option>
+                    <option value="ALL">{t.allCategories}</option>
                     <option value="IT">IT</option>
                     <option value="SAFETY">Safety</option>
                     <option value="FACILITY">Facility</option>
@@ -11106,7 +11609,7 @@ export default function App() {
                     value={qrItemFilter}
                     onChange={(e) => setQrItemFilter(e.target.value)}
                   >
-                    <option value="ALL">All Item Names</option>
+                    <option value="ALL">{lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}</option>
                     {qrItemFilterOptions.map((itemName) => (
                       <option key={`qr-item-${itemName}`} value={itemName}>
                         {itemName}
@@ -11126,7 +11629,7 @@ export default function App() {
                           checked={assetMasterCampusFilter.includes("ALL")}
                           onChange={() => updateMultiSelect(setAssetMasterCampusFilter, "ALL")}
                         />
-                        <span>All Campuses</span>
+                        <span>{t.allCampuses}</span>
                       </label>
                       {assetMasterCampusFilterOptions.map((campus) => (
                         <label key={`master-campus-${campus}`} className="filter-menu-item">
@@ -11149,7 +11652,7 @@ export default function App() {
                           checked={assetMasterCategoryFilter.includes("ALL")}
                           onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, "ALL")}
                         />
-                        <span>All Categories</span>
+                        <span>{t.allCategories}</span>
                       </label>
                       {assetMasterCategoryFilterOptions.map((category) => (
                         <label key={`master-category-${category}`} className="filter-menu-item">
@@ -11158,7 +11661,13 @@ export default function App() {
                             checked={assetMasterCategoryFilter.includes(category)}
                             onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, category)}
                           />
-                          <span>{category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}</span>
+                          <span>
+                            {category === "SAFETY"
+                              ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                              : category === "FACILITY"
+                                ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                                : category}
+                          </span>
                         </label>
                       ))}
                     </div>
@@ -11172,7 +11681,7 @@ export default function App() {
                           checked={assetMasterItemFilter.includes("ALL")}
                           onChange={() => updateMultiSelect(setAssetMasterItemFilter, "ALL")}
                         />
-                        <span>All Item Names</span>
+                        <span>{lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}</span>
                       </label>
                       {assetMasterItemFilterOptions.map((itemName) => (
                         <label key={`master-item-${itemName}`} className="filter-menu-item">
@@ -11203,12 +11712,19 @@ export default function App() {
                   </details>
                 </>
               ) : null}
-              <button className="btn-primary report-print-btn" onClick={printCurrentReport}>Print Report</button>
+              <button className="btn-primary report-print-btn" onClick={printCurrentReport}>
+                {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
+              </button>
             </div>
 
             {reportType === "asset_master" && (
               <div className="panel-note">
                 <strong>Asset register view:</strong> one row per asset with quick item/service information.
+              </div>
+            )}
+            {reportType === "set_code" && (
+              <div className="panel-note">
+                <strong>Computer set view:</strong> one row per set with main asset and connected items (with photos).
               </div>
             )}
             {reportType === "qr_labels" && (
@@ -11253,9 +11769,6 @@ export default function App() {
                               }
                               if (column.key === "assetId") {
                                 return <td key={`${row.key}-assetId`}><strong>{row.assetId}</strong></td>;
-                              }
-                              if (column.key === "setCode") {
-                                return <td key={`${row.key}-setCode`}>{row.setCode || "-"}</td>;
                               }
                               if (column.key === "linkedTo") {
                                 return <td key={`${row.key}-linkedTo`}>{row.linkedTo || "-"}</td>;
@@ -11314,6 +11827,56 @@ export default function App() {
                     ) : (
                       <tr>
                         <td colSpan={Math.max(assetMasterVisibleColumns.length, 1)}>No assets found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {reportType === "set_code" && (
+              <div className="table-wrap report-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.setCode}</th>
+                      <th>{t.photo}</th>
+                      <th>Main Set ({t.assetId})</th>
+                      <th>Main Item</th>
+                      <th>{t.campus}</th>
+                      <th>Total Items</th>
+                      <th>Connected Items</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {setCodeReportRows.length ? (
+                      setCodeReportRows.map((row) => (
+                        <tr key={`report-set-code-${row.key}`}>
+                          <td><strong>{row.setCode}</strong></td>
+                          <td>{renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}</td>
+                          <td>{row.mainAssetId}</td>
+                          <td>{row.mainItem}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.totalItems}</td>
+                          <td>
+                            {row.connectedItems.length ? (
+                              <div className="set-code-connected-list">
+                                {row.connectedItems.map((item) => (
+                                  <div key={`${row.key}-${item.assetId}`} className="set-code-connected-item">
+                                    {renderAssetPhoto(item.photo || "", item.assetId)}
+                                    <span>{item.assetId} ({item.itemName})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7}>No set code records found.</td>
                       </tr>
                     )}
                   </tbody>
@@ -11456,20 +12019,6 @@ export default function App() {
 
             {reportType === "maintenance_completion" && (
               <>
-                <div className="stats-grid">
-                  <article className="stat-card">
-                    <div className="stat-label">Total Records ({reportMonth})</div>
-                    <div className="stat-value">{maintenanceCompletionSummary.total}</div>
-                  </article>
-                  <article className="stat-card">
-                    <div className="stat-label">Done</div>
-                    <div className="stat-value">{maintenanceCompletionSummary.done}</div>
-                  </article>
-                  <article className="stat-card">
-                    <div className="stat-label">Not Yet</div>
-                    <div className="stat-value">{maintenanceCompletionSummary.notYet}</div>
-                  </article>
-                </div>
                 <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
@@ -11502,7 +12051,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={9}>No maintenance records in selected month.</td>
+                          <td colSpan={9}>No maintenance records in selected range.</td>
                         </tr>
                       )}
                     </tbody>
@@ -11852,6 +12401,23 @@ export default function App() {
                   ))}
                 </select>
               </label>
+              <label className="field">
+                <span>Assets Tab Access</span>
+                <select
+                  className="input"
+                  value={authCreateForm.assetSubviewAccess}
+                  disabled={!isAdmin}
+                  onChange={(e) =>
+                    setAuthCreateForm((f) => ({
+                      ...f,
+                      assetSubviewAccess: normalizeAssetSubviewAccess(e.target.value),
+                    }))
+                  }
+                >
+                  <option value="both">Register + List</option>
+                  <option value="list_only">List Only</option>
+                </select>
+              </label>
             </div>
             <div className="asset-actions">
               <div className="tiny">{t.addLoginAccount}</div>
@@ -11867,6 +12433,7 @@ export default function App() {
                     <th>{t.displayName}</th>
                     <th>{t.role}</th>
                     <th>{t.accessCampus}</th>
+                    <th>Assets Tab Access</th>
                     <th>{t.save}</th>
                   </tr>
                 </thead>
@@ -11877,6 +12444,7 @@ export default function App() {
                         role: u.role,
                         campus: (u.campuses && u.campuses[0]) || "ALL",
                         modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
+                        assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
                       };
                       return (
                         <tr key={`auth-perm-${u.id}`}>
@@ -11897,6 +12465,7 @@ export default function App() {
                                       e.target.value === "Admin"
                                         ? [...ALL_NAV_MODULES]
                                         : (draft.modules.length ? draft.modules : [...DEFAULT_VIEWER_MODULES]),
+                                    assetSubviewAccess: draft.assetSubviewAccess,
                                   },
                                 }))
                               }
@@ -11924,6 +12493,25 @@ export default function App() {
                             </select>
                           </td>
                           <td>
+                            <select
+                              className="input"
+                              value={draft.assetSubviewAccess}
+                              disabled={!isAdmin}
+                              onChange={(e) =>
+                                setAuthPermissionDraft((prev) => ({
+                                  ...prev,
+                                  [u.id]: {
+                                    ...draft,
+                                    assetSubviewAccess: normalizeAssetSubviewAccess(e.target.value),
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="both">Register + List</option>
+                              <option value="list_only">List Only</option>
+                            </select>
+                          </td>
+                          <td>
                             <button className="btn-primary" disabled={!isAdmin} onClick={() => saveAuthPermission(u.id)}>
                               Save
                             </button>
@@ -11933,7 +12521,7 @@ export default function App() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5}>{t.noLoginUsersFound}</td>
+                      <td colSpan={6}>{t.noLoginUsersFound}</td>
                     </tr>
                   )}
                 </tbody>

@@ -634,6 +634,7 @@ function normalizeImportedDb(input) {
     settings.campusNames && typeof settings.campusNames === "object" && !Array.isArray(settings.campusNames)
       ? settings.campusNames
       : {};
+  const staffUsers = normalizeStaffUsers(settings.staffUsers);
   const normalizedAssets = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
@@ -651,6 +652,7 @@ function normalizeImportedDb(input) {
     authSessions: Array.isArray(parsed.authSessions) ? parsed.authSessions : [],
     settings: {
       campusNames,
+      staffUsers,
     },
   };
 }
@@ -913,6 +915,41 @@ function validateLocation(body) {
   return { campus, name };
 }
 
+function normalizeStaffUsers(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  const usedEmails = new Set();
+  for (let i = 0; i < input.length; i += 1) {
+    const row = input[i];
+    if (!row || typeof row !== "object") continue;
+    const fullName = toText(row.fullName);
+    const position = toText(row.position);
+    const email = toText(row.email).toLowerCase();
+    if (!fullName || !position || !email) continue;
+    if (usedEmails.has(email)) continue;
+    usedEmails.add(email);
+    const parsedId = Number(row.id);
+    const id = Number.isFinite(parsedId) && parsedId > 0 ? parsedId : Date.now() + i;
+    out.push({
+      id,
+      fullName,
+      position,
+      email,
+    });
+  }
+  return out;
+}
+
+function validateStaffUser(body) {
+  const fullName = toText(body.fullName);
+  const position = toText(body.position);
+  const email = toText(body.email).toLowerCase();
+  if (!fullName) return "Staff full name is required";
+  if (!position) return "Position is required";
+  if (!email) return "Email is required";
+  return { fullName, position, email };
+}
+
 function validateTicket(body) {
   const campus = normalizeCampusInput(body.campus);
   const category = normalizeCategoryInput(body.category);
@@ -1038,12 +1075,19 @@ function filterByCampusPermission(list, user, getter) {
 
 function sanitizeUser(user) {
   const campuses = normalizeCampusPermissions(user.campuses);
+  const modules = Array.isArray(user.modules)
+    ? user.modules.filter((m) => typeof m === "string")
+    : [];
+  const assetSubviewAccess =
+    toText(user.assetSubviewAccess).toLowerCase() === "list_only" ? "list_only" : "both";
   return {
     id: Number(user.id),
     username: toText(user.username),
     displayName: toText(user.displayName) || toText(user.username),
     role: toText(user.role) === "Admin" ? "Admin" : "Viewer",
     campuses: campuses.length ? campuses : ["ALL"],
+    modules,
+    assetSubviewAccess,
   };
 }
 
@@ -1382,8 +1426,13 @@ const server = http.createServer(async (req, res) => {
       const settings =
         db.settings && typeof db.settings === "object"
           ? db.settings
-          : { campusNames: {} };
-      sendJson(res, 200, { settings });
+          : { campusNames: {}, staffUsers: [] };
+      sendJson(res, 200, {
+        settings: {
+          ...settings,
+          staffUsers: normalizeStaffUsers(settings.staffUsers),
+        },
+      });
       return;
     }
 
@@ -1403,13 +1452,139 @@ const server = http.createServer(async (req, res) => {
         !Array.isArray(incoming.campusNames)
           ? incoming.campusNames
           : current.campusNames || {};
+      const nextStaffUsers =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "staffUsers")
+          ? normalizeStaffUsers(incoming.staffUsers)
+          : normalizeStaffUsers(current.staffUsers);
       db.settings = {
         ...current,
         campusNames: nextCampusNames,
+        staffUsers: nextStaffUsers,
       };
       appendAuditLog(db, admin, "UPDATE", "settings", "campusNames", "Updated campus name settings");
       await writeDb(db);
       sendJson(res, 200, { ok: true, settings: db.settings });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/staff-users") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const db = await readDb();
+      const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+      const users = normalizeStaffUsers(settings.staffUsers);
+      sendJson(res, 200, { users });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/staff-users") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const cleaned = validateStaffUser(body);
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+      const db = await readDb();
+      const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+      const users = normalizeStaffUsers(settings.staffUsers);
+      const duplicate = users.some((u) => u.email.toLowerCase() === cleaned.email.toLowerCase());
+      if (duplicate) {
+        sendJson(res, 400, { error: "User email already exists." });
+        return;
+      }
+      const user = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        fullName: cleaned.fullName,
+        position: cleaned.position,
+        email: cleaned.email,
+      };
+      const nextUsers = [user, ...users];
+      db.settings = {
+        ...settings,
+        staffUsers: nextUsers,
+      };
+      appendAuditLog(db, admin, "CREATE", "staff_user", String(user.id), `${user.fullName} | ${user.email}`);
+      await writeDb(db);
+      sendJson(res, 201, { user, users: nextUsers });
+      return;
+    }
+
+    if (req.method === "PATCH" && url.pathname.startsWith("/api/staff-users/")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/staff-users/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const body = await parseBody(req);
+      const cleaned = validateStaffUser(body);
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+      const db = await readDb();
+      const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+      const users = normalizeStaffUsers(settings.staffUsers);
+      const idx = users.findIndex((u) => u.id === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "User not found" });
+        return;
+      }
+      const duplicate = users.some(
+        (u) => u.id !== id && u.email.toLowerCase() === cleaned.email.toLowerCase()
+      );
+      if (duplicate) {
+        sendJson(res, 400, { error: "User email already exists." });
+        return;
+      }
+      users[idx] = { ...users[idx], ...cleaned };
+      db.settings = {
+        ...settings,
+        staffUsers: users,
+      };
+      appendAuditLog(db, admin, "UPDATE", "staff_user", String(id), `${users[idx].fullName} | ${users[idx].email}`);
+      await writeDb(db);
+      sendJson(res, 200, { user: users[idx], users });
+      return;
+    }
+
+    if (req.method === "DELETE" && url.pathname.startsWith("/api/staff-users/")) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/staff-users/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const db = await readDb();
+      const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+      const users = normalizeStaffUsers(settings.staffUsers);
+      const target = users.find((u) => u.id === id);
+      const nextUsers = users.filter((u) => u.id !== id);
+      if (nextUsers.length === users.length) {
+        sendJson(res, 404, { error: "User not found" });
+        return;
+      }
+      db.settings = {
+        ...settings,
+        staffUsers: nextUsers,
+      };
+      appendAuditLog(
+        db,
+        admin,
+        "DELETE",
+        "staff_user",
+        String(id),
+        target ? `${target.fullName} | ${target.email}` : ""
+      );
+      await writeDb(db);
+      sendJson(res, 200, { ok: true, users: nextUsers });
       return;
     }
 
@@ -1512,6 +1687,11 @@ const server = http.createServer(async (req, res) => {
       const displayName = toText(body.displayName) || username;
       const role = toText(body.role) === "Admin" ? "Admin" : "Viewer";
       const campuses = normalizeCampusPermissions(body.campuses);
+      const modules = Array.isArray(body.modules)
+        ? body.modules.filter((m) => typeof m === "string")
+        : [];
+      const assetSubviewAccess =
+        toText(body.assetSubviewAccess).toLowerCase() === "list_only" ? "list_only" : "both";
 
       if (!username || !password) {
         sendJson(res, 400, { error: "Username and password are required" });
@@ -1540,6 +1720,8 @@ const server = http.createServer(async (req, res) => {
         displayName,
         role,
         campuses: role === "Admin" ? ["ALL"] : campuses,
+        modules,
+        assetSubviewAccess,
       };
 
       users.push(newUser);
@@ -1550,7 +1732,7 @@ const server = http.createServer(async (req, res) => {
         "CREATE",
         "auth_user",
         String(newUser.id),
-        `username=${newUser.username}; role=${newUser.role}; campuses=${newUser.campuses.join(",")}`
+        `username=${newUser.username}; role=${newUser.role}; campuses=${newUser.campuses.join(",")}; assetAccess=${newUser.assetSubviewAccess}`
       );
       await writeDb(db);
       sendJson(res, 201, { user: sanitizeUser(newUser) });
@@ -1568,6 +1750,11 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const role = toText(body.role) === "Admin" ? "Admin" : "Viewer";
       const campuses = normalizeCampusPermissions(body.campuses);
+      const modules = Array.isArray(body.modules)
+        ? body.modules.filter((m) => typeof m === "string")
+        : [];
+      const assetSubviewAccess =
+        toText(body.assetSubviewAccess).toLowerCase() === "list_only" ? "list_only" : "both";
       if (role !== "Admin" && !campuses.length) {
         sendJson(res, 400, { error: "At least one campus is required for Viewer" });
         return;
@@ -1582,6 +1769,8 @@ const server = http.createServer(async (req, res) => {
       }
       users[idx].role = role;
       users[idx].campuses = role === "Admin" ? ["ALL"] : campuses;
+      users[idx].modules = modules;
+      users[idx].assetSubviewAccess = assetSubviewAccess;
       db.users = users;
       appendAuditLog(
         db,
@@ -1589,7 +1778,7 @@ const server = http.createServer(async (req, res) => {
         "UPDATE",
         "auth_user_permission",
         String(id),
-        `role=${role}; campuses=${(role === "Admin" ? ["ALL"] : campuses).join(",")}`
+        `role=${role}; campuses=${(role === "Admin" ? ["ALL"] : campuses).join(",")}; assetAccess=${assetSubviewAccess}`
       );
       await writeDb(db);
 

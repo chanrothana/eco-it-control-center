@@ -53,8 +53,12 @@ body {
 .app-shell {
   position: relative;
   min-height: 100vh;
-  padding: 26px 18px;
-  overflow: hidden;
+  padding: calc(26px + env(safe-area-inset-top, 0px))
+    calc(18px + env(safe-area-inset-right, 0px))
+    calc(26px + env(safe-area-inset-bottom, 0px))
+    calc(18px + env(safe-area-inset-left, 0px));
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .bg-orb {
@@ -123,7 +127,9 @@ body {
 .brand-block {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  align-items: flex-start;
+  text-align: left;
   min-height: 170px;
 }
 
@@ -906,6 +912,19 @@ h2 {
   flex-shrink: 0;
 }
 
+.set-code-connected-list {
+  display: grid;
+  gap: 6px;
+}
+
+.set-code-connected-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .btn-small {
   height: 34px;
   padding: 0 12px;
@@ -1360,7 +1379,7 @@ tr.row-maint-maintenance:hover td {
 }
 
 .report-table-wrap table {
-  min-width: 1480px;
+  min-width: 1240px;
 }
 
 .report-table-wrap td strong {
@@ -1908,6 +1927,7 @@ tr.row-maint-maintenance:hover td {
 
   .report-filter-row {
     justify-content: flex-start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: 8px;
     gap: 8px;
   }
@@ -1925,6 +1945,10 @@ tr.row-maint-maintenance:hover td {
 
   .top-controls-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-print-btn {
+    width: 100%;
   }
 
   .top-right {
@@ -2122,6 +2146,7 @@ tr.row-maint-maintenance:hover td {
 
   .report-filter-row {
     justify-content: flex-end;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .report-filters {
@@ -2325,6 +2350,29 @@ tr.row-maint-maintenance:hover td {
   .tabs {
     padding: 6px;
     gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tabs .tab {
+    flex: 0 0 auto;
+  }
+
+  .report-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .report-title-row,
+  .maintenance-title-row,
+  .asset-list-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .report-table-wrap table {
+    min-width: 920px;
   }
 
   .public-asset-shell {
@@ -2423,6 +2471,10 @@ tr.row-maint-maintenance:hover td {
   }
 
   .table-compact {
+    min-width: 860px;
+  }
+
+  .report-table-wrap table {
     min-width: 860px;
   }
 
