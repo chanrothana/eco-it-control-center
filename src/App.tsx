@@ -170,10 +170,17 @@ type InventoryTxn = {
   itemCode: string;
   itemName: string;
   date: string;
-  type: "IN" | "OUT";
+  type: "IN" | "OUT" | "BORROW_OUT" | "BORROW_IN" | "BORROW_CONSUME";
   qty: number;
   by?: string;
   note?: string;
+  fromCampus?: string;
+  toCampus?: string;
+  expectedReturnDate?: string;
+  requestedBy?: string;
+  approvedBy?: string;
+  receivedBy?: string;
+  borrowStatus?: "BORROW_OPEN" | "PARTIAL_RETURN" | "CLOSED" | "CONSUMED";
 };
 
 type DashboardStats = {
@@ -265,6 +272,27 @@ const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
 const INVENTORY_ITEM_FALLBACK_KEY = "it_inventory_items_v1";
 const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
+const APP_VERSION = "v2.3.0";
+const APP_UPDATE_NOTES: Array<{ version: string; date: string; notes: string[] }> = [
+  {
+    version: "v2.3.0",
+    date: "2026-02-25",
+    notes: [
+      "Added sortable Asset List headers with simple click behavior.",
+      "Improved dashboard Quick Count with status summary and detail popups.",
+      "Added item icons in Quick Count for faster visual scan.",
+    ],
+  },
+  {
+    version: "v2.2.0",
+    date: "2026-02-24",
+    notes: [
+      "Updated phone layout with app-style navigation and cleaner spacing.",
+      "Linked maintenance alerts to direct maintenance record flow.",
+      "Refined QR report view and smaller print label size.",
+    ],
+  },
+];
 const SERVER_ONLY_STORAGE = true;
 const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "dashboard",
@@ -543,6 +571,25 @@ const INVENTORY_CATEGORY_OPTIONS = [
   { value: "SUPPLY", label: "Cleaning Supply" },
   { value: "CLEAN_TOOL", label: "Cleaning Tool" },
   { value: "MAINT_TOOL", label: "Maintenance Tool" },
+] as const;
+const INVENTORY_TXN_TYPE_OPTIONS = [
+  { value: "IN", label: "Stock In" },
+  { value: "OUT", label: "Stock Out" },
+  { value: "BORROW_OUT", label: "Borrow Out" },
+  { value: "BORROW_IN", label: "Borrow Return (In)" },
+  { value: "BORROW_CONSUME", label: "Borrow Consume" },
+] as const;
+const INVENTORY_MASTER_ITEMS = [
+  { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", spec: "Box", unit: "box", aliases: ["tissue", "hand tissue", "ក្រដាស"] },
+  { key: "cleaner", category: "SUPPLY", nameEn: "Floor Cleaner", spec: "Liquid", unit: "bottle", aliases: ["cleaner", "soap", "សាប៊ូ"] },
+  { key: "shampoo", category: "SUPPLY", nameEn: "Hand Wash Shampoo", spec: "Liquid", unit: "bottle", aliases: ["shampoo", "hand wash", "សាប៊ូលាងដៃ"] },
+  { key: "trash_bag", category: "SUPPLY", nameEn: "Trash Bag", spec: "Large", unit: "roll", aliases: ["trash bag", "bin bag", "ថង់សំរាម"] },
+  { key: "mop", category: "CLEAN_TOOL", nameEn: "Mop", spec: "Head + Handle", unit: "set", aliases: ["mop", "ម៉ាប់"] },
+  { key: "broom", category: "CLEAN_TOOL", nameEn: "Broom", spec: "Soft", unit: "pcs", aliases: ["broom", "អំបោស"] },
+  { key: "vacuum", category: "CLEAN_TOOL", nameEn: "Vacuum Cleaner", spec: "Portable", unit: "unit", aliases: ["vacuum", "ម៉ាស៊ីនបូមធូលី"] },
+  { key: "drill", category: "MAINT_TOOL", nameEn: "Electric Drill", spec: "Portable", unit: "unit", aliases: ["drill", "ខួង"] },
+  { key: "multimeter", category: "MAINT_TOOL", nameEn: "Multimeter", spec: "Digital", unit: "unit", aliases: ["multimeter", "meter"] },
+  { key: "ladder", category: "MAINT_TOOL", nameEn: "Ladder", spec: "Foldable", unit: "pcs", aliases: ["ladder", "ជណ្ដើរ"] },
 ] as const;
 const VERIFICATION_RESULT_OPTIONS: Array<VerificationEntry["result"]> = [
   "Verified",
@@ -1586,6 +1633,24 @@ function inventoryCategoryCode(category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL")
   if (category === "MAINT_TOOL") return "MT";
   return "CS";
 }
+function isInventoryTxnIn(type: InventoryTxn["type"]) {
+  return type === "IN" || type === "BORROW_IN";
+}
+function isInventoryTxnOut(type: InventoryTxn["type"]) {
+  return type === "OUT" || type === "BORROW_OUT" || type === "BORROW_CONSUME";
+}
+function isInventoryTxnUsageOut(type: InventoryTxn["type"]) {
+  return type === "OUT" || type === "BORROW_CONSUME";
+}
+function inventoryTxnTypeLabel(type: InventoryTxn["type"]) {
+  const row = INVENTORY_TXN_TYPE_OPTIONS.find((option) => option.value === type);
+  return row ? row.label : type;
+}
+function inventoryAliasText(itemName: string) {
+  const name = String(itemName || "").toLowerCase();
+  const hit = INVENTORY_MASTER_ITEMS.find((item) => name.includes(item.nameEn.toLowerCase()));
+  return hit ? hit.aliases.join(" ") : "";
+}
 function calcNextInventorySeq(
   list: InventoryItem[],
   campus: string,
@@ -2092,6 +2157,13 @@ export default function App() {
     | "cost"
     | "by"
     | "status";
+  type AssetListSortKey =
+    | "assetId"
+    | "campus"
+    | "category"
+    | "name"
+    | "location"
+    | "status";
   type AssetMasterSortKey =
     | "photo"
     | "assetId"
@@ -2230,7 +2302,7 @@ export default function App() {
   const [verificationDateTo, setVerificationDateTo] = useState("");
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("bulk");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations">("campus");
-  const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance">("items");
+  const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance" | "daily">("items");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"record" | "history">("history");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
@@ -2247,6 +2319,13 @@ export default function App() {
   }>({
     key: "date",
     direction: "desc",
+  });
+  const [assetListSort, setAssetListSort] = useState<{
+    key: AssetListSortKey;
+    direction: "asc" | "desc";
+  }>({
+    key: "assetId",
+    direction: "asc",
   });
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
@@ -2273,7 +2352,10 @@ export default function App() {
   });
   const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
-  const [qrItemFilter, setQrItemFilter] = useState("ALL");
+  const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
+  const [quickCountCampus, setQuickCountCampus] = useState("ALL");
+  const [quickCountQuery, setQuickCountQuery] = useState("");
+  const [dashboardQuickCountOpen, setDashboardQuickCountOpen] = useState(true);
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [reportDateFrom, setReportDateFrom] = useState(() => `${toYmd(new Date()).slice(0, 7)}-01`);
   const [reportDateTo, setReportDateTo] = useState(() => {
@@ -2586,6 +2668,8 @@ export default function App() {
   });
   const [scheduleAlertModal, setScheduleAlertModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "selected">(null);
   const [overviewModal, setOverviewModal] = useState<null | "total" | "it" | "safety" | "tickets">(null);
+  const [quickCountModal, setQuickCountModal] = useState<null | { title: string; assets: Asset[] }>(null);
+  const [updateNotesOpen, setUpdateNotesOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     assetId: "",
     date: "",
@@ -2615,6 +2699,7 @@ export default function App() {
   const [inventoryItemForm, setInventoryItemForm] = useState({
     campus: CAMPUS_LIST[0],
     category: "SUPPLY" as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL",
+    masterItemKey: "",
     itemCode: "",
     itemName: "",
     unit: "pcs",
@@ -2630,16 +2715,31 @@ export default function App() {
   const [inventoryTxnForm, setInventoryTxnForm] = useState({
     itemId: "",
     date: toYmd(new Date()),
-    type: "IN" as "IN" | "OUT",
+    type: "IN" as InventoryTxn["type"],
     qty: "",
     by: "",
     note: "",
+    fromCampus: "",
+    toCampus: "",
+    expectedReturnDate: "",
+    requestedBy: "",
+    approvedBy: "",
+    receivedBy: "",
+  });
+  const [inventoryDailyForm, setInventoryDailyForm] = useState({
+    itemId: "",
+    date: toYmd(new Date()),
+    type: "OUT" as "IN" | "OUT",
+    qty: "",
+    by: "",
+    note: "",
+    search: "",
   });
   const [editingInventoryTxnId, setEditingInventoryTxnId] = useState<number | null>(null);
   const [inventoryTxnEditForm, setInventoryTxnEditForm] = useState({
     itemId: "",
     date: toYmd(new Date()),
-    type: "IN" as "IN" | "OUT",
+    type: "IN" as InventoryTxn["type"],
     qty: "",
     by: "",
     note: "",
@@ -2669,6 +2769,13 @@ export default function App() {
       localStorage.removeItem(AUTH_USER_KEY);
     }
   }, [authUser]);
+
+  useEffect(() => {
+    const actor = authUser?.displayName || authUser?.username || "";
+    if (!actor) return;
+    setInventoryTxnForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
+    setInventoryDailyForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
+  }, [authUser?.displayName, authUser?.username]);
 
   useEffect(() => {
     if (!SERVER_ONLY_STORAGE) return;
@@ -3008,6 +3115,22 @@ export default function App() {
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
     return `${item.itemCode} - ${item.itemName} • ${campusLabel(item.campus)}`;
   }, [campusLabel]);
+  const inventoryMasterOptions = useMemo(
+    () => INVENTORY_MASTER_ITEMS.filter((item) => item.category === inventoryItemForm.category),
+    [inventoryItemForm.category]
+  );
+  const selectedInventoryMaster = useMemo(
+    () => inventoryMasterOptions.find((item) => item.key === inventoryItemForm.masterItemKey) || null,
+    [inventoryMasterOptions, inventoryItemForm.masterItemKey]
+  );
+  const inventoryTxnSelectedItem = useMemo(
+    () => inventoryItems.find((item) => String(item.id) === String(inventoryTxnForm.itemId || "")) || null,
+    [inventoryItems, inventoryTxnForm.itemId]
+  );
+  const inventoryTxnIsBorrow = useMemo(
+    () => inventoryTxnForm.type === "BORROW_OUT" || inventoryTxnForm.type === "BORROW_IN" || inventoryTxnForm.type === "BORROW_CONSUME",
+    [inventoryTxnForm.type]
+  );
   const autoInventoryItemCode = useMemo(
     () => buildInventoryItemCode(inventoryItems, inventoryItemForm.campus, inventoryItemForm.category),
     [inventoryItems, inventoryItemForm.campus, inventoryItemForm.category]
@@ -3016,8 +3139,8 @@ export default function App() {
     const byItem = new Map<number, { in: number; out: number }>();
     for (const tx of inventoryTxns) {
       const current = byItem.get(tx.itemId) || { in: 0, out: 0 };
-      if (tx.type === "IN") current.in += tx.qty;
-      else current.out += tx.qty;
+      if (isInventoryTxnIn(tx.type)) current.in += tx.qty;
+      if (isInventoryTxnOut(tx.type)) current.out += tx.qty;
       byItem.set(tx.itemId, current);
     }
     let rows = inventoryItems.map((item) => {
@@ -3036,7 +3159,7 @@ export default function App() {
     const q = inventorySearch.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
-        `${r.itemCode} ${r.itemName} ${r.location} ${r.vendor || ""}`.toLowerCase().includes(q)
+        `${r.itemCode} ${r.itemName} ${inventoryAliasText(r.itemName)} ${r.location} ${r.vendor || ""}`.toLowerCase().includes(q)
       );
     }
     return rows.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
@@ -3057,9 +3180,100 @@ export default function App() {
       .filter((row) => {
         const q = inventorySearch.trim().toLowerCase();
         if (!q) return true;
-        return `${row.itemCode} ${row.itemName} ${row.by || ""} ${row.note || ""}`.toLowerCase().includes(q);
+        return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.by || ""} ${row.note || ""}`.toLowerCase().includes(q);
       });
   }, [inventoryTxns, inventoryItems, inventoryCampusFilter, inventoryCategoryFilter, inventorySearch]);
+  const inventoryItemById = useMemo(
+    () => new Map<number, InventoryItem>(inventoryItems.map((item) => [item.id, item])),
+    [inventoryItems]
+  );
+  const inventoryStockMap = useMemo(() => {
+    const totals = new Map<number, { in: number; out: number }>();
+    for (const tx of inventoryTxns) {
+      const cur = totals.get(tx.itemId) || { in: 0, out: 0 };
+      if (isInventoryTxnIn(tx.type)) cur.in += tx.qty;
+      if (isInventoryTxnOut(tx.type)) cur.out += tx.qty;
+      totals.set(tx.itemId, cur);
+    }
+    const out = new Map<number, number>();
+    for (const item of inventoryItems) {
+      const total = totals.get(item.id) || { in: 0, out: 0 };
+      out.set(item.id, Number(item.openingQty || 0) + total.in - total.out);
+    }
+    return out;
+  }, [inventoryItems, inventoryTxns]);
+  const inventoryDailyItemOptions = useMemo(() => {
+    const q = String(inventoryDailyForm.search || "").trim().toLowerCase();
+    let list = [...inventoryItems];
+    if (inventoryCampusFilter !== "ALL") list = list.filter((item) => item.campus === inventoryCampusFilter);
+    if (inventoryCategoryFilter !== "ALL") list = list.filter((item) => item.category === inventoryCategoryFilter);
+    if (q) {
+      list = list.filter((item) =>
+        `${item.itemCode} ${item.itemName} ${inventoryAliasText(item.itemName)} ${item.location} ${item.vendor || ""}`.toLowerCase().includes(q)
+      );
+    }
+    return list.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
+  }, [inventoryItems, inventoryDailyForm.search, inventoryCampusFilter, inventoryCategoryFilter]);
+  const inventoryDailySelectedItem = useMemo(
+    () => inventoryItems.find((item) => String(item.id) === String(inventoryDailyForm.itemId || "")) || null,
+    [inventoryItems, inventoryDailyForm.itemId]
+  );
+  const inventoryDailyTodayRows = useMemo(() => {
+    const date = inventoryDailyForm.date;
+    return [...inventoryTxns]
+      .filter((tx) => tx.date === date)
+      .filter((tx) => (inventoryCampusFilter === "ALL" ? true : tx.campus === inventoryCampusFilter))
+      .filter((tx) => {
+        if (inventoryCategoryFilter === "ALL") return true;
+        const item = inventoryItemById.get(tx.itemId);
+        return item?.category === inventoryCategoryFilter;
+      })
+      .sort((a, b) => b.id - a.id)
+      .slice(0, 12);
+  }, [inventoryTxns, inventoryDailyForm.date, inventoryCampusFilter, inventoryCategoryFilter, inventoryItemById]);
+  const inventoryPurchaseWindow = useMemo(() => {
+    const now = new Date();
+    const cutoffDay = 27;
+    const day = now.getDate();
+    const start = day >= cutoffDay
+      ? new Date(now.getFullYear(), now.getMonth(), cutoffDay)
+      : new Date(now.getFullYear(), now.getMonth() - 1, cutoffDay);
+    const end = day >= cutoffDay
+      ? new Date(now.getFullYear(), now.getMonth() + 1, cutoffDay - 1)
+      : new Date(now.getFullYear(), now.getMonth(), cutoffDay - 1);
+    return {
+      startYmd: toYmd(start),
+      endYmd: toYmd(end),
+      label: `${formatDate(toYmd(start))} - ${formatDate(toYmd(end))}`,
+    };
+  }, []);
+  const inventoryPurchaseRows = useMemo(() => {
+    const outByItem = new Map<number, number>();
+    for (const tx of inventoryTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      if (tx.date < inventoryPurchaseWindow.startYmd || tx.date > inventoryPurchaseWindow.endYmd) continue;
+      outByItem.set(tx.itemId, (outByItem.get(tx.itemId) || 0) + tx.qty);
+    }
+    let list = inventoryItems.map((item) => {
+      const currentStock = inventoryStockMap.get(item.id) || 0;
+      const usedQty = outByItem.get(item.id) || 0;
+      const min = Number(item.minStock || 0);
+      const suggestedQty = Math.max(min * 2 - currentStock, 0);
+      return {
+        ...item,
+        currentStock,
+        usedQty,
+        suggestedQty,
+        lowStock: currentStock <= min,
+      };
+    });
+    if (inventoryCampusFilter !== "ALL") list = list.filter((item) => item.campus === inventoryCampusFilter);
+    if (inventoryCategoryFilter !== "ALL") list = list.filter((item) => item.category === inventoryCategoryFilter);
+    list = list.filter((item) => item.usedQty > 0 || item.lowStock || item.suggestedQty > 0);
+    return list
+      .sort((a, b) => b.suggestedQty - a.suggestedQty || b.usedQty - a.usedQty || a.itemCode.localeCompare(b.itemCode))
+      .slice(0, 30);
+  }, [inventoryItems, inventoryTxns, inventoryPurchaseWindow, inventoryStockMap, inventoryCampusFilter, inventoryCategoryFilter]);
 
   const setupLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === locationCampus)),
@@ -3295,6 +3509,26 @@ export default function App() {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
   }, [autoInventoryItemCode, inventoryCodeManual]);
+  useEffect(() => {
+    if (!inventoryMasterOptions.length) return;
+    const hasSelected = inventoryMasterOptions.some((item) => item.key === inventoryItemForm.masterItemKey);
+    if (hasSelected) return;
+    const first = inventoryMasterOptions[0];
+    setInventoryItemForm((f) => ({
+      ...f,
+      masterItemKey: first.key,
+      itemName: `${first.nameEn}${first.spec ? ` (${first.spec})` : ""}`,
+      unit: first.unit,
+    }));
+  }, [inventoryMasterOptions, inventoryItemForm.masterItemKey]);
+  useEffect(() => {
+    if (!selectedInventoryMaster) return;
+    setInventoryItemForm((f) => ({
+      ...f,
+      itemName: `${selectedInventoryMaster.nameEn}${selectedInventoryMaster.spec ? ` (${selectedInventoryMaster.spec})` : ""}`,
+      unit: selectedInventoryMaster.unit,
+    }));
+  }, [selectedInventoryMaster]);
 
   useEffect(() => {
     if (!canOpenAssetRegister && assetsView === "register") {
@@ -4601,11 +4835,18 @@ export default function App() {
   function createInventoryItem() {
     if (!requireAdminAction()) return;
     const itemCode = (inventoryItemForm.itemCode.trim().toUpperCase() || autoInventoryItemCode);
-    const itemName = inventoryItemForm.itemName.trim();
+    const masterItem = INVENTORY_MASTER_ITEMS.find((item) => item.key === inventoryItemForm.masterItemKey);
+    const itemName = masterItem
+      ? `${masterItem.nameEn}${masterItem.spec ? ` (${masterItem.spec})` : ""}`
+      : inventoryItemForm.itemName.trim();
     const location = inventoryItemForm.location.trim();
-    const unit = inventoryItemForm.unit.trim() || "pcs";
+    const unit = masterItem ? masterItem.unit : (inventoryItemForm.unit.trim() || "pcs");
+    if (!masterItem) {
+      setError("Please select item master.");
+      return;
+    }
     if (!itemCode || !itemName || !location) {
-      setError("Item code, item name, and location are required.");
+      setError("Item code, item master, and location are required.");
       return;
     }
     if (inventoryItems.some((i) => i.itemCode === itemCode && i.campus === inventoryItemForm.campus)) {
@@ -4633,6 +4874,7 @@ export default function App() {
     setInventoryItemForm((f) => ({
       ...f,
       itemCode: "",
+      masterItemKey: "",
       itemName: "",
       openingQty: "",
       minStock: "",
@@ -4645,25 +4887,67 @@ export default function App() {
     setError("");
   }
 
-  function createInventoryTxn() {
-    if (!requireAdminAction()) return;
-    const itemId = Number(inventoryTxnForm.itemId);
-    const qty = Math.max(0, Number(inventoryTxnForm.qty || 0));
-    if (!itemId || !inventoryTxnForm.date || qty <= 0) {
+  function saveInventoryTxnEntry(values: {
+    itemId: string;
+    date: string;
+    type: InventoryTxn["type"];
+    qty: string;
+    by: string;
+    note: string;
+    fromCampus?: string;
+    toCampus?: string;
+    expectedReturnDate?: string;
+    requestedBy?: string;
+    approvedBy?: string;
+    receivedBy?: string;
+  }) {
+    const itemId = Number(values.itemId);
+    const qty = Math.max(0, Number(values.qty || 0));
+    if (!itemId || !values.date || qty <= 0) {
       setError("Please select item, date, and quantity.");
-      return;
+      return false;
     }
     const item = inventoryItems.find((i) => i.id === itemId);
     if (!item) {
       setError("Item not found.");
-      return;
+      return false;
     }
-    const inQty = inventoryTxns.filter((x) => x.itemId === itemId && x.type === "IN").reduce((a, b) => a + b.qty, 0);
-    const outQty = inventoryTxns.filter((x) => x.itemId === itemId && x.type === "OUT").reduce((a, b) => a + b.qty, 0);
+    const inQty = inventoryTxns
+      .filter((x) => x.itemId === itemId && isInventoryTxnIn(x.type))
+      .reduce((a, b) => a + b.qty, 0);
+    const outQty = inventoryTxns
+      .filter((x) => x.itemId === itemId && isInventoryTxnOut(x.type))
+      .reduce((a, b) => a + b.qty, 0);
     const currentStock = Number(item.openingQty || 0) + inQty - outQty;
-    if (inventoryTxnForm.type === "OUT" && qty > currentStock) {
+    if (isInventoryTxnOut(values.type) && qty > currentStock) {
       setError(`Not enough stock. Current: ${currentStock}`);
-      return;
+      return false;
+    }
+    const fromCampus = String(values.fromCampus || "").trim();
+    const toCampus = String(values.toCampus || "").trim();
+    const expectedReturnDate = String(values.expectedReturnDate || "").trim();
+    const requestedBy = String(values.requestedBy || "").trim();
+    const approvedBy = String(values.approvedBy || "").trim();
+    const receivedBy = String(values.receivedBy || "").trim();
+    if (values.type === "BORROW_OUT" || values.type === "BORROW_CONSUME") {
+      if (!toCampus || !requestedBy || !approvedBy) {
+        setError("Borrow Out/Consume requires destination campus, requested by, and approved by.");
+        return false;
+      }
+      if (toCampus === item.campus) {
+        setError("Destination campus must be different from source campus.");
+        return false;
+      }
+    }
+    if (values.type === "BORROW_IN") {
+      if (!fromCampus || !receivedBy) {
+        setError("Borrow Return requires source campus and received by.");
+        return false;
+      }
+      if (fromCampus === item.campus) {
+        setError("Source campus must be different from current campus.");
+        return false;
+      }
     }
     const tx: InventoryTxn = {
       id: Date.now(),
@@ -4671,23 +4955,206 @@ export default function App() {
       campus: item.campus,
       itemCode: item.itemCode,
       itemName: item.itemName,
-      date: inventoryTxnForm.date,
-      type: inventoryTxnForm.type,
+      date: values.date,
+      type: values.type,
       qty,
-      by: inventoryTxnForm.by.trim(),
-      note: inventoryTxnForm.note.trim(),
+      by: values.by.trim(),
+      note: values.note.trim(),
+      fromCampus: values.type === "BORROW_IN" ? fromCampus : item.campus,
+      toCampus: values.type === "BORROW_OUT" || values.type === "BORROW_CONSUME" ? toCampus : item.campus,
+      expectedReturnDate: values.type === "BORROW_OUT" ? expectedReturnDate : "",
+      requestedBy,
+      approvedBy,
+      receivedBy,
+      borrowStatus:
+        values.type === "BORROW_OUT"
+          ? "BORROW_OPEN"
+          : values.type === "BORROW_IN"
+            ? "CLOSED"
+            : values.type === "BORROW_CONSUME"
+              ? "CONSUMED"
+              : undefined,
     };
     setInventoryTxns((prev) => [tx, ...prev]);
     appendUiAudit("CREATE", "inventory_txn", `${item.itemCode}-${tx.id}`, `${tx.type} ${tx.qty} ${item.unit}`);
+    setError("");
+    return true;
+  }
+
+  function createInventoryTxn() {
+    if (!requireAdminAction()) return;
+    const saved = saveInventoryTxnEntry({
+      itemId: inventoryTxnForm.itemId,
+      date: inventoryTxnForm.date,
+      type: inventoryTxnForm.type,
+      qty: inventoryTxnForm.qty,
+      by: inventoryTxnForm.by,
+      note: inventoryTxnForm.note,
+      fromCampus: inventoryTxnForm.fromCampus,
+      toCampus: inventoryTxnForm.toCampus,
+      expectedReturnDate: inventoryTxnForm.expectedReturnDate,
+      requestedBy: inventoryTxnForm.requestedBy,
+      approvedBy: inventoryTxnForm.approvedBy,
+      receivedBy: inventoryTxnForm.receivedBy,
+    });
+    if (!saved) return;
     setInventoryTxnForm({
       itemId: "",
       date: toYmd(new Date()),
       type: "IN",
       qty: "",
-      by: "",
+      by: authUser?.displayName || authUser?.username || "",
       note: "",
+      fromCampus: "",
+      toCampus: "",
+      expectedReturnDate: "",
+      requestedBy: "",
+      approvedBy: "",
+      receivedBy: "",
     });
-    setError("");
+  }
+
+  function createInventoryDailyTxn() {
+    const saved = saveInventoryTxnEntry({
+      itemId: inventoryDailyForm.itemId,
+      date: inventoryDailyForm.date,
+      type: inventoryDailyForm.type,
+      qty: inventoryDailyForm.qty,
+      by: inventoryDailyForm.by,
+      note: inventoryDailyForm.note,
+    });
+    if (!saved) return;
+    setInventoryDailyForm((prev) => ({
+      ...prev,
+      itemId: "",
+      qty: "",
+      note: "",
+      by: authUser?.displayName || authUser?.username || prev.by,
+    }));
+  }
+
+  function exportPurchaseRequestCsv() {
+    if (!inventoryPurchaseRows.length) {
+      alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់ Export" : "No purchase summary rows to export.");
+      return;
+    }
+    const headers = [
+      "Item Code",
+      "Item Name",
+      "Campus",
+      "Category",
+      "Unit",
+      "Used Qty (Period)",
+      "Current Stock",
+      "Min Stock",
+      "Suggested Qty",
+      "Period",
+    ];
+    const escapeCsvCell = (value: string | number) => {
+      const text = String(value ?? "");
+      if (!/[",\n]/.test(text)) return text;
+      return `"${text.replace(/"/g, "\"\"")}"`;
+    };
+    const lines = [
+      headers.join(","),
+      ...inventoryPurchaseRows.map((row) =>
+        [
+          row.itemCode,
+          row.itemName,
+          campusLabel(row.campus),
+          row.category,
+          row.unit,
+          row.usedQty,
+          row.currentStock,
+          row.minStock,
+          row.suggestedQty,
+          inventoryPurchaseWindow.label,
+        ]
+          .map(escapeCsvCell)
+          .join(",")
+      ),
+    ];
+    const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `purchase-request-${inventoryPurchaseWindow.startYmd}-to-${inventoryPurchaseWindow.endYmd}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function printPurchaseRequest() {
+    if (!inventoryPurchaseRows.length) {
+      alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់បោះពុម្ព" : "No purchase summary rows to print.");
+      return;
+    }
+    const title = lang === "km" ? "សំណើទិញសម្ភារៈប្រចាំខែ" : "Monthly Purchase Request";
+    const generatedAt = formatDate(new Date().toISOString());
+    const rowsHtml = inventoryPurchaseRows
+      .map(
+        (row) => `<tr>
+          <td>${escapeHtml(row.itemCode)}</td>
+          <td>${escapeHtml(row.itemName)}</td>
+          <td>${escapeHtml(campusLabel(row.campus))}</td>
+          <td>${escapeHtml(row.category)}</td>
+          <td>${escapeHtml(row.unit)}</td>
+          <td>${row.usedQty}</td>
+          <td>${row.currentStock}</td>
+          <td>${row.minStock}</td>
+          <td><strong>${row.suggestedQty}</strong></td>
+        </tr>`
+      )
+      .join("");
+    const html = `
+      <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 18px; color: #1c2e4f; }
+          h1 { margin: 0 0 8px; font-size: 24px; }
+          p.meta { margin: 0 0 12px; color: #4e6287; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th, td { border: 1px solid #c9d8ed; padding: 7px 8px; font-size: 12px; text-align: left; }
+          th { background: #edf4ff; text-transform: uppercase; letter-spacing: 0.03em; }
+          .summary { margin: 8px 0 0; color: #3f557e; }
+          @media print { body { margin: 8mm; } }
+        </style>
+      </head>
+      <body>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="meta">Generated: ${escapeHtml(generatedAt)} | Period: ${escapeHtml(inventoryPurchaseWindow.label)}</p>
+        <p class="summary"><strong>Total Items:</strong> ${inventoryPurchaseRows.length}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Campus</th>
+              <th>Category</th>
+              <th>Unit</th>
+              <th>Used Qty</th>
+              <th>Current</th>
+              <th>Min</th>
+              <th>Suggested</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) {
+      alert(lang === "km" ? "សូមអនុញ្ញាត pop-up សិន" : "Unable to open print window. Please allow pop-ups.");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
   }
 
   function startInventoryTxnEdit(row: InventoryTxn) {
@@ -4739,10 +5206,14 @@ export default function App() {
     }
 
     const rowsWithoutCurrent = inventoryTxns.filter((x) => x.id !== editingInventoryTxnId);
-    const inQty = rowsWithoutCurrent.filter((x) => x.itemId === itemId && x.type === "IN").reduce((a, b) => a + b.qty, 0);
-    const outQty = rowsWithoutCurrent.filter((x) => x.itemId === itemId && x.type === "OUT").reduce((a, b) => a + b.qty, 0);
+    const inQty = rowsWithoutCurrent
+      .filter((x) => x.itemId === itemId && isInventoryTxnIn(x.type))
+      .reduce((a, b) => a + b.qty, 0);
+    const outQty = rowsWithoutCurrent
+      .filter((x) => x.itemId === itemId && isInventoryTxnOut(x.type))
+      .reduce((a, b) => a + b.qty, 0);
     const currentStock = Number(item.openingQty || 0) + inQty - outQty;
-    if (inventoryTxnEditForm.type === "OUT" && qty > currentStock) {
+    if (isInventoryTxnOut(inventoryTxnEditForm.type) && qty > currentStock) {
       setError(`Not enough stock. Current: ${currentStock}`);
       return;
     }
@@ -4761,6 +5232,14 @@ export default function App() {
               qty,
               by: inventoryTxnEditForm.by.trim(),
               note: inventoryTxnEditForm.note.trim(),
+              borrowStatus:
+                inventoryTxnEditForm.type === "BORROW_OUT"
+                  ? (x.borrowStatus || "BORROW_OPEN")
+                  : inventoryTxnEditForm.type === "BORROW_IN"
+                    ? "CLOSED"
+                    : inventoryTxnEditForm.type === "BORROW_CONSUME"
+                      ? "CONSUMED"
+                      : undefined,
             }
           : x
       )
@@ -4785,13 +5264,17 @@ export default function App() {
       return;
     }
 
-    if (row.type === "IN") {
+    if (isInventoryTxnIn(row.type)) {
       const rowsWithoutCurrent = inventoryTxns.filter((x) => x.id !== row.id);
-      const inQty = rowsWithoutCurrent.filter((x) => x.itemId === row.itemId && x.type === "IN").reduce((a, b) => a + b.qty, 0);
-      const outQty = rowsWithoutCurrent.filter((x) => x.itemId === row.itemId && x.type === "OUT").reduce((a, b) => a + b.qty, 0);
+      const inQty = rowsWithoutCurrent
+        .filter((x) => x.itemId === row.itemId && isInventoryTxnIn(x.type))
+        .reduce((a, b) => a + b.qty, 0);
+      const outQty = rowsWithoutCurrent
+        .filter((x) => x.itemId === row.itemId && isInventoryTxnOut(x.type))
+        .reduce((a, b) => a + b.qty, 0);
       const currentStock = Number(item.openingQty || 0) + inQty - outQty;
       if (currentStock < 0) {
-        setError("Cannot delete this Stock In record because it would make stock negative.");
+        setError("Cannot delete this transaction because it would make stock negative.");
         return;
       }
     }
@@ -6190,6 +6673,25 @@ export default function App() {
     }));
   }
 
+  function openMaintenanceFromNotification(row: MaintenanceNotification) {
+    const byDbId = assets.find((asset) => Number(asset.id) === Number(row.assetDbId));
+    const byAssetId = assets.find(
+      (asset) => String(asset.assetId || "").trim().toUpperCase() === String(row.assetId || "").trim().toUpperCase()
+    );
+    const targetAsset = byDbId || byAssetId || null;
+    const preferredDate = String(row.scheduleDate || "").trim();
+
+    setTab("maintenance");
+    setMaintenanceView("record");
+    setMaintenanceRecordScheduleJumpMode(true);
+    setMaintenanceRecordForm((f) => ({
+      ...f,
+      assetId: targetAsset ? String(targetAsset.id) : "",
+      date: preferredDate || f.date || toYmd(new Date()),
+    }));
+    setMobileNotificationOpen(false);
+  }
+
   const filterLabel = useMemo(
     () => (campusFilter === "ALL" ? t.allCampuses : campusLabel(campusFilter)),
     [campusFilter, t.allCampuses, campusLabel]
@@ -6710,13 +7212,46 @@ export default function App() {
         assetLocationMultiFilter.includes(String(asset.location || "").trim())
       );
     }
-    return list;
+    const { key, direction } = assetListSort;
+    const sign = direction === "asc" ? 1 : -1;
+    return list.sort((a, b) => {
+      const aValue =
+        key === "assetId"
+          ? String(a.assetId || "")
+          : key === "campus"
+            ? campusLabel(a.campus)
+            : key === "category"
+              ? String(a.category || "")
+              : key === "name"
+                ? assetItemName(a.category, a.type, a.pcType || "")
+                : key === "location"
+                  ? String(a.location || "")
+                  : String(a.status || "");
+      const bValue =
+        key === "assetId"
+          ? String(b.assetId || "")
+          : key === "campus"
+            ? campusLabel(b.campus)
+            : key === "category"
+              ? String(b.category || "")
+              : key === "name"
+                ? assetItemName(b.category, b.type, b.pcType || "")
+                : key === "location"
+                  ? String(b.location || "")
+                  : String(b.status || "");
+      const compared = aValue.localeCompare(bValue, undefined, { sensitivity: "base" });
+      if (compared !== 0) return compared * sign;
+      return String(a.assetId || "").localeCompare(String(b.assetId || ""), undefined, { sensitivity: "base" });
+    });
   }, [
     assets,
     assetCampusMultiFilter,
     assetCategoryMultiFilter,
     assetNameMultiFilter,
     assetLocationMultiFilter,
+    assetListSort,
+    campusLabel,
+    assetItemName,
   ]);
   const topCampusByAssets = useMemo(() => {
     if (!stats.byCampus.length) return null;
@@ -6925,6 +7460,18 @@ export default function App() {
 
   function toggleMaintenanceSort(key: MaintenanceSortKey) {
     setMaintenanceSort((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  }
+
+  function toggleAssetListSort(key: AssetListSortKey) {
+    setAssetListSort((prev) => {
       if (prev.key === key) {
         return {
           key,
@@ -7458,7 +8005,7 @@ export default function App() {
     if (reportType === "qr_labels") {
       setQrCampusFilter("ALL");
       setQrCategoryFilter("ALL");
-      setQrItemFilter("ALL");
+      setQrItemFilter(["ALL"]);
     }
   }, [reportType]);
 
@@ -7466,6 +8013,279 @@ export default function App() {
     const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrLabelRows]);
+  const quickCountBaseAssets = useMemo(
+    () => (quickCountCampus === "ALL" ? assets : assets.filter((asset) => asset.campus === quickCountCampus)),
+    [assets, quickCountCampus]
+  );
+  const quickCountRows = useMemo(() => {
+    const map = new Map<string, { category: string; itemName: string; count: number }>();
+    for (const asset of quickCountBaseAssets) {
+      const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+      if (!itemName) continue;
+      const category = String(asset.category || "OTHER");
+      const key = `${category}::${itemName}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, { category, itemName, count: 1 });
+      }
+    }
+    const categoryOrder = ["IT", "SAFETY"];
+    return Array.from(map.values()).sort((a, b) => {
+      const aIdx = categoryOrder.indexOf(a.category);
+      const bIdx = categoryOrder.indexOf(b.category);
+      if (aIdx !== bIdx) {
+        if (aIdx === -1) return 1;
+        if (bIdx === -1) return -1;
+        return aIdx - bIdx;
+      }
+      return b.count - a.count || a.itemName.localeCompare(b.itemName);
+    });
+  }, [quickCountBaseAssets, assetItemName]);
+  const quickCountFilteredRows = useMemo(() => {
+    const q = String(quickCountQuery || "").trim().toLowerCase();
+    if (!q) return quickCountRows;
+    return quickCountRows.filter(
+      (row) => row.itemName.toLowerCase().includes(q) || row.category.toLowerCase().includes(q)
+    );
+  }, [quickCountRows, quickCountQuery]);
+  const quickCountGroupedRows = useMemo(() => {
+    const grouped = new Map<string, typeof quickCountFilteredRows>();
+    for (const row of quickCountFilteredRows) {
+      const list = grouped.get(row.category) || [];
+      list.push(row);
+      grouped.set(row.category, list);
+    }
+    const categoryOrder = ["IT", "SAFETY"];
+    return Array.from(grouped.entries())
+      .sort((a, b) => {
+        const aIdx = categoryOrder.indexOf(a[0]);
+        const bIdx = categoryOrder.indexOf(b[0]);
+        if (aIdx !== bIdx) {
+          if (aIdx === -1) return 1;
+          if (bIdx === -1) return -1;
+          return aIdx - bIdx;
+        }
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([category, rows]) => ({ category, rows: rows.slice(0, 18) }));
+  }, [quickCountFilteredRows]);
+  const quickCountTotal = quickCountBaseAssets.length;
+  const quickCountFilteredTotal = useMemo(
+    () => quickCountFilteredRows.reduce((sum, row) => sum + row.count, 0),
+    [quickCountFilteredRows]
+  );
+  const quickCountStatusAssets = useMemo(() => {
+    const buckets = {
+      active: [] as Asset[],
+      retired: [] as Asset[],
+      underMaintenance: [] as Asset[],
+      broken: [] as Asset[],
+    };
+
+    for (const asset of quickCountBaseAssets) {
+      const status = String(asset.status || "Active").trim().toLowerCase();
+      const history = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+      const hasOpenMaintenance = history.some(
+        (entry) => String(entry?.completion || "").trim().toLowerCase() === "not yet"
+      );
+      const hasBrokenSignal =
+        status.includes("broken") ||
+        history.some((entry) =>
+          isBrokenMaintenance(String(entry?.condition || ""), String(entry?.note || ""))
+        );
+
+      if (status === "retired") buckets.retired.push(asset);
+      else if (status === "maintenance" || hasOpenMaintenance) buckets.underMaintenance.push(asset);
+      else buckets.active.push(asset);
+
+      if (hasBrokenSignal) buckets.broken.push(asset);
+    }
+
+    return buckets;
+  }, [quickCountBaseAssets, isBrokenMaintenance]);
+  const quickCountStatusSummary = useMemo(
+    () => ({
+      active: quickCountStatusAssets.active.length,
+      retired: quickCountStatusAssets.retired.length,
+      underMaintenance: quickCountStatusAssets.underMaintenance.length,
+      broken: quickCountStatusAssets.broken.length,
+    }),
+    [quickCountStatusAssets]
+  );
+  function openQuickCountAssetsModal(title: string, rows: Asset[]) {
+    const sorted = [...rows].sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")));
+    setQuickCountModal({ title, assets: sorted });
+  }
+  function quickCountItemIcon(itemName: string) {
+    const name = String(itemName || "").toLowerCase();
+    if (name.includes("air conditioner") || name.includes("air-con") || name.includes("ac")) return "❄";
+    if (name.includes("monitor")) return "🖥";
+    if (name.includes("keyboard")) return "⌨";
+    if (name.includes("mouse")) return "🖱";
+    if (name.includes("computer")) return "💻";
+    if (name.includes("fire extinguisher")) return "🧯";
+    if (name.includes("router")) return "📶";
+    if (name.includes("switch")) return "🔀";
+    if (name.includes("printer")) return "🖨";
+    return "📦";
+  }
+  const renderQuickCountPanel = (source: "dashboard" | "reports") => {
+    const isDashboard = source === "dashboard";
+    const isVisible = isDashboard ? dashboardQuickCountOpen : true;
+    return (
+      <div className="report-quick-count">
+        <div className="report-quick-count-head-row">
+          <div className="report-quick-count-head">
+            <strong>{lang === "km" ? "ស្វែងរកចំនួនរហ័ស" : "Quick Count"}</strong>
+            <div className="report-quick-count-summary tiny">
+              {lang === "km"
+                ? `មុខទំនិញ: ${quickCountFilteredRows.length} | ចំនួនតាមលទ្ធផលស្វែងរក: ${quickCountFilteredTotal}`
+                : `Items: ${quickCountFilteredRows.length} | Matched assets: ${quickCountFilteredTotal}`}
+            </div>
+            <span className="tiny">
+              {lang === "km"
+                ? "ជ្រើសសាខា និងស្វែងរកឈ្មោះទ្រព្យ ដើម្បីឃើញចំនួនភ្លាមៗ"
+                : "Pick campus and search item name to get instant quantity"}
+            </span>
+          </div>
+          {isDashboard ? (
+            <button
+              type="button"
+              className="tab btn-small report-quick-toggle-btn"
+              onClick={() => setDashboardQuickCountOpen((open) => !open)}
+            >
+              {dashboardQuickCountOpen ? (lang === "km" ? "លាក់" : "Hide") : (lang === "km" ? "បង្ហាញ" : "View")}
+            </button>
+          ) : null}
+        </div>
+        {isVisible ? (
+          <>
+            <div className="report-quick-count-controls">
+              <select className="input" value={quickCountCampus} onChange={(e) => setQuickCountCampus(e.target.value)}>
+                <option value="ALL">{t.allCampuses}</option>
+                {CAMPUS_LIST.map((campus) => (
+                  <option key={`quick-count-campus-${campus}`} value={campus}>
+                    {campusLabel(campus)}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="input"
+                value={quickCountQuery}
+                onChange={(e) => setQuickCountQuery(e.target.value)}
+                placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទ្រព្យ (ឧ. Monitor, Air Conditioner)" : "Search item name (e.g. Monitor, Air Conditioner)"}
+              />
+              <div className="report-quick-count-result">
+                <span>{lang === "km" ? "ទ្រព្យសរុប" : "Assets"}</span>
+                <button
+                  type="button"
+                  className="report-quick-count-link"
+                  onClick={() =>
+                    openQuickCountAssetsModal(
+                      `${lang === "km" ? "ទ្រព្យសរុប" : "Assets"} - ${
+                        quickCountCampus === "ALL" ? t.allCampuses : campusLabel(quickCountCampus)
+                      }`,
+                      quickCountBaseAssets
+                    )
+                  }
+                >
+                  {quickCountTotal}
+                </button>
+              </div>
+            </div>
+            <div className="report-quick-status-grid">
+              <article className="report-quick-status-pill report-quick-status-broken">
+                <span>{lang === "km" ? "ខូច" : "Broken"}</span>
+                <button
+                  type="button"
+                  className="report-quick-count-link"
+                  onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Broken Assets", quickCountStatusAssets.broken)}
+                >
+                  {quickCountStatusSummary.broken}
+                </button>
+              </article>
+              <article className="report-quick-status-pill report-quick-status-maintenance">
+                <span>{lang === "km" ? "កំពុងជួសជុល" : "Under Maintenance"}</span>
+                <button
+                  type="button"
+                  className="report-quick-count-link"
+                  onClick={() =>
+                    openQuickCountAssetsModal(
+                      lang === "km" ? "ទ្រព្យកំពុងជួសជុល" : "Under Maintenance Assets",
+                      quickCountStatusAssets.underMaintenance
+                    )
+                  }
+                >
+                  {quickCountStatusSummary.underMaintenance}
+                </button>
+              </article>
+              <article className="report-quick-status-pill report-quick-status-active">
+                <span>{lang === "km" ? "កំពុងប្រើ" : "Active"}</span>
+                <button
+                  type="button"
+                  className="report-quick-count-link"
+                  onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងប្រើ" : "Active Assets", quickCountStatusAssets.active)}
+                >
+                  {quickCountStatusSummary.active}
+                </button>
+              </article>
+              <article className="report-quick-status-pill report-quick-status-retired">
+                <span>{lang === "km" ? "ឈប់ប្រើ" : "Retired"}</span>
+                <button
+                  type="button"
+                  className="report-quick-count-link"
+                  onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យឈប់ប្រើ" : "Retired Assets", quickCountStatusAssets.retired)}
+                >
+                  {quickCountStatusSummary.retired}
+                </button>
+              </article>
+            </div>
+            <div className="report-quick-count-groups">
+              {quickCountGroupedRows.length ? (
+                quickCountGroupedRows.map((group) => (
+                  <section key={`quick-count-group-${group.category}`} className="report-quick-category-block">
+                    <div className="report-quick-category-title">
+                      {lang === "km" ? `ប្រភេទ: ${group.category}` : `${group.category} Items`}
+                    </div>
+                    <div className="report-quick-count-list">
+                      {group.rows.map((row) => (
+                        <article key={`quick-count-row-${row.category}-${row.itemName}`} className="report-quick-count-item">
+                          <span className="report-quick-item-label">
+                            <span className="report-quick-item-icon" aria-hidden="true">{quickCountItemIcon(row.itemName)}</span>
+                            <span>{row.itemName}</span>
+                          </span>
+                          <button
+                            type="button"
+                            className="report-quick-count-link"
+                            onClick={() =>
+                              openQuickCountAssetsModal(
+                                `${row.itemName} - ${quickCountCampus === "ALL" ? t.allCampuses : campusLabel(quickCountCampus)}`,
+                                quickCountBaseAssets.filter(
+                                  (asset) =>
+                                    asset.category === row.category &&
+                                    assetItemName(asset.category, asset.type, asset.pcType || "") === row.itemName
+                                )
+                              )
+                            }
+                          >
+                            {row.count}
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ))
+              ) : (
+                <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យត្រូវគ្នា" : "No matched items"}</div>
+              )}
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
+  };
   useEffect(() => {
     if (!reportTypeOptions.length) return;
     if (!reportTypeOptions.some((option) => option.value === reportType)) {
@@ -7537,7 +8357,7 @@ export default function App() {
     return qrLabelRows.filter((row) => {
       if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
       if (qrCategoryFilter !== "ALL" && row.category !== qrCategoryFilter) return false;
-      if (qrItemFilter !== "ALL" && row.itemName !== qrItemFilter) return false;
+      if (!qrItemFilter.includes("ALL") && !qrItemFilter.includes(row.itemName)) return false;
       return true;
     });
   }, [qrLabelRows, qrCampusFilter, qrCategoryFilter, qrItemFilter]);
@@ -7868,11 +8688,11 @@ export default function App() {
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; }
-          .qr-sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
-          .qr-sticker { border: 1px solid #cfded0; border-radius: 8px; padding: 10px; display: grid; gap: 10px; justify-items: center; page-break-inside: avoid; }
-          .qr-sticker-qr { width: 120px; height: 120px; border: 1px solid #e1e8e1; border-radius: 6px; display: grid; place-items: center; }
-          .qr-sticker-qr img { width: 110px; height: 110px; object-fit: contain; }
-          .qr-sticker-id { width: 100%; text-align: center; border: 1.5px solid #1b2d23; border-radius: 999px; padding: 6px 8px; font-size: 14px; font-weight: 800; letter-spacing: 0.02em; }
+          .qr-sticker-grid { display: grid; grid-template-columns: repeat(4, 116px); column-gap: 10px; row-gap: 10px; margin-top: 10px; justify-content: start; }
+          .qr-sticker { width: 116px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 8px; padding: 7px 7px 6px; display: grid; gap: 6px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
+          .qr-sticker-qr { width: 84px; height: 84px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 6px; display: grid; place-items: center; }
+          .qr-sticker-qr img { width: 76px; height: 76px; object-fit: contain; display: block; }
+          .qr-sticker-id { width: 84px; min-height: 24px; box-sizing: border-box; text-align: center; border: 1px solid #1b2d23; border-radius: 6px; padding: 3px 4px; font-size: 8.5px; line-height: 1.05; font-weight: 800; letter-spacing: 0.005em; white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
           @media print { body { margin: 8mm; } }
         </style>
       </head>
@@ -8726,8 +9546,7 @@ export default function App() {
                               className="tab btn-small"
                               onClick={() => {
                                 if (!row.read) void markMaintenanceNotificationRead(row.id);
-                                setTab("maintenance");
-                                setMobileNotificationOpen(false);
+                                openMaintenanceFromNotification(row);
                               }}
                             >
                               {t.openMaintenance}
@@ -8812,6 +9631,7 @@ export default function App() {
                     <button className="tab" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
                     <button className="tab" onClick={() => setTab("inventory")}>Inventory</button>
                     <button className="tab" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+                    <button className="tab" onClick={() => setTab("verification")}>{t.recordVerification}</button>
                   </div>
                 </div>
               </div>
@@ -8865,6 +9685,8 @@ export default function App() {
               </div>
             )}
 
+            {renderQuickCountPanel("dashboard")}
+
             {dashboardView === "overview" && (
               <div className="dashboard-clean-grid">
                 <article className="panel dashboard-widget dashboard-focus-panel">
@@ -8897,44 +9719,51 @@ export default function App() {
                       </button>
                     </article>
                   </div>
-                  {isPhoneView ? null : (
-                    <div className="dashboard-focus-actions">
-                      <button className="tab" onClick={() => setTab("schedule")}>Go to Schedule</button>
-                      <button className="tab" onClick={() => setTab("maintenance")}>Record Maintenance</button>
-                      <button className="tab" onClick={() => setTab("verification")}>Record Verification</button>
-                    </div>
-                  )}
                 </article>
 
-                <article className="panel dashboard-widget">
+                <article className="panel dashboard-widget dashboard-calendar-panel">
                   <div className="dashboard-widget-head">
-                    <h3 className="section-title">Campus Summary</h3>
+                    <h3 className="section-title">Calendar View</h3>
+                    <div className="row-actions">
+                      <button
+                        className="tab btn-small"
+                        onClick={() =>
+                          setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                        }
+                      >
+                        Prev
+                      </button>
+                      <button
+                        className="tab btn-small"
+                        onClick={() =>
+                          setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                        }
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>{t.campus}</th>
-                          <th>{t.assets}</th>
-                          <th>{t.openTickets}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {stats.byCampus.length ? (
-                          stats.byCampus.map((row) => (
-                            <tr key={row.campus}>
-                              <td>{campusLabel(row.campus)}</td>
-                              <td>{row.assets}</td>
-                              <td>{row.openTickets}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={3}>{t.noDataYet}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <p className="tiny dashboard-calendar-month">
+                    {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
+                  </p>
+                  <div className="calendar-grid dashboard-calendar-grid">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                      <div key={`dash-cal-head-${d}`} className="calendar-day calendar-head">{d}</div>
+                    ))}
+                    {calendarGridDays.map((d) => (
+                      <button
+                        key={`dash-cal-day-${d.ymd}`}
+                        className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""}`}
+                        onClick={() => {
+                          setSelectedCalendarDate(d.ymd);
+                          if (d.hasItems) setScheduleAlertModal("selected");
+                        }}
+                        title={d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}
+                      >
+                        <span>{d.day}</span>
+                        {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                      </button>
+                    ))}
                   </div>
                 </article>
               </div>
@@ -9654,7 +10483,7 @@ export default function App() {
                   <h2 className="asset-list-title">{t.assetRegistry}</h2>
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
-                  <details className="filter-menu">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>{summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}</summary>
                     <div className="filter-menu-list">
                       <label className="filter-menu-item">
@@ -9698,7 +10527,7 @@ export default function App() {
                       ))}
                     </div>
                   </details>
-                  <details className="filter-menu">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>
                       {summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
                         const row = CATEGORY_OPTIONS.find((option) => option.value === value);
@@ -9747,7 +10576,7 @@ export default function App() {
                       ))}
                     </div>
                   </details>
-                  <details className="filter-menu">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>
                       {summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
                         const row = assetNameFilterOptions.find((option) => option.value === value);
@@ -9796,7 +10625,7 @@ export default function App() {
                       ))}
                     </div>
                   </details>
-                  <details className="filter-menu">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
                     <div className="filter-menu-list">
                       <label className="filter-menu-item">
@@ -9919,14 +10748,62 @@ export default function App() {
                     <table className="table-compact asset-list-table">
                       <thead>
                         <tr>
-                          <th>{t.assetId}</th>
-                          <th>{t.campus}</th>
-                          <th>{t.category}</th>
+                          <th aria-sort={assetListSort.key === "assetId" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${assetListSort.key === "assetId" ? "is-active" : ""}`}
+                              onClick={() => toggleAssetListSort("assetId")}
+                            >
+                              {t.assetId}
+                            </button>
+                          </th>
+                          <th aria-sort={assetListSort.key === "campus" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${assetListSort.key === "campus" ? "is-active" : ""}`}
+                              onClick={() => toggleAssetListSort("campus")}
+                            >
+                              {t.campus}
+                            </button>
+                          </th>
+                          <th aria-sort={assetListSort.key === "category" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${assetListSort.key === "category" ? "is-active" : ""}`}
+                              onClick={() => toggleAssetListSort("category")}
+                            >
+                              {t.category}
+                            </button>
+                          </th>
                           <th>{t.photo}</th>
-                          <th>{t.name}</th>
-                          <th>{t.location}</th>
+                          <th aria-sort={assetListSort.key === "name" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${assetListSort.key === "name" ? "is-active" : ""}`}
+                              onClick={() => toggleAssetListSort("name")}
+                            >
+                              {t.name}
+                            </button>
+                          </th>
+                          <th aria-sort={assetListSort.key === "location" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${assetListSort.key === "location" ? "is-active" : ""}`}
+                              onClick={() => toggleAssetListSort("location")}
+                            >
+                              {t.location}
+                            </button>
+                          </th>
                           <th>{t.actions}</th>
-                          <th>{t.status}</th>
+                          <th aria-sort={assetListSort.key === "status" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${assetListSort.key === "status" ? "is-active" : ""}`}
+                              onClick={() => toggleAssetListSort("status")}
+                            >
+                              {t.status}
+                            </button>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -10902,6 +11779,9 @@ export default function App() {
               </div>
               <div className="tabs">
                 <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
+                <button className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
+                  {lang === "km" ? "កត់ត្រាប្រចាំថ្ងៃ" : "Daily IN/OUT"}
+                </button>
                 <button className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>Stock In/Out</button>
                 <button className={`tab ${inventoryView === "balance" ? "tab-active" : ""}`} onClick={() => setInventoryView("balance")}>Balance & Alerts</button>
               </div>
@@ -10932,6 +11812,24 @@ export default function App() {
                     </select>
                   </label>
                   <label className="field">
+                    <span>Item Master</span>
+                    <select
+                      className="input"
+                      value={inventoryItemForm.masterItemKey}
+                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, masterItemKey: e.target.value }))}
+                    >
+                      <option value="">Select item master</option>
+                      {inventoryMasterOptions.map((item) => (
+                        <option key={`inv-master-${item.key}`} value={item.key}>
+                          {item.nameEn}{item.spec ? ` (${item.spec})` : ""} - {item.unit}
+                        </option>
+                      ))}
+                    </select>
+                    <small className="tiny">
+                      Standardized items only (Khmer/English aliases mapped in master list).
+                    </small>
+                  </label>
+                  <label className="field">
                     <span>Item Code</span>
                     <div style={{ display: "flex", gap: 8 }}>
                       <input
@@ -10957,11 +11855,11 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Item Name</span>
-                    <input className="input" value={inventoryItemForm.itemName} onChange={(e) => setInventoryItemForm((f) => ({ ...f, itemName: e.target.value }))} />
+                    <input className="input" value={inventoryItemForm.itemName} readOnly />
                   </label>
                   <label className="field">
                     <span>Unit</span>
-                    <input className="input" value={inventoryItemForm.unit} onChange={(e) => setInventoryItemForm((f) => ({ ...f, unit: e.target.value }))} />
+                    <input className="input" value={inventoryItemForm.unit} readOnly />
                   </label>
                   <label className="field">
                     <span>Location</span>
@@ -11060,9 +11958,12 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Type</span>
-                    <select className="input" value={inventoryTxnForm.type} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, type: e.target.value as "IN" | "OUT" }))}>
-                      <option value="IN">Stock In</option>
-                      <option value="OUT">Stock Out</option>
+                    <select className="input" value={inventoryTxnForm.type} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, type: e.target.value as InventoryTxn["type"] }))}>
+                      {INVENTORY_TXN_TYPE_OPTIONS.map((typeOption) => (
+                        <option key={`inv-txn-type-${typeOption.value}`} value={typeOption.value}>
+                          {typeOption.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="field">
@@ -11077,9 +11978,54 @@ export default function App() {
                     <span>{t.notes}</span>
                     <input className="input" value={inventoryTxnForm.note} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, note: e.target.value }))} />
                   </label>
+                  {inventoryTxnIsBorrow ? (
+                    <>
+                      {inventoryTxnForm.type === "BORROW_IN" ? (
+                        <label className="field">
+                          <span>From Campus</span>
+                          <select className="input" value={inventoryTxnForm.fromCampus} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, fromCampus: e.target.value }))}>
+                            <option value="">Select source campus</option>
+                            {CAMPUS_LIST.filter((campus) => campus !== (inventoryTxnSelectedItem?.campus || "")).map((campus) => (
+                              <option key={`inv-borrow-from-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : (
+                        <label className="field">
+                          <span>To Campus</span>
+                          <select className="input" value={inventoryTxnForm.toCampus} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, toCampus: e.target.value }))}>
+                            <option value="">Select destination campus</option>
+                            {CAMPUS_LIST.filter((campus) => campus !== (inventoryTxnSelectedItem?.campus || "")).map((campus) => (
+                              <option key={`inv-borrow-to-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      <label className="field">
+                        <span>Requested By</span>
+                        <input className="input" value={inventoryTxnForm.requestedBy} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, requestedBy: e.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Approved By</span>
+                        <input className="input" value={inventoryTxnForm.approvedBy} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, approvedBy: e.target.value }))} />
+                      </label>
+                      {inventoryTxnForm.type === "BORROW_IN" ? (
+                        <label className="field">
+                          <span>Received By</span>
+                          <input className="input" value={inventoryTxnForm.receivedBy} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, receivedBy: e.target.value }))} />
+                        </label>
+                      ) : null}
+                      {inventoryTxnForm.type === "BORROW_OUT" ? (
+                        <label className="field">
+                          <span>Expected Return Date</span>
+                          <input className="input" type="date" value={inventoryTxnForm.expectedReturnDate} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, expectedReturnDate: e.target.value }))} />
+                        </label>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
                 <div className="asset-actions">
-                  <div className="tiny">Track every in/out movement to keep accurate monthly stock report.</div>
+                  <div className="tiny">Track stock in/out and campus borrow flow in one register.</div>
                   <button className="btn-primary" disabled={!isAdmin} onClick={createInventoryTxn}>Save Transaction</button>
                 </div>
 
@@ -11093,6 +12039,7 @@ export default function App() {
                         <th>{t.campus}</th>
                         <th>Type</th>
                         <th>Qty</th>
+                        <th>Borrow Details</th>
                         <th>{t.by}</th>
                         <th>{t.notes}</th>
                         <th>Actions</th>
@@ -11138,10 +12085,13 @@ export default function App() {
                                   <select
                                     className="table-input"
                                     value={inventoryTxnEditForm.type}
-                                    onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, type: e.target.value as "IN" | "OUT" }))}
+                                    onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, type: e.target.value as InventoryTxn["type"] }))}
                                   >
-                                    <option value="IN">Stock In</option>
-                                    <option value="OUT">Stock Out</option>
+                                    {INVENTORY_TXN_TYPE_OPTIONS.map((typeOption) => (
+                                      <option key={`inv-edit-type-${typeOption.value}`} value={typeOption.value}>
+                                        {typeOption.label}
+                                      </option>
+                                    ))}
                                   </select>
                                 </td>
                                 <td>
@@ -11153,6 +12103,7 @@ export default function App() {
                                     onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, qty: e.target.value }))}
                                   />
                                 </td>
+                                <td>{row.borrowStatus || "-"}</td>
                                 <td>
                                   <input
                                     className="table-input"
@@ -11182,8 +12133,15 @@ export default function App() {
                                 <td><strong>{row.itemCode}</strong></td>
                                 <td>{row.itemName}</td>
                                 <td>{campusLabel(row.campus)}</td>
-                                <td>{row.type === "IN" ? "Stock In" : "Stock Out"}</td>
+                                <td>{inventoryTxnTypeLabel(row.type)}</td>
                                 <td>{row.qty}</td>
+                                <td>
+                                  {row.type === "BORROW_OUT" || row.type === "BORROW_CONSUME"
+                                    ? `${campusLabel(row.campus)} → ${campusLabel(row.toCampus || "-")} (${row.borrowStatus || "-"})`
+                                    : row.type === "BORROW_IN"
+                                      ? `${campusLabel(row.fromCampus || "-")} → ${campusLabel(row.campus)} (${row.borrowStatus || "-"})`
+                                      : "-"}
+                                </td>
                                 <td>{row.by || "-"}</td>
                                 <td>{row.note || "-"}</td>
                                 <td>
@@ -11202,12 +12160,247 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={9}>No transactions yet.</td>
+                          <td colSpan={10}>No transactions yet.</td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
+              </section>
+            )}
+
+            {inventoryView === "daily" && (
+              <section className="panel inventory-daily-panel">
+                <div className="inventory-daily-head">
+                  <h2>{lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)"}</h2>
+                  <p className="tiny">
+                    {lang === "km"
+                      ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រា IN / OUT តាមទូរស័ព្ទបានលឿន។"
+                      : "Phone-friendly daily IN/OUT for maintenance staff."}
+                  </p>
+                </div>
+
+                <div className="inventory-daily-grid">
+                  <label className="field field-wide">
+                    <span>{lang === "km" ? "ស្វែងរកសម្ភារៈ" : "Search Item"}</span>
+                    <input
+                      className="input"
+                      placeholder={lang === "km" ? "ស្វែងរកកូដ ឬឈ្មោះ..." : "Search code or item name..."}
+                      value={inventoryDailyForm.search}
+                      onChange={(e) => setInventoryDailyForm((f) => ({ ...f, search: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field field-wide">
+                    <span>{lang === "km" ? "ជ្រើសសម្ភារៈ" : "Select Item"}</span>
+                    <select
+                      className="input"
+                      value={inventoryDailyForm.itemId}
+                      onChange={(e) => setInventoryDailyForm((f) => ({ ...f, itemId: e.target.value }))}
+                    >
+                      <option value="">{lang === "km" ? "ជ្រើសសម្ភារៈ" : "Select item"}</option>
+                      {inventoryDailyItemOptions.map((item) => (
+                        <option key={`daily-inv-item-${item.id}`} value={String(item.id)}>
+                          {inventoryItemLabel(item)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.date}</span>
+                    <input
+                      className="input"
+                      type="date"
+                      value={inventoryDailyForm.date}
+                      onChange={(e) => setInventoryDailyForm((f) => ({ ...f, date: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "អ្នកកត់ត្រា" : "Recorded By"}</span>
+                    <input
+                      className="input"
+                      value={inventoryDailyForm.by}
+                      onChange={(e) => setInventoryDailyForm((f) => ({ ...f, by: e.target.value }))}
+                      placeholder={lang === "km" ? "ឈ្មោះអ្នកកត់ត្រា" : "Staff name"}
+                    />
+                  </label>
+
+                  <div className="field field-wide">
+                    <span>{lang === "km" ? "ប្រភេទចលនា" : "Type"}</span>
+                    <div className="inventory-daily-type-switch">
+                      <button
+                        type="button"
+                        className={`tab ${inventoryDailyForm.type === "IN" ? "tab-active" : ""}`}
+                        onClick={() => setInventoryDailyForm((f) => ({ ...f, type: "IN" }))}
+                      >
+                        {lang === "km" ? "ចូលស្តុក (IN)" : "Stock In"}
+                      </button>
+                      <button
+                        type="button"
+                        className={`tab ${inventoryDailyForm.type === "OUT" ? "tab-active" : ""}`}
+                        onClick={() => setInventoryDailyForm((f) => ({ ...f, type: "OUT" }))}
+                      >
+                        {lang === "km" ? "ចេញស្តុក (OUT)" : "Stock Out"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <label className="field">
+                    <span>{lang === "km" ? "បរិមាណ" : "Quantity"}</span>
+                    <input
+                      className="input inventory-daily-qty-input"
+                      type="number"
+                      min="0"
+                      value={inventoryDailyForm.qty}
+                      onChange={(e) => setInventoryDailyForm((f) => ({ ...f, qty: e.target.value }))}
+                    />
+                    <div className="inventory-daily-qty-quick">
+                      {[1, 5, 10].map((step) => (
+                        <button
+                          key={`daily-qty-step-${step}`}
+                          type="button"
+                          className="tab btn-small"
+                          onClick={() =>
+                            setInventoryDailyForm((f) => ({
+                              ...f,
+                              qty: String(Math.max(0, Number(f.qty || 0) + step)),
+                            }))
+                          }
+                        >
+                          +{step}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.notes}</span>
+                    <input
+                      className="input"
+                      value={inventoryDailyForm.note}
+                      onChange={(e) => setInventoryDailyForm((f) => ({ ...f, note: e.target.value }))}
+                      placeholder={lang === "km" ? "ឧទាហរណ៍៖ ប្រើសម្រាប់ជួសជុលបន្ទប់..." : "Example: used for room maintenance..."}
+                    />
+                  </label>
+                </div>
+
+                {inventoryDailySelectedItem ? (
+                  <div className="inventory-daily-stock-note">
+                    <strong>{inventoryDailySelectedItem.itemCode}</strong> - {inventoryDailySelectedItem.itemName}
+                    {" | "}
+                    {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}: <strong>{inventoryStockMap.get(inventoryDailySelectedItem.id) || 0}</strong>
+                    {" | "}
+                    {lang === "km" ? "ស្តុកអប្បបរមា" : "Min Stock"}: <strong>{inventoryDailySelectedItem.minStock}</strong>
+                  </div>
+                ) : null}
+
+                <div className="asset-actions">
+                  <div className="tiny">
+                    {lang === "km"
+                      ? "ប្រព័ន្ធនឹងកត់ត្រាក្នុងប្រវត្តិ Stock In/Out ដោយស្វ័យប្រវត្តិ។"
+                      : "Saved directly into Stock In/Out history."}
+                  </div>
+                  <button
+                    className="btn-primary"
+                    disabled={busy || !inventoryDailyForm.itemId || !inventoryDailyForm.qty || !inventoryDailyForm.date}
+                    onClick={createInventoryDailyTxn}
+                  >
+                    {lang === "km" ? "រក្សាទុកប្រតិបត្តិការ" : "Save Daily Record"}
+                  </button>
+                </div>
+
+                <article className="panel" style={{ marginTop: 12 }}>
+                  <div className="panel-row">
+                    <h3 className="section-title">{lang === "km" ? "សង្ខេបទិញសម្ភារៈ (ថ្ងៃ 27)" : "Purchase Summary (27th Cutoff)"}</h3>
+                    <div className="row-actions">
+                      <span className="tiny">{inventoryPurchaseWindow.label}</span>
+                      <button type="button" className="tab btn-small" onClick={exportPurchaseRequestCsv}>
+                        {lang === "km" ? "ទាញយក CSV" : "Export CSV"}
+                      </button>
+                      <button type="button" className="btn-primary btn-small" onClick={printPurchaseRequest}>
+                        {lang === "km" ? "បោះពុម្ព/PDF" : "Print / PDF"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tiny" style={{ marginBottom: 8 }}>
+                    {lang === "km"
+                      ? "ប្រើសម្រាប់រៀបចំសំណើទិញប្រចាំខែ (ពិនិត្យ Used Qty និង Suggested Qty)"
+                      : "Use this on the 27th to prepare monthly purchase request."}
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Name</th>
+                          <th>{t.campus}</th>
+                          <th>{lang === "km" ? "ប្រើក្នុងរយៈពេល" : "Used Qty"}</th>
+                          <th>{lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current"}</th>
+                          <th>{lang === "km" ? "អប្បបរមា" : "Min"}</th>
+                          <th>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryPurchaseRows.length ? (
+                          inventoryPurchaseRows.map((row) => (
+                            <tr key={`purchase-row-${row.id}`}>
+                              <td><strong>{row.itemCode}</strong></td>
+                              <td>{row.itemName}</td>
+                              <td>{campusLabel(row.campus)}</td>
+                              <td>{row.usedQty}</td>
+                              <td>{row.currentStock}</td>
+                              <td>{row.minStock}</td>
+                              <td><strong>{row.suggestedQty}</strong></td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់សំណើទិញ" : "No purchase summary rows."}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+
+                <article className="panel" style={{ marginTop: 12 }}>
+                  <div className="panel-row">
+                    <h3 className="section-title">{lang === "km" ? "កំណត់ត្រាប្រចាំថ្ងៃ" : "Today Records"}</h3>
+                    <span className="tiny">{formatDate(inventoryDailyForm.date)}</span>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t.date}</th>
+                          <th>Code</th>
+                          <th>Name</th>
+                          <th>Type</th>
+                          <th>Qty</th>
+                          <th>{t.by}</th>
+                          <th>{t.notes}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryDailyTodayRows.length ? (
+                          inventoryDailyTodayRows.map((row) => (
+                            <tr key={`daily-row-${row.id}`}>
+                              <td>{formatDate(row.date)}</td>
+                              <td><strong>{row.itemCode}</strong></td>
+                              <td>{row.itemName}</td>
+                              <td>{inventoryTxnTypeLabel(row.type)}</td>
+                              <td>{row.qty}</td>
+                              <td>{row.by || "-"}</td>
+                              <td>{row.note || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7}>{lang === "km" ? "មិនទាន់មានកំណត់ត្រា" : "No records yet."}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
               </section>
             )}
 
@@ -12951,18 +14144,37 @@ export default function App() {
                     <option value="SAFETY">Safety</option>
                     <option value="FACILITY">Facility</option>
                   </select>
-                  <select
-                    className="input"
-                    value={qrItemFilter}
-                    onChange={(e) => setQrItemFilter(e.target.value)}
-                  >
-                    <option value="ALL">{lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}</option>
-                    {qrItemFilterOptions.map((itemName) => (
-                      <option key={`qr-item-${itemName}`} value={itemName}>
-                        {itemName}
-                      </option>
-                    ))}
-                  </select>
+                  <details className="filter-menu">
+                    <summary>{summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={qrItemFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setQrItemFilter((prev) =>
+                              applyMultiFilterSelection(prev, e.target.checked, "ALL", qrItemFilterOptions)
+                            )
+                          }
+                        />
+                        <span>{lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}</span>
+                      </label>
+                      {qrItemFilterOptions.map((itemName) => (
+                        <label key={`qr-item-${itemName}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={qrItemFilter.includes("ALL") || qrItemFilter.includes(itemName)}
+                            onChange={(e) =>
+                              setQrItemFilter((prev) =>
+                                applyMultiFilterSelection(prev, e.target.checked, itemName, qrItemFilterOptions)
+                              )
+                            }
+                          />
+                          <span>{itemName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                 </>
               ) : null}
               {reportType === "asset_master" ? (
@@ -14388,7 +15600,7 @@ export default function App() {
                 <h2>{scheduleAlertItems.title}</h2>
                 <button className="tab" onClick={() => setScheduleAlertModal(null)}>{t.close}</button>
               </div>
-              <div className="table-wrap">
+              <div className="table-wrap modal-sticky-table-wrap">
                 <table>
                   <thead>
                     <tr>
@@ -14441,7 +15653,7 @@ export default function App() {
                 <h2>{overviewModalData.title}</h2>
                 <button className="tab" onClick={() => setOverviewModal(null)}>{t.close}</button>
               </div>
-              <div className="table-wrap">
+              <div className="table-wrap modal-sticky-table-wrap">
                 {overviewModalData.mode === "assets" ? (
                   <table>
                     <thead>
@@ -14511,6 +15723,77 @@ export default function App() {
                     </tbody>
                   </table>
                 )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {quickCountModal && (
+          <div className="modal-backdrop" onClick={() => setQuickCountModal(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{quickCountModal.title}</h2>
+                <button className="tab" onClick={() => setQuickCountModal(null)}>{t.close}</button>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.assetId}</th>
+                      <th>{t.photo}</th>
+                      <th>{t.campus}</th>
+                      <th>{t.category}</th>
+                      <th>{t.name}</th>
+                      <th>{t.location}</th>
+                      <th>{t.status}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quickCountModal.assets.length ? (
+                      quickCountModal.assets.map((asset) => (
+                        <tr key={`quick-count-modal-asset-${asset.id}`}>
+                          <td><strong>{asset.assetId}</strong></td>
+                          <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
+                          <td>{campusLabel(asset.campus)}</td>
+                          <td>{asset.category}</td>
+                          <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                          <td>{asset.location || "-"}</td>
+                          <td>{asset.status || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {updateNotesOpen && (
+          <div className="modal-backdrop" onClick={() => setUpdateNotesOpen(false)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{lang === "km" ? "កំណត់ត្រាកំណែប្រព័ន្ធ" : "Update Notes"}</h2>
+                <button className="tab" onClick={() => setUpdateNotesOpen(false)}>{t.close}</button>
+              </div>
+              <div className="version-modal-list">
+                {APP_UPDATE_NOTES.map((entry) => (
+                  <article key={`version-note-${entry.version}`} className="version-modal-item">
+                    <div className="version-modal-head">
+                      <strong>{entry.version}</strong>
+                      <span className="tiny">{entry.date}</span>
+                    </div>
+                    <ul className="version-modal-notes">
+                      {entry.notes.map((note, index) => (
+                        <li key={`version-note-line-${entry.version}-${index}`}>{note}</li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
               </div>
             </section>
           </div>
@@ -14606,9 +15889,19 @@ export default function App() {
           </div>
         )}
 
-        <p className={`footnote ${error ? "footnote-error" : ""}`}>
-          {error ? `${t.systemError}: ${error}` : t.dataStored}
-        </p>
+        <div className="footnote-row">
+          <p className={`footnote ${error ? "footnote-error" : ""}`}>
+            {error ? `${t.systemError}: ${error}` : t.dataStored}
+          </p>
+          <button
+            type="button"
+            className="version-badge-btn"
+            onClick={() => setUpdateNotesOpen(true)}
+            title={lang === "km" ? "មើលកំណត់ត្រាកំណែ" : "View update notes"}
+          >
+            {APP_VERSION}
+          </button>
+        </div>
       </section>
     </main>
   );

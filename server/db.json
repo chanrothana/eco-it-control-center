@@ -251,6 +251,104 @@
   ],
   "auditLogs": [
     {
+      "id": 1771984672019,
+      "date": "2026-02-25T01:57:51.343Z",
+      "action": "BACKUP_CREATE",
+      "entity": "backup",
+      "entityId": "backup-2026-02-25T01-57-51-342Z.json",
+      "summary": "Server backup file created",
+      "actor": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Admin"
+      }
+    },
+    {
+      "id": 1771983619290,
+      "date": "2026-02-25T01:40:18.683Z",
+      "action": "BACKUP_CREATE",
+      "entity": "backup",
+      "entityId": "backup-2026-02-25T01-40-18-682Z.json",
+      "summary": "Automatic scheduled backup",
+      "actor": {
+        "id": 0,
+        "username": "system",
+        "displayName": "System",
+        "role": "System"
+      }
+    },
+    {
+      "id": 1771982665192,
+      "date": "2026-02-25T01:24:25.063Z",
+      "action": "BACKUP_CREATE",
+      "entity": "backup",
+      "entityId": "backup-2026-02-25T01-24-25-062Z.json",
+      "summary": "Automatic scheduled backup",
+      "actor": {
+        "id": 0,
+        "username": "system",
+        "displayName": "System",
+        "role": "System"
+      }
+    },
+    {
+      "id": 1771980947737,
+      "date": "2026-02-25T00:55:47.659Z",
+      "action": "BACKUP_CREATE",
+      "entity": "backup",
+      "entityId": "backup-2026-02-25T00-55-47-658Z.json",
+      "summary": "Automatic scheduled backup",
+      "actor": {
+        "id": 0,
+        "username": "system",
+        "displayName": "System",
+        "role": "System"
+      }
+    },
+    {
+      "id": 1771980938012,
+      "date": "2026-02-25T00:55:37.150Z",
+      "action": "BACKUP_CREATE",
+      "entity": "backup",
+      "entityId": "backup-2026-02-25T00-55-37-148Z.json",
+      "summary": "Automatic scheduled backup",
+      "actor": {
+        "id": 0,
+        "username": "system",
+        "displayName": "System",
+        "role": "System"
+      }
+    },
+    {
+      "id": 1771945656873,
+      "date": "2026-02-24T15:07:35.918Z",
+      "action": "BACKUP_CREATE",
+      "entity": "backup",
+      "entityId": "backup-2026-02-24T15-07-35-917Z.json",
+      "summary": "Automatic scheduled backup",
+      "actor": {
+        "id": 0,
+        "username": "system",
+        "displayName": "System",
+        "role": "System"
+      }
+    },
+    {
+      "id": 1771945643400,
+      "date": "2026-02-24T15:07:23.165Z",
+      "action": "BACKUP_CREATE",
+      "entity": "backup",
+      "entityId": "backup-2026-02-24T15-07-23-163Z.json",
+      "summary": "Automatic scheduled backup",
+      "actor": {
+        "id": 0,
+        "username": "system",
+        "displayName": "System",
+        "role": "System"
+      }
+    },
+    {
       "id": 1771922389115,
       "date": "2026-02-24T08:39:48.596Z",
       "action": "BACKUP_CREATE",
@@ -587,7 +685,39 @@
       }
     }
   ],
-  "authSessions": [],
+  "authSessions": [
+    {
+      "token": "a65e1011308e406513fa6480a8dfa43df646119187aedfca",
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Admin",
+        "campuses": [
+          "ALL"
+        ],
+        "modules": [],
+        "assetSubviewAccess": "both",
+        "menuAccess": []
+      }
+    },
+    {
+      "token": "fdf532741e192da29fc1a3879bbbbdd3ac43951a0e9024fd",
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Admin",
+        "campuses": [
+          "ALL"
+        ],
+        "modules": [],
+        "assetSubviewAccess": "both",
+        "menuAccess": []
+      }
+    }
+  ],
+  "notifications": [],
   "settings": {
     "campusNames": {},
     "staffUsers": []
