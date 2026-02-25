@@ -1,4 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import QRCode from "qrcode";
 import "./App.css";
 
@@ -266,6 +267,8 @@ const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
 const ITEM_TYPE_FALLBACK_KEY = "it_item_types_fallback_v1";
 const AUTH_TOKEN_KEY = "it_auth_token_v1";
 const AUTH_USER_KEY = "it_auth_user_v1";
+const LOGIN_REMEMBER_KEY = "it_login_remember_v1";
+const LOGIN_REMEMBER_USERNAME_KEY = "it_login_remember_username_v1";
 const AUTH_PERMISSION_FALLBACK_KEY = "it_auth_permissions_fallback_v1";
 const AUTH_ACCOUNTS_FALLBACK_KEY = "it_auth_accounts_fallback_v1";
 const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
@@ -491,7 +494,8 @@ function getAutoApiBaseForHost() {
   if (typeof window === "undefined") return "";
   const host = String(window.location.hostname || "").toLowerCase();
   if (host === "localhost" || host === "127.0.0.1") {
-    return DEFAULT_CLOUD_API_BASE;
+    // Local dev should stay local (CRA proxy -> local API server).
+    return "";
   }
   return "";
 }
@@ -2186,9 +2190,28 @@ export default function App() {
   const t = TEXT[lang];
   const [authLoading, setAuthLoading] = useState(true);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [loginForm, setLoginForm] = useState(() => {
+    const remember = String(localStorage.getItem(LOGIN_REMEMBER_KEY) || "") === "1";
+    return {
+      username: remember ? String(localStorage.getItem(LOGIN_REMEMBER_USERNAME_KEY) || "") : "",
+      password: "",
+    };
+  });
+  const [rememberLogin, setRememberLogin] = useState(
+    () => String(localStorage.getItem(LOGIN_REMEMBER_KEY) || "") === "1"
+  );
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [apiBaseInput, setApiBaseInput] = useState(
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [forgotPasswordForm, setForgotPasswordForm] = useState({
+    username: "",
+    email: "",
+    code: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [forgotPasswordCode, setForgotPasswordCode] = useState("");
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState("");
+  const [apiBaseInput] = useState(
     () =>
       SERVER_ONLY_STORAGE
         ? String(ENV_API_BASE_URL || getAutoApiBaseForHost())
@@ -2282,7 +2305,6 @@ export default function App() {
   const handleNavChange = useCallback((nextTab: NavModule) => {
     setTab(nextTab);
   }, []);
-  const [dashboardView, setDashboardView] = useState<"overview" | "schedule" | "activity">("overview");
   const [assetsView, setAssetsView] = useState<"register" | "list">("register");
   const [campusFilter, setCampusFilter] = useState("ALL");
   const [assetCampusFilter, setAssetCampusFilter] = useState("ALL");
@@ -2748,6 +2770,16 @@ export default function App() {
   useEffect(() => {
     trySetLocalStorage("ui_lang", lang);
   }, [lang]);
+
+  useEffect(() => {
+    if (rememberLogin) {
+      trySetLocalStorage(LOGIN_REMEMBER_KEY, "1");
+      trySetLocalStorage(LOGIN_REMEMBER_USERNAME_KEY, loginForm.username.trim());
+      return;
+    }
+    localStorage.removeItem(LOGIN_REMEMBER_KEY);
+    localStorage.removeItem(LOGIN_REMEMBER_USERNAME_KEY);
+  }, [rememberLogin, loginForm.username]);
 
   useEffect(() => {
     const onResize = () => {
@@ -4432,6 +4464,64 @@ export default function App() {
     }
   }
 
+  async function syncFromLiveWeb() {
+    if (!requireAdminAction()) return;
+    const baseInput = window.prompt("Live server URL", DEFAULT_CLOUD_API_BASE);
+    const liveBase = String(baseInput || "").trim().replace(/\/+$/, "");
+    if (!liveBase) return;
+
+    const username = window.prompt("Live admin username", "admin");
+    if (!username || !username.trim()) return;
+    const password = window.prompt("Live admin password");
+    if (!password || !password.trim()) return;
+
+    setBusy(true);
+    setError("");
+    setSetupMessage("Syncing from live web...");
+    try {
+      const loginRes = await fetch(`${liveBase}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          password,
+        }),
+      });
+      const loginData = (await loginRes.json().catch(() => ({}))) as { token?: string; error?: string };
+      if (!loginRes.ok || !loginData.token) {
+        throw new Error(loginData.error || "Cannot login to live server.");
+      }
+
+      const exportRes = await fetch(`${liveBase}/api/backup/export`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${loginData.token}`,
+        },
+      });
+      const exportData = (await exportRes.json().catch(() => ({}))) as { db?: unknown; error?: string };
+      if (!exportRes.ok || !exportData.db || typeof exportData.db !== "object") {
+        throw new Error(exportData.error || "Cannot export backup from live server.");
+      }
+
+      await requestJson<{ ok: boolean }>("/api/backup/import", {
+        method: "POST",
+        body: JSON.stringify({ db: exportData.db }),
+      });
+
+      setSetupMessage("Live sync completed. Local database updated.");
+      appendUiAudit("BACKUP_IMPORT_REMOTE", "system", "db", `Synced database from ${liveBase}`);
+      await loadData();
+      await loadAuthAccounts();
+      await loadAuditLogs();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Live sync failed";
+      setError("");
+      setSetupMessage(`Live sync failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function factoryResetSystem() {
     if (!requireAdminAction()) return;
     const confirmed = window.confirm(
@@ -4682,6 +4772,41 @@ export default function App() {
         return;
       }
       setError(err instanceof Error ? err.message : "Failed to create login account");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetAuthAccountPassword(user: AuthAccount) {
+    if (!requireAdminAction()) return;
+    const tempPassword = window.prompt(`Set temporary password for ${user.username}:`, "EcoTemp@2026!");
+    const password = String(tempPassword || "").trim();
+    if (!password) return;
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      try {
+        await requestJson<{ ok?: boolean }>(`/api/auth/users/${user.id}/reset-password`, {
+          method: "POST",
+          body: JSON.stringify({ password }),
+        });
+      } catch (err) {
+        if (isMissingRouteError(err)) {
+          await requestJson<{ user?: AuthAccount }>(`/api/auth/users/${user.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ password }),
+          });
+        } else {
+          throw err;
+        }
+      }
+      setSetupMessage(`Password reset for ${user.username}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset password.");
     } finally {
       setBusy(false);
     }
@@ -7154,41 +7279,6 @@ export default function App() {
     verificationDateFrom,
     verificationDateTo,
   ]);
-  const verificationAssets = useMemo(() => {
-    const today = toYmd(new Date());
-    const filtered = campusFilter === "ALL" ? assets : assets.filter((a) => a.campus === campusFilter);
-    return filtered
-      .filter((a) => a.nextVerificationDate)
-      .map((a) => ({
-        ...a,
-        verificationStatus:
-          (a.nextVerificationDate || "") < today
-            ? "Overdue"
-            : (a.nextVerificationDate || "") <= shiftYmd(today, 30)
-              ? "Due Soon"
-              : "Scheduled",
-      }))
-      .sort((a, b) => (a.nextVerificationDate || "").localeCompare(b.nextVerificationDate || ""));
-  }, [assets, campusFilter]);
-  const overdueVerificationAssets = useMemo(
-    () => verificationAssets.filter((a) => a.verificationStatus === "Overdue"),
-    [verificationAssets]
-  );
-  const dueSoonVerificationAssets = useMemo(
-    () => verificationAssets.filter((a) => a.verificationStatus === "Due Soon"),
-    [verificationAssets]
-  );
-  const recentTransfers = useMemo(() => {
-    const rows: Array<{ assetId: string; assetPhoto: string; entry: TransferEntry }> = [];
-    for (const asset of assets) {
-      for (const entry of asset.transferHistory || []) {
-        rows.push({ assetId: asset.assetId, assetPhoto: asset.photo || "", entry });
-      }
-    }
-    return rows
-      .sort((a, b) => b.entry.date.localeCompare(a.entry.date))
-      .slice(0, 6);
-  }, [assets]);
   const assetListRows = useMemo(() => {
     let list = [...assets];
     if (!assetCampusMultiFilter.includes("ALL")) {
@@ -7326,11 +7416,6 @@ export default function App() {
       .filter((a) => a.nextMaintenanceDate)
       .sort((a, b) => (a.nextMaintenanceDate || "").localeCompare(b.nextMaintenanceDate || ""));
   }, [assets, campusFilter]);
-  const nextScheduleRows = useMemo(() => {
-    return [...scheduleAssets]
-      .sort((a, b) => (a.nextMaintenanceDate || "").localeCompare(b.nextMaintenanceDate || ""))
-      .slice(0, 6);
-  }, [scheduleAssets]);
   const scheduleByDate = useMemo(() => {
     const gridStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
     gridStart.setDate(gridStart.getDate() - gridStart.getDay());
@@ -8251,28 +8336,27 @@ export default function App() {
                     </div>
                     <div className="report-quick-count-list">
                       {group.rows.map((row) => (
-                        <article key={`quick-count-row-${row.category}-${row.itemName}`} className="report-quick-count-item">
+                        <button
+                          key={`quick-count-row-${row.category}-${row.itemName}`}
+                          type="button"
+                          className="report-quick-count-item report-quick-count-item-btn"
+                          onClick={() =>
+                            openQuickCountAssetsModal(
+                              `${row.itemName} - ${quickCountCampus === "ALL" ? t.allCampuses : campusLabel(quickCountCampus)}`,
+                              quickCountBaseAssets.filter(
+                                (asset) =>
+                                  asset.category === row.category &&
+                                  assetItemName(asset.category, asset.type, asset.pcType || "") === row.itemName
+                              )
+                            )
+                          }
+                        >
                           <span className="report-quick-item-label">
                             <span className="report-quick-item-icon" aria-hidden="true">{quickCountItemIcon(row.itemName)}</span>
                             <span>{row.itemName}</span>
                           </span>
-                          <button
-                            type="button"
-                            className="report-quick-count-link"
-                            onClick={() =>
-                              openQuickCountAssetsModal(
-                                `${row.itemName} - ${quickCountCampus === "ALL" ? t.allCampuses : campusLabel(quickCountCampus)}`,
-                                quickCountBaseAssets.filter(
-                                  (asset) =>
-                                    asset.category === row.category &&
-                                    assetItemName(asset.category, asset.type, asset.pcType || "") === row.itemName
-                                )
-                              )
-                            }
-                          >
-                            {row.count}
-                          </button>
-                        </article>
+                          <strong className="report-quick-count-value">{row.count}</strong>
+                        </button>
                       ))}
                     </div>
                   </section>
@@ -8364,10 +8448,6 @@ export default function App() {
 
   const qrScanBase = useMemo(() => {
     if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
-    const host = String(window.location.hostname || "").toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1") {
-      return DEFAULT_CLOUD_API_BASE;
-    }
     return String(window.location.origin || DEFAULT_CLOUD_API_BASE).replace(/\/+$/, "");
   }, []);
 
@@ -8737,7 +8817,7 @@ export default function App() {
       trySetLocalStorage(AUTH_TOKEN_KEY, res.token);
       trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(res.user));
       setAuthUser(res.user);
-      setLoginForm({ username: "", password: "" });
+      setLoginForm((prev) => ({ username: rememberLogin ? prev.username.trim() : "", password: "" }));
       await loadData();
     } catch (err) {
       // Local fallback login is disabled in server-only mode.
@@ -8750,7 +8830,7 @@ export default function App() {
           const adminUser: AuthUser = { id: 1, username: "admin", displayName: "Eco Admin", role: "Admin", campuses: ["ALL"] };
           trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(adminUser));
           setAuthUser(adminUser);
-          setLoginForm({ username: "", password: "" });
+          setLoginForm((prev) => ({ username: rememberLogin ? prev.username.trim() : "", password: "" }));
           setError("");
           await loadData();
         } else if (username === "viewer" && password === "EcoViewer@2026!") {
@@ -8765,7 +8845,7 @@ export default function App() {
           };
           trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(viewerUser));
           setAuthUser(viewerUser);
-          setLoginForm({ username: "", password: "" });
+          setLoginForm((prev) => ({ username: rememberLogin ? prev.username.trim() : "", password: "" }));
           setError("");
           await loadData();
         } else {
@@ -8780,22 +8860,88 @@ export default function App() {
     }
   }
 
-  function saveApiServerUrl() {
-    const next = apiBaseInput.trim().replace(/\/+$/, "");
-    if (SERVER_ONLY_STORAGE) {
-      setApiBaseInput(ENV_API_BASE_URL || getAutoApiBaseForHost() || "");
-      setError("");
+  async function sendPasswordResetVerification() {
+    const username = forgotPasswordForm.username.trim();
+    const email = forgotPasswordForm.email.trim();
+    if (!username || !email) {
+      setError("Username and email are required.");
       return;
     }
-    if (next) {
-      trySetLocalStorage(API_BASE_OVERRIDE_KEY, next);
-      setApiBaseInput(next);
-      setError("");
-      return;
-    }
-    localStorage.removeItem(API_BASE_OVERRIDE_KEY);
-    setApiBaseInput(ENV_API_BASE_URL || getAutoApiBaseForHost() || "");
+    setBusy(true);
     setError("");
+    setForgotPasswordMessage("");
+    try {
+      const res = await requestJson<{ ok?: boolean; message?: string; demoCode?: string }>(
+        "/api/auth/password-reset/request",
+        {
+          method: "POST",
+          body: JSON.stringify({ username, email }),
+        }
+      );
+      const demoCode = String(res.demoCode || "");
+      setForgotPasswordCode(demoCode);
+      setForgotPasswordMessage(
+        demoCode
+          ? `Verification code sent. (Demo code: ${demoCode})`
+          : (res.message || "Verification code sent to your email.")
+      );
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) {
+        const demoCode = String(Math.floor(100000 + Math.random() * 900000));
+        setForgotPasswordCode(demoCode);
+        setForgotPasswordMessage(`Email service not ready yet. Demo verification code: ${demoCode}`);
+        setError("");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Failed to send verification code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmPasswordReset() {
+    const username = forgotPasswordForm.username.trim();
+    const email = forgotPasswordForm.email.trim();
+    const code = forgotPasswordForm.code.trim();
+    const newPassword = forgotPasswordForm.newPassword.trim();
+    const confirmPassword = forgotPasswordForm.confirmPassword.trim();
+    if (!username || !email || !code || !newPassword) {
+      setError("Please complete all reset fields.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Password confirmation does not match.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      if (forgotPasswordCode && code !== forgotPasswordCode) {
+        setError("Invalid verification code.");
+        return;
+      }
+      await requestJson<{ ok?: boolean }>("/api/auth/password-reset/confirm", {
+        method: "POST",
+        body: JSON.stringify({ username, email, code, newPassword }),
+      });
+      setForgotPasswordMessage("Password reset successful. Please login with your new password.");
+      setForgotPasswordOpen(false);
+      setForgotPasswordForm({ username: "", email: "", code: "", newPassword: "", confirmPassword: "" });
+      setForgotPasswordCode("");
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) {
+        setForgotPasswordMessage("Backend reset API is not ready yet. Please ask Admin to reset from Setup.");
+        setError("");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Failed to reset password.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleLogout() {
@@ -9266,50 +9412,41 @@ export default function App() {
 
   if (!authUser) {
     return (
-      <main className="app-shell">
-        <div className="bg-orb bg-orb-a" aria-hidden="true" />
-        <div className="bg-orb bg-orb-b" aria-hidden="true" />
-        <section className="app-card login-page">
-          <section className="panel login-panel">
-            <div className="login-top">
-              <p className="eyebrow">{t.school}</p>
-              <h1>{t.title}</h1>
-              <p className="subhead">{t.pleaseLogin}</p>
-            </div>
-            <label className="field">
-              <span>{t.language}</span>
-              <select value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="input">
-                <option value="en">{t.english}</option>
-                <option value="km">{t.khmer}</option>
-              </select>
-            </label>
-            {error ? <p className="alert alert-error">{error}</p> : null}
-            <h2>{t.login}</h2>
-            <div className="form-grid login-grid">
-              <label className="field field-wide">
-                <span>{t.apiServerUrl}</span>
-                <input
-                  className="input"
-                  placeholder="http://192.168.1.50:4000"
-                  value={apiBaseInput}
-                  onChange={(e) => setApiBaseInput(e.target.value)}
-                />
-              </label>
+      <main className="app-shell login-shell-sunset">
+        <section className="app-card login-page login-page-sunset">
+          <section className="panel login-panel login-panel-sunset">
+            <img
+              className="login-logo-sunset"
+              src="/eco-logo.png"
+              alt="ECO International School"
+              onError={(e) => {
+                const img = e.currentTarget;
+                if (!img.dataset.fallback) {
+                  img.dataset.fallback = "1";
+                  img.src = "/logo192.png";
+                  return;
+                }
+                img.style.display = "none";
+              }}
+            />
+            <p className="login-app-name-sunset">IT and Maintenance Controll</p>
+            <h2 className="login-title-sunset">{lang === "km" ? "ចូលប្រើគណនីរបស់អ្នក" : "Login to your account"}</h2>
+            <div className="form-grid login-grid login-grid-sunset">
               <label className="field">
-                <span>{t.username}</span>
                 <input
-                  className="input"
+                  className="input login-input-pill"
+                  placeholder={lang === "km" ? "ឈ្មោះអ្នកប្រើ ឬ អ៊ីមែល" : "username@email.com"}
                   value={loginForm.username}
                   autoComplete="username"
                   onChange={(e) => setLoginForm((f) => ({ ...f, username: e.target.value }))}
                 />
               </label>
               <label className="field">
-                <span>{t.password}</span>
-                <div className="password-row">
+                <div className="login-password-pill-wrap">
                   <input
                     type={showLoginPassword ? "text" : "password"}
-                    className="input"
+                    className="input login-input-pill"
+                    placeholder={lang === "km" ? "ពាក្យសម្ងាត់" : "Password"}
                     value={loginForm.password}
                     autoComplete="current-password"
                     onChange={(e) => setLoginForm((f) => ({ ...f, password: e.target.value }))}
@@ -9319,25 +9456,98 @@ export default function App() {
                   />
                   <button
                     type="button"
-                    className="tab"
+                    className="login-password-icon-btn"
+                    aria-label={showLoginPassword ? t.hide : t.show}
                     onClick={() => setShowLoginPassword((v) => !v)}
                   >
-                    {showLoginPassword ? t.hide : t.show}
+                    {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </label>
             </div>
-            <div className="asset-actions">
-              <div className="tiny">
-                Admin: admin / EcoAdmin@2026! | Viewer: viewer / EcoViewer@2026!
-                <br />
-                Leave API URL blank to use default cloud server. For LAN testing, set your Mac IP (port 4000).
-              </div>
-              <div className="row-actions">
-                <button className="tab" type="button" onClick={saveApiServerUrl}>{t.saveApiUrl}</button>
-                <button className="btn-primary" disabled={busy} onClick={handleLogin}>{t.login}</button>
-              </div>
+            <label className="login-remember-row">
+              <span>{lang === "km" ? "ចងចាំខ្ញុំ" : "Remember me"}</span>
+              <span className="login-switch">
+                <input
+                  type="checkbox"
+                  checked={rememberLogin}
+                  onChange={(e) => setRememberLogin(e.target.checked)}
+                />
+                <span className="login-switch-slider" />
+              </span>
+            </label>
+            <div className="login-actions login-actions-sunset">
+              <button className="btn-primary login-submit-btn login-submit-btn-sunset" disabled={busy} onClick={handleLogin}>
+                {busy ? `${t.login}...` : t.login}
+              </button>
+              <button className="login-forgot-link login-forgot-link-sunset" type="button" onClick={() => setForgotPasswordOpen((v) => !v)}>
+                {forgotPasswordOpen ? t.close : (lang === "km" ? "ភ្លេចពាក្យសម្ងាត់?" : "Forgot Password?" )}
+              </button>
             </div>
+            {forgotPasswordOpen ? (
+              <div className="login-reset-box">
+                <div className="panel-row">
+                  <strong>{lang === "km" ? "កំណត់ពាក្យសម្ងាត់ឡើងវិញ" : "Reset Password by Email"}</strong>
+                  <button type="button" className="tab btn-small" onClick={() => setForgotPasswordOpen(false)}>
+                    {t.close}
+                  </button>
+                </div>
+                <div className="form-grid login-grid">
+                  <label className="field">
+                    <span>{t.username}</span>
+                    <input
+                      className="input"
+                      value={forgotPasswordForm.username}
+                      onChange={(e) => setForgotPasswordForm((f) => ({ ...f, username: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t.email}</span>
+                    <input
+                      className="input"
+                      type="email"
+                      value={forgotPasswordForm.email}
+                      onChange={(e) => setForgotPasswordForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "កូដផ្ទៀងផ្ទាត់" : "Verification Code"}</span>
+                    <input
+                      className="input"
+                      value={forgotPasswordForm.code}
+                      onChange={(e) => setForgotPasswordForm((f) => ({ ...f, code: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "ពាក្យសម្ងាត់ថ្មី" : "New Password"}</span>
+                    <input
+                      className="input"
+                      type="password"
+                      value={forgotPasswordForm.newPassword}
+                      onChange={(e) => setForgotPasswordForm((f) => ({ ...f, newPassword: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field field-wide">
+                    <span>{lang === "km" ? "បញ្ជាក់ពាក្យសម្ងាត់" : "Confirm Password"}</span>
+                    <input
+                      className="input"
+                      type="password"
+                      value={forgotPasswordForm.confirmPassword}
+                      onChange={(e) => setForgotPasswordForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                {forgotPasswordMessage ? <p className="tiny">{forgotPasswordMessage}</p> : null}
+                <div className="row-actions">
+                  <button className="tab" type="button" disabled={busy} onClick={sendPasswordResetVerification}>
+                    {lang === "km" ? "ផ្ញើកូដអ៊ីមែល" : "Send Email Code"}
+                  </button>
+                  <button className="btn-primary" type="button" disabled={busy} onClick={confirmPasswordReset}>
+                    {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset Password"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </section>
         </section>
       </main>
@@ -9664,201 +9874,101 @@ export default function App() {
               </article>
             </div>
 
-            {isPhoneView ? (
-              <label className="field dashboard-mobile-view">
-                <span>{lang === "km" ? "ទិដ្ឋភាពផ្ទាំងគ្រប់គ្រង" : "Dashboard View"}</span>
-                <select
-                  className="input"
-                  value={dashboardView}
-                  onChange={(e) => setDashboardView(e.target.value as "overview" | "schedule" | "activity")}
-                >
-                  <option value="overview">Overview</option>
-                  <option value="schedule">Schedule</option>
-                  <option value="activity">Activity</option>
-                </select>
-              </label>
-            ) : (
-              <div className="dashboard-subtabs">
-                <button className={`tab ${dashboardView === "overview" ? "tab-active" : ""}`} onClick={() => setDashboardView("overview")}>Overview</button>
-                <button className={`tab ${dashboardView === "schedule" ? "tab-active" : ""}`} onClick={() => setDashboardView("schedule")}>Schedule</button>
-                <button className={`tab ${dashboardView === "activity" ? "tab-active" : ""}`} onClick={() => setDashboardView("activity")}>Activity</button>
-              </div>
-            )}
-
             {renderQuickCountPanel("dashboard")}
 
-            {dashboardView === "overview" && (
-              <div className="dashboard-clean-grid">
-                <article className="panel dashboard-widget dashboard-focus-panel">
-                  <div className="dashboard-widget-head">
-                    <h3 className="section-title">Maintenance Focus</h3>
-                  </div>
-                  <div className="dashboard-mini-grid">
-                    <article className="stat-card mini danger">
-                      <div className="stat-label">Overdue</div>
-                      <button className="stat-value stat-link" onClick={() => setScheduleAlertModal("overdue")}>
-                        {overdueScheduleAssets.length}
-                      </button>
-                    </article>
-                    <article className="stat-card mini">
-                      <div className="stat-label">Due Next 7 Days</div>
-                      <button className="stat-value stat-link" onClick={() => setScheduleAlertModal("upcoming")}>
-                        {upcomingScheduleAssets.length}
-                      </button>
-                    </article>
-                    <article className="stat-card mini">
-                      <div className="stat-label">Scheduled</div>
-                      <button className="stat-value stat-link" onClick={() => setScheduleAlertModal("scheduled")}>
-                        {scheduleAssets.length}
-                      </button>
-                    </article>
-                    <article className="stat-card mini">
-                      <div className="stat-label">Verification Due</div>
-                      <button className="stat-value stat-link" onClick={() => setTab("verification")}>
-                        {dueSoonVerificationAssets.length + overdueVerificationAssets.length}
-                      </button>
-                    </article>
-                  </div>
-                </article>
-
-                <article className="panel dashboard-widget dashboard-calendar-panel">
-                  <div className="dashboard-widget-head">
-                    <h3 className="section-title">Calendar View</h3>
-                    <div className="row-actions">
-                      <button
-                        className="tab btn-small"
-                        onClick={() =>
-                          setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
-                        }
-                      >
-                        Prev
-                      </button>
-                      <button
-                        className="tab btn-small"
-                        onClick={() =>
-                          setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
-                        }
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                  <p className="tiny dashboard-calendar-month">
-                    {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
-                  </p>
-                  <div className="calendar-grid dashboard-calendar-grid">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                      <div key={`dash-cal-head-${d}`} className="calendar-day calendar-head">{d}</div>
-                    ))}
-                    {calendarGridDays.map((d) => (
-                      <button
-                        key={`dash-cal-day-${d.ymd}`}
-                        className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""}`}
-                        onClick={() => {
-                          setSelectedCalendarDate(d.ymd);
-                          if (d.hasItems) setScheduleAlertModal("selected");
-                        }}
-                        title={d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}
-                      >
-                        <span>{d.day}</span>
-                        {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
-                      </button>
-                    ))}
-                  </div>
-                </article>
-              </div>
-            )}
-
-            {dashboardView === "schedule" && (
-              <article className="panel dashboard-widget" style={{ marginTop: 12 }}>
+            <div className="dashboard-clean-grid dashboard-calendar-stock-grid" style={{ marginTop: 12 }}>
+              <article className="panel dashboard-widget dashboard-calendar-panel">
                 <div className="dashboard-widget-head">
-                  <h3 className="section-title">{t.nextScheduledAssets}</h3>
-                  <p className="tiny">Click asset ID to open maintenance form</p>
+                  <h3 className="section-title">Calendar View</h3>
+                  <div className="row-actions">
+                    <button
+                      className="tab btn-small"
+                      onClick={() =>
+                        setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                      }
+                    >
+                      Prev
+                    </button>
+                    <button
+                      className="tab btn-small"
+                      onClick={() =>
+                        setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                      }
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+                <p className="tiny dashboard-calendar-month">
+                  {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
+                </p>
+                <div className="calendar-grid dashboard-calendar-grid">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                    <div key={`dash-cal-head-${d}`} className="calendar-day calendar-head">{d}</div>
+                  ))}
+                  {calendarGridDays.map((d) => (
+                    <button
+                      key={`dash-cal-day-${d.ymd}`}
+                      className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""}`}
+                      onClick={() => {
+                        setSelectedCalendarDate(d.ymd);
+                        if (d.hasItems) setScheduleAlertModal("selected");
+                      }}
+                      title={d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}
+                    >
+                      <span>{d.day}</span>
+                      {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                    </button>
+                  ))}
+                </div>
+              </article>
+
+              <article className="panel dashboard-widget">
+                <div className="dashboard-widget-head">
+                  <h3 className="section-title">Stock Balance & Low Stock Alerts</h3>
+                </div>
+                <div className="stats-grid dashboard-stock-stats" style={{ marginBottom: 10 }}>
+                  <article className="stat-card">
+                    <div className="stat-label">Total Inventory Items</div>
+                    <div className="stat-value">{inventoryBalanceRows.length}</div>
+                  </article>
+                  <article className="stat-card stat-card-overdue">
+                    <div className="stat-label">Low Stock Alerts</div>
+                    <div className="stat-value">{inventoryLowStockRows.length}</div>
+                  </article>
                 </div>
                 <div className="table-wrap">
                   <table>
                     <thead>
                       <tr>
-                        <th>{t.date}</th>
-                        <th>{t.assetId}</th>
-                        <th>{t.photo}</th>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Current</th>
+                        <th>Min</th>
+                        <th>Alert</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {nextScheduleRows.length ? (
-                        nextScheduleRows.map((asset) => (
-                          <tr key={`next-schedule-${asset.id}`}>
-                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
-                            <td>
-                              <button
-                                className="tab"
-                                onClick={() => openMaintenanceRecordFromScheduleAsset(asset)}
-                              >
-                                <strong>{asset.assetId}</strong>
-                              </button>
-                            </td>
-                            <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
-                            <td>{campusLabel(asset.campus)}</td>
-                            <td>{asset.location || "-"}</td>
+                      {inventoryBalanceRows.length ? (
+                        inventoryBalanceRows.slice(0, 10).map((row) => (
+                          <tr key={`dash-stock-row-${row.id}`}>
+                            <td><strong>{row.itemCode}</strong></td>
+                            <td>{row.itemName}</td>
+                            <td>{row.currentStock}</td>
+                            <td>{row.minStock}</td>
+                            <td>{row.lowStock ? "Low" : "OK"}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5}>No scheduled assets yet.</td>
+                          <td colSpan={5}>No stock balance data.</td>
                         </tr>
                       )}
                     </tbody>
                   </table>
                 </div>
               </article>
-            )}
-
-            {dashboardView === "activity" && (
-              <article className="panel dashboard-widget" style={{ marginTop: 12 }}>
-                <div className="dashboard-widget-head">
-                  <h3 className="section-title">Recent Transfers</h3>
-                  <p className="tiny">Latest moved assets</p>
-                </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t.photo}</th>
-                        <th>{t.assetId}</th>
-                        <th>{t.date}</th>
-                        <th>{t.fromCampus}</th>
-                        <th>{t.fromLocation}</th>
-                        <th>{t.toCampus}</th>
-                        <th>{t.toLocation}</th>
-                        <th>{t.by}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentTransfers.length ? (
-                        recentTransfers.map((row) => (
-                          <tr key={`transfer-${row.assetId}-${row.entry.id}`}>
-                            <td>{renderAssetPhoto(row.assetPhoto, row.assetId)}</td>
-                            <td><strong>{row.assetId}</strong></td>
-                            <td>{formatDate(row.entry.date)}</td>
-                            <td>{campusLabel(row.entry.fromCampus)}</td>
-                            <td>{row.entry.fromLocation || "-"}</td>
-                            <td>{campusLabel(row.entry.toCampus)}</td>
-                            <td>{row.entry.toLocation || "-"}</td>
-                            <td>{row.entry.by || "-"}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={8}>{t.noTransfersYet}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </article>
-            )}
+            </div>
 
           </section>
         )}
@@ -15167,6 +15277,7 @@ export default function App() {
                     <th>{t.accessCampus}</th>
                     <th>Assets Tab Access</th>
                     <th>Menu Access</th>
+                    <th>{lang === "km" ? "កំណត់ពាក្យសម្ងាត់ឡើងវិញ" : "Reset Password"}</th>
                     <th>{t.save}</th>
                   </tr>
                 </thead>
@@ -15327,6 +15438,11 @@ export default function App() {
                             </details>
                           </td>
                           <td>
+                            <button className="tab" disabled={!isAdmin || busy} onClick={() => resetAuthAccountPassword(u)}>
+                              {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}
+                            </button>
+                          </td>
+                          <td>
                             <button className="btn-primary" disabled={!isAdmin} onClick={() => saveAuthPermission(u.id)}>
                               Save
                             </button>
@@ -15336,7 +15452,7 @@ export default function App() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7}>{t.noLoginUsersFound}</td>
+                      <td colSpan={8}>{t.noLoginUsersFound}</td>
                     </tr>
                   )}
                 </tbody>
@@ -15348,16 +15464,19 @@ export default function App() {
           {setupView === "backup" && canAccessMenu("setup.backup", "setup") && (
           <section className="panel">
             <h2>Backup & Audit</h2>
+            <p className="backup-subline">Backup database to file, restore when needed, and track user actions.</p>
             <div className="asset-actions">
-              <div className="tiny">Backup database to file, restore when needed, and track user actions.</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button className="btn-primary" disabled={!isAdmin || busy} onClick={createServerBackup}>
+              <div className="backup-action-row">
+                <button className="btn-primary backup-action-btn" disabled={!isAdmin || busy} onClick={createServerBackup}>
                   Create Server Backup
                 </button>
-                <button className="tab" disabled={!isAdmin || busy} onClick={exportBackupFile}>
+                <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportBackupFile}>
                   Download Backup
                 </button>
-                <label className="tab" style={{ cursor: isAdmin ? "pointer" : "not-allowed", opacity: isAdmin ? 1 : 0.6 }}>
+                <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
+                  Sync From Live Web
+                </button>
+                <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
                   Restore Backup
                   <input
                     key={backupImportKey}
@@ -15369,7 +15488,7 @@ export default function App() {
                   />
                 </label>
                 <button
-                  className="btn-danger"
+                  className="btn-danger backup-action-btn backup-action-btn-danger"
                   disabled={!isAdmin || busy}
                   onClick={factoryResetSystem}
                   title="Delete all records and restart from zero"
