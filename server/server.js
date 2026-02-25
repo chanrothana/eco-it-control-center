@@ -109,7 +109,7 @@ const DEFAULT_USERS = [
   },
 ];
 const sessions = new Map();
-const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs", "app_settings", "auth_sessions"];
+const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs", "app_settings", "auth_sessions", "notifications"];
 const PASSWORD_PREFIX = "scrypt$";
 
 let sqliteDb;
@@ -135,6 +135,7 @@ function mapDbToSqlRows(db) {
     audit_logs: Array.isArray(db.auditLogs) ? db.auditLogs : [],
     app_settings: [db.settings && typeof db.settings === "object" ? db.settings : {}],
     auth_sessions: Array.isArray(db.authSessions) ? db.authSessions : [],
+    notifications: Array.isArray(db.notifications) ? db.notifications : [],
   };
 }
 
@@ -148,6 +149,7 @@ function mapSqlRowsToDb(rowsByTable) {
     auditLogs: Array.isArray(rowsByTable.audit_logs) ? rowsByTable.audit_logs : [],
     settings: settingsRow && typeof settingsRow === "object" ? settingsRow : {},
     authSessions: Array.isArray(rowsByTable.auth_sessions) ? rowsByTable.auth_sessions : [],
+    notifications: Array.isArray(rowsByTable.notifications) ? rowsByTable.notifications : [],
   };
 }
 
@@ -205,6 +207,7 @@ function countDbRows(db) {
     users: Array.isArray(safe.users) ? safe.users.length : 0,
     auditLogs: Array.isArray(safe.auditLogs) ? safe.auditLogs.length : 0,
     authSessions: Array.isArray(safe.authSessions) ? safe.authSessions.length : 0,
+    notifications: Array.isArray(safe.notifications) ? safe.notifications.length : 0,
   };
 }
 
@@ -216,7 +219,8 @@ function dbScore(db) {
     counts.locations * 200 +
     counts.users * 50 +
     counts.auditLogs * 10 +
-    counts.authSessions
+    counts.authSessions +
+    counts.notifications
   );
 }
 
@@ -268,6 +272,11 @@ function openSqlite() {
       payload TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS auth_sessions (
+      row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
       row_id INTEGER PRIMARY KEY AUTOINCREMENT,
       position INTEGER NOT NULL,
       payload TEXT NOT NULL
@@ -670,11 +679,214 @@ function normalizeImportedDb(input) {
     users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
     auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
     authSessions: Array.isArray(parsed.authSessions) ? parsed.authSessions : [],
+    notifications: normalizeNotificationEntries(parsed.notifications),
     settings: {
       campusNames,
       staffUsers,
     },
   };
+}
+
+const MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
+const NOTIFICATION_MAX_ROWS = 3000;
+
+function parseYmdToUtcMs(value) {
+  const text = toText(value);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  let year = 0;
+  let month = 0;
+  let day = 0;
+  if (match) {
+    year = Number(match[1]);
+    month = Number(match[2]);
+    day = Number(match[3]);
+  } else {
+    const dmy = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    if (!dmy) return NaN;
+    day = Number(dmy[1]);
+    month = Number(dmy[2]);
+    year = Number(dmy[3]);
+  }
+  if (!year || !month || !day) return NaN;
+  return Date.UTC(year, month - 1, day);
+}
+
+function toYmdUtc(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function daysUntilYmd(targetYmd) {
+  const targetMs = parseYmdToUtcMs(targetYmd);
+  if (!Number.isFinite(targetMs)) return null;
+  const todayYmd = toYmdUtc(new Date());
+  const todayMs = parseYmdToUtcMs(todayYmd);
+  if (!Number.isFinite(todayMs)) return null;
+  return Math.round((targetMs - todayMs) / 86400000);
+}
+
+function normalizeNotificationEntries(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  for (const row of input) {
+    if (!row || typeof row !== "object") continue;
+    const createdAt = toText(row.createdAt) || new Date().toISOString();
+    const key = toText(row.key);
+    const title = toText(row.title);
+    const message = toText(row.message);
+    if (!key || !title || !message) continue;
+    const readBy = Array.isArray(row.readBy)
+      ? Array.from(
+          new Set(
+            row.readBy
+              .map((value) => toText(value))
+              .filter(Boolean)
+          )
+        )
+      : [];
+    out.push({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      key,
+      kind: toText(row.kind) || "maintenance_due",
+      title,
+      message,
+      assetId: toText(row.assetId),
+      assetDbId: Number(row.assetDbId) || 0,
+      campus: toText(row.campus),
+      scheduleDate: toText(row.scheduleDate),
+      createdAt,
+      readBy,
+      generatedBy: toText(row.generatedBy) || "system",
+    });
+  }
+  out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return out.slice(0, NOTIFICATION_MAX_ROWS);
+}
+
+function upsertNotification(db, row) {
+  db.notifications = normalizeNotificationEntries(db.notifications);
+  const idx = db.notifications.findIndex((n) => n.key === row.key);
+  if (idx >= 0) return false;
+  db.notifications.unshift(row);
+  if (db.notifications.length > NOTIFICATION_MAX_ROWS) {
+    db.notifications = db.notifications.slice(0, NOTIFICATION_MAX_ROWS);
+  }
+  return true;
+}
+
+function ensureMaintenanceScheduleNotifications(db) {
+  db.notifications = normalizeNotificationEntries(db.notifications);
+  const expectedKeys = new Set();
+  let changed = false;
+  const assets = Array.isArray(db.assets) ? db.assets : [];
+  for (const asset of assets) {
+    const scheduleDate = toText(asset && asset.nextMaintenanceDate);
+    if (!scheduleDate) continue;
+    const days = daysUntilYmd(scheduleDate);
+    if (days === null) continue;
+
+    let kind = "";
+    if (days < 0) {
+      kind = "maintenance_overdue";
+    } else if (MAINTENANCE_REMINDER_OFFSETS.includes(days)) {
+      kind = days === 0 ? "maintenance_due_today" : "maintenance_due";
+    }
+    if (!kind) continue;
+
+    const key = `maintenance-schedule:${Number(asset.id) || 0}:${scheduleDate}:${kind}`;
+    expectedKeys.add(key);
+    const title =
+      kind === "maintenance_overdue"
+        ? `Maintenance overdue: ${toText(asset.assetId) || "Unknown Asset"}`
+        : kind === "maintenance_due_today"
+          ? `Maintenance due today: ${toText(asset.assetId) || "Unknown Asset"}`
+          : `Maintenance due soon: ${toText(asset.assetId) || "Unknown Asset"}`;
+    const message =
+      kind === "maintenance_overdue"
+        ? `${toText(asset.name) || "Asset"} at ${toText(asset.location) || "Unknown location"} is overdue since ${scheduleDate}.`
+        : kind === "maintenance_due_today"
+          ? `${toText(asset.name) || "Asset"} at ${toText(asset.location) || "Unknown location"} is scheduled for today (${scheduleDate}).`
+          : `${toText(asset.name) || "Asset"} at ${toText(asset.location) || "Unknown location"} is due in ${days} day(s) on ${scheduleDate}.`;
+
+    const created = upsertNotification(db, {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      key,
+      kind,
+      title,
+      message,
+      assetId: toText(asset.assetId),
+      assetDbId: Number(asset.id) || 0,
+      campus: toText(asset.campus),
+      scheduleDate,
+      createdAt: new Date().toISOString(),
+      readBy: [],
+      generatedBy: "maintenance-schedule",
+    });
+    if (created) changed = true;
+  }
+
+  const before = db.notifications.length;
+  db.notifications = db.notifications.filter((row) => {
+    if (toText(row.generatedBy) !== "maintenance-schedule") return true;
+    return expectedKeys.has(toText(row.key));
+  });
+  if (db.notifications.length !== before) changed = true;
+  return changed;
+}
+
+function addMaintenanceDoneNotification(db, asset, entry) {
+  const completion = toText(entry && entry.completion);
+  if (completion !== "Done") return false;
+  const key = `maintenance-done:${Number(asset && asset.id) || 0}:${Number(entry && entry.id) || 0}`;
+  return upsertNotification(db, {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    key,
+    kind: "maintenance_done",
+    title: `Maintenance done: ${toText(asset && asset.assetId) || "Unknown Asset"}`,
+    message: `${toText(asset && asset.name) || "Asset"} was marked done on ${toText(entry && entry.date) || toYmdUtc(new Date())}.`,
+    assetId: toText(asset && asset.assetId),
+    assetDbId: Number(asset && asset.id) || 0,
+    campus: toText(asset && asset.campus),
+    scheduleDate: toText(asset && asset.nextMaintenanceDate),
+    createdAt: new Date().toISOString(),
+    readBy: [],
+    generatedBy: "maintenance-done",
+  });
+}
+
+function markNotificationReadByUser(notification, username) {
+  const user = toText(username);
+  if (!user) return false;
+  const readBy = Array.isArray(notification.readBy) ? notification.readBy : [];
+  if (readBy.includes(user)) return false;
+  notification.readBy = [...readBy, user];
+  return true;
+}
+
+function notificationVisibleToUser(notification, user) {
+  const campus = toText(notification && notification.campus);
+  if (!campus) return true;
+  return userCanAccessCampus(user, campus);
+}
+
+function projectNotificationForUser(notification, user) {
+  const username = toText(user && user.username);
+  const readBy = Array.isArray(notification.readBy) ? notification.readBy : [];
+  return {
+    ...notification,
+    read: Boolean(username && readBy.includes(username)),
+  };
+}
+
+function purgeNotificationsForAsset(db, assetDbId) {
+  const targetId = Number(assetDbId);
+  if (!targetId) return false;
+  db.notifications = normalizeNotificationEntries(db.notifications);
+  const before = db.notifications.length;
+  db.notifications = db.notifications.filter((row) => Number(row.assetDbId) !== targetId);
+  return db.notifications.length !== before;
 }
 
 initStorageSync();
@@ -1855,6 +2067,77 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/notifications") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const status = toText(url.searchParams.get("status")).toLowerCase() || "all";
+      const limitRaw = Number(url.searchParams.get("limit") || 30);
+      const limit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? limitRaw : 30));
+      const db = await readDb();
+      const generated = ensureMaintenanceScheduleNotifications(db);
+      if (generated) {
+        await writeDb(db);
+      }
+      const visible = normalizeNotificationEntries(db.notifications)
+        .filter((row) => notificationVisibleToUser(row, user))
+        .map((row) => projectNotificationForUser(row, user));
+      const filtered =
+        status === "unread" ? visible.filter((row) => !row.read) : visible;
+      const unread = visible.filter((row) => !row.read).length;
+      sendJson(res, 200, { notifications: filtered.slice(0, limit), unread });
+      return;
+    }
+
+    if (req.method === "PATCH" && url.pathname === "/api/notifications/read-all") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const db = await readDb();
+      db.notifications = normalizeNotificationEntries(db.notifications);
+      let changed = false;
+      for (const row of db.notifications) {
+        if (!notificationVisibleToUser(row, user)) continue;
+        if (markNotificationReadByUser(row, user.username)) changed = true;
+      }
+      if (changed) await writeDb(db);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    const notificationReadMatch = url.pathname.match(/^\/api\/notifications\/(\d+)\/read$/);
+    if (req.method === "PATCH" && notificationReadMatch) {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const id = Number(notificationReadMatch[1]);
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const db = await readDb();
+      db.notifications = normalizeNotificationEntries(db.notifications);
+      const row = db.notifications.find((item) => Number(item.id) === id);
+      if (!row) {
+        sendJson(res, 404, { error: "Notification not found" });
+        return;
+      }
+      if (!notificationVisibleToUser(row, user)) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+      const changed = markNotificationReadByUser(row, user.username);
+      if (changed) await writeDb(db);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/assets") {
       const user = getAuthUser(req);
       if (!user) {
@@ -1920,6 +2203,7 @@ const server = http.createServer(async (req, res) => {
       };
 
       db.assets.unshift(asset);
+      ensureMaintenanceScheduleNotifications(db);
       appendAuditLog(db, admin, "CREATE", "asset", asset.assetId, `${asset.campus} | ${asset.location}`);
       await writeDb(db);
       sendJson(res, 201, { asset });
@@ -2162,6 +2446,10 @@ const server = http.createServer(async (req, res) => {
         `${db.assets[idx].assetId || assetId}#${entryId}`,
         `${updated.type} | ${updated.completion || "Not Yet"}`
       );
+      if (updated.completion === "Done") {
+        addMaintenanceDoneNotification(db, db.assets[idx], updated);
+      }
+      ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       sendJson(res, 200, { asset: db.assets[idx], entry: history[hIdx] });
       return;
@@ -2213,6 +2501,7 @@ const server = http.createServer(async (req, res) => {
         `${db.assets[idx].assetId || assetId}#${entryId}`,
         "Maintenance record deleted"
       );
+      ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       sendJson(res, 200, { asset: db.assets[idx], ok: true });
       return;
@@ -2284,6 +2573,7 @@ const server = http.createServer(async (req, res) => {
         db.assets[idx].assetId || String(id),
         `${db.assets[idx].campus} | ${db.assets[idx].location}${photoChanged ? " | photo updated" : ""}`
       );
+      ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       sendJson(res, 200, { asset: db.assets[idx] });
       return;
@@ -2362,6 +2652,8 @@ const server = http.createServer(async (req, res) => {
         `${db.assets[idx].assetId || id}#${entry.id}`,
         `${entry.type} | ${entry.completion || "Not Yet"}`
       );
+      addMaintenanceDoneNotification(db, db.assets[idx], entry);
+      ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       sendJson(res, 201, { asset: db.assets[idx], entry });
       return;
@@ -2394,6 +2686,8 @@ const server = http.createServer(async (req, res) => {
         target?.assetId || String(id),
         target ? `${target.campus} | ${target.location}` : ""
       );
+      purgeNotificationsForAsset(db, id);
+      ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       sendJson(res, 200, { ok: true });
       return;

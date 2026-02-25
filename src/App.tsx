@@ -237,6 +237,20 @@ type ServerSettings = {
   campusNames?: Record<string, string>;
   staffUsers?: StaffUser[];
 };
+type MaintenanceNotification = {
+  id: number;
+  key: string;
+  kind: string;
+  title: string;
+  message: string;
+  assetId: string;
+  assetDbId: number;
+  campus: string;
+  scheduleDate?: string;
+  createdAt: string;
+  readBy?: string[];
+  read?: boolean;
+};
 const LOCATION_FALLBACK_KEY = "it_locations_fallback_v1";
 const ASSET_FALLBACK_KEY = "it_assets_fallback_v1";
 const USER_FALLBACK_KEY = "it_users_fallback_v1";
@@ -838,6 +852,12 @@ const TEXT = {
     alreadyDone: "Already Done",
     notYetDone: "Not Yet Done",
     photoProcessError: "Cannot process photo.",
+    maintenanceNotifications: "Maintenance Alerts",
+    noMaintenanceNotifications: "No maintenance alerts right now.",
+    markAllRead: "Mark All Read",
+    markRead: "Mark Read",
+    enablePhoneAlerts: "Enable Phone Alerts",
+    openMaintenance: "Open Maintenance",
   },
   km: {
     school: "សាលា អេកូ អន្តរជាតិ",
@@ -1031,6 +1051,12 @@ const TEXT = {
     alreadyDone: "បានធ្វើរួច",
     notYetDone: "មិនទាន់ធ្វើ",
     photoProcessError: "មិនអាចដំណើរការរូបភាពបានទេ។",
+    maintenanceNotifications: "ជូនដំណឹងថែទាំ",
+    noMaintenanceNotifications: "បច្ចុប្បន្នមិនមានជូនដំណឹងថែទាំទេ។",
+    markAllRead: "សម្គាល់ថាបានអានទាំងអស់",
+    markRead: "សម្គាល់ថាបានអាន",
+    enablePhoneAlerts: "បើកការជូនដំណឹងលើទូរស័ព្ទ",
+    openMaintenance: "បើកផ្ទាំងថែទាំ",
   },
 };
 
@@ -1068,11 +1094,8 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     if (apiBaseOverride) candidates.push(`${apiBaseOverride}${url}`);
     if (ENV_API_BASE_URL) candidates.push(`${ENV_API_BASE_URL}${url}`);
     if (autoApiBase) candidates.push(`${autoApiBase}${url}`);
-    if (typeof window !== "undefined") {
-      const host = String(window.location.hostname || "").toLowerCase();
-      if (host && host !== "localhost" && host !== "127.0.0.1") {
-        candidates.push(url);
-      }
+    if (!apiBaseOverride && !ENV_API_BASE_URL && !autoApiBase) {
+      candidates.push(url);
     }
   }
 
@@ -1611,6 +1634,24 @@ function toYmd(value: Date) {
   return `${y}-${m}-${d}`;
 }
 
+function normalizeYmdInput(raw: string) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const dmy = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    if (year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return toYmd(parsed);
+}
+
 function shiftYmd(ymd: string, days: number) {
   const d = new Date(`${ymd}T00:00:00`);
   if (Number.isNaN(d.getTime())) return ymd;
@@ -1651,19 +1692,6 @@ function resolveNextScheduleDate(asset: Asset, fromYmd: string) {
     return "";
   }
   return asset.nextMaintenanceDate || "";
-}
-
-function latestDoneDateOnOrAfter(asset: Asset, targetYmd: string) {
-  if (!targetYmd) return "";
-  const doneDates = (asset.maintenanceHistory || [])
-    .map((entry) => ({
-      date: String(entry?.date || "").trim(),
-      completion: String(entry?.completion || "").trim(),
-    }))
-    .filter((entry) => entry.completion === "Done" && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date >= targetYmd)
-    .map((entry) => entry.date);
-  if (!doneDates.length) return "";
-  return doneDates.sort((a, b) => b.localeCompare(a))[0];
 }
 
 function escapeHtml(input: string) {
@@ -1710,15 +1738,6 @@ function filterAssets(
     );
   }
   return out;
-}
-
-function useDebouncedValue<T>(value: T, delayMs = 220): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), delayMs);
-    return () => window.clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
 }
 
 function mergeAssets(primary: Asset[], secondary: Asset[]) {
@@ -1983,10 +2002,13 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return assets;
-    return assets.filter((a) =>
-      `${a.assetId} ${a.name} ${a.location} ${a.campus} ${a.category} ${a.type}`.toLowerCase().includes(q)
-    );
-  }, [assets, deferredSearch]);
+    return assets.filter((a) => {
+      const label = getLabel(a);
+      return `${a.assetId} ${label} ${a.name} ${a.location} ${a.campus} ${a.category} ${a.type}`
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [assets, deferredSearch, getLabel]);
 
   const selectAsset = useCallback(
     (assetId: string) => {
@@ -2023,7 +2045,7 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
         <div className="asset-picker-menu">
           <input
             className="input asset-picker-search"
-            placeholder="Search asset..."
+            placeholder="Search by ID or name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -2104,7 +2126,9 @@ export default function App() {
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
+  const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
   const navItems = useMemo<Array<{ id: NavModule; label: string }>>(
     () => [
       { id: "dashboard", label: t.dashboard },
@@ -2153,6 +2177,13 @@ export default function App() {
   const navMenuItems = useMemo(
     () => navItems.filter((item) => allowedNavModules.has(item.id)),
     [navItems, allowedNavModules]
+  );
+  const phonePrimaryTabs = useMemo(
+    () =>
+      navMenuItems.filter((item) =>
+        ["dashboard", "assets", "schedule", "maintenance", "reports"].includes(item.id)
+      ),
+    [navMenuItems]
   );
   const navSections = useMemo(() => {
     const labels: Record<NavSection, string> =
@@ -2257,7 +2288,6 @@ export default function App() {
   );
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 260);
 
   useEffect(() => {
     if (!navMenuItems.some((item) => item.id === tab)) {
@@ -2267,14 +2297,16 @@ export default function App() {
 
   useEffect(() => {
     setMobileMenuOpen(false);
+    setMobileNotificationOpen(false);
   }, [tab]);
   useEffect(() => {
-    if (!mobileMenuOpen) return;
+    if (!mobileMenuOpen && !mobileNotificationOpen) return;
     const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
       if (mobileNavRef.current?.contains(target)) return;
       setMobileMenuOpen(false);
+      setMobileNotificationOpen(false);
     };
     document.addEventListener("mousedown", handleOutsideTap);
     document.addEventListener("touchstart", handleOutsideTap);
@@ -2282,7 +2314,7 @@ export default function App() {
       document.removeEventListener("mousedown", handleOutsideTap);
       document.removeEventListener("touchstart", handleOutsideTap);
     };
-  }, [mobileMenuOpen]);
+  }, [mobileMenuOpen, mobileNotificationOpen]);
 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -2312,6 +2344,11 @@ export default function App() {
     openTickets: 0,
     byCampus: [],
   });
+  const [maintenanceNotifications, setMaintenanceNotifications] = useState<MaintenanceNotification[]>([]);
+  const [maintenanceNotificationUnread, setMaintenanceNotificationUnread] = useState(0);
+  const [browserNotificationPermission, setBrowserNotificationPermission] = useState<NotificationPermission>(
+    () => (typeof window !== "undefined" && "Notification" in window ? Notification.permission : "default")
+  );
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -3336,6 +3373,45 @@ export default function App() {
     }
   }, []);
 
+  const loadMaintenanceNotifications = useCallback(async () => {
+    if (!authUser) return;
+    try {
+      const res = await requestJson<{ notifications: MaintenanceNotification[]; unread: number }>(
+        "/api/notifications?status=all&limit=30"
+      );
+      const rows = normalizeArray<MaintenanceNotification>(res.notifications).sort(
+        (a, b) => Date.parse(String(b.createdAt || "")) - Date.parse(String(a.createdAt || ""))
+      );
+      setMaintenanceNotifications(rows);
+      setMaintenanceNotificationUnread(Number(res.unread) || rows.filter((row) => !row.read).length);
+
+      if (typeof window !== "undefined" && "Notification" in window) {
+        setBrowserNotificationPermission(Notification.permission);
+        if (Notification.permission === "granted") {
+          for (const row of rows) {
+            const id = Number(row.id);
+            if (!id || row.read || shownBrowserNotificationIdsRef.current.has(id)) continue;
+            shownBrowserNotificationIdsRef.current.add(id);
+            try {
+              new Notification(row.title, { body: row.message, tag: `maintenance-notification-${id}` });
+            } catch {
+              // Ignore browser notification errors; in-app list still works.
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if (
+        isApiUnavailableError(err) ||
+        isMissingRouteError(err) ||
+        isUnauthorizedError(err)
+      ) {
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Failed to load notifications");
+    }
+  }, [authUser]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -3369,14 +3445,7 @@ export default function App() {
       const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
       // Server-first sync: when API is reachable, use server data as single source of truth.
       writeAssetFallback(serverAssets);
-      const effectiveAssets = filterAssets(
-        serverAssets,
-        effectiveAssetCampusFilter,
-        assetCategoryFilter,
-        assetNameFilter,
-        debouncedSearch
-      );
-      setAssets(effectiveAssets);
+      setAssets(serverAssets);
       setTickets(normalizeArray<Ticket>(ticketRes.tickets));
       setLocations(locationList);
       const serverStats =
@@ -3390,12 +3459,16 @@ export default function App() {
       setStats(
         serverStats
       );
+      void loadMaintenanceNotifications();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cannot load data");
     } finally {
       setLoading(false);
     }
-  }, [campusFilter, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, debouncedSearch]);
+  }, [
+    campusFilter,
+    loadMaintenanceNotifications,
+  ]);
 
   useEffect(() => {
     void loadData();
@@ -3405,6 +3478,20 @@ export default function App() {
     if (!authUser) return;
     void loadStaffUsers();
   }, [authUser, loadStaffUsers]);
+
+  useEffect(() => {
+    if (!authUser) {
+      setMaintenanceNotifications([]);
+      setMaintenanceNotificationUnread(0);
+      shownBrowserNotificationIdsRef.current.clear();
+      return;
+    }
+    void loadMaintenanceNotifications();
+    const timer = window.setInterval(() => {
+      void loadMaintenanceNotifications();
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, [authUser, loadMaintenanceNotifications]);
 
   useEffect(() => {
     if (tab === "setup" && isAdmin) {
@@ -3419,6 +3506,45 @@ export default function App() {
     if (tab !== "setup" || !isAdmin || setupView !== "users") return;
     void loadStaffUsers();
   }, [tab, isAdmin, setupView, loadStaffUsers]);
+
+  async function enablePhoneAlerts() {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    try {
+      const permission = await Notification.requestPermission();
+      setBrowserNotificationPermission(permission);
+    } catch {
+      setBrowserNotificationPermission("denied");
+    }
+  }
+
+  async function markMaintenanceNotificationRead(id: number) {
+    if (!id) return;
+    try {
+      await requestJson<{ ok: boolean }>(`/api/notifications/${id}/read`, {
+        method: "PATCH",
+      });
+      setMaintenanceNotifications((prev) =>
+        prev.map((row) => (row.id === id ? { ...row, read: true } : row))
+      );
+      setMaintenanceNotificationUnread((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      if (isUnauthorizedError(err)) return;
+      setError(err instanceof Error ? err.message : "Failed to update notification");
+    }
+  }
+
+  async function markAllMaintenanceNotificationsRead() {
+    try {
+      await requestJson<{ ok: boolean }>("/api/notifications/read-all", {
+        method: "PATCH",
+      });
+      setMaintenanceNotifications((prev) => prev.map((row) => ({ ...row, read: true })));
+      setMaintenanceNotificationUnread(0);
+    } catch (err) {
+      if (isUnauthorizedError(err)) return;
+      setError(err instanceof Error ? err.message : "Failed to update notifications");
+    }
+  }
 
   async function createAsset() {
     if (!requireAdminAction()) return;
@@ -4941,7 +5067,7 @@ export default function App() {
         };
         const nextLocal = [childAsset, ...allLocal];
         writeAssetFallback(nextLocal);
-        setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+        setAssets(nextLocal);
         setStats(buildStatsFromAssets(nextLocal, campusFilter));
       }
 
@@ -5065,7 +5191,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("UPDATE", "asset", String(editingAssetId), `location=${payload.location}`);
       setEditingAssetId(null);
@@ -5079,13 +5205,21 @@ export default function App() {
 
   async function saveMaintenanceSchedule() {
     if (!requireAdminAction()) return;
-    if (!scheduleForm.assetId) return;
-    if (scheduleForm.repeatMode === "NONE" && !scheduleForm.date) return;
+    if (!scheduleForm.assetId) {
+      setError("Please select an asset first.");
+      return;
+    }
+    const normalizedDate =
+      scheduleForm.repeatMode === "NONE" ? normalizeYmdInput(scheduleForm.date) : "";
+    if (scheduleForm.repeatMode === "NONE" && !normalizedDate) {
+      setError("Please select a valid date (YYYY-MM-DD).");
+      return;
+    }
     const assetId = Number(scheduleForm.assetId);
     if (!assetId) return;
 
     const payload = {
-      nextMaintenanceDate: scheduleForm.repeatMode === "NONE" ? scheduleForm.date : "",
+      nextMaintenanceDate: normalizedDate,
       scheduleNote: scheduleForm.note.trim(),
       repeatMode: scheduleForm.repeatMode,
       repeatWeekOfMonth:
@@ -5101,7 +5235,7 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      let nextLocal = readAssetFallback().map((asset) =>
+      let nextLocal = assets.map((asset) =>
         asset.id === assetId ? { ...asset, ...payload } : asset
       );
       try {
@@ -5113,9 +5247,15 @@ export default function App() {
         if (!isApiUnavailableError(err)) throw err;
       }
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("SCHEDULE_UPDATE", "asset", String(assetId), payload.nextMaintenanceDate || "repeat schedule");
+      const savedAsset = nextLocal.find((asset) => asset.id === assetId);
+      setSetupMessage(
+        `Schedule saved: ${savedAsset?.assetId || assetId} -> ${
+          payload.nextMaintenanceDate || `${scheduleForm.repeatMode} (repeat)`
+        }`
+      );
       setScheduleForm((f) => ({
         ...f,
         note: "",
@@ -5157,7 +5297,7 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      const nextLocal = readAssetFallback().map((asset) =>
+      const nextLocal = assets.map((asset) =>
         asset.id === assetId ? { ...asset, ...payload } : asset
       );
       try {
@@ -5170,7 +5310,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("SCHEDULE_DELETE", "asset", String(assetId), "Schedule removed");
       if (scheduleForm.assetId === String(assetId)) {
@@ -5186,19 +5326,25 @@ export default function App() {
 
   async function saveBulkMaintenanceSchedule() {
     if (!requireAdminAction()) return;
-    if (bulkScheduleForm.repeatMode === "NONE" && !bulkScheduleForm.date) return;
+    const normalizedDate =
+      bulkScheduleForm.repeatMode === "NONE" ? normalizeYmdInput(bulkScheduleForm.date) : "";
+    if (bulkScheduleForm.repeatMode === "NONE" && !normalizedDate) {
+      setError("Please select a valid date (YYYY-MM-DD).");
+      return;
+    }
 
     const matched = assets.filter((asset) => {
       const campusOk = bulkScheduleForm.campus === "ALL" || asset.campus === bulkScheduleForm.campus;
       return campusOk && asset.category === bulkScheduleForm.category && asset.type === bulkScheduleForm.type;
     });
     if (!matched.length) {
+      setError("No assets matched this campus + item type.");
       setSetupMessage("No assets matched this campus + item type.");
       return;
     }
 
     const payload = {
-      nextMaintenanceDate: bulkScheduleForm.repeatMode === "NONE" ? bulkScheduleForm.date : "",
+      nextMaintenanceDate: normalizedDate,
       scheduleNote: bulkScheduleForm.note.trim(),
       repeatMode: bulkScheduleForm.repeatMode,
       repeatWeekOfMonth:
@@ -5215,7 +5361,7 @@ export default function App() {
     setError("");
     try {
       const matchedIdSet = new Set(matched.map((a) => a.id));
-      const nextLocal = readAssetFallback().map((asset) =>
+      const nextLocal = assets.map((asset) =>
         matchedIdSet.has(asset.id) ? { ...asset, ...payload } : asset
       );
 
@@ -5232,7 +5378,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       setSetupMessage(`Bulk schedule updated for ${matched.length} asset(s).`);
       setBulkScheduleForm((f) => ({
@@ -5388,7 +5534,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
       if (shouldApplyRetireStatus) {
@@ -5474,7 +5620,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("VERIFICATION_CREATE", "asset", String(assetId), `${entry.result} | ${entry.note.slice(0, 60)}`);
       setVerificationRecordForm((f) => ({
@@ -5582,7 +5728,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("VERIFICATION_UPDATE", "verification_record", String(entryId), `${payload.result}`);
       cancelVerificationRowEdit();
@@ -5618,7 +5764,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("VERIFICATION_DELETE", "verification_record", String(entryId), "Deleted");
       if (verificationEditingRowId?.endsWith(`-${entryId}`)) {
@@ -5678,7 +5824,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("TRANSFER", "asset", String(assetId), `${transferEntry.fromCampus} -> ${transferEntry.toCampus}`);
       setTransferForm((f) => ({
@@ -5821,7 +5967,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_UPDATE", "maintenance_record", String(entryId), `${payload.type} | ${payload.completion || "-"}`);
       cancelMaintenanceEntryEdit();
@@ -5866,7 +6012,7 @@ export default function App() {
       }
 
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_DELETE", "maintenance_record", String(entryId), "Deleted");
       if (Number(maintenanceEditingEntryId) === Number(entryId)) {
@@ -5941,7 +6087,7 @@ export default function App() {
             : asset
         );
       writeAssetFallback(nextLocal);
-      setAssets(filterAssets(nextLocal, effectiveAssetCampusFilter, assetCategoryFilter, assetNameFilter, search));
+      setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("UPDATE_STATUS", "asset", String(id), status);
       await loadData();
@@ -6639,15 +6785,7 @@ export default function App() {
     const filtered = campusFilter === "ALL" ? merged : merged.filter((a) => a.campus === campusFilter);
     return filtered
       .map((a) => {
-        let nextMaintenanceDate = resolveNextScheduleDate(a, today);
-        const doneDate = latestDoneDateOnOrAfter(a, nextMaintenanceDate);
-        if (doneDate) {
-          if (a.repeatMode === "MONTHLY_WEEKDAY") {
-            nextMaintenanceDate = resolveNextScheduleDate(a, shiftYmd(doneDate, 1));
-          } else {
-            nextMaintenanceDate = "";
-          }
-        }
+        const nextMaintenanceDate = resolveNextScheduleDate(a, today);
         return { ...a, nextMaintenanceDate };
       })
       .filter((a) => a.nextMaintenanceDate)
@@ -7161,6 +7299,31 @@ export default function App() {
         const exists = current.includes(value);
         const next = exists ? current.filter((item) => item !== value) : [...current, value];
         return next.length ? next : ["ALL"];
+      });
+    },
+    []
+  );
+
+  const updateSingleSelect = useCallback(
+    (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
+      setter((prev) => {
+        if (value === "ALL") return ["ALL"];
+        if (prev.length === 1 && prev[0] === value) return ["ALL"];
+        return [value];
+      });
+    },
+    []
+  );
+
+  const handleAssetMasterFilterMenuToggle = useCallback(
+    (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+      const current = event.currentTarget;
+      if (!current.open) return;
+      const wrapper = current.parentElement;
+      if (!wrapper) return;
+      const menus = wrapper.querySelectorAll<HTMLDetailsElement>("details.filter-menu");
+      menus.forEach((menu) => {
+        if (menu !== current) menu.open = false;
       });
     },
     []
@@ -8369,9 +8532,9 @@ export default function App() {
       <section className="app-card app-card-layout">
         <header className="topbar">
           <div className="brand-block">
-            <p className="eyebrow">{t.school}</p>
-            <h1>{t.title}</h1>
-            <p className="subhead">{t.subhead}</p>
+            {isPhoneView ? null : <p className="eyebrow">{t.school}</p>}
+            <h1 className={isPhoneView ? "brand-title-mobile" : ""}>{t.title}</h1>
+            {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
           </div>
 
           <div className="top-right">
@@ -8443,17 +8606,39 @@ export default function App() {
 
           <section className="workspace-main">
             <div className="mobile-nav-hud" ref={mobileNavRef}>
-              {!mobileMenuOpen ? (
+              <div className="mobile-nav-actions">
                 <button
-                  className={`mobile-hamburger-btn ${mobileMenuOpen ? "mobile-hamburger-btn-active" : ""}`}
+                  className={`mobile-notify-btn ${mobileNotificationOpen ? "mobile-notify-btn-active" : ""}`}
                   type="button"
-                  onClick={() => setMobileMenuOpen((open) => !open)}
-                  aria-expanded={mobileMenuOpen}
-                  aria-label={t.menu}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setMobileNotificationOpen((open) => !open);
+                  }}
+                  aria-expanded={mobileNotificationOpen}
+                  aria-label={t.maintenanceNotifications}
                 >
-                  <span className="mobile-hamburger-icon" aria-hidden="true">☰</span>
+                  <span aria-hidden="true">🔔</span>
+                  {maintenanceNotificationUnread > 0 ? (
+                    <span className="mobile-notify-badge">
+                      {maintenanceNotificationUnread > 99 ? "99+" : maintenanceNotificationUnread}
+                    </span>
+                  ) : null}
                 </button>
-              ) : null}
+                {!mobileMenuOpen ? (
+                  <button
+                    className={`mobile-hamburger-btn ${mobileMenuOpen ? "mobile-hamburger-btn-active" : ""}`}
+                    type="button"
+                    onClick={() => {
+                      setMobileNotificationOpen(false);
+                      setMobileMenuOpen((open) => !open);
+                    }}
+                    aria-expanded={mobileMenuOpen}
+                    aria-label={t.menu}
+                  >
+                    <span className="mobile-hamburger-icon" aria-hidden="true">☰</span>
+                  </button>
+                ) : null}
+              </div>
               {mobileMenuOpen ? (
                 <div className="mobile-settings-panel">
                   <label className="field">
@@ -8504,50 +8689,135 @@ export default function App() {
                   </button>
                 </div>
               ) : null}
+              {mobileNotificationOpen ? (
+                <div className="mobile-notify-panel">
+                  <div className="mobile-notify-head">
+                    <strong>{t.maintenanceNotifications}</strong>
+                    <button
+                      type="button"
+                      className="tab btn-small"
+                      onClick={() => {
+                        void markAllMaintenanceNotificationsRead();
+                      }}
+                    >
+                      {t.markAllRead}
+                    </button>
+                  </div>
+                  {browserNotificationPermission !== "granted" ? (
+                    <button type="button" className="tab" onClick={enablePhoneAlerts}>
+                      {t.enablePhoneAlerts}
+                    </button>
+                  ) : null}
+                  <div className="mobile-notify-list">
+                    {maintenanceNotifications.length ? (
+                      maintenanceNotifications.map((row) => (
+                        <article
+                          key={`mobile-notify-${row.id}`}
+                          className={`mobile-notify-item ${row.read ? "" : "mobile-notify-item-unread"}`}
+                        >
+                          <div className="mobile-notify-item-head">
+                            <strong>{row.title}</strong>
+                            <span className="tiny">{formatDateTime(row.createdAt)}</span>
+                          </div>
+                          <p className="tiny">{row.message}</p>
+                          <div className="row-actions">
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              onClick={() => {
+                                if (!row.read) void markMaintenanceNotificationRead(row.id);
+                                setTab("maintenance");
+                                setMobileNotificationOpen(false);
+                              }}
+                            >
+                              {t.openMaintenance}
+                            </button>
+                            {!row.read ? (
+                              <button
+                                type="button"
+                                className="tab btn-small"
+                                onClick={() => {
+                                  void markMaintenanceNotificationRead(row.id);
+                                }}
+                              >
+                                {t.markRead}
+                              </button>
+                            ) : null}
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <p className="tiny">{t.noMaintenanceNotifications}</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
-            <div className="mobile-module-panel">
-              <label className="field mobile-nav-field">
-                <span>{t.menu}</span>
-                <select
-                  className="input mobile-nav-select"
-                  value={tab}
-                  onChange={(e) => handleNavChange(e.target.value as NavModule)}
-                >
-                  {navMenuItems.map((item) => (
-                    <option key={`mobile-module-${item.id}`} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            {!isPhoneView ? (
+              <div className="mobile-module-panel">
+                <label className="field mobile-nav-field">
+                  <span>{t.menu}</span>
+                  <select
+                    className="input mobile-nav-select"
+                    value={tab}
+                    onChange={(e) => handleNavChange(e.target.value as NavModule)}
+                  >
+                    {navMenuItems.map((item) => (
+                      <option key={`mobile-module-${item.id}`} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
             {error ? <p className="alert alert-error">{error}</p> : null}
             {!isAdmin ? <p className="alert">{t.viewerMode}</p> : null}
             {loading ? <p className="alert">{t.loading}</p> : null}
 
         {tab === "dashboard" && (
           <section className="panel dashboard-panel">
-            <div className="dashboard-hero">
-              <div>
-                <h2>{filterLabel} {t.overview}</h2>
-                <p className="tiny">
-                  {topCampusByAssets
-                    ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets} ${t.assets.toLowerCase()})`
-                    : t.noCampusDataYet}
-                </p>
-              </div>
-              <div className="dashboard-actions">
-                <span className="tiny">Quick Access</span>
-                <div className="row-actions">
-                  <button className="tab" onClick={() => setTab("assets")}>{t.openAssetList}</button>
-                  <button className="tab" onClick={() => setTab("inventory")}>Inventory</button>
-                  <button className="tab" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
-                  <button className="tab" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+            {isPhoneView ? (
+              <section className="phone-dashboard-hero">
+                <div className="phone-dashboard-head">
+                  <p className="phone-dashboard-kicker">{t.overview}</p>
+                  <h2 className="phone-dashboard-title">{filterLabel}</h2>
+                  <p className="phone-dashboard-campus">
+                    {topCampusByAssets
+                      ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets})`
+                      : t.noCampusDataYet}
+                  </p>
+                </div>
+                <div className="phone-dashboard-actions">
+                  <button className="phone-quick-btn" onClick={() => setTab("assets")}>{t.openAssetList}</button>
+                  <button className="phone-quick-btn" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
+                  <button className="phone-quick-btn" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+                  <button className="phone-quick-btn" onClick={() => setTab("verification")}>Record Verification</button>
+                </div>
+              </section>
+            ) : (
+              <div className="dashboard-hero">
+                <div>
+                  <h2>{filterLabel} {t.overview}</h2>
+                  <p className="tiny">
+                    {topCampusByAssets
+                      ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets} ${t.assets.toLowerCase()})`
+                      : t.noCampusDataYet}
+                  </p>
+                </div>
+                <div className="dashboard-actions">
+                  <span className="tiny">Quick Access</span>
+                  <div className="row-actions">
+                    <button className="tab" onClick={() => setTab("assets")}>{t.openAssetList}</button>
+                    <button className="tab" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
+                    <button className="tab" onClick={() => setTab("inventory")}>Inventory</button>
+                    <button className="tab" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="stats-grid dashboard-stats">
+            <div className={`stats-grid dashboard-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
               <article className="stat-card stat-card-total">
                 <div className="stat-label">{t.totalAssets}</div>
                 <button className="stat-value stat-link" onClick={() => setOverviewModal("total")}>
@@ -8574,11 +8844,26 @@ export default function App() {
               </article>
             </div>
 
-            <div className="dashboard-subtabs">
-              <button className={`tab ${dashboardView === "overview" ? "tab-active" : ""}`} onClick={() => setDashboardView("overview")}>Overview</button>
-              <button className={`tab ${dashboardView === "schedule" ? "tab-active" : ""}`} onClick={() => setDashboardView("schedule")}>Schedule</button>
-              <button className={`tab ${dashboardView === "activity" ? "tab-active" : ""}`} onClick={() => setDashboardView("activity")}>Activity</button>
-            </div>
+            {isPhoneView ? (
+              <label className="field dashboard-mobile-view">
+                <span>{lang === "km" ? "ទិដ្ឋភាពផ្ទាំងគ្រប់គ្រង" : "Dashboard View"}</span>
+                <select
+                  className="input"
+                  value={dashboardView}
+                  onChange={(e) => setDashboardView(e.target.value as "overview" | "schedule" | "activity")}
+                >
+                  <option value="overview">Overview</option>
+                  <option value="schedule">Schedule</option>
+                  <option value="activity">Activity</option>
+                </select>
+              </label>
+            ) : (
+              <div className="dashboard-subtabs">
+                <button className={`tab ${dashboardView === "overview" ? "tab-active" : ""}`} onClick={() => setDashboardView("overview")}>Overview</button>
+                <button className={`tab ${dashboardView === "schedule" ? "tab-active" : ""}`} onClick={() => setDashboardView("schedule")}>Schedule</button>
+                <button className={`tab ${dashboardView === "activity" ? "tab-active" : ""}`} onClick={() => setDashboardView("activity")}>Activity</button>
+              </div>
+            )}
 
             {dashboardView === "overview" && (
               <div className="dashboard-clean-grid">
@@ -8612,11 +8897,13 @@ export default function App() {
                       </button>
                     </article>
                   </div>
-                  <div className="dashboard-focus-actions">
-                    <button className="tab" onClick={() => setTab("schedule")}>Go to Schedule</button>
-                    <button className="tab" onClick={() => setTab("maintenance")}>Record Maintenance</button>
-                    <button className="tab" onClick={() => setTab("verification")}>Record Verification</button>
-                  </div>
+                  {isPhoneView ? null : (
+                    <div className="dashboard-focus-actions">
+                      <button className="tab" onClick={() => setTab("schedule")}>Go to Schedule</button>
+                      <button className="tab" onClick={() => setTab("maintenance")}>Record Maintenance</button>
+                      <button className="tab" onClick={() => setTab("verification")}>Record Verification</button>
+                    </div>
+                  )}
                 </article>
 
                 <article className="panel dashboard-widget">
@@ -11251,9 +11538,7 @@ export default function App() {
                 className="btn-primary"
                 disabled={
                   busy ||
-                  !scheduleForm.assetId ||
-                  !isAdmin ||
-                  (scheduleForm.repeatMode === "NONE" && !scheduleForm.date)
+                  !scheduleForm.assetId
                 }
                 onClick={saveMaintenanceSchedule}
               >
@@ -12682,7 +12967,7 @@ export default function App() {
               ) : null}
               {reportType === "asset_master" ? (
                 <>
-                  <details className="filter-menu">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>{campusFilterSummary}</summary>
                     <div className="filter-menu-list">
                       <label className="filter-menu-item">
@@ -12705,14 +12990,14 @@ export default function App() {
                       ))}
                     </div>
                   </details>
-                  <details className="filter-menu">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>{categoryFilterSummary}</summary>
                     <div className="filter-menu-list">
                       <label className="filter-menu-item">
                         <input
                           type="checkbox"
                           checked={assetMasterCategoryFilter.includes("ALL")}
-                          onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, "ALL")}
+                          onChange={() => updateSingleSelect(setAssetMasterCategoryFilter, "ALL")}
                         />
                         <span>{t.allCategories}</span>
                       </label>
@@ -12721,7 +13006,7 @@ export default function App() {
                           <input
                             type="checkbox"
                             checked={assetMasterCategoryFilter.includes(category)}
-                            onChange={() => updateMultiSelect(setAssetMasterCategoryFilter, category)}
+                            onChange={() => updateSingleSelect(setAssetMasterCategoryFilter, category)}
                           />
                           <span>
                             {category === "SAFETY"
@@ -12734,7 +13019,7 @@ export default function App() {
                       ))}
                     </div>
                   </details>
-                  <details className="filter-menu">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>{itemFilterSummary}</summary>
                     <div className="filter-menu-list">
                       <label className="filter-menu-item">
@@ -12757,7 +13042,7 @@ export default function App() {
                       ))}
                     </div>
                   </details>
-                  <details className="filter-menu filter-menu-columns">
+                  <details className="filter-menu filter-menu-columns" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>{columnFilterSummary}</summary>
                     <div className="filter-menu-list">
                       {assetMasterColumnDefs.map((column) => (
@@ -14070,6 +14355,31 @@ export default function App() {
         )}
           </section>
         </section>
+
+        {isPhoneView ? (
+          <nav className="mobile-bottom-nav" aria-label={`${t.menu} quick nav`}>
+            {phonePrimaryTabs.map((item) => (
+              <button
+                key={`mobile-bottom-${item.id}`}
+                type="button"
+                className={`mobile-bottom-btn ${tab === item.id ? "mobile-bottom-btn-active" : ""}`}
+                onClick={() => handleNavChange(item.id)}
+              >
+                <span className="mobile-bottom-label">{item.label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`mobile-bottom-btn ${mobileMenuOpen ? "mobile-bottom-btn-active" : ""}`}
+              onClick={() => {
+                setMobileNotificationOpen(false);
+                setMobileMenuOpen((open) => !open);
+              }}
+            >
+              <span className="mobile-bottom-label">{t.menu}</span>
+            </button>
+          </nav>
+        ) : null}
 
         {scheduleAlertModal && (
           <div className="modal-backdrop" onClick={() => setScheduleAlertModal(null)}>
