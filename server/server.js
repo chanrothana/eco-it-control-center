@@ -1,4 +1,5 @@
 const http = require("http");
+const https = require("https");
 const fsSync = require("fs");
 const fs = require("fs/promises");
 const path = require("path");
@@ -41,6 +42,9 @@ const DEFAULT_ADMIN_PASSWORD = String(
 const DEFAULT_VIEWER_PASSWORD = String(
   process.env.BOOTSTRAP_VIEWER_PASSWORD || (!IS_PROD ? "EcoViewer@2026!" : "")
 );
+const TELEGRAM_ALERT_ENABLED = String(process.env.TELEGRAM_ALERT_ENABLED || "false").toLowerCase() === "true";
+const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const INDEX_FILE = path.join(BUILD_DIR, "index.html");
 const CAMPUS_MAP = {
@@ -661,6 +665,18 @@ async function resetDirContents(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
 }
 
+function normalizeMaintenanceReminderOffsets(input) {
+  const base = Array.isArray(input) ? input : [7, 6, 5, 4, 3, 2, 1, 0];
+  const cleaned = Array.from(
+    new Set(
+      base
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value >= 0 && value <= 30)
+    )
+  ).sort((a, b) => b - a);
+  return cleaned.length ? cleaned : [7, 6, 5, 4, 3, 2, 1, 0];
+}
+
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
   const settings =
@@ -672,10 +688,15 @@ function normalizeImportedDb(input) {
       ? settings.campusNames
       : {};
   const staffUsers = normalizeStaffUsers(settings.staffUsers);
+  const calendarEvents = normalizeCalendarEvents(settings.calendarEvents);
+  const maintenanceReminderOffsets = normalizeMaintenanceReminderOffsets(settings.maintenanceReminderOffsets);
   const normalizedAssets = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
         const cloned = { ...asset };
+        cloned.custodyStatus = normalizeCustodyStatus(
+          cloned.custodyStatus || (toText(cloned.assignedTo) ? "ASSIGNED" : "IN_STOCK")
+        );
         syncAssetStatusFromMaintenance(cloned);
         return cloned;
       })
@@ -691,11 +712,12 @@ function normalizeImportedDb(input) {
     settings: {
       campusNames,
       staffUsers,
+      calendarEvents,
+      maintenanceReminderOffsets,
     },
   };
 }
 
-const MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
 const NOTIFICATION_MAX_ROWS = 3000;
 
 function parseYmdToUtcMs(value) {
@@ -784,8 +806,11 @@ function upsertNotification(db, row) {
   return true;
 }
 
-function ensureMaintenanceScheduleNotifications(db) {
+function ensureMaintenanceScheduleNotifications(db, createdNotifications = null) {
   db.notifications = normalizeNotificationEntries(db.notifications);
+  const reminderOffsets = normalizeMaintenanceReminderOffsets(
+    db && db.settings && typeof db.settings === "object" ? db.settings.maintenanceReminderOffsets : []
+  );
   const expectedKeys = new Set();
   let changed = false;
   const assets = Array.isArray(db.assets) ? db.assets : [];
@@ -798,7 +823,7 @@ function ensureMaintenanceScheduleNotifications(db) {
     let kind = "";
     if (days < 0) {
       kind = "maintenance_overdue";
-    } else if (MAINTENANCE_REMINDER_OFFSETS.includes(days)) {
+    } else if (reminderOffsets.includes(days)) {
       kind = days === 0 ? "maintenance_due_today" : "maintenance_due";
     }
     if (!kind) continue;
@@ -832,7 +857,19 @@ function ensureMaintenanceScheduleNotifications(db) {
       readBy: [],
       generatedBy: "maintenance-schedule",
     });
-    if (created) changed = true;
+    if (created) {
+      changed = true;
+      if (Array.isArray(createdNotifications)) {
+        createdNotifications.push({
+          kind,
+          title,
+          message,
+          assetId: toText(asset.assetId),
+          campus: toText(asset.campus),
+          scheduleDate,
+        });
+      }
+    }
   }
 
   const before = db.notifications.length;
@@ -895,6 +932,57 @@ function purgeNotificationsForAsset(db, assetDbId) {
   const before = db.notifications.length;
   db.notifications = db.notifications.filter((row) => Number(row.assetDbId) !== targetId);
   return db.notifications.length !== before;
+}
+
+function sendTelegramMessage(text) {
+  return new Promise((resolve) => {
+    if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID || !toText(text)) {
+      resolve(false);
+      return;
+    }
+    const payload = JSON.stringify({
+      chat_id: TELEGRAM_CHAT_ID,
+      text: toText(text),
+      disable_web_page_preview: true,
+    });
+    const req = https.request(
+      {
+        hostname: "api.telegram.org",
+        path: `/bot${encodeURIComponent(TELEGRAM_BOT_TOKEN)}/sendMessage`,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+        timeout: 5000,
+      },
+      (res) => {
+        res.on("data", () => {});
+        res.on("end", () => resolve(res.statusCode >= 200 && res.statusCode < 300));
+      }
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function sendTelegramMaintenanceBatch(rows) {
+  if (!Array.isArray(rows) || !rows.length) return false;
+  const lines = rows.slice(0, 8).map((row, idx) => {
+    const dateText = toText(row.scheduleDate) || "-";
+    const assetId = toText(row.assetId) || "Unknown";
+    const campus = toText(row.campus) || "-";
+    const title = toText(row.title) || "Maintenance Alert";
+    return `${idx + 1}. ${title}\nAsset: ${assetId} | Campus: ${campus} | Date: ${dateText}`;
+  });
+  const extra = rows.length > 8 ? `\n+${rows.length - 8} more alert(s)` : "";
+  const text = `Eco IT Maintenance Alerts\n${lines.join("\n\n")}${extra}`;
+  return sendTelegramMessage(text);
 }
 
 initStorageSync();
@@ -1035,6 +1123,39 @@ function normalizeTransferEntries(entries) {
   return out;
 }
 
+function normalizeCustodyStatus(value) {
+  const raw = toUpper(value);
+  if (raw === "ASSIGNED") return "ASSIGNED";
+  return "IN_STOCK";
+}
+
+function normalizeCustodyEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  const out = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = Number(entry.id) || Date.now();
+    const date = toText(entry.date);
+    if (!date) continue;
+    const action = toUpper(entry.action) || "ASSIGN";
+    out.push({
+      id,
+      date,
+      action,
+      fromCampus: normalizeCampusInput(entry.fromCampus),
+      fromLocation: toText(entry.fromLocation),
+      toCampus: normalizeCampusInput(entry.toCampus),
+      toLocation: toText(entry.toLocation),
+      fromUser: toText(entry.fromUser),
+      toUser: toText(entry.toUser),
+      responsibilityAck: Boolean(entry.responsibilityAck),
+      by: toText(entry.by),
+      note: toText(entry.note),
+    });
+  }
+  return out;
+}
+
 function toUpper(value) {
   return String(value || "").trim().toUpperCase();
 }
@@ -1076,6 +1197,7 @@ function validateAsset(body) {
   const componentRole = toText(body.componentRole);
   const componentRequired = Boolean(body.componentRequired);
   const assignedTo = toText(body.assignedTo);
+  const custodyStatus = normalizeCustodyStatus(body.custodyStatus || (assignedTo ? "ASSIGNED" : "IN_STOCK"));
   const brand = toText(body.brand);
   const model = toText(body.model);
   const serialNumber = toText(body.serialNumber);
@@ -1130,6 +1252,7 @@ function validateAsset(body) {
     componentRole,
     componentRequired,
     assignedTo,
+    custodyStatus,
     brand,
     model,
     serialNumber,
@@ -1184,6 +1307,42 @@ function normalizeStaffUsers(input) {
     });
   }
   return out;
+}
+
+function normalizeCalendarEventType(value) {
+  const type = toText(value).toLowerCase();
+  if (["public", "ptc", "term_end", "term_start", "camp", "celebration", "break"].includes(type)) {
+    return type;
+  }
+  return "public";
+}
+
+function normalizeCalendarEvents(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < input.length; i += 1) {
+    const row = input[i];
+    if (!row || typeof row !== "object") continue;
+    const date = toText(row.date);
+    const name = toText(row.name);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) continue;
+    const key = `${date}::${name.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const parsedId = Number(row.id);
+    const id = Number.isFinite(parsedId) && parsedId > 0 ? parsedId : Date.now() + i;
+    out.push({
+      id,
+      date,
+      name,
+      type: normalizeCalendarEventType(row.type),
+    });
+  }
+  return out.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function validateStaffUser(body) {
@@ -1472,6 +1631,22 @@ function toPublicAssetView(asset) {
         by: toText(entry?.by),
       }))
     : [];
+  const custodyHistory = Array.isArray(source.custodyHistory)
+    ? source.custodyHistory.map((entry) => ({
+        id: Number(entry?.id || 0),
+        date: toText(entry?.date),
+        action: toText(entry?.action),
+        fromCampus: toText(entry?.fromCampus),
+        fromLocation: toText(entry?.fromLocation),
+        toCampus: toText(entry?.toCampus),
+        toLocation: toText(entry?.toLocation),
+        fromUser: toText(entry?.fromUser),
+        toUser: toText(entry?.toUser),
+        responsibilityAck: Boolean(entry?.responsibilityAck),
+        by: toText(entry?.by),
+        note: toText(entry?.note),
+      }))
+    : [];
   return {
     id: Number(source.id || 0),
     assetId: toText(source.assetId),
@@ -1486,6 +1661,7 @@ function toPublicAssetView(asset) {
     componentRole: toText(source.componentRole),
     componentRequired: Boolean(source.componentRequired),
     assignedTo: toText(source.assignedTo),
+    custodyStatus: normalizeCustodyStatus(source.custodyStatus || (toText(source.assignedTo) ? "ASSIGNED" : "IN_STOCK")),
     brand: toText(source.brand),
     model: toText(source.model),
     serialNumber: toText(source.serialNumber),
@@ -1500,6 +1676,7 @@ function toPublicAssetView(asset) {
     maintenanceHistory,
     transferHistory,
     statusHistory,
+    custodyHistory,
     created: toText(source.created),
   };
 }
@@ -1514,6 +1691,7 @@ function latestHistoryMillis(asset) {
     Array.isArray(asset?.maintenanceHistory) ? asset.maintenanceHistory : [],
     Array.isArray(asset?.transferHistory) ? asset.transferHistory : [],
     Array.isArray(asset?.statusHistory) ? asset.statusHistory : [],
+    Array.isArray(asset?.custodyHistory) ? asset.custodyHistory : [],
   ];
   let latest = 0;
   for (const list of lists) {
@@ -1701,11 +1879,12 @@ const server = http.createServer(async (req, res) => {
       const settings =
         db.settings && typeof db.settings === "object"
           ? db.settings
-          : { campusNames: {}, staffUsers: [] };
+          : { campusNames: {}, staffUsers: [], calendarEvents: [] };
       sendJson(res, 200, {
         settings: {
           ...settings,
           staffUsers: normalizeStaffUsers(settings.staffUsers),
+          calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
         },
       });
       return;
@@ -1731,10 +1910,20 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "staffUsers")
           ? normalizeStaffUsers(incoming.staffUsers)
           : normalizeStaffUsers(current.staffUsers);
+      const nextCalendarEvents =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "calendarEvents")
+          ? normalizeCalendarEvents(incoming.calendarEvents)
+          : normalizeCalendarEvents(current.calendarEvents);
+      const nextMaintenanceReminderOffsets =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "maintenanceReminderOffsets")
+          ? normalizeMaintenanceReminderOffsets(incoming.maintenanceReminderOffsets)
+          : normalizeMaintenanceReminderOffsets(current.maintenanceReminderOffsets);
       db.settings = {
         ...current,
         campusNames: nextCampusNames,
         staffUsers: nextStaffUsers,
+        calendarEvents: nextCalendarEvents,
+        maintenanceReminderOffsets: nextMaintenanceReminderOffsets,
       };
       appendAuditLog(db, admin, "UPDATE", "settings", "campusNames", "Updated campus name settings");
       await writeDb(db);
@@ -2137,9 +2326,11 @@ const server = http.createServer(async (req, res) => {
       const limitRaw = Number(url.searchParams.get("limit") || 30);
       const limit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? limitRaw : 30));
       const db = await readDb();
-      const generated = ensureMaintenanceScheduleNotifications(db);
+      const createdNotifications = [];
+      const generated = ensureMaintenanceScheduleNotifications(db, createdNotifications);
       if (generated) {
         await writeDb(db);
+        void sendTelegramMaintenanceBatch(createdNotifications);
       }
       const visible = normalizeNotificationEntries(db.notifications)
         .filter((row) => notificationVisibleToUser(row, user))
@@ -2245,9 +2436,30 @@ const server = http.createServer(async (req, res) => {
       const mainPhoto = assetPhotos[0] || assetPhoto || "";
       const initialHistory = await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
       const initialTransferHistory = normalizeTransferEntries(body.transferHistory);
+      const initialCustodyHistory = normalizeCustodyEntries(body.custodyHistory);
       const db = await readDb();
       const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
       const assetId = `${campusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || cleaned.category}-${cleaned.type}-${pad(seq, 4)}`;
+      const custodyStatus = normalizeCustodyStatus(cleaned.custodyStatus || (cleaned.assignedTo ? "ASSIGNED" : "IN_STOCK"));
+      const finalCustodyHistory =
+        initialCustodyHistory.length || !cleaned.assignedTo
+          ? initialCustodyHistory
+          : [
+              {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                action: "ASSIGN",
+                fromCampus: cleaned.campus,
+                fromLocation: cleaned.location,
+                toCampus: cleaned.campus,
+                toLocation: cleaned.location,
+                fromUser: "",
+                toUser: cleaned.assignedTo,
+                responsibilityAck: false,
+                by: "",
+                note: "Initial assignment",
+              },
+            ];
 
       const asset = {
         id: Date.now(),
@@ -2256,8 +2468,10 @@ const server = http.createServer(async (req, res) => {
         name: assetId,
         maintenanceHistory: initialHistory,
         transferHistory: initialTransferHistory,
+        custodyHistory: finalCustodyHistory,
         created: new Date().toISOString(),
         ...cleaned,
+        custodyStatus,
         photo: mainPhoto,
         photos: assetPhotos,
       };
@@ -2615,6 +2829,36 @@ const server = http.createServer(async (req, res) => {
         body.transferHistory === undefined
           ? current.transferHistory
           : normalizeTransferEntries(body.transferHistory);
+      const nextCustodyHistory =
+        body.custodyHistory === undefined
+          ? current.custodyHistory
+          : normalizeCustodyEntries(body.custodyHistory);
+      const previousAssignedTo = toText(current.assignedTo);
+      const incomingAssignedTo = toText(cleaned.assignedTo);
+      const assignmentChanged = previousAssignedTo !== incomingAssignedTo;
+      let finalCustodyHistory = Array.isArray(nextCustodyHistory) ? nextCustodyHistory : [];
+      if (assignmentChanged && body.custodyHistory === undefined) {
+        finalCustodyHistory = [
+          {
+            id: Date.now(),
+            date: new Date().toISOString(),
+            action: incomingAssignedTo ? "ASSIGN" : "UNASSIGN",
+            fromCampus: toText(current.campus),
+            fromLocation: toText(current.location),
+            toCampus: toText(cleaned.campus),
+            toLocation: toText(cleaned.location),
+            fromUser: previousAssignedTo,
+            toUser: incomingAssignedTo,
+            responsibilityAck: false,
+            by: "",
+            note: "Assignment changed from asset edit",
+          },
+          ...finalCustodyHistory,
+        ];
+      }
+      const nextCustodyStatus = normalizeCustodyStatus(
+        cleaned.custodyStatus || (incomingAssignedTo ? "ASSIGNED" : "IN_STOCK")
+      );
       const photoChanged = toText(current.photo) !== toText(mainPhoto);
       db.assets[idx] = {
         ...current,
@@ -2623,6 +2867,8 @@ const server = http.createServer(async (req, res) => {
         photos: nextPhotos,
         maintenanceHistory: nextHistory,
         transferHistory: nextTransferHistory,
+        custodyHistory: finalCustodyHistory,
+        custodyStatus: nextCustodyStatus,
         name: current.assetId,
       };
       appendAuditLog(

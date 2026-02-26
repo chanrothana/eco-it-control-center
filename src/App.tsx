@@ -18,6 +18,7 @@ type Asset = {
   componentRole?: string;
   componentRequired?: boolean;
   assignedTo?: string;
+  custodyStatus?: "IN_STOCK" | "ASSIGNED";
   brand?: string;
   model?: string;
   serialNumber?: string;
@@ -36,6 +37,7 @@ type Asset = {
   maintenanceHistory?: MaintenanceEntry[];
   verificationHistory?: VerificationEntry[];
   transferHistory?: TransferEntry[];
+  custodyHistory?: CustodyEntry[];
   statusHistory?: StatusEntry[];
   photo: string;
   photos?: string[];
@@ -81,6 +83,20 @@ type StatusEntry = {
   reason?: string;
   by?: string;
 };
+type CustodyEntry = {
+  id: number;
+  date: string;
+  action: string;
+  fromCampus?: string;
+  fromLocation?: string;
+  toCampus?: string;
+  toLocation?: string;
+  fromUser?: string;
+  toUser?: string;
+  responsibilityAck?: boolean;
+  by?: string;
+  note?: string;
+};
 type PendingStatusChange = {
   assetId: number;
   fromStatus: string;
@@ -102,6 +118,7 @@ type PublicQrAsset = {
   componentRole?: string;
   componentRequired?: boolean;
   assignedTo?: string;
+  custodyStatus?: "IN_STOCK" | "ASSIGNED";
   brand?: string;
   model?: string;
   serialNumber?: string;
@@ -115,6 +132,7 @@ type PublicQrAsset = {
   photos?: string[];
   maintenanceHistory?: MaintenanceEntry[];
   transferHistory?: TransferEntry[];
+  custodyHistory?: CustodyEntry[];
   statusHistory?: StatusEntry[];
   created?: string;
 };
@@ -124,6 +142,7 @@ type ReportType =
   | "asset_by_location"
   | "overdue"
   | "transfer"
+  | "staff_borrowing"
   | "maintenance_completion"
   | "verification_summary"
   | "qr_labels";
@@ -250,6 +269,22 @@ type AuditLog = {
 type ServerSettings = {
   campusNames?: Record<string, string>;
   staffUsers?: StaffUser[];
+  calendarEvents?: CalendarEvent[];
+  maintenanceReminderOffsets?: number[];
+};
+type CalendarEventType =
+  | "public"
+  | "ptc"
+  | "term_end"
+  | "term_start"
+  | "camp"
+  | "celebration"
+  | "break";
+type CalendarEvent = {
+  id: number;
+  date: string;
+  name: string;
+  type: CalendarEventType;
 };
 type MaintenanceNotification = {
   id: number;
@@ -271,6 +306,7 @@ const USER_FALLBACK_KEY = "it_users_fallback_v1";
 const CAMPUS_NAME_FALLBACK_KEY = "it_campus_names_fallback_v1";
 const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
 const ITEM_TYPE_FALLBACK_KEY = "it_item_types_fallback_v1";
+const CALENDAR_EVENT_FALLBACK_KEY = "it_calendar_events_v1";
 const AUTH_TOKEN_KEY = "it_auth_token_v1";
 const AUTH_USER_KEY = "it_auth_user_v1";
 const LOGIN_REMEMBER_KEY = "it_login_remember_v1";
@@ -282,6 +318,7 @@ const INVENTORY_ITEM_FALLBACK_KEY = "it_inventory_items_v1";
 const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
 const APP_VERSION = "v2.3.0";
+const DEFAULT_MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
 const APP_UPDATE_NOTES: Array<{ version: string; date: string; notes: string[] }> = [
   {
     version: "v2.3.0",
@@ -415,6 +452,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.asset_by_location", labelEn: "Asset by Campus and Location", labelKm: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
       { key: "reports.overdue", labelEn: "Overdue Maintenance", labelKm: "ថែទាំលើសកាលកំណត់" },
       { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
+      { key: "reports.staff_borrowing", labelEn: "Staff Borrowing List", labelKm: "បញ្ជីខ្ចីឧបករណ៍បុគ្គលិក" },
       { key: "reports.maintenance_completion", labelEn: "Maintenance Completion", labelKm: "លទ្ធផលបញ្ចប់ការថែទាំ" },
       { key: "reports.verification_summary", labelEn: "Verification Summary", labelKm: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
       { key: "reports.qr_labels", labelEn: "Asset ID + QR Labels", labelKm: "លេខទ្រព្យ + QR" },
@@ -431,6 +469,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "setup.backup", labelEn: "Backup & Audit", labelKm: "បម្រុងទុក និង Audit" },
       { key: "setup.items", labelEn: "Item Name Setup", labelKm: "កំណត់ឈ្មោះទំនិញ" },
       { key: "setup.locations", labelEn: "Location Setup by Campus", labelKm: "កំណត់ទីតាំងតាមសាខា" },
+      { key: "setup.calendar", labelEn: "Calendar Event Setup", labelKm: "កំណត់ព្រឹត្តិការណ៍ប្រតិទិន" },
     ],
   },
 ];
@@ -590,6 +629,18 @@ const ASSET_STATUS_OPTIONS = [
   { value: "Maintenance", en: "Maintenance", km: "កំពុងជួសជុល" },
   { value: "Retired", en: "Defective", km: "ខូច" },
 ];
+const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: string }> = [
+  { value: "public", label: "Public Holiday" },
+  { value: "ptc", label: "PTC" },
+  { value: "term_end", label: "Term End" },
+  { value: "term_start", label: "Term Start" },
+  { value: "camp", label: "Camp" },
+  { value: "celebration", label: "Celebration" },
+  { value: "break", label: "Break" },
+];
+function calendarEventTypeLabel(type: CalendarEventType) {
+  return CALENDAR_EVENT_TYPE_OPTIONS.find((opt) => opt.value === type)?.label || type;
+}
 const MAINTENANCE_COMPLETION_OPTIONS = [
   { value: "Done", label: "Already Done" },
   { value: "Not Yet", label: "Not Yet Done" },
@@ -1168,6 +1219,30 @@ function normalizeArray<T>(input: unknown): T[] {
   return input as T[];
 }
 
+function normalizeMaintenanceReminderOffsets(input: unknown): number[] {
+  const base = Array.isArray(input) ? input : DEFAULT_MAINTENANCE_REMINDER_OFFSETS;
+  const cleaned = Array.from(
+    new Set(
+      base
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value >= 0 && value <= 30)
+    )
+  ).sort((a, b) => b - a);
+  return cleaned.length ? cleaned : [...DEFAULT_MAINTENANCE_REMINDER_OFFSETS];
+}
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ORDINAL_WORDS = ["first", "second", "third", "fourth", "fifth"];
+
+function monthlyRepeatLabel(weekOfMonth: number, weekday: number) {
+  const safeWeek = Math.max(1, Math.min(5, Number(weekOfMonth || 1)));
+  const safeWeekday = Math.max(0, Math.min(6, Number(weekday || 0)));
+  const dayName = WEEKDAY_NAMES[safeWeekday];
+  if (safeWeek >= 5) return `Monthly on the last ${dayName}`;
+  const ord = ORDINAL_WORDS[safeWeek - 1] || `${safeWeek}th`;
+  return `Monthly on the ${ord} ${dayName}`;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const authToken = localStorage.getItem(AUTH_TOKEN_KEY) || runtimeAuthToken;
   const requestInit: RequestInit = {
@@ -1373,6 +1448,21 @@ function writeAssetFallback(list: Asset[]) {
 
 function writeUserFallback(list: StaffUser[]) {
   trySetLocalStorage(USER_FALLBACK_KEY, JSON.stringify(list));
+}
+
+function readCalendarEventFallback(defaultEvents: CalendarEvent[]) {
+  if (SERVER_ONLY_STORAGE) return defaultEvents;
+  try {
+    const raw = localStorage.getItem(CALENDAR_EVENT_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeCalendarEvents(parsed, defaultEvents);
+  } catch {
+    return defaultEvents;
+  }
+}
+
+function writeCalendarEventFallback(events: CalendarEvent[]) {
+  trySetLocalStorage(CALENDAR_EVENT_FALLBACK_KEY, JSON.stringify(events));
 }
 
 function writeStringMap(key: string, map: Record<string, string>) {
@@ -1803,7 +1893,7 @@ function expandHolidayRange(from: string, to: string, name: string) {
   return out;
 }
 
-const CAMBODIA_PUBLIC_HOLIDAYS: Record<number, Array<{ date: string; name: string }>> = {
+const DEFAULT_CALENDAR_EVENTS_BY_YEAR: Record<number, Array<{ date: string; name: string }>> = {
   2026: [
     { date: "2026-01-01", name: "New Year's Day" },
     { date: "2026-01-02", name: "Winter Break" },
@@ -1864,16 +1954,7 @@ const CAMBODIA_PUBLIC_HOLIDAYS: Record<number, Array<{ date: string; name: strin
   ],
 };
 
-type HolidayEventType =
-  | "public"
-  | "ptc"
-  | "term_end"
-  | "term_start"
-  | "camp"
-  | "celebration"
-  | "break";
-
-function classifyHolidayEvent(name: string): HolidayEventType {
+function classifyHolidayEvent(name: string): CalendarEventType {
   const text = String(name || "").toLowerCase();
   if (text.includes("ptc")) return "ptc";
   if (text.includes("end of term")) return "term_end";
@@ -1884,20 +1965,59 @@ function classifyHolidayEvent(name: string): HolidayEventType {
   return "public";
 }
 
-function getHolidayEvent(ymd: string): { name: string; type: HolidayEventType | "" } {
-  const date = String(ymd || "").trim();
-  if (!date) return { name: "", type: "" };
-  const year = Number(date.slice(0, 4));
-  const list = CAMBODIA_PUBLIC_HOLIDAYS[year] || [];
-  const matches = list.filter((h) => h.date === date);
-  if (!matches.length) return { name: "", type: "" };
-  const names = Array.from(new Set(matches.map((row) => row.name).filter(Boolean)));
-  const name = names.join(" | ");
-  return { name, type: classifyHolidayEvent(names[0] || "") };
+function buildDefaultCalendarEvents() {
+  const out: CalendarEvent[] = [];
+  let cursor = 1;
+  const years = Object.keys(DEFAULT_CALENDAR_EVENTS_BY_YEAR)
+    .map((y) => Number(y))
+    .sort((a, b) => a - b);
+  for (const year of years) {
+    for (const row of DEFAULT_CALENDAR_EVENTS_BY_YEAR[year] || []) {
+      if (!row?.date || !row?.name) continue;
+      out.push({
+        id: cursor,
+        date: row.date,
+        name: row.name,
+        type: classifyHolidayEvent(row.name),
+      });
+      cursor += 1;
+    }
+  }
+  return out;
 }
 
-function getHolidayName(ymd: string) {
-  return getHolidayEvent(ymd).name;
+function normalizeCalendarEventType(value: unknown): CalendarEventType {
+  const type = String(value || "").trim().toLowerCase();
+  if (["public", "ptc", "term_end", "term_start", "camp", "celebration", "break"].includes(type)) {
+    return type as CalendarEventType;
+  }
+  return "public";
+}
+
+function normalizeCalendarEvents(input: unknown, fallback: CalendarEvent[] = []) {
+  const rows = Array.isArray(input) ? input : fallback;
+  const out: CalendarEvent[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i] as Partial<CalendarEvent> | undefined;
+    const date = String(row?.date || "").trim();
+    const name = String(row?.name || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) continue;
+    const key = `${date}::${name.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const parsedId = Number(row?.id);
+    out.push({
+      id: Number.isFinite(parsedId) && parsedId > 0 ? parsedId : Date.now() + i,
+      date,
+      name,
+      type: normalizeCalendarEventType((row as { type?: unknown })?.type || classifyHolidayEvent(name)),
+    });
+  }
+  return out.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function nthWeekdayOfMonth(
@@ -2097,6 +2217,11 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
     const nextTransfer = Array.isArray(a.transferHistory) ? a.transferHistory : [];
     const hasIncomingTransferHistory = Object.prototype.hasOwnProperty.call(a, "transferHistory");
     if (!hasIncomingTransferHistory && nextTransfer.length < prevTransfer.length) next.transferHistory = prevTransfer;
+    const prevCustody = Array.isArray(prev.custodyHistory) ? prev.custodyHistory : [];
+    const nextCustody = Array.isArray(a.custodyHistory) ? a.custodyHistory : [];
+    const hasIncomingCustodyHistory = Object.prototype.hasOwnProperty.call(a, "custodyHistory");
+    if (!hasIncomingCustodyHistory && nextCustody.length < prevCustody.length) next.custodyHistory = prevCustody;
+    if (!a.custodyStatus && prev.custodyStatus) next.custodyStatus = prev.custodyStatus;
 
     merged.set(key, next);
   }
@@ -2223,6 +2348,11 @@ function normalizeAssetForUi(asset: Asset): Asset {
         ...(Array.isArray(asset.statusHistory) ? asset.statusHistory : []),
       ]
     : asset.statusHistory;
+  const custodyHistory = Array.isArray(asset.custodyHistory) ? asset.custodyHistory : [];
+  const custodyStatus =
+    asset.custodyStatus === "ASSIGNED" || asset.custodyStatus === "IN_STOCK"
+      ? asset.custodyStatus
+      : (String(asset.assignedTo || "").trim() ? "ASSIGNED" : "IN_STOCK");
   return {
     ...asset,
     componentRole: String(asset.componentRole || "").trim(),
@@ -2231,6 +2361,8 @@ function normalizeAssetForUi(asset: Asset): Asset {
     photo: normalizeUrl(normalizedPhotos[0] || ""),
     status: shouldAutoRetire ? "Retired" : asset.status,
     statusHistory: nextStatusHistory,
+    custodyHistory,
+    custodyStatus,
   };
 }
 
@@ -2535,12 +2667,12 @@ export default function App() {
   const [verificationResultFilter, setVerificationResultFilter] = useState("ALL");
   const [verificationDateFrom, setVerificationDateFrom] = useState("");
   const [verificationDateTo, setVerificationDateTo] = useState("");
-  const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("bulk");
-  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations">("campus");
+  const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
+  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance" | "daily">("items");
   const [inventoryBalanceMode, setInventoryBalanceMode] = useState<"all" | "low">("all");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
-  const [maintenanceView, setMaintenanceView] = useState<"record" | "history">("history");
+  const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
   const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
   const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState("ALL");
@@ -2591,10 +2723,10 @@ export default function App() {
   const [qrLocationFilter, setQrLocationFilter] = useState("ALL");
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
-  const [quickCountCampus, setQuickCountCampus] = useState("ALL");
-  const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState("ALL");
-  const [quickCountLocationFilter, setQuickCountLocationFilter] = useState("ALL");
-  const [quickCountStatusFilter, setQuickCountStatusFilter] = useState("ALL");
+  const [quickCountCampusFilter, setQuickCountCampusFilter] = useState<string[]>(["ALL"]);
+  const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState<string[]>(["ALL"]);
+  const [quickCountLocationFilter, setQuickCountLocationFilter] = useState<string[]>(["ALL"]);
+  const [quickCountStatusFilter, setQuickCountStatusFilter] = useState<string[]>(["ALL"]);
   const [quickCountQuery, setQuickCountQuery] = useState("");
   const [dashboardQuickCountOpen, setDashboardQuickCountOpen] = useState(true);
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
@@ -2611,6 +2743,7 @@ export default function App() {
   );
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const todayYmd = toYmd(new Date());
 
   useEffect(() => {
     if (!navMenuItems.some((item) => item.id === tab)) {
@@ -2854,11 +2987,18 @@ export default function App() {
     date: toYmd(new Date()),
     toCampus: CAMPUS_LIST[0],
     toLocation: "",
+    toAssignedTo: "",
+    responsibilityConfirmed: false,
+    returnConfirmed: false,
     reason: "",
     by: "",
     note: "",
   });
   const [showTransferAssetPicker, setShowTransferAssetPicker] = useState(false);
+  const [transferFilterCampus, setTransferFilterCampus] = useState("ALL");
+  const [transferFilterLocation, setTransferFilterLocation] = useState("ALL");
+  const [transferFilterCategory, setTransferFilterCategory] = useState("ALL");
+  const [transferFilterName, setTransferFilterName] = useState("ALL");
 
   const [ticketForm, setTicketForm] = useState({
     campus: CAMPUS_LIST[0],
@@ -2882,6 +3022,16 @@ export default function App() {
     return out;
   });
   const [setupMessage, setSetupMessage] = useState("");
+  const defaultCalendarEvents = useMemo(() => buildDefaultCalendarEvents(), []);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
+    readCalendarEventFallback(buildDefaultCalendarEvents())
+  );
+  const [calendarEventForm, setCalendarEventForm] = useState({
+    date: "",
+    name: "",
+    type: "public" as CalendarEventType,
+  });
+  const [editingCalendarEventId, setEditingCalendarEventId] = useState<number | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [backupImportKey, setBackupImportKey] = useState(0);
   const [userForm, setUserForm] = useState({
@@ -2910,7 +3060,13 @@ export default function App() {
   const [editingAuthUserId, setEditingAuthUserId] = useState<number | null>(null);
   const [scheduleAlertModal, setScheduleAlertModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "selected">(null);
   const [scheduleAlertItemFilter, setScheduleAlertItemFilter] = useState("ALL");
+  const [maintenanceReminderOffsets, setMaintenanceReminderOffsets] = useState<number[]>(
+    () => [...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]
+  );
+  const [savingMaintenanceReminder, setSavingMaintenanceReminder] = useState(false);
   const [overviewModal, setOverviewModal] = useState<null | "total" | "it" | "safety" | "tickets">(null);
+  const [maintenanceDashboardModal, setMaintenanceDashboardModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "done">(null);
+  const [latestMaintenanceDetailRowId, setLatestMaintenanceDetailRowId] = useState<string | null>(null);
   const [quickCountModal, setQuickCountModal] = useState<null | { title: string; assets: Asset[] }>(null);
   const [updateNotesOpen, setUpdateNotesOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
@@ -2921,6 +3077,19 @@ export default function App() {
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
   });
+  const [scheduleQuickCreateOpen, setScheduleQuickCreateOpen] = useState(false);
+  const [scheduleQuickForm, setScheduleQuickForm] = useState({
+    assetId: "",
+    date: toYmd(new Date()),
+    note: "",
+    repeatMode: "NONE" as "NONE" | "MONTHLY_WEEKDAY",
+    repeatWeekOfMonth: 1,
+    repeatWeekday: 6,
+  });
+  const [scheduleQuickFilterCampus, setScheduleQuickFilterCampus] = useState("ALL");
+  const [scheduleQuickFilterLocation, setScheduleQuickFilterLocation] = useState("ALL");
+  const [scheduleQuickFilterCategory, setScheduleQuickFilterCategory] = useState("ALL");
+  const [scheduleQuickFilterName, setScheduleQuickFilterName] = useState("ALL");
   const [bulkScheduleForm, setBulkScheduleForm] = useState({
     campus: "ALL",
     category: "SAFETY",
@@ -2931,6 +3100,10 @@ export default function App() {
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
   });
+  const [scheduleScopeModal, setScheduleScopeModal] = useState<null | {
+    action: "edit" | "delete";
+    assetId: number;
+  }>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -3491,6 +3664,27 @@ export default function App() {
     () => inventoryItems.find((item) => String(item.id) === String(inventoryDailyForm.itemId || "")) || null,
     [inventoryItems, inventoryDailyForm.itemId]
   );
+  const holidayLookup = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    for (const event of calendarEvents) {
+      const date = String(event.date || "").trim();
+      if (!date) continue;
+      if (!map.has(date)) map.set(date, []);
+      map.get(date)?.push(event);
+    }
+    return map;
+  }, [calendarEvents]);
+  const getHolidayEvent = useCallback((ymd: string): { name: string; type: CalendarEventType | "" } => {
+    const date = String(ymd || "").trim();
+    if (!date) return { name: "", type: "" };
+    const matches = holidayLookup.get(date) || [];
+    if (!matches.length) return { name: "", type: "" };
+    const names = Array.from(new Set(matches.map((row) => String(row.name || "").trim()).filter(Boolean)));
+    const name = names.join(" | ");
+    const type = matches[0]?.type || classifyHolidayEvent(names[0] || "");
+    return { name, type: normalizeCalendarEventType(type) };
+  }, [holidayLookup]);
+  const getHolidayName = useCallback((ymd: string) => getHolidayEvent(ymd).name, [getHolidayEvent]);
   const inventoryDailyTodayRows = useMemo(() => {
     const date = inventoryDailyForm.date;
     return [...inventoryTxns]
@@ -3533,7 +3727,7 @@ export default function App() {
       max: max > 0 ? max : 1,
       rows,
     };
-  }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryItems, inventoryTxns]);
+  }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryItems, inventoryTxns, getHolidayName]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -3872,11 +4066,17 @@ export default function App() {
   }, [canOpenAssetRegister, assetsView, canAccessMenu]);
   useEffect(() => {
     if (tab === "maintenance") {
-      if (maintenanceView === "record" && !canAccessMenu("maintenance.record", "maintenance")) {
-        setMaintenanceView("history");
+      const canRecordMaintenanceTab = canAccessMenu("maintenance.record", "maintenance");
+      const canHistoryMaintenanceTab = canAccessMenu("maintenance.history", "maintenance");
+      const canDashboardMaintenanceTab = canRecordMaintenanceTab || canHistoryMaintenanceTab;
+      if (maintenanceView === "dashboard" && !canDashboardMaintenanceTab) {
+        setMaintenanceView(canHistoryMaintenanceTab ? "history" : "record");
       }
-      if (maintenanceView === "history" && !canAccessMenu("maintenance.history", "maintenance")) {
-        setMaintenanceView("record");
+      if (maintenanceView === "record" && !canRecordMaintenanceTab) {
+        setMaintenanceView(canDashboardMaintenanceTab ? "dashboard" : "history");
+      }
+      if (maintenanceView === "history" && !canHistoryMaintenanceTab) {
+        setMaintenanceView(canDashboardMaintenanceTab ? "dashboard" : "record");
       }
     }
   }, [tab, maintenanceView, canAccessMenu]);
@@ -3901,7 +4101,8 @@ export default function App() {
     if (tab === "setup" && setupView === "permissions" && !canAccessMenu("setup.permissions", "setup")) setSetupView("backup");
     if (tab === "setup" && setupView === "backup" && !canAccessMenu("setup.backup", "setup")) setSetupView("items");
     if (tab === "setup" && setupView === "items" && !canAccessMenu("setup.items", "setup")) setSetupView("locations");
-    if (tab === "setup" && setupView === "locations" && !canAccessMenu("setup.locations", "setup")) setSetupView("campus");
+    if (tab === "setup" && setupView === "locations" && !canAccessMenu("setup.locations", "setup")) setSetupView("calendar");
+    if (tab === "setup" && setupView === "calendar" && !canAccessMenu("setup.calendar", "setup")) setSetupView("campus");
   }, [tab, setupView, canAccessMenu]);
 
   const effectiveAssetCampusFilter =
@@ -4001,8 +4202,19 @@ export default function App() {
           setCampusNames(mergedCampusNames);
           writeStringMap(CAMPUS_NAME_FALLBACK_KEY, mergedCampusNames);
         }
+        const nextCalendarEvents = normalizeCalendarEvents(
+          settingsRes.settings?.calendarEvents,
+          defaultCalendarEvents
+        );
+        setCalendarEvents(nextCalendarEvents);
+        writeCalendarEventFallback(nextCalendarEvents);
+        setMaintenanceReminderOffsets(
+          normalizeMaintenanceReminderOffsets(settingsRes.settings?.maintenanceReminderOffsets)
+        );
       } catch {
         // Keep local settings if /api/settings is unavailable.
+        setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
+        setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
       }
 
       const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
@@ -4033,6 +4245,7 @@ export default function App() {
     }
   }, [
     campusFilter,
+    defaultCalendarEvents,
     loadMaintenanceNotifications,
   ]);
 
@@ -4158,6 +4371,7 @@ export default function App() {
           parentAssetId: createParentAssetId,
           componentRole: assetForm.componentRole.trim(),
           componentRequired: Boolean(assetForm.componentRequired),
+          custodyStatus: assetForm.assignedTo ? "ASSIGNED" : "IN_STOCK",
         }),
       });
 
@@ -4175,6 +4389,7 @@ export default function App() {
               setCode: createSetCode,
               parentAssetId: created.asset.assetId,
               assignedTo: "",
+              custodyStatus: "IN_STOCK",
               brand: draft.brand,
               model: draft.model,
               serialNumber: draft.serialNumber,
@@ -4270,6 +4485,7 @@ export default function App() {
           componentRole: assetForm.componentRole.trim(),
           componentRequired: Boolean(assetForm.componentRequired),
           assignedTo: assetForm.assignedTo,
+          custodyStatus: assetForm.assignedTo ? "ASSIGNED" : "IN_STOCK",
           brand: assetForm.brand,
           model: assetForm.model,
           serialNumber: assetForm.serialNumber,
@@ -4288,6 +4504,24 @@ export default function App() {
           maintenanceHistory: [],
           verificationHistory: [],
           transferHistory: [],
+          custodyHistory: assetForm.assignedTo
+            ? [
+                {
+                  id: Date.now() + 1,
+                  date: new Date().toISOString(),
+                  action: "ASSIGN",
+                  fromCampus: assetForm.campus,
+                  fromLocation: assetForm.location,
+                  toCampus: assetForm.campus,
+                  toLocation: assetForm.location,
+                  fromUser: "",
+                  toUser: assetForm.assignedTo,
+                  responsibilityAck: false,
+                  by: authUser?.displayName || "",
+                  note: "Initial assignment",
+                },
+              ]
+            : [],
           statusHistory: [
             {
               id: Date.now(),
@@ -4321,6 +4555,7 @@ export default function App() {
               setCode: createSetCode,
               parentAssetId: newAsset.assetId,
               assignedTo: "",
+              custodyStatus: "IN_STOCK",
               brand: draft.brand,
               model: draft.model,
               serialNumber: draft.serialNumber,
@@ -4339,6 +4574,7 @@ export default function App() {
               maintenanceHistory: [],
               verificationHistory: [],
               transferHistory: [],
+              custodyHistory: [],
               statusHistory: [
                 {
                   id: Date.now(),
@@ -4434,6 +4670,131 @@ export default function App() {
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
       throw err;
+    }
+  }
+
+  async function saveCalendarEventsToServer(nextRows: CalendarEvent[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: { calendarEvents: nextRows } }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function saveMaintenanceReminderOffsetsToServer(nextOffsets: number[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: { maintenanceReminderOffsets: nextOffsets } }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function toggleMaintenanceReminderOffset(dayOffset: number) {
+    if (!requireAdminAction()) return;
+    const current = [...maintenanceReminderOffsets];
+    const has = current.includes(dayOffset);
+    const next = normalizeMaintenanceReminderOffsets(
+      has ? current.filter((d) => d !== dayOffset) : [...current, dayOffset]
+    );
+    setSavingMaintenanceReminder(true);
+    setError("");
+    try {
+      await saveMaintenanceReminderOffsetsToServer(next);
+      setMaintenanceReminderOffsets(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save reminder setting");
+    } finally {
+      setSavingMaintenanceReminder(false);
+    }
+  }
+
+  async function createOrUpdateCalendarEvent() {
+    if (!requireAdminAction()) return;
+    const date = normalizeYmdInput(calendarEventForm.date);
+    const name = String(calendarEventForm.name || "").trim();
+    if (!date || !name) {
+      setError("Calendar event date and name are required.");
+      return;
+    }
+    const normalizedType = normalizeCalendarEventType(calendarEventForm.type);
+    const base = editingCalendarEventId === null
+      ? calendarEvents
+      : calendarEvents.filter((row) => row.id !== editingCalendarEventId);
+    const nextRows = normalizeCalendarEvents(
+      [
+        ...base,
+        {
+          id: editingCalendarEventId || Date.now(),
+          date,
+          name,
+          type: normalizedType,
+        },
+      ],
+      defaultCalendarEvents
+    );
+    setBusy(true);
+    setError("");
+    try {
+      await saveCalendarEventsToServer(nextRows);
+      setCalendarEvents(nextRows);
+      writeCalendarEventFallback(nextRows);
+      setCalendarEventForm({ date: "", name: "", type: "public" });
+      setEditingCalendarEventId(null);
+      setSetupMessage(editingCalendarEventId === null ? "Calendar event added." : "Calendar event updated.");
+      appendUiAudit(
+        editingCalendarEventId === null ? "CREATE" : "UPDATE",
+        "calendar_event",
+        `${date}`,
+        `${name} | ${normalizedType}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save calendar event");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEditCalendarEvent(row: CalendarEvent) {
+    setEditingCalendarEventId(row.id);
+    setCalendarEventForm({
+      date: row.date,
+      name: row.name,
+      type: normalizeCalendarEventType(row.type),
+    });
+  }
+
+  function cancelEditCalendarEvent() {
+    setEditingCalendarEventId(null);
+    setCalendarEventForm({ date: "", name: "", type: "public" });
+  }
+
+  async function deleteCalendarEvent(id: number) {
+    if (!requireAdminAction()) return;
+    if (!window.confirm("Delete this calendar event?")) return;
+    const nextRows = calendarEvents.filter((row) => row.id !== id);
+    setBusy(true);
+    setError("");
+    try {
+      await saveCalendarEventsToServer(nextRows);
+      setCalendarEvents(nextRows);
+      writeCalendarEventFallback(nextRows);
+      setSetupMessage("Calendar event deleted.");
+      appendUiAudit("DELETE", "calendar_event", String(id), "Calendar event deleted");
+      if (editingCalendarEventId === id) {
+        cancelEditCalendarEvent();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete calendar event");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -5906,6 +6267,7 @@ export default function App() {
       setCode: editingAsset.setCode || "",
       parentAssetId: editingAsset.assetId,
       assignedTo: "",
+      custodyStatus: "IN_STOCK",
       brand: "",
       model: "",
       serialNumber: "",
@@ -5948,6 +6310,7 @@ export default function App() {
           setCode: payload.setCode,
           parentAssetId: payload.parentAssetId,
           assignedTo: payload.assignedTo,
+          custodyStatus: "IN_STOCK",
           brand: payload.brand,
           model: payload.model,
           serialNumber: payload.serialNumber,
@@ -5966,6 +6329,7 @@ export default function App() {
           maintenanceHistory: [],
           verificationHistory: [],
           transferHistory: [],
+          custodyHistory: [],
           statusHistory: [
             {
               id: Date.now(),
@@ -6083,6 +6447,9 @@ export default function App() {
       let nextLocal = readAssetFallback().map((a) => {
         if (a.id !== editingAssetId) return a;
         const statusChanged = (a.status || "Active") !== payload.status;
+        const fromUser = String(a.assignedTo || "").trim();
+        const toUser = String(payload.assignedTo || "").trim();
+        const assignmentChanged = fromUser !== toUser;
         const statusHistory = statusChanged
           ? [
               {
@@ -6095,8 +6462,36 @@ export default function App() {
               ...(a.statusHistory || []),
             ]
           : a.statusHistory || [];
+        const custodyHistory = assignmentChanged
+          ? [
+              {
+                id: Date.now() + 1,
+                date: new Date().toISOString(),
+                action: toUser ? "ASSIGN" : "UNASSIGN",
+                fromCampus: a.campus,
+                fromLocation: a.location,
+                toCampus: a.campus,
+                toLocation: payload.location,
+                fromUser,
+                toUser,
+                responsibilityAck: false,
+                by: authUser?.displayName || "",
+                note: "Assignment changed from asset edit",
+              },
+              ...(a.custodyHistory || []),
+            ]
+          : (a.custodyHistory || []);
+        const custodyStatus: Asset["custodyStatus"] = toUser ? "ASSIGNED" : "IN_STOCK";
         const normalizedPhotos = normalizeAssetPhotos(payload);
-        return { ...a, ...payload, photo: normalizedPhotos[0] || "", photos: normalizedPhotos, statusHistory };
+        return {
+          ...a,
+          ...payload,
+          custodyStatus,
+          custodyHistory,
+          photo: normalizedPhotos[0] || "",
+          photos: normalizedPhotos,
+          statusHistory,
+        };
       });
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${editingAssetId}`, {
@@ -6130,6 +6525,10 @@ export default function App() {
       scheduleForm.repeatMode === "NONE" ? normalizeYmdInput(scheduleForm.date) : "";
     if (scheduleForm.repeatMode === "NONE" && !normalizedDate) {
       setError("Please select a valid date (YYYY-MM-DD).");
+      return;
+    }
+    if (scheduleForm.repeatMode === "NONE" && normalizedDate < todayYmd) {
+      setError("Cannot set schedule to a past date.");
       return;
     }
     const assetId = Number(scheduleForm.assetId);
@@ -6186,6 +6585,94 @@ export default function App() {
     }
   }
 
+  function openQuickScheduleCreate(ymd: string) {
+    setSelectedCalendarDate(ymd);
+    if (!isAdmin) return;
+    const dateObj = new Date(`${ymd}T00:00:00`);
+    const computedWeekOfMonth = Number.isFinite(dateObj.getTime())
+      ? Math.max(1, Math.min(5, Math.floor((dateObj.getDate() - 1) / 7) + 1))
+      : 1;
+    const computedWeekday = Number.isFinite(dateObj.getTime()) ? dateObj.getDay() : 6;
+    setScheduleQuickForm({
+      assetId: "",
+      date: ymd,
+      note: "",
+      repeatMode: "NONE",
+      repeatWeekOfMonth: computedWeekOfMonth,
+      repeatWeekday: computedWeekday,
+    });
+    setScheduleQuickFilterCampus("ALL");
+    setScheduleQuickFilterLocation("ALL");
+    setScheduleQuickFilterCategory("ALL");
+    setScheduleQuickFilterName("ALL");
+    setScheduleQuickCreateOpen(true);
+  }
+
+  async function saveQuickScheduleFromCalendar() {
+    if (!requireAdminAction()) return;
+    if (!scheduleQuickForm.assetId) {
+      setError("Please select an asset first.");
+      return;
+    }
+    const normalizedDate =
+      scheduleQuickForm.repeatMode === "NONE" ? normalizeYmdInput(scheduleQuickForm.date) : "";
+    if (scheduleQuickForm.repeatMode === "NONE" && !normalizedDate) {
+      setError("Please select a valid date (YYYY-MM-DD).");
+      return;
+    }
+    if (scheduleQuickForm.repeatMode === "NONE" && normalizedDate < todayYmd) {
+      setError("Cannot set schedule to a past date.");
+      return;
+    }
+    const assetId = Number(scheduleQuickForm.assetId);
+    if (!assetId) return;
+
+    const payload = {
+      nextMaintenanceDate: normalizedDate,
+      scheduleNote: scheduleQuickForm.note.trim(),
+      repeatMode: scheduleQuickForm.repeatMode,
+      repeatWeekOfMonth:
+        scheduleQuickForm.repeatMode === "MONTHLY_WEEKDAY"
+          ? Number(scheduleQuickForm.repeatWeekOfMonth)
+          : 0,
+      repeatWeekday:
+        scheduleQuickForm.repeatMode === "MONTHLY_WEEKDAY"
+          ? Number(scheduleQuickForm.repeatWeekday)
+          : 0,
+    };
+
+    setBusy(true);
+    setError("");
+    try {
+      const nextLocal = assets.map((asset) =>
+        asset.id === assetId ? { ...asset, ...payload } : asset
+      );
+      try {
+        await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      } catch (err) {
+        if (!isApiUnavailableError(err)) throw err;
+      }
+      writeAssetFallback(nextLocal);
+      setAssets(nextLocal);
+      setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      appendUiAudit(
+        "SCHEDULE_UPDATE",
+        "asset",
+        String(assetId),
+        payload.nextMaintenanceDate || `${payload.repeatMode} quick-create`
+      );
+      setScheduleQuickCreateOpen(false);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save schedule");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function editScheduleForAsset(asset: Asset) {
     if (!requireAdminAction()) return;
     setScheduleForm((f) => ({
@@ -6197,11 +6684,12 @@ export default function App() {
       repeatWeekOfMonth: Number(asset.repeatWeekOfMonth || 1),
       repeatWeekday: Number(asset.repeatWeekday || 6),
     }));
+    setScheduleView("single");
   }
 
-  async function clearScheduleForAsset(assetId: number) {
+  async function clearScheduleForAsset(assetId: number, skipConfirm = false) {
     if (!requireAdminAction()) return;
-    if (!window.confirm("Delete schedule for this asset?")) return;
+    if (!skipConfirm && !window.confirm("Delete schedule for this asset?")) return;
 
     const payload = {
       nextMaintenanceDate: "",
@@ -6241,12 +6729,109 @@ export default function App() {
     }
   }
 
+  async function clearScheduleForType(category: string, type: string) {
+    if (!requireAdminAction()) return;
+    if (!window.confirm(`Delete schedules for all ${assetItemName(category, type)} assets?`)) return;
+    const targets = assets.filter((asset) => {
+      const hasSchedule = Boolean(String(asset.nextMaintenanceDate || "").trim()) || asset.repeatMode === "MONTHLY_WEEKDAY";
+      return hasSchedule && asset.category === category && asset.type === type;
+    });
+    if (!targets.length) {
+      setError("No schedules found for this item type.");
+      return;
+    }
+    const payload = {
+      nextMaintenanceDate: "",
+      scheduleNote: "",
+      repeatMode: "NONE" as const,
+      repeatWeekOfMonth: 0,
+      repeatWeekday: 0,
+    };
+    setBusy(true);
+    setError("");
+    try {
+      const targetIds = new Set(targets.map((a) => a.id));
+      const nextLocal = assets.map((asset) => (targetIds.has(asset.id) ? { ...asset, ...payload } : asset));
+      try {
+        await Promise.all(
+          targets.map((asset) =>
+            requestJson<{ asset: Asset }>(`/api/assets/${asset.id}`, {
+              method: "PATCH",
+              body: JSON.stringify(payload),
+            })
+          )
+        );
+      } catch (err) {
+        if (!isApiUnavailableError(err)) throw err;
+      }
+      writeAssetFallback(nextLocal);
+      setAssets(nextLocal);
+      setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      appendUiAudit("SCHEDULE_DELETE", "asset_type", `${category}:${type}`, `Removed schedule from ${targets.length} assets`);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete schedules");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleScheduleRowAction(asset: Asset, action: "edit" | "delete") {
+    if (!requireAdminAction()) return;
+    const groupedCount = scheduleListRows.filter((row) => row.category === asset.category && row.type === asset.type).length;
+    if (groupedCount > 1) {
+      setScheduleScopeModal({ action, assetId: asset.id });
+      return;
+    }
+    if (action === "edit") editScheduleForAsset(asset);
+    else void clearScheduleForAsset(asset.id);
+  }
+
+  async function applyScheduleScopeAction(scope: "single" | "all") {
+    if (!scheduleScopeModal) return;
+    const targetAsset = assets.find((a) => a.id === scheduleScopeModal.assetId);
+    if (!targetAsset) {
+      setScheduleScopeModal(null);
+      return;
+    }
+    const action = scheduleScopeModal.action;
+    setScheduleScopeModal(null);
+    if (action === "edit") {
+      if (scope === "single") {
+        editScheduleForAsset(targetAsset);
+        return;
+      }
+      setBulkScheduleForm((f) => ({
+        ...f,
+        campus: "ALL",
+        category: targetAsset.category,
+        type: targetAsset.type,
+        date: targetAsset.repeatMode === "NONE" ? (targetAsset.nextMaintenanceDate || "") : "",
+        note: targetAsset.scheduleNote || "",
+        repeatMode: targetAsset.repeatMode || "NONE",
+        repeatWeekOfMonth: Number(targetAsset.repeatWeekOfMonth || 1),
+        repeatWeekday: Number(targetAsset.repeatWeekday || 6),
+      }));
+      setScheduleView("bulk");
+      return;
+    }
+    if (scope === "single") {
+      await clearScheduleForAsset(targetAsset.id, true);
+      return;
+    }
+    await clearScheduleForType(targetAsset.category, targetAsset.type);
+  }
+
   async function saveBulkMaintenanceSchedule() {
     if (!requireAdminAction()) return;
     const normalizedDate =
       bulkScheduleForm.repeatMode === "NONE" ? normalizeYmdInput(bulkScheduleForm.date) : "";
     if (bulkScheduleForm.repeatMode === "NONE" && !normalizedDate) {
       setError("Please select a valid date (YYYY-MM-DD).");
+      return;
+    }
+    if (bulkScheduleForm.repeatMode === "NONE" && normalizedDate < todayYmd) {
+      setError("Cannot set schedule to a past date.");
       return;
     }
 
@@ -6341,6 +6926,10 @@ export default function App() {
       !maintenanceRecordForm.type.trim() ||
       !maintenanceRecordForm.note.trim()
     ) {
+      return false;
+    }
+    if (maintenanceRecordForm.date < todayYmd) {
+      setError("Cannot set maintenance date to a past date.");
       return false;
     }
 
@@ -6701,6 +7290,17 @@ export default function App() {
     if (!assetId || !transferForm.toCampus || !transferForm.toLocation.trim()) return false;
     const current = assets.find((a) => a.id === assetId);
     if (!current) return false;
+    const fromUser = String(current.assignedTo || "").trim();
+    const toUser = String(transferForm.toAssignedTo || "").trim();
+    const assignmentChanged = fromUser !== toUser;
+    if (toUser && assignmentChanged && !transferForm.responsibilityConfirmed) {
+      setError("Please confirm staff responsibility before assigning this asset.");
+      return false;
+    }
+    if (fromUser && assignmentChanged && !transferForm.returnConfirmed) {
+      setError("Please confirm previous staff return handover before reassigning.");
+      return false;
+    }
 
     const transferEntry: TransferEntry = {
       id: Date.now(),
@@ -6713,17 +7313,37 @@ export default function App() {
       by: transferForm.by.trim(),
       note: transferForm.note.trim(),
     };
+    const custodyEntry: CustodyEntry | null = assignmentChanged
+      ? {
+          id: Date.now() + 1,
+          date: transferEntry.date,
+          action: toUser ? "ASSIGN" : "UNASSIGN",
+          fromCampus: current.campus,
+          fromLocation: current.location || "-",
+          toCampus: transferEntry.toCampus,
+          toLocation: transferEntry.toLocation,
+          fromUser,
+          toUser,
+          responsibilityAck: Boolean(transferForm.responsibilityConfirmed),
+          by: transferEntry.by,
+          note: transferEntry.note || transferEntry.reason || "",
+        }
+      : null;
 
     setBusy(true);
     setError("");
     try {
       const nextLocal = readAssetFallback().map((asset) => {
         if (asset.id !== assetId) return asset;
+        const custodyStatus: Asset["custodyStatus"] = toUser ? "ASSIGNED" : "IN_STOCK";
         return {
           ...asset,
           campus: transferEntry.toCampus,
           location: transferEntry.toLocation,
+          assignedTo: toUser,
+          custodyStatus,
           transferHistory: [transferEntry, ...(asset.transferHistory || [])],
+          custodyHistory: custodyEntry ? [custodyEntry, ...(asset.custodyHistory || [])] : (asset.custodyHistory || []),
         };
       });
 
@@ -6733,7 +7353,10 @@ export default function App() {
           body: JSON.stringify({
             campus: transferEntry.toCampus,
             location: transferEntry.toLocation,
+            assignedTo: toUser,
+            custodyStatus: toUser ? "ASSIGNED" : "IN_STOCK",
             transferHistory: [transferEntry, ...(current.transferHistory || [])],
+            custodyHistory: custodyEntry ? [custodyEntry, ...(current.custodyHistory || [])] : (current.custodyHistory || []),
           }),
         });
       } catch (err) {
@@ -6747,6 +7370,8 @@ export default function App() {
       setTransferForm((f) => ({
         ...f,
         date: "",
+        responsibilityConfirmed: false,
+        returnConfirmed: false,
         reason: "",
         by: "",
         note: "",
@@ -6769,6 +7394,9 @@ export default function App() {
       date: toYmd(new Date()),
       toCampus: asset.campus,
       toLocation: asset.location || "",
+      toAssignedTo: asset.assignedTo || "",
+      responsibilityConfirmed: false,
+      returnConfirmed: false,
       reason: "",
       by: "",
       note: "",
@@ -6850,6 +7478,10 @@ export default function App() {
     if (!requireAdminAction()) return;
     if (!maintenanceDetailAssetId) return;
     if (!maintenanceEditForm.date || !maintenanceEditForm.type.trim() || !maintenanceEditForm.note.trim()) return;
+    if (maintenanceEditForm.date < todayYmd) {
+      setError("Cannot set maintenance date to a past date.");
+      return;
+    }
 
     const payload: MaintenanceEntry = {
       id: entryId,
@@ -7197,6 +7829,15 @@ export default function App() {
         : [],
     [detailAsset, sortByNewestDate]
   );
+  const detailCustodyEntries = useMemo(
+    () =>
+      detailAsset
+        ? [...(detailAsset.custodyHistory || [])].sort((a, b) =>
+            sortByNewestDate(a.date, b.date)
+          )
+        : [],
+    [detailAsset, sortByNewestDate]
+  );
   const editingAsset = useMemo(
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
@@ -7315,6 +7956,75 @@ export default function App() {
     () => assets.find((a) => String(a.id) === transferForm.assetId) || null,
     [assets, transferForm.assetId]
   );
+  const transferRecordAssets = useMemo(
+    () =>
+      [...assets].sort((a, b) => {
+        const itemA = assetItemName(a.category, a.type, a.pcType || "");
+        const itemB = assetItemName(b.category, b.type, b.pcType || "");
+        if (itemA !== itemB) return itemA.localeCompare(itemB);
+        return a.assetId.localeCompare(b.assetId);
+      }),
+    [assets, assetItemName]
+  );
+  const transferFilterCampusOptions = useMemo(
+    () => Array.from(new Set(transferRecordAssets.map((a) => a.campus).filter(Boolean))).sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
+    [transferRecordAssets, campusLabel]
+  );
+  const transferFilterLocationOptions = useMemo(() => {
+    let list = transferRecordAssets;
+    if (transferFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === transferFilterCampus);
+    }
+    return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [transferRecordAssets, transferFilterCampus]);
+  const transferFilterCategoryOptions = useMemo(() => {
+    let list = transferRecordAssets;
+    if (transferFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === transferFilterCampus);
+    }
+    if (transferFilterLocation !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === transferFilterLocation);
+    }
+    return Array.from(new Set(list.map((a) => a.category).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [transferRecordAssets, transferFilterCampus, transferFilterLocation]);
+  const transferFilterNameOptions = useMemo(() => {
+    let list = transferRecordAssets;
+    if (transferFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === transferFilterCampus);
+    }
+    if (transferFilterLocation !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === transferFilterLocation);
+    }
+    if (transferFilterCategory !== "ALL") {
+      list = list.filter((a) => a.category === transferFilterCategory);
+    }
+    return Array.from(new Set(list.map((a) => assetItemName(a.category, a.type, a.pcType || "")).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [transferRecordAssets, transferFilterCampus, transferFilterLocation, transferFilterCategory, assetItemName]);
+  const transferFilteredAssets = useMemo(() => {
+    let list = transferRecordAssets;
+    if (transferFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === transferFilterCampus);
+    }
+    if (transferFilterLocation !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === transferFilterLocation);
+    }
+    if (transferFilterCategory !== "ALL") {
+      list = list.filter((a) => a.category === transferFilterCategory);
+    }
+    if (transferFilterName !== "ALL") {
+      list = list.filter((a) => assetItemName(a.category, a.type, a.pcType || "") === transferFilterName);
+    }
+    return list;
+  }, [
+    transferRecordAssets,
+    transferFilterCampus,
+    transferFilterLocation,
+    transferFilterCategory,
+    transferFilterName,
+    assetItemName,
+  ]);
   const maintenanceRecordAssetPool = useMemo(() => {
     return (campusFilter === "ALL" ? assets : assets.filter((a) => a.campus === campusFilter)).sort((a, b) =>
       a.assetId.localeCompare(b.assetId)
@@ -7439,6 +8149,75 @@ export default function App() {
       return a.assetId.localeCompare(b.assetId);
     });
   }, [assets, assetItemName]);
+  const scheduleQuickSelectedAsset = useMemo(
+    () => assets.find((a) => String(a.id) === scheduleQuickForm.assetId) || null,
+    [assets, scheduleQuickForm.assetId]
+  );
+  const scheduleQuickFilterCampusOptions = useMemo(
+    () => Array.from(new Set(scheduleSelectAssets.map((a) => a.campus).filter(Boolean))).sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
+    [scheduleSelectAssets, campusLabel]
+  );
+  const scheduleQuickFilterLocationOptions = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleQuickFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleQuickFilterCampus);
+    }
+    return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [scheduleSelectAssets, scheduleQuickFilterCampus]);
+  const scheduleQuickFilterCategoryOptions = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleQuickFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleQuickFilterCampus);
+    }
+    if (scheduleQuickFilterLocation !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === scheduleQuickFilterLocation);
+    }
+    return Array.from(new Set(list.map((a) => a.category).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [scheduleSelectAssets, scheduleQuickFilterCampus, scheduleQuickFilterLocation]);
+  const scheduleQuickFilterNameOptions = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleQuickFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleQuickFilterCampus);
+    }
+    if (scheduleQuickFilterLocation !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === scheduleQuickFilterLocation);
+    }
+    if (scheduleQuickFilterCategory !== "ALL") {
+      list = list.filter((a) => a.category === scheduleQuickFilterCategory);
+    }
+    return Array.from(new Set(list.map((a) => assetItemName(a.category, a.type, a.pcType || "")).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [
+    scheduleSelectAssets,
+    scheduleQuickFilterCampus,
+    scheduleQuickFilterLocation,
+    scheduleQuickFilterCategory,
+    assetItemName,
+  ]);
+  const scheduleQuickFilteredAssets = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleQuickFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleQuickFilterCampus);
+    }
+    if (scheduleQuickFilterLocation !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === scheduleQuickFilterLocation);
+    }
+    if (scheduleQuickFilterCategory !== "ALL") {
+      list = list.filter((a) => a.category === scheduleQuickFilterCategory);
+    }
+    if (scheduleQuickFilterName !== "ALL") {
+      list = list.filter((a) => assetItemName(a.category, a.type, a.pcType || "") === scheduleQuickFilterName);
+    }
+    return list;
+  }, [
+    scheduleSelectAssets,
+    scheduleQuickFilterCampus,
+    scheduleQuickFilterLocation,
+    scheduleQuickFilterCategory,
+    scheduleQuickFilterName,
+    assetItemName,
+  ]);
   const allMaintenanceRows = useMemo(() => {
     const rows: Array<{
       rowId: string;
@@ -7537,6 +8316,43 @@ export default function App() {
 
     return rows;
   }, [filteredMaintenanceRows, maintenanceSort]);
+  const latestMaintenanceRows = useMemo(
+    () => allMaintenanceRows.slice(0, 5),
+    [allMaintenanceRows]
+  );
+  const latestMaintenanceDetailRow = useMemo(
+    () => latestMaintenanceRows.find((row) => row.rowId === latestMaintenanceDetailRowId) || null,
+    [latestMaintenanceRows, latestMaintenanceDetailRowId]
+  );
+  const maintenanceTypeReportRows = useMemo(() => {
+    const map = new Map<string, { type: string; done: number; notYet: number; total: number }>();
+    for (const row of allMaintenanceRows) {
+      const type = String(row.type || "-");
+      if (!map.has(type)) map.set(type, { type, done: 0, notYet: 0, total: 0 });
+      const item = map.get(type)!;
+      item.total += 1;
+      if (String(row.completion || "").trim().toLowerCase() === "done") item.done += 1;
+      else item.notYet += 1;
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total || a.type.localeCompare(b.type));
+  }, [allMaintenanceRows]);
+  const maintenanceCompletionByCampusRows = useMemo(() => {
+    const map = new Map<string, { campus: string; done: number; notYet: number; total: number }>();
+    for (const row of allMaintenanceRows) {
+      const campus = String(row.campus || "-");
+      if (!map.has(campus)) map.set(campus, { campus, done: 0, notYet: 0, total: 0 });
+      const item = map.get(campus)!;
+      item.total += 1;
+      if (String(row.completion || "").trim().toLowerCase() === "done") item.done += 1;
+      else item.notYet += 1;
+    }
+    return Array.from(map.values())
+      .map((row) => ({
+        ...row,
+        rate: row.total > 0 ? Math.round((row.done / row.total) * 100) : 0,
+      }))
+      .sort((a, b) => b.rate - a.rate || b.total - a.total || a.campus.localeCompare(b.campus));
+  }, [allMaintenanceRows]);
   const allVerificationRows = useMemo(() => {
     const rows: Array<{
       rowId: string;
@@ -7741,6 +8557,65 @@ export default function App() {
     if (!verificationRecordForm.assetId || hasSelectedAsset) return;
     setVerificationRecordForm((f) => ({ ...f, assetId: "" }));
   }, [verificationRecordForm.assetId, verificationRecordFilteredAssets]);
+  useEffect(() => {
+    if (transferFilterCampus === "ALL") return;
+    if (!transferFilterCampusOptions.includes(transferFilterCampus)) {
+      setTransferFilterCampus("ALL");
+    }
+  }, [transferFilterCampus, transferFilterCampusOptions]);
+  useEffect(() => {
+    if (transferFilterLocation === "ALL") return;
+    if (!transferFilterLocationOptions.includes(transferFilterLocation)) {
+      setTransferFilterLocation("ALL");
+    }
+  }, [transferFilterLocation, transferFilterLocationOptions]);
+  useEffect(() => {
+    if (transferFilterCategory === "ALL") return;
+    if (!transferFilterCategoryOptions.includes(transferFilterCategory)) {
+      setTransferFilterCategory("ALL");
+    }
+  }, [transferFilterCategory, transferFilterCategoryOptions]);
+  useEffect(() => {
+    if (transferFilterName === "ALL") return;
+    if (!transferFilterNameOptions.includes(transferFilterName)) {
+      setTransferFilterName("ALL");
+    }
+  }, [transferFilterName, transferFilterNameOptions]);
+  useEffect(() => {
+    const hasSelectedAsset = transferFilteredAssets.some((a) => String(a.id) === transferForm.assetId);
+    if (!transferForm.assetId || hasSelectedAsset) return;
+    setTransferForm((f) => ({ ...f, assetId: "" }));
+    setShowTransferAssetPicker(true);
+  }, [transferForm.assetId, transferFilteredAssets]);
+  useEffect(() => {
+    if (scheduleQuickFilterCampus === "ALL") return;
+    if (!scheduleQuickFilterCampusOptions.includes(scheduleQuickFilterCampus)) {
+      setScheduleQuickFilterCampus("ALL");
+    }
+  }, [scheduleQuickFilterCampus, scheduleQuickFilterCampusOptions]);
+  useEffect(() => {
+    if (scheduleQuickFilterLocation === "ALL") return;
+    if (!scheduleQuickFilterLocationOptions.includes(scheduleQuickFilterLocation)) {
+      setScheduleQuickFilterLocation("ALL");
+    }
+  }, [scheduleQuickFilterLocation, scheduleQuickFilterLocationOptions]);
+  useEffect(() => {
+    if (scheduleQuickFilterCategory === "ALL") return;
+    if (!scheduleQuickFilterCategoryOptions.includes(scheduleQuickFilterCategory)) {
+      setScheduleQuickFilterCategory("ALL");
+    }
+  }, [scheduleQuickFilterCategory, scheduleQuickFilterCategoryOptions]);
+  useEffect(() => {
+    if (scheduleQuickFilterName === "ALL") return;
+    if (!scheduleQuickFilterNameOptions.includes(scheduleQuickFilterName)) {
+      setScheduleQuickFilterName("ALL");
+    }
+  }, [scheduleQuickFilterName, scheduleQuickFilterNameOptions]);
+  useEffect(() => {
+    const hasSelectedAsset = scheduleQuickFilteredAssets.some((a) => String(a.id) === scheduleQuickForm.assetId);
+    if (!scheduleQuickForm.assetId || hasSelectedAsset) return;
+    setScheduleQuickForm((f) => ({ ...f, assetId: "" }));
+  }, [scheduleQuickForm.assetId, scheduleQuickFilteredAssets]);
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     // Prefer current in-memory/server assets, use fallback only to fill missing fields.
@@ -7754,6 +8629,17 @@ export default function App() {
       .filter((a) => a.nextMaintenanceDate)
       .sort((a, b) => (a.nextMaintenanceDate || "").localeCompare(b.nextMaintenanceDate || ""));
   }, [assets, campusFilter]);
+  const scheduleListRows = useMemo(() => {
+    return [...scheduleAssets].sort((a, b) => {
+      const aDate = String(a.nextMaintenanceDate || "");
+      const bDate = String(b.nextMaintenanceDate || "");
+      if (aDate !== bDate) return aDate.localeCompare(bDate);
+      const aName = assetItemName(a.category, a.type, a.pcType || "");
+      const bName = assetItemName(b.category, b.type, b.pcType || "");
+      if (aName !== bName) return aName.localeCompare(bName);
+      return a.assetId.localeCompare(b.assetId);
+    });
+  }, [scheduleAssets, assetItemName]);
   const scheduleByDate = useMemo(() => {
     const gridStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
     gridStart.setDate(gridStart.getDate() - gridStart.getDay());
@@ -7798,6 +8684,19 @@ export default function App() {
     const today = toYmd(new Date());
     return scheduleAssets.filter((a) => (a.nextMaintenanceDate || "") < today);
   }, [scheduleAssets]);
+  const maintenanceDashboardSummary = useMemo(() => {
+    const total = allMaintenanceRows.length;
+    const done = allMaintenanceRows.filter((row) => String(row.completion || "").trim().toLowerCase() === "done").length;
+    const notYet = total - done;
+    return {
+      overdue: overdueScheduleAssets.length,
+      upcoming: upcomingScheduleAssets.length,
+      scheduled: scheduleAssets.length,
+      done,
+      notYet,
+      total,
+    };
+  }, [allMaintenanceRows, overdueScheduleAssets.length, upcomingScheduleAssets.length, scheduleAssets.length]);
   const maintenanceDoneToday = useMemo(() => {
     const today = toYmd(new Date());
     let count = 0;
@@ -7858,7 +8757,7 @@ export default function App() {
         holidayType: holiday.type,
       };
     });
-  }, [calendarMonth, scheduleByDate]);
+  }, [calendarMonth, scheduleByDate, getHolidayEvent]);
   const selectedDateItems = useMemo(
     () => scheduleByDate.get(selectedCalendarDate) || [],
     [scheduleByDate, selectedCalendarDate]
@@ -7937,6 +8836,53 @@ export default function App() {
       tickets: [] as Ticket[],
     };
   }, [overviewModal, assets, tickets]);
+  const maintenanceDashboardModalData = useMemo(() => {
+    if (maintenanceDashboardModal === "overdue") {
+      return {
+        title: lang === "km" ? "លើសកាលកំណត់" : "Overdue",
+        mode: "assets" as const,
+        assets: overdueScheduleAssets,
+        rows: [] as typeof allMaintenanceRows,
+      };
+    }
+    if (maintenanceDashboardModal === "upcoming") {
+      return {
+        title: lang === "km" ? "7 ថ្ងៃបន្ទាប់" : "Next 7 Days",
+        mode: "assets" as const,
+        assets: upcomingScheduleAssets,
+        rows: [] as typeof allMaintenanceRows,
+      };
+    }
+    if (maintenanceDashboardModal === "scheduled") {
+      return {
+        title: lang === "km" ? "កាលវិភាគសរុប" : "Scheduled",
+        mode: "assets" as const,
+        assets: scheduleAssets,
+        rows: [] as typeof allMaintenanceRows,
+      };
+    }
+    if (maintenanceDashboardModal === "done") {
+      return {
+        title: lang === "km" ? "កំណត់ត្រា Done" : "Done Records",
+        mode: "rows" as const,
+        assets: [] as Asset[],
+        rows: allMaintenanceRows.filter((row) => String(row.completion || "").trim().toLowerCase() === "done"),
+      };
+    }
+    return {
+      title: "",
+      mode: "assets" as const,
+      assets: [] as Asset[],
+      rows: [] as typeof allMaintenanceRows,
+    };
+  }, [
+    maintenanceDashboardModal,
+    lang,
+    overdueScheduleAssets,
+    upcomingScheduleAssets,
+    scheduleAssets,
+    allMaintenanceRows,
+  ]);
 
   function toggleMaintenanceSort(key: MaintenanceSortKey) {
     setMaintenanceSort((prev) => {
@@ -7991,6 +8937,7 @@ export default function App() {
         ...f,
         assetId: String(first.id),
         toCampus: first.campus,
+        toAssignedTo: first.assignedTo || "",
       }));
     }
   }, [assets, transferForm.assetId]);
@@ -8012,12 +8959,21 @@ export default function App() {
       fromLocation: string;
       toCampus: string;
       toLocation: string;
+      fromUser: string;
+      toUser: string;
+      responsibilityAck: string;
       by: string;
       reason: string;
       note: string;
     }> = [];
     for (const asset of sourceAssets) {
       for (const entry of asset.transferHistory || []) {
+        const matchedCustody = (asset.custodyHistory || []).find(
+          (row) =>
+            String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
+            String(row.toCampus || "") === String(entry.toCampus || "") &&
+            String(row.toLocation || "") === String(entry.toLocation || "")
+        );
         rows.push({
           rowId: `${asset.id}-${entry.id}`,
           assetId: asset.assetId,
@@ -8026,6 +8982,9 @@ export default function App() {
           fromLocation: entry.fromLocation || "",
           toCampus: entry.toCampus || "",
           toLocation: entry.toLocation || "",
+          fromUser: matchedCustody?.fromUser || "",
+          toUser: matchedCustody?.toUser || "",
+          responsibilityAck: matchedCustody?.responsibilityAck ? "Yes" : "No",
           by: entry.by || "",
           reason: entry.reason || "",
           note: entry.note || "",
@@ -8034,6 +8993,29 @@ export default function App() {
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date));
   }, [assets]);
+  const staffBorrowingRows = useMemo(() => {
+    return assets
+      .filter((asset) => String(asset.assignedTo || "").trim())
+      .map((asset) => {
+        const latestCustody = [...(asset.custodyHistory || [])].sort((a, b) =>
+          String(b.date || "").localeCompare(String(a.date || ""))
+        )[0];
+        return {
+          assetDbId: asset.id,
+          assetId: asset.assetId,
+          assetPhoto: asset.photo || "",
+          itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+          campus: asset.campus,
+          location: asset.location || "-",
+          assignedTo: String(asset.assignedTo || "").trim(),
+          sinceDate: latestCustody?.date || asset.created || "",
+          lastAction: latestCustody?.action || "ASSIGN",
+          responsibilityAck: latestCustody?.responsibilityAck ? "Yes" : "No",
+          note: latestCustody?.note || "",
+        };
+      })
+      .sort((a, b) => a.assignedTo.localeCompare(b.assignedTo) || a.assetId.localeCompare(b.assetId));
+  }, [assets, assetItemName]);
 
   const maintenanceCompletionRows = useMemo(() => {
     return allMaintenanceRows.filter((row) => {
@@ -8436,6 +9418,7 @@ export default function App() {
               { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
               { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
               { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
+              { value: "staff_borrowing" as ReportType, label: "បញ្ជីខ្ចីឧបករណ៍បុគ្គលិក" },
               { value: "maintenance_completion" as ReportType, label: "លទ្ធផលបញ្ចប់ការថែទាំ" },
               { value: "verification_summary" as ReportType, label: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
               { value: "qr_labels" as ReportType, label: "លេខទ្រព្យ + QR" },
@@ -8446,6 +9429,7 @@ export default function App() {
               { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
               { value: "overdue" as ReportType, label: "Overdue Maintenance" },
               { value: "transfer" as ReportType, label: "Asset Transfer Log" },
+              { value: "staff_borrowing" as ReportType, label: "Staff Borrowing List" },
               { value: "maintenance_completion" as ReportType, label: "Maintenance Completion" },
               { value: "verification_summary" as ReportType, label: "Verification Summary" },
               { value: "qr_labels" as ReportType, label: "Asset ID + QR Labels" },
@@ -8465,6 +9449,7 @@ export default function App() {
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
+            staff_borrowing: "ទ្រព្យដែលកំពុងចាត់តាំងឱ្យបុគ្គលិក និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
             maintenance_completion: "តាមដានលទ្ធផលថែទាំក្នុងចន្លោះកាលបរិច្ឆេទ។",
             verification_summary: "សង្ខេបលទ្ធផលត្រួតពិនិត្យតាមខែ ឬត្រីមាស។",
             qr_labels: "បោះពុម្ពស្លាក QR សម្រាប់ទ្រព្យសម្បត្តិ។",
@@ -8475,6 +9460,7 @@ export default function App() {
             asset_by_location: "Summary count by campus and location.",
             overdue: "Show assets that are overdue for maintenance.",
             transfer: "Transfer history between campuses and locations.",
+            staff_borrowing: "Assets currently assigned to staff with accountability records.",
             maintenance_completion: "Maintenance completion records in selected date range.",
             verification_summary: "Verification summary by month or term.",
             qr_labels: "Print QR labels for selected assets.",
@@ -8584,39 +9570,69 @@ export default function App() {
       return prev.filter((item) => qrItemFilterOptions.includes(item));
     });
   }, [qrItemFilterOptions]);
+  const quickCountCampusFilterOptions = useMemo(
+    () => [...CAMPUS_LIST].sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
+    [campusLabel]
+  );
+  const quickCountCategoryFilterOptions = useMemo(
+    () => CATEGORY_OPTIONS.map((item) => item.value),
+    []
+  );
+  const quickCountStatusFilterOptions = useMemo(
+    () => ASSET_STATUS_OPTIONS.map((item) => item.value),
+    []
+  );
   const quickCountLocationOptions = useMemo(() => {
     let list = [...assets];
-    if (quickCountCampus !== "ALL") list = list.filter((asset) => asset.campus === quickCountCampus);
-    if (quickCountCategoryFilter !== "ALL") list = list.filter((asset) => asset.category === quickCountCategoryFilter);
-    if (quickCountStatusFilter !== "ALL") {
+    if (!quickCountCampusFilter.includes("ALL")) {
+      list = list.filter((asset) => quickCountCampusFilter.includes(asset.campus));
+    }
+    if (!quickCountCategoryFilter.includes("ALL")) {
+      list = list.filter((asset) => quickCountCategoryFilter.includes(asset.category));
+    }
+    if (!quickCountStatusFilter.includes("ALL")) {
       list = list.filter(
-        (asset) => String(asset.status || "Active").trim().toLowerCase() === quickCountStatusFilter.toLowerCase()
+        (asset) =>
+          quickCountStatusFilter.some(
+            (status) => String(asset.status || "Active").trim().toLowerCase() === status.toLowerCase()
+          )
       );
     }
     return Array.from(new Set(list.map((asset) => String(asset.location || "").trim()).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
-  }, [assets, quickCountCampus, quickCountCategoryFilter, quickCountStatusFilter]);
+  }, [assets, quickCountCampusFilter, quickCountCategoryFilter, quickCountStatusFilter]);
   useEffect(() => {
-    if (quickCountLocationFilter === "ALL") return;
-    if (!quickCountLocationOptions.includes(quickCountLocationFilter)) {
-      setQuickCountLocationFilter("ALL");
-    }
+    setQuickCountLocationFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const next = prev.filter((location) => quickCountLocationOptions.includes(location));
+      if (next.length === prev.length && next.every((value, index) => value === prev[index])) {
+        return prev;
+      }
+      return next.length ? next : ["ALL"];
+    });
   }, [quickCountLocationFilter, quickCountLocationOptions]);
   const quickCountBaseAssets = useMemo(() => {
     let list = [...assets];
-    if (quickCountCampus !== "ALL") list = list.filter((asset) => asset.campus === quickCountCampus);
-    if (quickCountCategoryFilter !== "ALL") list = list.filter((asset) => asset.category === quickCountCategoryFilter);
-    if (quickCountLocationFilter !== "ALL") {
-      list = list.filter((asset) => String(asset.location || "").trim() === quickCountLocationFilter);
+    if (!quickCountCampusFilter.includes("ALL")) {
+      list = list.filter((asset) => quickCountCampusFilter.includes(asset.campus));
     }
-    if (quickCountStatusFilter !== "ALL") {
+    if (!quickCountCategoryFilter.includes("ALL")) {
+      list = list.filter((asset) => quickCountCategoryFilter.includes(asset.category));
+    }
+    if (!quickCountLocationFilter.includes("ALL")) {
+      list = list.filter((asset) => quickCountLocationFilter.includes(String(asset.location || "").trim()));
+    }
+    if (!quickCountStatusFilter.includes("ALL")) {
       list = list.filter(
-        (asset) => String(asset.status || "Active").trim().toLowerCase() === quickCountStatusFilter.toLowerCase()
+        (asset) =>
+          quickCountStatusFilter.some(
+            (status) => String(asset.status || "Active").trim().toLowerCase() === status.toLowerCase()
+          )
       );
     }
     return list;
-  }, [assets, quickCountCampus, quickCountCategoryFilter, quickCountLocationFilter, quickCountStatusFilter]);
+  }, [assets, quickCountCampusFilter, quickCountCategoryFilter, quickCountLocationFilter, quickCountStatusFilter]);
   const quickCountRows = useMemo(() => {
     const map = new Map<string, { category: string; itemName: string; count: number }>();
     for (const asset of quickCountBaseAssets) {
@@ -8770,38 +9786,183 @@ export default function App() {
         {isVisible ? (
           <>
             <div className="report-quick-count-controls">
-              <select className="input" value={quickCountCampus} onChange={(e) => setQuickCountCampus(e.target.value)}>
-                <option value="ALL">{t.allCampuses}</option>
-                {CAMPUS_LIST.map((campus) => (
-                  <option key={`quick-count-campus-${campus}`} value={campus}>
-                    {campusLabel(campus)}
-                  </option>
-                ))}
-              </select>
-              <select className="input" value={quickCountCategoryFilter} onChange={(e) => setQuickCountCategoryFilter(e.target.value)}>
-                <option value="ALL">{t.allCategories}</option>
-                {CATEGORY_OPTIONS.map((cat) => (
-                  <option key={`quick-count-category-${cat.value}`} value={cat.value}>
-                    {lang === "km" ? cat.km : cat.en}
-                  </option>
-                ))}
-              </select>
-              <select className="input" value={quickCountLocationFilter} onChange={(e) => setQuickCountLocationFilter(e.target.value)}>
-                <option value="ALL">{lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}</option>
-                {quickCountLocationOptions.map((location) => (
-                  <option key={`quick-count-location-${location}`} value={location}>
-                    {location}
-                  </option>
-                ))}
-              </select>
-              <select className="input" value={quickCountStatusFilter} onChange={(e) => setQuickCountStatusFilter(e.target.value)}>
-                <option value="ALL">{lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}</option>
-                {ASSET_STATUS_OPTIONS.map((status) => (
-                  <option key={`quick-count-status-${status.value}`} value={status.value}>
-                    {lang === "km" ? status.km : status.en}
-                  </option>
-                ))}
-              </select>
+              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                <summary>{summarizeMultiFilter(quickCountCampusFilter, t.allCampuses, campusLabel)}</summary>
+                <div className="filter-menu-list">
+                  <label className="filter-menu-item">
+                    <input
+                      type="checkbox"
+                      checked={quickCountCampusFilter.includes("ALL")}
+                      onChange={(e) =>
+                        setQuickCountCampusFilter((prev) =>
+                          applyMultiFilterSelection(
+                            prev,
+                            e.target.checked,
+                            "ALL",
+                            quickCountCampusFilterOptions
+                          )
+                        )
+                      }
+                    />
+                    {t.allCampuses}
+                  </label>
+                  {quickCountCampusFilterOptions.map((campus) => (
+                    <label key={`quick-campus-${campus}`} className="filter-menu-item">
+                      <input
+                        type="checkbox"
+                        checked={quickCountCampusFilter.includes(campus)}
+                        onChange={(e) =>
+                          setQuickCountCampusFilter((prev) =>
+                            applyMultiFilterSelection(
+                              prev,
+                              e.target.checked,
+                              campus,
+                              quickCountCampusFilterOptions
+                            )
+                          )
+                        }
+                      />
+                      {campusLabel(campus)}
+                    </label>
+                  ))}
+                </div>
+              </details>
+              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                <summary>{summarizeMultiFilter(quickCountLocationFilter, lang === "km" ? "គ្រប់ទីតាំង" : "All Locations")}</summary>
+                <div className="filter-menu-list">
+                  <label className="filter-menu-item">
+                    <input
+                      type="checkbox"
+                      checked={quickCountLocationFilter.includes("ALL")}
+                      onChange={(e) =>
+                        setQuickCountLocationFilter((prev) =>
+                          applyMultiFilterSelection(
+                            prev,
+                            e.target.checked,
+                            "ALL",
+                            quickCountLocationOptions
+                          )
+                        )
+                      }
+                    />
+                    {lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
+                  </label>
+                  {quickCountLocationOptions.map((location) => (
+                    <label key={`quick-location-${location}`} className="filter-menu-item">
+                      <input
+                        type="checkbox"
+                        checked={quickCountLocationFilter.includes(location)}
+                        onChange={(e) =>
+                          setQuickCountLocationFilter((prev) =>
+                            applyMultiFilterSelection(
+                              prev,
+                              e.target.checked,
+                              location,
+                              quickCountLocationOptions
+                            )
+                          )
+                        }
+                      />
+                      {location}
+                    </label>
+                  ))}
+                </div>
+              </details>
+              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                <summary>
+                  {summarizeMultiFilter(quickCountCategoryFilter, t.allCategories, (value) => {
+                    const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+                    return row ? (lang === "km" ? row.km : row.en) : value;
+                  })}
+                </summary>
+                <div className="filter-menu-list">
+                  <label className="filter-menu-item">
+                    <input
+                      type="checkbox"
+                      checked={quickCountCategoryFilter.includes("ALL")}
+                      onChange={(e) =>
+                        setQuickCountCategoryFilter((prev) =>
+                          applyMultiFilterSelection(
+                            prev,
+                            e.target.checked,
+                            "ALL",
+                            quickCountCategoryFilterOptions
+                          )
+                        )
+                      }
+                    />
+                    {t.allCategories}
+                  </label>
+                  {quickCountCategoryFilterOptions.map((category) => (
+                    <label key={`quick-category-${category}`} className="filter-menu-item">
+                      <input
+                        type="checkbox"
+                        checked={quickCountCategoryFilter.includes(category)}
+                        onChange={(e) =>
+                          setQuickCountCategoryFilter((prev) =>
+                            applyMultiFilterSelection(
+                              prev,
+                              e.target.checked,
+                              category,
+                              quickCountCategoryFilterOptions
+                            )
+                          )
+                        }
+                      />
+                      {lang === "km"
+                        ? CATEGORY_OPTIONS.find((item) => item.value === category)?.km || category
+                        : CATEGORY_OPTIONS.find((item) => item.value === category)?.en || category}
+                    </label>
+                  ))}
+                </div>
+              </details>
+              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                <summary>
+                  {summarizeMultiFilter(
+                    quickCountStatusFilter,
+                    lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status",
+                    (value) => assetStatusLabel(value)
+                  )}
+                </summary>
+                <div className="filter-menu-list">
+                  <label className="filter-menu-item">
+                    <input
+                      type="checkbox"
+                      checked={quickCountStatusFilter.includes("ALL")}
+                      onChange={(e) =>
+                        setQuickCountStatusFilter((prev) =>
+                          applyMultiFilterSelection(
+                            prev,
+                            e.target.checked,
+                            "ALL",
+                            quickCountStatusFilterOptions
+                          )
+                        )
+                      }
+                    />
+                    {lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}
+                  </label>
+                  {quickCountStatusFilterOptions.map((status) => (
+                    <label key={`quick-status-${status}`} className="filter-menu-item">
+                      <input
+                        type="checkbox"
+                        checked={quickCountStatusFilter.includes(status)}
+                        onChange={(e) =>
+                          setQuickCountStatusFilter((prev) =>
+                            applyMultiFilterSelection(
+                              prev,
+                              e.target.checked,
+                              status,
+                              quickCountStatusFilterOptions
+                            )
+                          )
+                        }
+                      />
+                      {assetStatusLabel(status)}
+                    </label>
+                  ))}
+                </div>
+              </details>
               <input
                 className="input report-quick-search"
                 value={quickCountQuery}
@@ -8863,7 +10024,7 @@ export default function App() {
                           className="report-quick-count-item report-quick-count-item-btn"
                           onClick={() =>
                             openQuickCountAssetsModal(
-                              `${row.itemName} - ${quickCountCampus === "ALL" ? t.allCampuses : campusLabel(quickCountCampus)}`,
+                              `${row.itemName} - ${quickCountCampusFilter.includes("ALL") ? t.allCampuses : `${quickCountCampusFilter.length} campuses`}`,
                               quickCountBaseAssets.filter(
                                 (asset) =>
                                   asset.category === row.category &&
@@ -9146,7 +10307,7 @@ export default function App() {
       ]);
     } else if (reportType === "transfer") {
       title = "Asset Transfer Log Report";
-      columns = ["Date", "Asset ID", "From Campus", "From Location", "To Campus", "To Location", "By", "Reason"];
+      columns = ["Date", "Asset ID", "From Campus", "From Location", "To Campus", "To Location", "From Staff", "To Staff", "Ack", "By", "Reason"];
       rows = allTransferRows.map((r) => [
         r.date ? formatDate(r.date) : "-",
         r.assetId,
@@ -9154,8 +10315,26 @@ export default function App() {
         r.fromLocation || "-",
         campusLabel(r.toCampus),
         r.toLocation || "-",
+        r.fromUser || "-",
+        r.toUser || "-",
+        r.responsibilityAck,
         r.by || "-",
         r.reason || "-",
+      ]);
+    } else if (reportType === "staff_borrowing") {
+      title = "Staff Borrowing List Report";
+      columns = ["Asset ID", "Photo", "Item", "Campus", "Location", "Assigned To", "Since", "Ack", "Last Action", "Note"];
+      rows = staffBorrowingRows.map((r) => [
+        r.assetId,
+        toPrintablePhotoUrl(r.assetPhoto || ""),
+        r.itemName || "-",
+        campusLabel(r.campus),
+        r.location || "-",
+        r.assignedTo || "-",
+        formatDate(r.sinceDate || "-"),
+        r.responsibilityAck,
+        r.lastAction || "-",
+        r.note || "-",
       ]);
     } else if (reportType === "maintenance_completion") {
       title = `Maintenance Completion Report (${maintenanceCompletionRangeLabel})`;
@@ -9250,6 +10429,8 @@ export default function App() {
         ? `<p><strong>Total:</strong> ${verificationSummary.total} | <strong>Verified:</strong> ${verificationSummary.verified} | <strong>Issue Found:</strong> ${verificationSummary.issue} | <strong>Missing:</strong> ${verificationSummary.missing}</p>`
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
+        : reportType === "staff_borrowing"
+        ? `<p><strong>Borrowed / Assigned Assets:</strong> ${staffBorrowingRows.length}</p>`
         : reportType === "asset_master"
         ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>`
         : reportType === "set_code"
@@ -9541,6 +10722,10 @@ export default function App() {
       setPublicQrRecordError("Date, type, and note are required.");
       return;
     }
+    if (publicQrRecordForm.date < todayYmd) {
+      setPublicQrRecordError("Cannot set maintenance date to a past date.");
+      return;
+    }
     setPublicQrRecordBusy(true);
     setPublicQrRecordError("");
     setPublicQrRecordMessage("");
@@ -9654,6 +10839,7 @@ export default function App() {
                         <input
                           className="input"
                           type="date"
+                          min={todayYmd}
                           value={publicQrRecordForm.date}
                           onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, date: e.target.value }))}
                         />
@@ -10498,7 +11684,7 @@ export default function App() {
                       {calendarGridDays.map((d) => (
                         <button
                           key={`dash-cal-day-${d.ymd}`}
-                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
+                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
                           onClick={() => {
                             setSelectedCalendarDate(d.ymd);
                             if (d.hasItems) {
@@ -10618,7 +11804,7 @@ export default function App() {
                       {calendarGridDays.map((d) => (
                         <button
                           key={`dash-cal-day-${d.ymd}`}
-                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
+                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
                           onClick={() => {
                             setSelectedCalendarDate(d.ymd);
                             if (d.hasItems) {
@@ -11440,6 +12626,47 @@ export default function App() {
                     </div>
                   </details>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                    <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetLocationMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetLocationMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetLocationFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        All Locations
+                      </label>
+                      {assetLocationFilterOptions.map((location) => (
+                        <label key={`asset-location-filter-${location}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetLocationMultiFilter.includes(location)}
+                            onChange={(e) =>
+                              setAssetLocationMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  location,
+                                  assetLocationFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          {location}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>
                       {summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
                         const row = CATEGORY_OPTIONS.find((option) => option.value === value);
@@ -11531,51 +12758,10 @@ export default function App() {
                       ))}
                     </div>
                   </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetLocationMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetLocationMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetLocationFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        All Locations
-                      </label>
-                      {assetLocationFilterOptions.map((location) => (
-                        <label key={`asset-location-filter-${location}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetLocationMultiFilter.includes(location)}
-                            onChange={(e) =>
-                              setAssetLocationMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  location,
-                                  assetLocationFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          {location}
-                        </label>
-                      ))}
-                    </div>
-                  </details>
-                  <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
                   <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
+                  <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
                 </div>
 
                 {isPhoneView ? (
@@ -11876,26 +13062,76 @@ export default function App() {
                           <th>From Location</th>
                           <th>To Campus</th>
                           <th>To Location</th>
+                          <th>From Staff</th>
+                          <th>To Staff</th>
+                          <th>Ack</th>
                           <th>Reason</th>
                           <th>By</th>
                         </tr>
                       </thead>
                       <tbody>
                         {detailTransferEntries.length ? (
-                          detailTransferEntries.map((h) => (
+                          detailTransferEntries.map((h) => {
+                            const custody = detailCustodyEntries.find(
+                              (entry) =>
+                                String(entry.date || "").slice(0, 10) === String(h.date || "").slice(0, 10) &&
+                                String(entry.toCampus || "") === String(h.toCampus || "") &&
+                                String(entry.toLocation || "") === String(h.toLocation || "")
+                            );
+                            return (
                             <tr key={`detail-transfer-${h.id}`}>
                               <td>{formatDate(h.date)}</td>
                               <td>{campusLabel(h.fromCampus)}</td>
                               <td>{h.fromLocation || "-"}</td>
                               <td>{campusLabel(h.toCampus)}</td>
                               <td>{h.toLocation || "-"}</td>
+                              <td>{custody?.fromUser || "-"}</td>
+                              <td>{custody?.toUser || "-"}</td>
+                              <td>{custody?.responsibilityAck ? "Yes" : "No"}</td>
                               <td>{h.reason || "-"}</td>
                               <td>{h.by || "-"}</td>
+                            </tr>
+                          );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={10}>No transfer history yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <h3 className="section-title">Custody History</h3>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Action</th>
+                          <th>From User</th>
+                          <th>To User</th>
+                          <th>Ack</th>
+                          <th>By</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailCustodyEntries.length ? (
+                          detailCustodyEntries.map((h) => (
+                            <tr key={`detail-custody-${h.id}`}>
+                              <td>{formatDate(h.date)}</td>
+                              <td>{h.action || "-"}</td>
+                              <td>{h.fromUser || "-"}</td>
+                              <td>{h.toUser || "-"}</td>
+                              <td>{h.responsibilityAck ? "Yes" : "No"}</td>
+                              <td>{h.by || "-"}</td>
+                              <td>{h.note || "-"}</td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={7}>No transfer history yet.</td>
+                            <td colSpan={7}>No custody history yet.</td>
                           </tr>
                         )}
                       </tbody>
@@ -12380,6 +13616,7 @@ export default function App() {
                       <input
                         type="date"
                         className="input"
+                        min={todayYmd}
                         value={maintenanceRecordForm.date}
                         onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, date: e.target.value }))}
                       />
@@ -13445,6 +14682,12 @@ export default function App() {
           <section className="panel">
             <div className="row-actions" style={{ marginBottom: 12 }}>
               <button
+                className={`tab ${scheduleView === "calendar" ? "tab-active" : ""}`}
+                onClick={() => setScheduleView("calendar")}
+              >
+                Eco Calendar View
+              </button>
+              <button
                 className={`tab ${scheduleView === "bulk" ? "tab-active" : ""}`}
                 onClick={() => setScheduleView("bulk")}
               >
@@ -13455,12 +14698,6 @@ export default function App() {
                 onClick={() => setScheduleView("single")}
               >
                 By Asset
-              </button>
-              <button
-                className={`tab ${scheduleView === "calendar" ? "tab-active" : ""}`}
-                onClick={() => setScheduleView("calendar")}
-              >
-                Eco Calendar View
               </button>
             </div>
 
@@ -13520,6 +14757,7 @@ export default function App() {
                 <input
                   type="date"
                   className="input"
+                  min={todayYmd}
                   value={bulkScheduleForm.date}
                   onChange={(e) => setBulkScheduleForm((f) => ({ ...f, date: e.target.value }))}
                   disabled={bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY"}
@@ -13538,7 +14776,9 @@ export default function App() {
                   }
                 >
                   <option value="NONE">No repeat (one date)</option>
-                  <option value="MONTHLY_WEEKDAY">Every month by week + weekday</option>
+                  <option value="MONTHLY_WEEKDAY">
+                    {monthlyRepeatLabel(bulkScheduleForm.repeatWeekOfMonth, bulkScheduleForm.repeatWeekday)}
+                  </option>
                 </select>
               </label>
               <label className="field">
@@ -13631,6 +14871,7 @@ export default function App() {
                 <input
                   type="date"
                   className="input"
+                  min={todayYmd}
                   value={scheduleForm.date}
                   onChange={(e) => setScheduleForm((f) => ({ ...f, date: e.target.value }))}
                   disabled={scheduleForm.repeatMode === "MONTHLY_WEEKDAY"}
@@ -13649,7 +14890,9 @@ export default function App() {
                   }
                 >
                   <option value="NONE">No repeat (one date)</option>
-                  <option value="MONTHLY_WEEKDAY">Every month by week + weekday</option>
+                  <option value="MONTHLY_WEEKDAY">
+                    {monthlyRepeatLabel(scheduleForm.repeatWeekOfMonth, scheduleForm.repeatWeekday)}
+                  </option>
                 </select>
               </label>
               <label className="field">
@@ -13719,6 +14962,7 @@ export default function App() {
             {scheduleView === "calendar" && (
               <>
             <h3 className="section-title">Interactive Maintenance Calendar</h3>
+            <p className="tiny">{lang === "km" ? "ចុចថ្ងៃណាមួយ ដើម្បីបង្កើតកាលវិភាគបានភ្លាមៗ។" : "Click any day to create schedule directly."}</p>
             <div className="panel">
               <div className="panel-row">
                 <button
@@ -13751,8 +14995,8 @@ export default function App() {
                 {calendarGridDays.map((d) => (
                   <button
                     key={d.ymd}
-                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
-                    onClick={() => setSelectedCalendarDate(d.ymd)}
+                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
+                    onClick={() => openQuickScheduleCreate(d.ymd)}
                   >
                     <span>{d.day}</span>
                     {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
@@ -13827,6 +15071,69 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+              <h4 className="section-title" style={{ marginTop: 12 }}>
+                {lang === "km" ? "បញ្ជីកាលវិភាគទាំងអស់" : "All Scheduled List"}
+              </h4>
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.assetId}</th>
+                      <th>{t.name}</th>
+                      <th>{t.campus}</th>
+                      <th>{t.location}</th>
+                      <th>{t.date}</th>
+                      <th>{lang === "km" ? "របៀប" : "Mode"}</th>
+                      <th>{t.scheduleNote}</th>
+                      <th>{t.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scheduleListRows.length ? (
+                      scheduleListRows.map((asset) => (
+                        <tr key={`schedule-list-row-${asset.id}`}>
+                          <td><strong>{asset.assetId}</strong></td>
+                          <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                          <td>{campusLabel(asset.campus)}</td>
+                          <td>{asset.location || "-"}</td>
+                          <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                          <td>
+                            {asset.repeatMode === "MONTHLY_WEEKDAY"
+                              ? monthlyRepeatLabel(Number(asset.repeatWeekOfMonth || 1), Number(asset.repeatWeekday || 6))
+                              : "Does not repeat"}
+                          </td>
+                          <td>{asset.scheduleNote || "-"}</td>
+                          <td>
+                            <div className="row-actions">
+                              <button
+                                className="tab btn-small"
+                                disabled={!isAdmin}
+                                onClick={() => handleScheduleRowAction(asset, "edit")}
+                              >
+                                {t.edit}
+                              </button>
+                              <button
+                                className="btn-danger"
+                                disabled={!isAdmin || busy}
+                                onClick={() => {
+                                  void handleScheduleRowAction(asset, "delete");
+                                }}
+                                title={t.delete}
+                              >
+                                X
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
               </>
             )}
@@ -13855,22 +15162,99 @@ export default function App() {
             <h3 className="section-title">Asset Transfer</h3>
             <div className="form-grid">
               <label className="field">
+                <span>{t.campus}</span>
+                <select
+                  className="input"
+                  value={transferFilterCampus}
+                  onChange={(e) => {
+                    setTransferFilterCampus(e.target.value);
+                    setTransferFilterLocation("ALL");
+                    setTransferFilterCategory("ALL");
+                    setTransferFilterName("ALL");
+                  }}
+                >
+                  <option value="ALL">{t.allCampuses}</option>
+                  {transferFilterCampusOptions.map((campus) => (
+                    <option key={`transfer-filter-campus-${campus}`} value={campus}>
+                      {campusLabel(campus)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{t.location}</span>
+                <select
+                  className="input"
+                  value={transferFilterLocation}
+                  onChange={(e) => {
+                    setTransferFilterLocation(e.target.value);
+                    setTransferFilterCategory("ALL");
+                    setTransferFilterName("ALL");
+                  }}
+                >
+                  <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
+                  {transferFilterLocationOptions.map((location) => (
+                    <option key={`transfer-filter-location-${location}`} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{t.category}</span>
+                <select
+                  className="input"
+                  value={transferFilterCategory}
+                  onChange={(e) => {
+                    setTransferFilterCategory(e.target.value);
+                    setTransferFilterName("ALL");
+                  }}
+                >
+                  <option value="ALL">{t.allCategories}</option>
+                  {transferFilterCategoryOptions.map((category) => (
+                    <option key={`transfer-filter-category-${category}`} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{t.name}</span>
+                <select
+                  className="input"
+                  value={transferFilterName}
+                  onChange={(e) => setTransferFilterName(e.target.value)}
+                >
+                  <option value="ALL">{lang === "km" ? "ឈ្មោះទាំងអស់" : "All Names"}</option>
+                  {transferFilterNameOptions.map((name) => (
+                    <option key={`transfer-filter-name-${name}`} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
                 <span>Asset</span>
                 {showTransferAssetPicker || !transferAsset ? (
                   <AssetPicker
                     value={transferForm.assetId}
-                    assets={assets}
+                    assets={transferFilteredAssets}
                     getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
                     onChange={(assetId) => {
-                      const asset = assets.find((a) => String(a.id) === assetId);
+                      const asset = transferFilteredAssets.find((a) => String(a.id) === assetId) || assets.find((a) => String(a.id) === assetId);
                       setTransferForm((f) => ({
                         ...f,
                         assetId,
                         toCampus: asset?.campus || f.toCampus,
                         toLocation: asset?.location || "",
+                        toAssignedTo: asset?.assignedTo || "",
+                        responsibilityConfirmed: false,
+                        returnConfirmed: false,
                       }));
                       setShowTransferAssetPicker(false);
                     }}
+                    placeholder={lang === "km" ? "ជ្រើស Asset តាមតម្រង" : "Select filtered asset"}
+                    disabled={!transferFilteredAssets.length}
                   />
                 ) : (
                   <div className="detail-value transfer-selected-value">
@@ -13890,6 +15274,40 @@ export default function App() {
                     </button>
                   </div>
                 )}
+                <div className="tiny">
+                  {transferFilteredAssets.length
+                    ? lang === "km"
+                      ? `${transferFilteredAssets.length} assets ត្រូវតាមតម្រងបច្ចុប្បន្ន`
+                      : `${transferFilteredAssets.length} assets match current filters`
+                    : lang === "km"
+                    ? "មិនមាន assets ត្រូវតាមតម្រងបច្ចុប្បន្ន។"
+                    : "No assets match current filters."}
+                </div>
+              </label>
+              <label className="field field-wide">
+                <span>{lang === "km" ? "រូបភាព Asset ដែលបានជ្រើស" : "Selected Asset Photo"}</span>
+                <div className="transfer-preview">
+                  <div className="transfer-preview-photo">
+                    {transferAsset?.photo ? (
+                      <img src={transferAsset.photo} alt={transferAsset.assetId} className="asset-picker-thumb" />
+                    ) : (
+                      <span className="asset-picker-thumb-empty">-</span>
+                    )}
+                  </div>
+                  <div className="transfer-preview-meta">
+                    <strong>
+                      {transferAsset
+                        ? `${transferAsset.assetId} - ${assetItemName(transferAsset.category, transferAsset.type, transferAsset.pcType || "")}`
+                        : "-"}
+                    </strong>
+                    <span>
+                      {transferAsset
+                        ? `${CAMPUS_CODE[transferAsset.campus] || "CX"} • ${transferAsset.location || "-"}`
+                        : "-"}
+                    </span>
+                    <span>{transferAsset?.assignedTo || "Unassigned / In Stock"}</span>
+                  </div>
+                </div>
               </label>
               <label className="field">
                 <span>Transfer Date</span>
@@ -13907,6 +15325,10 @@ export default function App() {
               <label className="field">
                 <span>From Location</span>
                 <input className="input" value={transferAsset?.location || "-"} readOnly />
+              </label>
+              <label className="field">
+                <span>Current Staff</span>
+                <input className="input" value={transferAsset?.assignedTo || "-"} readOnly />
               </label>
               <label className="field">
                 <span>To Campus</span>
@@ -13942,6 +15364,44 @@ export default function App() {
                 </select>
               </label>
               <label className="field">
+                <span>Assign To Staff</span>
+                <select
+                  className="input"
+                  value={transferForm.toAssignedTo}
+                  onChange={(e) =>
+                    setTransferForm((f) => ({
+                      ...f,
+                      toAssignedTo: e.target.value,
+                      responsibilityConfirmed: false,
+                      returnConfirmed: false,
+                    }))
+                  }
+                >
+                  <option value="">Unassigned / In Stock</option>
+                  {users.map((u) => (
+                    <option key={`transfer-user-${u.id}`} value={u.fullName}>
+                      {u.fullName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field check-field">
+                <span>Staff responsibility confirm</span>
+                <input
+                  type="checkbox"
+                  checked={transferForm.responsibilityConfirmed}
+                  onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
+                />
+              </label>
+              <label className="field check-field">
+                <span>Previous holder returned item</span>
+                <input
+                  type="checkbox"
+                  checked={transferForm.returnConfirmed}
+                  onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
+                />
+              </label>
+              <label className="field">
                 <span>Reason</span>
                 <input
                   className="input"
@@ -13968,7 +15428,7 @@ export default function App() {
               </label>
             </div>
             <div className="asset-actions">
-              <div className="tiny">Transfer updates campus/location and saves transfer history.</div>
+              <div className="tiny">Transfer updates campus/location, assignee, transfer history, and custody accountability log.</div>
               <button
                 className="btn-primary"
                 disabled={busy || !isAdmin || !transferForm.assetId || !transferForm.toCampus || !transferForm.toLocation}
@@ -13995,6 +15455,9 @@ export default function App() {
                     <th>From Location</th>
                     <th>To Campus</th>
                     <th>To Location</th>
+                    <th>From Staff</th>
+                    <th>To Staff</th>
+                    <th>Ack</th>
                     <th>By</th>
                     <th>Reason</th>
                     <th>{t.notes}</th>
@@ -14010,6 +15473,9 @@ export default function App() {
                         <td>{row.fromLocation || "-"}</td>
                         <td>{campusLabel(row.toCampus)}</td>
                         <td>{row.toLocation || "-"}</td>
+                        <td>{row.fromUser || "-"}</td>
+                        <td>{row.toUser || "-"}</td>
+                        <td>{row.responsibilityAck}</td>
                         <td>{row.by || "-"}</td>
                         <td>{row.reason || "-"}</td>
                         <td>{row.note || "-"}</td>
@@ -14017,7 +15483,7 @@ export default function App() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9}>No transfer history yet.</td>
+                      <td colSpan={12}>No transfer history yet.</td>
                     </tr>
                   )}
                 </tbody>
@@ -14032,6 +15498,14 @@ export default function App() {
           <>
           <section className="panel">
             <div className="tabs">
+              {(canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) ? (
+                <button
+                  className={`tab ${maintenanceView === "dashboard" ? "tab-active" : ""}`}
+                  onClick={() => setMaintenanceView("dashboard")}
+                >
+                  {lang === "km" ? "ផ្ទាំងថែទាំ" : "Maintenance Dashboard"}
+                </button>
+              ) : null}
               {canAccessMenu("maintenance.history", "maintenance") ? (
                 <button
                   className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
@@ -14052,6 +15526,184 @@ export default function App() {
                 </button>
               ) : null}
             </div>
+
+            {maintenanceView === "dashboard" && (canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) && (
+            <>
+            <h3 className="section-title">{lang === "km" ? "ផ្ទាំងសង្ខេបថែទាំ" : "Maintenance Dashboard"}</h3>
+            <div className="stats-grid">
+              <button
+                type="button"
+                className={`stat-card stat-card-button ${maintenanceDashboardModal === "overdue" ? "stat-card-selected" : ""}`}
+                onClick={() => setMaintenanceDashboardModal("overdue")}
+              >
+                <div className="stat-label">{lang === "km" ? "លើសកាលកំណត់" : "Overdue"}</div>
+                <div className="stat-value">{maintenanceDashboardSummary.overdue}</div>
+              </button>
+              <button
+                type="button"
+                className={`stat-card stat-card-button ${maintenanceDashboardModal === "upcoming" ? "stat-card-selected" : ""}`}
+                onClick={() => setMaintenanceDashboardModal("upcoming")}
+              >
+                <div className="stat-label">{lang === "km" ? "7 ថ្ងៃបន្ទាប់" : "Next 7 Days"}</div>
+                <div className="stat-value">{maintenanceDashboardSummary.upcoming}</div>
+              </button>
+              <button
+                type="button"
+                className={`stat-card stat-card-button ${maintenanceDashboardModal === "scheduled" ? "stat-card-selected" : ""}`}
+                onClick={() => setMaintenanceDashboardModal("scheduled")}
+              >
+                <div className="stat-label">{lang === "km" ? "កាលវិភាគសរុប" : "Scheduled"}</div>
+                <div className="stat-value">{maintenanceDashboardSummary.scheduled}</div>
+              </button>
+              <button
+                type="button"
+                className={`stat-card stat-card-button ${maintenanceDashboardModal === "done" ? "stat-card-selected" : ""}`}
+                onClick={() => setMaintenanceDashboardModal("done")}
+              >
+                <div className="stat-label">{lang === "km" ? "កំណត់ត្រា Done" : "Done Records"}</div>
+                <div className="stat-value">{maintenanceDashboardSummary.done}</div>
+              </button>
+            </div>
+
+            <div className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-row">
+                <h3 className="section-title">Maintenance Calendar</h3>
+                <div className="row-actions">
+                  <button
+                    className="tab"
+                    onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  >
+                    Prev
+                  </button>
+                  <strong>{calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}</strong>
+                  <button
+                    className="tab"
+                    onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+              <div className="calendar-grid">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
+                  <div key={`maintenance-dashboard-head-${d}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
+                ))}
+                {calendarGridDays.map((d) => (
+                  <button
+                    key={`maintenance-dashboard-day-${d.ymd}`}
+                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
+                    onClick={() => setSelectedCalendarDate(d.ymd)}
+                  >
+                    <span>{d.day}</span>
+                    {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                    {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="panel" style={{ marginTop: 12 }}>
+              <h3 className="section-title">{lang === "km" ? "កំណត់ត្រាថែទាំចុងក្រោយ (5)" : "Latest Maintenance (Last 5)"}</h3>
+              <div className="table-wrap">
+                <table className="latest-maint-table">
+                  <thead>
+                    <tr>
+                      <th>{t.date}</th>
+                      <th>{lang === "km" ? "Asset" : "Asset"}</th>
+                      <th>{lang === "km" ? "Campus Code" : "Campus Code"}</th>
+                      <th>{lang === "km" ? "ប្រភេទថែទាំ" : "Maintenance Type"}</th>
+                      <th>{lang === "km" ? "ការងារធ្វើ" : "Work Detail"}</th>
+                      <th>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latestMaintenanceRows.length ? (
+                      latestMaintenanceRows.map((row) => (
+                        <tr
+                          key={`maintenance-dashboard-latest-${row.rowId}`}
+                          className="latest-maint-row"
+                          onClick={() => setLatestMaintenanceDetailRowId(row.rowId)}
+                        >
+                          <td>{formatDate(row.date || "-")}</td>
+                          <td className="latest-maint-asset-cell">
+                            <strong>{row.assetId}</strong>
+                            <div className="tiny">{assetItemName(row.category, row.assetType || "", "")}</div>
+                          </td>
+                          <td><strong>{CAMPUS_CODE[row.campus] || "CX"}</strong></td>
+                          <td>{row.type || "-"}</td>
+                          <td title={row.note || row.condition || "-"}>
+                            <span className="latest-maint-work">{row.note || row.condition || "-"}</span>
+                          </td>
+                          <td>{row.completion || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6}>No maintenance records yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="panel" style={{ marginTop: 12 }}>
+              <h3 className="section-title">{lang === "km" ? "របាយការណ៍ថែទាំ" : "Maintenance Report"}</h3>
+              <div className="tiny" style={{ marginBottom: 8 }}>
+                {lang === "km"
+                  ? `សរុប: ${maintenanceDashboardSummary.total} | Done: ${maintenanceDashboardSummary.done} | Not Yet: ${maintenanceDashboardSummary.notYet}`
+                  : `Total: ${maintenanceDashboardSummary.total} | Done: ${maintenanceDashboardSummary.done} | Not Yet: ${maintenanceDashboardSummary.notYet}`}
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{lang === "km" ? "ប្រភេទថែទាំ" : "Maintenance Type"}</th>
+                      <th>Done</th>
+                      <th>Not Yet</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {maintenanceTypeReportRows.length ? (
+                      maintenanceTypeReportRows.map((row) => (
+                        <tr key={`maintenance-type-report-${row.type}`}>
+                          <td>{row.type}</td>
+                          <td>{row.done}</td>
+                          <td>{row.notYet}</td>
+                          <td><strong>{row.total}</strong></td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4}>No maintenance report data.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="panel" style={{ marginTop: 12 }}>
+              <h3 className="section-title">{lang === "km" ? "អត្រាបញ្ចប់តាម Campus" : "Maintenance Completion by Campus"}</h3>
+              <div className="maintenance-campus-chart">
+                {maintenanceCompletionByCampusRows.length ? (
+                  maintenanceCompletionByCampusRows.map((row) => (
+                    <div key={`maintenance-campus-chart-${row.campus}`} className="maintenance-campus-row">
+                      <div className="maintenance-campus-label">{campusLabel(row.campus)}</div>
+                      <div className="maintenance-campus-bar-wrap">
+                        <div className="maintenance-campus-bar-fill" style={{ width: `${row.rate}%` }} />
+                      </div>
+                      <div className="maintenance-campus-value">{row.rate}% ({row.done}/{row.total})</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="tiny">No campus completion data.</div>
+                )}
+              </div>
+            </div>
+            </>
+            )}
 
             {maintenanceView === "record" && canAccessMenu("maintenance.record", "maintenance") && (
             <>
@@ -14131,6 +15783,7 @@ export default function App() {
                 <input
                   type="date"
                   className="input"
+                  min={todayYmd}
                   value={maintenanceRecordForm.date}
                   onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, date: e.target.value }))}
                 />
@@ -14407,6 +16060,7 @@ export default function App() {
                                 <input
                                   type="date"
                                   className="table-input"
+                                  min={todayYmd}
                                   value={maintenanceEditForm.date}
                                   onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, date: e.target.value }))}
                                 />
@@ -15622,6 +17276,9 @@ export default function App() {
                       <th>From Location</th>
                       <th>To Campus</th>
                       <th>To Location</th>
+                      <th>From Staff</th>
+                      <th>To Staff</th>
+                      <th>Ack</th>
                       <th>By</th>
                       <th>Reason</th>
                     </tr>
@@ -15636,13 +17293,59 @@ export default function App() {
                           <td>{r.fromLocation || "-"}</td>
                           <td>{campusLabel(r.toCampus)}</td>
                           <td>{r.toLocation || "-"}</td>
+                          <td>{r.fromUser || "-"}</td>
+                          <td>{r.toUser || "-"}</td>
+                          <td>{r.responsibilityAck}</td>
                           <td>{r.by || "-"}</td>
                           <td>{r.reason || "-"}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={8}>No transfer history.</td>
+                        <td colSpan={11}>No transfer history.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {reportType === "staff_borrowing" && (
+              <div className="table-wrap report-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.assetId}</th>
+                      <th>{t.photo}</th>
+                      <th>{t.name}</th>
+                      <th>{t.campus}</th>
+                      <th>{t.location}</th>
+                      <th>Assigned To</th>
+                      <th>Since</th>
+                      <th>Ack</th>
+                      <th>Last Action</th>
+                      <th>{t.notes}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staffBorrowingRows.length ? (
+                      staffBorrowingRows.map((r) => (
+                        <tr key={`report-staff-borrow-${r.assetDbId}`}>
+                          <td><strong>{r.assetId}</strong></td>
+                          <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
+                          <td>{r.itemName}</td>
+                          <td>{campusLabel(r.campus)}</td>
+                          <td>{r.location || "-"}</td>
+                          <td>{r.assignedTo || "-"}</td>
+                          <td>{formatDate(r.sinceDate || "-")}</td>
+                          <td>{r.responsibilityAck}</td>
+                          <td>{r.lastAction || "-"}</td>
+                          <td>{r.note || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={10}>No staff borrowing records.</td>
                       </tr>
                     )}
                   </tbody>
@@ -15814,6 +17517,11 @@ export default function App() {
               {canAccessMenu("setup.locations", "setup") ? (
                 <button className={`tab ${setupView === "locations" ? "tab-active" : ""}`} onClick={() => setSetupView("locations")}>
                   {t.locationSetup}
+                </button>
+              ) : null}
+              {canAccessMenu("setup.calendar", "setup") ? (
+                <button className={`tab ${setupView === "calendar" ? "tab-active" : ""}`} onClick={() => setSetupView("calendar")}>
+                  Calendar Event Setup
                 </button>
               ) : null}
             </div>
@@ -16513,6 +18221,110 @@ export default function App() {
             </div>
           </section>
           )}
+
+          {setupView === "calendar" && canAccessMenu("setup.calendar", "setup") && (
+          <section className="panel">
+            <h2>Calendar Event Setup</h2>
+            <p className="tiny">Manage holidays and school events from here. Changes apply to all calendar views.</p>
+            <div className="form-grid">
+              <label className="field">
+                <span>{t.date}</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={calendarEventForm.date}
+                  onChange={(e) => setCalendarEventForm((f) => ({ ...f, date: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Event Type</span>
+                <select
+                  className="input"
+                  value={calendarEventForm.type}
+                  onChange={(e) =>
+                    setCalendarEventForm((f) => ({
+                      ...f,
+                      type: normalizeCalendarEventType(e.target.value),
+                    }))
+                  }
+                >
+                  {CALENDAR_EVENT_TYPE_OPTIONS.map((opt) => (
+                    <option key={`calendar-type-${opt.value}`} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="calendar-type-legend">
+                  {CALENDAR_EVENT_TYPE_OPTIONS.map((opt) => (
+                    <span key={`calendar-type-legend-${opt.value}`} className={`calendar-type-badge calendar-type-${opt.value}`}>
+                      {opt.label}
+                    </span>
+                  ))}
+                </div>
+              </label>
+              <label className="field field-wide">
+                <span>Event Name</span>
+                <input
+                  className="input"
+                  value={calendarEventForm.name}
+                  onChange={(e) => setCalendarEventForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Example: PTC for Term 3"
+                />
+              </label>
+            </div>
+            <div className="asset-actions">
+              <div className="tiny">Use this for holiday, PTC, term dates, camp, and school events.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {editingCalendarEventId !== null ? (
+                  <button className="tab" onClick={cancelEditCalendarEvent}>Cancel</button>
+                ) : null}
+                <button className="btn-primary" disabled={busy || !isAdmin} onClick={createOrUpdateCalendarEvent}>
+                  {editingCalendarEventId === null ? "Add Event" : "Update Event"}
+                </button>
+              </div>
+            </div>
+            <div className="table-wrap" style={{ marginTop: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t.date}</th>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>{t.edit}</th>
+                    <th>{t.delete}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calendarEvents.length ? (
+                    calendarEvents.map((row) => (
+                      <tr key={`calendar-event-${row.id}`}>
+                        <td>{formatDate(row.date)}</td>
+                        <td>
+                          <span className={`calendar-type-badge calendar-type-${normalizeCalendarEventType(row.type)}`}>
+                            {calendarEventTypeLabel(normalizeCalendarEventType(row.type))}
+                          </span>
+                        </td>
+                        <td>{row.name}</td>
+                        <td>
+                          <button className="tab" disabled={!isAdmin} onClick={() => startEditCalendarEvent(row)}>
+                            {t.edit}
+                          </button>
+                        </td>
+                        <td>
+                          <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteCalendarEvent(row.id)}>X</button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5}>No calendar events yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          )}
           </>
         )}
           </section>
@@ -16541,6 +18353,264 @@ export default function App() {
               <span className="mobile-bottom-label">{t.menu}</span>
             </button>
           </nav>
+        ) : null}
+
+        {scheduleScopeModal ? (
+          <div className="modal-backdrop" onClick={() => setScheduleScopeModal(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{scheduleScopeModal.action === "edit" ? "Edit Recurring Schedule" : "Delete Recurring Schedule"}</h2>
+                <button className="tab" onClick={() => setScheduleScopeModal(null)}>{t.close}</button>
+              </div>
+              {(() => {
+                const asset = assets.find((a) => a.id === scheduleScopeModal.assetId);
+                if (!asset) return <p className="tiny">Schedule not found.</p>;
+                const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+                return (
+                  <>
+                    <p className="tiny" style={{ marginBottom: 12 }}>
+                      {scheduleScopeModal.action === "edit"
+                        ? `This item has multiple schedules (${itemName}). Choose scope like Google Calendar.`
+                        : `Delete schedule for ${itemName}. Choose scope like Google Calendar.`}
+                    </p>
+                    <div className="row-actions" style={{ justifyContent: "flex-end" }}>
+                      <button className="tab" onClick={() => void applyScheduleScopeAction("single")}>
+                        This schedule only
+                      </button>
+                      <button className="btn-danger" onClick={() => void applyScheduleScopeAction("all")}>
+                        {scheduleScopeModal.action === "edit" ? "All same schedules" : "Delete all same schedules"}
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </section>
+          </div>
+        ) : null}
+
+        {scheduleQuickCreateOpen ? (
+          <div className="modal-backdrop" onClick={() => setScheduleQuickCreateOpen(false)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{lang === "km" ? "បង្កើតកាលវិភាគលឿន" : "Quick Create Schedule"}</h2>
+                <button className="tab" onClick={() => setScheduleQuickCreateOpen(false)}>{t.close}</button>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>{t.campus}</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickFilterCampus}
+                    onChange={(e) => {
+                      setScheduleQuickFilterCampus(e.target.value);
+                      setScheduleQuickFilterLocation("ALL");
+                      setScheduleQuickFilterCategory("ALL");
+                      setScheduleQuickFilterName("ALL");
+                    }}
+                  >
+                    <option value="ALL">{t.allCampuses}</option>
+                    {scheduleQuickFilterCampusOptions.map((campus) => (
+                      <option key={`quick-schedule-campus-${campus}`} value={campus}>
+                        {campusLabel(campus)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.location}</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickFilterLocation}
+                    onChange={(e) => {
+                      setScheduleQuickFilterLocation(e.target.value);
+                      setScheduleQuickFilterCategory("ALL");
+                      setScheduleQuickFilterName("ALL");
+                    }}
+                  >
+                    <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
+                    {scheduleQuickFilterLocationOptions.map((location) => (
+                      <option key={`quick-schedule-location-${location}`} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.category}</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickFilterCategory}
+                    onChange={(e) => {
+                      setScheduleQuickFilterCategory(e.target.value);
+                      setScheduleQuickFilterName("ALL");
+                    }}
+                  >
+                    <option value="ALL">{t.allCategories}</option>
+                    {scheduleQuickFilterCategoryOptions.map((category) => (
+                      <option key={`quick-schedule-category-${category}`} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.name}</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickFilterName}
+                    onChange={(e) => setScheduleQuickFilterName(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "ឈ្មោះទាំងអស់" : "All Names"}</option>
+                    {scheduleQuickFilterNameOptions.map((name) => (
+                      <option key={`quick-schedule-name-${name}`} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field field-wide">
+                  <span>Asset</span>
+                  <AssetPicker
+                    value={scheduleQuickForm.assetId}
+                    assets={scheduleQuickFilteredAssets}
+                    getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.type})`}
+                    onChange={(assetId) => {
+                      const asset = assets.find((a) => String(a.id) === assetId);
+                      setScheduleQuickForm((f) => ({
+                        ...f,
+                        assetId,
+                        note: asset?.scheduleNote || f.note,
+                      }));
+                    }}
+                    placeholder={lang === "km" ? "ជ្រើស Asset តាមតម្រង" : "Select filtered asset"}
+                    disabled={!scheduleQuickFilteredAssets.length}
+                  />
+                  <div className="tiny">
+                    {scheduleQuickFilteredAssets.length
+                      ? lang === "km"
+                        ? `${scheduleQuickFilteredAssets.length} assets ត្រូវតាមតម្រងបច្ចុប្បន្ន`
+                        : `${scheduleQuickFilteredAssets.length} assets match current filters`
+                      : lang === "km"
+                      ? "មិនមាន assets ត្រូវតាមតម្រងបច្ចុប្បន្ន។"
+                      : "No assets match current filters."}
+                  </div>
+                </label>
+                <label className="field field-wide">
+                  <span>{lang === "km" ? "ព័ត៌មាន Asset ដែលបានជ្រើស" : "Selected Asset Details"}</span>
+                  <div className="transfer-preview">
+                    <div className="transfer-preview-photo">
+                      {scheduleQuickSelectedAsset?.photo ? (
+                        <img src={scheduleQuickSelectedAsset.photo} alt={scheduleQuickSelectedAsset.assetId} className="asset-picker-thumb" />
+                      ) : (
+                        <span className="asset-picker-thumb-empty">-</span>
+                      )}
+                    </div>
+                    <div className="transfer-preview-meta">
+                      <strong>
+                        {scheduleQuickSelectedAsset
+                          ? `${scheduleQuickSelectedAsset.assetId} - ${assetItemName(scheduleQuickSelectedAsset.category, scheduleQuickSelectedAsset.type, scheduleQuickSelectedAsset.pcType || "")}`
+                          : "-"}
+                      </strong>
+                      <span>
+                        {scheduleQuickSelectedAsset
+                          ? `${campusLabel(scheduleQuickSelectedAsset.campus)} • ${scheduleQuickSelectedAsset.location || "-"}`
+                          : "-"}
+                      </span>
+                      <span>
+                        {scheduleQuickSelectedAsset
+                          ? `${scheduleQuickSelectedAsset.category} • ${scheduleQuickSelectedAsset.type}`
+                          : "-"}
+                      </span>
+                    </div>
+                  </div>
+                </label>
+                <label className="field">
+                  <span>Date</span>
+                  <input
+                    type="date"
+                    className="input"
+                    min={todayYmd}
+                    value={scheduleQuickForm.date}
+                    onChange={(e) => setScheduleQuickForm((f) => ({ ...f, date: e.target.value }))}
+                    disabled={scheduleQuickForm.repeatMode === "MONTHLY_WEEKDAY"}
+                  />
+                </label>
+                <label className="field">
+                  <span>Repeat</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickForm.repeatMode}
+                    onChange={(e) =>
+                      setScheduleQuickForm((f) => ({
+                        ...f,
+                        repeatMode: e.target.value as "NONE" | "MONTHLY_WEEKDAY",
+                      }))
+                    }
+                  >
+                    <option value="NONE">Does not repeat</option>
+                    <option value="MONTHLY_WEEKDAY">
+                      {monthlyRepeatLabel(scheduleQuickForm.repeatWeekOfMonth, scheduleQuickForm.repeatWeekday)}
+                    </option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Week of Month</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickForm.repeatWeekOfMonth}
+                    onChange={(e) =>
+                      setScheduleQuickForm((f) => ({ ...f, repeatWeekOfMonth: Number(e.target.value) }))
+                    }
+                    disabled={scheduleQuickForm.repeatMode !== "MONTHLY_WEEKDAY"}
+                  >
+                    <option value={1}>Week 1</option>
+                    <option value={2}>Week 2</option>
+                    <option value={3}>Week 3</option>
+                    <option value={4}>Week 4</option>
+                    <option value={5}>Week 5</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Weekday</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickForm.repeatWeekday}
+                    onChange={(e) =>
+                      setScheduleQuickForm((f) => ({ ...f, repeatWeekday: Number(e.target.value) }))
+                    }
+                    disabled={scheduleQuickForm.repeatMode !== "MONTHLY_WEEKDAY"}
+                  >
+                    <option value={0}>Sunday</option>
+                    <option value={1}>Monday</option>
+                    <option value={2}>Tuesday</option>
+                    <option value={3}>Wednesday</option>
+                    <option value={4}>Thursday</option>
+                    <option value={5}>Friday</option>
+                    <option value={6}>Saturday</option>
+                  </select>
+                </label>
+                <label className="field field-wide">
+                  <span>{t.scheduleNote}</span>
+                  <input
+                    className="input"
+                    value={scheduleQuickForm.note}
+                    onChange={(e) => setScheduleQuickForm((f) => ({ ...f, note: e.target.value }))}
+                    placeholder="Example: Monthly preventive maintenance"
+                  />
+                </label>
+              </div>
+              <div className="asset-actions">
+                <div className="tiny">
+                  {lang === "km"
+                    ? "បង្កើតកាលវិភាគដោយផ្ទាល់ពីថ្ងៃដែលអ្នកបានចុច។"
+                    : "Create schedule directly from the clicked day."}
+                </div>
+                <button className="btn-primary" disabled={busy || !scheduleQuickForm.assetId} onClick={saveQuickScheduleFromCalendar}>
+                  Save Schedule
+                </button>
+              </div>
+            </section>
+          </div>
         ) : null}
 
         {scheduleAlertModal && (
@@ -16677,6 +18747,151 @@ export default function App() {
             </section>
           </div>
         )}
+
+        {maintenanceDashboardModal && (
+          <div className="modal-backdrop" onClick={() => setMaintenanceDashboardModal(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{maintenanceDashboardModalData.title}</h2>
+                <button className="tab" onClick={() => setMaintenanceDashboardModal(null)}>{t.close}</button>
+              </div>
+              <div className="row-actions" style={{ marginBottom: 10, justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <span className="tiny">
+                  {lang === "km" ? "កំណត់ជូនដំណឹងមុនថ្ងៃថែទាំ" : "Reminder before due date"}
+                </span>
+                <div className="row-actions" style={{ gap: 6, flexWrap: "wrap" }}>
+                  {[7, 3, 2, 1, 0].map((offset) => (
+                    <button
+                      key={`reminder-offset-${offset}`}
+                      type="button"
+                      className={`tab btn-small ${maintenanceReminderOffsets.includes(offset) ? "tab-active" : ""}`}
+                      disabled={!isAdmin || savingMaintenanceReminder}
+                      onClick={() => {
+                        void toggleMaintenanceReminderOffset(offset);
+                      }}
+                      title={
+                        offset === 0
+                          ? (lang === "km" ? "ថ្ងៃដល់កំណត់" : "On due date")
+                          : (lang === "km" ? `មុន ${offset} ថ្ងៃ` : `${offset} day(s) before`)
+                      }
+                    >
+                      {offset === 0 ? (lang === "km" ? "ថ្ងៃនេះ" : "Today") : `${offset}d`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="table-wrap modal-sticky-table-wrap">
+                {maintenanceDashboardModalData.mode === "assets" ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.date}</th>
+                        <th>{t.assetId}</th>
+                        <th>{t.photo}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.category}</th>
+                        <th>{t.name}</th>
+                        <th>{t.location}</th>
+                        <th>{t.status}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {maintenanceDashboardModalData.assets.length ? (
+                        maintenanceDashboardModalData.assets.map((asset) => (
+                          <tr key={`maintenance-dashboard-modal-asset-${maintenanceDashboardModal}-${asset.id}`}>
+                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                            <td>
+                              <button
+                                className="tab btn-small"
+                                disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                onClick={() => {
+                                  setMaintenanceDashboardModal(null);
+                                  openMaintenanceRecordFromScheduleAsset(asset);
+                                }}
+                              >
+                                <strong>{asset.assetId}</strong>
+                              </button>
+                            </td>
+                            <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
+                            <td>{campusLabel(asset.campus)}</td>
+                            <td>{asset.category}</td>
+                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                            <td>{asset.location || "-"}</td>
+                            <td>{assetStatusLabel(asset.status || "-")}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.date}</th>
+                        <th>{t.assetId}</th>
+                        <th>{t.photo}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.category}</th>
+                        <th>{lang === "km" ? "ប្រភេទថែទាំ" : "Maintenance Type"}</th>
+                        <th>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</th>
+                        <th>{t.by}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {maintenanceDashboardModalData.rows.length ? (
+                        maintenanceDashboardModalData.rows.map((row) => (
+                          <tr key={`maintenance-dashboard-modal-row-${row.rowId}`}>
+                            <td>{formatDate(row.date || "-")}</td>
+                            <td><strong>{row.assetId}</strong></td>
+                            <td>{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</td>
+                            <td>{campusLabel(row.campus)}</td>
+                            <td>{row.category}</td>
+                            <td>{row.type || "-"}</td>
+                            <td>{row.completion || "-"}</td>
+                            <td>{row.by || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No records found."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {latestMaintenanceDetailRow ? (
+          <div className="modal-backdrop" onClick={() => setLatestMaintenanceDetailRowId(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{lang === "km" ? "ព័ត៌មានថែទាំពេញ" : "Full Maintenance Detail"}</h2>
+                <button className="tab" onClick={() => setLatestMaintenanceDetailRowId(null)}>{t.close}</button>
+              </div>
+              <div className="form-grid">
+                <div className="field"><span>{t.assetId}</span><div className="detail-value"><strong>{latestMaintenanceDetailRow.assetId}</strong></div></div>
+                <div className="field"><span>{t.date}</span><div className="detail-value">{formatDate(latestMaintenanceDetailRow.date || "-")}</div></div>
+                <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(latestMaintenanceDetailRow.campus)} ({CAMPUS_CODE[latestMaintenanceDetailRow.campus] || "CX"})</div></div>
+                <div className="field"><span>{t.location}</span><div className="detail-value">{latestMaintenanceDetailRow.location || "-"}</div></div>
+                <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(latestMaintenanceDetailRow.category, latestMaintenanceDetailRow.assetType || "", "")}</div></div>
+                <div className="field"><span>{t.category}</span><div className="detail-value">{latestMaintenanceDetailRow.category}</div></div>
+                <div className="field"><span>{lang === "km" ? "ប្រភេទថែទាំ" : "Maintenance Type"}</span><div className="detail-value">{latestMaintenanceDetailRow.type || "-"}</div></div>
+                <div className="field"><span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span><div className="detail-value">{latestMaintenanceDetailRow.completion || "-"}</div></div>
+                <div className="field"><span>{lang === "km" ? "លក្ខខណ្ឌ" : "Condition"}</span><div className="detail-value">{latestMaintenanceDetailRow.condition || "-"}</div></div>
+                <div className="field"><span>{lang === "km" ? "ចំណាយ" : "Cost"}</span><div className="detail-value">{latestMaintenanceDetailRow.cost || "-"}</div></div>
+                <div className="field"><span>{t.by}</span><div className="detail-value">{latestMaintenanceDetailRow.by || "-"}</div></div>
+                <div className="field field-wide"><span>{t.notes}</span><div className="detail-value latest-maint-detail-note">{latestMaintenanceDetailRow.note || "-"}</div></div>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {quickCountModal && (
           <div className="modal-backdrop" onClick={() => setQuickCountModal(null)}>
