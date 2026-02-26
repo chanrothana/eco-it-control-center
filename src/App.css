@@ -1770,6 +1770,69 @@ label.backup-action-btn {
   color: #6b4a24;
 }
 
+.inventory-usage-panel {
+  display: grid;
+  gap: 10px;
+  overflow-x: auto;
+}
+
+.inventory-usage-chart {
+  min-height: 190px;
+  min-width: 560px;
+  border: 1px solid #d7e3f2;
+  border-radius: 12px;
+  padding: 12px 10px 10px;
+  background: #f8fbff;
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+}
+
+.inventory-usage-col {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+.inventory-usage-bar {
+  width: 100%;
+  max-width: 34px;
+  min-height: 8px;
+  border-radius: 8px 8px 4px 4px;
+  background: linear-gradient(180deg, #6d8cc7 0%, #4c6eab 100%);
+}
+
+.inventory-usage-bar-weekend {
+  background: linear-gradient(180deg, #e39a65 0%, #c56c32 100%);
+}
+
+.inventory-usage-bar-holiday {
+  background: linear-gradient(180deg, #e56a6a 0%, #bf3d3d 100%);
+}
+
+.inventory-usage-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2a3f69;
+  line-height: 1;
+}
+
+.inventory-usage-date {
+  font-size: 11px;
+  color: #60779f;
+}
+
+.inventory-usage-date-weekend {
+  color: #a25a22;
+  font-weight: 700;
+}
+
+.inventory-usage-date-holiday {
+  color: #b83535;
+  font-weight: 700;
+}
+
 .btn-primary,
 .btn-danger {
   border: 0;

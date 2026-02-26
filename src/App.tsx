@@ -123,6 +123,7 @@ type ReportType =
   | "maintenance_completion"
   | "verification_summary"
   | "qr_labels";
+type EdAssetTemplate = "ALL" | "computer" | "ipad" | "speaker" | "tv" | "aircon" | "monitor" | "peripheral";
 
 type Ticket = {
   id: number;
@@ -647,6 +648,10 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Monitor", itemKm: "ម៉ូនីទ័រ", code: "MON" },
     { itemEn: "Keyboard", itemKm: "ក្តារចុច", code: "KBD" },
     { itemEn: "Mouse", itemKm: "កណ្ដុរ", code: "MSE" },
+    { itemEn: "Digital Camera", itemKm: "កាមេរ៉ាឌីជីថល", code: "DCM" },
+    { itemEn: "Slide Projector", itemKm: "ម៉ាស៊ីនបញ្ចាំងស្លាយ", code: "SLP" },
+    { itemEn: "USB WiFi", itemKm: "USB វ៉ាយហ្វាយ", code: "UWF" },
+    { itemEn: "Webcam", itemKm: "កាមេរ៉ាវិប", code: "WBC" },
     { itemEn: "TV", itemKm: "ទូរទស្សន៍", code: "TV" },
     { itemEn: "Speaker", itemKm: "ឧបករណ៍បំពងសំឡេង", code: "SPK" },
     { itemEn: "Printer", itemKm: "ម៉ាស៊ីនបោះពុម្ព", code: "PRN" },
@@ -1839,6 +1844,17 @@ function hasCompletedMaintenanceOnDate(asset: Asset, ymd: string) {
   const target = String(ymd || "").trim();
   if (!target) return false;
   const history = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+  const doneDates = history
+    .map((entry) => {
+      const completion = String(entry?.completion || "").trim().toLowerCase();
+      if (completion === "not yet") return "";
+      return normalizeLooseDateToYmd(String(entry?.date || ""));
+    })
+    .filter(Boolean);
+  if (!doneDates.length) return false;
+  if (doneDates.some((entryDate) => entryDate === target)) return true;
+  // One-time schedule should clear once any done record exists on/after scheduled date.
+  if (asset.repeatMode !== "MONTHLY_WEEKDAY" && doneDates.some((entryDate) => entryDate >= target)) return true;
   return history.some((entry) => {
     const entryDate = normalizeLooseDateToYmd(String(entry?.date || ""));
     if (entryDate !== target) return false;
@@ -2454,6 +2470,7 @@ export default function App() {
   const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
   const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState<string[]>(["ALL"]);
   const [assetMasterItemFilter, setAssetMasterItemFilter] = useState<string[]>(["ALL"]);
+  const [edAssetTemplate, setEdAssetTemplate] = useState<EdAssetTemplate>("ALL");
   const [assetMasterVisibleColumns, setAssetMasterVisibleColumns] = useState<AssetMasterColumnKey[]>([
     "photo",
     "assetId",
@@ -3372,6 +3389,42 @@ export default function App() {
       .sort((a, b) => b.id - a.id)
       .slice(0, 12);
   }, [inventoryTxns, inventoryDailyForm.date]);
+  const inventoryDailyUsageTrend = useMemo(() => {
+    const endYmd = normalizeYmdInput(inventoryDailyForm.date) || toYmd(new Date());
+    const selectedItemId = Number(inventoryDailyForm.itemId || 0);
+    const itemLookup = new Map<number, InventoryItem>();
+    for (const item of inventoryItems) itemLookup.set(item.id, item);
+    const rows: Array<{
+      ymd: string;
+      qty: number;
+      isWeekend: boolean;
+      holidayName: string;
+    }> = [];
+    for (let i = 13; i >= 0; i -= 1) {
+      const ymd = shiftYmd(endYmd, -i);
+      let qty = 0;
+      for (const tx of inventoryTxns) {
+        if (tx.date !== ymd) continue;
+        if (!isInventoryTxnUsageOut(tx.type)) continue;
+        const item = itemLookup.get(tx.itemId);
+        if (!item || item.category !== "SUPPLY") continue;
+        if (selectedItemId && tx.itemId !== selectedItemId) continue;
+        qty += Number(tx.qty || 0);
+      }
+      const weekday = new Date(`${ymd}T00:00:00`).getDay();
+      rows.push({
+        ymd,
+        qty,
+        isWeekend: weekday === 0 || weekday === 6,
+        holidayName: getHolidayName(ymd),
+      });
+    }
+    const max = rows.reduce((m, row) => Math.max(m, row.qty), 0);
+    return {
+      max: max > 0 ? max : 1,
+      rows,
+    };
+  }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryItems, inventoryTxns]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -5111,6 +5164,24 @@ export default function App() {
       setError("Item not found.");
       return false;
     }
+    const txDate = normalizeYmdInput(values.date);
+    const holidayName = txDate ? getHolidayName(txDate) : "";
+    const day = txDate ? new Date(`${txDate}T00:00:00`).getDay() : -1;
+    const isWeekend = day === 0 || day === 6;
+    const needsNonWorkingCheck =
+      isInventoryTxnUsageOut(values.type) &&
+      item.category === "SUPPLY" &&
+      Boolean(txDate) &&
+      (isWeekend || Boolean(holidayName));
+    if (needsNonWorkingCheck) {
+      if (!String(values.note || "").trim()) {
+        setError("Weekend/Holiday stock out requires note.");
+        return false;
+      }
+      const dayType = holidayName ? `Holiday (${holidayName})` : "Weekend";
+      const ok = window.confirm(`Stock OUT on ${dayType} - ${txDate}. Confirm record?`);
+      if (!ok) return false;
+    }
     const inQty = inventoryTxns
       .filter((x) => x.itemId === itemId && isInventoryTxnIn(x.type))
       .reduce((a, b) => a + b.qty, 0);
@@ -5318,6 +5389,7 @@ export default function App() {
           th, td { border: 1px solid #c9d8ed; padding: 7px 8px; font-size: 12px; text-align: left; }
           th { background: #edf4ff; text-transform: uppercase; letter-spacing: 0.03em; }
           .summary { margin: 8px 0 0; color: #3f557e; }
+          @page { size: A4 landscape; margin: 8mm; }
           @media print { body { margin: 8mm; } }
         </style>
       </head>
@@ -7490,7 +7562,8 @@ export default function App() {
   }, [verificationRecordForm.assetId, verificationRecordFilteredAssets]);
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
-    const merged = mergeAssets(assets, readAssetFallback());
+    // Prefer current in-memory/server assets, use fallback only to fill missing fields.
+    const merged = mergeAssets(readAssetFallback(), assets);
     const filtered = campusFilter === "ALL" ? merged : merged.filter((a) => a.campus === campusFilter);
     return filtered
       .map((a) => {
@@ -7914,6 +7987,8 @@ export default function App() {
           setCode,
           linkedTo,
           category: asset.category || "-",
+          type: asset.type || "",
+          pcType: asset.pcType || "",
           itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           itemDescription: toItemDescription(asset),
           serialNumber: String(asset.serialNumber || "").trim(),
@@ -8116,6 +8191,56 @@ export default function App() {
     : lang === "km"
       ? `បានជ្រើស ${assetMasterItemFilter.length} ឈ្មោះ`
       : `${assetMasterItemFilter.length} item selected`;
+  const edTemplateOptions = useMemo<Array<{ value: EdAssetTemplate; label: string }>>(
+    () =>
+      lang === "km"
+        ? [
+            { value: "ALL", label: "ED Template: ទាំងអស់" },
+            { value: "computer", label: "Computer List" },
+            { value: "ipad", label: "iPad List" },
+            { value: "speaker", label: "Speaker List" },
+            { value: "tv", label: "TV List" },
+            { value: "aircon", label: "Air-Con List" },
+            { value: "monitor", label: "Monitor List" },
+            { value: "peripheral", label: "Computer Peripheral List" },
+          ]
+        : [
+            { value: "ALL", label: "ED Template: All Assets" },
+            { value: "computer", label: "Computer List" },
+            { value: "ipad", label: "iPad List" },
+            { value: "speaker", label: "Speaker List" },
+            { value: "tv", label: "TV List" },
+            { value: "aircon", label: "Air-Con List" },
+            { value: "monitor", label: "Monitor List" },
+            { value: "peripheral", label: "Computer Peripheral List" },
+          ],
+    [lang]
+  );
+  const selectedEdTemplateLabel = edTemplateOptions.find((option) => option.value === edAssetTemplate)?.label || "ED Template";
+  const assetMasterReportRows = useMemo(() => {
+    if (edAssetTemplate === "ALL") return sortedAssetMasterRows;
+    return sortedAssetMasterRows.filter((row) => {
+      const item = String(row.itemName || "").toLowerCase();
+      if (edAssetTemplate === "computer") return item.includes("computer");
+      if (edAssetTemplate === "ipad") return item.includes("ipad");
+      if (edAssetTemplate === "speaker") return item.includes("speaker");
+      if (edAssetTemplate === "tv") return item.includes("tv") || item.includes("television");
+      if (edAssetTemplate === "aircon") return item.includes("air conditioner") || item.includes("air-con");
+      if (edAssetTemplate === "monitor") return item.includes("monitor");
+      if (edAssetTemplate === "peripheral") {
+        return (
+          item.includes("keyboard") ||
+          item.includes("mouse") ||
+          item.includes("digital camera") ||
+          item.includes("slide projector") ||
+          item.includes("usb wifi") ||
+          item.includes("webcam") ||
+          item.includes("web camera")
+        );
+      }
+      return true;
+    });
+  }, [sortedAssetMasterRows, edAssetTemplate]);
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
   const reportTypeOptions = useMemo(
     () =>
@@ -8185,6 +8310,7 @@ export default function App() {
       setAssetMasterCampusFilter(["ALL"]);
       setAssetMasterCategoryFilter(["ALL"]);
       setAssetMasterItemFilter(["ALL"]);
+      setEdAssetTemplate("ALL");
       setAssetMasterVisibleColumns([
         "photo",
         "assetId",
@@ -8760,10 +8886,10 @@ export default function App() {
     };
 
     if (reportType === "asset_master") {
-      title = "Asset Master Register Report";
+      title = edAssetTemplate === "ALL" ? "Asset Master Register Report" : `${selectedEdTemplateLabel} Report`;
       const visibleDefs = assetMasterColumnDefs.filter((def) => isAssetMasterColumnVisible(def.key));
       columns = visibleDefs.map((def) => def.label);
-      rows = sortedAssetMasterRows.map((row) =>
+      rows = assetMasterReportRows.map((row) =>
         visibleDefs.map((def) => {
           switch (def.key) {
             case "photo":
@@ -8945,7 +9071,7 @@ export default function App() {
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
         : reportType === "asset_master"
-        ? `<p><strong>Total Assets:</strong> ${sortedAssetMasterRows.length}</p>`
+        ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>`
         : reportType === "set_code"
         ? `<p><strong>Total Set Codes:</strong> ${setCodeReportRows.length} | <strong>Total Assets in Sets:</strong> ${setCodeReportRows.reduce((sum, row) => sum + row.totalItems, 0)}</p>`
         : reportType === "qr_labels"
@@ -8963,6 +9089,7 @@ export default function App() {
                   <div class="qr-sticker-sn">SN: ${escapeHtml(serial)}</div>
                   <div class="qr-sticker">
                     <div class="qr-sticker-qr">${qr ? `<img src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
+                    <div class="qr-sticker-divider"></div>
                     <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
                   </div>
                 </div>`;
@@ -8988,11 +9115,12 @@ export default function App() {
           .qr-sticker-grid { display: grid; grid-template-columns: repeat(5, 116px); column-gap: 10px; row-gap: 10px; margin-top: 10px; width: 100%; justify-content: space-between; }
           .qr-sticker-wrap { width: 116px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
           .qr-sticker-sn { width: 116px; min-height: 11px; text-align: center; font-size: 7.5px; line-height: 1.1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
-          .qr-sticker { width: 116px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 8px; padding: 7px 7px 6px; display: grid; gap: 6px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
-          .qr-sticker-qr { width: 84px; height: 84px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 6px; display: grid; place-items: center; }
+          .qr-sticker { width: 116px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 7px 7px 6px; display: grid; gap: 5px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
+          .qr-sticker-qr { width: 84px; height: 84px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
           .qr-sticker-qr img { width: 76px; height: 76px; object-fit: contain; display: block; }
-          .qr-sticker-id { width: 84px; min-height: 24px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 1px solid #1b2d23; border-radius: 6px; padding: 3px 4px; font-size: 8.5px; line-height: 1.05; font-weight: 800; letter-spacing: 0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          @page { size: A4 portrait; margin: 8mm; }
+          .qr-sticker-divider { width: 84px; height: 1px; background: #1b2d23; }
+          .qr-sticker-id { width: 84px; min-height: 18px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 4px; font-size: 8.5px; line-height: 1.05; font-weight: 800; letter-spacing: 0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          @page { size: A4 landscape; margin: 8mm; }
           @media print { body { margin: 0; } }
         </style>
       </head>
@@ -12800,6 +12928,42 @@ export default function App() {
                   </div>
                 ) : null}
 
+                <article className="panel inventory-usage-panel">
+                  <div className="panel-row">
+                    <h3 className="section-title">
+                      {lang === "km" ? "ក្រាហ្វប្រើប្រាស់ប្រចាំថ្ងៃ (14 ថ្ងៃ)" : "Daily Usage Trend (14 days)"}
+                    </h3>
+                    <span className="tiny">
+                      {inventoryDailySelectedItem
+                        ? `${inventoryDailySelectedItem.itemCode} - ${inventoryDailySelectedItem.itemName}`
+                        : (lang === "km" ? "Cleaning Supply ទាំងអស់" : "All Cleaning Supplies")}
+                    </span>
+                  </div>
+                  <div className="inventory-usage-chart">
+                    {inventoryDailyUsageTrend.rows.map((row) => {
+                      const height = Math.max(8, Math.round((row.qty / inventoryDailyUsageTrend.max) * 100));
+                      return (
+                        <div key={`usage-day-${row.ymd}`} className="inventory-usage-col">
+                          <div
+                            className={`inventory-usage-bar ${row.holidayName ? "inventory-usage-bar-holiday" : row.isWeekend ? "inventory-usage-bar-weekend" : ""}`}
+                            style={{ height: `${height}%` }}
+                            title={`${row.ymd} | Used: ${row.qty}${row.holidayName ? ` | ${row.holidayName}` : ""}`}
+                          />
+                          <div className="inventory-usage-value">{row.qty}</div>
+                          <div className={`inventory-usage-date ${row.holidayName ? "inventory-usage-date-holiday" : row.isWeekend ? "inventory-usage-date-weekend" : ""}`}>
+                            {row.ymd.slice(5)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="tiny">
+                    {lang === "km"
+                      ? "OUT នៅថ្ងៃអាទិត្យ/ថ្ងៃឈប់សម្រាក ត្រូវបញ្ចូល Note ហើយបញ្ជាក់ម្តងទៀត។"
+                      : "OUT on Sunday/holiday requires note and confirmation."}
+                  </div>
+                </article>
+
                 <div className="asset-actions">
                   <div className="tiny">
                     {lang === "km"
@@ -14720,6 +14884,17 @@ export default function App() {
               ) : null}
               {reportType === "asset_master" ? (
                 <>
+                  <select
+                    className="input"
+                    value={edAssetTemplate}
+                    onChange={(e) => setEdAssetTemplate(e.target.value as EdAssetTemplate)}
+                  >
+                    {edTemplateOptions.map((option) => (
+                      <option key={`ed-template-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
                     <summary>{campusFilterSummary}</summary>
                     <div className="filter-menu-list">
@@ -14860,6 +15035,9 @@ export default function App() {
             {reportType === "asset_master" && (
               <div className="panel-note">
                 <strong>Asset register view:</strong> one row per asset with quick item/service information.
+                {edAssetTemplate !== "ALL" ? (
+                  <span> Template: <strong>{selectedEdTemplateLabel}</strong></span>
+                ) : null}
               </div>
             )}
             {reportType === "set_code" && (
@@ -14876,8 +15054,8 @@ export default function App() {
               <>
                 {isPhoneView ? (
                   <div className="report-mobile-only report-card-list">
-                    {sortedAssetMasterRows.length ? (
-                      sortedAssetMasterRows.map((row) => (
+                    {assetMasterReportRows.length ? (
+                      assetMasterReportRows.map((row) => (
                         <article key={`report-mobile-asset-${row.key}`} className="report-card">
                           <div className="report-card-head">
                             <div>{renderAssetPhoto(row.photo || "", row.assetId)}</div>
@@ -14944,8 +15122,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {sortedAssetMasterRows.length ? (
-                          sortedAssetMasterRows.map((row) => (
+                        {assetMasterReportRows.length ? (
+                          assetMasterReportRows.map((row) => (
                             <tr key={`report-asset-master-${row.key}`}>
                               {assetMasterColumnDefs
                                 .filter((column) => isAssetMasterColumnVisible(column.key))
