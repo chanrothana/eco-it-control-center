@@ -15,6 +15,8 @@ type Asset = {
   location: string;
   setCode?: string;
   parentAssetId?: string;
+  componentRole?: string;
+  componentRequired?: boolean;
   assignedTo?: string;
   brand?: string;
   model?: string;
@@ -97,6 +99,8 @@ type PublicQrAsset = {
   location: string;
   setCode?: string;
   parentAssetId?: string;
+  componentRole?: string;
+  componentRequired?: boolean;
   assignedTo?: string;
   brand?: string;
   model?: string;
@@ -573,6 +577,7 @@ const CODE_TO_CAMPUS: Record<string, string> = Object.fromEntries(
   Object.entries(CAMPUS_CODE).map(([name, code]) => [code, name])
 );
 const MAX_ASSET_PHOTOS = 5;
+const MAX_SET_PACK_PHOTOS = 3;
 
 const CATEGORY_OPTIONS = [
   { value: "IT", en: "IT", km: "IT" },
@@ -650,7 +655,9 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Mouse", itemKm: "កណ្ដុរ", code: "MSE" },
     { itemEn: "Digital Camera", itemKm: "កាមេរ៉ាឌីជីថល", code: "DCM" },
     { itemEn: "Slide Projector", itemKm: "ម៉ាស៊ីនបញ្ចាំងស្លាយ", code: "SLP" },
-    { itemEn: "USB WiFi", itemKm: "USB វ៉ាយហ្វាយ", code: "UWF" },
+    { itemEn: "Power Adapter", itemKm: "អាដាប់ទ័រ", code: "ADP" },
+    { itemEn: "Remote Control", itemKm: "រីម៉ូត", code: "RMT" },
+    { itemEn: "USB WiFi Adapter", itemKm: "USB វ៉ាយហ្វាយ", code: "UWF" },
     { itemEn: "Webcam", itemKm: "កាមេរ៉ាវិប", code: "WBC" },
     { itemEn: "TV", itemKm: "ទូរទស្សន៍", code: "TV" },
     { itemEn: "Speaker", itemKm: "ឧបករណ៍បំពងសំឡេង", code: "SPK" },
@@ -668,13 +675,16 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   ],
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
+    { itemEn: "Front Panel", itemKm: "ផ្នែកខាងមុខ", code: "FPN" },
+    { itemEn: "Rear Panel", itemKm: "ផ្នែកខាងក្រោយ", code: "RPN" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
   ],
 };
 
-const USER_REQUIRED_TYPES = ["PC", "TAB", "SPK"];
-const DESKTOP_SET_COMPONENT_TYPES = ["MON", "KBD", "MSE"] as const;
+const USER_REQUIRED_TYPES = ["PC", "TAB", "SPK", "DCM"];
+const USB_WIFI_TYPE_CODE = "UWF";
+const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
 const SHARED_LOCATION_KEYWORDS = [
   "teacher office",
   "itc room",
@@ -691,7 +701,7 @@ const PC_TYPE_OPTIONS = [
   { value: "Mac Mini", en: "Mac Mini", km: "Mac Mini" },
   { value: "Other", en: "Other", km: "ផ្សេងៗ" },
 ] as const;
-type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE";
+type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE" | "UWF" | "WBC";
 type SetPackChildDraft = {
   enabled: boolean;
   status: string;
@@ -704,6 +714,7 @@ type SetPackChildDraft = {
   specs: string;
   notes: string;
   photo: string;
+  photos: string[];
 };
 
 function defaultSetPackChildDraft(): SetPackChildDraft {
@@ -719,6 +730,7 @@ function defaultSetPackChildDraft(): SetPackChildDraft {
     specs: "",
     notes: "",
     photo: "",
+    photos: [],
   };
 }
 
@@ -728,16 +740,18 @@ function defaultSetPackDraft(): Record<SetPackChildType, SetPackChildDraft> {
     MON2: { ...defaultSetPackChildDraft(), enabled: false },
     KBD: defaultSetPackChildDraft(),
     MSE: defaultSetPackChildDraft(),
+    UWF: { ...defaultSetPackChildDraft(), enabled: false },
+    WBC: { ...defaultSetPackChildDraft(), enabled: false },
   };
 }
 
-function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" {
+function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF" | "WBC" {
   if (type === "MON2") return "MON";
   return type;
 }
 
-function isDesktopSetComponent(category: string, type: string): boolean {
-  return category === "IT" && (DESKTOP_SET_COMPONENT_TYPES as readonly string[]).includes(type.toUpperCase());
+function canLinkToParentAsset(type: string): boolean {
+  return String(type || "").toUpperCase() !== DESKTOP_PARENT_TYPE;
 }
 
 const TEXT = {
@@ -793,8 +807,12 @@ const TEXT = {
     includeMonitor2: "Include 2nd Monitor",
     includeKeyboard: "Include Keyboard",
     includeMouse: "Include Mouse",
-    linkToDesktopSet: "Link to existing desktop set",
-    selectDesktopUnit: "Select Desktop Unit",
+    includeUsbWifi: "Include USB WiFi",
+    includeWebcam: "Include Webcam",
+    linkToParentAsset: "Link to parent asset",
+    selectParentAsset: "Select Parent Asset",
+    componentRole: "Component Role",
+    componentRequired: "Required Component",
     desktopSetAutoNote: "Desktop Unit set code is auto-generated.",
     location: "Location",
     locationSetup: "Location Setup by Campus",
@@ -834,7 +852,7 @@ const TEXT = {
     deleteLocationConfirm: "Delete this location?",
     photoLimit: "Photo is too large. Please use file under 15MB.",
     user: "User",
-    userRequired: "User is required for Computer, iPad/Tablet, and Speaker.",
+    userRequired: "User is required for Computer, iPad/Tablet, Speaker, and Digital Camera.",
     selectLocation: "Select location",
     locationRequired: "Please select location.",
     noLocationsConfigured: "No locations configured for this campus. Please add in Setup tab.",
@@ -992,8 +1010,12 @@ const TEXT = {
     includeMonitor2: "រួមបញ្ចូល Monitor ទី២",
     includeKeyboard: "រួមបញ្ចូល Keyboard",
     includeMouse: "រួមបញ្ចូល Mouse",
-    linkToDesktopSet: "ភ្ជាប់ទៅក្រុម Desktop ដែលមានស្រាប់",
-    selectDesktopUnit: "ជ្រើស Desktop Unit",
+    includeUsbWifi: "រួមបញ្ចូល USB WiFi",
+    includeWebcam: "រួមបញ្ចូល Webcam",
+    linkToParentAsset: "ភ្ជាប់ទៅ Asset មេ",
+    selectParentAsset: "ជ្រើស Asset មេ",
+    componentRole: "តួនាទីគ្រឿងបន្ថែម",
+    componentRequired: "គ្រឿងបន្ថែមចាំបាច់",
     desktopSetAutoNote: "លេខក្រុម Desktop Unit បង្កើតស្វ័យប្រវត្តិ។",
     location: "ទីតាំង",
     locationSetup: "កំណត់ទីតាំងតាម Campus",
@@ -1033,7 +1055,7 @@ const TEXT = {
     deleteLocationConfirm: "តើលុបទីតាំងនេះមែនទេ?",
     photoLimit: "រូបភាពធំពេក។ សូមប្រើឯកសារតិចជាង 15MB។",
     user: "អ្នកប្រើប្រាស់",
-    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើសម្រាប់ Computer, iPad/Tablet និង Speaker។",
+    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើសម្រាប់ Computer, iPad/Tablet, Speaker និង Digital Camera។",
     selectLocation: "ជ្រើសទីតាំង",
     locationRequired: "សូមជ្រើសរើសទីតាំង។",
     noLocationsConfigured: "Campus នេះមិនទាន់កំណត់ទីតាំងទេ។ សូមបន្ថែមនៅផ្ទាំង Setup។",
@@ -1769,40 +1791,113 @@ function normalizeLooseDateToYmd(raw: string) {
   return toYmd(parsed);
 }
 
+function expandHolidayRange(from: string, to: string, name: string) {
+  const out: Array<{ date: string; name: string }> = [];
+  let cur = normalizeYmdInput(from);
+  const end = normalizeYmdInput(to);
+  if (!cur || !end || cur > end) return out;
+  while (cur <= end) {
+    out.push({ date: cur, name });
+    cur = shiftYmd(cur, 1);
+  }
+  return out;
+}
+
 const CAMBODIA_PUBLIC_HOLIDAYS: Record<number, Array<{ date: string; name: string }>> = {
   2026: [
     { date: "2026-01-01", name: "New Year's Day" },
-    { date: "2026-01-07", name: "Victory over Genocide Day" },
+    { date: "2026-01-02", name: "Winter Break" },
+    { date: "2026-01-07", name: "Victory Over Genocide Day" },
+    { date: "2026-01-12", name: "End of Term 2" },
+    { date: "2026-01-13", name: "Start of Term 3" },
+    { date: "2026-01-17", name: "PTC for Term 2" },
     { date: "2026-03-08", name: "International Women's Day" },
-    { date: "2026-04-14", name: "Khmer New Year" },
-    { date: "2026-04-15", name: "Khmer New Year Holiday" },
-    { date: "2026-04-16", name: "Khmer New Year Holiday" },
-    { date: "2026-05-01", name: "International Labour Day" },
-    { date: "2026-05-04", name: "Visak Bochea Day" },
-    { date: "2026-05-08", name: "King's Birthday" },
-    { date: "2026-05-15", name: "Royal Plowing Ceremony" },
-    { date: "2026-06-18", name: "Queen Mother's Birthday" },
+    { date: "2026-03-21", name: "PTC for Term 3" },
+    { date: "2026-03-23", name: "End of Term 3" },
+    { date: "2026-03-24", name: "Start of Term 4" },
+    { date: "2026-04-10", name: "KNY Celebration" },
+    ...expandHolidayRange("2026-04-11", "2026-04-19", "Khmer New Year"),
+    { date: "2026-05-01", name: "International Labour Day & Visak Bochea Day" },
+    { date: "2026-05-05", name: "Royal Plowing Ceremony" },
+    { date: "2026-05-14", name: "King's Birthday" },
+    { date: "2026-06-06", name: "PTC for Term 4" },
+    { date: "2026-06-12", name: "End of Term 4" },
+    { date: "2026-06-13", name: "Year-End Recognition Day" },
+    { date: "2026-06-18", name: "King's Mother's Birthday" },
+    ...expandHolidayRange("2026-06-22", "2026-06-30", "Summer Camp"),
+    ...expandHolidayRange("2026-07-01", "2026-07-24", "Summer Camp"),
+    { date: "2026-08-03", name: "Start of Term 1 (2026)" },
     { date: "2026-09-24", name: "Constitutional Day" },
-    { date: "2026-10-10", name: "Ancestors' Day" },
-    { date: "2026-10-11", name: "Ancestors' Day Holiday" },
-    { date: "2026-10-12", name: "Ancestors' Day Holiday" },
+    ...expandHolidayRange("2026-10-10", "2026-10-12", "Pchum Ben Days"),
+    { date: "2026-10-13", name: "End of Term 1" },
+    { date: "2026-10-14", name: "Start of Term 2" },
     { date: "2026-10-15", name: "Commemoration Day of King's Father" },
-    { date: "2026-10-29", name: "King's Coronation Day" },
+    { date: "2026-10-17", name: "PTC for Term 1" },
+    { date: "2026-10-29", name: "King Norodom Sihamoni's Coronation" },
     { date: "2026-11-09", name: "Independence Day" },
-    { date: "2026-11-24", name: "Water Festival Ceremony" },
-    { date: "2026-11-25", name: "Water Festival Ceremony Holiday" },
-    { date: "2026-11-26", name: "Water Festival Ceremony Holiday" },
-    { date: "2026-12-29", name: "Peace Day" },
+    ...expandHolidayRange("2026-11-23", "2026-11-25", "Water Festival Days"),
+    ...expandHolidayRange("2026-12-24", "2026-12-31", "Winter Break"),
+  ],
+  2027: [
+    { date: "2027-01-01", name: "New Year's Day" },
+    { date: "2027-01-07", name: "Victory Over Genocide Day" },
+    { date: "2027-01-11", name: "End of Term 2" },
+    { date: "2027-01-12", name: "Start of Term 3" },
+    { date: "2027-01-16", name: "PTC for Term 2" },
+    { date: "2027-03-08", name: "International Women's Day" },
+    { date: "2027-03-23", name: "End of Term 3" },
+    { date: "2027-03-24", name: "Start of Term 4" },
+    { date: "2027-03-27", name: "PTC for Term 3" },
+    { date: "2027-04-09", name: "KNY Celebration" },
+    ...expandHolidayRange("2027-04-10", "2027-04-18", "Khmer New Year"),
+    { date: "2027-05-01", name: "International Labour Day" },
+    { date: "2027-05-14", name: "King's Birthday" },
+    { date: "2027-05-20", name: "Visak Bochea Day" },
+    { date: "2027-05-24", name: "Royal Plowing Ceremony" },
+    { date: "2027-06-05", name: "PTC for Term 4" },
+    { date: "2027-06-11", name: "End of Term 4" },
+    { date: "2027-06-12", name: "Year-End Recognition Day" },
+    { date: "2027-06-18", name: "King's Mother's Birthday" },
+    ...expandHolidayRange("2027-06-21", "2027-06-30", "Summer Camp"),
+    ...expandHolidayRange("2027-07-01", "2027-07-23", "Summer Camp"),
+    { date: "2027-08-02", name: "Start of Term 1 (2027)" },
   ],
 };
 
-function getHolidayName(ymd: string) {
+type HolidayEventType =
+  | "public"
+  | "ptc"
+  | "term_end"
+  | "term_start"
+  | "camp"
+  | "celebration"
+  | "break";
+
+function classifyHolidayEvent(name: string): HolidayEventType {
+  const text = String(name || "").toLowerCase();
+  if (text.includes("ptc")) return "ptc";
+  if (text.includes("end of term")) return "term_end";
+  if (text.includes("start of term")) return "term_start";
+  if (text.includes("summer camp")) return "camp";
+  if (text.includes("kny celebration") || text.includes("recognition")) return "celebration";
+  if (text.includes("winter break") || text.includes("khmer new year")) return "break";
+  return "public";
+}
+
+function getHolidayEvent(ymd: string): { name: string; type: HolidayEventType | "" } {
   const date = String(ymd || "").trim();
-  if (!date) return "";
+  if (!date) return { name: "", type: "" };
   const year = Number(date.slice(0, 4));
   const list = CAMBODIA_PUBLIC_HOLIDAYS[year] || [];
-  const match = list.find((h) => h.date === date);
-  return match?.name || "";
+  const matches = list.filter((h) => h.date === date);
+  if (!matches.length) return { name: "", type: "" };
+  const names = Array.from(new Set(matches.map((row) => row.name).filter(Boolean)));
+  const name = names.join(" | ");
+  return { name, type: classifyHolidayEvent(names[0] || "") };
+}
+
+function getHolidayName(ymd: string) {
+  return getHolidayEvent(ymd).name;
 }
 
 function nthWeekdayOfMonth(
@@ -2130,6 +2225,8 @@ function normalizeAssetForUi(asset: Asset): Asset {
     : asset.statusHistory;
   return {
     ...asset,
+    componentRole: String(asset.componentRole || "").trim(),
+    componentRequired: Boolean(asset.componentRequired),
     photos: normalizedPhotos,
     photo: normalizeUrl(normalizedPhotos[0] || ""),
     status: shouldAutoRetire ? "Retired" : asset.status,
@@ -2589,6 +2686,8 @@ export default function App() {
     setCode: "",
     parentAssetId: "",
     useExistingSet: false,
+    componentRole: "",
+    componentRequired: false,
     createSetPack: false,
     assignedTo: "",
     brand: "",
@@ -2613,24 +2712,32 @@ export default function App() {
     MON2: 0,
     KBD: 0,
     MSE: 0,
+    UWF: 0,
+    WBC: 0,
   });
   const setPackPhotoInputRefs = useRef<Record<SetPackChildType, HTMLInputElement | null>>({
     MON: null,
     MON2: null,
     KBD: null,
     MSE: null,
+    UWF: null,
+    WBC: null,
   });
   const [setPackDetailOpen, setSetPackDetailOpen] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
     MON2: false,
     KBD: false,
     MSE: false,
+    UWF: false,
+    WBC: false,
   });
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
     MON2: false,
     KBD: false,
     MSE: false,
+    UWF: false,
+    WBC: false,
   });
   const [editCreateSetPack, setEditCreateSetPack] = useState(false);
   const [assetFileKey, setAssetFileKey] = useState(0);
@@ -2674,6 +2781,8 @@ export default function App() {
     setCode: "",
     parentAssetId: "",
     useExistingSet: false,
+    componentRole: "",
+    componentRequired: false,
     assignedTo: "",
     brand: "",
     model: "",
@@ -3193,7 +3302,7 @@ export default function App() {
       allOptions: string[]
     ) => {
       if (value === "ALL") {
-        return ["ALL"];
+        return checked ? ["ALL"] : [];
       }
       if (checked) {
         const base = prev.includes("ALL") ? [] : prev.filter((item) => item !== "ALL");
@@ -3202,10 +3311,10 @@ export default function App() {
       }
       if (prev.includes("ALL")) {
         const next = allOptions.filter((item) => item !== value);
-        return next.length ? next : ["ALL"];
+        return next;
       }
       const next = prev.filter((item) => item !== value);
-      return next.length ? next : ["ALL"];
+      return next;
     },
     []
   );
@@ -3217,6 +3326,13 @@ export default function App() {
     },
     []
   );
+  const resetAssetListFilters = useCallback(() => {
+    setAssetCampusMultiFilter(["ALL"]);
+    setAssetCategoryMultiFilter(["ALL"]);
+    setAssetNameMultiFilter(["ALL"]);
+    setAssetLocationMultiFilter(["ALL"]);
+    setSearch("");
+  }, []);
   const toggleCampusAccess = useCallback((current: string[], campus: string, checked: boolean) => {
     if (checked) return Array.from(new Set([...current, campus]));
     const next = current.filter((value) => value !== campus);
@@ -3227,15 +3343,10 @@ export default function App() {
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === assetForm.campus)),
     [locations, assetForm.campus]
   );
-  const desktopSetParentsForCreate = useMemo(
+  const parentAssetsForCreate = useMemo(
     () =>
       assets
-        .filter(
-          (a) =>
-            a.category === "IT" &&
-            a.type === DESKTOP_PARENT_TYPE &&
-            a.campus === assetForm.campus
-        )
+        .filter((a) => a.campus === assetForm.campus)
         .sort((a, b) => a.assetId.localeCompare(b.assetId)),
     [assets, assetForm.campus]
   );
@@ -3262,24 +3373,22 @@ export default function App() {
     const baseMon = calcNextSeq(assets, assetForm.campus, "IT", "MON");
     const baseKbd = calcNextSeq(assets, assetForm.campus, "IT", "KBD");
     const baseMse = calcNextSeq(assets, assetForm.campus, "IT", "MSE");
+    const baseUwf = calcNextSeq(assets, assetForm.campus, "IT", "UWF");
+    const baseWbc = calcNextSeq(assets, assetForm.campus, "IT", "WBC");
     return {
       MON: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon)}`,
       MON2: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon + 1)}`,
       KBD: `${campusCode}-${categoryCode("IT")}-KBD-${pad4(baseKbd)}`,
       MSE: `${campusCode}-${categoryCode("IT")}-MSE-${pad4(baseMse)}`,
+      UWF: `${campusCode}-${categoryCode("IT")}-UWF-${pad4(baseUwf)}`,
+      WBC: `${campusCode}-${categoryCode("IT")}-WBC-${pad4(baseWbc)}`,
     };
   }, [assets, assetForm.campus]);
-  const desktopSetParentsForEdit = useMemo(() => {
+  const parentAssetsForEdit = useMemo(() => {
     const editing = assets.find((a) => a.id === editingAssetId);
     if (!editing) return [] as Asset[];
     return assets
-      .filter(
-        (a) =>
-          a.id !== editing.id &&
-          a.category === "IT" &&
-          a.type === DESKTOP_PARENT_TYPE &&
-          a.campus === editing.campus
-      )
+      .filter((a) => a.id !== editing.id && a.campus === editing.campus)
       .sort((a, b) => a.assetId.localeCompare(b.assetId));
   }, [assets, editingAssetId]);
   const inventoryLocations = useMemo(
@@ -3480,9 +3589,9 @@ export default function App() {
     () => assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE,
     [assetForm.category, assetForm.type]
   );
-  const isDesktopComponentForCreate = useMemo(
-    () => isDesktopSetComponent(assetForm.category, assetForm.type),
-    [assetForm.category, assetForm.type]
+  const isLinkableForCreate = useMemo(
+    () => canLinkToParentAsset(assetForm.type),
+    [assetForm.type]
   );
   const modelTemplates = useMemo(() => {
     const byModel = new Map<
@@ -3535,6 +3644,24 @@ export default function App() {
     });
     setModelTemplateNote(`Model template matched: ${tpl.model}. Specs auto-filled`);
   }, [modelTemplates]);
+  const applySetPackModelTemplate = useCallback((type: SetPackChildType, rawModel: string) => {
+    const input = String(rawModel || "").trim();
+    if (!input) return;
+    const tpl = modelTemplates.find((m) => m.model.toLowerCase() === input.toLowerCase());
+    if (!tpl) return;
+    setSetPackDraft((prev) => {
+      const draft = prev[type];
+      if (!draft) return prev;
+      const nextDraft = { ...draft };
+      if (!String(draft.specs || "").trim()) nextDraft.specs = tpl.specs;
+      if (!String(draft.brand || "").trim() && tpl.brand) nextDraft.brand = tpl.brand;
+      if (!String(draft.vendor || "").trim() && tpl.vendor) nextDraft.vendor = tpl.vendor;
+      return {
+        ...prev,
+        [type]: nextDraft,
+      };
+    });
+  }, [modelTemplates]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -3561,11 +3688,11 @@ export default function App() {
           createSetPack: false,
         };
       }
-      if (!isDesktopSetComponent(prev.category, prev.type) && (prev.useExistingSet || prev.setCode || prev.parentAssetId)) {
-        return { ...prev, useExistingSet: false, setCode: "", parentAssetId: "" };
+      if (!canLinkToParentAsset(prev.type) && (prev.useExistingSet || prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
+        return { ...prev, useExistingSet: false, setCode: "", parentAssetId: "", componentRole: "", componentRequired: false };
       }
-      if (!prev.useExistingSet && (prev.setCode || prev.parentAssetId)) {
-        return { ...prev, setCode: "", parentAssetId: "" };
+      if (!prev.useExistingSet && (prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
+        return { ...prev, setCode: "", parentAssetId: "", componentRole: "", componentRequired: false };
       }
       return prev;
     });
@@ -3580,13 +3707,28 @@ export default function App() {
       MON2: false,
       KBD: false,
       MSE: false,
+      UWF: false,
+      WBC: false,
     });
     setSetPackFileKey((prev) => ({
       MON: prev.MON + 1,
       MON2: prev.MON2 + 1,
       KBD: prev.KBD + 1,
       MSE: prev.MSE + 1,
+      UWF: prev.UWF + 1,
+      WBC: prev.WBC + 1,
     }));
+  }, [assetForm.category, assetForm.type]);
+
+  useEffect(() => {
+    setAssetForm((prev) => {
+      if (prev.category !== "IT" || prev.type !== USB_WIFI_TYPE_CODE) return prev;
+      if (String(prev.specs || "").trim()) return prev;
+      return {
+        ...prev,
+        specs: USB_WIFI_DEFAULT_SPECS,
+      };
+    });
   }, [assetForm.category, assetForm.type]);
 
   const itemSetupRows = useMemo(() => {
@@ -3604,8 +3746,10 @@ export default function App() {
       { type: "MON", label: t.includeMonitor },
       { type: "KBD", label: t.includeKeyboard },
       { type: "MSE", label: t.includeMouse },
+      { type: "UWF", label: t.includeUsbWifi },
+      { type: "WBC", label: t.includeWebcam },
     ],
-    [t.includeMonitor, t.includeKeyboard, t.includeMouse]
+    [t.includeMonitor, t.includeKeyboard, t.includeMouse, t.includeUsbWifi, t.includeWebcam]
   );
 
   useEffect(() => {
@@ -3645,30 +3789,26 @@ export default function App() {
   useEffect(() => {
     setAssetCampusMultiFilter((prev) => {
       if (prev.includes("ALL")) return ["ALL"];
-      const valid = prev.filter((item) => assetCampusFilterOptions.includes(item));
-      return valid.length ? valid : ["ALL"];
+      return prev.filter((item) => assetCampusFilterOptions.includes(item));
     });
   }, [assetCampusFilterOptions]);
   useEffect(() => {
     setAssetCategoryMultiFilter((prev) => {
       if (prev.includes("ALL")) return ["ALL"];
-      const valid = prev.filter((item) => assetCategoryFilterOptions.includes(item));
-      return valid.length ? valid : ["ALL"];
+      return prev.filter((item) => assetCategoryFilterOptions.includes(item));
     });
   }, [assetCategoryFilterOptions]);
   useEffect(() => {
     const validNameValues = assetNameFilterOptions.map((option) => option.value);
     setAssetNameMultiFilter((prev) => {
       if (prev.includes("ALL")) return ["ALL"];
-      const valid = prev.filter((item) => validNameValues.includes(item));
-      return valid.length ? valid : ["ALL"];
+      return prev.filter((item) => validNameValues.includes(item));
     });
   }, [assetNameFilterOptions]);
   useEffect(() => {
     setAssetLocationMultiFilter((prev) => {
       if (prev.includes("ALL")) return ["ALL"];
-      const valid = prev.filter((item) => assetLocationFilterOptions.includes(item));
-      return valid.length ? valid : ["ALL"];
+      return prev.filter((item) => assetLocationFilterOptions.includes(item));
     });
   }, [assetLocationFilterOptions]);
 
@@ -3980,10 +4120,10 @@ export default function App() {
       .filter(([, draft]) => draft.enabled);
     const createSetCode = isDesktopAsset
       ? suggestedDesktopSetCode
-      : (isDesktopComponentForCreate && assetForm.useExistingSet ? assetForm.setCode.trim() : "");
+      : (isLinkableForCreate && assetForm.useExistingSet ? assetForm.setCode.trim() : "");
     const createParentAssetId = isDesktopAsset
       ? ""
-      : (isDesktopComponentForCreate && assetForm.useExistingSet ? assetForm.parentAssetId.trim().toUpperCase() : "");
+      : (isLinkableForCreate && assetForm.useExistingSet ? assetForm.parentAssetId.trim().toUpperCase() : "");
     if (!assetForm.location) {
       alert(t.locationRequired);
       return;
@@ -3992,8 +4132,8 @@ export default function App() {
       alert(t.pcTypeRequired);
       return;
     }
-    if (isDesktopComponentForCreate && assetForm.useExistingSet && !createParentAssetId) {
-      alert(t.selectDesktopUnit);
+    if (isLinkableForCreate && assetForm.useExistingSet && !createParentAssetId) {
+      alert(t.selectParentAsset);
       return;
     }
     if (createPack && !packItems.length) {
@@ -4016,12 +4156,15 @@ export default function App() {
           type: assetForm.type.toUpperCase(),
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
+          componentRole: assetForm.componentRole.trim(),
+          componentRequired: Boolean(assetForm.componentRequired),
         }),
       });
 
       if (createPack && created.asset?.assetId) {
         for (const [typeCode, draft] of packItems) {
           const assetType = setPackAssetType(typeCode);
+          const packPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
           await requestJson<{ asset: Asset }>("/api/assets", {
             method: "POST",
             body: JSON.stringify({
@@ -4042,7 +4185,8 @@ export default function App() {
               notes: draft.notes || `Auto-created from set pack: ${created.asset.assetId}`,
               nextMaintenanceDate: "",
               scheduleNote: "",
-              photo: draft.photo || "",
+              photo: packPhotos[0] || "",
+              photos: packPhotos,
               status: draft.status || assetForm.status,
             }),
           });
@@ -4056,6 +4200,8 @@ export default function App() {
         setCode: "",
         parentAssetId: "",
         useExistingSet: false,
+        componentRole: "",
+        componentRequired: false,
         createSetPack: false,
         assignedTo: "",
         brand: "",
@@ -4078,12 +4224,16 @@ export default function App() {
         MON2: false,
         KBD: false,
         MSE: false,
+        UWF: false,
+        WBC: false,
       });
       setSetPackFileKey((prev) => ({
         MON: prev.MON + 1,
         MON2: prev.MON2 + 1,
         KBD: prev.KBD + 1,
         MSE: prev.MSE + 1,
+        UWF: prev.UWF + 1,
+        WBC: prev.WBC + 1,
       }));
       setModelTemplateNote("");
       setAssetFileKey((k) => k + 1);
@@ -4117,6 +4267,8 @@ export default function App() {
           location: assetForm.location,
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
+          componentRole: assetForm.componentRole.trim(),
+          componentRequired: Boolean(assetForm.componentRequired),
           assignedTo: assetForm.assignedTo,
           brand: assetForm.brand,
           model: assetForm.model,
@@ -4155,6 +4307,7 @@ export default function App() {
           for (const [typeCode, draft] of packItems) {
             const assetType = setPackAssetType(typeCode);
             const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", assetType);
+            const packPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
             const child: Asset = {
               id: Date.now() + Math.floor(Math.random() * 10000),
               campus: assetForm.campus,
@@ -4195,7 +4348,8 @@ export default function App() {
                   reason: "Asset created from set pack",
                 },
               ],
-              photo: draft.photo || "",
+              photo: packPhotos[0] || "",
+              photos: packPhotos,
               status: draft.status || assetForm.status,
               created: new Date().toISOString(),
             };
@@ -4216,6 +4370,8 @@ export default function App() {
           setCode: "",
           parentAssetId: "",
           useExistingSet: false,
+          componentRole: "",
+          componentRequired: false,
           createSetPack: false,
           assignedTo: "",
           brand: "",
@@ -4238,12 +4394,16 @@ export default function App() {
           MON2: false,
           KBD: false,
           MSE: false,
+          UWF: false,
+          WBC: false,
         });
         setSetPackFileKey((prev) => ({
           MON: prev.MON + 1,
           MON2: prev.MON2 + 1,
           KBD: prev.KBD + 1,
           MSE: prev.MSE + 1,
+          UWF: prev.UWF + 1,
+          WBC: prev.WBC + 1,
         }));
         setModelTemplateNote("");
         setAssetFileKey((k) => k + 1);
@@ -5697,7 +5857,6 @@ export default function App() {
 
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
-    const isDesktopComponent = isDesktopSetComponent(asset.category, asset.type);
     const photos = normalizeAssetPhotos(asset);
     setAssetEditForm({
       location: asset.location || "",
@@ -5706,7 +5865,9 @@ export default function App() {
         : "",
       setCode: asset.setCode || "",
       parentAssetId: asset.parentAssetId || "",
-      useExistingSet: isDesktopComponent && !!asset.parentAssetId,
+      useExistingSet: canLinkToParentAsset(asset.type) && !!asset.parentAssetId,
+      componentRole: asset.componentRole || "",
+      componentRequired: Boolean(asset.componentRequired),
       assignedTo: asset.assignedTo || "",
       brand: asset.brand || "",
       model: asset.model || "",
@@ -5872,8 +6033,8 @@ export default function App() {
     const editingAsset = assets.find((a) => a.id === editingAssetId);
     const editingIsDesktop =
       !!editingAsset && editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
-    const editingIsDesktopComponent =
-      !!editingAsset && isDesktopSetComponent(editingAsset.category, editingAsset.type);
+    const editingIsLinkable =
+      !!editingAsset && canLinkToParentAsset(editingAsset.type);
     const needsUser =
       !!editingAsset &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
@@ -5882,8 +6043,8 @@ export default function App() {
       alert(t.userRequired);
       return;
     }
-    if (editingIsDesktopComponent && assetEditForm.useExistingSet && !assetEditForm.parentAssetId.trim()) {
-      alert(t.selectDesktopUnit);
+    if (editingIsLinkable && assetEditForm.useExistingSet && !assetEditForm.parentAssetId.trim()) {
+      alert(t.selectParentAsset);
       return;
     }
     if (editingIsDesktop && !assetEditForm.pcType.trim()) {
@@ -5896,10 +6057,12 @@ export default function App() {
       pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
       setCode: editingIsDesktop
         ? assetEditForm.setCode.trim()
-        : (editingIsDesktopComponent && assetEditForm.useExistingSet ? assetEditForm.setCode.trim() : ""),
+        : (editingIsLinkable && assetEditForm.useExistingSet ? assetEditForm.setCode.trim() : ""),
       parentAssetId: editingIsDesktop
         ? ""
-        : (editingIsDesktopComponent && assetEditForm.useExistingSet ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
+        : (editingIsLinkable && assetEditForm.useExistingSet ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
+      componentRole: assetEditForm.componentRole.trim(),
+      componentRequired: Boolean(assetEditForm.componentRequired),
       assignedTo: assetEditForm.assignedTo.trim(),
       brand: assetEditForm.brand.trim(),
       model: assetEditForm.model.trim(),
@@ -6896,23 +7059,33 @@ export default function App() {
   }
 
   async function onSetPackPhotoFile(type: SetPackChildType, e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
       alert(t.photoLimit);
+      e.target.value = "";
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
-      setSetPackDraft((prev) => ({
-        ...prev,
-        [type]: {
-          ...prev[type],
-          photo,
-        },
-      }));
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setSetPackDraft((prev) => {
+        const merged = normalizeAssetPhotos({
+          photo: prev[type].photo,
+          photos: [...(prev[type].photos || []), ...optimized],
+        }).slice(0, MAX_SET_PACK_PHOTOS);
+        return {
+          ...prev,
+          [type]: {
+            ...prev[type],
+            photo: merged[0] || "",
+            photos: merged,
+          },
+        };
+      });
     } catch {
       alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -7047,34 +7220,42 @@ export default function App() {
     if (monitors[1]) map.MON2 = monitors[1];
     const keyboard = childrenByScope.find((a) => a.type === "KBD");
     const mouse = childrenByScope.find((a) => a.type === "MSE");
+    const usbWifi = childrenByScope.find((a) => a.type === "UWF");
+    const webcam = childrenByScope.find((a) => a.type === "WBC");
     if (keyboard) map.KBD = keyboard;
     if (mouse) map.MSE = mouse;
+    if (usbWifi) map.UWF = usbWifi;
+    if (webcam) map.WBC = webcam;
     return map;
   }, [assets, editingAsset]);
 
   useEffect(() => {
     if (!editingAsset) {
       setEditCreateSetPack(false);
-      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false });
+      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false, UWF: false, WBC: false });
       return;
     }
     const isDesktopParent = editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     if (!isDesktopParent) {
       setEditCreateSetPack(false);
-      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false });
+      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false, UWF: false, WBC: false });
       return;
     }
     const hasAnyChild =
       Boolean(editingSetPackChildren.MON) ||
       Boolean(editingSetPackChildren.MON2) ||
       Boolean(editingSetPackChildren.KBD) ||
-      Boolean(editingSetPackChildren.MSE);
+      Boolean(editingSetPackChildren.MSE) ||
+      Boolean(editingSetPackChildren.UWF) ||
+      Boolean(editingSetPackChildren.WBC);
     setEditCreateSetPack(hasAnyChild);
     setEditSetPackEnabled({
       MON: Boolean(editingSetPackChildren.MON),
       MON2: Boolean(editingSetPackChildren.MON2),
       KBD: Boolean(editingSetPackChildren.KBD),
       MSE: Boolean(editingSetPackChildren.MSE),
+      UWF: Boolean(editingSetPackChildren.UWF),
+      WBC: Boolean(editingSetPackChildren.WBC),
     });
   }, [editingAsset, editingSetPackChildren]);
   const maintenanceDetailAsset = useMemo(
@@ -7665,13 +7846,16 @@ export default function App() {
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(startDate);
       d.setDate(startDate.getDate() + i);
+      const ymd = toYmd(d);
+      const holiday = getHolidayEvent(ymd);
       return {
-        ymd: toYmd(d),
+        ymd,
         day: d.getDate(),
         weekday: d.getDay(),
         inMonth: d.getMonth() === month,
-        hasItems: (scheduleByDate.get(toYmd(d)) || []).length > 0,
-        holidayName: getHolidayName(toYmd(d)),
+        hasItems: (scheduleByDate.get(ymd) || []).length > 0,
+        holidayName: holiday.name,
+        holidayType: holiday.type,
       };
     });
   }, [calendarMonth, scheduleByDate]);
@@ -8139,10 +8323,10 @@ export default function App() {
   );
 
   const updateSingleSelect = useCallback(
-    (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
+    (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string, checked: boolean) => {
       setter((prev) => {
-        if (value === "ALL") return ["ALL"];
-        if (prev.length === 1 && prev[0] === value) return ["ALL"];
+        if (value === "ALL") return checked ? ["ALL"] : [];
+        if (!checked) return prev.filter((item) => item !== value);
         return [value];
       });
     },
@@ -8397,8 +8581,7 @@ export default function App() {
   useEffect(() => {
     setQrItemFilter((prev) => {
       if (prev.includes("ALL")) return prev;
-      const valid = prev.filter((item) => qrItemFilterOptions.includes(item));
-      return valid.length ? valid : ["ALL"];
+      return prev.filter((item) => qrItemFilterOptions.includes(item));
     });
   }, [qrItemFilterOptions]);
   const quickCountLocationOptions = useMemo(() => {
@@ -8721,24 +8904,21 @@ export default function App() {
   useEffect(() => {
     setAssetMasterCampusFilter((prev) => {
       if (prev.includes("ALL")) return prev;
-      const next = prev.filter((item) => assetMasterCampusFilterOptions.includes(item));
-      return next.length ? next : ["ALL"];
+      return prev.filter((item) => assetMasterCampusFilterOptions.includes(item));
     });
   }, [assetMasterCampusFilterOptions]);
 
   useEffect(() => {
     setAssetMasterCategoryFilter((prev) => {
       if (prev.includes("ALL")) return prev;
-      const next = prev.filter((item) => assetMasterCategoryFilterOptions.includes(item));
-      return next.length ? next : ["ALL"];
+      return prev.filter((item) => assetMasterCategoryFilterOptions.includes(item));
     });
   }, [assetMasterCategoryFilterOptions]);
 
   useEffect(() => {
     setAssetMasterItemFilter((prev) => {
       if (prev.includes("ALL")) return prev;
-      const next = prev.filter((item) => assetMasterItemFilterOptions.includes(item));
-      return next.length ? next : ["ALL"];
+      return prev.filter((item) => assetMasterItemFilterOptions.includes(item));
     });
   }, [assetMasterItemFilterOptions]);
 
@@ -10283,7 +10463,7 @@ export default function App() {
                 <div className="dashboard-clean-grid dashboard-maintenance-calendar-only" style={{ marginTop: 12 }}>
                   <article className="panel dashboard-widget dashboard-calendar-panel">
                     <div className="dashboard-widget-head">
-                      <h3 className="section-title">Calendar View</h3>
+                      <h3 className="section-title">Eco Calendar View</h3>
                       <div className="row-actions">
                         <button
                           className="tab btn-small"
@@ -10318,7 +10498,7 @@ export default function App() {
                       {calendarGridDays.map((d) => (
                         <button
                           key={`dash-cal-day-${d.ymd}`}
-                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
+                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
                           onClick={() => {
                             setSelectedCalendarDate(d.ymd);
                             if (d.hasItems) {
@@ -10326,10 +10506,10 @@ export default function App() {
                               setScheduleAlertModal("selected");
                             }
                           }}
-                          title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
                         >
                           <span>{d.day}</span>
                           {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                          {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
                         </button>
                       ))}
                     </div>
@@ -10403,7 +10583,7 @@ export default function App() {
                 <div className="dashboard-clean-grid dashboard-calendar-stock-grid" style={{ marginTop: 12 }}>
                   <article className="panel dashboard-widget dashboard-calendar-panel">
                     <div className="dashboard-widget-head">
-                      <h3 className="section-title">Calendar View</h3>
+                      <h3 className="section-title">Eco Calendar View</h3>
                       <div className="row-actions">
                         <button
                           className="tab btn-small"
@@ -10438,7 +10618,7 @@ export default function App() {
                       {calendarGridDays.map((d) => (
                         <button
                           key={`dash-cal-day-${d.ymd}`}
-                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
+                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
                           onClick={() => {
                             setSelectedCalendarDate(d.ymd);
                             if (d.hasItems) {
@@ -10446,10 +10626,10 @@ export default function App() {
                               setScheduleAlertModal("selected");
                             }
                           }}
-                          title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
                         >
                           <span>{d.day}</span>
                           {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                          {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
                         </button>
                       ))}
                     </div>
@@ -10557,6 +10737,8 @@ export default function App() {
                             type: type.code,
                             pcType: category === "IT" && type.code === DESKTOP_PARENT_TYPE ? PC_TYPE_OPTIONS[0].value : "",
                             assignedTo: "",
+                            componentRole: "",
+                            componentRequired: false,
                           };
                         })
                       }
@@ -10749,16 +10931,19 @@ export default function App() {
                                       <span>{t.model}</span>
                                       <input
                                         className="input"
+                                        list="asset-model-options"
                                         value={setPackDraft[item.type].model}
-                                        onChange={(e) =>
+                                        onChange={(e) => {
+                                          const model = e.target.value;
                                           setSetPackDraft((prev) => ({
                                             ...prev,
                                             [item.type]: {
                                               ...prev[item.type],
-                                              model: e.target.value,
+                                              model,
                                             },
-                                          }))
-                                        }
+                                          }));
+                                        }}
+                                        onBlur={(e) => applySetPackModelTemplate(item.type, e.target.value)}
                                       />
                                     </label>
                                     <label className="field">
@@ -10869,12 +11054,13 @@ export default function App() {
                                         className="file-input"
                                         type="file"
                                         accept="image/*"
+                                        multiple
                                         onChange={(e) => onSetPackPhotoFile(item.type, e)}
                                       />
                                       <div className="photo-preview-wrap">
-                                        {setPackDraft[item.type].photo ? (
+                                        {normalizeAssetPhotos(setPackDraft[item.type]).length ? (
                                           <img
-                                            src={setPackDraft[item.type].photo}
+                                            src={normalizeAssetPhotos(setPackDraft[item.type])[0]}
                                             alt={`${item.label} preview`}
                                             className="photo-preview"
                                           />
@@ -10896,13 +11082,14 @@ export default function App() {
                                             type="button"
                                             title="Delete Photo"
                                             aria-label="Delete Photo"
-                                            disabled={!setPackDraft[item.type].photo}
+                                            disabled={!normalizeAssetPhotos(setPackDraft[item.type]).length}
                                             onClick={() => {
                                               setSetPackDraft((prev) => ({
                                                 ...prev,
                                                 [item.type]: {
                                                   ...prev[item.type],
                                                   photo: "",
+                                                  photos: [],
                                                 },
                                               }));
                                               setSetPackFileKey((prev) => ({
@@ -10914,6 +11101,57 @@ export default function App() {
                                             ✕
                                           </button>
                                         </div>
+                                      </div>
+                                      <div className="asset-photo-gallery">
+                                        {normalizeAssetPhotos(setPackDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                          <div key={`setpack-photo-${item.type}-${index}`} className="asset-photo-chip">
+                                            <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                            <div className="asset-photo-chip-actions">
+                                              <button
+                                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                                type="button"
+                                                onClick={() =>
+                                                  setSetPackDraft((prev) => {
+                                                    const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
+                                                    const hit = next.indexOf(url);
+                                                    if (hit <= 0) return prev;
+                                                    next.splice(hit, 1);
+                                                    next.unshift(url);
+                                                    return {
+                                                      ...prev,
+                                                      [item.type]: {
+                                                        ...prev[item.type],
+                                                        photo: next[0] || "",
+                                                        photos: next,
+                                                      },
+                                                    };
+                                                  })
+                                                }
+                                              >
+                                                {index === 0 ? "Main" : "Set Main"}
+                                              </button>
+                                              <button
+                                                className="btn-danger"
+                                                type="button"
+                                                onClick={() =>
+                                                  setSetPackDraft((prev) => {
+                                                    const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
+                                                    return {
+                                                      ...prev,
+                                                      [item.type]: {
+                                                        ...prev[item.type],
+                                                        photo: next[0] || "",
+                                                        photos: next,
+                                                      },
+                                                    };
+                                                  })
+                                                }
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
                                       </div>
                                     </div>
                                       </div>
@@ -10927,31 +11165,39 @@ export default function App() {
                           </div>
                         ) : null}
                     </>
-                  ) : isDesktopComponentForCreate ? (
+                  ) : isLinkableForCreate ? (
                     <>
                       <label className="field field-wide">
-                        <span>{t.linkToDesktopSet}</span>
-                        <input
-                          type="checkbox"
-                          checked={assetForm.useExistingSet}
-                          onChange={(e) =>
-                            setAssetForm((f) => ({
-                              ...f,
-                              useExistingSet: e.target.checked,
-                              setCode: e.target.checked ? f.setCode : "",
-                              parentAssetId: e.target.checked ? f.parentAssetId : "",
-                            }))
-                          }
-                        />
+                        <span>{t.linkToParentAsset}</span>
+                        <div className="setpack-toggle-row">
+                          <span className="tiny">{t.linkToParentAsset}</span>
+                          <label className="switch-toggle">
+                            <input
+                              type="checkbox"
+                              checked={assetForm.useExistingSet}
+                              onChange={(e) =>
+                                setAssetForm((f) => ({
+                                  ...f,
+                                  useExistingSet: e.target.checked,
+                                  setCode: e.target.checked ? f.setCode : "",
+                                  parentAssetId: e.target.checked ? f.parentAssetId : "",
+                                  componentRole: e.target.checked ? f.componentRole : "",
+                                  componentRequired: e.target.checked ? f.componentRequired : false,
+                                }))
+                              }
+                            />
+                            <span className="switch-slider" />
+                          </label>
+                        </div>
                       </label>
                       {assetForm.useExistingSet ? (
                         <label className="field field-wide">
-                          <span>{t.selectDesktopUnit}</span>
+                          <span>{t.selectParentAsset}</span>
                           <select
                             className="input"
                             value={assetForm.parentAssetId}
                             onChange={(e) => {
-                              const parent = desktopSetParentsForCreate.find((a) => a.assetId === e.target.value);
+                              const parent = parentAssetsForCreate.find((a) => a.assetId === e.target.value);
                               setAssetForm((f) => ({
                                 ...f,
                                 parentAssetId: e.target.value,
@@ -10960,13 +11206,34 @@ export default function App() {
                             }}
                           >
                             <option value="">-</option>
-                            {desktopSetParentsForCreate.map((asset) => (
-                              <option key={`desktop-parent-${asset.id}`} value={asset.assetId}>
-                                {asset.assetId} - {asset.location} ({asset.setCode || "-"})
+                            {parentAssetsForCreate.map((asset) => (
+                              <option key={`parent-create-${asset.id}`} value={asset.assetId}>
+                                {asset.assetId} - {assetItemName(asset.category, asset.type, asset.pcType || "")} ({asset.location || "-"})
                               </option>
                             ))}
                           </select>
                         </label>
+                      ) : null}
+                      {assetForm.useExistingSet ? (
+                        <>
+                          <label className="field">
+                            <span>{t.componentRole}</span>
+                            <input
+                              className="input"
+                              value={assetForm.componentRole}
+                              onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
+                              placeholder="Adapter / Remote / Front Panel"
+                            />
+                          </label>
+                          <label className="field">
+                            <span>{t.componentRequired}</span>
+                            <input
+                              type="checkbox"
+                              checked={assetForm.componentRequired}
+                              onChange={(e) => setAssetForm((f) => ({ ...f, componentRequired: e.target.checked }))}
+                            />
+                          </label>
+                        </>
                       ) : null}
                     </>
                   ) : null}
@@ -11155,10 +11422,7 @@ export default function App() {
                         <label key={`asset-campus-filter-${campus}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={
-                              assetCampusMultiFilter.includes("ALL") ||
-                              assetCampusMultiFilter.includes(campus)
-                            }
+                            checked={assetCampusMultiFilter.includes(campus)}
                             onChange={(e) =>
                               setAssetCampusMultiFilter((prev) =>
                                 applyMultiFilterSelection(
@@ -11204,10 +11468,7 @@ export default function App() {
                         <label key={`asset-category-filter-${category.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={
-                              assetCategoryMultiFilter.includes("ALL") ||
-                              assetCategoryMultiFilter.includes(category.value)
-                            }
+                            checked={assetCategoryMultiFilter.includes(category.value)}
                             onChange={(e) =>
                               setAssetCategoryMultiFilter((prev) =>
                                 applyMultiFilterSelection(
@@ -11253,10 +11514,7 @@ export default function App() {
                         <label key={`asset-name-filter-${option.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={
-                              assetNameMultiFilter.includes("ALL") ||
-                              assetNameMultiFilter.includes(option.value)
-                            }
+                            checked={assetNameMultiFilter.includes(option.value)}
                             onChange={(e) =>
                               setAssetNameMultiFilter((prev) =>
                                 applyMultiFilterSelection(
@@ -11297,10 +11555,7 @@ export default function App() {
                         <label key={`asset-location-filter-${location}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={
-                              assetLocationMultiFilter.includes("ALL") ||
-                              assetLocationMultiFilter.includes(location)
-                            }
+                            checked={assetLocationMultiFilter.includes(location)}
                             onChange={(e) =>
                               setAssetLocationMultiFilter((prev) =>
                                 applyMultiFilterSelection(
@@ -11318,6 +11573,9 @@ export default function App() {
                     </div>
                   </details>
                   <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
+                  <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
+                    {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                  </button>
                 </div>
 
                 {isPhoneView ? (
@@ -11543,6 +11801,12 @@ export default function App() {
                     {detailAsset.category === "IT" ? (
                       <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{detailAsset.parentAssetId || "-"}</div></div>
                     ) : null}
+                    {detailAsset.parentAssetId ? (
+                      <div className="field"><span>{t.componentRole}</span><div className="detail-value">{detailAsset.componentRole || "-"}</div></div>
+                    ) : null}
+                    {detailAsset.parentAssetId ? (
+                      <div className="field"><span>{t.componentRequired}</span><div className="detail-value">{detailAsset.componentRequired ? "Yes" : "No"}</div></div>
+                    ) : null}
                     {detailAsset.category === "IT" ? (
                       <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
                     ) : null}
@@ -11739,31 +12003,39 @@ export default function App() {
                           placeholder="SET-C2.2-001"
                         />
                       </label>
-                    ) : isDesktopSetComponent(editingAsset.category, editingAsset.type) ? (
+                    ) : canLinkToParentAsset(editingAsset.type) ? (
                       <>
                         <label className="field field-wide">
-                          <span>{t.linkToDesktopSet}</span>
-                          <input
-                            type="checkbox"
-                            checked={assetEditForm.useExistingSet}
-                            onChange={(e) =>
-                              setAssetEditForm((f) => ({
-                                ...f,
-                                useExistingSet: e.target.checked,
-                                setCode: e.target.checked ? f.setCode : "",
-                                parentAssetId: e.target.checked ? f.parentAssetId : "",
-                              }))
-                            }
-                          />
+                          <span>{t.linkToParentAsset}</span>
+                          <div className="setpack-toggle-row">
+                            <span className="tiny">{t.linkToParentAsset}</span>
+                            <label className="switch-toggle">
+                              <input
+                                type="checkbox"
+                                checked={assetEditForm.useExistingSet}
+                                onChange={(e) =>
+                                  setAssetEditForm((f) => ({
+                                    ...f,
+                                    useExistingSet: e.target.checked,
+                                    setCode: e.target.checked ? f.setCode : "",
+                                    parentAssetId: e.target.checked ? f.parentAssetId : "",
+                                    componentRole: e.target.checked ? f.componentRole : "",
+                                    componentRequired: e.target.checked ? f.componentRequired : false,
+                                  }))
+                                }
+                              />
+                              <span className="switch-slider" />
+                            </label>
+                          </div>
                         </label>
                         {assetEditForm.useExistingSet ? (
                           <label className="field field-wide">
-                            <span>{t.selectDesktopUnit}</span>
+                            <span>{t.selectParentAsset}</span>
                             <select
                               className="input"
                               value={assetEditForm.parentAssetId}
                               onChange={(e) => {
-                                const parent = desktopSetParentsForEdit.find((a) => a.assetId === e.target.value);
+                                const parent = parentAssetsForEdit.find((a) => a.assetId === e.target.value);
                                 setAssetEditForm((f) => ({
                                   ...f,
                                   parentAssetId: e.target.value,
@@ -11772,13 +12044,34 @@ export default function App() {
                               }}
                             >
                               <option value="">-</option>
-                              {desktopSetParentsForEdit.map((asset) => (
-                                <option key={`desktop-parent-edit-${asset.id}`} value={asset.assetId}>
-                                  {asset.assetId} - {asset.location} ({asset.setCode || "-"})
+                              {parentAssetsForEdit.map((asset) => (
+                                <option key={`parent-edit-${asset.id}`} value={asset.assetId}>
+                                  {asset.assetId} - {assetItemName(asset.category, asset.type, asset.pcType || "")} ({asset.location || "-"})
                                 </option>
                               ))}
                             </select>
                           </label>
+                        ) : null}
+                        {assetEditForm.useExistingSet ? (
+                          <>
+                            <label className="field">
+                              <span>{t.componentRole}</span>
+                              <input
+                                className="input"
+                                value={assetEditForm.componentRole}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                placeholder="Adapter / Remote / Front Panel"
+                              />
+                            </label>
+                            <label className="field">
+                              <span>{t.componentRequired}</span>
+                              <input
+                                type="checkbox"
+                                checked={assetEditForm.componentRequired}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRequired: e.target.checked }))}
+                              />
+                            </label>
+                          </>
                         ) : null}
                       </>
                     ) : null}
@@ -13167,7 +13460,7 @@ export default function App() {
                 className={`tab ${scheduleView === "calendar" ? "tab-active" : ""}`}
                 onClick={() => setScheduleView("calendar")}
               >
-                Calendar View
+                Eco Calendar View
               </button>
             </div>
 
@@ -13458,12 +13751,12 @@ export default function App() {
                 {calendarGridDays.map((d) => (
                   <button
                     key={d.ymd}
-                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
+                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
                     onClick={() => setSelectedCalendarDate(d.ymd)}
-                    title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
                   >
                     <span>{d.day}</span>
                     {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                    {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
                   </button>
                 ))}
               </div>
@@ -14868,7 +15161,7 @@ export default function App() {
                         <label key={`qr-item-${itemName}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={qrItemFilter.includes("ALL") || qrItemFilter.includes(itemName)}
+                            checked={qrItemFilter.includes(itemName)}
                             onChange={(e) =>
                               setQrItemFilter((prev) =>
                                 applyMultiFilterSelection(prev, e.target.checked, itemName, qrItemFilterOptions)
@@ -14902,7 +15195,7 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={assetMasterCampusFilter.includes("ALL")}
-                          onChange={() => updateSingleSelect(setAssetMasterCampusFilter, "ALL")}
+                          onChange={(e) => updateSingleSelect(setAssetMasterCampusFilter, "ALL", e.target.checked)}
                         />
                         <span>{t.allCampuses}</span>
                       </label>
@@ -14911,7 +15204,7 @@ export default function App() {
                           <input
                             type="checkbox"
                             checked={assetMasterCampusFilter.includes(campus)}
-                            onChange={() => updateSingleSelect(setAssetMasterCampusFilter, campus)}
+                            onChange={(e) => updateSingleSelect(setAssetMasterCampusFilter, campus, e.target.checked)}
                           />
                           <span>{campusLabel(campus)}</span>
                         </label>
@@ -14925,7 +15218,7 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={assetMasterCategoryFilter.includes("ALL")}
-                          onChange={() => updateSingleSelect(setAssetMasterCategoryFilter, "ALL")}
+                          onChange={(e) => updateSingleSelect(setAssetMasterCategoryFilter, "ALL", e.target.checked)}
                         />
                         <span>{t.allCategories}</span>
                       </label>
@@ -14934,7 +15227,7 @@ export default function App() {
                           <input
                             type="checkbox"
                             checked={assetMasterCategoryFilter.includes(category)}
-                            onChange={() => updateSingleSelect(setAssetMasterCategoryFilter, category)}
+                            onChange={(e) => updateSingleSelect(setAssetMasterCategoryFilter, category, e.target.checked)}
                           />
                           <span>
                             {category === "SAFETY"
@@ -14966,7 +15259,7 @@ export default function App() {
                         <label key={`master-item-${itemName}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetMasterItemFilter.includes("ALL") || assetMasterItemFilter.includes(itemName)}
+                            checked={assetMasterItemFilter.includes(itemName)}
                             onChange={(e) =>
                               setAssetMasterItemFilter((prev) =>
                                 applyMultiFilterSelection(prev, e.target.checked, itemName, assetMasterItemFilterOptions)

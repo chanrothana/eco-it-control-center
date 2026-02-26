@@ -1135,11 +1135,11 @@ h2 {
 
 .asset-list-filter-row {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  justify-content: end;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  justify-content: stretch;
   align-items: center;
-  margin-left: auto;
-  width: min(50%, 860px);
+  margin-left: 0;
+  width: 100%;
   max-width: 100%;
   gap: 10px;
   margin-bottom: 10px;
@@ -1169,6 +1169,12 @@ h2 {
 .asset-list-filters .input:last-child {
   min-width: 0;
   width: 100%;
+}
+
+.asset-list-filters .asset-filter-reset-btn {
+  width: auto;
+  min-width: 140px;
+  white-space: nowrap;
 }
 
 .filter-menu {
@@ -2786,6 +2792,97 @@ tr.row-maint-maintenance:hover td {
   color: #fff;
 }
 
+.calendar-holiday-public {
+  background: #d33c48;
+  border-color: #a92532;
+  color: #fff;
+}
+
+.calendar-holiday-break {
+  background: #d33c48;
+  border-color: #a92532;
+  color: #fff;
+}
+
+.calendar-holiday-ptc {
+  background: #f29a2e;
+  border-color: #c47314;
+  color: #fff;
+}
+
+.calendar-holiday-term_end {
+  background: #1f78bf;
+  border-color: #15588f;
+  color: #fff;
+}
+
+.calendar-holiday-term_start {
+  background: #67b24f;
+  border-color: #4e8b3d;
+  color: #fff;
+}
+
+.calendar-holiday-camp {
+  background: #f2ec2e;
+  border-color: #c2bb10;
+  color: #3b3400;
+}
+
+.calendar-holiday-celebration {
+  background: #19d7e2;
+  border-color: #11a4ab;
+  color: #00353a;
+}
+
+.calendar-holiday-camp span,
+.calendar-holiday-celebration span {
+  color: inherit !important;
+}
+
+.calendar-day .calendar-hover-popup {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  min-width: 0;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid #cfb48f;
+  background: #fff6e8;
+  color: #4b3317;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-wrap: pretty;
+  box-shadow: 0 6px 16px rgba(70, 46, 20, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  z-index: 30;
+}
+
+.calendar-day.calendar-popup-left .calendar-hover-popup {
+  left: 0;
+  right: auto;
+  transform: none;
+  text-align: left;
+}
+
+.calendar-day.calendar-popup-right .calendar-hover-popup {
+  left: auto;
+  right: 0;
+  transform: none;
+  text-align: right;
+}
+
+.calendar-day:hover .calendar-hover-popup,
+.calendar-day:focus-visible .calendar-hover-popup {
+  opacity: 1;
+  visibility: visible;
+}
+
 .calendar-selected {
   border-color: #6e8fc3;
   box-shadow: inset 0 0 0 1px #6e8fc3;
@@ -3681,6 +3778,19 @@ tr.row-maint-maintenance:hover td {
     flex-wrap: nowrap;
     overflow-x: auto;
     width: 100%;
+  }
+
+  .asset-list-filters .filter-menu,
+  .asset-list-filters .input {
+    flex: 0 0 210px;
+    width: 210px;
+    min-width: 210px;
+  }
+
+  .asset-list-filters .asset-filter-reset-btn {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 140px;
   }
 
   .maintenance-filter-row {

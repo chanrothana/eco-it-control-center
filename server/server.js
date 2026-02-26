@@ -52,9 +52,9 @@ const CAMPUS_MAP = {
 };
 const CAMPUS_NAMES = Object.values(CAMPUS_MAP);
 const TYPE_CODES = {
-  IT: ["PC", "LAP", "TAB", "MON", "KBD", "MSE", "TV", "SPK", "PRN", "SW", "AP", "CAM"],
+  IT: ["PC", "LAP", "TAB", "MON", "KBD", "MSE", "DCM", "SLP", "ADP", "RMT", "UWF", "WBC", "TV", "SPK", "PRN", "SW", "AP", "CAM"],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "TBL", "CHR"],
+  FACILITY: ["AC", "FPN", "RPN", "TBL", "CHR"],
 };
 const TYPE_LABELS = {
   PC: "Computer",
@@ -63,6 +63,12 @@ const TYPE_LABELS = {
   MON: "Monitor",
   KBD: "Keyboard",
   MSE: "Mouse",
+  DCM: "Digital Camera",
+  SLP: "Slide Projector",
+  ADP: "Power Adapter",
+  RMT: "Remote Control",
+  UWF: "USB WiFi Adapter",
+  WBC: "Webcam",
   TV: "TV",
   SPK: "Speaker",
   PRN: "Printer",
@@ -75,6 +81,8 @@ const TYPE_LABELS = {
   FB: "Fire Bell",
   FCP: "Fire Control Panel",
   AC: "Air Conditioner",
+  FPN: "Front Panel",
+  RPN: "Rear Panel",
   TBL: "Table",
   CHR: "Chair",
 };
@@ -1065,6 +1073,8 @@ function validateAsset(body) {
   const location = toText(body.location);
   const setCode = toText(body.setCode);
   const parentAssetId = toUpper(body.parentAssetId);
+  const componentRole = toText(body.componentRole);
+  const componentRequired = Boolean(body.componentRequired);
   const assignedTo = toText(body.assignedTo);
   const brand = toText(body.brand);
   const model = toText(body.model);
@@ -1082,7 +1092,7 @@ function validateAsset(body) {
   const photo = toText(body.photo);
   const photos = Array.isArray(body.photos) ? body.photos : [];
   const status = toText(body.status) || "Active";
-  const requiresUser = ["PC", "TAB", "SPK"].includes(type);
+  const requiresUser = ["PC", "TAB", "SPK", "DCM"].includes(type);
   const sharedLocation = SHARED_LOCATION_KEYWORDS.some((k) =>
     location.toLowerCase().includes(k)
   );
@@ -1117,6 +1127,8 @@ function validateAsset(body) {
     location,
     setCode,
     parentAssetId,
+    componentRole,
+    componentRequired,
     assignedTo,
     brand,
     model,
@@ -1471,6 +1483,8 @@ function toPublicAssetView(asset) {
     location: toText(source.location),
     setCode: toText(source.setCode),
     parentAssetId: toText(source.parentAssetId),
+    componentRole: toText(source.componentRole),
+    componentRequired: Boolean(source.componentRequired),
     assignedTo: toText(source.assignedTo),
     brand: toText(source.brand),
     model: toText(source.model),
