@@ -1756,6 +1756,8 @@ function shiftYmd(ymd: string, days: number) {
 function normalizeLooseDateToYmd(raw: string) {
   const text = String(raw || "").trim();
   if (!text) return "";
+  const isoPrefix = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/);
+  if (isoPrefix) return isoPrefix[1];
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return "";
@@ -1923,10 +1925,12 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
     const nextHistory = Array.isArray(a.maintenanceHistory) ? a.maintenanceHistory : [];
     if (!hasIncomingMaintenanceHistory && prevHistory.length) {
       next.maintenanceHistory = prevHistory;
-    } else if (nextHistory.length && prevHistory.length) {
+    } else if (nextHistory.length || prevHistory.length) {
       const prevById = new Map<number, MaintenanceEntry>(prevHistory.map((h) => [h.id, h]));
-      next.maintenanceHistory = nextHistory.map((h) => {
+      const seen = new Set<number>();
+      const mergedHistory = nextHistory.map((h) => {
         const old = prevById.get(h.id);
+        seen.add(h.id);
         if (!old) return h;
         return {
           ...old,
@@ -1934,6 +1938,11 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
           photo: h.photo || old.photo || "",
         };
       });
+      for (const old of prevHistory) {
+        if (seen.has(old.id)) continue;
+        mergedHistory.push(old);
+      }
+      next.maintenanceHistory = mergedHistory;
     }
 
     const prevVerification = Array.isArray(prev.verificationHistory) ? prev.verificationHistory : [];
@@ -1941,10 +1950,12 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
     const nextVerification = Array.isArray(a.verificationHistory) ? a.verificationHistory : [];
     if (!hasIncomingVerificationHistory && prevVerification.length) {
       next.verificationHistory = prevVerification;
-    } else if (nextVerification.length && prevVerification.length) {
+    } else if (nextVerification.length || prevVerification.length) {
       const prevById = new Map<number, VerificationEntry>(prevVerification.map((h) => [h.id, h]));
-      next.verificationHistory = nextVerification.map((h) => {
+      const seen = new Set<number>();
+      const mergedVerification = nextVerification.map((h) => {
         const old = prevById.get(h.id);
+        seen.add(h.id);
         if (!old) return h;
         return {
           ...old,
@@ -1952,6 +1963,11 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
           photo: h.photo || old.photo || "",
         };
       });
+      for (const old of prevVerification) {
+        if (seen.has(old.id)) continue;
+        mergedVerification.push(old);
+      }
+      next.verificationHistory = mergedVerification;
     }
 
     if (!a.nextVerificationDate && prev.nextVerificationDate) {
@@ -2352,6 +2368,7 @@ export default function App() {
       authUser?.assetSubviewAccess !== "list_only" &&
       canAccessMenu("assets.register", "assets")
   );
+  const showMaintenanceDashboard = !isAdmin && canAccessMenu("maintenance.record", "maintenance");
   const navMenuItems = useMemo(
     () => navItems.filter((item) => allowedNavModules.has(item.id)),
     [navItems, allowedNavModules]
@@ -2766,6 +2783,7 @@ export default function App() {
   });
   const [editingAuthUserId, setEditingAuthUserId] = useState<number | null>(null);
   const [scheduleAlertModal, setScheduleAlertModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "selected">(null);
+  const [scheduleAlertItemFilter, setScheduleAlertItemFilter] = useState("ALL");
   const [overviewModal, setOverviewModal] = useState<null | "total" | "it" | "safety" | "tickets">(null);
   const [quickCountModal, setQuickCountModal] = useState<null | { title: string; assets: Asset[] }>(null);
   const [updateNotesOpen, setUpdateNotesOpen] = useState(false);
@@ -7526,6 +7544,45 @@ export default function App() {
     const today = toYmd(new Date());
     return scheduleAssets.filter((a) => (a.nextMaintenanceDate || "") < today);
   }, [scheduleAssets]);
+  const maintenanceDoneToday = useMemo(() => {
+    const today = toYmd(new Date());
+    let count = 0;
+    for (const asset of assets) {
+      for (const entry of asset.maintenanceHistory || []) {
+        const raw = String(entry?.date || "").trim();
+        if (!raw) continue;
+        const ymd = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : toYmd(new Date(raw));
+        if (ymd !== today) continue;
+        if (String(entry?.completion || "").toLowerCase() === "done") count += 1;
+      }
+    }
+    return count;
+  }, [assets]);
+  const maintenanceDueAssets = useMemo(
+    () =>
+      scheduleAssets.filter((asset) => {
+        const dueDate = String(asset.nextMaintenanceDate || "").trim();
+        if (!dueDate) return false;
+        return !hasCompletedMaintenanceOnDate(asset, dueDate);
+      }),
+    [scheduleAssets]
+  );
+  const maintenanceDueByItemRows = useMemo(() => {
+    const map = new Map<string, { itemName: string; count: number; assets: Asset[] }>();
+    for (const asset of maintenanceDueAssets) {
+      const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+      if (!map.has(itemName)) {
+        map.set(itemName, { itemName, count: 0, assets: [] });
+      }
+      const row = map.get(itemName)!;
+      row.count += 1;
+      row.assets.push(asset);
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.itemName.localeCompare(b.itemName);
+    });
+  }, [maintenanceDueAssets, assetItemName]);
   const calendarGridDays = useMemo(() => {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
@@ -7550,19 +7607,28 @@ export default function App() {
     [scheduleByDate, selectedCalendarDate]
   );
   const scheduleAlertItems = useMemo(() => {
+    let title = "";
+    let items: Asset[] = [];
     if (scheduleAlertModal === "overdue") {
-      return { title: "Overdue Scheduled Assets", items: overdueScheduleAssets };
+      title = "Overdue Scheduled Assets";
+      items = overdueScheduleAssets;
+    } else if (scheduleAlertModal === "upcoming") {
+      title = "Scheduled Assets - Next 7 Days";
+      items = upcomingScheduleAssets;
+    } else if (scheduleAlertModal === "scheduled") {
+      title = "All Scheduled Assets";
+      items = scheduleAssets;
+    } else if (scheduleAlertModal === "selected") {
+      title = `Selected Date Assets - ${selectedCalendarDate}`;
+      items = selectedDateItems;
     }
-    if (scheduleAlertModal === "upcoming") {
-      return { title: "Scheduled Assets - Next 7 Days", items: upcomingScheduleAssets };
+    if (scheduleAlertItemFilter !== "ALL") {
+      items = items.filter(
+        (asset) => assetItemName(asset.category, asset.type, asset.pcType || "") === scheduleAlertItemFilter
+      );
+      title = `${title} - ${scheduleAlertItemFilter}`;
     }
-    if (scheduleAlertModal === "scheduled") {
-      return { title: "All Scheduled Assets", items: scheduleAssets };
-    }
-    if (scheduleAlertModal === "selected") {
-      return { title: `Selected Date Assets - ${selectedCalendarDate}`, items: selectedDateItems };
-    }
-    return { title: "", items: [] as Asset[] };
+    return { title, items };
   }, [
     scheduleAlertModal,
     overdueScheduleAssets,
@@ -7570,6 +7636,8 @@ export default function App() {
     scheduleAssets,
     selectedDateItems,
     selectedCalendarDate,
+    scheduleAlertItemFilter,
+    assetItemName,
   ]);
   const overviewModalData = useMemo(() => {
     const openTickets = tickets.filter((t) => t.status !== "Resolved");
@@ -7848,6 +7916,7 @@ export default function App() {
           category: asset.category || "-",
           itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           itemDescription: toItemDescription(asset),
+          serialNumber: String(asset.serialNumber || "").trim(),
           location: asset.location || "-",
           purchaseDate: asset.purchaseDate || "-",
           lastServiceDate: toLastServiceDate(asset),
@@ -7916,6 +7985,7 @@ export default function App() {
         category: row.category,
         location: row.location,
         status: row.status,
+        serialNumber: row.serialNumber,
       })),
     [assetMasterSetRows]
   );
@@ -7991,19 +8061,6 @@ export default function App() {
   const isAssetMasterColumnVisible = useCallback(
     (key: AssetMasterColumnKey) => assetMasterVisibleColumns.includes(key),
     [assetMasterVisibleColumns]
-  );
-
-  const updateMultiSelect = useCallback(
-    (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
-      setter((prev) => {
-        if (value === "ALL") return ["ALL"];
-        const current = prev.includes("ALL") ? [] : [...prev];
-        const exists = current.includes(value);
-        const next = exists ? current.filter((item) => item !== value) : [...current, value];
-        return next.length ? next : ["ALL"];
-      });
-    },
-    []
   );
 
   const updateSingleSelect = useCallback(
@@ -8901,9 +8958,13 @@ export default function App() {
           ? `<div class="qr-sticker-grid">${qrFilteredRows
               .map((row) => {
                 const qr = String(rows.find((r) => r[1] === row.assetId)?.[0] || "");
-                return `<div class="qr-sticker">
-                  <div class="qr-sticker-qr">${qr ? `<img src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
-                  <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
+                const serial = String(row.serialNumber || "").trim() || "-";
+                return `<div class="qr-sticker-wrap">
+                  <div class="qr-sticker-sn">SN: ${escapeHtml(serial)}</div>
+                  <div class="qr-sticker">
+                    <div class="qr-sticker-qr">${qr ? `<img src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
+                    <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
+                  </div>
                 </div>`;
               })
               .join("")}</div>`
@@ -8925,6 +8986,8 @@ export default function App() {
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; }
           .qr-sticker-grid { display: grid; grid-template-columns: repeat(5, 116px); column-gap: 10px; row-gap: 10px; margin-top: 10px; width: 100%; justify-content: space-between; }
+          .qr-sticker-wrap { width: 116px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
+          .qr-sticker-sn { width: 116px; min-height: 11px; text-align: center; font-size: 7.5px; line-height: 1.1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
           .qr-sticker { width: 116px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 8px; padding: 7px 7px 6px; display: grid; gap: 6px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
           .qr-sticker-qr { width: 84px; height: 84px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 6px; display: grid; place-items: center; }
           .qr-sticker-qr img { width: 76px; height: 76px; object-fit: contain; display: block; }
@@ -9963,170 +10026,359 @@ export default function App() {
 
         {tab === "dashboard" && (
           <section className="panel dashboard-panel">
-            {isPhoneView ? (
-              <section className="phone-dashboard-hero">
-                <div className="phone-dashboard-head">
-                  <p className="phone-dashboard-kicker">{t.overview}</p>
-                  <h2 className="phone-dashboard-title">{filterLabel}</h2>
-                  <p className="phone-dashboard-campus">
-                    {topCampusByAssets
-                      ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets})`
-                      : t.noCampusDataYet}
-                  </p>
-                </div>
-                <div className="phone-dashboard-actions">
-                  <button className="phone-quick-btn" onClick={() => setTab("assets")}>{t.openAssetList}</button>
-                  <button className="phone-quick-btn" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
-                  <button className="phone-quick-btn" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
-                  <button className="phone-quick-btn" onClick={() => setTab("verification")}>Record Verification</button>
-                </div>
-              </section>
-            ) : (
-              <div className="dashboard-hero">
-                <div>
-                  <h2>{filterLabel} {t.overview}</h2>
-                  <p className="tiny">
-                    {topCampusByAssets
-                      ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets} ${t.assets.toLowerCase()})`
-                      : t.noCampusDataYet}
-                  </p>
-                </div>
-                <div className="dashboard-actions">
-                  <span className="tiny">Quick Access</span>
-                  <div className="row-actions">
-                    <button className="tab" onClick={() => setTab("assets")}>{t.openAssetList}</button>
-                    <button className="tab" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
-                    <button className="tab" onClick={() => setTab("inventory")}>Inventory</button>
-                    <button className="tab" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
-                    <button className="tab" onClick={() => setTab("verification")}>{t.recordVerification}</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className={`stats-grid dashboard-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
-              <button className="stat-card stat-card-button stat-card-total" onClick={() => setOverviewModal("total")}>
-                <div className="stat-label">{t.totalAssets}</div>
-                <div className="stat-value">{stats.totalAssets}</div>
-              </button>
-              <button className="stat-card stat-card-button stat-card-it" onClick={() => setOverviewModal("it")}>
-                <div className="stat-label">{t.itAssets}</div>
-                <div className="stat-value">{stats.itAssets}</div>
-              </button>
-              <button className="stat-card stat-card-button stat-card-safety" onClick={() => setOverviewModal("safety")}>
-                <div className="stat-label">{t.safetyAssets}</div>
-                <div className="stat-value">{stats.safetyAssets}</div>
-              </button>
-              <button className="stat-card stat-card-button stat-card-ticket" onClick={() => setOverviewModal("tickets")}>
-                <div className="stat-label">{t.openWorkOrders}</div>
-                <div className="stat-value">{stats.openTickets}</div>
-              </button>
-            </div>
-
-            {renderQuickCountPanel("dashboard")}
-
-            <div className="dashboard-clean-grid dashboard-calendar-stock-grid" style={{ marginTop: 12 }}>
-              <article className="panel dashboard-widget dashboard-calendar-panel">
-                <div className="dashboard-widget-head">
-                  <h3 className="section-title">Calendar View</h3>
-                  <div className="row-actions">
-                    <button
-                      className="tab btn-small"
-                      onClick={() =>
-                        setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
-                      }
-                    >
-                      Prev
-                    </button>
-                    <button
-                      className="tab btn-small"
-                      onClick={() =>
-                        setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
-                      }
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-                <p className="tiny dashboard-calendar-month">
-                  {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
-                </p>
-                <div className="calendar-grid dashboard-calendar-grid">
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
-                    <div
-                      key={`dash-cal-head-${d}`}
-                      className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
-                    >
-                      {d}
+            {showMaintenanceDashboard ? (
+              <>
+                {isPhoneView ? (
+                  <section className="phone-dashboard-hero">
+                    <div className="phone-dashboard-head">
+                      <p className="phone-dashboard-kicker">Maintenance Focus</p>
+                      <h2 className="phone-dashboard-title">{filterLabel}</h2>
+                      <p className="phone-dashboard-campus">Track due tasks and complete maintenance faster.</p>
                     </div>
-                  ))}
-                  {calendarGridDays.map((d) => (
-                    <button
-                      key={`dash-cal-day-${d.ymd}`}
-                      className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
-                      onClick={() => {
-                        setSelectedCalendarDate(d.ymd);
-                        if (d.hasItems) setScheduleAlertModal("selected");
-                      }}
-                      title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
-                    >
-                      <span>{d.day}</span>
-                      {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
-                    </button>
-                  ))}
-                </div>
-              </article>
+                    <div className="phone-dashboard-actions">
+                      <button className="phone-quick-btn" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+                      <button className="phone-quick-btn" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
+                      {allowedNavModules.has("reports") ? (
+                        <button className="phone-quick-btn" onClick={() => setTab("reports")}>{t.reports}</button>
+                      ) : null}
+                      {allowedNavModules.has("assets") ? (
+                        <button className="phone-quick-btn" onClick={() => setTab("assets")}>{t.openAssetList}</button>
+                      ) : null}
+                    </div>
+                  </section>
+                ) : (
+                  <div className="dashboard-hero">
+                    <div>
+                      <h2>Maintenance Dashboard</h2>
+                      <p className="tiny">
+                        {filterLabel} | focus on overdue, upcoming, and completed work.
+                      </p>
+                    </div>
+                    <div className="dashboard-actions">
+                      <span className="tiny">Quick Access</span>
+                      <div className="row-actions">
+                        <button className="tab" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+                        <button className="tab" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
+                        {allowedNavModules.has("reports") ? (
+                          <button className="tab" onClick={() => setTab("reports")}>{t.reports}</button>
+                        ) : null}
+                        {allowedNavModules.has("assets") ? (
+                          <button className="tab" onClick={() => setTab("assets")}>{t.openAssetList}</button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-              <article className="panel dashboard-widget">
-                <div className="dashboard-widget-head">
-                  <h3 className="section-title">Stock Balance & Low Stock Alerts</h3>
-                </div>
-                <div className="stats-grid dashboard-stock-stats" style={{ marginBottom: 10 }}>
-                  <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryBalanceView("all")}>
-                    <div className="stat-label">Total Inventory Items</div>
-                    <div className="stat-value">{inventoryBalanceRows.length}</div>
+                <article className="panel dashboard-widget dashboard-maintenance-item-panel">
+                  <div className="dashboard-widget-head">
+                    <h3 className="section-title">Maintenance Items</h3>
+                    <button
+                      type="button"
+                      className="tab btn-small"
+                      onClick={() => {
+                        setScheduleAlertItemFilter("ALL");
+                        setScheduleAlertModal("scheduled");
+                      }}
+                    >
+                      View All Assets
+                    </button>
+                  </div>
+                  <div className="maintenance-item-grid">
+                    {maintenanceDueByItemRows.length ? (
+                      maintenanceDueByItemRows.slice(0, 10).map((row) => (
+                        <button
+                          key={`maintenance-due-item-${row.itemName}`}
+                          type="button"
+                          className="maintenance-item-card"
+                          onClick={() => {
+                            setScheduleAlertItemFilter(row.itemName);
+                            setScheduleAlertModal("scheduled");
+                          }}
+                        >
+                          <span className="maintenance-item-card-icon" aria-hidden="true">
+                            {quickCountItemIcon(row.itemName)}
+                          </span>
+                          <span className="maintenance-item-card-name">{row.itemName}</span>
+                          <strong className="maintenance-item-card-value">{row.count}</strong>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="tiny">No maintenance items to schedule.</div>
+                    )}
+                  </div>
+                </article>
+
+                <div className={`stats-grid dashboard-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
+                  <button
+                    className="stat-card stat-card-button stat-card-overdue"
+                    onClick={() => {
+                      setScheduleAlertItemFilter("ALL");
+                      setScheduleAlertModal("overdue");
+                    }}
+                  >
+                    <div className="stat-label">Overdue</div>
+                    <div className="stat-value">{overdueScheduleAssets.length}</div>
                   </button>
                   <button
-                    type="button"
-                    className="stat-card stat-card-button stat-card-overdue"
-                    onClick={() => openInventoryBalanceView("low")}
+                    className="stat-card stat-card-button stat-card-ticket"
+                    onClick={() => {
+                      setScheduleAlertItemFilter("ALL");
+                      setScheduleAlertModal("upcoming");
+                    }}
                   >
-                    <div className="stat-label">Low Stock Alerts</div>
-                    <div className="stat-value">{inventoryLowStockRows.length}</div>
+                    <div className="stat-label">Next 7 Days</div>
+                    <div className="stat-value">{upcomingScheduleAssets.length}</div>
+                  </button>
+                  <button
+                    className="stat-card stat-card-button stat-card-it"
+                    onClick={() => {
+                      setTab("maintenance");
+                      setMaintenanceView("history");
+                    }}
+                  >
+                    <div className="stat-label">Completed Today</div>
+                    <div className="stat-value">{maintenanceDoneToday}</div>
+                  </button>
+                  <button
+                    className="stat-card stat-card-button stat-card-total"
+                    onClick={() => {
+                      setScheduleAlertItemFilter("ALL");
+                      setScheduleAlertModal("scheduled");
+                    }}
+                  >
+                    <div className="stat-label">All Scheduled</div>
+                    <div className="stat-value">{scheduleAssets.length}</div>
                   </button>
                 </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Code</th>
-                        <th>Name</th>
-                        <th>Current</th>
-                        <th>Min</th>
-                        <th>Alert</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventoryBalanceRows.length ? (
-                        inventoryBalanceRows.slice(0, 10).map((row) => (
-                          <tr key={`dash-stock-row-${row.id}`}>
-                            <td><strong>{row.itemCode}</strong></td>
-                            <td>{row.itemName}</td>
-                            <td>{row.currentStock}</td>
-                            <td>{row.minStock}</td>
-                            <td>{row.lowStock ? "Low" : "OK"}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5}>No stock balance data.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+
+                <div className="dashboard-clean-grid dashboard-maintenance-calendar-only" style={{ marginTop: 12 }}>
+                  <article className="panel dashboard-widget dashboard-calendar-panel">
+                    <div className="dashboard-widget-head">
+                      <h3 className="section-title">Calendar View</h3>
+                      <div className="row-actions">
+                        <button
+                          className="tab btn-small"
+                          onClick={() =>
+                            setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                          }
+                        >
+                          Prev
+                        </button>
+                        <button
+                          className="tab btn-small"
+                          onClick={() =>
+                            setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                          }
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                    <p className="tiny dashboard-calendar-month">
+                      {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
+                    </p>
+                    <div className="calendar-grid dashboard-calendar-grid">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
+                        <div
+                          key={`dash-cal-head-${d}`}
+                          className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
+                        >
+                          {d}
+                        </div>
+                      ))}
+                      {calendarGridDays.map((d) => (
+                        <button
+                          key={`dash-cal-day-${d.ymd}`}
+                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
+                          onClick={() => {
+                            setSelectedCalendarDate(d.ymd);
+                            if (d.hasItems) {
+                              setScheduleAlertItemFilter("ALL");
+                              setScheduleAlertModal("selected");
+                            }
+                          }}
+                          title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
+                        >
+                          <span>{d.day}</span>
+                          {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </article>
                 </div>
-              </article>
-            </div>
+              </>
+            ) : (
+              <>
+                {isPhoneView ? (
+                  <section className="phone-dashboard-hero">
+                    <div className="phone-dashboard-head">
+                      <p className="phone-dashboard-kicker">{t.overview}</p>
+                      <h2 className="phone-dashboard-title">{filterLabel}</h2>
+                      <p className="phone-dashboard-campus">
+                        {topCampusByAssets
+                          ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets})`
+                          : t.noCampusDataYet}
+                      </p>
+                    </div>
+                    <div className="phone-dashboard-actions">
+                      <button className="phone-quick-btn" onClick={() => setTab("assets")}>{t.openAssetList}</button>
+                      <button className="phone-quick-btn" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
+                      <button className="phone-quick-btn" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+                      <button className="phone-quick-btn" onClick={() => setTab("verification")}>Record Verification</button>
+                    </div>
+                  </section>
+                ) : (
+                  <div className="dashboard-hero">
+                    <div>
+                      <h2>{filterLabel} {t.overview}</h2>
+                      <p className="tiny">
+                        {topCampusByAssets
+                          ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets} ${t.assets.toLowerCase()})`
+                          : t.noCampusDataYet}
+                      </p>
+                    </div>
+                    <div className="dashboard-actions">
+                      <span className="tiny">Quick Access</span>
+                      <div className="row-actions">
+                        <button className="tab" onClick={() => setTab("assets")}>{t.openAssetList}</button>
+                        <button className="tab" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
+                        <button className="tab" onClick={() => setTab("inventory")}>Inventory</button>
+                        <button className="tab" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
+                        <button className="tab" onClick={() => setTab("verification")}>{t.recordVerification}</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`stats-grid dashboard-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
+                  <button className="stat-card stat-card-button stat-card-total" onClick={() => setOverviewModal("total")}>
+                    <div className="stat-label">{t.totalAssets}</div>
+                    <div className="stat-value">{stats.totalAssets}</div>
+                  </button>
+                  <button className="stat-card stat-card-button stat-card-it" onClick={() => setOverviewModal("it")}>
+                    <div className="stat-label">{t.itAssets}</div>
+                    <div className="stat-value">{stats.itAssets}</div>
+                  </button>
+                  <button className="stat-card stat-card-button stat-card-safety" onClick={() => setOverviewModal("safety")}>
+                    <div className="stat-label">{t.safetyAssets}</div>
+                    <div className="stat-value">{stats.safetyAssets}</div>
+                  </button>
+                  <button className="stat-card stat-card-button stat-card-ticket" onClick={() => setOverviewModal("tickets")}>
+                    <div className="stat-label">{t.openWorkOrders}</div>
+                    <div className="stat-value">{stats.openTickets}</div>
+                  </button>
+                </div>
+
+                {renderQuickCountPanel("dashboard")}
+
+                <div className="dashboard-clean-grid dashboard-calendar-stock-grid" style={{ marginTop: 12 }}>
+                  <article className="panel dashboard-widget dashboard-calendar-panel">
+                    <div className="dashboard-widget-head">
+                      <h3 className="section-title">Calendar View</h3>
+                      <div className="row-actions">
+                        <button
+                          className="tab btn-small"
+                          onClick={() =>
+                            setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                          }
+                        >
+                          Prev
+                        </button>
+                        <button
+                          className="tab btn-small"
+                          onClick={() =>
+                            setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                          }
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                    <p className="tiny dashboard-calendar-month">
+                      {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
+                    </p>
+                    <div className="calendar-grid dashboard-calendar-grid">
+                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
+                        <div
+                          key={`dash-cal-head-${d}`}
+                          className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
+                        >
+                          {d}
+                        </div>
+                      ))}
+                      {calendarGridDays.map((d) => (
+                        <button
+                          key={`dash-cal-day-${d.ymd}`}
+                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
+                          onClick={() => {
+                            setSelectedCalendarDate(d.ymd);
+                            if (d.hasItems) {
+                              setScheduleAlertItemFilter("ALL");
+                              setScheduleAlertModal("selected");
+                            }
+                          }}
+                          title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
+                        >
+                          <span>{d.day}</span>
+                          {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </article>
+
+                  <article className="panel dashboard-widget">
+                    <div className="dashboard-widget-head">
+                      <h3 className="section-title">Stock Balance & Low Stock Alerts</h3>
+                    </div>
+                    <div className="stats-grid dashboard-stock-stats" style={{ marginBottom: 10 }}>
+                      <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryBalanceView("all")}>
+                        <div className="stat-label">Total Inventory Items</div>
+                        <div className="stat-value">{inventoryBalanceRows.length}</div>
+                      </button>
+                      <button
+                        type="button"
+                        className="stat-card stat-card-button stat-card-overdue"
+                        onClick={() => openInventoryBalanceView("low")}
+                      >
+                        <div className="stat-label">Low Stock Alerts</div>
+                        <div className="stat-value">{inventoryLowStockRows.length}</div>
+                      </button>
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Current</th>
+                            <th>Min</th>
+                            <th>Alert</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inventoryBalanceRows.length ? (
+                            inventoryBalanceRows.slice(0, 10).map((row) => (
+                              <tr key={`dash-stock-row-${row.id}`}>
+                                <td><strong>{row.itemCode}</strong></td>
+                                <td>{row.itemName}</td>
+                                <td>{row.currentStock}</td>
+                                <td>{row.minStock}</td>
+                                <td>{row.lowStock ? "Low" : "OK"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5}>No stock balance data.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                </div>
+              </>
+            )}
 
           </section>
         )}
@@ -14475,7 +14727,7 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={assetMasterCampusFilter.includes("ALL")}
-                          onChange={() => updateMultiSelect(setAssetMasterCampusFilter, "ALL")}
+                          onChange={() => updateSingleSelect(setAssetMasterCampusFilter, "ALL")}
                         />
                         <span>{t.allCampuses}</span>
                       </label>
@@ -14484,7 +14736,7 @@ export default function App() {
                           <input
                             type="checkbox"
                             checked={assetMasterCampusFilter.includes(campus)}
-                            onChange={() => updateMultiSelect(setAssetMasterCampusFilter, campus)}
+                            onChange={() => updateSingleSelect(setAssetMasterCampusFilter, campus)}
                           />
                           <span>{campusLabel(campus)}</span>
                         </label>
@@ -14527,7 +14779,11 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={assetMasterItemFilter.includes("ALL")}
-                          onChange={() => updateMultiSelect(setAssetMasterItemFilter, "ALL")}
+                          onChange={(e) =>
+                            setAssetMasterItemFilter((prev) =>
+                              applyMultiFilterSelection(prev, e.target.checked, "ALL", assetMasterItemFilterOptions)
+                            )
+                          }
                         />
                         <span>{lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}</span>
                       </label>
@@ -14535,8 +14791,12 @@ export default function App() {
                         <label key={`master-item-${itemName}`} className="filter-menu-item">
                           <input
                             type="checkbox"
-                            checked={assetMasterItemFilter.includes(itemName)}
-                            onChange={() => updateMultiSelect(setAssetMasterItemFilter, itemName)}
+                            checked={assetMasterItemFilter.includes("ALL") || assetMasterItemFilter.includes(itemName)}
+                            onChange={(e) =>
+                              setAssetMasterItemFilter((prev) =>
+                                applyMultiFilterSelection(prev, e.target.checked, itemName, assetMasterItemFilterOptions)
+                              )
+                            }
                           />
                           <span>{itemName}</span>
                         </label>
@@ -14935,7 +15195,7 @@ export default function App() {
                         <div className="qr-label-asset-id">{row.assetId}</div>
                         <div>{row.itemName}</div>
                         <div>{campusLabel(row.campus)} | {row.location || "-"}</div>
-                        <div>Status: {assetStatusLabel(row.status || "-")}</div>
+                        <div>Status: {assetStatusLabel(row.status || "-")} | SN: {String(row.serialNumber || "").trim() || "-"}</div>
                       </div>
                     </article>
                   ))
