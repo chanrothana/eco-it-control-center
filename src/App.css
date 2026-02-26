@@ -1379,6 +1379,24 @@ label.backup-action-btn {
   flex-wrap: wrap;
 }
 
+.setup-tabs-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  gap: 6px;
+  padding-bottom: 2px;
+}
+
+.setup-tabs-row .tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  padding: 0 8px;
+  font-size: clamp(10px, 0.82vw, 15px);
+  line-height: 1.1;
+}
+
 .setpack-toggle-row {
   display: flex;
   align-items: center;
@@ -2103,6 +2121,12 @@ table {
   border-spacing: 0;
 }
 
+.permission-user-table th,
+.permission-user-table td {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .table-compact {
   min-width: 1320px;
 }
@@ -2583,9 +2607,11 @@ tr.row-maint-maintenance:hover td {
   border-radius: 10px;
   background: #fffdf9;
   color: var(--text);
+  position: relative;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
+  text-align: center;
 }
 
 .calendar-head {
@@ -2596,7 +2622,14 @@ tr.row-maint-maintenance:hover td {
   font-weight: 700;
 }
 
+.calendar-head-weekend {
+  color: #c62f3a;
+}
+
 .calendar-day small {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   border-radius: 999px;
   background: #ffe1bf;
   color: #8f4f1b;
@@ -2611,6 +2644,25 @@ tr.row-maint-maintenance:hover td {
 
 .calendar-has {
   border-color: #93aad2;
+}
+
+.calendar-weekend span {
+  color: #c62f3a;
+}
+
+.calendar-holiday {
+  background: #d33c48;
+  border-color: #a92532;
+  color: #fff;
+}
+
+.calendar-holiday span {
+  color: #fff !important;
+}
+
+.calendar-holiday small {
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
 }
 
 .calendar-selected {

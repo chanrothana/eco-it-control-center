@@ -195,6 +195,7 @@ type DashboardStats = {
 type ApiError = { error?: string };
 type Lang = "en" | "km";
 type AssetSubviewAccess = "both" | "list_only";
+type AuthRole = "Super Admin" | "Admin" | "Viewer";
 type NavModule =
   | "dashboard"
   | "assets"
@@ -211,7 +212,7 @@ type AuthUser = {
   id: number;
   username: string;
   displayName: string;
-  role: "Admin" | "Viewer";
+  role: AuthRole;
   campuses?: string[];
   modules?: NavModule[];
   assetSubviewAccess?: AssetSubviewAccess;
@@ -221,7 +222,7 @@ type AuthAccount = {
   id: number;
   username: string;
   displayName: string;
-  role: "Admin" | "Viewer";
+  role: AuthRole;
   campuses: string[];
   modules: NavModule[];
   assetSubviewAccess: AssetSubviewAccess;
@@ -428,14 +429,38 @@ const MENU_ACCESS_TREE: Array<{
     ],
   },
 ];
-function defaultMenuAccessFor(role: "Admin" | "Viewer", modules: NavModule[], assetSubviewAccess: AssetSubviewAccess) {
+function normalizeRole(value: unknown): AuthRole {
+  const role = String(value || "").trim();
+  if (role === "Super Admin") return "Super Admin";
+  if (role === "Admin") return "Admin";
+  return "Viewer";
+}
+function isAdminRole(role: AuthRole) {
+  return role === "Admin" || role === "Super Admin";
+}
+function hasGlobalCampusAccess(role: AuthRole, campuses?: unknown) {
+  if (role === "Super Admin") return true;
+  if (!Array.isArray(campuses)) return false;
+  return campuses.map((v) => String(v || "").trim()).includes("ALL");
+}
+function normalizeRoleCampuses(role: AuthRole, campuses?: unknown) {
+  if (role === "Super Admin") return ["ALL"];
+  if (Array.isArray(campuses) && campuses.map((v) => String(v || "").trim().toUpperCase()).includes("ALL")) {
+    return [...CAMPUS_LIST];
+  }
+  const selected = Array.isArray(campuses)
+    ? Array.from(new Set(campuses.map((v) => String(v || "").trim()).filter((v) => CAMPUS_LIST.includes(v))))
+    : [];
+  return selected;
+}
+function defaultMenuAccessFor(role: AuthRole, modules: NavModule[], assetSubviewAccess: AssetSubviewAccess) {
   const allowed = new Set(modules);
   const out = new Set<MenuAccessKey>();
   for (const node of MENU_ACCESS_TREE) {
     if (!allowed.has(node.module)) continue;
     out.add(node.module);
     for (const child of node.children) {
-      if (child.key === "assets.register" && (role !== "Admin" || assetSubviewAccess === "list_only")) continue;
+      if (child.key === "assets.register" && (!isAdminRole(role) || assetSubviewAccess === "list_only")) continue;
       out.add(child.key);
     }
   }
@@ -504,11 +529,11 @@ const LOCAL_AUTH_ACCOUNTS: AuthAccount[] = [
     id: 1,
     username: "admin",
     displayName: "Eco Admin",
-    role: "Admin",
+    role: "Super Admin",
     campuses: ["ALL"],
     modules: [...ALL_NAV_MODULES],
     assetSubviewAccess: "both",
-    menuAccess: defaultMenuAccessFor("Admin", ALL_NAV_MODULES, "both"),
+    menuAccess: defaultMenuAccessFor("Super Admin", ALL_NAV_MODULES, "both"),
   },
   {
     id: 2,
@@ -874,7 +899,7 @@ const TEXT = {
     addUser: "Add User",
     noUsersYet: "No users yet.",
     accountPermissionSetup: "Account Permission Setup",
-    permissionHelp: "Set role and campus access for login users. Viewer can only see assigned campus.",
+    permissionHelp: "Set role and campus access. Super Admin can manage all campuses; Admin/Viewer are campus-scoped.",
     addLoginAccount: "Add Login Account",
     selectStaffOptional: "Select Staff (optional)",
     usernameLabel: "Username",
@@ -1211,7 +1236,7 @@ function readUserFallback(): StaffUser[] {
           email: String(user.email || "").trim().toLowerCase(),
         } as StaffUser;
       })
-      .filter((u) => u.fullName && u.position && u.email);
+      .filter((u) => u.fullName && u.position);
   } catch {
     return [];
   }
@@ -1333,18 +1358,18 @@ function writeItemTypeFallback(map: Record<string, Array<{ itemEn: string; itemK
   trySetLocalStorage(ITEM_TYPE_FALLBACK_KEY, JSON.stringify(map));
 }
 
-function normalizeModulesByRole(role: "Admin" | "Viewer", modules?: unknown): NavModule[] {
+function normalizeModulesByRole(role: AuthRole, modules?: unknown): NavModule[] {
   const allowed = new Set(ALL_NAV_MODULES);
   const list = Array.isArray(modules) ? modules.filter((x): x is NavModule => typeof x === "string" && allowed.has(x as NavModule)) : [];
   if (list.length) return Array.from(new Set(list));
-  return role === "Admin" ? [...ALL_NAV_MODULES] : [...DEFAULT_VIEWER_MODULES];
+  return isAdminRole(role) ? [...ALL_NAV_MODULES] : [...DEFAULT_VIEWER_MODULES];
 }
 
 function normalizeAssetSubviewAccess(value: unknown): AssetSubviewAccess {
   return String(value || "").trim().toLowerCase() === "list_only" ? "list_only" : "both";
 }
 function normalizeMenuAccess(
-  role: "Admin" | "Viewer",
+  role: AuthRole,
   modules: NavModule[],
   assetSubviewAccess: AssetSubviewAccess,
   input?: unknown
@@ -1358,7 +1383,7 @@ function normalizeMenuAccess(
         node.children.forEach((child) => next.delete(child.key));
       }
     }
-    if (role !== "Admin" || assetSubviewAccess === "list_only") {
+    if (!isAdminRole(role) || assetSubviewAccess === "list_only") {
       next.delete("assets.register");
     }
     return Array.from(next);
@@ -1379,7 +1404,7 @@ function normalizeMenuAccess(
 function readAuthPermissionFallback(): Record<
   string,
   {
-    role: "Admin" | "Viewer";
+    role: AuthRole;
     campuses: string[];
     modules: NavModule[];
     assetSubviewAccess: AssetSubviewAccess;
@@ -1394,7 +1419,7 @@ function readAuthPermissionFallback(): Record<
     const out: Record<
       string,
       {
-        role: "Admin" | "Viewer";
+        role: AuthRole;
         campuses: string[];
         modules: NavModule[];
         assetSubviewAccess: AssetSubviewAccess;
@@ -1410,8 +1435,8 @@ function readAuthPermissionFallback(): Record<
         assetSubviewAccess?: unknown;
         menuAccess?: unknown;
       };
-      const role = v.role === "Admin" ? "Admin" : "Viewer";
-      const campuses = Array.isArray(v.campuses) && v.campuses.length ? v.campuses : ["ALL"];
+      const role = normalizeRole(v.role);
+      const campuses = normalizeRoleCampuses(role, v.campuses);
       const modules = normalizeModulesByRole(role, v.modules);
       const assetSubviewAccess = normalizeAssetSubviewAccess(v.assetSubviewAccess);
       const menuAccess = normalizeMenuAccess(role, modules, assetSubviewAccess, v.menuAccess);
@@ -1427,7 +1452,7 @@ function writeAuthPermissionFallback(
   map: Record<
     string,
     {
-      role: "Admin" | "Viewer";
+      role: AuthRole;
       campuses: string[];
       modules: NavModule[];
       assetSubviewAccess: AssetSubviewAccess;
@@ -1453,13 +1478,13 @@ function readAuthAccountsFallback(): AuthAccount[] {
           id: Number(row.id) || Date.now(),
           username: String(row.username || "").trim(),
           displayName: String(row.displayName || row.username || "").trim(),
-          role: row.role === "Admin" ? "Admin" : "Viewer",
-          campuses: Array.isArray(row.campuses) && row.campuses.length ? row.campuses : ["ALL"],
-          modules: normalizeModulesByRole(row.role === "Admin" ? "Admin" : "Viewer", row.modules),
+          role: normalizeRole(row.role),
+          campuses: normalizeRoleCampuses(normalizeRole(row.role), row.campuses),
+          modules: normalizeModulesByRole(normalizeRole(row.role), row.modules),
           assetSubviewAccess: normalizeAssetSubviewAccess((row as { assetSubviewAccess?: unknown }).assetSubviewAccess),
           menuAccess: normalizeMenuAccess(
-            row.role === "Admin" ? "Admin" : "Viewer",
-            normalizeModulesByRole(row.role === "Admin" ? "Admin" : "Viewer", row.modules),
+            normalizeRole(row.role),
+            normalizeModulesByRole(normalizeRole(row.role), row.modules),
             normalizeAssetSubviewAccess((row as { assetSubviewAccess?: unknown }).assetSubviewAccess),
             (row as { menuAccess?: unknown }).menuAccess
           ),
@@ -1728,6 +1753,51 @@ function shiftYmd(ymd: string, days: number) {
   return toYmd(d);
 }
 
+function normalizeLooseDateToYmd(raw: string) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return toYmd(parsed);
+}
+
+const CAMBODIA_PUBLIC_HOLIDAYS: Record<number, Array<{ date: string; name: string }>> = {
+  2026: [
+    { date: "2026-01-01", name: "New Year's Day" },
+    { date: "2026-01-07", name: "Victory over Genocide Day" },
+    { date: "2026-03-08", name: "International Women's Day" },
+    { date: "2026-04-14", name: "Khmer New Year" },
+    { date: "2026-04-15", name: "Khmer New Year Holiday" },
+    { date: "2026-04-16", name: "Khmer New Year Holiday" },
+    { date: "2026-05-01", name: "International Labour Day" },
+    { date: "2026-05-04", name: "Visak Bochea Day" },
+    { date: "2026-05-08", name: "King's Birthday" },
+    { date: "2026-05-15", name: "Royal Plowing Ceremony" },
+    { date: "2026-06-18", name: "Queen Mother's Birthday" },
+    { date: "2026-09-24", name: "Constitutional Day" },
+    { date: "2026-10-10", name: "Ancestors' Day" },
+    { date: "2026-10-11", name: "Ancestors' Day Holiday" },
+    { date: "2026-10-12", name: "Ancestors' Day Holiday" },
+    { date: "2026-10-15", name: "Commemoration Day of King's Father" },
+    { date: "2026-10-29", name: "King's Coronation Day" },
+    { date: "2026-11-09", name: "Independence Day" },
+    { date: "2026-11-24", name: "Water Festival Ceremony" },
+    { date: "2026-11-25", name: "Water Festival Ceremony Holiday" },
+    { date: "2026-11-26", name: "Water Festival Ceremony Holiday" },
+    { date: "2026-12-29", name: "Peace Day" },
+  ],
+};
+
+function getHolidayName(ymd: string) {
+  const date = String(ymd || "").trim();
+  if (!date) return "";
+  const year = Number(date.slice(0, 4));
+  const list = CAMBODIA_PUBLIC_HOLIDAYS[year] || [];
+  const match = list.find((h) => h.date === date);
+  return match?.name || "";
+}
+
 function nthWeekdayOfMonth(
   year: number,
   monthIndex: number,
@@ -1761,6 +1831,19 @@ function resolveNextScheduleDate(asset: Asset, fromYmd: string) {
     return "";
   }
   return asset.nextMaintenanceDate || "";
+}
+
+function hasCompletedMaintenanceOnDate(asset: Asset, ymd: string) {
+  const target = String(ymd || "").trim();
+  if (!target) return false;
+  const history = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+  return history.some((entry) => {
+    const entryDate = normalizeLooseDateToYmd(String(entry?.date || ""));
+    if (entryDate !== target) return false;
+    const completion = String(entry?.completion || "").trim().toLowerCase();
+    if (!completion) return true;
+    return completion !== "not yet";
+  });
 }
 
 function escapeHtml(input: string) {
@@ -2217,7 +2300,7 @@ export default function App() {
         ? String(ENV_API_BASE_URL || getAutoApiBaseForHost())
         : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
   );
-  const isAdmin = authUser?.role === "Admin";
+  const isAdmin = authUser ? isAdminRole(authUser.role) : false;
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -2374,6 +2457,7 @@ export default function App() {
     direction: "asc",
   });
   const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
+  const [qrLocationFilter, setQrLocationFilter] = useState("ALL");
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [quickCountCampus, setQuickCountCampus] = useState("ALL");
@@ -2669,29 +2753,18 @@ export default function App() {
   });
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
-  const [authPermissionDraft, setAuthPermissionDraft] = useState<
-    Record<
-      number,
-      {
-        role: "Admin" | "Viewer";
-        campus: string;
-        modules: NavModule[];
-        assetSubviewAccess: AssetSubviewAccess;
-        menuAccess: MenuAccessKey[];
-      }
-    >
-  >({});
   const [authCreateForm, setAuthCreateForm] = useState({
     staffId: "",
     username: "",
     password: "",
     displayName: "",
-    role: "Viewer" as "Admin" | "Viewer",
-    campus: CAMPUS_LIST[0],
+    role: "Viewer" as AuthRole,
+    campuses: [CAMPUS_LIST[0]] as string[],
     modules: [...DEFAULT_VIEWER_MODULES] as NavModule[],
     assetSubviewAccess: "both" as AssetSubviewAccess,
     menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
   });
+  const [editingAuthUserId, setEditingAuthUserId] = useState<number | null>(null);
   const [scheduleAlertModal, setScheduleAlertModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "selected">(null);
   const [overviewModal, setOverviewModal] = useState<null | "total" | "it" | "safety" | "tickets">(null);
   const [quickCountModal, setQuickCountModal] = useState<null | { title: string; assets: Asset[] }>(null);
@@ -2719,8 +2792,6 @@ export default function App() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toYmd(new Date()));
-  const [inventoryCampusFilter, setInventoryCampusFilter] = useState("ALL");
-  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState("ALL");
   const [inventorySearch, setInventorySearch] = useState("");
   const [inventoryItemForm, setInventoryItemForm] = useState({
     campus: CAMPUS_LIST[0],
@@ -2841,22 +2912,27 @@ export default function App() {
       runtimeAuthToken = token;
       if (ALLOW_LOCAL_AUTH_BYPASS && token === LOCAL_ADMIN_TOKEN) {
         const perm = readAuthPermissionFallback().admin || {
-          role: "Admin" as const,
+          role: "Super Admin" as const,
           campuses: ["ALL"],
           modules: [...ALL_NAV_MODULES],
           assetSubviewAccess: "both" as AssetSubviewAccess,
-          menuAccess: defaultMenuAccessFor("Admin", ALL_NAV_MODULES, "both"),
+          menuAccess: defaultMenuAccessFor("Super Admin", ALL_NAV_MODULES, "both"),
         };
         if (mounted) {
           setAuthUser({
             id: 1,
             username: "admin",
             displayName: "Eco Admin",
-            role: perm.role,
-            campuses: perm.campuses,
-            modules: perm.modules,
+            role: normalizeRole(perm.role),
+            campuses: normalizeRoleCampuses(normalizeRole(perm.role), perm.campuses),
+            modules: normalizeModulesByRole(normalizeRole(perm.role), perm.modules),
             assetSubviewAccess: perm.assetSubviewAccess,
-            menuAccess: perm.menuAccess,
+            menuAccess: normalizeMenuAccess(
+              normalizeRole(perm.role),
+              normalizeModulesByRole(normalizeRole(perm.role), perm.modules),
+              normalizeAssetSubviewAccess(perm.assetSubviewAccess),
+              perm.menuAccess
+            ),
           });
           setAuthLoading(false);
         }
@@ -2875,11 +2951,16 @@ export default function App() {
             id: 2,
             username: "viewer",
             displayName: "Eco Viewer",
-            role: perm.role,
-            campuses: perm.campuses,
-            modules: perm.modules,
-            assetSubviewAccess: perm.assetSubviewAccess,
-            menuAccess: perm.menuAccess,
+            role: normalizeRole(perm.role),
+            campuses: normalizeRoleCampuses(normalizeRole(perm.role), perm.campuses),
+            modules: normalizeModulesByRole(normalizeRole(perm.role), perm.modules),
+            assetSubviewAccess: normalizeAssetSubviewAccess(perm.assetSubviewAccess),
+            menuAccess: normalizeMenuAccess(
+              normalizeRole(perm.role),
+              normalizeModulesByRole(normalizeRole(perm.role), perm.modules),
+              normalizeAssetSubviewAccess(perm.assetSubviewAccess),
+              perm.menuAccess
+            ),
           });
           setAuthLoading(false);
         }
@@ -2914,14 +2995,14 @@ export default function App() {
 
   const allowedCampuses = useMemo(() => {
     if (!authUser) return CAMPUS_LIST;
-    if (authUser.role === "Admin") return CAMPUS_LIST;
+    if (hasGlobalCampusAccess(authUser.role, authUser.campuses)) return CAMPUS_LIST;
     const campuses = Array.isArray(authUser.campuses) ? authUser.campuses : [];
-    if (!campuses.length || campuses.includes("ALL")) return CAMPUS_LIST;
+    if (!campuses.length) return CAMPUS_LIST;
     return CAMPUS_LIST.filter((c) => campuses.includes(c));
   }, [authUser]);
 
   useEffect(() => {
-    if (!authUser || authUser.role === "Admin") return;
+    if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
     if (campusFilter === "ALL") {
       if (allowedCampuses.length) setCampusFilter(allowedCampuses[0]);
       return;
@@ -2932,12 +3013,19 @@ export default function App() {
   }, [authUser, campusFilter, allowedCampuses]);
 
   useEffect(() => {
-    if (!authUser || authUser.role === "Admin") return;
+    if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
     if (assetCampusFilter === "ALL") return;
     if (!allowedCampuses.includes(assetCampusFilter)) {
       setAssetCampusFilter("ALL");
     }
   }, [authUser, assetCampusFilter, allowedCampuses]);
+
+  useEffect(() => {
+    if (editingAuthUserId === null) return;
+    if (!authAccounts.some((u) => u.id === editingAuthUserId)) {
+      resetAuthCreateForm();
+    }
+  }, [authAccounts, editingAuthUserId]);
 
   function requireAdminAction() {
     if (isAdmin) return true;
@@ -3094,6 +3182,11 @@ export default function App() {
     },
     []
   );
+  const toggleCampusAccess = useCallback((current: string[], campus: string, checked: boolean) => {
+    if (checked) return Array.from(new Set([...current, campus]));
+    const next = current.filter((value) => value !== campus);
+    return next.length ? next : [campus];
+  }, []);
 
   const campusLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === assetForm.campus)),
@@ -3200,8 +3293,6 @@ export default function App() {
         lowStock: currentStock <= Number(item.minStock || 0),
       };
     });
-    if (inventoryCampusFilter !== "ALL") rows = rows.filter((r) => r.campus === inventoryCampusFilter);
-    if (inventoryCategoryFilter !== "ALL") rows = rows.filter((r) => r.category === inventoryCategoryFilter);
     const q = inventorySearch.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
@@ -3209,7 +3300,7 @@ export default function App() {
       );
     }
     return rows.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryItems, inventoryTxns, inventoryCampusFilter, inventoryCategoryFilter, inventorySearch]);
+  }, [inventoryItems, inventoryTxns, inventorySearch]);
   const inventoryLowStockRows = useMemo(
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
@@ -3222,21 +3313,11 @@ export default function App() {
     return [...inventoryTxns]
       .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
       .filter((row) => {
-        if (inventoryCampusFilter !== "ALL" && row.campus !== inventoryCampusFilter) return false;
-        if (inventoryCategoryFilter === "ALL") return true;
-        const item = inventoryItems.find((i) => i.id === row.itemId);
-        return item?.category === inventoryCategoryFilter;
-      })
-      .filter((row) => {
         const q = inventorySearch.trim().toLowerCase();
         if (!q) return true;
         return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.by || ""} ${row.note || ""}`.toLowerCase().includes(q);
       });
-  }, [inventoryTxns, inventoryItems, inventoryCampusFilter, inventoryCategoryFilter, inventorySearch]);
-  const inventoryItemById = useMemo(
-    () => new Map<number, InventoryItem>(inventoryItems.map((item) => [item.id, item])),
-    [inventoryItems]
-  );
+  }, [inventoryTxns, inventorySearch]);
   const inventoryStockMap = useMemo(() => {
     const totals = new Map<number, { in: number; out: number }>();
     for (const tx of inventoryTxns) {
@@ -3255,15 +3336,13 @@ export default function App() {
   const inventoryDailyItemOptions = useMemo(() => {
     const q = String(inventoryDailyForm.search || "").trim().toLowerCase();
     let list = [...inventoryItems];
-    if (inventoryCampusFilter !== "ALL") list = list.filter((item) => item.campus === inventoryCampusFilter);
-    if (inventoryCategoryFilter !== "ALL") list = list.filter((item) => item.category === inventoryCategoryFilter);
     if (q) {
       list = list.filter((item) =>
         `${item.itemCode} ${item.itemName} ${inventoryAliasText(item.itemName)} ${item.location} ${item.vendor || ""}`.toLowerCase().includes(q)
       );
     }
     return list.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryItems, inventoryDailyForm.search, inventoryCampusFilter, inventoryCategoryFilter]);
+  }, [inventoryItems, inventoryDailyForm.search]);
   const inventoryDailySelectedItem = useMemo(
     () => inventoryItems.find((item) => String(item.id) === String(inventoryDailyForm.itemId || "")) || null,
     [inventoryItems, inventoryDailyForm.itemId]
@@ -3272,15 +3351,9 @@ export default function App() {
     const date = inventoryDailyForm.date;
     return [...inventoryTxns]
       .filter((tx) => tx.date === date)
-      .filter((tx) => (inventoryCampusFilter === "ALL" ? true : tx.campus === inventoryCampusFilter))
-      .filter((tx) => {
-        if (inventoryCategoryFilter === "ALL") return true;
-        const item = inventoryItemById.get(tx.itemId);
-        return item?.category === inventoryCategoryFilter;
-      })
       .sort((a, b) => b.id - a.id)
       .slice(0, 12);
-  }, [inventoryTxns, inventoryDailyForm.date, inventoryCampusFilter, inventoryCategoryFilter, inventoryItemById]);
+  }, [inventoryTxns, inventoryDailyForm.date]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -3317,13 +3390,11 @@ export default function App() {
         lowStock: currentStock <= min,
       };
     });
-    if (inventoryCampusFilter !== "ALL") list = list.filter((item) => item.campus === inventoryCampusFilter);
-    if (inventoryCategoryFilter !== "ALL") list = list.filter((item) => item.category === inventoryCategoryFilter);
     list = list.filter((item) => item.usedQty > 0 || item.lowStock || item.suggestedQty > 0);
     return list
       .sort((a, b) => b.suggestedQty - a.suggestedQty || b.usedQty - a.usedQty || a.itemCode.localeCompare(b.itemCode))
       .slice(0, 30);
-  }, [inventoryItems, inventoryTxns, inventoryPurchaseWindow, inventoryStockMap, inventoryCampusFilter, inventoryCategoryFilter]);
+  }, [inventoryItems, inventoryTxns, inventoryPurchaseWindow, inventoryStockMap]);
 
   const setupLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === locationCampus)),
@@ -4139,12 +4210,12 @@ export default function App() {
     if (!requireAdminAction()) return;
     const fullName = userForm.fullName.trim();
     const position = userForm.position.trim();
-    const email = userForm.email.trim();
-    if (!fullName || !position || !email) return;
+    const email = userForm.email.trim().toLowerCase();
+    if (!fullName || !position) return;
 
-    const emailTaken = users.some(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.id !== editingUserId
-    );
+    const emailTaken = email
+      ? users.some((u) => String(u.email || "").toLowerCase() === email && u.id !== editingUserId)
+      : false;
     if (emailTaken) {
       setError("User email already exists.");
       return;
@@ -4165,7 +4236,7 @@ export default function App() {
         } else {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, email: email.toLowerCase() } : u
+              u.id === editingUserId ? { ...u, fullName, position, email } : u
             )
           );
         }
@@ -4182,7 +4253,7 @@ export default function App() {
         } else if (res.user) {
           const created = {
             ...res.user,
-            email: String(res.user.email || "").toLowerCase(),
+            email: String(res.user.email || "").trim().toLowerCase(),
           };
           setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
         } else {
@@ -4195,7 +4266,7 @@ export default function App() {
         if (editingUserId !== null) {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, email: email.toLowerCase() } : u
+              u.id === editingUserId ? { ...u, fullName, position, email } : u
             )
           );
           setEditingUserId(null);
@@ -4204,7 +4275,7 @@ export default function App() {
             id: Date.now() + Math.floor(Math.random() * 1000),
             fullName,
             position,
-            email: email.toLowerCase(),
+            email,
           };
           setUsers((prev) => [localUser, ...prev]);
         }
@@ -4240,32 +4311,10 @@ export default function App() {
       const rows = mergeAuthAccounts(serverRows, localRows);
       writeAuthAccountsFallback(rows);
       setAuthAccounts(rows);
-      setAuthPermissionDraft(
-        Object.fromEntries(
-          rows.map((u) => [
-            u.id,
-              {
-                role: u.role === "Admin" ? "Admin" : "Viewer",
-                campus:
-                  (Array.isArray(u.campuses) && u.campuses[0]) ||
-                "ALL",
-                modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
-                assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
-                menuAccess: normalizeMenuAccess(
-                  u.role === "Admin" ? "Admin" : "Viewer",
-                  Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
-                  normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
-                  (u as { menuAccess?: unknown }).menuAccess
-                ),
-              },
-            ])
-          )
-      );
       setError("");
     } catch (err) {
       if (SERVER_ONLY_STORAGE) {
         setAuthAccounts([]);
-        setAuthPermissionDraft({});
         setError(err instanceof Error ? err.message : "Cannot load account permissions");
         return;
       }
@@ -4294,25 +4343,6 @@ export default function App() {
         });
         writeAuthAccountsFallback(rows);
         setAuthAccounts(rows);
-        setAuthPermissionDraft(
-          Object.fromEntries(
-            rows.map((u) => [
-              u.id,
-              {
-                role: u.role,
-                campus: (Array.isArray(u.campuses) && u.campuses[0]) || "ALL",
-                modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
-                assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
-                menuAccess: normalizeMenuAccess(
-                  u.role === "Admin" ? "Admin" : "Viewer",
-                  Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
-                  normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
-                  (u as { menuAccess?: unknown }).menuAccess
-                ),
-              },
-            ])
-          )
-        );
         setError("");
         return;
       }
@@ -4579,64 +4609,46 @@ export default function App() {
     }
   }
 
-  async function saveAuthPermission(userId: number) {
-    if (!requireAdminAction()) return;
-    const draft = authPermissionDraft[userId];
-    if (!draft) return;
-    const target = authAccounts.find((u) => u.id === userId);
-    if (!target) return;
-    const campuses = draft.role === "Admin" || draft.campus === "ALL" ? ["ALL"] : [draft.campus];
-    const assetSubviewAccess = normalizeAssetSubviewAccess(draft.assetSubviewAccess);
-    const modules: NavModule[] = draft.role === "Admin"
-      ? [...ALL_NAV_MODULES]
-      : (draft.modules.length ? draft.modules : (["dashboard"] as NavModule[]));
-    const menuAccess = normalizeMenuAccess(draft.role, modules, assetSubviewAccess, draft.menuAccess);
-    if (!SERVER_ONLY_STORAGE) {
-      const nextMap = {
-        ...readAuthPermissionFallback(),
-        [target.username]: { role: draft.role, campuses, modules, assetSubviewAccess, menuAccess },
-      };
-      const nextRows = authAccounts.map((u) =>
-        u.id === userId ? { ...u, role: draft.role, campuses, modules, assetSubviewAccess, menuAccess } : u
-      );
-      writeAuthPermissionFallback(nextMap);
-      writeAuthAccountsFallback(nextRows);
-      setAuthAccounts(nextRows);
-      if (authUser && authUser.id === userId) {
-        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess, menuAccess });
-      }
-    }
-    try {
-      await requestJson<{ user: AuthAccount }>(`/api/auth/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ role: draft.role, campuses, modules, assetSubviewAccess, menuAccess }),
-      });
-      await loadAuthAccounts();
-      if (authUser && authUser.id === userId) {
-        setAuthUser({ ...authUser, role: draft.role, campuses, modules, assetSubviewAccess, menuAccess });
-      }
-      setSetupMessage("Saved account permission.");
-    } catch (err) {
-      if (SERVER_ONLY_STORAGE) {
-        setError(err instanceof Error ? err.message : "Failed to save account permission");
-        setSetupMessage("Failed to save account permission.");
-        return;
-      }
-      const msg = err instanceof Error ? err.message.toLowerCase() : "";
-      if (
-        isApiUnavailableError(err) ||
-        isMissingRouteError(err) ||
-        msg.includes("unauthorized") ||
-        msg.includes("admin role required") ||
-        msg.includes("request failed (401)") ||
-        msg.includes("request failed (403)")
-      ) {
-        setError("");
-        setSetupMessage("Saved account permission.");
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Failed to save account permission");
-    }
+  function resetAuthCreateForm() {
+    setAuthCreateForm({
+      staffId: "",
+      username: "",
+      password: "",
+      displayName: "",
+      role: "Viewer",
+      campuses: [CAMPUS_LIST[0]],
+      modules: [...DEFAULT_VIEWER_MODULES],
+      assetSubviewAccess: "both",
+      menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
+    });
+    setEditingAuthUserId(null);
+  }
+
+  function startEditAuthAccount(user: AuthAccount) {
+    const role = normalizeRole(user.role);
+    const campuses = normalizeRoleCampuses(role, user.campuses);
+    const modules = Array.isArray(user.modules) && user.modules.length ? user.modules : normalizeModulesByRole(role, []);
+    const assetSubviewAccess = normalizeAssetSubviewAccess((user as { assetSubviewAccess?: unknown }).assetSubviewAccess);
+    const menuAccess = normalizeMenuAccess(
+      role,
+      modules,
+      assetSubviewAccess,
+      (user as { menuAccess?: unknown }).menuAccess
+    );
+    setAuthCreateForm({
+      staffId: "",
+      username: user.username,
+      password: "",
+      displayName: user.displayName,
+      role,
+      campuses,
+      modules,
+      assetSubviewAccess,
+      menuAccess,
+    });
+    setEditingAuthUserId(user.id);
+    setError("");
+    setSetupMessage(`Editing account: ${user.username}`);
   }
 
   async function createAuthAccount() {
@@ -4644,20 +4656,31 @@ export default function App() {
     const username = authCreateForm.username.trim();
     const password = authCreateForm.password.trim();
     const displayName = authCreateForm.displayName.trim();
-    if (!username || !password || !displayName) {
-      setError("Username, password, and display name are required.");
+    const isEditing = editingAuthUserId !== null;
+    const editingUser = isEditing ? authAccounts.find((u) => u.id === editingAuthUserId) : null;
+    if (!username || !displayName) {
+      setError("Username and display name are required.");
       return;
     }
-    if (authAccounts.some((u) => u.username.toLowerCase() === username.toLowerCase())) {
+    if (!isEditing && !password) {
+      setError("Password is required for new account.");
+      return;
+    }
+    if (
+      authAccounts.some(
+        (u) => u.username.toLowerCase() === username.toLowerCase() && (!isEditing || u.id !== editingAuthUserId)
+      )
+    ) {
       setError("Username already exists.");
       return;
     }
 
-    const campuses =
-      authCreateForm.role === "Admin" || authCreateForm.campus === "ALL"
-        ? ["ALL"]
-        : [authCreateForm.campus];
-    const modules: NavModule[] = authCreateForm.role === "Admin"
+    const campuses = normalizeRoleCampuses(authCreateForm.role, authCreateForm.campuses);
+    if (authCreateForm.role !== "Super Admin" && !campuses.length) {
+      setError("Please select at least one campus.");
+      return;
+    }
+    const modules: NavModule[] = isAdminRole(authCreateForm.role)
       ? [...ALL_NAV_MODULES]
       : (authCreateForm.modules.length ? authCreateForm.modules : (["dashboard"] as NavModule[]));
     const assetSubviewAccess = normalizeAssetSubviewAccess(authCreateForm.assetSubviewAccess);
@@ -4666,11 +4689,13 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
-      const res = await requestJson<{ user: AuthAccount }>("/api/auth/users", {
-        method: "POST",
+      const endpoint = isEditing && editingAuthUserId ? `/api/auth/users/${editingAuthUserId}` : "/api/auth/users";
+      const method = isEditing ? "PATCH" : "POST";
+      const res = await requestJson<{ user: AuthAccount }>(endpoint, {
+        method,
         body: JSON.stringify({
           username,
-          password,
+          ...(password ? { password } : {}),
           displayName,
           role: authCreateForm.role,
           campuses,
@@ -4679,17 +4704,17 @@ export default function App() {
           menuAccess,
         }),
       });
-      const created: AuthAccount = res.user?.username
+      const saved: AuthAccount = res.user?.username
         ? {
             id: Number(res.user.id) || Date.now(),
             username: res.user.username,
             displayName: res.user.displayName || displayName,
-            role: res.user.role === "Admin" ? "Admin" : authCreateForm.role,
+            role: normalizeRole(res.user.role),
             campuses: Array.isArray(res.user.campuses) && res.user.campuses.length ? res.user.campuses : campuses,
             modules: Array.isArray(res.user.modules) && res.user.modules.length ? res.user.modules : modules,
             assetSubviewAccess: normalizeAssetSubviewAccess((res.user as { assetSubviewAccess?: unknown }).assetSubviewAccess || assetSubviewAccess),
             menuAccess: normalizeMenuAccess(
-              res.user.role === "Admin" ? "Admin" : authCreateForm.role,
+              normalizeRole(res.user.role),
               Array.isArray(res.user.modules) && res.user.modules.length ? res.user.modules : modules,
               normalizeAssetSubviewAccess((res.user as { assetSubviewAccess?: unknown }).assetSubviewAccess || assetSubviewAccess),
               (res.user as { menuAccess?: unknown }).menuAccess || menuAccess
@@ -4705,36 +4730,42 @@ export default function App() {
             assetSubviewAccess,
             menuAccess,
           };
-      const merged = mergeAuthAccounts([created], readAuthAccountsFallback());
+      const merged = mergeAuthAccounts([saved], readAuthAccountsFallback());
       writeAuthAccountsFallback(merged);
+      const permissionFallback = readAuthPermissionFallback();
+      if (isEditing && editingUser && editingUser.username !== saved.username) {
+        delete permissionFallback[editingUser.username];
+      }
       writeAuthPermissionFallback({
-        ...readAuthPermissionFallback(),
-        [created.username]: {
-          role: created.role,
-          campuses: created.campuses,
-          modules: created.modules,
-          assetSubviewAccess: created.assetSubviewAccess,
-          menuAccess: created.menuAccess,
+        ...permissionFallback,
+        [saved.username]: {
+          role: saved.role,
+          campuses: saved.campuses,
+          modules: saved.modules,
+          assetSubviewAccess: saved.assetSubviewAccess,
+          menuAccess: saved.menuAccess,
         },
       });
       setAuthAccounts(merged);
       await loadAuthAccounts();
-      setAuthCreateForm({
-        staffId: "",
-        username: "",
-        password: "",
-        displayName: "",
-        role: "Viewer",
-        campus: CAMPUS_LIST[0],
-        modules: [...DEFAULT_VIEWER_MODULES],
-        assetSubviewAccess: "both",
-        menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
-      });
-      setSetupMessage("Login account created.");
+      if (authUser && isEditing && editingAuthUserId === authUser.id) {
+        setAuthUser({
+          ...authUser,
+          username: saved.username,
+          displayName: saved.displayName,
+          role: saved.role,
+          campuses: saved.campuses,
+          modules: saved.modules,
+          assetSubviewAccess: saved.assetSubviewAccess,
+          menuAccess: saved.menuAccess,
+        });
+      }
+      resetAuthCreateForm();
+      setSetupMessage(isEditing ? "Login account updated." : "Login account created.");
     } catch (err) {
       if (SERVER_ONLY_STORAGE) {
-        setError(err instanceof Error ? err.message : "Failed to create login account");
-        setSetupMessage("Failed to create login account.");
+        setError(err instanceof Error ? err.message : `Failed to ${isEditing ? "update" : "create"} login account`);
+        setSetupMessage(`Failed to ${isEditing ? "update" : "create"} login account.`);
         return;
       }
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
@@ -4746,7 +4777,16 @@ export default function App() {
         msg.includes("request failed (401)") ||
         msg.includes("request failed (403)")
       ) {
-        const nextAccount: AuthAccount = {
+        const nextAccount: AuthAccount = isEditing && editingUser ? {
+          ...editingUser,
+          username,
+          displayName,
+          role: authCreateForm.role,
+          campuses,
+          modules,
+          assetSubviewAccess,
+          menuAccess,
+        } : {
           id: Date.now(),
           username,
           displayName,
@@ -4756,40 +4796,38 @@ export default function App() {
           assetSubviewAccess,
           menuAccess,
         };
-        const nextRows = [nextAccount, ...readAuthAccountsFallback()];
+        const fallbackRows = readAuthAccountsFallback();
+        const nextRows = isEditing && editingUser
+          ? fallbackRows.map((row) => (row.id === editingUser.id ? nextAccount : row))
+          : [nextAccount, ...fallbackRows];
         writeAuthAccountsFallback(nextRows);
-        const nextMap = {
-          ...readAuthPermissionFallback(),
+        const nextMap = readAuthPermissionFallback();
+        if (isEditing && editingUser && editingUser.username !== username) {
+          delete nextMap[editingUser.username];
+        }
+        writeAuthPermissionFallback({
+          ...nextMap,
           [username]: { role: authCreateForm.role, campuses, modules, assetSubviewAccess, menuAccess },
-        };
-        writeAuthPermissionFallback(nextMap);
-        setAuthAccounts(nextRows);
-        setAuthPermissionDraft((prev) => ({
-          ...prev,
-          [nextAccount.id]: {
-            role: nextAccount.role,
-            campus: nextAccount.campuses[0] || "ALL",
-            modules: nextAccount.modules,
-            assetSubviewAccess: nextAccount.assetSubviewAccess,
-            menuAccess: nextAccount.menuAccess,
-          },
-        }));
-        setAuthCreateForm({
-          staffId: "",
-          username: "",
-          password: "",
-          displayName: "",
-          role: "Viewer",
-          campus: CAMPUS_LIST[0],
-          modules: [...DEFAULT_VIEWER_MODULES],
-          assetSubviewAccess: "both",
-          menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
         });
+        setAuthAccounts(nextRows);
+        if (authUser && isEditing && editingAuthUserId === authUser.id) {
+          setAuthUser({
+            ...authUser,
+            username,
+            displayName,
+            role: authCreateForm.role,
+            campuses,
+            modules,
+            assetSubviewAccess,
+            menuAccess,
+          });
+        }
+        resetAuthCreateForm();
         setError("");
-        setSetupMessage("Login account created.");
+        setSetupMessage(isEditing ? "Login account updated." : "Login account created.");
         return;
       }
-      setError(err instanceof Error ? err.message : "Failed to create login account");
+      setError(err instanceof Error ? err.message : `Failed to ${isEditing ? "update" : "create"} login account`);
     } finally {
       setBusy(false);
     }
@@ -7465,6 +7503,7 @@ export default function App() {
           if (!d) continue;
           const key = toYmd(d);
           if (key < startYmd || key > endYmd) continue;
+          if (hasCompletedMaintenanceOnDate(asset, key)) continue;
           if (!map.has(key)) map.set(key, []);
           map.get(key)?.push({ ...asset, nextMaintenanceDate: key });
         }
@@ -7472,6 +7511,7 @@ export default function App() {
       }
       const key = asset.nextMaintenanceDate || "";
       if (!key || key < startYmd || key > endYmd) continue;
+      if (hasCompletedMaintenanceOnDate(asset, key)) continue;
       if (!map.has(key)) map.set(key, []);
       map.get(key)?.push(asset);
     }
@@ -7498,8 +7538,10 @@ export default function App() {
       return {
         ymd: toYmd(d),
         day: d.getDate(),
+        weekday: d.getDay(),
         inMonth: d.getMonth() === month,
         hasItems: (scheduleByDate.get(toYmd(d)) || []).length > 0,
+        holidayName: getHolidayName(toYmd(d)),
       };
     });
   }, [calendarMonth, scheduleByDate]);
@@ -8117,15 +8159,65 @@ export default function App() {
     }
     if (reportType === "qr_labels") {
       setQrCampusFilter("ALL");
+      setQrLocationFilter("ALL");
       setQrCategoryFilter("ALL");
       setQrItemFilter(["ALL"]);
     }
   }, [reportType]);
 
-  const qrItemFilterOptions = useMemo(() => {
-    const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
+  const qrLocationFilterOptions = useMemo(() => {
+    const source =
+      qrCampusFilter === "ALL"
+        ? qrLabelRows
+        : qrLabelRows.filter((row) => row.campus === qrCampusFilter);
+    const options = Array.from(new Set(source.map((row) => String(row.location || "").trim()).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
-  }, [qrLabelRows]);
+  }, [qrLabelRows, qrCampusFilter]);
+  const qrRowsByCampusLocation = useMemo(() => {
+    return qrLabelRows.filter((row) => {
+      if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
+      if (qrLocationFilter !== "ALL" && String(row.location || "").trim() !== qrLocationFilter) return false;
+      return true;
+    });
+  }, [qrLabelRows, qrCampusFilter, qrLocationFilter]);
+  const qrCategoryFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(qrRowsByCampusLocation.map((row) => row.category).filter(Boolean)));
+    const order = ["IT", "SAFETY", "FACILITY"];
+    return options.sort((a, b) => {
+      const ai = order.indexOf(a);
+      const bi = order.indexOf(b);
+      if (ai === -1 && bi === -1) return a.localeCompare(b);
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }, [qrRowsByCampusLocation]);
+  const qrRowsByCampusLocationCategory = useMemo(() => {
+    return qrRowsByCampusLocation.filter((row) => (qrCategoryFilter === "ALL" ? true : row.category === qrCategoryFilter));
+  }, [qrRowsByCampusLocation, qrCategoryFilter]);
+  const qrItemFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(qrRowsByCampusLocationCategory.map((row) => row.itemName).filter(Boolean)));
+    return options.sort((a, b) => a.localeCompare(b));
+  }, [qrRowsByCampusLocationCategory]);
+  useEffect(() => {
+    if (qrLocationFilter === "ALL") return;
+    if (!qrLocationFilterOptions.includes(qrLocationFilter)) {
+      setQrLocationFilter("ALL");
+    }
+  }, [qrLocationFilter, qrLocationFilterOptions]);
+  useEffect(() => {
+    if (qrCategoryFilter === "ALL") return;
+    if (!qrCategoryFilterOptions.includes(qrCategoryFilter)) {
+      setQrCategoryFilter("ALL");
+    }
+  }, [qrCategoryFilter, qrCategoryFilterOptions]);
+  useEffect(() => {
+    setQrItemFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const valid = prev.filter((item) => qrItemFilterOptions.includes(item));
+      return valid.length ? valid : ["ALL"];
+    });
+  }, [qrItemFilterOptions]);
   const quickCountLocationOptions = useMemo(() => {
     let list = [...assets];
     if (quickCountCampus !== "ALL") list = list.filter((asset) => asset.campus === quickCountCampus);
@@ -8503,11 +8595,12 @@ export default function App() {
   const qrFilteredRows = useMemo(() => {
     return qrLabelRows.filter((row) => {
       if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
+      if (qrLocationFilter !== "ALL" && String(row.location || "").trim() !== qrLocationFilter) return false;
       if (qrCategoryFilter !== "ALL" && row.category !== qrCategoryFilter) return false;
       if (!qrItemFilter.includes("ALL") && !qrItemFilter.includes(row.itemName)) return false;
       return true;
     });
-  }, [qrLabelRows, qrCampusFilter, qrCategoryFilter, qrItemFilter]);
+  }, [qrLabelRows, qrCampusFilter, qrLocationFilter, qrCategoryFilter, qrItemFilter]);
 
   const qrScanBase = useMemo(() => {
     if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
@@ -8891,7 +8984,7 @@ export default function App() {
         if (username === "admin" && password === "EcoAdmin@2026!") {
           runtimeAuthToken = LOCAL_ADMIN_TOKEN;
           trySetLocalStorage(AUTH_TOKEN_KEY, LOCAL_ADMIN_TOKEN);
-          const adminUser: AuthUser = { id: 1, username: "admin", displayName: "Eco Admin", role: "Admin", campuses: ["ALL"] };
+          const adminUser: AuthUser = { id: 1, username: "admin", displayName: "Eco Admin", role: "Super Admin", campuses: ["ALL"] };
           trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(adminUser));
           setAuthUser(adminUser);
           setLoginForm((prev) => ({ username: rememberLogin ? prev.username.trim() : "", password: "" }));
@@ -9121,12 +9214,12 @@ export default function App() {
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
     const showPublicQrSetFields = asset?.category === "IT";
-    const publicQrCampusAllowed = authUser?.role === "Admin" || (asset?.campus ? allowedCampuses.includes(asset.campus) : true);
+    const publicQrCampusAllowed = (authUser ? isAdminRole(authUser.role) : false) || (asset?.campus ? allowedCampuses.includes(asset.campus) : true);
     const publicQrCanRecordMaintenance = Boolean(
       authUser &&
       asset &&
       publicQrCampusAllowed &&
-      (authUser.role === "Admin" || canAccessMenu("maintenance.record", "maintenance"))
+      (isAdminRole(authUser.role) || canAccessMenu("maintenance.record", "maintenance"))
     );
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
@@ -9650,7 +9743,7 @@ export default function App() {
               <label className="field campus-field">
                 <span>{t.view}</span>
                 <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
-                  {authUser.role === "Admin" ? <option value="ALL">{t.allCampuses}</option> : null}
+                  {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
                   {allowedCampuses.map((campus) => (
                     <option key={campus} value={campus}>{campusLabel(campus)}</option>
                   ))}
@@ -9745,7 +9838,7 @@ export default function App() {
                       }}
                       className="input"
                     >
-                      {authUser.role === "Admin" ? <option value="ALL">{t.allCampuses}</option> : null}
+                      {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
                       {allowedCampuses.map((campus) => (
                         <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
                       ))}
@@ -9959,18 +10052,23 @@ export default function App() {
                   {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
                 </p>
                 <div className="calendar-grid dashboard-calendar-grid">
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                    <div key={`dash-cal-head-${d}`} className="calendar-day calendar-head">{d}</div>
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
+                    <div
+                      key={`dash-cal-head-${d}`}
+                      className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
+                    >
+                      {d}
+                    </div>
                   ))}
                   {calendarGridDays.map((d) => (
                     <button
                       key={`dash-cal-day-${d.ymd}`}
-                      className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""}`}
+                      className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
                       onClick={() => {
                         setSelectedCalendarDate(d.ymd);
                         if (d.hasItems) setScheduleAlertModal("selected");
                       }}
-                      title={d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}
+                      title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
                     >
                       <span>{d.day}</span>
                       {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
@@ -11927,18 +12025,6 @@ export default function App() {
               <div className="panel-row">
                 <h2>Inventory Control</h2>
                 <div className="panel-filters">
-                  <select className="input" value={inventoryCampusFilter} onChange={(e) => setInventoryCampusFilter(e.target.value)}>
-                    <option value="ALL">All Campuses</option>
-                    {CAMPUS_LIST.map((campus) => (
-                      <option key={`inv-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                    ))}
-                  </select>
-                  <select className="input" value={inventoryCategoryFilter} onChange={(e) => setInventoryCategoryFilter(e.target.value)}>
-                    <option value="ALL">All Categories</option>
-                    {INVENTORY_CATEGORY_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
                   <input
                     className="input"
                     placeholder="Search item code, name..."
@@ -12950,14 +13036,15 @@ export default function App() {
                 </button>
               </div>
               <div className="calendar-grid">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                  <div key={d} className="calendar-day calendar-head">{d}</div>
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
+                  <div key={d} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
                 ))}
                 {calendarGridDays.map((d) => (
                   <button
                     key={d.ymd}
-                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""}`}
+                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""}`}
                     onClick={() => setSelectedCalendarDate(d.ymd)}
+                    title={`${d.holidayName ? `${d.holidayName} • ` : ""}${d.hasItems ? `${(scheduleByDate.get(d.ymd) || []).length} scheduled` : "No schedule"}`}
                   >
                     <span>{d.day}</span>
                     {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
@@ -14320,13 +14407,31 @@ export default function App() {
                   </select>
                   <select
                     className="input"
+                    value={qrLocationFilter}
+                    onChange={(e) => setQrLocationFilter(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}</option>
+                    {qrLocationFilterOptions.map((location) => (
+                      <option key={`qr-location-${location}`} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
                     value={qrCategoryFilter}
                     onChange={(e) => setQrCategoryFilter(e.target.value)}
                   >
                     <option value="ALL">{t.allCategories}</option>
-                    <option value="IT">IT</option>
-                    <option value="SAFETY">Safety</option>
-                    <option value="FACILITY">Facility</option>
+                    {qrCategoryFilterOptions.map((category) => (
+                      <option key={`qr-category-${category}`} value={category}>
+                        {category === "SAFETY"
+                          ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                          : category === "FACILITY"
+                            ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                            : category}
+                      </option>
+                    ))}
                   </select>
                   <details className="filter-menu">
                     <summary>{summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}</summary>
@@ -14949,7 +15054,7 @@ export default function App() {
         {tab === "setup" && (
           <>
           <section className="panel">
-            <div className="row-actions">
+            <div className="row-actions setup-tabs-row">
               {canAccessMenu("setup.campus", "setup") ? (
                 <button className={`tab ${setupView === "campus" ? "tab-active" : ""}`} onClick={() => setSetupView("campus")}>
                   {t.campusNameSetup}
@@ -15089,7 +15194,7 @@ export default function App() {
                 />
               </label>
               <label className="field field-wide">
-                <span>{t.email}</span>
+                <span>{t.email} ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
                 <input
                   className="input"
                   type="email"
@@ -15152,7 +15257,7 @@ export default function App() {
                 <select
                   className="input"
                   value={authCreateForm.staffId}
-                  disabled={!isAdmin}
+                  disabled={!isAdmin || editingAuthUserId !== null}
                   onChange={(e) => {
                     const staffId = e.target.value;
                     const staff = users.find((u) => String(u.id) === staffId);
@@ -15190,6 +15295,7 @@ export default function App() {
                 <input
                   className="input"
                   type="text"
+                  placeholder={editingAuthUserId !== null ? "Leave blank to keep current password" : ""}
                   value={authCreateForm.password}
                   disabled={!isAdmin}
                   onChange={(e) => setAuthCreateForm((f) => ({ ...f, password: e.target.value }))}
@@ -15212,13 +15318,14 @@ export default function App() {
                   disabled={!isAdmin}
                   onChange={(e) =>
                     setAuthCreateForm((f) => {
-                      const nextRole = e.target.value as "Admin" | "Viewer";
-                      const nextModules = nextRole === "Admin" ? [...ALL_NAV_MODULES] : [...DEFAULT_VIEWER_MODULES];
-                      const nextAssetAccess = nextRole === "Admin" ? f.assetSubviewAccess : "list_only";
+                      const nextRole = normalizeRole(e.target.value);
+                      const nextModules = isAdminRole(nextRole) ? [...ALL_NAV_MODULES] : [...DEFAULT_VIEWER_MODULES];
+                      const nextAssetAccess = isAdminRole(nextRole) ? f.assetSubviewAccess : "list_only";
+                      const nextCampuses = normalizeRoleCampuses(nextRole, f.campuses);
                       return {
                         ...f,
                         role: nextRole,
-                        campus: nextRole === "Admin" ? "ALL" : f.campus === "ALL" ? CAMPUS_LIST[0] : f.campus,
+                        campuses: nextRole === "Super Admin" ? ["ALL"] : (nextCampuses.length ? nextCampuses : [CAMPUS_LIST[0]]),
                         modules: nextModules,
                         assetSubviewAccess: nextAssetAccess,
                         menuAccess: defaultMenuAccessFor(nextRole, nextModules, nextAssetAccess),
@@ -15226,23 +15333,40 @@ export default function App() {
                     })
                   }
                 >
+                  <option value="Super Admin">Super Admin</option>
                   <option value="Admin">Admin</option>
                   <option value="Viewer">Viewer</option>
                 </select>
               </label>
               <label className="field">
                 <span>{t.accessCampus}</span>
-                <select
-                  className="input"
-                  value={authCreateForm.campus}
-                  disabled={!isAdmin || authCreateForm.role === "Admin"}
-                  onChange={(e) => setAuthCreateForm((f) => ({ ...f, campus: e.target.value }))}
-                >
-                  <option value="ALL">{t.allCampuses}</option>
-                  {CAMPUS_LIST.map((campus) => (
-                    <option key={`new-auth-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                  ))}
-                </select>
+                <details className="filter-menu">
+                  <summary>
+                    {authCreateForm.role === "Super Admin"
+                      ? t.allCampuses
+                      : authCreateForm.campuses.length === 1
+                        ? campusLabel(authCreateForm.campuses[0])
+                        : `${authCreateForm.campuses.length} campuses`}
+                  </summary>
+                  <div className="filter-menu-list" style={{ maxHeight: 220 }}>
+                    {CAMPUS_LIST.map((campus) => (
+                      <label key={`new-auth-campus-${campus}`} className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={authCreateForm.role === "Super Admin" || authCreateForm.campuses.includes(campus)}
+                          disabled={!isAdmin || authCreateForm.role === "Super Admin"}
+                          onChange={(e) =>
+                            setAuthCreateForm((f) => ({
+                              ...f,
+                              campuses: toggleCampusAccess(f.campuses, campus, e.target.checked),
+                            }))
+                          }
+                        />
+                        <span>{campusLabel(campus)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
               </label>
               <label className="field">
                 <span>Assets Tab Access</span>
@@ -15343,7 +15467,7 @@ export default function App() {
                                 }
                                 disabled={
                                   child.key === "assets.register" &&
-                                  (authCreateForm.role !== "Admin" || authCreateForm.assetSubviewAccess === "list_only")
+                                  (!isAdminRole(authCreateForm.role) || authCreateForm.assetSubviewAccess === "list_only")
                                 }
                               />
                               <span>{lang === "km" ? child.labelKm : child.labelEn}</span>
@@ -15357,13 +15481,24 @@ export default function App() {
               </label>
             </div>
             <div className="asset-actions">
-              <div className="tiny">{t.addLoginAccount}</div>
-              <button className="btn-primary" disabled={!isAdmin || busy} onClick={createAuthAccount}>
-                {t.addLoginAccount}
-              </button>
+              <div className="tiny">
+                {editingAuthUserId !== null
+                  ? `Editing account ID: ${editingAuthUserId}`
+                  : t.addLoginAccount}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {editingAuthUserId !== null ? (
+                  <button className="tab" disabled={!isAdmin || busy} onClick={resetAuthCreateForm}>
+                    {t.cancelEdit}
+                  </button>
+                ) : null}
+                <button className="btn-primary" disabled={!isAdmin || busy} onClick={createAuthAccount}>
+                  {editingAuthUserId !== null ? "Update Account" : t.addLoginAccount}
+                </button>
+              </div>
             </div>
             <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
+              <table className="permission-user-table">
                 <thead>
                   <tr>
                     <th>{t.usernameLabel}</th>
@@ -15372,174 +15507,44 @@ export default function App() {
                     <th>{t.accessCampus}</th>
                     <th>Assets Tab Access</th>
                     <th>Menu Access</th>
+                    <th>{t.edit}</th>
                     <th>{lang === "km" ? "កំណត់ពាក្យសម្ងាត់ឡើងវិញ" : "Reset Password"}</th>
-                    <th>{t.save}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {authAccounts.length ? (
                     authAccounts.map((u) => {
-                      const draft = authPermissionDraft[u.id] || {
-                        role: u.role,
-                        campus: (u.campuses && u.campuses[0]) || "ALL",
-                        modules: Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
-                        assetSubviewAccess: normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
-                        menuAccess: normalizeMenuAccess(
-                          u.role,
-                          Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(u.role, []),
-                          normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess),
-                          (u as { menuAccess?: unknown }).menuAccess
-                        ),
-                      };
+                      const rowRole = normalizeRole(u.role);
+                      const rowCampuses = normalizeRoleCampuses(rowRole, u.campuses);
+                      const rowAssetAccess = normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess);
+                      const rowMenuAccess = normalizeMenuAccess(
+                        rowRole,
+                        Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(rowRole, []),
+                        rowAssetAccess,
+                        (u as { menuAccess?: unknown }).menuAccess
+                      );
+                      const campusText =
+                        rowRole === "Super Admin"
+                          ? t.allCampuses
+                          : rowCampuses.length
+                            ? rowCampuses.map((campus) => CAMPUS_CODE[campus] || campus).join(", ")
+                            : "0 campuses";
                       return (
                         <tr key={`auth-perm-${u.id}`}>
                           <td><strong>{u.username}</strong></td>
                           <td>{u.displayName}</td>
+                          <td>{rowRole}</td>
+                          <td>{campusText}</td>
+                          <td>{rowAssetAccess === "list_only" ? "List Only" : "Register + List"}</td>
+                          <td>{`Set Menu Access (${countEnabledMenuChildren(rowMenuAccess)})`}</td>
                           <td>
-                            <select
-                              className="input"
-                              value={draft.role}
-                              disabled={!isAdmin}
-                              onChange={(e) =>
-                                setAuthPermissionDraft((prev) => {
-                                  const nextRole = e.target.value as "Admin" | "Viewer";
-                                  const nextModules =
-                                    nextRole === "Admin"
-                                      ? [...ALL_NAV_MODULES]
-                                      : (draft.modules.length ? draft.modules : [...DEFAULT_VIEWER_MODULES]);
-                                  const nextAssetAccess = nextRole === "Admin" ? draft.assetSubviewAccess : "list_only";
-                                  return {
-                                    ...prev,
-                                    [u.id]: {
-                                      role: nextRole,
-                                      campus: nextRole === "Admin" ? "ALL" : draft.campus === "ALL" ? CAMPUS_LIST[0] : draft.campus,
-                                      modules: nextModules,
-                                      assetSubviewAccess: nextAssetAccess,
-                                      menuAccess: defaultMenuAccessFor(nextRole, nextModules, nextAssetAccess),
-                                    },
-                                  };
-                                })
-                              }
-                            >
-                              <option value="Admin">Admin</option>
-                              <option value="Viewer">Viewer</option>
-                            </select>
-                          </td>
-                          <td>
-                            <select
-                              className="input"
-                              value={draft.campus}
-                              disabled={!isAdmin || draft.role === "Admin"}
-                              onChange={(e) =>
-                                setAuthPermissionDraft((prev) => ({
-                                  ...prev,
-                                  [u.id]: { ...draft, campus: e.target.value },
-                                }))
-                              }
-                            >
-                              <option value="ALL">{t.allCampuses}</option>
-                              {CAMPUS_LIST.map((campus) => (
-                                <option key={campus} value={campus}>{campusLabel(campus)}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>
-                            <select
-                              className="input"
-                              value={draft.assetSubviewAccess}
-                              disabled={!isAdmin}
-                              onChange={(e) =>
-                                setAuthPermissionDraft((prev) => ({
-                                  ...prev,
-                                  [u.id]: {
-                                    ...draft,
-                                    assetSubviewAccess: normalizeAssetSubviewAccess(e.target.value),
-                                    menuAccess: normalizeMenuAccess(
-                                      draft.role,
-                                      draft.modules,
-                                      normalizeAssetSubviewAccess(e.target.value),
-                                      draft.menuAccess
-                                    ),
-                                  },
-                                }))
-                              }
-                            >
-                              <option value="both">Register + List</option>
-                              <option value="list_only">List Only</option>
-                            </select>
-                          </td>
-                          <td>
-                            <details className="filter-menu">
-                              <summary>
-                                {lang === "km" ? "កំណត់សិទ្ធិម៉ឺនុយ" : "Set Menu Access"} ({countEnabledMenuChildren(draft.menuAccess)})
-                              </summary>
-                              <div className="filter-menu-list" style={{ maxHeight: 320 }}>
-                                {MENU_ACCESS_TREE.map((node) => {
-                                  const moduleChecked = isModuleFullyChecked(draft.menuAccess, node.module);
-                                  return (
-                                    <div key={`row-menu-${u.id}-${node.module}`} style={{ padding: "4px 0 8px" }}>
-                                      <label className="filter-menu-item" style={{ fontWeight: 700 }}>
-                                        <input
-                                          type="checkbox"
-                                          checked={moduleChecked}
-                                          onChange={(e) =>
-                                            setAuthPermissionDraft((prev) => ({
-                                              ...prev,
-                                              [u.id]: {
-                                                ...draft,
-                                                menuAccess: normalizeMenuAccess(
-                                                  draft.role,
-                                                  draft.modules,
-                                                  draft.assetSubviewAccess,
-                                                  toggleModuleAccess(draft.menuAccess, node.module, e.target.checked)
-                                                ),
-                                              },
-                                            }))
-                                          }
-                                        />
-                                        <span>{lang === "km" ? node.labelKm : node.labelEn}</span>
-                                      </label>
-                                      {node.children.map((child) => (
-                                        <label key={`row-menu-child-${u.id}-${child.key}`} className="filter-menu-item" style={{ paddingLeft: 24 }}>
-                                          <input
-                                            type="checkbox"
-                                            checked={draft.menuAccess.includes(child.key)}
-                                            onChange={(e) =>
-                                              setAuthPermissionDraft((prev) => ({
-                                                ...prev,
-                                                [u.id]: {
-                                                  ...draft,
-                                                  menuAccess: normalizeMenuAccess(
-                                                    draft.role,
-                                                    draft.modules,
-                                                    draft.assetSubviewAccess,
-                                                    toggleChildAccess(draft.menuAccess, node.module, child.key, e.target.checked)
-                                                  ),
-                                                },
-                                              }))
-                                            }
-                                            disabled={
-                                              child.key === "assets.register" &&
-                                              (draft.role !== "Admin" || draft.assetSubviewAccess === "list_only")
-                                            }
-                                          />
-                                          <span>{lang === "km" ? child.labelKm : child.labelEn}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </details>
+                            <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditAuthAccount(u)}>
+                              {t.edit}
+                            </button>
                           </td>
                           <td>
                             <button className="tab" disabled={!isAdmin || busy} onClick={() => resetAuthAccountPassword(u)}>
                               {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}
-                            </button>
-                          </td>
-                          <td>
-                            <button className="btn-primary" disabled={!isAdmin} onClick={() => saveAuthPermission(u.id)}>
-                              Save
                             </button>
                           </td>
                         </tr>

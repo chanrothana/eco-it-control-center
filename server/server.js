@@ -96,7 +96,7 @@ const DEFAULT_USERS = [
     username: "admin",
     password: DEFAULT_ADMIN_PASSWORD,
     displayName: "Eco Admin",
-    role: "Admin",
+    role: "Super Admin",
     campuses: ["ALL"],
   },
   {
@@ -1157,9 +1157,11 @@ function normalizeStaffUsers(input) {
     const fullName = toText(row.fullName);
     const position = toText(row.position);
     const email = toText(row.email).toLowerCase();
-    if (!fullName || !position || !email) continue;
-    if (usedEmails.has(email)) continue;
-    usedEmails.add(email);
+    if (!fullName || !position) continue;
+    if (email) {
+      if (usedEmails.has(email)) continue;
+      usedEmails.add(email);
+    }
     const parsedId = Number(row.id);
     const id = Number.isFinite(parsedId) && parsedId > 0 ? parsedId : Date.now() + i;
     out.push({
@@ -1178,7 +1180,6 @@ function validateStaffUser(body) {
   const email = toText(body.email).toLowerCase();
   if (!fullName) return "Staff full name is required";
   if (!position) return "Position is required";
-  if (!email) return "Email is required";
   return { fullName, position, email };
 }
 
@@ -1267,16 +1268,27 @@ function requireAdmin(req, res) {
     sendJson(res, 401, { error: "Unauthorized" });
     return null;
   }
-  if (user.role !== "Admin") {
+  if (!isAdminRole(user.role)) {
     sendJson(res, 403, { error: "Admin role required" });
     return null;
   }
   return user;
 }
 
+function normalizeRole(value) {
+  const role = toText(value);
+  if (role === "Super Admin") return "Super Admin";
+  if (role === "Admin") return "Admin";
+  return "Viewer";
+}
+
+function isAdminRole(role) {
+  return role === "Super Admin" || role === "Admin";
+}
+
 function canRecordMaintenance(user) {
   if (!user) return false;
-  if (user.role === "Admin") return true;
+  if (isAdminRole(user.role)) return true;
   const modules = Array.isArray(user.modules) ? user.modules.filter((m) => typeof m === "string") : [];
   if (modules.length && !modules.includes("maintenance")) return false;
   const menuAccess = Array.isArray(user.menuAccess) ? user.menuAccess.filter((m) => typeof m === "string") : [];
@@ -1301,24 +1313,24 @@ function normalizeCampusPermissions(input) {
 
 function userCanAccessCampus(user, campusName) {
   if (!user) return false;
-  if (user.role === "Admin") return true;
+  if (user.role === "Super Admin") return true;
   const campuses = normalizeCampusPermissions(user.campuses);
   if (!campuses.length) return false;
-  if (campuses.includes("ALL")) return true;
   return campuses.includes(campusName);
 }
 
 function filterByCampusPermission(list, user, getter) {
   if (!user) return [];
-  if (user.role === "Admin") return list;
+  if (user.role === "Super Admin") return list;
   const campuses = normalizeCampusPermissions(user.campuses);
   if (!campuses.length) return [];
-  if (campuses.includes("ALL")) return list;
   return list.filter((row) => campuses.includes(getter(row)));
 }
 
 function sanitizeUser(user) {
   const campuses = normalizeCampusPermissions(user.campuses);
+  const normalizedRole = normalizeRole(user.role);
+  const role = normalizedRole === "Admin" && campuses.includes("ALL") ? "Super Admin" : normalizedRole;
   const modules = Array.isArray(user.modules)
     ? user.modules.filter((m) => typeof m === "string")
     : [];
@@ -1331,8 +1343,8 @@ function sanitizeUser(user) {
     id: Number(user.id),
     username: toText(user.username),
     displayName: toText(user.displayName) || toText(user.username),
-    role: toText(user.role) === "Admin" ? "Admin" : "Viewer",
-    campuses: campuses.length ? campuses : ["ALL"],
+    role,
+    campuses: role === "Super Admin" ? ["ALL"] : campuses.filter((campus) => campus !== "ALL"),
     modules,
     assetSubviewAccess,
     menuAccess,
@@ -1741,7 +1753,9 @@ const server = http.createServer(async (req, res) => {
       const db = await readDb();
       const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
       const users = normalizeStaffUsers(settings.staffUsers);
-      const duplicate = users.some((u) => u.email.toLowerCase() === cleaned.email.toLowerCase());
+      const duplicate = cleaned.email
+        ? users.some((u) => String(u.email || "").toLowerCase() === cleaned.email.toLowerCase())
+        : false;
       if (duplicate) {
         sendJson(res, 400, { error: "User email already exists." });
         return;
@@ -1757,7 +1771,7 @@ const server = http.createServer(async (req, res) => {
         ...settings,
         staffUsers: nextUsers,
       };
-      appendAuditLog(db, admin, "CREATE", "staff_user", String(user.id), `${user.fullName} | ${user.email}`);
+      appendAuditLog(db, admin, "CREATE", "staff_user", String(user.id), `${user.fullName} | ${user.email || "-"}`);
       await writeDb(db);
       sendJson(res, 201, { user, users: nextUsers });
       return;
@@ -1785,9 +1799,11 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: "User not found" });
         return;
       }
-      const duplicate = users.some(
-        (u) => u.id !== id && u.email.toLowerCase() === cleaned.email.toLowerCase()
-      );
+      const duplicate = cleaned.email
+        ? users.some(
+            (u) => u.id !== id && String(u.email || "").toLowerCase() === cleaned.email.toLowerCase()
+          )
+        : false;
       if (duplicate) {
         sendJson(res, 400, { error: "User email already exists." });
         return;
@@ -1797,7 +1813,7 @@ const server = http.createServer(async (req, res) => {
         ...settings,
         staffUsers: users,
       };
-      appendAuditLog(db, admin, "UPDATE", "staff_user", String(id), `${users[idx].fullName} | ${users[idx].email}`);
+      appendAuditLog(db, admin, "UPDATE", "staff_user", String(id), `${users[idx].fullName} | ${users[idx].email || "-"}`);
       await writeDb(db);
       sendJson(res, 200, { user: users[idx], users });
       return;
@@ -1934,7 +1950,7 @@ const server = http.createServer(async (req, res) => {
       const username = toText(body.username).toLowerCase();
       const password = toText(body.password);
       const displayName = toText(body.displayName) || username;
-      const role = toText(body.role) === "Admin" ? "Admin" : "Viewer";
+      const role = normalizeRole(body.role);
       const campuses = normalizeCampusPermissions(body.campuses);
       const modules = Array.isArray(body.modules)
         ? body.modules.filter((m) => typeof m === "string")
@@ -1949,8 +1965,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: "Username and password are required" });
         return;
       }
-      if (role !== "Admin" && !campuses.length) {
-        sendJson(res, 400, { error: "At least one campus is required for Viewer" });
+      if (role !== "Super Admin" && !campuses.length) {
+        sendJson(res, 400, { error: "At least one campus is required for this role" });
+        return;
+      }
+      if (role !== "Super Admin" && campuses.includes("ALL")) {
+        sendJson(res, 400, { error: "Only Super Admin can use ALL campuses" });
         return;
       }
 
@@ -1971,7 +1991,7 @@ const server = http.createServer(async (req, res) => {
         password: hashPassword(password),
         displayName,
         role,
-        campuses: role === "Admin" ? ["ALL"] : campuses,
+        campuses: role === "Super Admin" ? ["ALL"] : campuses,
         modules,
         assetSubviewAccess,
         menuAccess,
@@ -2001,7 +2021,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const body = await parseBody(req);
-      const role = toText(body.role) === "Admin" ? "Admin" : "Viewer";
+      const usernameInput = toText(body.username).toLowerCase();
+      const displayNameInput = toText(body.displayName);
+      const passwordInput = toText(body.password);
+      const role = normalizeRole(body.role);
       const campuses = normalizeCampusPermissions(body.campuses);
       const modules = Array.isArray(body.modules)
         ? body.modules.filter((m) => typeof m === "string")
@@ -2011,8 +2034,12 @@ const server = http.createServer(async (req, res) => {
       const menuAccess = Array.isArray(body.menuAccess)
         ? body.menuAccess.filter((m) => typeof m === "string")
         : [];
-      if (role !== "Admin" && !campuses.length) {
-        sendJson(res, 400, { error: "At least one campus is required for Viewer" });
+      if (role !== "Super Admin" && !campuses.length) {
+        sendJson(res, 400, { error: "At least one campus is required for this role" });
+        return;
+      }
+      if (role !== "Super Admin" && campuses.includes("ALL")) {
+        sendJson(res, 400, { error: "Only Super Admin can use ALL campuses" });
         return;
       }
 
@@ -2023,8 +2050,27 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { error: "User not found" });
         return;
       }
+      const username = usernameInput || toText(users[idx].username).toLowerCase();
+      if (!username) {
+        sendJson(res, 400, { error: "Username is required" });
+        return;
+      }
+      const duplicateUsername = users.some(
+        (u, rowIdx) => rowIdx !== idx && toText(u.username).toLowerCase() === username
+      );
+      if (duplicateUsername) {
+        sendJson(res, 409, { error: "Username already exists" });
+        return;
+      }
+      const displayName = displayNameInput || username;
+
+      users[idx].username = username;
+      users[idx].displayName = displayName;
+      if (passwordInput) {
+        users[idx].password = hashPassword(passwordInput);
+      }
       users[idx].role = role;
-      users[idx].campuses = role === "Admin" ? ["ALL"] : campuses;
+      users[idx].campuses = role === "Super Admin" ? ["ALL"] : campuses;
       users[idx].modules = modules;
       users[idx].assetSubviewAccess = assetSubviewAccess;
       users[idx].menuAccess = menuAccess;
@@ -2035,7 +2081,7 @@ const server = http.createServer(async (req, res) => {
         "UPDATE",
         "auth_user_permission",
         String(id),
-        `role=${role}; campuses=${(role === "Admin" ? ["ALL"] : campuses).join(",")}; assetAccess=${assetSubviewAccess}; menuAccess=${menuAccess.length}`
+        `username=${username}; role=${role}; campuses=${(role === "Super Admin" ? ["ALL"] : campuses).join(",")}; assetAccess=${assetSubviewAccess}; menuAccess=${menuAccess.length}; passwordUpdated=${passwordInput ? "yes" : "no"}`
       );
       await writeDb(db);
 
