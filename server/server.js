@@ -1238,7 +1238,7 @@ function syncAssetStatusFromMaintenance(asset) {
     date: new Date().toISOString(),
     fromStatus: currentStatus,
     toStatus: "Retired",
-    reason: `Auto retired after replacement maintenance on ${toText(latestReplacement?.date) || "unknown date"}`,
+    reason: `Auto defective after replacement maintenance on ${toText(latestReplacement?.date) || "unknown date"}`,
     by: toText(latestReplacement?.by),
   };
   asset.statusHistory = Array.isArray(asset.statusHistory)
@@ -2435,7 +2435,7 @@ const server = http.createServer(async (req, res) => {
           "UPDATE_STATUS",
           "asset",
           db.assets[idx].assetId || String(assetId),
-          "Retired (auto from replacement)"
+          "Defective (auto from replacement)"
         );
       }
       appendAuditLog(
@@ -2489,7 +2489,7 @@ const server = http.createServer(async (req, res) => {
           "UPDATE_STATUS",
           "asset",
           db.assets[idx].assetId || String(assetId),
-          "Retired (auto from replacement)"
+          "Defective (auto from replacement)"
         );
       }
 
@@ -2641,7 +2641,7 @@ const server = http.createServer(async (req, res) => {
           "UPDATE_STATUS",
           "asset",
           db.assets[idx].assetId || String(id),
-          "Retired (auto from replacement)"
+          "Defective (auto from replacement)"
         );
       }
       appendAuditLog(

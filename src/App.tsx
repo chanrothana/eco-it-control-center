@@ -557,7 +557,7 @@ const CATEGORY_OPTIONS = [
 const ASSET_STATUS_OPTIONS = [
   { value: "Active", en: "Active", km: "កំពុងប្រើ" },
   { value: "Maintenance", en: "Maintenance", km: "កំពុងជួសជុល" },
-  { value: "Retired", en: "Retired", km: "ឈប់ប្រើ" },
+  { value: "Retired", en: "Defective", km: "ខូច" },
 ];
 const MAINTENANCE_COMPLETION_OPTIONS = [
   { value: "Done", label: "Already Done" },
@@ -2325,6 +2325,7 @@ export default function App() {
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("bulk");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations">("campus");
   const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance" | "daily">("items");
+  const [inventoryBalanceMode, setInventoryBalanceMode] = useState<"all" | "low">("all");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"record" | "history">("history");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
@@ -2376,6 +2377,9 @@ export default function App() {
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [quickCountCampus, setQuickCountCampus] = useState("ALL");
+  const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState("ALL");
+  const [quickCountLocationFilter, setQuickCountLocationFilter] = useState("ALL");
+  const [quickCountStatusFilter, setQuickCountStatusFilter] = useState("ALL");
   const [quickCountQuery, setQuickCountQuery] = useState("");
   const [dashboardQuickCountOpen, setDashboardQuickCountOpen] = useState(true);
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
@@ -2993,6 +2997,16 @@ export default function App() {
     },
     [campusNames, lang]
   );
+  const assetStatusLabel = useCallback(
+    (statusRaw: string) => {
+      const status = String(statusRaw || "").trim();
+      if (!status) return "-";
+      const option = ASSET_STATUS_OPTIONS.find((item) => item.value.toLowerCase() === status.toLowerCase());
+      if (!option) return status;
+      return lang === "km" ? option.km : option.en;
+    },
+    [lang]
+  );
   const assetItemName = useCallback(
     (category: string, typeCode: string, pcType = "") => {
       const key = `${category}:${typeCode}`;
@@ -3199,6 +3213,10 @@ export default function App() {
   const inventoryLowStockRows = useMemo(
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
+  );
+  const inventoryBalanceDisplayRows = useMemo(
+    () => (inventoryBalanceMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
+    [inventoryBalanceMode, inventoryLowStockRows, inventoryBalanceRows]
   );
   const inventoryTxnsRows = useMemo(() => {
     return [...inventoryTxns]
@@ -6053,7 +6071,7 @@ export default function App() {
       (maintenanceType === "replacement" || maintenanceType === "replacment");
     const shouldApplyRetireStatus =
       shouldAutoRetire && (sourceAsset?.status || "Active") !== "Retired";
-    const retireReason = `Auto retired after replacement maintenance on ${entry.date}`;
+    const retireReason = `Auto defective after replacement maintenance on ${entry.date}`;
 
     setBusy(true);
     setError("");
@@ -6146,7 +6164,7 @@ export default function App() {
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
       if (shouldApplyRetireStatus) {
-        appendUiAudit("UPDATE_STATUS", "asset", String(assetId), "Retired (auto from replacement)");
+        appendUiAudit("UPDATE_STATUS", "asset", String(assetId), "Defective (auto from replacement)");
       }
       setMaintenanceRecordForm((f) => ({
         ...f,
@@ -7302,6 +7320,15 @@ export default function App() {
         assetLocationMultiFilter.includes(String(asset.location || "").trim())
       );
     }
+    const q = String(search || "").trim().toLowerCase();
+    if (q) {
+      list = list.filter((asset) => {
+        const itemLabel = assetItemName(asset.category, asset.type, asset.pcType || "");
+        return `${asset.assetId} ${itemLabel} ${asset.name || ""} ${asset.location || ""} ${campusLabel(asset.campus)} ${asset.category || ""}`
+          .toLowerCase()
+          .includes(q);
+      });
+    }
     const { key, direction } = assetListSort;
     const sign = direction === "asc" ? 1 : -1;
     return list.sort((a, b) => {
@@ -7339,6 +7366,7 @@ export default function App() {
     assetCategoryMultiFilter,
     assetNameMultiFilter,
     assetLocationMultiFilter,
+    search,
     assetListSort,
     campusLabel,
     assetItemName,
@@ -7782,7 +7810,7 @@ export default function App() {
           purchaseDate: asset.purchaseDate || "-",
           lastServiceDate: toLastServiceDate(asset),
           assignedTo: asset.assignedTo || "-",
-          status: asset.status || "-",
+          status: assetStatusLabel(asset.status || "-"),
           photo: asset.photo || "",
           campus: asset.campus || "-",
         };
@@ -7793,7 +7821,7 @@ export default function App() {
           a.location.localeCompare(b.location) ||
           a.assetId.localeCompare(b.assetId)
       );
-  }, [assets, assetItemName, campusLabel]);
+  }, [assets, assetItemName, campusLabel, assetStatusLabel]);
 
   const setCodeReportRows = useMemo(() => {
     const groupedBySet = new Map<string, Asset[]>();
@@ -8098,10 +8126,39 @@ export default function App() {
     const options = Array.from(new Set(qrLabelRows.map((row) => row.itemName).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrLabelRows]);
-  const quickCountBaseAssets = useMemo(
-    () => (quickCountCampus === "ALL" ? assets : assets.filter((asset) => asset.campus === quickCountCampus)),
-    [assets, quickCountCampus]
-  );
+  const quickCountLocationOptions = useMemo(() => {
+    let list = [...assets];
+    if (quickCountCampus !== "ALL") list = list.filter((asset) => asset.campus === quickCountCampus);
+    if (quickCountCategoryFilter !== "ALL") list = list.filter((asset) => asset.category === quickCountCategoryFilter);
+    if (quickCountStatusFilter !== "ALL") {
+      list = list.filter(
+        (asset) => String(asset.status || "Active").trim().toLowerCase() === quickCountStatusFilter.toLowerCase()
+      );
+    }
+    return Array.from(new Set(list.map((asset) => String(asset.location || "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [assets, quickCountCampus, quickCountCategoryFilter, quickCountStatusFilter]);
+  useEffect(() => {
+    if (quickCountLocationFilter === "ALL") return;
+    if (!quickCountLocationOptions.includes(quickCountLocationFilter)) {
+      setQuickCountLocationFilter("ALL");
+    }
+  }, [quickCountLocationFilter, quickCountLocationOptions]);
+  const quickCountBaseAssets = useMemo(() => {
+    let list = [...assets];
+    if (quickCountCampus !== "ALL") list = list.filter((asset) => asset.campus === quickCountCampus);
+    if (quickCountCategoryFilter !== "ALL") list = list.filter((asset) => asset.category === quickCountCategoryFilter);
+    if (quickCountLocationFilter !== "ALL") {
+      list = list.filter((asset) => String(asset.location || "").trim() === quickCountLocationFilter);
+    }
+    if (quickCountStatusFilter !== "ALL") {
+      list = list.filter(
+        (asset) => String(asset.status || "Active").trim().toLowerCase() === quickCountStatusFilter.toLowerCase()
+      );
+    }
+    return list;
+  }, [assets, quickCountCampus, quickCountCategoryFilter, quickCountLocationFilter, quickCountStatusFilter]);
   const quickCountRows = useMemo(() => {
     const map = new Map<string, { category: string; itemName: string; count: number }>();
     for (const asset of quickCountBaseAssets) {
@@ -8156,7 +8213,6 @@ export default function App() {
       })
       .map(([category, rows]) => ({ category, rows: rows.slice(0, 18) }));
   }, [quickCountFilteredRows]);
-  const quickCountTotal = quickCountBaseAssets.length;
   const quickCountFilteredTotal = useMemo(
     () => quickCountFilteredRows.reduce((sum, row) => sum + row.count, 0),
     [quickCountFilteredRows]
@@ -8199,6 +8255,14 @@ export default function App() {
     }),
     [quickCountStatusAssets]
   );
+  const openInventoryBalanceView = useCallback(
+    (mode: "all" | "low") => {
+      setInventoryBalanceMode(mode);
+      setTab("inventory");
+      setInventoryView("balance");
+    },
+    []
+  );
   function openQuickCountAssetsModal(title: string, rows: Asset[]) {
     const sorted = [...rows].sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")));
     setQuickCountModal({ title, assets: sorted });
@@ -8231,8 +8295,8 @@ export default function App() {
             </div>
             <span className="tiny">
               {lang === "km"
-                ? "ជ្រើសសាខា និងស្វែងរកឈ្មោះទ្រព្យ ដើម្បីឃើញចំនួនភ្លាមៗ"
-                : "Pick campus and search item name to get instant quantity"}
+                ? "ជ្រើសតម្រង (សាខា ទីតាំង ប្រភេទ ស្ថានភាព) និងស្វែងរកឈ្មោះទ្រព្យ"
+                : "Use filters (campus, location, category, status) and search item name"}
             </span>
           </div>
           {isDashboard ? (
@@ -8256,76 +8320,75 @@ export default function App() {
                   </option>
                 ))}
               </select>
+              <select className="input" value={quickCountCategoryFilter} onChange={(e) => setQuickCountCategoryFilter(e.target.value)}>
+                <option value="ALL">{t.allCategories}</option>
+                {CATEGORY_OPTIONS.map((cat) => (
+                  <option key={`quick-count-category-${cat.value}`} value={cat.value}>
+                    {lang === "km" ? cat.km : cat.en}
+                  </option>
+                ))}
+              </select>
+              <select className="input" value={quickCountLocationFilter} onChange={(e) => setQuickCountLocationFilter(e.target.value)}>
+                <option value="ALL">{lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}</option>
+                {quickCountLocationOptions.map((location) => (
+                  <option key={`quick-count-location-${location}`} value={location}>
+                    {location}
+                  </option>
+                ))}
+              </select>
+              <select className="input" value={quickCountStatusFilter} onChange={(e) => setQuickCountStatusFilter(e.target.value)}>
+                <option value="ALL">{lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}</option>
+                {ASSET_STATUS_OPTIONS.map((status) => (
+                  <option key={`quick-count-status-${status.value}`} value={status.value}>
+                    {lang === "km" ? status.km : status.en}
+                  </option>
+                ))}
+              </select>
               <input
-                className="input"
+                className="input report-quick-search"
                 value={quickCountQuery}
                 onChange={(e) => setQuickCountQuery(e.target.value)}
                 placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទ្រព្យ (ឧ. Monitor, Air Conditioner)" : "Search item name (e.g. Monitor, Air Conditioner)"}
               />
-              <div className="report-quick-count-result">
-                <span>{lang === "km" ? "ទ្រព្យសរុប" : "Assets"}</span>
-                <button
-                  type="button"
-                  className="report-quick-count-link"
-                  onClick={() =>
-                    openQuickCountAssetsModal(
-                      `${lang === "km" ? "ទ្រព្យសរុប" : "Assets"} - ${
-                        quickCountCampus === "ALL" ? t.allCampuses : campusLabel(quickCountCampus)
-                      }`,
-                      quickCountBaseAssets
-                    )
-                  }
-                >
-                  {quickCountTotal}
-                </button>
-              </div>
             </div>
             <div className="report-quick-status-grid">
-              <article className="report-quick-status-pill report-quick-status-broken">
+              <button
+                type="button"
+                className="report-quick-status-pill report-quick-status-btn report-quick-status-broken"
+                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Broken Assets", quickCountStatusAssets.broken)}
+              >
                 <span>{lang === "km" ? "ខូច" : "Broken"}</span>
-                <button
-                  type="button"
-                  className="report-quick-count-link"
-                  onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Broken Assets", quickCountStatusAssets.broken)}
-                >
-                  {quickCountStatusSummary.broken}
-                </button>
-              </article>
-              <article className="report-quick-status-pill report-quick-status-maintenance">
+                <strong>{quickCountStatusSummary.broken}</strong>
+              </button>
+              <button
+                type="button"
+                className="report-quick-status-pill report-quick-status-btn report-quick-status-maintenance"
+                onClick={() =>
+                  openQuickCountAssetsModal(
+                    lang === "km" ? "ទ្រព្យកំពុងជួសជុល" : "Under Maintenance Assets",
+                    quickCountStatusAssets.underMaintenance
+                  )
+                }
+              >
                 <span>{lang === "km" ? "កំពុងជួសជុល" : "Under Maintenance"}</span>
-                <button
-                  type="button"
-                  className="report-quick-count-link"
-                  onClick={() =>
-                    openQuickCountAssetsModal(
-                      lang === "km" ? "ទ្រព្យកំពុងជួសជុល" : "Under Maintenance Assets",
-                      quickCountStatusAssets.underMaintenance
-                    )
-                  }
-                >
-                  {quickCountStatusSummary.underMaintenance}
-                </button>
-              </article>
-              <article className="report-quick-status-pill report-quick-status-active">
+                <strong>{quickCountStatusSummary.underMaintenance}</strong>
+              </button>
+              <button
+                type="button"
+                className="report-quick-status-pill report-quick-status-btn report-quick-status-active"
+                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងប្រើ" : "Active Assets", quickCountStatusAssets.active)}
+              >
                 <span>{lang === "km" ? "កំពុងប្រើ" : "Active"}</span>
-                <button
-                  type="button"
-                  className="report-quick-count-link"
-                  onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងប្រើ" : "Active Assets", quickCountStatusAssets.active)}
-                >
-                  {quickCountStatusSummary.active}
-                </button>
-              </article>
-              <article className="report-quick-status-pill report-quick-status-retired">
-                <span>{lang === "km" ? "ឈប់ប្រើ" : "Retired"}</span>
-                <button
-                  type="button"
-                  className="report-quick-count-link"
-                  onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យឈប់ប្រើ" : "Retired Assets", quickCountStatusAssets.retired)}
-                >
-                  {quickCountStatusSummary.retired}
-                </button>
-              </article>
+                <strong>{quickCountStatusSummary.active}</strong>
+              </button>
+              <button
+                type="button"
+                className="report-quick-status-pill report-quick-status-btn report-quick-status-retired"
+                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Defective Assets", quickCountStatusAssets.retired)}
+              >
+                <span>{lang === "km" ? "ខូច" : "Defective"}</span>
+                <strong>{quickCountStatusSummary.retired}</strong>
+              </button>
             </div>
             <div className="report-quick-count-groups">
               {quickCountGroupedRows.length ? (
@@ -8622,7 +8685,7 @@ export default function App() {
         formatDate(a.nextMaintenanceDate || "-"),
         a.assetId,
         campusLabel(a.campus),
-        a.status || "-",
+        assetStatusLabel(a.status || "-"),
         a.scheduleNote || "-",
       ]);
     } else if (reportType === "transfer") {
@@ -8768,12 +8831,13 @@ export default function App() {
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; }
-          .qr-sticker-grid { display: grid; grid-template-columns: repeat(4, 116px); column-gap: 10px; row-gap: 10px; margin-top: 10px; justify-content: start; }
+          .qr-sticker-grid { display: grid; grid-template-columns: repeat(5, 116px); column-gap: 10px; row-gap: 10px; margin-top: 10px; width: 100%; justify-content: space-between; }
           .qr-sticker { width: 116px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 8px; padding: 7px 7px 6px; display: grid; gap: 6px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
           .qr-sticker-qr { width: 84px; height: 84px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 6px; display: grid; place-items: center; }
           .qr-sticker-qr img { width: 76px; height: 76px; object-fit: contain; display: block; }
-          .qr-sticker-id { width: 84px; min-height: 24px; box-sizing: border-box; text-align: center; border: 1px solid #1b2d23; border-radius: 6px; padding: 3px 4px; font-size: 8.5px; line-height: 1.05; font-weight: 800; letter-spacing: 0.005em; white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
-          @media print { body { margin: 8mm; } }
+          .qr-sticker-id { width: 84px; min-height: 24px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 1px solid #1b2d23; border-radius: 6px; padding: 3px 4px; font-size: 8.5px; line-height: 1.05; font-weight: 800; letter-spacing: 0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          @page { size: A4 portrait; margin: 8mm; }
+          @media print { body { margin: 0; } }
         </style>
       </head>
       <body>
@@ -9228,7 +9292,7 @@ export default function App() {
                           <div><strong>{t.campus}:</strong> {campusLabel(asset.campus || "-")}</div>
                           <div><strong>{t.category}:</strong> {asset.category || "-"}</div>
                           <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
-                          <div><strong>{t.status}:</strong> {asset.status || "-"}</div>
+                          <div><strong>{t.status}:</strong> {assetStatusLabel(asset.status || "-")}</div>
                         </div>
                       </div>
                       <div className="public-asset-mobile-photo">
@@ -9242,7 +9306,7 @@ export default function App() {
                   </div>
 
                   <div className="field public-asset-dup-mobile"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
-                  <div className="field public-asset-dup-mobile"><span>{t.status}</span><div className="detail-value">{asset.status || "-"}</div></div>
+                  <div className="field public-asset-dup-mobile"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(asset.status || "-")}</div></div>
                   <div className="field public-asset-dup-mobile"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
                   <div className="field public-asset-dup-mobile"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
                   <div className="field public-asset-dup-mobile"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
@@ -9370,8 +9434,8 @@ export default function App() {
                           publicStatusHistory.map((entry) => (
                             <tr key={`public-status-${entry.id}`}>
                               <td>{formatDate(entry.date || "-")}</td>
-                              <td>{entry.fromStatus || "-"}</td>
-                              <td>{entry.toStatus || "-"}</td>
+                              <td>{assetStatusLabel(entry.fromStatus || "-")}</td>
+                              <td>{assetStatusLabel(entry.toStatus || "-")}</td>
                               <td>{entry.reason || "-"}</td>
                               <td>{entry.by || "-"}</td>
                             </tr>
@@ -9848,30 +9912,22 @@ export default function App() {
             )}
 
             <div className={`stats-grid dashboard-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
-              <article className="stat-card stat-card-total">
+              <button className="stat-card stat-card-button stat-card-total" onClick={() => setOverviewModal("total")}>
                 <div className="stat-label">{t.totalAssets}</div>
-                <button className="stat-value stat-link" onClick={() => setOverviewModal("total")}>
-                  {stats.totalAssets}
-                </button>
-              </article>
-              <article className="stat-card stat-card-it">
+                <div className="stat-value">{stats.totalAssets}</div>
+              </button>
+              <button className="stat-card stat-card-button stat-card-it" onClick={() => setOverviewModal("it")}>
                 <div className="stat-label">{t.itAssets}</div>
-                <button className="stat-value stat-link" onClick={() => setOverviewModal("it")}>
-                  {stats.itAssets}
-                </button>
-              </article>
-              <article className="stat-card stat-card-safety">
+                <div className="stat-value">{stats.itAssets}</div>
+              </button>
+              <button className="stat-card stat-card-button stat-card-safety" onClick={() => setOverviewModal("safety")}>
                 <div className="stat-label">{t.safetyAssets}</div>
-                <button className="stat-value stat-link" onClick={() => setOverviewModal("safety")}>
-                  {stats.safetyAssets}
-                </button>
-              </article>
-              <article className="stat-card stat-card-ticket">
+                <div className="stat-value">{stats.safetyAssets}</div>
+              </button>
+              <button className="stat-card stat-card-button stat-card-ticket" onClick={() => setOverviewModal("tickets")}>
                 <div className="stat-label">{t.openWorkOrders}</div>
-                <button className="stat-value stat-link" onClick={() => setOverviewModal("tickets")}>
-                  {stats.openTickets}
-                </button>
-              </article>
+                <div className="stat-value">{stats.openTickets}</div>
+              </button>
             </div>
 
             {renderQuickCountPanel("dashboard")}
@@ -9928,14 +9984,18 @@ export default function App() {
                   <h3 className="section-title">Stock Balance & Low Stock Alerts</h3>
                 </div>
                 <div className="stats-grid dashboard-stock-stats" style={{ marginBottom: 10 }}>
-                  <article className="stat-card">
+                  <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryBalanceView("all")}>
                     <div className="stat-label">Total Inventory Items</div>
                     <div className="stat-value">{inventoryBalanceRows.length}</div>
-                  </article>
-                  <article className="stat-card stat-card-overdue">
+                  </button>
+                  <button
+                    type="button"
+                    className="stat-card stat-card-button stat-card-overdue"
+                    onClick={() => openInventoryBalanceView("low")}
+                  >
                     <div className="stat-label">Low Stock Alerts</div>
                     <div className="stat-value">{inventoryLowStockRows.length}</div>
-                  </article>
+                  </button>
                 </div>
                 <div className="table-wrap">
                   <table>
@@ -10996,7 +11056,7 @@ export default function App() {
                     {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
                       <div className="field"><span>{t.pcType}</span><div className="detail-value">{detailAsset.pcType || "-"}</div></div>
                     ) : null}
-                    <div className="field"><span>{t.status}</span><div className="detail-value">{detailAsset.status}</div></div>
+                    <div className="field"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(detailAsset.status)}</div></div>
                     <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</div></div>
                     <div className="field"><span>{t.location}</span><div className="detail-value">{detailAsset.location || "-"}</div></div>
                     {detailAsset.category === "IT" ? (
@@ -11116,8 +11176,8 @@ export default function App() {
                           detailStatusEntries.map((h) => (
                             <tr key={`detail-status-${h.id}`}>
                               <td>{formatDate(h.date)}</td>
-                              <td>{h.fromStatus}</td>
-                              <td>{h.toStatus}</td>
+                              <td>{assetStatusLabel(h.fromStatus)}</td>
+                              <td>{assetStatusLabel(h.toStatus)}</td>
                               <td>{h.reason || "-"}</td>
                             </tr>
                           ))
@@ -11302,7 +11362,7 @@ export default function App() {
                                         <strong>{item.label}</strong>
                                         <div className="tiny">
                                           {child
-                                            ? `${t.assetId}: ${child.assetId} | ${t.status}: ${child.status || "-"}`
+                                            ? `${t.assetId}: ${child.assetId} | ${t.status}: ${assetStatusLabel(child.status || "-")}`
                                             : "Not created yet for this set"}
                                         </div>
                                       </div>
@@ -12515,17 +12575,25 @@ export default function App() {
             )}
 
             {inventoryView === "balance" && (
-              <section className="panel">
+              <section className="panel" id="inventory-balance-section">
                 <h2>Stock Balance & Low Stock Alerts</h2>
                 <div className="stats-grid" style={{ marginBottom: 12 }}>
-                  <article className="stat-card">
+                  <button
+                    type="button"
+                    className={`stat-card stat-card-button ${inventoryBalanceMode === "all" ? "stat-card-selected" : ""}`}
+                    onClick={() => setInventoryBalanceMode("all")}
+                  >
                     <div className="stat-label">Total Inventory Items</div>
                     <div className="stat-value">{inventoryBalanceRows.length}</div>
-                  </article>
-                  <article className="stat-card stat-card-overdue">
+                  </button>
+                  <button
+                    type="button"
+                    className={`stat-card stat-card-button stat-card-overdue ${inventoryBalanceMode === "low" ? "stat-card-selected" : ""}`}
+                    onClick={() => setInventoryBalanceMode("low")}
+                  >
                     <div className="stat-label">Low Stock Alerts</div>
                     <div className="stat-value">{inventoryLowStockRows.length}</div>
-                  </article>
+                  </button>
                 </div>
                 <div className="table-wrap">
                   <table>
@@ -12546,8 +12614,8 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {inventoryBalanceRows.length ? (
-                        inventoryBalanceRows.map((row) => (
+                      {inventoryBalanceDisplayRows.length ? (
+                        inventoryBalanceDisplayRows.map((row) => (
                           <tr key={`inv-balance-row-${row.id}`}>
                             <td><strong>{row.itemCode}</strong></td>
                             <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
@@ -12565,7 +12633,9 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={12}>No stock balance data.</td>
+                          <td colSpan={12}>
+                            {inventoryBalanceMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                          </td>
                         </tr>
                       )}
                     </tbody>
@@ -12923,7 +12993,7 @@ export default function App() {
                           </td>
                           <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
                           <td>{campusLabel(asset.campus)}</td>
-                          <td>{asset.status}</td>
+                          <td>{assetStatusLabel(asset.status)}</td>
                           <td>{asset.scheduleNote || "-"}</td>
                           <td>
                             <div className="row-actions">
@@ -13464,7 +13534,7 @@ export default function App() {
                         <td>{renderAssetPhoto(row.photo || "", "maintenance")}</td>
                         <td>{row.cost || "-"}</td>
                         <td>{row.by || "-"}</td>
-                        <td>{row.status}</td>
+                        <td>{assetStatusLabel(row.status)}</td>
                         <td>
                           <button
                             className="tab"
@@ -14091,15 +14161,17 @@ export default function App() {
           <section className="panel">
             <div className="report-title-row">
               <h2>{t.reports}</h2>
-              <button
-                className="btn-primary report-print-btn report-title-print-btn"
-                onClick={() => {
-                  setReportMobileFiltersOpen(false);
-                  printCurrentReport();
-                }}
-              >
-                {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
-              </button>
+              {isPhoneView || !hasReportFilters ? (
+                <button
+                  className="btn-primary report-print-btn report-title-print-btn"
+                  onClick={() => {
+                    setReportMobileFiltersOpen(false);
+                    printCurrentReport();
+                  }}
+                >
+                  {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
+                </button>
+              ) : null}
             </div>
             {reportType === "maintenance_completion" && (
               <div className="stats-grid" style={{ marginBottom: 10 }}>
@@ -14143,9 +14215,11 @@ export default function App() {
                       ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
                       : (lang === "km" ? "តម្រង" : "Filters")}
                   </button>
-                  <button type="button" className="tab" onClick={resetReportFilters}>
-                    {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
-                  </button>
+                  {isPhoneView ? (
+                    <button type="button" className="tab" onClick={resetReportFilters}>
+                      {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
               {hasReportFilters ? (
@@ -14381,6 +14455,27 @@ export default function App() {
                   </details>
                 </>
               ) : null}
+                      {!isPhoneView ? (
+                        <>
+                          <button
+                            type="button"
+                            className="tab report-filter-reset-btn"
+                            onClick={resetReportFilters}
+                          >
+                            {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary report-print-btn report-filter-print-btn"
+                            onClick={() => {
+                              setReportMobileFiltersOpen(false);
+                              printCurrentReport();
+                            }}
+                          >
+                            {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </>
@@ -14631,7 +14726,7 @@ export default function App() {
                           <td>{formatDate(a.nextMaintenanceDate || "-")}</td>
                           <td><strong>{a.assetId}</strong></td>
                           <td>{campusLabel(a.campus)}</td>
-                          <td>{a.status || "-"}</td>
+                          <td>{assetStatusLabel(a.status || "-")}</td>
                           <td>{a.scheduleNote || "-"}</td>
                         </tr>
                       ))
@@ -14735,7 +14830,7 @@ export default function App() {
                         <div className="qr-label-asset-id">{row.assetId}</div>
                         <div>{row.itemName}</div>
                         <div>{campusLabel(row.campus)} | {row.location || "-"}</div>
-                        <div>Status: {row.status || "-"}</div>
+                        <div>Status: {assetStatusLabel(row.status || "-")}</div>
                       </div>
                     </article>
                   ))
@@ -15749,7 +15844,7 @@ export default function App() {
                           </td>
                           <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
                           <td>{campusLabel(asset.campus)}</td>
-                          <td>{asset.status}</td>
+                          <td>{assetStatusLabel(asset.status)}</td>
                           <td>{asset.scheduleNote || "-"}</td>
                         </tr>
                       ))
@@ -15796,7 +15891,7 @@ export default function App() {
                             <td>{asset.category}</td>
                             <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
                             <td>{asset.location || "-"}</td>
-                            <td>{asset.status || "-"}</td>
+                            <td>{assetStatusLabel(asset.status || "-")}</td>
                           </tr>
                         ))
                       ) : (
@@ -15877,7 +15972,7 @@ export default function App() {
                           <td>{asset.category}</td>
                           <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
                           <td>{asset.location || "-"}</td>
-                          <td>{asset.status || "-"}</td>
+                          <td>{assetStatusLabel(asset.status || "-")}</td>
                         </tr>
                       ))
                     ) : (
@@ -15928,11 +16023,11 @@ export default function App() {
               <div className="form-grid">
                 <div className="field">
                   <span>From</span>
-                  <input className="input" value={pendingStatusChange.fromStatus} readOnly />
+                  <input className="input" value={assetStatusLabel(pendingStatusChange.fromStatus)} readOnly />
                 </div>
                 <div className="field">
                   <span>To</span>
-                  <input className="input" value={pendingStatusChange.toStatus} readOnly />
+                  <input className="input" value={assetStatusLabel(pendingStatusChange.toStatus)} readOnly />
                 </div>
                 <label className="field field-wide">
                   <span>{t.statusReason}</span>
@@ -15961,7 +16056,7 @@ export default function App() {
               </div>
               <div className="asset-actions">
                 <div className="tiny">
-                  {pendingStatusChange.fromStatus} {"->"} {pendingStatusChange.toStatus}
+                  {assetStatusLabel(pendingStatusChange.fromStatus)} {"->"} {assetStatusLabel(pendingStatusChange.toStatus)}
                 </div>
                 <div className="row-actions">
                   <button className="tab" onClick={() => setPendingStatusChange(null)}>{t.cancelEdit}</button>
