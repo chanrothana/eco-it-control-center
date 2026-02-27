@@ -566,8 +566,8 @@ function getAutoApiBaseForHost() {
   if (typeof window === "undefined") return "";
   const host = String(window.location.hostname || "").toLowerCase();
   if (host === "localhost" || host === "127.0.0.1") {
-    // In local UI testing, fall back to cloud API if local API is unavailable.
-    return DEFAULT_CLOUD_API_BASE;
+    // Keep localhost fully local/offline by default (use CRA proxy /api -> :4000).
+    return "";
   }
   return "";
 }
@@ -644,6 +644,26 @@ const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: stri
 function calendarEventTypeLabel(type: CalendarEventType) {
   return CALENDAR_EVENT_TYPE_OPTIONS.find((opt) => opt.value === type)?.label || type;
 }
+function calendarEventBadgeLabel(type: CalendarEventType) {
+  switch (type) {
+    case "public":
+      return "Holiday";
+    case "ptc":
+      return "PTC";
+    case "term_end":
+      return "Term End";
+    case "term_start":
+      return "Term Start";
+    case "camp":
+      return "Camp";
+    case "celebration":
+      return "Event";
+    case "break":
+      return "Break";
+    default:
+      return "Holiday";
+  }
+}
 const MAINTENANCE_COMPLETION_OPTIONS = [
   { value: "Done", label: "Already Done" },
   { value: "Not Yet", label: "Not Yet Done" },
@@ -668,6 +688,18 @@ const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "BORROW_IN", label: "Borrow Return (In)" },
   { value: "BORROW_CONSUME", label: "Borrow Consume" },
 ] as const;
+const INVENTORY_MONTHLY_ITEM_COLORS = [
+  "#2f6cb7",
+  "#25a87c",
+  "#e88a3a",
+  "#805ad5",
+  "#dd6b20",
+  "#d53f8c",
+  "#2b6cb0",
+  "#319795",
+  "#c05621",
+  "#718096",
+];
 const INVENTORY_MASTER_ITEMS = [
   { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
   { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", spec: "", unit: "pcs", aliases: ["hand tissue", "tissue", "ក្រដាសដៃ"] },
@@ -1478,7 +1510,8 @@ function readCalendarEventFallback(defaultEvents: CalendarEvent[]) {
   try {
     const raw = localStorage.getItem(CALENDAR_EVENT_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return normalizeCalendarEvents(parsed, defaultEvents);
+    const normalized = normalizeCalendarEvents(parsed, defaultEvents);
+    return normalized.length ? normalized : defaultEvents;
   } catch {
     return defaultEvents;
   }
@@ -3678,6 +3711,7 @@ export default function App() {
   );
   const summarizeMultiFilter = useCallback(
     (selected: string[], allLabel: string, resolveLabel?: (value: string) => string) => {
+      if (!selected.length) return "0 selected";
       if (selected.includes("ALL")) return allLabel;
       if (selected.length === 1) return resolveLabel ? resolveLabel(selected[0]) : selected[0];
       return `${selected.length} selected`;
@@ -3702,11 +3736,19 @@ export default function App() {
     [locations, assetForm.campus]
   );
   const parentAssetsForCreate = useMemo(
-    () =>
-      assets
-        .filter((a) => a.campus === assetForm.campus)
-        .sort((a, b) => a.assetId.localeCompare(b.assetId)),
-    [assets, assetForm.campus]
+    () => {
+      const selectedLocation = String(assetForm.location || "").trim();
+      return assets
+        .filter((a) => {
+          if (a.campus !== assetForm.campus) return false;
+          // Parent picker should show only top-level assets, not set components.
+          if (String(a.parentAssetId || "").trim()) return false;
+          if (!selectedLocation) return true;
+          return String(a.location || "").trim() === selectedLocation;
+        })
+        .sort((a, b) => a.assetId.localeCompare(b.assetId));
+    },
+    [assets, assetForm.campus, assetForm.location]
   );
   const suggestedDesktopSetCode = useMemo(() => {
     const campusCodeValue = CAMPUS_CODE[assetForm.campus] || "CX";
@@ -3745,10 +3787,17 @@ export default function App() {
   const parentAssetsForEdit = useMemo(() => {
     const editing = assets.find((a) => a.id === editingAssetId);
     if (!editing) return [] as Asset[];
+    const selectedLocation = String(assetEditForm.location || "").trim();
     return assets
-      .filter((a) => a.id !== editing.id && a.campus === editing.campus)
+      .filter((a) => {
+        if (a.id === editing.id) return false;
+        if (a.campus !== editing.campus) return false;
+        if (String(a.parentAssetId || "").trim()) return false;
+        if (!selectedLocation) return true;
+        return String(a.location || "").trim() === selectedLocation;
+      })
       .sort((a, b) => a.assetId.localeCompare(b.assetId));
-  }, [assets, editingAssetId]);
+  }, [assets, editingAssetId, assetEditForm.location]);
   const inventoryLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === inventoryItemForm.campus)),
     [locations, inventoryItemForm.campus]
@@ -3894,6 +3943,70 @@ export default function App() {
     const max = rows.reduce((m, row) => Math.max(m, row.qty), 0);
     return { rows, max: max > 0 ? max : 1 };
   }, [inventorySupplyMonth, inventoryVisibleItems, inventoryVisibleTxns]);
+  const cleaningSupplyMonthlyItemCampusRows = useMemo(() => {
+    const month = inventorySupplyMonth;
+    const supplyItems = new Map<number, InventoryItem>();
+    for (const item of inventoryVisibleItems) {
+      if (isCleaningSupplyItem(item)) supplyItems.set(item.id, item);
+    }
+    const campusSet = new Set<string>();
+    const rowsMap = new Map<
+      number,
+      {
+        itemCode: string;
+        itemName: string;
+        campusQty: Record<string, number>;
+      }
+    >();
+    for (const item of Array.from(supplyItems.values())) {
+      const campus = inventoryRecordCampusCode(item.campus) === "C2" ? "C2" : item.campus;
+      campusSet.add(campus);
+      if (!rowsMap.has(item.id)) {
+        rowsMap.set(item.id, {
+          itemCode: item.itemCode,
+          itemName: item.itemName,
+          campusQty: {},
+        });
+      }
+      rowsMap.get(item.id)!.campusQty[campus] = rowsMap.get(item.id)!.campusQty[campus] || 0;
+    }
+    for (const tx of inventoryVisibleTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      if (!supplyItems.has(tx.itemId)) continue;
+      const date = String(tx.date || "");
+      if (date.slice(0, 7) !== month) continue;
+      const campus = inventoryRecordCampusCode(tx.campus) === "C2" ? "C2" : tx.campus;
+      campusSet.add(campus);
+      if (!rowsMap.has(tx.itemId)) {
+        rowsMap.set(tx.itemId, {
+          itemCode: tx.itemCode,
+          itemName: tx.itemName,
+          campusQty: {},
+        });
+      }
+      const row = rowsMap.get(tx.itemId)!;
+      const qty = Number(tx.qty || 0);
+      row.campusQty[campus] = (row.campusQty[campus] || 0) + qty;
+    }
+    const campuses = Array.from(campusSet).sort((a, b) =>
+      inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b))
+    );
+    const rows = Array.from(rowsMap.values())
+      .map((row) => {
+        const total = campuses.reduce((sum, campus) => sum + Number(row.campusQty[campus] || 0), 0);
+        return { ...row, total };
+      })
+      .sort((a, b) => b.total - a.total || a.itemCode.localeCompare(b.itemCode));
+    const max = rows.reduce(
+      (m, row) => Math.max(m, ...campuses.map((campus) => Number(row.campusQty[campus] || 0))),
+      0
+    );
+    return {
+      campuses,
+      rows,
+      max: max > 0 ? max : 1,
+    };
+  }, [inventorySupplyMonth, inventoryVisibleItems, inventoryVisibleTxns, inventoryCampusLabel]);
   useEffect(() => {
     if (!cleaningSupplyMonthlyOptions.length) return;
     if (!cleaningSupplyMonthlyOptions.includes(inventorySupplyMonth)) {
@@ -4023,42 +4136,188 @@ export default function App() {
       .sort((a, b) => b.id - a.id)
       .slice(0, 12);
   }, [inventoryVisibleTxns, inventoryDailyForm.date]);
-  const inventoryDailyUsageTrend = useMemo(() => {
+  const inventoryMonthlyItemCampusTrend = useMemo(() => {
+    const now = new Date();
+    const month = toYmd(now).slice(0, 7);
+    const supplyItems = new Map<number, InventoryItem>();
+    for (const item of inventoryVisibleItems) {
+      if (isCleaningSupplyItem(item)) supplyItems.set(item.id, item);
+    }
+    const campusSet = new Set<string>(["C1", "C2", "C3"]);
+    const rowsMap = new Map<
+      number,
+      {
+        itemCode: string;
+        itemName: string;
+        campusQty: Record<string, number>;
+      }
+    >();
+    for (const item of Array.from(supplyItems.values())) {
+      const campus = inventoryRecordCampusCode(item.campus);
+      campusSet.add(campus);
+      if (!rowsMap.has(item.id)) {
+        rowsMap.set(item.id, {
+          itemCode: item.itemCode,
+          itemName: item.itemName,
+          campusQty: {},
+        });
+      }
+      rowsMap.get(item.id)!.campusQty[campus] = rowsMap.get(item.id)!.campusQty[campus] || 0;
+    }
+    for (const tx of inventoryVisibleTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      if (!supplyItems.has(tx.itemId)) continue;
+      if (String(tx.date || "").slice(0, 7) !== month) continue;
+      const campus = inventoryRecordCampusCode(tx.campus);
+      campusSet.add(campus);
+      if (!rowsMap.has(tx.itemId)) {
+        rowsMap.set(tx.itemId, {
+          itemCode: tx.itemCode,
+          itemName: tx.itemName,
+          campusQty: {},
+        });
+      }
+      const row = rowsMap.get(tx.itemId)!;
+      row.campusQty[campus] = (row.campusQty[campus] || 0) + Number(tx.qty || 0);
+    }
+    const campuses = ["C1", "C2", "C3"];
+    const rows = Array.from(rowsMap.values())
+      .map((row) => ({
+        ...row,
+        total: campuses.reduce((sum, campus) => sum + Number(row.campusQty[campus] || 0), 0),
+      }))
+      .sort((a, b) => b.total - a.total || a.itemCode.localeCompare(b.itemCode));
+    const max = rows.reduce(
+      (m, row) => Math.max(m, ...campuses.map((campus) => Number(row.campusQty[campus] || 0))),
+      0
+    );
+    const yTicks = [100, 75, 50, 25, 0].map((percent) => ({
+      percent,
+      value: Math.round(((max > 0 ? max : 1) * percent) / 100),
+    }));
+    return {
+      monthLabel: new Date(`${month}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" }),
+      campuses,
+      rows,
+      max: max > 0 ? max : 1,
+      yTicks,
+    };
+  }, [inventoryVisibleItems, inventoryVisibleTxns]);
+  const inventoryMonthlyCampusOutDiagrams = useMemo(() => {
+    const now = new Date();
+    const month = toYmd(now).slice(0, 7);
+    const monthDate = new Date(`${month}-01T00:00:00`);
+    const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+    const campuses = ["C1", "C2", "C3"];
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+      const ymd = `${month}-${String(i + 1).padStart(2, "0")}`;
+      return { ymd, day: i + 1 };
+    });
+
+    const itemNameByCode = new Map<string, string>();
+    const itemCodeSet = new Set<string>();
+    for (const item of inventoryVisibleItems) {
+      if (!isCleaningSupplyItem(item)) continue;
+      const code = String(item.itemCode || "").trim();
+      if (!code) continue;
+      itemCodeSet.add(code);
+      itemNameByCode.set(code, item.itemName || code);
+    }
+
+    const monthTxns = inventoryVisibleTxns.filter(
+      (tx) => isInventoryTxnUsageOut(tx.type) && String(tx.date || "").slice(0, 7) === month
+    );
+    for (const tx of monthTxns) {
+      if (!String(tx.itemCode || "").trim()) continue;
+      itemCodeSet.add(tx.itemCode);
+      if (!itemNameByCode.has(tx.itemCode)) {
+        itemNameByCode.set(tx.itemCode, tx.itemName || tx.itemCode);
+      }
+    }
+
+    const totalsByItem = new Map<string, number>();
+    for (const tx of monthTxns) {
+      const code = String(tx.itemCode || "").trim();
+      if (!code) continue;
+      totalsByItem.set(code, (totalsByItem.get(code) || 0) + Number(tx.qty || 0));
+    }
+    const itemCodes = Array.from(itemCodeSet).sort(
+      (a, b) => (totalsByItem.get(b) || 0) - (totalsByItem.get(a) || 0) || a.localeCompare(b)
+    );
+
+    const byCampus = new Map<string, Map<string, Record<string, number>>>();
+    for (const campus of campuses) {
+      const dayMap = new Map<string, Record<string, number>>();
+      for (const day of days) dayMap.set(day.ymd, {});
+      byCampus.set(campus, dayMap);
+    }
+
+    for (const tx of monthTxns) {
+      const campus = inventoryRecordCampusCode(tx.campus);
+      if (!campuses.includes(campus)) continue;
+      const code = String(tx.itemCode || "").trim();
+      if (!code) continue;
+      const dayRow = byCampus.get(campus)?.get(tx.date);
+      if (!dayRow) continue;
+      dayRow[code] = (dayRow[code] || 0) + Number(tx.qty || 0);
+    }
+
+    const rows = campuses.map((campus) => {
+      const dayRows = days.map((day) => {
+        const qtyByItem = byCampus.get(campus)?.get(day.ymd) || {};
+        const total = Object.values(qtyByItem).reduce((sum, qty) => sum + Number(qty || 0), 0);
+        return { ...day, qtyByItem, total };
+      });
+      const maxDailyTotal = dayRows.reduce((max, row) => Math.max(max, row.total), 0);
+      return { campus, dayRows, maxDailyTotal: maxDailyTotal > 0 ? maxDailyTotal : 1 };
+    });
+
+    return {
+      monthLabel: monthDate.toLocaleString(undefined, { month: "long", year: "numeric" }),
+      itemCodes,
+      itemNameByCode,
+      rows,
+    };
+  }, [inventoryVisibleItems, inventoryVisibleTxns]);
+  const inventoryDailyUsageByCampus = useMemo(() => {
     const endYmd = normalizeYmdInput(inventoryDailyForm.date) || toYmd(new Date());
     const selectedItemId = Number(inventoryDailyForm.itemId || 0);
     const itemLookup = new Map<number, InventoryItem>();
     for (const item of inventoryVisibleItems) itemLookup.set(item.id, item);
+    const campusSet = new Set<string>();
+    for (const item of inventoryVisibleItems) {
+      if (!isCleaningSupplyItem(item)) continue;
+      const campus = inventoryRecordCampusCode(item.campus) === "C2" ? "C2" : item.campus;
+      campusSet.add(campus);
+    }
     const rows: Array<{
       ymd: string;
-      qty: number;
-      isWeekend: boolean;
-      holidayName: string;
+      byCampus: Record<string, number>;
+      total: number;
     }> = [];
     for (let i = 13; i >= 0; i -= 1) {
       const ymd = shiftYmd(endYmd, -i);
-      let qty = 0;
+      const byCampus: Record<string, number> = {};
+      let total = 0;
       for (const tx of inventoryVisibleTxns) {
         if (tx.date !== ymd) continue;
         if (!isInventoryTxnUsageOut(tx.type)) continue;
         const item = itemLookup.get(tx.itemId);
         if (!item || item.category !== "SUPPLY") continue;
         if (selectedItemId && tx.itemId !== selectedItemId) continue;
-        qty += Number(tx.qty || 0);
+        const campus = inventoryRecordCampusCode(tx.campus) === "C2" ? "C2" : tx.campus;
+        campusSet.add(campus);
+        const qty = Number(tx.qty || 0);
+        byCampus[campus] = (byCampus[campus] || 0) + qty;
+        total += qty;
       }
-      const weekday = new Date(`${ymd}T00:00:00`).getDay();
-      rows.push({
-        ymd,
-        qty,
-        isWeekend: weekday === 0 || weekday === 6,
-        holidayName: getHolidayName(ymd),
-      });
+      rows.push({ ymd, byCampus, total });
     }
-    const max = rows.reduce((m, row) => Math.max(m, row.qty), 0);
-    return {
-      max: max > 0 ? max : 1,
-      rows,
-    };
-  }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryVisibleItems, inventoryVisibleTxns, getHolidayName]);
+    const campuses = Array.from(campusSet).sort((a, b) =>
+      inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b))
+    );
+    return { campuses, rows };
+  }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryVisibleItems, inventoryVisibleTxns, inventoryCampusLabel]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -4222,6 +4481,16 @@ export default function App() {
       return prev;
     });
   }, [suggestedDesktopSetCode]);
+  useEffect(() => {
+    if (!assetForm.useExistingSet || !assetForm.parentAssetId) return;
+    if (parentAssetsForCreate.some((asset) => asset.assetId === assetForm.parentAssetId)) return;
+    setAssetForm((prev) => ({ ...prev, parentAssetId: "", setCode: "" }));
+  }, [assetForm.useExistingSet, assetForm.parentAssetId, parentAssetsForCreate]);
+  useEffect(() => {
+    if (!assetEditForm.useExistingSet || !assetEditForm.parentAssetId) return;
+    if (parentAssetsForEdit.some((asset) => asset.assetId === assetEditForm.parentAssetId)) return;
+    setAssetEditForm((prev) => ({ ...prev, parentAssetId: "", setCode: "" }));
+  }, [assetEditForm.useExistingSet, assetEditForm.parentAssetId, parentAssetsForEdit]);
 
   useEffect(() => {
     const isDesktop = assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE;
@@ -4538,10 +4807,10 @@ export default function App() {
           setCampusNames(mergedCampusNames);
           writeStringMap(CAMPUS_NAME_FALLBACK_KEY, mergedCampusNames);
         }
-        const nextCalendarEvents = normalizeCalendarEvents(
-          settingsRes.settings?.calendarEvents,
-          defaultCalendarEvents
-        );
+        const serverCalendarEvents = normalizeCalendarEvents(settingsRes.settings?.calendarEvents, []);
+        const nextCalendarEvents = serverCalendarEvents.length
+          ? serverCalendarEvents
+          : readCalendarEventFallback(defaultCalendarEvents);
         setCalendarEvents(nextCalendarEvents);
         writeCalendarEventFallback(nextCalendarEvents);
         setMaintenanceReminderOffsets(
@@ -12286,6 +12555,11 @@ export default function App() {
                           }}
                         >
                           <span>{d.day}</span>
+                          {d.holidayName ? (
+                            <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                              {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                            </em>
+                          ) : null}
                           {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
                           {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
                         </button>
@@ -12410,6 +12684,11 @@ export default function App() {
                           }}
                         >
                           <span>{d.day}</span>
+                          {d.holidayName ? (
+                            <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                              {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                            </em>
+                          ) : null}
                           {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
                           {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
                         </button>
@@ -14975,7 +15254,7 @@ export default function App() {
                       : "Phone-friendly daily IN/OUT for maintenance staff."}
                   </p>
                 </div>
-                {(maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT" ? (
+                {inventoryDailyForm.type === "OUT" ? (
                   <article className="panel inventory-daily-gallery-panel">
                     <div className="panel-row">
                       <h3 className="section-title">{lang === "km" ? "ជ្រើសសម្ភារៈចេញស្តុកលឿន" : "Quick Stock-Out Gallery"}</h3>
@@ -15009,7 +15288,7 @@ export default function App() {
                   </article>
                 ) : null}
 
-                {!(((maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT")) ? (
+                {!(inventoryDailyForm.type === "OUT") ? (
                 <div className="inventory-daily-grid">
                   <label className="field field-wide">
                     <span>{lang === "km" ? "ស្វែងរកសម្ភារៈ" : "Search Item"}</span>
@@ -15059,14 +15338,14 @@ export default function App() {
                     <div className="inventory-daily-type-switch">
                       <button
                         type="button"
-                        className={`tab ${inventoryDailyForm.type === "IN" ? "tab-active" : ""}`}
+                        className="tab tab-active"
                         onClick={() => setInventoryDailyForm((f) => ({ ...f, type: "IN" }))}
                       >
                         {lang === "km" ? "ចូលស្តុក (IN)" : "Stock In"}
                       </button>
                       <button
                         type="button"
-                        className={`tab ${inventoryDailyForm.type === "OUT" ? "tab-active" : ""}`}
+                        className="tab"
                         onClick={() => setInventoryDailyForm((f) => ({ ...f, type: "OUT" }))}
                       >
                         {lang === "km" ? "ចេញស្តុក (OUT)" : "Stock Out"}
@@ -15113,7 +15392,7 @@ export default function App() {
                 </div>
                 ) : null}
 
-                {!(((maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT")) && inventoryDailySelectedItem ? (
+                {!(inventoryDailyForm.type === "OUT") && inventoryDailySelectedItem ? (
                   <div className="inventory-daily-stock-note">
                     <strong>{inventoryDailySelectedItem.itemCode}</strong> - {inventoryDailySelectedItem.itemName}
                     {" | "}
@@ -15127,31 +15406,176 @@ export default function App() {
                 <article className="panel inventory-usage-panel">
                   <div className="panel-row">
                     <h3 className="section-title">
-                      {lang === "km" ? "ក្រាហ្វប្រើប្រាស់ប្រចាំថ្ងៃ (14 ថ្ងៃ)" : "Daily Usage Trend (14 days)"}
+                      {lang === "km" ? "ប្រៀបធៀបចេញស្តុកតាម Item/Campus (ខែបច្ចុប្បន្ន)" : "Item/Campus Out Compare (Current Month)"}
                     </h3>
-                    <span className="tiny">
-                      {inventoryDailySelectedItem
-                        ? `${inventoryDailySelectedItem.itemCode} - ${inventoryDailySelectedItem.itemName}`
-                        : (lang === "km" ? "Cleaning Supply ទាំងអស់" : "All Cleaning Supplies")}
-                    </span>
+                    <span className="tiny">{inventoryMonthlyItemCampusTrend.monthLabel}</span>
                   </div>
-                  <div className="inventory-usage-chart">
-                    {inventoryDailyUsageTrend.rows.map((row) => {
-                      const height = Math.max(8, Math.round((row.qty / inventoryDailyUsageTrend.max) * 100));
-                      return (
-                        <div key={`usage-day-${row.ymd}`} className="inventory-usage-col">
-                          <div
-                            className={`inventory-usage-bar ${row.holidayName ? "inventory-usage-bar-holiday" : row.isWeekend ? "inventory-usage-bar-weekend" : ""}`}
-                            style={{ height: `${height}%` }}
-                            title={`${row.ymd} | Used: ${row.qty}${row.holidayName ? ` | ${row.holidayName}` : ""}`}
-                          />
-                          <div className="inventory-usage-value">{row.qty}</div>
-                          <div className={`inventory-usage-date ${row.holidayName ? "inventory-usage-date-holiday" : row.isWeekend ? "inventory-usage-date-weekend" : ""}`}>
-                            {row.ymd.slice(5)}
+                  <div className="inventory-item-campus-chart-wrap">
+                    <div className="inventory-item-campus-legend">
+                      {inventoryMonthlyItemCampusTrend.campuses.map((campus, index) => (
+                        <span key={`item-campus-legend-${campus}`} className="inventory-item-campus-legend-item">
+                          <span className={`inventory-item-campus-legend-dot inventory-item-campus-color-${index + 1}`} />
+                          <span>{campus}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="inventory-item-campus-chart-grid">
+                      <div className="inventory-item-campus-yaxis">
+                        {inventoryMonthlyItemCampusTrend.yTicks.map((tick) => (
+                          <div key={`item-campus-tick-${tick.percent}`} className="inventory-item-campus-y-tick">
+                            {tick.value}
                           </div>
-                        </div>
-                      );
-                    })}
+                        ))}
+                      </div>
+                      <div className="inventory-item-campus-groups">
+                        {inventoryMonthlyItemCampusTrend.rows.map((row) => (
+                          <div key={`item-campus-group-${row.itemCode}`} className="inventory-item-campus-group">
+                            <div className="inventory-item-campus-bars">
+                              {inventoryMonthlyItemCampusTrend.campuses.map((campus, index) => {
+                                const qty = Number(row.campusQty[campus] || 0);
+                                const height = qty > 0 ? Math.max(8, Math.round((qty / inventoryMonthlyItemCampusTrend.max) * 100)) : 6;
+                                return (
+                                  <div
+                                    key={`item-campus-bar-${row.itemCode}-${campus}`}
+                                    className="inventory-item-campus-bar-btn"
+                                    title={`${row.itemCode} | ${campus}: ${qty} pcs`}
+                                  >
+                                    <strong>{qty}</strong>
+                                    <div className={`inventory-item-campus-bar-fill inventory-item-campus-color-${index + 1}`} style={{ height: `${height}%` }} />
+                                    <span>{campus}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="inventory-item-campus-item-label">
+                              <strong>{row.itemName}</strong>
+                              <span>{row.itemCode}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="inventory-campus-monthly-compare-wrap">
+                    <div className="panel-row">
+                      <h4 className="section-title">{lang === "km" ? "ដ្យាក្រាមចេញស្តុកប្រចាំថ្ងៃតាមសាខា (ថ្ងៃទី 1 ដល់ចុងខែ)" : "Daily Stock Out by Campus (Day 1 to Month End)"}</h4>
+                      <span className="tiny">{inventoryMonthlyCampusOutDiagrams.monthLabel}</span>
+                    </div>
+                    <div className="inventory-campus-monthly-legend">
+                      {inventoryMonthlyCampusOutDiagrams.itemCodes.map((code, index) => (
+                        <span key={`inventory-monthly-item-legend-${code}`} className="inventory-campus-monthly-legend-item">
+                          <span
+                            className="inventory-campus-monthly-legend-dot"
+                            style={{ background: INVENTORY_MONTHLY_ITEM_COLORS[index % INVENTORY_MONTHLY_ITEM_COLORS.length] }}
+                          />
+                          <span>{code} - {inventoryMonthlyCampusOutDiagrams.itemNameByCode.get(code) || code}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="inventory-campus-monthly-grid">
+                      {inventoryMonthlyCampusOutDiagrams.rows.map((campusRow) => (
+                        <article key={`inventory-campus-month-${campusRow.campus}`} className="inventory-campus-monthly-card">
+                          <div className="inventory-campus-monthly-card-head">
+                            <strong>{inventoryCampusLabel(campusRow.campus)}</strong>
+                            <span className="tiny">Max/day: {campusRow.maxDailyTotal}</span>
+                          </div>
+                          <div className="inventory-campus-monthly-chart">
+                            {campusRow.dayRows.map((dayRow) => {
+                              const barHeight = dayRow.total > 0
+                                ? Math.max(8, Math.round((dayRow.total / campusRow.maxDailyTotal) * 100))
+                                : 6;
+                              return (
+                                <div
+                                  key={`inventory-campus-day-${campusRow.campus}-${dayRow.ymd}`}
+                                  className="inventory-campus-monthly-col"
+                                  title={`${inventoryCampusLabel(campusRow.campus)} | ${formatDate(dayRow.ymd)} | Total ${dayRow.total} pcs`}
+                                >
+                                  <span className="inventory-campus-monthly-value">{dayRow.total}</span>
+                                  <div className="inventory-campus-monthly-stack-rail">
+                                    {dayRow.total > 0 ? (
+                                      <div className="inventory-campus-monthly-stack" style={{ height: `${barHeight}%` }}>
+                                        {inventoryMonthlyCampusOutDiagrams.itemCodes.map((code, index) => {
+                                          const qty = Number(dayRow.qtyByItem[code] || 0);
+                                          if (qty <= 0) return null;
+                                          return (
+                                            <span
+                                              key={`inventory-campus-day-seg-${campusRow.campus}-${dayRow.ymd}-${code}`}
+                                              className="inventory-campus-monthly-seg"
+                                              style={{
+                                                height: `${(qty / dayRow.total) * 100}%`,
+                                                background: INVENTORY_MONTHLY_ITEM_COLORS[index % INVENTORY_MONTHLY_ITEM_COLORS.length],
+                                              }}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <span className="inventory-campus-monthly-day">{dayRow.day}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t.date}</th>
+                          {inventoryMonthlyItemCampusTrend.rows.map((row) => (
+                            <th key={`daily-item-head-${row.itemCode}`}>{row.itemCode} - {row.itemName}</th>
+                          ))}
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryDailyUsageByCampus.rows.map((row) => (
+                          <tr key={`daily-item-row-${row.ymd}`}>
+                            <td>{formatDate(row.ymd)}</td>
+                            {inventoryMonthlyItemCampusTrend.rows.map((itemRow) => {
+                              const qty = inventoryVisibleTxns
+                                .filter((tx) => tx.date === row.ymd && tx.itemCode === itemRow.itemCode && isInventoryTxnUsageOut(tx.type))
+                                .reduce((sum, tx) => sum + Number(tx.qty || 0), 0);
+                              return (
+                                <td key={`daily-item-cell-${row.ymd}-${itemRow.itemCode}`}>
+                                  {qty} pcs
+                                </td>
+                              );
+                            })}
+                            <td><strong>{row.total} pcs</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t.date}</th>
+                          {inventoryDailyUsageByCampus.campuses.map((campus) => (
+                            <th key={`daily-campus-head-${campus}`}>{inventoryCampusLabel(campus)}</th>
+                          ))}
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryDailyUsageByCampus.rows.map((row) => (
+                          <tr key={`daily-campus-row-${row.ymd}`}>
+                            <td>{formatDate(row.ymd)}</td>
+                            {inventoryDailyUsageByCampus.campuses.map((campus) => (
+                              <td key={`daily-campus-cell-${row.ymd}-${campus}`}>
+                                {row.byCampus[campus] || 0}
+                              </td>
+                            ))}
+                            <td><strong>{row.total} pcs</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                   <div className="tiny">
                     {lang === "km"
@@ -15161,7 +15585,7 @@ export default function App() {
                 </article>
                 ) : null}
 
-                {!(((maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT")) ? (
+                {!(inventoryDailyForm.type === "OUT") ? (
                 <div className="asset-actions">
                   <div className="tiny">
                     {lang === "km"
@@ -15347,6 +15771,62 @@ export default function App() {
                   ) : (
                     <p className="tiny">No cleaning-supply stock-out data for this month.</p>
                   )}
+                </article>
+                <article className="panel inventory-supply-compare-panel" style={{ marginBottom: 12 }}>
+                  <div className="panel-row">
+                    <h3 className="section-title">Campus Usage Compare by Item (Selected Month)</h3>
+                    <span className="tiny">{new Date(`${inventorySupplyMonth}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" })}</span>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => (
+                            <th key={`item-campus-head-${campus}`}>{inventoryCampusLabel(campus)}</th>
+                          ))}
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cleaningSupplyMonthlyItemCampusRows.rows.length ? (
+                          cleaningSupplyMonthlyItemCampusRows.rows.map((row) => (
+                            <tr key={`item-campus-row-${row.itemCode}`}>
+                              <td>
+                                <strong>{row.itemCode}</strong> - {row.itemName}
+                              </td>
+                              {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => {
+                                const qty = Number(row.campusQty[campus] || 0);
+                                const percent = qty > 0
+                                  ? Math.max(8, Math.round((qty / cleaningSupplyMonthlyItemCampusRows.max) * 100))
+                                  : 0;
+                                return (
+                                  <td key={`item-campus-cell-${row.itemCode}-${campus}`}>
+                                    <div className="inventory-supply-mini-bar" title={`${row.itemCode} | ${inventoryCampusLabel(campus)} | ${qty}`}>
+                                      <div className="inventory-supply-mini-track">
+                                        <div
+                                          className="inventory-supply-mini-fill"
+                                          style={{ width: `${percent}%`, opacity: qty > 0 ? 1 : 0.25 }}
+                                        />
+                                      </div>
+                                      <strong>{qty}</strong>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                              <td><strong>{row.total}</strong></td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={Math.max(3, cleaningSupplyMonthlyItemCampusRows.campuses.length + 2)}>
+                              No cleaning-supply usage in this month.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </article>
                 <div className="table-wrap">
                   <table>
@@ -15724,6 +16204,11 @@ export default function App() {
                     onClick={() => openQuickScheduleCreate(d.ymd)}
                   >
                     <span>{d.day}</span>
+                    {d.holidayName ? (
+                      <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                        {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                      </em>
+                    ) : null}
                     {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
                     {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
                   </button>
@@ -16324,6 +16809,11 @@ export default function App() {
                     onClick={() => setSelectedCalendarDate(d.ymd)}
                   >
                     <span>{d.day}</span>
+                    {d.holidayName ? (
+                      <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                        {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                      </em>
+                    ) : null}
                     {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
                     {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
                   </button>
@@ -19127,9 +19617,29 @@ export default function App() {
                       ) : null}
                       {quickOutEcoPickerOpen ? (
                         <div className="quickout-eco-inline-panel">
-                          <strong className="quickout-eco-title">
-                            {quickOutEcoMonth.toLocaleString(undefined, { month: "short", year: "numeric" })}
-                          </strong>
+                          <div className="quickout-eco-head">
+                            <strong className="quickout-eco-title">
+                              {quickOutEcoMonth.toLocaleString(undefined, { month: "short", year: "numeric" })}
+                            </strong>
+                            <div className="quickout-eco-nav">
+                              <button
+                                type="button"
+                                className="quickout-eco-nav-btn"
+                                aria-label="Previous month"
+                                onClick={() => setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                              >
+                                {"<"}
+                              </button>
+                              <button
+                                type="button"
+                                className="quickout-eco-nav-btn"
+                                aria-label="Next month"
+                                onClick={() => setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                              >
+                                {">"}
+                              </button>
+                            </div>
+                          </div>
                           <div className="calendar-grid quickout-eco-grid">
                             {quickOutEcoGridDays.map((d) => (
                               <button
@@ -19144,6 +19654,11 @@ export default function App() {
                                 }}
                               >
                                 {d.inMonth ? <span>{d.day}</span> : null}
+                                {d.holidayName ? (
+                                  <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                                    {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                                  </em>
+                                ) : null}
                               </button>
                             ))}
                           </div>

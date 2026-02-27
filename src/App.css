@@ -1278,8 +1278,8 @@ h2 {
   top: calc(100% + 6px);
   left: 0;
   width: 100%;
-  max-height: 280px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   border: 1px solid #c9d6eb;
   border-radius: var(--radius-sm);
   background: #ffffff;
@@ -2020,7 +2020,7 @@ label.backup-action-btn {
   z-index: 55;
   border: 1px solid #d7e3f2;
   border-radius: 12px;
-  padding: 10px;
+  padding: 8px;
   background: #f8fbff;
   box-shadow: 0 12px 28px rgba(23, 52, 94, 0.2);
   max-height: 70vh;
@@ -2029,13 +2029,50 @@ label.backup-action-btn {
 
 .quickout-eco-title {
   display: block;
-  margin-bottom: 8px;
   color: #2f3d5e;
+}
+
+.quickout-eco-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.quickout-eco-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quickout-eco-nav-btn {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #d6b887;
+  background: #fff8ee;
+  color: #6b4a24;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .quickout-eco-grid .calendar-day.calendar-out {
   opacity: 0;
   pointer-events: none;
+}
+
+.quickout-eco-grid {
+  margin-top: 0;
+  gap: 5px;
+}
+
+.quickout-eco-grid .calendar-day {
+  min-height: 46px;
+  padding: 4px 6px;
+  border-radius: 9px;
 }
 
 .quickout-eco-events {
@@ -2158,6 +2195,187 @@ label.backup-action-btn {
   font-weight: 700;
 }
 
+.inventory-monthly-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.inventory-monthly-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #405a88;
+}
+
+.inventory-monthly-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.inventory-monthly-chart .inventory-usage-col {
+  gap: 2px;
+}
+
+.inventory-monthly-stack {
+  width: 100%;
+  max-width: 24px;
+  min-height: 8px;
+  border-radius: 8px 8px 4px 4px;
+  overflow: hidden;
+  background: #e0e8f7;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.inventory-monthly-segment {
+  width: 100%;
+}
+
+.inventory-item-campus-chart-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "legend"
+    "chart";
+  gap: 8px;
+  border: 1px solid #d7e3f2;
+  border-radius: 12px;
+  padding: 12px 10px 10px;
+  background: #f8fbff;
+}
+
+.inventory-item-campus-legend {
+  grid-area: legend;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.inventory-item-campus-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #45608f;
+}
+
+.inventory-item-campus-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.inventory-item-campus-yaxis {
+  grid-area: yaxis;
+  display: grid;
+  align-content: stretch;
+  min-height: 190px;
+}
+
+.inventory-item-campus-y-tick {
+  min-height: 38px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  font-size: 11px;
+  color: #60779f;
+}
+
+.inventory-item-campus-chart-grid {
+  grid-area: chart;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.inventory-item-campus-groups {
+  grid-area: groups;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 190px;
+}
+
+.inventory-item-campus-group {
+  border: 0;
+  border-radius: 0;
+  padding: 2px 4px;
+  background: transparent;
+  display: grid;
+  gap: 6px;
+}
+
+.inventory-item-campus-bars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 138px;
+}
+
+.inventory-item-campus-bar-btn {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #3f5886;
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  padding: 0 2px;
+  min-height: 124px;
+  align-content: end;
+}
+
+.inventory-item-campus-bar-fill {
+  width: 22px;
+  border-radius: 8px 8px 3px 3px;
+}
+
+.inventory-item-campus-bar-btn strong {
+  font-size: 12px;
+  color: #1f335f;
+}
+
+.inventory-item-campus-bar-btn span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.inventory-item-campus-item-label {
+  display: grid;
+  gap: 2px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.inventory-item-campus-item-label strong {
+  color: #1f335f;
+  font-size: 12px;
+}
+
+.inventory-item-campus-item-label span {
+  font-size: 11px;
+  color: #61779e;
+}
+
+.inventory-item-campus-color-1 {
+  background: #2f6cb7;
+}
+
+.inventory-item-campus-color-2 {
+  background: #25a87c;
+}
+
+.inventory-item-campus-color-3 {
+  background: #e88a3a;
+}
+
 .inventory-supply-compare-panel {
   display: grid;
   gap: 10px;
@@ -2211,6 +2429,143 @@ label.backup-action-btn {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(135deg, #2e7ac7 0%, #174c98 100%);
+}
+
+.inventory-supply-daily-chart .inventory-usage-bar {
+  max-width: 20px;
+}
+
+.inventory-supply-daily-chart .inventory-usage-date {
+  font-size: 10px;
+}
+
+.inventory-supply-mini-bar {
+  min-width: 150px;
+  display: grid;
+  grid-template-columns: minmax(86px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.inventory-supply-mini-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e4ecfa;
+  overflow: hidden;
+}
+
+.inventory-supply-mini-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #5c81c8 0%, #264f98 100%);
+}
+
+.inventory-campus-monthly-compare-wrap {
+  border: 1px solid #d7e3f2;
+  border-radius: 12px;
+  padding: 12px 10px 10px;
+  background: #f8fbff;
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-campus-monthly-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.inventory-campus-monthly-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #3c5685;
+}
+
+.inventory-campus-monthly-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.inventory-campus-monthly-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.inventory-campus-monthly-card {
+  border: 1px solid #dbe6f6;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.inventory-campus-monthly-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inventory-campus-monthly-card-head strong {
+  color: #233d6a;
+}
+
+.inventory-campus-monthly-chart {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16px, 1fr));
+  gap: 3px;
+  align-items: end;
+  min-height: 170px;
+}
+
+.inventory-campus-monthly-col {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+}
+
+.inventory-campus-monthly-value {
+  font-size: 10px;
+  color: #4b6490;
+  line-height: 1;
+}
+
+.inventory-campus-monthly-stack-rail {
+  width: 100%;
+  height: 132px;
+  border-radius: 6px;
+  background: #edf3fd;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.inventory-campus-monthly-stack {
+  width: 100%;
+  min-height: 6px;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.inventory-campus-monthly-seg {
+  width: 100%;
+}
+
+.inventory-campus-monthly-day {
+  font-size: 10px;
+  color: #60779f;
+}
+
+@media (max-width: 1100px) {
+  .inventory-campus-monthly-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .item-setup-icon {
@@ -3203,6 +3558,20 @@ tr.row-maint-maintenance:hover td {
   font-size: var(--font-size-xs);
   font-weight: 700;
   padding: 2px 7px;
+}
+
+.calendar-event-tag {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  font-style: normal;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .calendar-out {
