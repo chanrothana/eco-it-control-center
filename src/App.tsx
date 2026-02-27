@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Lightbulb } from "lucide-react";
 import QRCode from "qrcode";
 import "./App.css";
 
@@ -206,6 +206,7 @@ type InventoryTxn = {
   approvedBy?: string;
   receivedBy?: string;
   borrowStatus?: "BORROW_OPEN" | "PARTIAL_RETURN" | "CLOSED" | "CONSUMED";
+  photo?: string;
 };
 
 type DashboardStats = {
@@ -565,8 +566,8 @@ function getAutoApiBaseForHost() {
   if (typeof window === "undefined") return "";
   const host = String(window.location.hostname || "").toLowerCase();
   if (host === "localhost" || host === "127.0.0.1") {
-    // Local dev should stay local (CRA proxy -> local API server).
-    return "";
+    // In local UI testing, fall back to cloud API if local API is unavailable.
+    return DEFAULT_CLOUD_API_BASE;
   }
   return "";
 }
@@ -1291,9 +1292,9 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   if (url.startsWith("/api/")) {
     if (apiBaseOverride) candidates.push(`${apiBaseOverride}${url}`);
     if (ENV_API_BASE_URL) candidates.push(`${ENV_API_BASE_URL}${url}`);
-    if (autoApiBase) candidates.push(`${autoApiBase}${url}`);
-    if (!apiBaseOverride && !ENV_API_BASE_URL && !autoApiBase) {
+    if (!apiBaseOverride && !ENV_API_BASE_URL) {
       candidates.push(url);
+      if (autoApiBase) candidates.push(`${autoApiBase}${url}`);
     }
   }
 
@@ -1840,6 +1841,30 @@ function inventoryAliasText(itemName: string) {
   const name = String(itemName || "").toLowerCase();
   const hit = INVENTORY_MASTER_ITEMS.find((item) => name.includes(item.nameEn.toLowerCase()));
   return hit ? hit.aliases.join(" ") : "";
+}
+function normalizeInventoryCompareText(value: string) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+function inventoryMasterDisplayName(master: {
+  nameEn: string;
+  spec: string;
+}) {
+  return `${master.nameEn}${master.spec ? ` (${master.spec})` : ""}`;
+}
+function inventoryItemMatchesMaster(
+  item: Pick<InventoryItem, "category" | "itemName" | "unit">,
+  master: {
+    category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL";
+    nameEn: string;
+    spec: string;
+    unit: string;
+  }
+) {
+  if (item.category !== master.category) return false;
+  return (
+    normalizeInventoryCompareText(item.itemName) === normalizeInventoryCompareText(inventoryMasterDisplayName(master)) &&
+    normalizeInventoryCompareText(item.unit) === normalizeInventoryCompareText(master.unit)
+  );
 }
 function isCleaningSupplyItem(item: Pick<InventoryItem, "category" | "itemName" | "itemCode">) {
   if (item.category !== "SUPPLY") return false;
@@ -2611,6 +2636,18 @@ export default function App() {
         : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
   );
   const isAdmin = authUser ? isAdminRole(authUser.role) : false;
+  const maintenanceQuickMode = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    const mode = String(params.get("mode") || "").toLowerCase();
+    return mode === "maintenance" || mode === "staff";
+  }, []);
+  const maintenanceQuickLink = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const params = new URLSearchParams(window.location.search);
+    params.set("mode", "maintenance");
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+  }, []);
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -3265,7 +3302,10 @@ export default function App() {
     qty: string;
     by: string;
     note: string;
+    photo: string;
   }>(null);
+  const [inventoryQuickOutFileKey, setInventoryQuickOutFileKey] = useState(0);
+  const [inventoryQuickReasonTipsOpen, setInventoryQuickReasonTipsOpen] = useState(false);
   const [editingInventoryTxnId, setEditingInventoryTxnId] = useState<number | null>(null);
   const [inventoryTxnEditForm, setInventoryTxnEditForm] = useState({
     itemId: "",
@@ -3302,6 +3342,12 @@ export default function App() {
   useEffect(() => {
     if (!isPhoneView) setReportMobileFiltersOpen(false);
   }, [isPhoneView]);
+  useEffect(() => {
+    if (!maintenanceQuickMode) return;
+    setTab("inventory");
+    setInventoryView("daily");
+    setInventoryDailyForm((prev) => ({ ...prev, type: "OUT" }));
+  }, [maintenanceQuickMode]);
 
   useEffect(() => {
     if (authUser) {
@@ -3695,9 +3741,28 @@ export default function App() {
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
     return `${item.itemCode} - ${item.itemName} • ${inventoryCampusLabel(item.campus)}`;
   }, [inventoryCampusLabel]);
+  const usedInventoryMasterKeysForCampus = useMemo(() => {
+    const out = new Set<string>();
+    if (inventoryItemForm.category !== "SUPPLY") return out;
+    const masters = INVENTORY_MASTER_ITEMS.filter((item) => item.category === inventoryItemForm.category);
+    for (const row of inventoryItems) {
+      if (row.campus !== inventoryItemForm.campus || row.category !== inventoryItemForm.category) continue;
+      for (const master of masters) {
+        if (inventoryItemMatchesMaster(row, master)) out.add(master.key);
+      }
+    }
+    return out;
+  }, [inventoryItemForm.category, inventoryItemForm.campus, inventoryItems]);
   const inventoryMasterOptions = useMemo(
-    () => INVENTORY_MASTER_ITEMS.filter((item) => item.category === inventoryItemForm.category),
-    [inventoryItemForm.category]
+    () =>
+      INVENTORY_MASTER_ITEMS
+        .filter((item) => item.category === inventoryItemForm.category)
+        .filter((item) => !(inventoryItemForm.category === "SUPPLY" && usedInventoryMasterKeysForCampus.has(item.key))),
+    [inventoryItemForm.category, usedInventoryMasterKeysForCampus]
+  );
+  const inventorySupplyMasterLocked = useMemo(
+    () => inventoryItemForm.category === "SUPPLY" && inventoryMasterOptions.length === 0,
+    [inventoryItemForm.category, inventoryMasterOptions.length]
   );
   const selectedInventoryMaster = useMemo(
     () => inventoryMasterOptions.find((item) => item.key === inventoryItemForm.masterItemKey) || null,
@@ -3841,6 +3906,18 @@ export default function App() {
         : null,
     [inventoryItems, inventoryQuickOutModal]
   );
+  const inventoryQuickOutReasonSuggestions = useMemo(() => {
+    if (!inventoryQuickOutSelectedItem) return [] as string[];
+    const set = new Set<string>();
+    for (const tx of inventoryTxns) {
+      if (tx.type !== "OUT" || tx.itemId !== inventoryQuickOutSelectedItem.id) continue;
+      const note = String(tx.note || "").trim();
+      if (!note) continue;
+      set.add(note);
+      if (set.size >= 6) break;
+    }
+    return Array.from(set);
+  }, [inventoryTxns, inventoryQuickOutSelectedItem]);
   const holidayLookup = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const event of calendarEvents) {
@@ -4213,7 +4290,12 @@ export default function App() {
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
   }, [autoInventoryItemCode, inventoryCodeManual]);
   useEffect(() => {
-    if (!inventoryMasterOptions.length) return;
+    if (!inventoryMasterOptions.length) {
+      if (inventoryItemForm.masterItemKey || inventoryItemForm.itemName || inventoryItemForm.unit) {
+        setInventoryItemForm((f) => ({ ...f, masterItemKey: "", itemName: "", unit: "" }));
+      }
+      return;
+    }
     const hasSelected = inventoryMasterOptions.some((item) => item.key === inventoryItemForm.masterItemKey);
     if (hasSelected) return;
     const first = inventoryMasterOptions[0];
@@ -4223,7 +4305,7 @@ export default function App() {
       itemName: `${first.nameEn}${first.spec ? ` (${first.spec})` : ""}`,
       unit: first.unit,
     }));
-  }, [inventoryMasterOptions, inventoryItemForm.masterItemKey]);
+  }, [inventoryMasterOptions, inventoryItemForm.masterItemKey, inventoryItemForm.itemName, inventoryItemForm.unit]);
   useEffect(() => {
     if (!selectedInventoryMaster) return;
     setInventoryItemForm((f) => ({
@@ -5828,6 +5910,16 @@ export default function App() {
       return;
     }
     if (
+      masterItem &&
+      inventoryItemForm.category === "SUPPLY" &&
+      inventoryItems.some(
+        (i) => i.campus === inventoryItemForm.campus && inventoryItemMatchesMaster(i, masterItem)
+      )
+    ) {
+      setError("This cleaning supply already exists in this campus.");
+      return;
+    }
+    if (
       inventoryItems.some(
         (i) =>
           i.itemCode === itemCode &&
@@ -5880,6 +5972,8 @@ export default function App() {
     qty: string;
     by: string;
     note: string;
+    photo?: string;
+    requirePhoto?: boolean;
     fromCampus?: string;
     toCampus?: string;
     expectedReturnDate?: string;
@@ -5896,6 +5990,11 @@ export default function App() {
     const item = inventoryItems.find((i) => i.id === itemId);
     if (!item) {
       setError("Item not found.");
+      return false;
+    }
+    const cleanedPhoto = String(values.photo || "").trim();
+    if (values.requirePhoto && isInventoryTxnUsageOut(values.type) && !cleanedPhoto) {
+      setError("Please take photo for stock-out record.");
       return false;
     }
     const txDate = normalizeYmdInput(values.date);
@@ -5970,6 +6069,7 @@ export default function App() {
       requestedBy,
       approvedBy,
       receivedBy,
+      photo: cleanedPhoto,
       borrowStatus:
         values.type === "BORROW_OUT"
           ? "BORROW_OPEN"
@@ -6038,25 +6138,69 @@ export default function App() {
       by: authUser?.displayName || authUser?.username || prev.by,
     }));
   }
+  function closeInventoryQuickOut() {
+    setInventoryQuickOutModal(null);
+    setInventoryQuickReasonTipsOpen(false);
+    setInventoryQuickOutFileKey((k) => k + 1);
+  }
+  async function copyMaintenanceQuickLink() {
+    if (!maintenanceQuickLink) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(maintenanceQuickLink);
+        alert("Maintenance quick link copied.");
+        return;
+      }
+    } catch {
+      // fallback below
+    }
+    window.prompt("Copy maintenance quick link", maintenanceQuickLink);
+  }
   function openInventoryQuickOut(item: InventoryItem) {
+    const recorder = authUser?.displayName || authUser?.username || "";
     setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", itemId: String(item.id) }));
     setInventoryQuickOutModal({
       itemId: String(item.id),
       date: inventoryDailyForm.date || toYmd(new Date()),
-      qty: "1",
-      by: inventoryDailyForm.by || authUser?.displayName || authUser?.username || "",
+      qty: "",
+      by: recorder,
       note: "",
+      photo: "",
     });
+    setInventoryQuickReasonTipsOpen(false);
+    setInventoryQuickOutFileKey((k) => k + 1);
+  }
+  async function onInventoryQuickOutPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setInventoryQuickOutModal((prev) => (prev ? { ...prev, photo } : prev));
+    } catch {
+      alert(t.photoProcessError);
+    }
   }
   function saveInventoryQuickOut() {
     if (!inventoryQuickOutModal) return;
+    const recorder = authUser?.displayName || authUser?.username || "";
+    const reason = inventoryQuickOutModal.note.trim();
+    if (!reason) {
+      setError("Please enter reason for stock-out.");
+      return;
+    }
     const saved = saveInventoryTxnEntry({
       itemId: inventoryQuickOutModal.itemId,
       date: inventoryQuickOutModal.date,
       type: "OUT",
       qty: inventoryQuickOutModal.qty,
-      by: inventoryQuickOutModal.by,
-      note: inventoryQuickOutModal.note,
+      by: recorder,
+      note: reason,
+      photo: inventoryQuickOutModal.photo,
+      requirePhoto: true,
     });
     if (!saved) return;
     setInventoryDailyForm((prev) => ({
@@ -6064,11 +6208,11 @@ export default function App() {
       type: "OUT",
       itemId: inventoryQuickOutModal.itemId,
       date: inventoryQuickOutModal.date,
-      by: inventoryQuickOutModal.by || prev.by,
+      by: recorder || prev.by,
       qty: "",
       note: "",
     }));
-    setInventoryQuickOutModal(null);
+    closeInventoryQuickOut();
   }
 
   function exportPurchaseRequestCsv() {
@@ -14280,27 +14424,43 @@ export default function App() {
           <>
             <section className="panel">
               <div className="panel-row">
-                <h2>Inventory Control</h2>
-                <div className="panel-filters">
-                  <input
-                    className="input"
-                    placeholder="Search item code, name..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                  />
+                <h2>{maintenanceQuickMode ? "Maintenance Quick Record" : "Inventory Control"}</h2>
+                {maintenanceQuickMode ? (
+                  <div className="row-actions">
+                    <button type="button" className="tab btn-small" onClick={copyMaintenanceQuickLink}>
+                      Copy Staff Link
+                    </button>
+                  </div>
+                ) : (
+                  <div className="panel-filters">
+                    <input
+                      className="input"
+                      placeholder="Search item code, name..."
+                      value={inventorySearch}
+                      onChange={(e) => setInventorySearch(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              {maintenanceQuickMode ? (
+                <p className="tiny">
+                  {lang === "km"
+                    ? "របៀបសម្រាប់បុគ្គលិកថែទាំ៖ កត់ត្រាចេញស្តុកតាម Gallery ប៉ុណ្ណោះ។"
+                    : "Maintenance staff mode: only quick recording flow is shown."}
+                </p>
+              ) : (
+                <div className="tabs">
+                  <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
+                  <button className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
+                    {lang === "km" ? "កត់ត្រាប្រចាំថ្ងៃ" : "Daily IN/OUT"}
+                  </button>
+                  <button className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>Stock In/Out</button>
+                  <button className={`tab ${inventoryView === "balance" ? "tab-active" : ""}`} onClick={() => setInventoryView("balance")}>Balance & Alerts</button>
                 </div>
-              </div>
-              <div className="tabs">
-                <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
-                <button className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
-                  {lang === "km" ? "កត់ត្រាប្រចាំថ្ងៃ" : "Daily IN/OUT"}
-                </button>
-                <button className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>Stock In/Out</button>
-                <button className={`tab ${inventoryView === "balance" ? "tab-active" : ""}`} onClick={() => setInventoryView("balance")}>Balance & Alerts</button>
-              </div>
+              )}
             </section>
 
-            {inventoryView === "items" && (
+            {!maintenanceQuickMode && inventoryView === "items" && (
               <section className="panel">
                 <h2>Create Inventory Item</h2>
                 <div className="form-grid">
@@ -14341,6 +14501,11 @@ export default function App() {
                     <small className="tiny">
                       Standardized items only (Khmer/English aliases mapped in master list).
                     </small>
+                    {inventorySupplyMasterLocked && (
+                      <small className="tiny" style={{ color: "#b03131" }}>
+                        All cleaning supplies are already created for this campus.
+                      </small>
+                    )}
                   </label>
                   <label className="field">
                     <span>Item Code</span>
@@ -14405,7 +14570,7 @@ export default function App() {
                 </div>
                 <div className="asset-actions">
                   <div className="tiny">Add consumable supplies and tools for cleaning/maintenance operation.</div>
-                  <button className="btn-primary" disabled={!isAdmin} onClick={createInventoryItem}>Add Inventory Item</button>
+                  <button className="btn-primary" disabled={!isAdmin || inventorySupplyMasterLocked} onClick={createInventoryItem}>Add Inventory Item</button>
                 </div>
 
                 <div className="table-wrap" style={{ marginTop: 12 }}>
@@ -14449,7 +14614,7 @@ export default function App() {
               </section>
             )}
 
-            {inventoryView === "stock" && (
+            {!maintenanceQuickMode && inventoryView === "stock" && (
               <section className="panel">
                 <h2>Stock In / Out</h2>
                 <div className="form-grid">
@@ -14726,6 +14891,7 @@ export default function App() {
                   </article>
                 ) : null}
 
+                {!(isPhoneView && inventoryDailyForm.type === "OUT") ? (
                 <div className="inventory-daily-grid">
                   <label className="field field-wide">
                     <span>{lang === "km" ? "ស្វែងរកសម្ភារៈ" : "Search Item"}</span>
@@ -14827,8 +14993,9 @@ export default function App() {
                     />
                   </label>
                 </div>
+                ) : null}
 
-                {inventoryDailySelectedItem ? (
+                {!(isPhoneView && inventoryDailyForm.type === "OUT") && inventoryDailySelectedItem ? (
                   <div className="inventory-daily-stock-note">
                     <strong>{inventoryDailySelectedItem.itemCode}</strong> - {inventoryDailySelectedItem.itemName}
                     {" | "}
@@ -14838,6 +15005,7 @@ export default function App() {
                   </div>
                 ) : null}
 
+                {!maintenanceQuickMode ? (
                 <article className="panel inventory-usage-panel">
                   <div className="panel-row">
                     <h3 className="section-title">
@@ -14873,7 +15041,9 @@ export default function App() {
                       : "OUT on Sunday/holiday requires note and confirmation."}
                   </div>
                 </article>
+                ) : null}
 
+                {!(isPhoneView && inventoryDailyForm.type === "OUT") ? (
                 <div className="asset-actions">
                   <div className="tiny">
                     {lang === "km"
@@ -14888,7 +15058,9 @@ export default function App() {
                     {lang === "km" ? "រក្សាទុកប្រតិបត្តិការ" : "Save Daily Record"}
                   </button>
                 </div>
+                ) : null}
 
+                {!maintenanceQuickMode ? (
                 <article className="panel" style={{ marginTop: 12 }}>
                   <div className="panel-row">
                     <h3 className="section-title">{lang === "km" ? "សង្ខេបទិញសម្ភារៈ (ថ្ងៃ 27)" : "Purchase Summary (27th Cutoff)"}</h3>
@@ -14942,7 +15114,9 @@ export default function App() {
                     </table>
                   </div>
                 </article>
+                ) : null}
 
+                {!maintenanceQuickMode ? (
                 <article className="panel" style={{ marginTop: 12 }}>
                   <div className="panel-row">
                     <h3 className="section-title">{lang === "km" ? "កំណត់ត្រាប្រចាំថ្ងៃ" : "Today Records"}</h3>
@@ -14983,10 +15157,11 @@ export default function App() {
                     </table>
                   </div>
                 </article>
+                ) : null}
               </section>
             )}
 
-            {inventoryView === "balance" && (
+            {!maintenanceQuickMode && inventoryView === "balance" && (
               <section className="panel" id="inventory-balance-section">
                 <h2>Stock Balance & Low Stock Alerts</h2>
                 <div className="stats-grid" style={{ marginBottom: 12 }}>
@@ -18777,22 +18952,39 @@ export default function App() {
         ) : null}
 
         {inventoryQuickOutModal ? (
-          <div className="modal-backdrop" onClick={() => setInventoryQuickOutModal(null)}>
+          <div className="modal-backdrop" onClick={closeInventoryQuickOut}>
             <section className="panel modal-panel inventory-quickout-modal" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <h2>{lang === "km" ? "កត់ត្រាចេញស្តុកលឿន" : "Quick Stock Out"}</h2>
-                <button className="tab" onClick={() => setInventoryQuickOutModal(null)}>{t.close}</button>
+                <button className="tab" onClick={closeInventoryQuickOut}>{t.close}</button>
               </div>
               {inventoryQuickOutSelectedItem ? (
                 <>
-                  <div className="inventory-daily-stock-note">
-                    <strong>{inventoryQuickOutSelectedItem.itemCode}</strong> - {inventoryQuickOutSelectedItem.itemName}
-                    {" | "}
-                    {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}:{" "}
-                    <strong>{inventoryStockMap.get(inventoryQuickOutSelectedItem.id) || 0}</strong>
-                    {" | "}
-                    {lang === "km" ? "ទីតាំង" : "Location"}: <strong>{inventoryQuickOutSelectedItem.location}</strong>
+                  <div className="inventory-quickout-hero-icon-wrap" aria-hidden="true">
+                    <span className="inventory-quickout-hero-icon">
+                      {inventorySupplyIcon(inventoryQuickOutSelectedItem.itemName)}
+                    </span>
                   </div>
+                  {(() => {
+                    const currentStock = inventoryStockMap.get(inventoryQuickOutSelectedItem.id) || 0;
+                    const isLowStock = currentStock <= Number(inventoryQuickOutSelectedItem.minStock || 0);
+                    return (
+                      <div className="inventory-daily-stock-note inventory-quickout-stock-note-grid">
+                        <div className="inventory-quickout-item-col">
+                          <div className="inventory-quickout-item-line">
+                            <strong>{inventoryQuickOutSelectedItem.itemCode}</strong> - {inventoryQuickOutSelectedItem.itemName}
+                          </div>
+                          <div className="inventory-quickout-location-line">
+                            <span>{lang === "km" ? "ទីតាំង" : "Location"}:</span> <strong>{inventoryQuickOutSelectedItem.location}</strong>
+                          </div>
+                        </div>
+                        <div className={`inventory-quickout-stock-col ${isLowStock ? "is-low-stock" : ""}`}>
+                          <div className="inventory-quickout-stock-label">{lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}</div>
+                          <div className="inventory-quickout-stock-value">{currentStock}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="form-grid" style={{ marginTop: 10 }}>
                     <label className="field">
                       <span>{t.date}</span>
@@ -18804,15 +18996,6 @@ export default function App() {
                       />
                     </label>
                     <label className="field">
-                      <span>{lang === "km" ? "អ្នកកត់ត្រា" : "Recorded By"}</span>
-                      <input
-                        className="input"
-                        value={inventoryQuickOutModal.by}
-                        onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, by: e.target.value } : prev))}
-                        placeholder={lang === "km" ? "ឈ្មោះបុគ្គលិក" : "Staff name"}
-                      />
-                    </label>
-                    <label className="field">
                       <span>{lang === "km" ? "បរិមាណចេញ" : "Stock Out Qty"}</span>
                       <input
                         className="input inventory-daily-qty-input"
@@ -18821,41 +19004,70 @@ export default function App() {
                         value={inventoryQuickOutModal.qty}
                         onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, qty: e.target.value } : prev))}
                       />
-                      <div className="inventory-daily-qty-quick">
-                        {[-5, -1, 1, 5].map((step) => (
-                          <button
-                            key={`quick-out-step-${step}`}
-                            type="button"
-                            className="tab btn-small"
-                            onClick={() =>
-                              setInventoryQuickOutModal((prev) => {
-                                if (!prev) return prev;
-                                const nextQty = Math.max(0, Number(prev.qty || 0) + step);
-                                return { ...prev, qty: String(nextQty) };
-                              })
-                            }
-                          >
-                            {step > 0 ? `+${step}` : String(step)}
-                          </button>
-                        ))}
-                      </div>
                     </label>
                     <label className="field field-wide">
-                      <span>{t.notes}</span>
+                      <span>{lang === "km" ? "រូបថតចេញស្តុក" : "Stock Out Photo"}</span>
+                      <input
+                        key={`quickout-photo-${inventoryQuickOutFileKey}`}
+                        className="input"
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={onInventoryQuickOutPhotoFile}
+                      />
+                      {inventoryQuickOutModal.photo ? (
+                        <img src={inventoryQuickOutModal.photo} alt="stock out proof" className="inventory-quickout-photo-preview" />
+                      ) : (
+                        <small className="tiny">{lang === "km" ? "ត្រូវភ្ជាប់រូបថតមុនពេល Save" : "Photo is required before saving."}</small>
+                      )}
+                    </label>
+                    <label className="field field-wide">
+                      <div className="quickout-note-head">
+                        <span>{t.notes}</span>
+                        <button
+                          type="button"
+                          className="tab btn-small quickout-reason-btn"
+                          title={lang === "km" ? "ហេតុផលចាស់ៗ" : "Previous reasons"}
+                          onClick={() => setInventoryQuickReasonTipsOpen((v) => !v)}
+                        >
+                          <Lightbulb size={14} />
+                          <span>{lang === "km" ? "គន្លឹះ" : "Tips"}</span>
+                        </button>
+                      </div>
                       <input
                         className="input"
                         value={inventoryQuickOutModal.note}
                         onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
-                        placeholder={lang === "km" ? "ហេតុផលចេញស្តុក (ថ្ងៃឈប់ត្រូវបំពេញ)" : "Reason for stock out (required on weekend/holiday)"}
+                        placeholder={lang === "km" ? "មូលហេតុចេញស្តុក" : "Reason for stock out"}
                       />
+                      {inventoryQuickReasonTipsOpen && inventoryQuickOutReasonSuggestions.length ? (
+                        <div className="quickout-reason-chips">
+                          {inventoryQuickOutReasonSuggestions.map((reason, index) => (
+                            <button
+                              key={`quickout-reason-${index}`}
+                              type="button"
+                              className="tab btn-small quickout-reason-chip"
+                              onClick={() =>
+                                setInventoryQuickOutModal((prev) => (prev ? { ...prev, note: reason } : prev))
+                              }
+                            >
+                              {reason}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </label>
                   </div>
                   <div className="asset-actions">
-                    <div className="tiny">{lang === "km" ? "កត់ត្រាជាប្រភេទ OUT ដោយស្វ័យប្រវត្តិ។" : "This will record as Stock OUT."}</div>
+                    <div className="tiny">
+                      {lang === "km"
+                        ? "ប្រព័ន្ធកត់ត្រាអ្នកប្រើប្រាស់ចូលដោយស្វ័យប្រវត្តិ។"
+                        : "Recorded by current login user automatically."}
+                    </div>
                     <button
                       className="btn-primary"
                       onClick={saveInventoryQuickOut}
-                      disabled={!inventoryQuickOutModal.itemId || !inventoryQuickOutModal.qty || !inventoryQuickOutModal.date}
+                      disabled={!inventoryQuickOutModal.itemId || !inventoryQuickOutModal.qty || !inventoryQuickOutModal.date || !inventoryQuickOutModal.photo}
                     >
                       {lang === "km" ? "រក្សាទុក OUT" : "Save Stock Out"}
                     </button>

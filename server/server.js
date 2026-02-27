@@ -720,6 +720,7 @@ function normalizeInventoryTxns(input) {
       approvedBy: toText(row.approvedBy),
       receivedBy: toText(row.receivedBy),
       borrowStatus: toText(row.borrowStatus),
+      photo: toText(row.photo),
     }));
 }
 
