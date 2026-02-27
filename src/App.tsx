@@ -1002,6 +1002,7 @@ const TEXT = {
     campusActivity: "Campus Activity",
     campus: "Campus",
     registerAsset: "Register Asset",
+    assetGallery: "Gallery Asset",
     category: "Category",
     typeCode: "Type Code",
     pcType: "PC Type",
@@ -1205,6 +1206,7 @@ const TEXT = {
     campusActivity: "សកម្មភាពតាម Campus",
     campus: "Campus",
     registerAsset: "ចុះបញ្ជីទ្រព្យសម្បត្តិ",
+    assetGallery: "វិចិត្រសាលទ្រព្យសម្បត្តិ",
     category: "ប្រភេទ",
     typeCode: "កូដប្រភេទ",
     pcType: "ប្រភេទកុំព្យូទ័រ",
@@ -3073,7 +3075,8 @@ export default function App() {
     setTab("dashboard");
     window.location.reload();
   }, []);
-  const [assetsView, setAssetsView] = useState<"register" | "list">("register");
+  const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
+  const [assetGalleryCardSize, setAssetGalleryCardSize] = useState(180);
   const [campusFilter, setCampusFilter] = useState("ALL");
   const [assetCampusFilter, setAssetCampusFilter] = useState("ALL");
   const [assetCategoryFilter] = useState("ALL");
@@ -3100,6 +3103,7 @@ export default function App() {
   const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
   const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState("ALL");
   const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
+  const [maintenanceRecordCampusFilter, setMaintenanceRecordCampusFilter] = useState("ALL");
   const [maintenanceRecordScheduleJumpMode, setMaintenanceRecordScheduleJumpMode] = useState(false);
   const [verificationRecordCategoryFilter, setVerificationRecordCategoryFilter] = useState("ALL");
   const [verificationRecordItemFilter, setVerificationRecordItemFilter] = useState("ALL");
@@ -5012,7 +5016,7 @@ export default function App() {
     if (!canOpenAssetRegister && assetsView === "register") {
       setAssetsView("list");
     }
-    if (!canAccessMenu("assets.list", "assets") && canOpenAssetRegister && assetsView === "list") {
+    if (!canAccessMenu("assets.list", "assets") && canOpenAssetRegister && (assetsView === "list" || assetsView === "gallery")) {
       setAssetsView("register");
     }
   }, [canOpenAssetRegister, assetsView, canAccessMenu]);
@@ -9483,22 +9487,37 @@ export default function App() {
       a.assetId.localeCompare(b.assetId)
     );
   }, [assets, campusFilter]);
-  const maintenanceRecordCategoryOptions = useMemo(() => {
-    return Array.from(new Set(maintenanceRecordAssetPool.map((a) => a.category).filter(Boolean))).sort((a, b) =>
+  const maintenanceRecordCampusOptions = useMemo(() => {
+    return Array.from(new Set(maintenanceRecordAssetPool.map((a) => a.campus).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
   }, [maintenanceRecordAssetPool]);
+  const maintenanceRecordCategoryOptions = useMemo(() => {
+    let list = maintenanceRecordAssetPool;
+    if (maintenanceRecordCampusFilter !== "ALL") {
+      list = list.filter((a) => a.campus === maintenanceRecordCampusFilter);
+    }
+    return Array.from(new Set(list.map((a) => a.category).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [maintenanceRecordAssetPool, maintenanceRecordCampusFilter]);
   const maintenanceRecordItemOptions = useMemo(() => {
     let list = maintenanceRecordAssetPool;
+    if (maintenanceRecordCampusFilter !== "ALL") {
+      list = list.filter((a) => a.campus === maintenanceRecordCampusFilter);
+    }
     if (maintenanceRecordCategoryFilter !== "ALL") {
       list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
     }
     return Array.from(new Set(list.map((a) => assetItemName(a.category, a.type, a.pcType || "")).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
-  }, [maintenanceRecordAssetPool, maintenanceRecordCategoryFilter, assetItemName]);
+  }, [maintenanceRecordAssetPool, maintenanceRecordCampusFilter, maintenanceRecordCategoryFilter, assetItemName]);
   const maintenanceRecordLocationOptions = useMemo(() => {
     let list = maintenanceRecordAssetPool;
+    if (maintenanceRecordCampusFilter !== "ALL") {
+      list = list.filter((a) => a.campus === maintenanceRecordCampusFilter);
+    }
     if (maintenanceRecordCategoryFilter !== "ALL") {
       list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
     }
@@ -9510,9 +9529,18 @@ export default function App() {
     return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
-  }, [maintenanceRecordAssetPool, maintenanceRecordCategoryFilter, maintenanceRecordItemFilter, assetItemName]);
+  }, [
+    maintenanceRecordAssetPool,
+    maintenanceRecordCampusFilter,
+    maintenanceRecordCategoryFilter,
+    maintenanceRecordItemFilter,
+    assetItemName,
+  ]);
   const maintenanceRecordFilteredAssets = useMemo(() => {
     let list = maintenanceRecordAssetPool;
+    if (maintenanceRecordCampusFilter !== "ALL") {
+      list = list.filter((a) => a.campus === maintenanceRecordCampusFilter);
+    }
     if (maintenanceRecordCategoryFilter !== "ALL") {
       list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
     }
@@ -9527,6 +9555,7 @@ export default function App() {
     return list;
   }, [
     maintenanceRecordAssetPool,
+    maintenanceRecordCampusFilter,
     maintenanceRecordCategoryFilter,
     maintenanceRecordItemFilter,
     maintenanceRecordLocationFilter,
@@ -9972,6 +10001,12 @@ export default function App() {
       setMaintenanceTypeFilter("ALL");
     }
   }, [maintenanceTypeFilter, maintenanceTypeOptions]);
+  useEffect(() => {
+    if (maintenanceRecordCampusFilter === "ALL") return;
+    if (!maintenanceRecordCampusOptions.includes(maintenanceRecordCampusFilter)) {
+      setMaintenanceRecordCampusFilter("ALL");
+    }
+  }, [maintenanceRecordCampusFilter, maintenanceRecordCampusOptions]);
   useEffect(() => {
     if (maintenanceRecordItemFilter === "ALL") return;
     if (!maintenanceRecordItemOptions.includes(maintenanceRecordItemFilter)) {
@@ -13470,6 +13505,14 @@ export default function App() {
                   {t.assetRegistry}
                 </button>
               ) : null}
+              {canAccessMenu("assets.list", "assets") ? (
+                <button
+                  className={`tab ${assetsView === "gallery" ? "tab-active" : ""}`}
+                  onClick={() => setAssetsView("gallery")}
+                >
+                  {t.assetGallery}
+                </button>
+              ) : null}
             </div>
 
             {assetsView === "register" && canOpenAssetRegister && (
@@ -14538,7 +14581,241 @@ export default function App() {
               </section>
             )}
 
-            {assetsView === "list" && detailAsset && (
+            {assetsView === "gallery" && canAccessMenu("assets.list", "assets") && (
+              <section className="panel">
+                <div className="asset-list-toolbar">
+                  <h2 className="asset-list-title">{t.assetGallery}</h2>
+                </div>
+                <div className="panel-filters asset-list-filters asset-list-filter-row">
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                    <summary>{summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetCampusMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetCampusMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetCampusFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        {t.allCampuses}
+                      </label>
+                      {assetCampusFilterOptions.map((campus) => (
+                        <label key={`asset-gallery-campus-filter-${campus}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetCampusMultiFilter.includes(campus)}
+                            onChange={(e) =>
+                              setAssetCampusMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  campus,
+                                  assetCampusFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          {campusLabel(campus)}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                    <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetLocationMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetLocationMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetLocationFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        All Locations
+                      </label>
+                      {assetLocationFilterOptions.map((location) => (
+                        <label key={`asset-gallery-location-filter-${location}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetLocationMultiFilter.includes(location)}
+                            onChange={(e) =>
+                              setAssetLocationMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  location,
+                                  assetLocationFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          {location}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                    <summary>{summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories)}</summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetCategoryMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetCategoryMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetCategoryFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        {t.allCategories}
+                      </label>
+                      {CATEGORY_OPTIONS.map((category) => (
+                        <label key={`asset-gallery-category-filter-${category.value}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetCategoryMultiFilter.includes(category.value)}
+                            onChange={(e) =>
+                              setAssetCategoryMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  category.value,
+                                  assetCategoryFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          {lang === "km" ? category.km : category.en}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                    <summary>
+                      {summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
+                        const row = assetNameFilterOptions.find((option) => option.value === value);
+                        return row ? row.label : value;
+                      })}
+                    </summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetNameMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetNameMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetNameFilterOptions.map((option) => option.value)
+                              )
+                            )
+                          }
+                        />
+                        {`All ${t.name}s`}
+                      </label>
+                      {assetNameFilterOptions.map((option) => (
+                        <label key={`asset-gallery-name-filter-${option.value}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetNameMultiFilter.includes(option.value)}
+                            onChange={(e) =>
+                              setAssetNameMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  option.value,
+                                  assetNameFilterOptions.map((item) => item.value)
+                                )
+                              )
+                            }
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                  <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
+                    {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                  </button>
+                  <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
+                </div>
+
+                <div className="asset-gallery-toolbar">
+                  <span className="tiny">View Size</span>
+                  <span className="tiny">Small</span>
+                  <input
+                    type="range"
+                    min={130}
+                    max={280}
+                    step={5}
+                    value={assetGalleryCardSize}
+                    onChange={(e) => setAssetGalleryCardSize(Number(e.target.value))}
+                    className="asset-gallery-size-slider"
+                    aria-label="Gallery size"
+                  />
+                  <span className="tiny">Big</span>
+                </div>
+
+                <div
+                  className="asset-gallery-grid"
+                  style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${assetGalleryCardSize}px, 1fr))` }}
+                >
+                  {assetListRows.length ? (
+                    assetListRows.map((asset) => {
+                      const displayPhoto = normalizeAssetPhotos(asset)[0] || "";
+                      return (
+                        <button
+                          type="button"
+                          key={`asset-gallery-card-${asset.id}`}
+                          className={`asset-gallery-card ${assetStatusRowClass(asset.status || "")}`}
+                          onClick={() => setAssetDetailId(asset.id)}
+                        >
+                          <div className="asset-gallery-photo-wrap">
+                            {displayPhoto ? (
+                              <img src={displayPhoto} alt={asset.assetId} className="asset-gallery-photo" />
+                            ) : (
+                              <div className="asset-gallery-photo-empty">{t.noPhoto}</div>
+                            )}
+                          </div>
+                          <div className="asset-gallery-meta">
+                            <strong>{asset.assetId}</strong>
+                            <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                            <div>{campusLabel(asset.campus)} | {asset.location || "-"}</div>
+                            <div>Status: {assetStatusLabel(asset.status || "-")} | SN: {String(asset.serialNumber || "").trim() || "-"}</div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="panel-note">{t.noAssets}</div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {(assetsView === "list" || assetsView === "gallery") && detailAsset && (
               <div className="modal-backdrop" onClick={() => setAssetDetailId(null)}>
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
@@ -17469,7 +17746,7 @@ export default function App() {
                   className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
                   onClick={() => setMaintenanceView("history")}
                 >
-                  {lang === "km" ? "មើលប្រវត្តិ" : "History View"}
+                  {lang === "km" ? "មើលប្រវត្តិ" : "All Maintenance View"}
                 </button>
               ) : null}
               {canAccessMenu("maintenance.record", "maintenance") ? (
@@ -17480,7 +17757,7 @@ export default function App() {
                     setMaintenanceView("record");
                   }}
                 >
-                  {lang === "km" ? "កត់ត្រាថែទាំ" : "Record History"}
+                  {lang === "km" ? "កត់ត្រាថែទាំ" : "Register Maintenance Task"}
                 </button>
               ) : null}
             </div>
@@ -17488,7 +17765,7 @@ export default function App() {
             {maintenanceView === "dashboard" && (canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) && (
             <>
             <h3 className="section-title">{lang === "km" ? "ផ្ទាំងសង្ខេបថែទាំ" : "Maintenance Dashboard"}</h3>
-            <div className="stats-grid">
+            <div className="stats-grid maintenance-dashboard-stats">
               <button
                 type="button"
                 className={`stat-card stat-card-button ${maintenanceDashboardModal === "overdue" ? "stat-card-selected" : ""}`}
@@ -17704,9 +17981,39 @@ export default function App() {
             {maintenanceView === "record" && canAccessMenu("maintenance.record", "maintenance") && (
             <>
             <h3 className="section-title">{lang === "km" ? "កត់ត្រាលទ្ធផលថែទាំ" : "Record Maintenance Result"}</h3>
-            <div className="form-grid">
+            <div className="form-grid maintenance-record-grid">
               {!maintenanceRecordScheduleJumpMode ? (
                 <>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select
+                      className="input"
+                      value={maintenanceRecordCampusFilter}
+                      onChange={(e) => setMaintenanceRecordCampusFilter(e.target.value)}
+                    >
+                      <option value="ALL">{t.allCampuses}</option>
+                      {maintenanceRecordCampusOptions.map((campus) => (
+                        <option key={`maintenance-record-campus-${campus}`} value={campus}>
+                          {campusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.location}</span>
+                    <select
+                      className="input"
+                      value={maintenanceRecordLocationFilter}
+                      onChange={(e) => setMaintenanceRecordLocationFilter(e.target.value)}
+                    >
+                      <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
+                      {maintenanceRecordLocationOptions.map((location) => (
+                        <option key={`maintenance-record-location-${location}`} value={location}>
+                          {location}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="field">
                     <span>{t.category}</span>
                     <select
@@ -17737,24 +18044,9 @@ export default function App() {
                       ))}
                     </select>
                   </label>
-                  <label className="field">
-                    <span>{t.location}</span>
-                    <select
-                      className="input"
-                      value={maintenanceRecordLocationFilter}
-                      onChange={(e) => setMaintenanceRecordLocationFilter(e.target.value)}
-                    >
-                      <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
-                      {maintenanceRecordLocationOptions.map((location) => (
-                        <option key={`maintenance-record-location-${location}`} value={location}>
-                          {location}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                 </>
               ) : null}
-              <label className="field">
+              <label className="field field-wide">
                 <span>{lang === "km" ? "Asset" : "Asset"}</span>
                 <AssetPicker
                   value={maintenanceRecordForm.assetId}
@@ -17774,7 +18066,7 @@ export default function App() {
                     : "No assets match current filters."}
                 </div>
               </label>
-              <label className="field">
+              <label className="field field-wide">
                 <span>{t.date}</span>
                 <input
                   type="date"
@@ -17879,7 +18171,7 @@ export default function App() {
             {maintenanceView === "history" && canAccessMenu("maintenance.history", "maintenance") && (
             <>
             <div className="maintenance-title-row">
-              <h2>{t.maintenanceHistory}</h2>
+              <h2>{lang === "km" ? t.maintenanceHistory : "All Maintenance View"}</h2>
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <select
@@ -17919,95 +18211,154 @@ export default function App() {
                 onChange={(e) => setMaintenanceDateTo(e.target.value)}
               />
             </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("assetId")}>{t.assetId} {maintenanceSort.key === "assetId" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th>{t.photo}</th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("campus")}>{t.campus} {maintenanceSort.key === "campus" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("category")}>{t.category} {maintenanceSort.key === "category" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("assetType")}>{t.typeCode} {maintenanceSort.key === "assetType" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("location")}>{t.location} {maintenanceSort.key === "location" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("date")}>Date {maintenanceSort.key === "date" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("type")}>Type {maintenanceSort.key === "type" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("completion")}>Work Status {maintenanceSort.key === "completion" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("condition")}>Condition {maintenanceSort.key === "condition" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("note")}>Note {maintenanceSort.key === "note" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th>{t.photo}</th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("cost")}>Cost {maintenanceSort.key === "cost" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("by")}>By {maintenanceSort.key === "by" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("status")}>{t.status} {maintenanceSort.key === "status" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                    <th>{t.edit}</th>
-                    <th>{t.delete}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedMaintenanceRows.length ? (
-                    sortedMaintenanceRows.map((row) => (
-                      <tr
-                        key={row.rowId}
-                        className={maintenanceHistoryRowClass(
-                          row.type || "",
-                          row.completion || "",
-                          row.status || "",
-                          row.condition || "",
-                          row.note || ""
-                        )}
-                      >
-                        <td>
-                          <button
-                            className="tab"
-                            onClick={() => {
-                              setMaintenanceDetailAssetId(row.assetDbId);
-                              cancelMaintenanceEntryEdit();
-                            }}
-                          >
-                            <strong>{row.assetId}</strong>
-                          </button>
-                        </td>
-                        <td>{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</td>
-                        <td>{campusLabel(row.campus)}</td>
-                        <td>{row.category}</td>
-                        <td>{row.assetType || "-"}</td>
-                        <td>{row.location}</td>
-                        <td>{formatDate(row.date || "-")}</td>
-                        <td>{row.type || "-"}</td>
-                        <td>{row.completion || "-"}</td>
-                        <td>{row.condition || "-"}</td>
-                        <td>{row.note || "-"}</td>
-                        <td>{renderAssetPhoto(row.photo || "", "maintenance")}</td>
-                        <td>{row.cost || "-"}</td>
-                        <td>{row.by || "-"}</td>
-                        <td>{assetStatusLabel(row.status)}</td>
-                        <td>
-                          <button
-                            className="tab"
-                            disabled={!isAdmin}
-                            onClick={() => editMaintenanceEntryFromHistoryRow(row)}
-                          >
-                            {t.edit}
-                          </button>
-                        </td>
-                        <td>
-                          <button
-                            className="btn-danger"
-                            disabled={busy || !isAdmin}
-                            onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
-                          >
-                            X
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+            {isPhoneView ? (
+              <div className="report-mobile-only report-card-list">
+                {sortedMaintenanceRows.length ? (
+                  sortedMaintenanceRows.map((row) => (
+                    <article key={`maint-history-mobile-${row.rowId}`} className="report-card">
+                      <div className="report-card-head">
+                        <div>{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</div>
+                        <div>
+                          <strong>{row.assetId}</strong>
+                          <div className="tiny">{formatDate(row.date || "-")}</div>
+                        </div>
+                      </div>
+                      <div className="report-card-meta">
+                        <div><strong>{t.campus}:</strong> {campusLabel(row.campus)}</div>
+                        <div><strong>{t.category}:</strong> {row.category || "-"}</div>
+                        <div><strong>{t.typeCode}:</strong> {row.assetType || "-"}</div>
+                        <div><strong>{t.location}:</strong> {row.location || "-"}</div>
+                        <div><strong>Type:</strong> {row.type || "-"}</div>
+                        <div><strong>Work Status:</strong> {row.completion || "-"}</div>
+                        <div><strong>Condition:</strong> {row.condition || "-"}</div>
+                        <div><strong>Note:</strong> {row.note || "-"}</div>
+                        <div><strong>{t.status}:</strong> {assetStatusLabel(row.status)}</div>
+                        <div><strong>Cost:</strong> {row.cost || "-"}</div>
+                        <div><strong>By:</strong> {row.by || "-"}</div>
+                        <div><strong>Maintenance Photo:</strong> {renderAssetPhoto(row.photo || "", "maintenance")}</div>
+                      </div>
+                      <div className="asset-actions maintenance-history-mobile-actions">
+                        <button
+                          className="tab"
+                          onClick={() => {
+                            setMaintenanceDetailAssetId(row.assetDbId);
+                            cancelMaintenanceEntryEdit();
+                          }}
+                        >
+                          Open Detail
+                        </button>
+                        <button
+                          className="tab"
+                          disabled={!isAdmin}
+                          onClick={() => editMaintenanceEntryFromHistoryRow(row)}
+                        >
+                          {t.edit}
+                        </button>
+                        <button
+                          className="btn-danger"
+                          disabled={busy || !isAdmin}
+                          onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
+                        >
+                          X
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">No maintenance records yet.</div>
+                )}
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={17}>No maintenance records yet.</td>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("assetId")}>{t.assetId} {maintenanceSort.key === "assetId" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th>{t.photo}</th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("campus")}>{t.campus} {maintenanceSort.key === "campus" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("category")}>{t.category} {maintenanceSort.key === "category" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("assetType")}>{t.typeCode} {maintenanceSort.key === "assetType" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("location")}>{t.location} {maintenanceSort.key === "location" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("date")}>Date {maintenanceSort.key === "date" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("type")}>Type {maintenanceSort.key === "type" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("completion")}>Work Status {maintenanceSort.key === "completion" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("condition")}>Condition {maintenanceSort.key === "condition" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("note")}>Note {maintenanceSort.key === "note" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th>{t.photo}</th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("cost")}>Cost {maintenanceSort.key === "cost" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("by")}>By {maintenanceSort.key === "by" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("status")}>{t.status} {maintenanceSort.key === "status" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                      <th>{t.edit}</th>
+                      <th>{t.delete}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sortedMaintenanceRows.length ? (
+                      sortedMaintenanceRows.map((row) => (
+                        <tr
+                          key={row.rowId}
+                          className={maintenanceHistoryRowClass(
+                            row.type || "",
+                            row.completion || "",
+                            row.status || "",
+                            row.condition || "",
+                            row.note || ""
+                          )}
+                        >
+                          <td>
+                            <button
+                              className="tab"
+                              onClick={() => {
+                                setMaintenanceDetailAssetId(row.assetDbId);
+                                cancelMaintenanceEntryEdit();
+                              }}
+                            >
+                              <strong>{row.assetId}</strong>
+                            </button>
+                          </td>
+                          <td>{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.category}</td>
+                          <td>{row.assetType || "-"}</td>
+                          <td>{row.location}</td>
+                          <td>{formatDate(row.date || "-")}</td>
+                          <td>{row.type || "-"}</td>
+                          <td>{row.completion || "-"}</td>
+                          <td>{row.condition || "-"}</td>
+                          <td>{row.note || "-"}</td>
+                          <td>{renderAssetPhoto(row.photo || "", "maintenance")}</td>
+                          <td>{row.cost || "-"}</td>
+                          <td>{row.by || "-"}</td>
+                          <td>{assetStatusLabel(row.status)}</td>
+                          <td>
+                            <button
+                              className="tab"
+                              disabled={!isAdmin}
+                              onClick={() => editMaintenanceEntryFromHistoryRow(row)}
+                            >
+                              {t.edit}
+                            </button>
+                          </td>
+                          <td>
+                            <button
+                              className="btn-danger"
+                              disabled={busy || !isAdmin}
+                              onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
+                            >
+                              X
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={17}>No maintenance records yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
             </>
             )}
           </section>
