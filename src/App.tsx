@@ -455,7 +455,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.asset_by_location", labelEn: "Asset by Campus and Location", labelKm: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
       { key: "reports.overdue", labelEn: "Overdue Maintenance", labelKm: "ថែទាំលើសកាលកំណត់" },
       { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
-      { key: "reports.staff_borrowing", labelEn: "Staff Borrowing List", labelKm: "បញ្ជីខ្ចីឧបករណ៍បុគ្គលិក" },
+      { key: "reports.staff_borrowing", labelEn: "Staff Asset Assignment List", labelKm: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
       { key: "reports.maintenance_completion", labelEn: "Maintenance Completion", labelKm: "លទ្ធផលបញ្ចប់ការថែទាំ" },
       { key: "reports.verification_summary", labelEn: "Verification Summary", labelKm: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
       { key: "reports.qr_labels", labelEn: "Asset ID + QR Labels", labelKm: "លេខទ្រព្យ + QR" },
@@ -10001,20 +10001,32 @@ export default function App() {
     [assetMasterSetRows]
   );
 
-  const assetMasterItemFilterOptions = useMemo(() => {
-    const options = Array.from(new Set(assetMasterSetRows.map((row) => row.itemName).filter(Boolean)));
-    return options.sort((a, b) => a.localeCompare(b));
-  }, [assetMasterSetRows]);
-
   const assetMasterCampusFilterOptions = useMemo(() => {
     const options = Array.from(new Set(assetMasterSetRows.map((row) => row.campus).filter(Boolean)));
     return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
   }, [assetMasterSetRows, campusLabel]);
 
+  const assetMasterRowsByCampusFilter = useMemo(() => {
+    if (assetMasterCampusFilter.includes("ALL")) return assetMasterSetRows;
+    if (!assetMasterCampusFilter.length) return [] as typeof assetMasterSetRows;
+    return assetMasterSetRows.filter((row) => assetMasterCampusFilter.includes(row.campus));
+  }, [assetMasterSetRows, assetMasterCampusFilter]);
+
   const assetMasterCategoryFilterOptions = useMemo(() => {
-    const options = Array.from(new Set(assetMasterSetRows.map((row) => row.category).filter(Boolean)));
+    const options = Array.from(new Set(assetMasterRowsByCampusFilter.map((row) => row.category).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
-  }, [assetMasterSetRows]);
+  }, [assetMasterRowsByCampusFilter]);
+
+  const assetMasterRowsByCampusCategoryFilter = useMemo(() => {
+    if (assetMasterCategoryFilter.includes("ALL")) return assetMasterRowsByCampusFilter;
+    if (!assetMasterCategoryFilter.length) return [] as typeof assetMasterRowsByCampusFilter;
+    return assetMasterRowsByCampusFilter.filter((row) => assetMasterCategoryFilter.includes(row.category));
+  }, [assetMasterRowsByCampusFilter, assetMasterCategoryFilter]);
+
+  const assetMasterItemFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(assetMasterRowsByCampusCategoryFilter.map((row) => row.itemName).filter(Boolean)));
+    return options.sort((a, b) => a.localeCompare(b));
+  }, [assetMasterRowsByCampusCategoryFilter]);
 
   const filteredAssetMasterRows = useMemo(() => {
     return assetMasterSetRows.filter((row) => {
@@ -10072,17 +10084,6 @@ export default function App() {
   const isAssetMasterColumnVisible = useCallback(
     (key: AssetMasterColumnKey) => assetMasterVisibleColumns.includes(key),
     [assetMasterVisibleColumns]
-  );
-
-  const updateSingleSelect = useCallback(
-    (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string, checked: boolean) => {
-      setter((prev) => {
-        if (value === "ALL") return checked ? ["ALL"] : [];
-        if (!checked) return prev.filter((item) => item !== value);
-        return [value];
-      });
-    },
-    []
   );
 
   const handleAssetMasterFilterMenuToggle = useCallback(
@@ -10188,7 +10189,7 @@ export default function App() {
               { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
               { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
               { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
-              { value: "staff_borrowing" as ReportType, label: "បញ្ជីខ្ចីឧបករណ៍បុគ្គលិក" },
+              { value: "staff_borrowing" as ReportType, label: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
               { value: "maintenance_completion" as ReportType, label: "លទ្ធផលបញ្ចប់ការថែទាំ" },
               { value: "verification_summary" as ReportType, label: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
               { value: "qr_labels" as ReportType, label: "លេខទ្រព្យ + QR" },
@@ -10199,7 +10200,7 @@ export default function App() {
               { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
               { value: "overdue" as ReportType, label: "Overdue Maintenance" },
               { value: "transfer" as ReportType, label: "Asset Transfer Log" },
-              { value: "staff_borrowing" as ReportType, label: "Staff Borrowing List" },
+              { value: "staff_borrowing" as ReportType, label: "Staff Asset Assignment List" },
               { value: "maintenance_completion" as ReportType, label: "Maintenance Completion" },
               { value: "verification_summary" as ReportType, label: "Verification Summary" },
               { value: "qr_labels" as ReportType, label: "Asset ID + QR Labels" },
@@ -10219,7 +10220,7 @@ export default function App() {
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
-            staff_borrowing: "ទ្រព្យដែលកំពុងចាត់តាំងឱ្យបុគ្គលិក និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
+            staff_borrowing: "ទ្រព្យដែលសាលាបានចាត់តាំងឱ្យបុគ្គលិកប្រើប្រាស់ និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
             maintenance_completion: "តាមដានលទ្ធផលថែទាំក្នុងចន្លោះកាលបរិច្ឆេទ។",
             verification_summary: "សង្ខេបលទ្ធផលត្រួតពិនិត្យតាមខែ ឬត្រីមាស។",
             qr_labels: "បោះពុម្ពស្លាក QR សម្រាប់ទ្រព្យសម្បត្តិ។",
@@ -10884,17 +10885,19 @@ export default function App() {
 
   useEffect(() => {
     setAssetMasterCategoryFilter((prev) => {
+      if (!assetMasterRowsByCampusFilter.length) return [];
       if (prev.includes("ALL")) return prev;
       return prev.filter((item) => assetMasterCategoryFilterOptions.includes(item));
     });
-  }, [assetMasterCategoryFilterOptions]);
+  }, [assetMasterCategoryFilterOptions, assetMasterRowsByCampusFilter]);
 
   useEffect(() => {
     setAssetMasterItemFilter((prev) => {
+      if (!assetMasterRowsByCampusCategoryFilter.length) return [];
       if (prev.includes("ALL")) return prev;
       return prev.filter((item) => assetMasterItemFilterOptions.includes(item));
     });
-  }, [assetMasterItemFilterOptions]);
+  }, [assetMasterItemFilterOptions, assetMasterRowsByCampusCategoryFilter]);
 
   useEffect(() => {
     const closeOpenFilterMenus = () => {
@@ -11135,7 +11138,7 @@ export default function App() {
         r.reason || "-",
       ]);
     } else if (reportType === "staff_borrowing") {
-      title = "Staff Borrowing List Report";
+      title = "Staff Asset Assignment List Report";
       columns = ["Asset ID", "Photo", "Item", "Campus", "Location", "Assigned To", "Since", "Ack", "Last Action", "Note"];
       rows = staffBorrowingRows.map((r) => [
         r.assetId,
@@ -18068,7 +18071,11 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={assetMasterCampusFilter.includes("ALL")}
-                          onChange={(e) => updateSingleSelect(setAssetMasterCampusFilter, "ALL", e.target.checked)}
+                          onChange={(e) =>
+                            setAssetMasterCampusFilter((prev) =>
+                              applyMultiFilterSelection(prev, e.target.checked, "ALL", assetMasterCampusFilterOptions)
+                            )
+                          }
                         />
                         <span>{t.allCampuses}</span>
                       </label>
@@ -18077,7 +18084,11 @@ export default function App() {
                           <input
                             type="checkbox"
                             checked={assetMasterCampusFilter.includes(campus)}
-                            onChange={(e) => updateSingleSelect(setAssetMasterCampusFilter, campus, e.target.checked)}
+                            onChange={(e) =>
+                              setAssetMasterCampusFilter((prev) =>
+                                applyMultiFilterSelection(prev, e.target.checked, campus, assetMasterCampusFilterOptions)
+                              )
+                            }
                           />
                           <span>{campusLabel(campus)}</span>
                         </label>
@@ -18091,7 +18102,11 @@ export default function App() {
                         <input
                           type="checkbox"
                           checked={assetMasterCategoryFilter.includes("ALL")}
-                          onChange={(e) => updateSingleSelect(setAssetMasterCategoryFilter, "ALL", e.target.checked)}
+                          onChange={(e) =>
+                            setAssetMasterCategoryFilter((prev) =>
+                              applyMultiFilterSelection(prev, e.target.checked, "ALL", assetMasterCategoryFilterOptions)
+                            )
+                          }
                         />
                         <span>{t.allCategories}</span>
                       </label>
@@ -18100,7 +18115,11 @@ export default function App() {
                           <input
                             type="checkbox"
                             checked={assetMasterCategoryFilter.includes(category)}
-                            onChange={(e) => updateSingleSelect(setAssetMasterCategoryFilter, category, e.target.checked)}
+                            onChange={(e) =>
+                              setAssetMasterCategoryFilter((prev) =>
+                                applyMultiFilterSelection(prev, e.target.checked, category, assetMasterCategoryFilterOptions)
+                              )
+                            }
                           />
                           <span>
                             {category === "SAFETY"
@@ -18564,7 +18583,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={10}>No staff borrowing records.</td>
+                          <td colSpan={10}>No staff asset assignment records.</td>
                       </tr>
                     )}
                   </tbody>

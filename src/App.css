@@ -687,8 +687,6 @@ h2 {
   padding: 18px;
   background: linear-gradient(180deg, #fff9f0 0%, #fff0db 100%);
   box-shadow: var(--shadow-sm);
-  content-visibility: auto;
-  contain-intrinsic-size: 640px;
 }
 
 .panel-row {
