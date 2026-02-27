@@ -271,6 +271,8 @@ type ServerSettings = {
   staffUsers?: StaffUser[];
   calendarEvents?: CalendarEvent[];
   maintenanceReminderOffsets?: number[];
+  inventoryItems?: InventoryItem[];
+  inventoryTxns?: InventoryTxn[];
 };
 type CalendarEventType =
   | "public"
@@ -666,10 +668,14 @@ const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "BORROW_CONSUME", label: "Borrow Consume" },
 ] as const;
 const INVENTORY_MASTER_ITEMS = [
-  { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", spec: "Box", unit: "box", aliases: ["tissue", "hand tissue", "ក្រដាស"] },
-  { key: "cleaner", category: "SUPPLY", nameEn: "Floor Cleaner", spec: "Liquid", unit: "bottle", aliases: ["cleaner", "soap", "សាប៊ូ"] },
-  { key: "shampoo", category: "SUPPLY", nameEn: "Hand Wash Shampoo", spec: "Liquid", unit: "bottle", aliases: ["shampoo", "hand wash", "សាប៊ូលាងដៃ"] },
-  { key: "trash_bag", category: "SUPPLY", nameEn: "Trash Bag", spec: "Large", unit: "roll", aliases: ["trash bag", "bin bag", "ថង់សំរាម"] },
+  { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
+  { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", spec: "", unit: "pcs", aliases: ["hand tissue", "tissue", "ក្រដាសដៃ"] },
+  { key: "toilet_paper", category: "SUPPLY", nameEn: "Toilet Paper", spec: "", unit: "pcs", aliases: ["toilet paper", "paper roll"] },
+  { key: "hand_wash_15l", category: "SUPPLY", nameEn: "Washing Hand Shampoo", spec: "1.5L", unit: "pcs", aliases: ["hand wash", "shampoo", "soap"] },
+  { key: "alcohol_15l", category: "SUPPLY", nameEn: "Alcohol", spec: "1.5L", unit: "pcs", aliases: ["alcohol", "sanitizer"] },
+  { key: "floor_shampoo_15l", category: "SUPPLY", nameEn: "Floor Shampoo", spec: "1.5L", unit: "pcs", aliases: ["floor shampoo", "floor cleaner"] },
+  { key: "plastic_pack", category: "SUPPLY", nameEn: "Plastic", spec: "Pack (10 pcs)", unit: "unit", aliases: ["plastic", "plastic bag"] },
+  { key: "plastic_glove", category: "SUPPLY", nameEn: "Plastic Glove", spec: "Pack", unit: "unit", aliases: ["glove", "plastic glove"] },
   { key: "mop", category: "CLEAN_TOOL", nameEn: "Mop", spec: "Head + Handle", unit: "set", aliases: ["mop", "ម៉ាប់"] },
   { key: "broom", category: "CLEAN_TOOL", nameEn: "Broom", spec: "Soft", unit: "pcs", aliases: ["broom", "អំបោស"] },
   { key: "vacuum", category: "CLEAN_TOOL", nameEn: "Vacuum Cleaner", spec: "Portable", unit: "unit", aliases: ["vacuum", "ម៉ាស៊ីនបូមធូលី"] },
@@ -677,6 +683,20 @@ const INVENTORY_MASTER_ITEMS = [
   { key: "multimeter", category: "MAINT_TOOL", nameEn: "Multimeter", spec: "Digital", unit: "unit", aliases: ["multimeter", "meter"] },
   { key: "ladder", category: "MAINT_TOOL", nameEn: "Ladder", spec: "Foldable", unit: "pcs", aliases: ["ladder", "ជណ្ដើរ"] },
 ] as const;
+const CLEANING_SUPPLY_KEYWORDS = [
+  "tissue",
+  "hand tissue",
+  "toilet paper",
+  "paper",
+  "floor shampoo",
+  "floor cleaner",
+  "soap",
+  "hand wash",
+  "shampoo",
+  "alcohol",
+  "plastic",
+  "glove",
+];
 const VERIFICATION_RESULT_OPTIONS: Array<VerificationEntry["result"]> = [
   "Verified",
   "Issue Found",
@@ -1350,6 +1370,8 @@ function trySetLocalStorage(key: string, value: string) {
     AUTH_USER_KEY,
     API_BASE_OVERRIDE_KEY,
     USER_FALLBACK_KEY,
+    INVENTORY_ITEM_FALLBACK_KEY,
+    INVENTORY_TXN_FALLBACK_KEY,
     "ui_lang",
   ]);
   if (SERVER_ONLY_STORAGE && !allowInServerOnlyMode.has(key)) return true;
@@ -1692,13 +1714,31 @@ function clearAllFallbackCaches() {
 }
 
 function writeInventoryItemFallback(rows: InventoryItem[]) {
-  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(INVENTORY_ITEM_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function writeInventoryTxnFallback(rows: InventoryTxn[]) {
-  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(INVENTORY_TXN_FALLBACK_KEY, JSON.stringify(rows.slice(0, 5000)));
+}
+
+function readInventoryItemFallback(): InventoryItem[] {
+  try {
+    const raw = localStorage.getItem(INVENTORY_ITEM_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as InventoryItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function readInventoryTxnFallback(): InventoryTxn[] {
+  try {
+    const raw = localStorage.getItem(INVENTORY_TXN_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as InventoryTxn[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function sortLocationEntriesByName(rows: LocationEntry[]) {
@@ -1779,6 +1819,10 @@ function inventoryCategoryCode(category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL")
   if (category === "MAINT_TOOL") return "MT";
   return "CS";
 }
+function inventoryRecordCampusCode(campus: string) {
+  if (campus === "Chaktomuk Campus" || campus === "Chaktomuk Campus (C2.2)") return "C2";
+  return CAMPUS_CODE[campus] || "CX";
+}
 function isInventoryTxnIn(type: InventoryTxn["type"]) {
   return type === "IN" || type === "BORROW_IN";
 }
@@ -1797,16 +1841,21 @@ function inventoryAliasText(itemName: string) {
   const hit = INVENTORY_MASTER_ITEMS.find((item) => name.includes(item.nameEn.toLowerCase()));
   return hit ? hit.aliases.join(" ") : "";
 }
+function isCleaningSupplyItem(item: Pick<InventoryItem, "category" | "itemName" | "itemCode">) {
+  if (item.category !== "SUPPLY") return false;
+  const text = `${item.itemName || ""} ${item.itemCode || ""}`.toLowerCase();
+  return CLEANING_SUPPLY_KEYWORDS.some((keyword) => text.includes(keyword));
+}
 function calcNextInventorySeq(
   list: InventoryItem[],
   campus: string,
   category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL"
 ) {
-  const campusCode = CAMPUS_CODE[campus] || "CX";
+  const campusCode = inventoryRecordCampusCode(campus);
   const catCode = inventoryCategoryCode(category);
   let maxSeq = 0;
   for (const item of list) {
-    if (item.campus !== campus || item.category !== category) continue;
+    if (inventoryRecordCampusCode(item.campus) !== campusCode || item.category !== category) continue;
     const m = String(item.itemCode || "").toUpperCase().match(new RegExp(`^${campusCode}-${catCode}-(\\d{1,6})$`));
     if (!m) continue;
     const n = Number(m[1] || 0);
@@ -1819,7 +1868,7 @@ function buildInventoryItemCode(
   campus: string,
   category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL"
 ) {
-  const campusCode = CAMPUS_CODE[campus] || "CX";
+  const campusCode = inventoryRecordCampusCode(campus);
   const catCode = inventoryCategoryCode(category);
   const seq = calcNextInventorySeq(list, campus, category);
   return `${campusCode}-${catCode}-${pad4(seq)}`;
@@ -2567,6 +2616,8 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
+  const mobileSwipeStartXRef = useRef<number | null>(null);
+  const mobileSwipeStartYRef = useRef<number | null>(null);
   const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
   const navItems = useMemo<Array<{ id: NavModule; label: string }>>(
     () => [
@@ -2583,6 +2634,32 @@ export default function App() {
     ],
     [isAdmin, t]
   );
+  const navIcon = useCallback((id: NavModule) => {
+    switch (id) {
+      case "dashboard":
+        return "📊";
+      case "assets":
+        return "🗂";
+      case "inventory":
+        return "📦";
+      case "tickets":
+        return "🧾";
+      case "schedule":
+        return "🗓";
+      case "transfer":
+        return "🔁";
+      case "maintenance":
+        return "🛠";
+      case "verification":
+        return "✅";
+      case "reports":
+        return "📄";
+      case "setup":
+        return "⚙";
+      default:
+        return "•";
+    }
+  }, []);
   const allowedNavModules = useMemo(() => {
     const modules = authUser?.modules?.length ? authUser.modules : ALL_NAV_MODULES;
     const byRole = new Set<NavModule>(modules);
@@ -2618,13 +2695,6 @@ export default function App() {
     () => navItems.filter((item) => allowedNavModules.has(item.id)),
     [navItems, allowedNavModules]
   );
-  const phonePrimaryTabs = useMemo(
-    () =>
-      navMenuItems.filter((item) =>
-        ["dashboard", "assets", "schedule", "maintenance", "reports"].includes(item.id)
-      ),
-    [navMenuItems]
-  );
   const navSections = useMemo(() => {
     const labels: Record<NavSection, string> =
       lang === "km"
@@ -2649,6 +2719,10 @@ export default function App() {
   }, [lang, navMenuItems]);
   const handleNavChange = useCallback((nextTab: NavModule) => {
     setTab(nextTab);
+  }, []);
+  const handlePhoneLogoHome = useCallback(() => {
+    setTab("dashboard");
+    window.location.reload();
   }, []);
   const [assetsView, setAssetsView] = useState<"register" | "list">("register");
   const [campusFilter, setCampusFilter] = useState("ALL");
@@ -2743,7 +2817,10 @@ export default function App() {
   );
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const todayYmd = toYmd(new Date());
+  const calendarPrevLabel = isPhoneView ? "<" : "Prev";
+  const calendarNextLabel = isPhoneView ? ">" : "Next";
 
   useEffect(() => {
     if (!navMenuItems.some((item) => item.id === tab)) {
@@ -2771,6 +2848,39 @@ export default function App() {
       document.removeEventListener("touchstart", handleOutsideTap);
     };
   }, [mobileMenuOpen, mobileNotificationOpen]);
+  useEffect(() => {
+    if (!isPhoneView) return;
+    const onTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      mobileSwipeStartXRef.current = touch.clientX;
+      mobileSwipeStartYRef.current = touch.clientY;
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      const startX = mobileSwipeStartXRef.current;
+      const startY = mobileSwipeStartYRef.current;
+      if (startX === null || startY === null) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const deltaX = touch.clientX - startX;
+      const deltaY = Math.abs(touch.clientY - startY);
+      const startedAtLeftEdge = startX <= 28;
+      if (!mobileMenuOpen && startedAtLeftEdge && deltaX > 46 && deltaY < 48) {
+        setMobileNotificationOpen(false);
+        setMobileMenuOpen(true);
+      } else if (mobileMenuOpen && deltaX < -42 && deltaY < 48) {
+        setMobileMenuOpen(false);
+      }
+      mobileSwipeStartXRef.current = null;
+      mobileSwipeStartYRef.current = null;
+    };
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [isPhoneView, mobileMenuOpen]);
 
   const [assets, setAssets] = useState<Asset[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -3149,6 +3259,13 @@ export default function App() {
     note: "",
     search: "",
   });
+  const [inventoryQuickOutModal, setInventoryQuickOutModal] = useState<null | {
+    itemId: string;
+    date: string;
+    qty: string;
+    by: string;
+    note: string;
+  }>(null);
   const [editingInventoryTxnId, setEditingInventoryTxnId] = useState<number | null>(null);
   const [inventoryTxnEditForm, setInventoryTxnEditForm] = useState({
     itemId: "",
@@ -3402,6 +3519,13 @@ export default function App() {
     },
     [campusNames, lang]
   );
+  const inventoryCampusLabel = useCallback(
+    (campus: string) => {
+      if (campus === "C2" || campus === "C2.1" || campus === "C2.2") return "C2";
+      return inventoryRecordCampusCode(campus) === "C2" ? "C2" : campusLabel(campus);
+    },
+    [campusLabel]
+  );
   const assetStatusLabel = useCallback(
     (statusRaw: string) => {
       const status = String(statusRaw || "").trim();
@@ -3569,8 +3693,8 @@ export default function App() {
     [locations, inventoryItemForm.campus]
   );
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
-    return `${item.itemCode} - ${item.itemName} • ${campusLabel(item.campus)}`;
-  }, [campusLabel]);
+    return `${item.itemCode} - ${item.itemName} • ${inventoryCampusLabel(item.campus)}`;
+  }, [inventoryCampusLabel]);
   const inventoryMasterOptions = useMemo(
     () => INVENTORY_MASTER_ITEMS.filter((item) => item.category === inventoryItemForm.category),
     [inventoryItemForm.category]
@@ -3626,6 +3750,48 @@ export default function App() {
     () => (inventoryBalanceMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
     [inventoryBalanceMode, inventoryLowStockRows, inventoryBalanceRows]
   );
+  const cleaningSupplyMonthlyOptions = useMemo(() => {
+    const validMonths = new Set<string>();
+    const supplyItems = new Map<number, InventoryItem>();
+    for (const item of inventoryItems) {
+      if (isCleaningSupplyItem(item)) supplyItems.set(item.id, item);
+    }
+    for (const tx of inventoryTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      if (!supplyItems.has(tx.itemId)) continue;
+      const month = String(tx.date || "").slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(month)) validMonths.add(month);
+    }
+    validMonths.add(toYmd(new Date()).slice(0, 7));
+    return Array.from(validMonths).sort((a, b) => b.localeCompare(a));
+  }, [inventoryItems, inventoryTxns]);
+  const cleaningSupplyMonthlyCampusRows = useMemo(() => {
+    const month = inventorySupplyMonth;
+    const supplyItems = new Map<number, InventoryItem>();
+    for (const item of inventoryItems) {
+      if (isCleaningSupplyItem(item)) supplyItems.set(item.id, item);
+    }
+    const campusTotals = new Map<string, number>();
+    for (const tx of inventoryTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      if (!supplyItems.has(tx.itemId)) continue;
+      if (String(tx.date || "").slice(0, 7) !== month) continue;
+      const groupCampus = inventoryRecordCampusCode(tx.campus) === "C2" ? "C2" : tx.campus;
+      const current = campusTotals.get(groupCampus) || 0;
+      campusTotals.set(groupCampus, current + Number(tx.qty || 0));
+    }
+    const rows = Array.from(campusTotals.entries())
+      .map(([campus, qty]) => ({ campus, qty }))
+      .sort((a, b) => b.qty - a.qty);
+    const max = rows.reduce((m, row) => Math.max(m, row.qty), 0);
+    return { rows, max: max > 0 ? max : 1 };
+  }, [inventorySupplyMonth, inventoryItems, inventoryTxns]);
+  useEffect(() => {
+    if (!cleaningSupplyMonthlyOptions.length) return;
+    if (!cleaningSupplyMonthlyOptions.includes(inventorySupplyMonth)) {
+      setInventorySupplyMonth(cleaningSupplyMonthlyOptions[0]);
+    }
+  }, [cleaningSupplyMonthlyOptions, inventorySupplyMonth]);
   const inventoryTxnsRows = useMemo(() => {
     return [...inventoryTxns]
       .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
@@ -3660,9 +3826,20 @@ export default function App() {
     }
     return list.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
   }, [inventoryItems, inventoryDailyForm.search]);
+  const inventoryDailyOutGalleryItems = useMemo(
+    () => inventoryDailyItemOptions.filter((item) => isCleaningSupplyItem(item)),
+    [inventoryDailyItemOptions]
+  );
   const inventoryDailySelectedItem = useMemo(
     () => inventoryItems.find((item) => String(item.id) === String(inventoryDailyForm.itemId || "")) || null,
     [inventoryItems, inventoryDailyForm.itemId]
+  );
+  const inventoryQuickOutSelectedItem = useMemo(
+    () =>
+      inventoryQuickOutModal
+        ? inventoryItems.find((item) => String(item.id) === String(inventoryQuickOutModal.itemId)) || null
+        : null,
+    [inventoryItems, inventoryQuickOutModal]
   );
   const holidayLookup = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
@@ -4211,10 +4388,20 @@ export default function App() {
         setMaintenanceReminderOffsets(
           normalizeMaintenanceReminderOffsets(settingsRes.settings?.maintenanceReminderOffsets)
         );
+        const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
+        const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
+        const fallbackInventoryItems = readInventoryItemFallback();
+        const fallbackInventoryTxns = readInventoryTxnFallback();
+        const nextInventoryItems = serverInventoryItems.length ? serverInventoryItems : fallbackInventoryItems;
+        const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
+        setInventoryItems(nextInventoryItems);
+        setInventoryTxns(nextInventoryTxns);
       } catch {
         // Keep local settings if /api/settings is unavailable.
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
         setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
+        setInventoryItems(readInventoryItemFallback());
+        setInventoryTxns(readInventoryTxnFallback());
       }
 
       const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
@@ -5604,6 +5791,24 @@ export default function App() {
       alert(t.photoProcessError);
     }
   }
+  const persistInventorySettings = useCallback(
+    async (nextItems: InventoryItem[], nextTxns: InventoryTxn[]) => {
+      try {
+        await requestJson<{ ok: boolean }>("/api/settings", {
+          method: "PATCH",
+          body: JSON.stringify({
+            settings: {
+              inventoryItems: nextItems,
+              inventoryTxns: nextTxns,
+            },
+          }),
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save inventory settings");
+      }
+    },
+    []
+  );
 
   function createInventoryItem() {
     if (!requireAdminAction()) return;
@@ -5622,8 +5827,14 @@ export default function App() {
       setError("Item code, item master, and location are required.");
       return;
     }
-    if (inventoryItems.some((i) => i.itemCode === itemCode && i.campus === inventoryItemForm.campus)) {
-      setError("Item code already exists in this campus.");
+    if (
+      inventoryItems.some(
+        (i) =>
+          i.itemCode === itemCode &&
+          inventoryRecordCampusCode(i.campus) === inventoryRecordCampusCode(inventoryItemForm.campus)
+      )
+    ) {
+      setError("Item code already exists in this campus group.");
       return;
     }
     const row: InventoryItem = {
@@ -5641,7 +5852,9 @@ export default function App() {
       photo: inventoryItemForm.photo || "",
       created: new Date().toISOString(),
     };
-    setInventoryItems((prev) => [row, ...prev]);
+    const nextItems = [row, ...inventoryItems];
+    setInventoryItems(nextItems);
+    void persistInventorySettings(nextItems, inventoryTxns);
     appendUiAudit("CREATE", "inventory_item", row.itemCode, `${row.campus} | ${row.itemName}`);
     setInventoryCodeManual(false);
     setInventoryItemForm((f) => ({
@@ -5766,7 +5979,9 @@ export default function App() {
               ? "CONSUMED"
               : undefined,
     };
-    setInventoryTxns((prev) => [tx, ...prev]);
+    const nextTxns = [tx, ...inventoryTxns];
+    setInventoryTxns(nextTxns);
+    void persistInventorySettings(inventoryItems, nextTxns);
     appendUiAudit("CREATE", "inventory_txn", `${item.itemCode}-${tx.id}`, `${tx.type} ${tx.qty} ${item.unit}`);
     setError("");
     return true;
@@ -5823,6 +6038,38 @@ export default function App() {
       by: authUser?.displayName || authUser?.username || prev.by,
     }));
   }
+  function openInventoryQuickOut(item: InventoryItem) {
+    setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", itemId: String(item.id) }));
+    setInventoryQuickOutModal({
+      itemId: String(item.id),
+      date: inventoryDailyForm.date || toYmd(new Date()),
+      qty: "1",
+      by: inventoryDailyForm.by || authUser?.displayName || authUser?.username || "",
+      note: "",
+    });
+  }
+  function saveInventoryQuickOut() {
+    if (!inventoryQuickOutModal) return;
+    const saved = saveInventoryTxnEntry({
+      itemId: inventoryQuickOutModal.itemId,
+      date: inventoryQuickOutModal.date,
+      type: "OUT",
+      qty: inventoryQuickOutModal.qty,
+      by: inventoryQuickOutModal.by,
+      note: inventoryQuickOutModal.note,
+    });
+    if (!saved) return;
+    setInventoryDailyForm((prev) => ({
+      ...prev,
+      type: "OUT",
+      itemId: inventoryQuickOutModal.itemId,
+      date: inventoryQuickOutModal.date,
+      by: inventoryQuickOutModal.by || prev.by,
+      qty: "",
+      note: "",
+    }));
+    setInventoryQuickOutModal(null);
+  }
 
   function exportPurchaseRequestCsv() {
     if (!inventoryPurchaseRows.length) {
@@ -5852,7 +6099,7 @@ export default function App() {
         [
           row.itemCode,
           row.itemName,
-          campusLabel(row.campus),
+          inventoryCampusLabel(row.campus),
           row.category,
           row.unit,
           row.usedQty,
@@ -5888,7 +6135,7 @@ export default function App() {
         (row) => `<tr>
           <td>${escapeHtml(row.itemCode)}</td>
           <td>${escapeHtml(row.itemName)}</td>
-          <td>${escapeHtml(campusLabel(row.campus))}</td>
+          <td>${escapeHtml(inventoryCampusLabel(row.campus))}</td>
           <td>${escapeHtml(row.category)}</td>
           <td>${escapeHtml(row.unit)}</td>
           <td>${row.usedQty}</td>
@@ -6010,8 +6257,7 @@ export default function App() {
       return;
     }
 
-    setInventoryTxns((prev) =>
-      prev.map((x) =>
+    const nextTxns = inventoryTxns.map((x) =>
         x.id === editingInventoryTxnId
           ? {
               ...x,
@@ -6034,8 +6280,9 @@ export default function App() {
                       : undefined,
             }
           : x
-      )
-    );
+      );
+    setInventoryTxns(nextTxns);
+    void persistInventorySettings(inventoryItems, nextTxns);
     appendUiAudit(
       "UPDATE",
       "inventory_txn",
@@ -6071,7 +6318,9 @@ export default function App() {
       }
     }
 
-    setInventoryTxns((prev) => prev.filter((x) => x.id !== row.id));
+    const nextTxns = inventoryTxns.filter((x) => x.id !== row.id);
+    setInventoryTxns(nextTxns);
+    void persistInventorySettings(inventoryItems, nextTxns);
     if (editingInventoryTxnId === row.id) {
       cancelInventoryTxnEdit();
     }
@@ -8740,9 +8989,12 @@ export default function App() {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
     const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
     const startOffset = firstDay.getDay();
+    const endOffset = 6 - lastDay.getDay();
+    const totalCells = startOffset + lastDay.getDate() + endOffset;
     const startDate = new Date(year, month, 1 - startOffset);
-    return Array.from({ length: 42 }, (_, i) => {
+    return Array.from({ length: totalCells }, (_, i) => {
       const d = new Date(startDate);
       d.setDate(startDate.getDate() + i);
       const ymd = toYmd(d);
@@ -9741,18 +9993,61 @@ export default function App() {
     const sorted = [...rows].sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")));
     setQuickCountModal({ title, assets: sorted });
   }
-  function quickCountItemIcon(itemName: string) {
-    const name = String(itemName || "").toLowerCase();
-    if (name.includes("air conditioner") || name.includes("air-con") || name.includes("ac")) return "❄";
-    if (name.includes("monitor")) return "🖥";
-    if (name.includes("keyboard")) return "⌨";
-    if (name.includes("mouse")) return "🖱";
-    if (name.includes("computer")) return "💻";
-    if (name.includes("fire extinguisher")) return "🧯";
-    if (name.includes("router")) return "📶";
-    if (name.includes("switch")) return "🔀";
-    if (name.includes("printer")) return "🖨";
+  function itemTypeIcon(category: string, typeCode: string, labelOrName = "") {
+    const code = String(typeCode || "").trim().toUpperCase();
+    const name = String(labelOrName || "").toLowerCase();
+    const isFacility = String(category || "").toUpperCase() === "FACILITY";
+    const isSafety = String(category || "").toUpperCase() === "SAFETY";
+
+    if (code === "PC" || name.includes("computer")) {
+      if (name.includes("desktop")) return "🖥";
+      if (name.includes("aio") || name.includes("all-in-one")) return "🖥";
+      if (name.includes("mini pc") || name.includes("mac mini")) return "🖥";
+      if (name.includes("imac")) return "🖥";
+      return "🖥";
+    }
+    if (code === "LAP" || name.includes("laptop")) return "💻";
+    if (code === "TAB" || name.includes("ipad") || name.includes("tablet")) return "📱";
+    if (code === "MON" || name.includes("monitor")) return "🖥";
+    if (code === "KBD" || name.includes("keyboard")) return "⌨";
+    if (code === "MSE" || name.includes("mouse")) return "🖱";
+    if (code === "PRN" || name.includes("printer")) return "🖨";
+    if (code === "SW" || name.includes("switch")) return "🔀";
+    if (code === "AP" || name.includes("access point") || name.includes("wifi")) return "📶";
+    if (code === "CAM" || code === "DCM" || name.includes("camera") || name.includes("cctv")) return "📷";
+    if (code === "WBC" || name.includes("webcam")) return "🎥";
+    if (code === "SLP" || name.includes("projector")) return "📽";
+    if (code === "TV" || name.includes("tv")) return "📺";
+    if (code === "SPK" || name.includes("speaker")) return "🔊";
+    if (code === "UWF" || name.includes("usb wifi")) return "📡";
+    if (code === "RMT" || name.includes("remote")) return "🎛";
+    if (code === "ADP" || name.includes("adapter")) return "🔌";
+
+    if (code === "FE" || name.includes("fire extinguisher")) return "🧯";
+    if (code === "SD" || name.includes("smoke detector")) return "🚨";
+    if (code === "EL" || name.includes("emergency light")) return "💡";
+    if (code === "FB" || name.includes("fire bell")) return "🔔";
+    if (code === "FCP" || name.includes("control panel")) return "🧰";
+
+    if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return "❄";
+    if (code === "FPN" || name.includes("front panel")) return "🧩";
+    if (code === "RPN" || name.includes("rear panel")) return "🧱";
+    if (code === "TBL" || name.includes("table")) return "🪑";
+    if (code === "CHR" || name.includes("chair")) return "🪑";
+
+    if (isSafety) return "🛡";
+    if (isFacility) return "🏢";
     return "📦";
+  }
+  function quickCountItemIcon(itemName: string) {
+    return itemTypeIcon("", "", itemName);
+  }
+  function inventorySupplyIcon(itemName: string) {
+    const name = String(itemName || "").toLowerCase();
+    if (name.includes("hand tissue") || name.includes("tissue") || name.includes("paper")) return "🧻";
+    if (name.includes("cleaner") || name.includes("soap") || name.includes("shampoo")) return "🧴";
+    if (name.includes("trash bag") || name.includes("bin bag")) return "🗑";
+    return "🧽";
   }
   const renderQuickCountPanel = (source: "dashboard" | "reports") => {
     const isDashboard = source === "dashboard";
@@ -11276,6 +11571,30 @@ export default function App() {
       <section className="app-card app-card-layout">
         <header className="topbar">
           <div className="brand-block">
+            {isPhoneView ? (
+              <button
+                type="button"
+                className="mobile-brand-logo-btn"
+                onClick={handlePhoneLogoHome}
+                aria-label="Go to dashboard"
+                title="Dashboard"
+              >
+                <img
+                  src="/eco-logo.png"
+                  alt="Eco International School"
+                  className="mobile-brand-logo"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (!img.dataset.fallback) {
+                      img.dataset.fallback = "1";
+                      img.src = "/logo192.png";
+                      return;
+                    }
+                    img.style.display = "none";
+                  }}
+                />
+              </button>
+            ) : null}
             {isPhoneView ? null : <p className="eyebrow">{t.school}</p>}
             <h1 className={isPhoneView ? "brand-title-mobile" : ""}>{t.title}</h1>
             {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
@@ -11350,7 +11669,91 @@ export default function App() {
 
           <section className="workspace-main">
             <div className="mobile-nav-hud" ref={mobileNavRef}>
-              <div className="mobile-nav-actions">
+              {mobileMenuOpen ? (
+                <button
+                  type="button"
+                  className="mobile-side-backdrop"
+                  aria-label="Close menu"
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+              ) : null}
+              <aside className={`mobile-side-drawer ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}>
+                <div className="mobile-menu-head">
+                  <strong>{t.menu}</strong>
+                  <span>{lang === "km" ? "អូសពីឆ្វេងដើម្បីបើក/បិទ" : "Swipe from left to open/close"}</span>
+                </div>
+                <div className="mobile-menu-sections">
+                  {navSections.map((section) => (
+                    <section key={`mobile-nav-${section.section}`} className="mobile-menu-section">
+                      <p className="mobile-menu-section-label">{section.label}</p>
+                      <div className="mobile-menu-grid">
+                        {section.items.map((item) => (
+                          <button
+                            key={`mobile-nav-btn-${item.id}`}
+                            type="button"
+                            className={`mobile-menu-nav-btn ${tab === item.id ? "mobile-menu-nav-btn-active" : ""}`}
+                            onClick={() => {
+                              handleNavChange(item.id);
+                              setMobileMenuOpen(false);
+                            }}
+                          >
+                            <span className="mobile-menu-nav-icon" aria-hidden="true">{navIcon(item.id)}</span>
+                            <span className="mobile-menu-nav-label">{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+
+                <label className="field">
+                  <span>{t.view}</span>
+                  <select
+                    value={campusFilter}
+                    onChange={(e) => {
+                      setCampusFilter(e.target.value);
+                      setMobileMenuOpen(false);
+                    }}
+                    className="input"
+                  >
+                    {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
+                    {allowedCampuses.map((campus) => (
+                      <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>{t.language}</span>
+                  <select
+                    value={lang}
+                    onChange={(e) => {
+                      setLang(e.target.value as Lang);
+                    }}
+                    className="input"
+                  >
+                    <option value="en">{t.english}</option>
+                    <option value="km">{t.khmer}</option>
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>{t.account}</span>
+                  <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
+                </label>
+                <button
+                  className="tab"
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleLogout();
+                  }}
+                >
+                  {t.logout}
+                </button>
+              </aside>
+
+              <div className="mobile-nav-topline">
                 <button
                   className={`mobile-notify-btn ${mobileNotificationOpen ? "mobile-notify-btn-active" : ""}`}
                   type="button"
@@ -11368,71 +11771,7 @@ export default function App() {
                     </span>
                   ) : null}
                 </button>
-                {!mobileMenuOpen ? (
-                  <button
-                    className={`mobile-hamburger-btn ${mobileMenuOpen ? "mobile-hamburger-btn-active" : ""}`}
-                    type="button"
-                    onClick={() => {
-                      setMobileNotificationOpen(false);
-                      setMobileMenuOpen((open) => !open);
-                    }}
-                    aria-expanded={mobileMenuOpen}
-                    aria-label={t.menu}
-                  >
-                    <span className="mobile-hamburger-icon" aria-hidden="true">☰</span>
-                  </button>
-                ) : null}
               </div>
-              {mobileMenuOpen ? (
-                <div className="mobile-settings-panel">
-                  <label className="field">
-                    <span>{t.view}</span>
-                    <select
-                      value={campusFilter}
-                      onChange={(e) => {
-                        setCampusFilter(e.target.value);
-                        setMobileMenuOpen(false);
-                      }}
-                      className="input"
-                    >
-                      {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                      {allowedCampuses.map((campus) => (
-                        <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="field">
-                    <span>{t.language}</span>
-                    <select
-                      value={lang}
-                      onChange={(e) => {
-                        setLang(e.target.value as Lang);
-                        setMobileMenuOpen(false);
-                      }}
-                      className="input"
-                    >
-                      <option value="en">{t.english}</option>
-                      <option value="km">{t.khmer}</option>
-                    </select>
-                  </label>
-
-                  <label className="field">
-                    <span>{t.account}</span>
-                    <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
-                  </label>
-                  <button
-                    className="tab"
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      handleLogout();
-                    }}
-                  >
-                    {t.logout}
-                  </button>
-                </div>
-              ) : null}
               {mobileNotificationOpen ? (
                 <div className="mobile-notify-panel">
                   <div className="mobile-notify-head">
@@ -11650,22 +11989,26 @@ export default function App() {
                   <article className="panel dashboard-widget dashboard-calendar-panel">
                     <div className="dashboard-widget-head">
                       <h3 className="section-title">Eco Calendar View</h3>
-                      <div className="row-actions">
+                      <div className="row-actions calendar-nav-row">
                         <button
                           className="tab btn-small"
+                          aria-label="Previous month"
+                          title="Previous month"
                           onClick={() =>
                             setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
                           }
                         >
-                          Prev
+                          {calendarPrevLabel}
                         </button>
                         <button
                           className="tab btn-small"
+                          aria-label="Next month"
+                          title="Next month"
                           onClick={() =>
                             setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
                           }
                         >
-                          Next
+                          {calendarNextLabel}
                         </button>
                       </div>
                     </div>
@@ -11770,22 +12113,26 @@ export default function App() {
                   <article className="panel dashboard-widget dashboard-calendar-panel">
                     <div className="dashboard-widget-head">
                       <h3 className="section-title">Eco Calendar View</h3>
-                      <div className="row-actions">
+                      <div className="row-actions calendar-nav-row">
                         <button
                           className="tab btn-small"
+                          aria-label="Previous month"
+                          title="Previous month"
                           onClick={() =>
                             setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
                           }
                         >
-                          Prev
+                          {calendarPrevLabel}
                         </button>
                         <button
                           className="tab btn-small"
+                          aria-label="Next month"
+                          title="Next month"
                           onClick={() =>
                             setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
                           }
                         >
-                          Next
+                          {calendarNextLabel}
                         </button>
                       </div>
                     </div>
@@ -14017,7 +14364,7 @@ export default function App() {
                         Auto
                       </button>
                     </div>
-                    <small className="tiny">Auto format: Campus-Category-0001 (example: C2.2-CS-0001)</small>
+                    <small className="tiny">Auto format: Campus-Category-0001 (example: C2-CS-0001)</small>
                   </label>
                   <label className="field">
                     <span>Item Name</span>
@@ -14084,7 +14431,7 @@ export default function App() {
                             <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
                             <td>{row.itemName}</td>
                             <td>{row.category}</td>
-                            <td>{campusLabel(row.campus)}</td>
+                            <td>{inventoryCampusLabel(row.campus)}</td>
                             <td>{row.location}</td>
                             <td>{row.unit}</td>
                             <td>{row.openingQty}</td>
@@ -14298,14 +14645,14 @@ export default function App() {
                                 <td>{formatDate(row.date)}</td>
                                 <td><strong>{row.itemCode}</strong></td>
                                 <td>{row.itemName}</td>
-                                <td>{campusLabel(row.campus)}</td>
+                                <td>{inventoryCampusLabel(row.campus)}</td>
                                 <td>{inventoryTxnTypeLabel(row.type)}</td>
                                 <td>{row.qty}</td>
                                 <td>
                                   {row.type === "BORROW_OUT" || row.type === "BORROW_CONSUME"
-                                    ? `${campusLabel(row.campus)} → ${campusLabel(row.toCampus || "-")} (${row.borrowStatus || "-"})`
+                                    ? `${inventoryCampusLabel(row.campus)} → ${inventoryCampusLabel(row.toCampus || "-")} (${row.borrowStatus || "-"})`
                                     : row.type === "BORROW_IN"
-                                      ? `${campusLabel(row.fromCampus || "-")} → ${campusLabel(row.campus)} (${row.borrowStatus || "-"})`
+                                      ? `${inventoryCampusLabel(row.fromCampus || "-")} → ${inventoryCampusLabel(row.campus)} (${row.borrowStatus || "-"})`
                                       : "-"}
                                 </td>
                                 <td>{row.by || "-"}</td>
@@ -14345,6 +14692,39 @@ export default function App() {
                       : "Phone-friendly daily IN/OUT for maintenance staff."}
                   </p>
                 </div>
+                {isPhoneView && inventoryDailyForm.type === "OUT" ? (
+                  <article className="panel inventory-daily-gallery-panel">
+                    <div className="panel-row">
+                      <h3 className="section-title">{lang === "km" ? "ជ្រើសសម្ភារៈចេញស្តុកលឿន" : "Quick Stock-Out Gallery"}</h3>
+                      <span className="tiny">{lang === "km" ? "ចុច Item ដើម្បីកត់ត្រាលឿន" : "Tap item to stock out quickly"}</span>
+                    </div>
+                    <div className="inventory-daily-gallery-grid">
+                      {inventoryDailyOutGalleryItems.length ? (
+                        inventoryDailyOutGalleryItems.map((item) => {
+                          const currentStock = inventoryStockMap.get(item.id) || 0;
+                          return (
+                            <button
+                              key={`daily-out-gallery-${item.id}`}
+                              type="button"
+                              className="inventory-daily-gallery-card"
+                              onClick={() => openInventoryQuickOut(item)}
+                            >
+                              <span className="inventory-daily-gallery-icon" aria-hidden="true">
+                                {inventorySupplyIcon(item.itemName)}
+                              </span>
+                              <span className="inventory-daily-gallery-name">{item.itemName}</span>
+                              <span className="inventory-daily-gallery-meta">
+                                {item.itemCode} | {inventoryCampusLabel(item.campus)} | Stock: {currentStock}
+                              </span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="tiny">No cleaning supply items found.</div>
+                      )}
+                    </div>
+                  </article>
+                ) : null}
 
                 <div className="inventory-daily-grid">
                   <label className="field field-wide">
@@ -14546,7 +14926,7 @@ export default function App() {
                             <tr key={`purchase-row-${row.id}`}>
                               <td><strong>{row.itemCode}</strong></td>
                               <td>{row.itemName}</td>
-                              <td>{campusLabel(row.campus)}</td>
+                              <td>{inventoryCampusLabel(row.campus)}</td>
                               <td>{row.usedQty}</td>
                               <td>{row.currentStock}</td>
                               <td>{row.minStock}</td>
@@ -14627,6 +15007,54 @@ export default function App() {
                     <div className="stat-value">{inventoryLowStockRows.length}</div>
                   </button>
                 </div>
+                <article className="panel inventory-supply-compare-panel" style={{ marginBottom: 12 }}>
+                  <div className="panel-row inventory-supply-compare-head">
+                    <h3 className="section-title">Monthly Cleaning Supplies Stock Out by Campus</h3>
+                    <label className="field inventory-supply-month-field">
+                      <span>Month</span>
+                      <select
+                        className="input"
+                        value={inventorySupplyMonth}
+                        onChange={(e) => setInventorySupplyMonth(e.target.value)}
+                      >
+                        {cleaningSupplyMonthlyOptions.map((month) => {
+                          const label = new Date(`${month}-01T00:00:00`).toLocaleString(undefined, {
+                            month: "long",
+                            year: "numeric",
+                          });
+                          return (
+                            <option key={`supply-month-${month}`} value={month}>
+                              {label}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                  </div>
+                  {cleaningSupplyMonthlyCampusRows.rows.length ? (
+                    <div className="inventory-supply-bars">
+                      {cleaningSupplyMonthlyCampusRows.rows.map((row) => {
+                        const percent = Math.max(
+                          8,
+                          Math.round((row.qty / cleaningSupplyMonthlyCampusRows.max) * 100)
+                        );
+                        return (
+                          <div key={`supply-campus-${row.campus}`} className="inventory-supply-bar-row">
+                            <div className="inventory-supply-bar-meta">
+                              <strong>{inventoryCampusLabel(row.campus)}</strong>
+                              <span>{row.qty}</span>
+                            </div>
+                            <div className="inventory-supply-bar-track">
+                              <div className="inventory-supply-bar-fill" style={{ width: `${percent}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="tiny">No cleaning-supply stock-out data for this month.</p>
+                  )}
+                </article>
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -14653,7 +15081,7 @@ export default function App() {
                             <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
                             <td>{row.itemName}</td>
                             <td>{row.category}</td>
-                            <td>{campusLabel(row.campus)}</td>
+                            <td>{inventoryCampusLabel(row.campus)}</td>
                             <td>{row.location}</td>
                             <td>{row.unit}</td>
                             <td>{row.stockIn}</td>
@@ -14964,14 +15392,16 @@ export default function App() {
             <h3 className="section-title">Interactive Maintenance Calendar</h3>
             <p className="tiny">{lang === "km" ? "ចុចថ្ងៃណាមួយ ដើម្បីបង្កើតកាលវិភាគបានភ្លាមៗ។" : "Click any day to create schedule directly."}</p>
             <div className="panel">
-              <div className="panel-row">
+              <div className="panel-row calendar-nav-line">
                 <button
                   className="tab"
+                  aria-label="Previous month"
+                  title="Previous month"
                   onClick={() =>
                     setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
                   }
                 >
-                  Prev
+                  {calendarPrevLabel}
                 </button>
                 <strong>
                   {calendarMonth.toLocaleString(undefined, {
@@ -14981,11 +15411,13 @@ export default function App() {
                 </strong>
                 <button
                   className="tab"
+                  aria-label="Next month"
+                  title="Next month"
                   onClick={() =>
                     setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
                   }
                 >
-                  Next
+                  {calendarNextLabel}
                 </button>
               </div>
               <div className="calendar-grid">
@@ -15568,19 +16000,23 @@ export default function App() {
             <div className="panel" style={{ marginTop: 12 }}>
               <div className="panel-row">
                 <h3 className="section-title">Maintenance Calendar</h3>
-                <div className="row-actions">
+                <div className="row-actions calendar-nav-row">
                   <button
                     className="tab"
+                    aria-label="Previous month"
+                    title="Previous month"
                     onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                   >
-                    Prev
+                    {calendarPrevLabel}
                   </button>
                   <strong>{calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}</strong>
                   <button
                     className="tab"
+                    aria-label="Next month"
+                    title="Next month"
                     onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
                   >
-                    Next
+                    {calendarNextLabel}
                   </button>
                 </div>
               </div>
@@ -18134,6 +18570,7 @@ export default function App() {
                   <tr>
                     <th>{t.category}</th>
                     <th>{t.typeCode}</th>
+                    <th>Icon</th>
                     <th>{t.itemName}</th>
                   </tr>
                 </thead>
@@ -18142,6 +18579,11 @@ export default function App() {
                     <tr key={row.key}>
                       <td>{row.category}</td>
                       <td><strong>{row.code}</strong></td>
+                      <td>
+                        <span className="item-setup-icon" aria-hidden="true">
+                          {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
+                        </span>
+                      </td>
                       <td>
                         <input
                           className="input"
@@ -18331,28 +18773,99 @@ export default function App() {
         </section>
 
         {isPhoneView ? (
-          <nav className="mobile-bottom-nav" aria-label={`${t.menu} quick nav`}>
-            {phonePrimaryTabs.map((item) => (
-              <button
-                key={`mobile-bottom-${item.id}`}
-                type="button"
-                className={`mobile-bottom-btn ${tab === item.id ? "mobile-bottom-btn-active" : ""}`}
-                onClick={() => handleNavChange(item.id)}
-              >
-                <span className="mobile-bottom-label">{item.label}</span>
-              </button>
-            ))}
-            <button
-              type="button"
-              className={`mobile-bottom-btn ${mobileMenuOpen ? "mobile-bottom-btn-active" : ""}`}
-              onClick={() => {
-                setMobileNotificationOpen(false);
-                setMobileMenuOpen((open) => !open);
-              }}
-            >
-              <span className="mobile-bottom-label">{t.menu}</span>
-            </button>
-          </nav>
+          null
+        ) : null}
+
+        {inventoryQuickOutModal ? (
+          <div className="modal-backdrop" onClick={() => setInventoryQuickOutModal(null)}>
+            <section className="panel modal-panel inventory-quickout-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{lang === "km" ? "កត់ត្រាចេញស្តុកលឿន" : "Quick Stock Out"}</h2>
+                <button className="tab" onClick={() => setInventoryQuickOutModal(null)}>{t.close}</button>
+              </div>
+              {inventoryQuickOutSelectedItem ? (
+                <>
+                  <div className="inventory-daily-stock-note">
+                    <strong>{inventoryQuickOutSelectedItem.itemCode}</strong> - {inventoryQuickOutSelectedItem.itemName}
+                    {" | "}
+                    {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}:{" "}
+                    <strong>{inventoryStockMap.get(inventoryQuickOutSelectedItem.id) || 0}</strong>
+                    {" | "}
+                    {lang === "km" ? "ទីតាំង" : "Location"}: <strong>{inventoryQuickOutSelectedItem.location}</strong>
+                  </div>
+                  <div className="form-grid" style={{ marginTop: 10 }}>
+                    <label className="field">
+                      <span>{t.date}</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={inventoryQuickOutModal.date}
+                        onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, date: e.target.value } : prev))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "អ្នកកត់ត្រា" : "Recorded By"}</span>
+                      <input
+                        className="input"
+                        value={inventoryQuickOutModal.by}
+                        onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, by: e.target.value } : prev))}
+                        placeholder={lang === "km" ? "ឈ្មោះបុគ្គលិក" : "Staff name"}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "បរិមាណចេញ" : "Stock Out Qty"}</span>
+                      <input
+                        className="input inventory-daily-qty-input"
+                        type="number"
+                        min="0"
+                        value={inventoryQuickOutModal.qty}
+                        onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, qty: e.target.value } : prev))}
+                      />
+                      <div className="inventory-daily-qty-quick">
+                        {[-5, -1, 1, 5].map((step) => (
+                          <button
+                            key={`quick-out-step-${step}`}
+                            type="button"
+                            className="tab btn-small"
+                            onClick={() =>
+                              setInventoryQuickOutModal((prev) => {
+                                if (!prev) return prev;
+                                const nextQty = Math.max(0, Number(prev.qty || 0) + step);
+                                return { ...prev, qty: String(nextQty) };
+                              })
+                            }
+                          >
+                            {step > 0 ? `+${step}` : String(step)}
+                          </button>
+                        ))}
+                      </div>
+                    </label>
+                    <label className="field field-wide">
+                      <span>{t.notes}</span>
+                      <input
+                        className="input"
+                        value={inventoryQuickOutModal.note}
+                        onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
+                        placeholder={lang === "km" ? "ហេតុផលចេញស្តុក (ថ្ងៃឈប់ត្រូវបំពេញ)" : "Reason for stock out (required on weekend/holiday)"}
+                      />
+                    </label>
+                  </div>
+                  <div className="asset-actions">
+                    <div className="tiny">{lang === "km" ? "កត់ត្រាជាប្រភេទ OUT ដោយស្វ័យប្រវត្តិ។" : "This will record as Stock OUT."}</div>
+                    <button
+                      className="btn-primary"
+                      onClick={saveInventoryQuickOut}
+                      disabled={!inventoryQuickOutModal.itemId || !inventoryQuickOutModal.qty || !inventoryQuickOutModal.date}
+                    >
+                      {lang === "km" ? "រក្សាទុក OUT" : "Save Stock Out"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="tiny">Item not found.</p>
+              )}
+            </section>
+          </div>
         ) : null}
 
         {scheduleScopeModal ? (

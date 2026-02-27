@@ -677,6 +677,52 @@ function normalizeMaintenanceReminderOffsets(input) {
   return cleaned.length ? cleaned : [7, 6, 5, 4, 3, 2, 1, 0];
 }
 
+function normalizeInventoryItems(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now(),
+      campus: toText(row.campus),
+      category: toText(row.category),
+      itemCode: toText(row.itemCode),
+      itemName: toText(row.itemName),
+      unit: toText(row.unit),
+      openingQty: Number(row.openingQty || 0),
+      minStock: Number(row.minStock || 0),
+      location: toText(row.location),
+      vendor: toText(row.vendor),
+      notes: toText(row.notes),
+      photo: toText(row.photo),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizeInventoryTxns(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now(),
+      itemId: Number(row.itemId) || 0,
+      campus: toText(row.campus),
+      itemCode: toText(row.itemCode),
+      itemName: toText(row.itemName),
+      date: toText(row.date),
+      type: toText(row.type),
+      qty: Number(row.qty || 0),
+      by: toText(row.by),
+      note: toText(row.note),
+      fromCampus: toText(row.fromCampus),
+      toCampus: toText(row.toCampus),
+      expectedReturnDate: toText(row.expectedReturnDate),
+      requestedBy: toText(row.requestedBy),
+      approvedBy: toText(row.approvedBy),
+      receivedBy: toText(row.receivedBy),
+      borrowStatus: toText(row.borrowStatus),
+    }));
+}
+
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
   const settings =
@@ -690,6 +736,8 @@ function normalizeImportedDb(input) {
   const staffUsers = normalizeStaffUsers(settings.staffUsers);
   const calendarEvents = normalizeCalendarEvents(settings.calendarEvents);
   const maintenanceReminderOffsets = normalizeMaintenanceReminderOffsets(settings.maintenanceReminderOffsets);
+  const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
+  const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
   const normalizedAssets = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
@@ -714,6 +762,8 @@ function normalizeImportedDb(input) {
       staffUsers,
       calendarEvents,
       maintenanceReminderOffsets,
+      inventoryItems,
+      inventoryTxns,
     },
   };
 }
@@ -1879,12 +1929,14 @@ const server = http.createServer(async (req, res) => {
       const settings =
         db.settings && typeof db.settings === "object"
           ? db.settings
-          : { campusNames: {}, staffUsers: [], calendarEvents: [] };
+          : { campusNames: {}, staffUsers: [], calendarEvents: [], inventoryItems: [], inventoryTxns: [] };
       sendJson(res, 200, {
         settings: {
           ...settings,
           staffUsers: normalizeStaffUsers(settings.staffUsers),
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
+          inventoryItems: normalizeInventoryItems(settings.inventoryItems),
+          inventoryTxns: normalizeInventoryTxns(settings.inventoryTxns),
         },
       });
       return;
@@ -1918,12 +1970,22 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "maintenanceReminderOffsets")
           ? normalizeMaintenanceReminderOffsets(incoming.maintenanceReminderOffsets)
           : normalizeMaintenanceReminderOffsets(current.maintenanceReminderOffsets);
+      const nextInventoryItems =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryItems")
+          ? normalizeInventoryItems(incoming.inventoryItems)
+          : normalizeInventoryItems(current.inventoryItems);
+      const nextInventoryTxns =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryTxns")
+          ? normalizeInventoryTxns(incoming.inventoryTxns)
+          : normalizeInventoryTxns(current.inventoryTxns);
       db.settings = {
         ...current,
         campusNames: nextCampusNames,
         staffUsers: nextStaffUsers,
         calendarEvents: nextCalendarEvents,
         maintenanceReminderOffsets: nextMaintenanceReminderOffsets,
+        inventoryItems: nextInventoryItems,
+        inventoryTxns: nextInventoryTxns,
       };
       appendAuditLog(db, admin, "UPDATE", "settings", "campusNames", "Updated campus name settings");
       await writeDb(db);
