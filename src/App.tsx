@@ -1,5 +1,37 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, Eye, EyeOff, Lightbulb } from "lucide-react";
+import {
+  ArrowLeftRight,
+  BarChart3,
+  Bell,
+  Boxes,
+  Building2,
+  Calendar,
+  Camera,
+  CheckCircle2,
+  ClipboardList,
+  Eye,
+  EyeOff,
+  FileText,
+  Flame,
+  Keyboard,
+  Laptop,
+  Lightbulb,
+  Monitor,
+  Mouse,
+  Package,
+  Printer,
+  Puzzle,
+  Settings,
+  Shield,
+  Snowflake,
+  Tablet,
+  Tv,
+  Usb,
+  Volume2,
+  Webcam,
+  Wifi,
+  Wrench,
+} from "lucide-react";
 import QRCode from "qrcode";
 import "./App.css";
 
@@ -231,6 +263,7 @@ type NavModule =
   | "maintenance"
   | "verification"
   | "reports"
+  | "vault"
   | "setup";
 type MenuAccessKey = string;
 type AuthUser = {
@@ -274,6 +307,67 @@ type ServerSettings = {
   maintenanceReminderOffsets?: number[];
   inventoryItems?: InventoryItem[];
   inventoryTxns?: InventoryTxn[];
+  vaultAccounts?: VaultAccount[];
+  vaultCredentials?: VaultCredential[];
+  vaultDesignLinks?: VaultDesignLink[];
+  vaultNetworkDocs?: VaultNetworkDoc[];
+  vaultCctvRecords?: VaultCctvRecord[];
+};
+type VaultAccount = {
+  id: number;
+  systemName: string;
+  accountName: string;
+  owner: string;
+  role: string;
+  status: string;
+  reviewDate: string;
+  note?: string;
+  created: string;
+};
+type VaultCredential = {
+  id: number;
+  systemName: string;
+  loginUrl: string;
+  username: string;
+  password?: string;
+  secretHint: string;
+  twoFa?: string;
+  recovery?: string;
+  lastUpdated?: string;
+  note?: string;
+  created: string;
+};
+type VaultDesignLink = {
+  id: number;
+  title: string;
+  folderUrl: string;
+  owner?: string;
+  note?: string;
+  lastReview?: string;
+  created: string;
+};
+type VaultNetworkDoc = {
+  id: number;
+  title: string;
+  docType: string;
+  fileUrl: string;
+  version?: string;
+  lastReview?: string;
+  owner?: string;
+  note?: string;
+  created: string;
+};
+type VaultCctvRecord = {
+  id: number;
+  site: string;
+  nvrName: string;
+  loginUrl: string;
+  username: string;
+  cameraGroup?: string;
+  retentionDays?: number;
+  lastAngleReview?: string;
+  note?: string;
+  created: string;
 };
 type CalendarEventType =
   | "public"
@@ -310,6 +404,11 @@ const CAMPUS_NAME_FALLBACK_KEY = "it_campus_names_fallback_v1";
 const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
 const ITEM_TYPE_FALLBACK_KEY = "it_item_types_fallback_v1";
 const CALENDAR_EVENT_FALLBACK_KEY = "it_calendar_events_v1";
+const VAULT_ACCOUNTS_FALLBACK_KEY = "it_vault_accounts_v1";
+const VAULT_CREDENTIALS_FALLBACK_KEY = "it_vault_credentials_v1";
+const VAULT_DESIGN_LINKS_FALLBACK_KEY = "it_vault_design_links_v1";
+const VAULT_NETWORK_DOCS_FALLBACK_KEY = "it_vault_network_docs_v1";
+const VAULT_CCTV_FALLBACK_KEY = "it_vault_cctv_v1";
 const AUTH_TOKEN_KEY = "it_auth_token_v1";
 const AUTH_USER_KEY = "it_auth_user_v1";
 const LOGIN_REMEMBER_KEY = "it_login_remember_v1";
@@ -363,6 +462,7 @@ const ALL_NAV_MODULES: NavModule[] = [
   "maintenance",
   "verification",
   "reports",
+  "vault",
   "setup",
 ];
 type NavSection = "core" | "operations" | "admin";
@@ -376,6 +476,7 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   maintenance: "operations",
   verification: "operations",
   reports: "operations",
+  vault: "admin",
   setup: "admin",
 };
 const MENU_ACCESS_TREE: Array<{
@@ -459,6 +560,19 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.maintenance_completion", labelEn: "Maintenance Completion", labelKm: "លទ្ធផលបញ្ចប់ការថែទាំ" },
       { key: "reports.verification_summary", labelEn: "Verification Summary", labelKm: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
       { key: "reports.qr_labels", labelEn: "Asset ID + QR Labels", labelKm: "លេខទ្រព្យ + QR" },
+    ],
+  },
+  {
+    module: "vault",
+    labelEn: "IT Operations Vault",
+    labelKm: "ឃ្លាំងទិន្នន័យ IT",
+    children: [
+      { key: "vault.dashboard", labelEn: "Vault Dashboard", labelKm: "ផ្ទាំងសង្ខេបឃ្លាំងទិន្នន័យ" },
+      { key: "vault.accounts", labelEn: "System Accounts", labelKm: "គណនីប្រព័ន្ធ" },
+      { key: "vault.credentials", labelEn: "Website Logins", labelKm: "ចូលប្រព័ន្ធវេបសាយ" },
+      { key: "vault.design", labelEn: "Design Folders", labelKm: "ថតឯកសារ Design" },
+      { key: "vault.network", labelEn: "Network Docs", labelKm: "ឯកសារបណ្តាញ" },
+      { key: "vault.cctv", labelEn: "CCTV Control", labelKm: "ការគ្រប់គ្រង CCTV" },
     ],
   },
   {
@@ -630,6 +744,7 @@ const CATEGORY_OPTIONS = [
 const ASSET_STATUS_OPTIONS = [
   { value: "Active", en: "Active", km: "កំពុងប្រើ" },
   { value: "Maintenance", en: "Maintenance", km: "កំពុងជួសជុល" },
+  { value: "Inactive", en: "Inactive", km: "មិនប្រើ" },
   { value: "Retired", en: "Defective", km: "ខូច" },
 ];
 const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: string }> = [
@@ -1737,6 +1852,11 @@ function clearAllFallbackCaches() {
     AUDIT_FALLBACK_KEY,
     INVENTORY_ITEM_FALLBACK_KEY,
     INVENTORY_TXN_FALLBACK_KEY,
+    VAULT_ACCOUNTS_FALLBACK_KEY,
+    VAULT_CREDENTIALS_FALLBACK_KEY,
+    VAULT_DESIGN_LINKS_FALLBACK_KEY,
+    VAULT_NETWORK_DOCS_FALLBACK_KEY,
+    VAULT_CCTV_FALLBACK_KEY,
   ];
   for (const key of keys) {
     try {
@@ -1773,6 +1893,157 @@ function readInventoryTxnFallback(): InventoryTxn[] {
   } catch {
     return [];
   }
+}
+
+function normalizeVaultAccounts(input: unknown): VaultAccount[] {
+  return normalizeArray<VaultAccount>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      systemName: String(row.systemName || "").trim(),
+      accountName: String(row.accountName || "").trim(),
+      owner: String(row.owner || "").trim(),
+      role: String(row.role || "").trim(),
+      status: String(row.status || "Active").trim() || "Active",
+      reviewDate: String(row.reviewDate || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultCredentials(input: unknown): VaultCredential[] {
+  return normalizeArray<VaultCredential>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      systemName: String(row.systemName || "").trim(),
+      loginUrl: String(row.loginUrl || "").trim(),
+      username: String(row.username || "").trim(),
+      password: String((row as { password?: unknown }).password || row.secretHint || "").trim(),
+      secretHint: String(row.secretHint || "").trim(),
+      twoFa: String(row.twoFa || "").trim(),
+      recovery: String(row.recovery || "").trim(),
+      lastUpdated: String(row.lastUpdated || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultDesignLinks(input: unknown): VaultDesignLink[] {
+  return normalizeArray<VaultDesignLink>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      title: String(row.title || "").trim(),
+      folderUrl: String((row as { folderUrl?: unknown }).folderUrl || "").trim(),
+      owner: String(row.owner || "").trim(),
+      note: String(row.note || "").trim(),
+      lastReview: String(row.lastReview || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultNetworkDocs(input: unknown): VaultNetworkDoc[] {
+  return normalizeArray<VaultNetworkDoc>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      title: String(row.title || "").trim(),
+      docType: String(row.docType || "").trim(),
+      fileUrl: String(row.fileUrl || "").trim(),
+      version: String(row.version || "").trim(),
+      lastReview: String(row.lastReview || "").trim(),
+      owner: String(row.owner || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultCctvRecords(input: unknown): VaultCctvRecord[] {
+  return normalizeArray<VaultCctvRecord>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      site: String(row.site || "").trim(),
+      nvrName: String(row.nvrName || "").trim(),
+      loginUrl: String(row.loginUrl || "").trim(),
+      username: String(row.username || "").trim(),
+      cameraGroup: String(row.cameraGroup || "").trim(),
+      retentionDays: Number(row.retentionDays || 0),
+      lastAngleReview: String(row.lastAngleReview || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function readVaultAccountsFallback(): VaultAccount[] {
+  try {
+    const raw = localStorage.getItem(VAULT_ACCOUNTS_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeVaultAccounts(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeVaultAccountsFallback(rows: VaultAccount[]) {
+  trySetLocalStorage(VAULT_ACCOUNTS_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readVaultCredentialsFallback(): VaultCredential[] {
+  try {
+    const raw = localStorage.getItem(VAULT_CREDENTIALS_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeVaultCredentials(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeVaultCredentialsFallback(rows: VaultCredential[]) {
+  trySetLocalStorage(VAULT_CREDENTIALS_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readVaultDesignLinksFallback(): VaultDesignLink[] {
+  try {
+    const raw = localStorage.getItem(VAULT_DESIGN_LINKS_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeVaultDesignLinks(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeVaultDesignLinksFallback(rows: VaultDesignLink[]) {
+  trySetLocalStorage(VAULT_DESIGN_LINKS_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readVaultNetworkDocsFallback(): VaultNetworkDoc[] {
+  try {
+    const raw = localStorage.getItem(VAULT_NETWORK_DOCS_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeVaultNetworkDocs(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeVaultNetworkDocsFallback(rows: VaultNetworkDoc[]) {
+  trySetLocalStorage(VAULT_NETWORK_DOCS_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readVaultCctvFallback(): VaultCctvRecord[] {
+  try {
+    const raw = localStorage.getItem(VAULT_CCTV_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeVaultCctvRecords(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeVaultCctvFallback(rows: VaultCctvRecord[]) {
+  trySetLocalStorage(VAULT_CCTV_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function sortLocationEntriesByName(rows: LocationEntry[]) {
@@ -2700,6 +2971,7 @@ export default function App() {
       { id: "maintenance", label: t.maintenance },
       { id: "verification", label: t.verification },
       { id: "reports", label: t.reports },
+      ...(isAdmin ? [{ id: "vault" as NavModule, label: "IT Vault" }] : []),
       ...(isAdmin ? [{ id: "setup" as NavModule, label: t.setup }] : []),
     ],
     [isAdmin, t]
@@ -2707,27 +2979,29 @@ export default function App() {
   const navIcon = useCallback((id: NavModule) => {
     switch (id) {
       case "dashboard":
-        return "📊";
+        return <BarChart3 size={16} aria-hidden={true} />;
       case "assets":
-        return "🗂";
+        return <Boxes size={16} aria-hidden={true} />;
       case "inventory":
-        return "📦";
+        return <Package size={16} aria-hidden={true} />;
       case "tickets":
-        return "🧾";
+        return <ClipboardList size={16} aria-hidden={true} />;
       case "schedule":
-        return "🗓";
+        return <Calendar size={16} aria-hidden={true} />;
       case "transfer":
-        return "🔁";
+        return <ArrowLeftRight size={16} aria-hidden={true} />;
       case "maintenance":
-        return "🛠";
+        return <Wrench size={16} aria-hidden={true} />;
       case "verification":
-        return "✅";
+        return <CheckCircle2 size={16} aria-hidden={true} />;
       case "reports":
-        return "📄";
+        return <FileText size={16} aria-hidden={true} />;
+      case "vault":
+        return <Shield size={16} aria-hidden={true} />;
       case "setup":
-        return "⚙";
+        return <Settings size={16} aria-hidden={true} />;
       default:
-        return "•";
+        return <Package size={16} aria-hidden={true} />;
     }
   }, []);
   const allowedNavModules = useMemo(() => {
@@ -3066,6 +3340,11 @@ export default function App() {
   const createPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [modelTemplateNote, setModelTemplateNote] = useState("");
   const [assetDetailId, setAssetDetailId] = useState<number | null>(null);
+  const [assetDetailSections, setAssetDetailSections] = useState({
+    showDetails: true,
+    showAllMaintenance: false,
+    showAllTransfer: false,
+  });
   const [pendingQrAssetId] = useState(() => {
     if (typeof window === "undefined") return "";
     return (
@@ -3211,6 +3490,59 @@ export default function App() {
     return out;
   });
   const [setupMessage, setSetupMessage] = useState("");
+  const [vaultTab, setVaultTab] = useState<"dashboard" | "accounts" | "credentials" | "design" | "network" | "cctv">("dashboard");
+  const [vaultAccounts, setVaultAccounts] = useState<VaultAccount[]>(() => readVaultAccountsFallback());
+  const [vaultCredentials, setVaultCredentials] = useState<VaultCredential[]>(() => readVaultCredentialsFallback());
+  const [vaultDesignLinks, setVaultDesignLinks] = useState<VaultDesignLink[]>(() => readVaultDesignLinksFallback());
+  const [vaultNetworkDocs, setVaultNetworkDocs] = useState<VaultNetworkDoc[]>(() => readVaultNetworkDocsFallback());
+  const [vaultCctvRecords, setVaultCctvRecords] = useState<VaultCctvRecord[]>(() => readVaultCctvFallback());
+  const [vaultVisiblePasswordId, setVaultVisiblePasswordId] = useState<number | null>(null);
+  const [vaultAccountForm, setVaultAccountForm] = useState({
+    systemName: "",
+    accountName: "",
+    owner: "",
+    role: "",
+    status: "Active",
+    reviewDate: "",
+    note: "",
+  });
+  const [vaultCredentialForm, setVaultCredentialForm] = useState({
+    systemName: "",
+    loginUrl: "",
+    username: "",
+    password: "",
+    secretHint: "",
+    twoFa: "",
+    recovery: "",
+    lastUpdated: "",
+    note: "",
+  });
+  const [vaultDesignForm, setVaultDesignForm] = useState({
+    title: "",
+    folderUrl: "",
+    owner: "",
+    lastReview: "",
+    note: "",
+  });
+  const [vaultNetworkDocForm, setVaultNetworkDocForm] = useState({
+    title: "",
+    docType: "Network Diagram",
+    fileUrl: "",
+    version: "",
+    lastReview: "",
+    owner: "",
+    note: "",
+  });
+  const [vaultCctvForm, setVaultCctvForm] = useState({
+    site: "",
+    nvrName: "",
+    loginUrl: "",
+    username: "",
+    cameraGroup: "",
+    retentionDays: "30",
+    lastAngleReview: "",
+    note: "",
+  });
   const defaultCalendarEvents = useMemo(() => buildDefaultCalendarEvents(), []);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
     readCalendarEventFallback(buildDefaultCalendarEvents())
@@ -3583,6 +3915,21 @@ export default function App() {
   useEffect(() => {
     writeInventoryTxnFallback(inventoryTxns);
   }, [inventoryTxns]);
+  useEffect(() => {
+    writeVaultAccountsFallback(vaultAccounts);
+  }, [vaultAccounts]);
+  useEffect(() => {
+    writeVaultCredentialsFallback(vaultCredentials);
+  }, [vaultCredentials]);
+  useEffect(() => {
+    writeVaultDesignLinksFallback(vaultDesignLinks);
+  }, [vaultDesignLinks]);
+  useEffect(() => {
+    writeVaultNetworkDocsFallback(vaultNetworkDocs);
+  }, [vaultNetworkDocs]);
+  useEffect(() => {
+    writeVaultCctvFallback(vaultCctvRecords);
+  }, [vaultCctvRecords]);
 
   const allTypeOptions = useMemo(() => {
     const out: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>> = {};
@@ -4709,6 +5056,15 @@ export default function App() {
     if (tab === "setup" && setupView === "locations" && !canAccessMenu("setup.locations", "setup")) setSetupView("calendar");
     if (tab === "setup" && setupView === "calendar" && !canAccessMenu("setup.calendar", "setup")) setSetupView("campus");
   }, [tab, setupView, canAccessMenu]);
+  useEffect(() => {
+    if (tab !== "vault") return;
+    if (vaultTab === "dashboard" && !canAccessMenu("vault.dashboard", "vault")) setVaultTab("credentials");
+    if (vaultTab === "accounts" && !canAccessMenu("vault.accounts", "vault")) setVaultTab("credentials");
+    if (vaultTab === "credentials" && !canAccessMenu("vault.credentials", "vault")) setVaultTab("design");
+    if (vaultTab === "design" && !canAccessMenu("vault.design", "vault")) setVaultTab("network");
+    if (vaultTab === "network" && !canAccessMenu("vault.network", "vault")) setVaultTab("cctv");
+    if (vaultTab === "cctv" && !canAccessMenu("vault.cctv", "vault")) setVaultTab("dashboard");
+  }, [tab, vaultTab, canAccessMenu]);
 
   const effectiveAssetCampusFilter =
     assetCampusFilter !== "ALL" ? assetCampusFilter : campusFilter;
@@ -4824,12 +5180,48 @@ export default function App() {
         const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
         setInventoryItems(nextInventoryItems);
         setInventoryTxns(nextInventoryTxns);
+        const nextVaultAccounts = normalizeVaultAccounts(settingsRes.settings?.vaultAccounts);
+        const nextVaultCredentials = normalizeVaultCredentials(settingsRes.settings?.vaultCredentials);
+        const nextVaultDesignLinks = normalizeVaultDesignLinks(settingsRes.settings?.vaultDesignLinks);
+        const nextVaultNetworkDocs = normalizeVaultNetworkDocs(settingsRes.settings?.vaultNetworkDocs);
+        const nextVaultCctvRecords = normalizeVaultCctvRecords(settingsRes.settings?.vaultCctvRecords);
+        const settingsObj = settingsRes.settings || {};
+        setVaultAccounts(
+          Object.prototype.hasOwnProperty.call(settingsObj, "vaultAccounts")
+            ? nextVaultAccounts
+            : readVaultAccountsFallback()
+        );
+        setVaultCredentials(
+          Object.prototype.hasOwnProperty.call(settingsObj, "vaultCredentials")
+            ? nextVaultCredentials
+            : readVaultCredentialsFallback()
+        );
+        setVaultDesignLinks(
+          Object.prototype.hasOwnProperty.call(settingsObj, "vaultDesignLinks")
+            ? nextVaultDesignLinks
+            : readVaultDesignLinksFallback()
+        );
+        setVaultNetworkDocs(
+          Object.prototype.hasOwnProperty.call(settingsObj, "vaultNetworkDocs")
+            ? nextVaultNetworkDocs
+            : readVaultNetworkDocsFallback()
+        );
+        setVaultCctvRecords(
+          Object.prototype.hasOwnProperty.call(settingsObj, "vaultCctvRecords")
+            ? nextVaultCctvRecords
+            : readVaultCctvFallback()
+        );
       } catch {
         // Keep local settings if /api/settings is unavailable.
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
         setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
         setInventoryItems(readInventoryItemFallback());
         setInventoryTxns(readInventoryTxnFallback());
+        setVaultAccounts(readVaultAccountsFallback());
+        setVaultCredentials(readVaultCredentialsFallback());
+        setVaultDesignLinks(readVaultDesignLinksFallback());
+        setVaultNetworkDocs(readVaultNetworkDocsFallback());
+        setVaultCctvRecords(readVaultCctvFallback());
       }
 
       const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
@@ -5312,6 +5704,231 @@ export default function App() {
     }
   }
 
+  async function saveVaultSettingsToServer(payload: Partial<ServerSettings>) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: payload }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function addVaultAccount() {
+    if (!requireAdminAction()) return;
+    if (!vaultAccountForm.systemName.trim() || !vaultAccountForm.accountName.trim()) {
+      setError("System name and account name are required.");
+      return;
+    }
+    const row: VaultAccount = {
+      id: Date.now(),
+      systemName: vaultAccountForm.systemName.trim(),
+      accountName: vaultAccountForm.accountName.trim(),
+      owner: vaultAccountForm.owner.trim(),
+      role: vaultAccountForm.role.trim(),
+      status: vaultAccountForm.status.trim() || "Active",
+      reviewDate: vaultAccountForm.reviewDate,
+      note: vaultAccountForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextRows = [row, ...vaultAccounts];
+    setVaultAccounts(nextRows);
+    try {
+      await saveVaultSettingsToServer({ vaultAccounts: nextRows });
+      setVaultAccountForm({
+        systemName: "",
+        accountName: "",
+        owner: "",
+        role: "",
+        status: "Active",
+        reviewDate: "",
+        note: "",
+      });
+      setSetupMessage("Vault account record added.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save vault account record");
+    }
+  }
+
+  async function addVaultCredential() {
+    if (!requireAdminAction()) return;
+    if (!vaultCredentialForm.systemName.trim() || !vaultCredentialForm.username.trim() || !vaultCredentialForm.password.trim()) {
+      setError("System name, username, and password are required.");
+      return;
+    }
+    const row: VaultCredential = {
+      id: Date.now(),
+      systemName: vaultCredentialForm.systemName.trim(),
+      loginUrl: vaultCredentialForm.loginUrl.trim(),
+      username: vaultCredentialForm.username.trim(),
+      password: vaultCredentialForm.password.trim(),
+      secretHint: vaultCredentialForm.secretHint.trim(),
+      twoFa: vaultCredentialForm.twoFa.trim(),
+      recovery: vaultCredentialForm.recovery.trim(),
+      lastUpdated: vaultCredentialForm.lastUpdated,
+      note: vaultCredentialForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextRows = [row, ...vaultCredentials];
+    setVaultCredentials(nextRows);
+    try {
+      await saveVaultSettingsToServer({ vaultCredentials: nextRows });
+      setVaultCredentialForm({
+        systemName: "",
+        loginUrl: "",
+        username: "",
+        password: "",
+        secretHint: "",
+        twoFa: "",
+        recovery: "",
+        lastUpdated: "",
+        note: "",
+      });
+      setSetupMessage("Vault credential record added.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save vault credential record");
+    }
+  }
+
+  async function addVaultDesignLink() {
+    if (!requireAdminAction()) return;
+    if (!vaultDesignForm.title.trim() || !vaultDesignForm.folderUrl.trim()) {
+      setError("Design title and folder link are required.");
+      return;
+    }
+    const row: VaultDesignLink = {
+      id: Date.now(),
+      title: vaultDesignForm.title.trim(),
+      folderUrl: vaultDesignForm.folderUrl.trim(),
+      owner: vaultDesignForm.owner.trim(),
+      note: vaultDesignForm.note.trim(),
+      lastReview: vaultDesignForm.lastReview,
+      created: new Date().toISOString(),
+    };
+    const nextRows = [row, ...vaultDesignLinks];
+    setVaultDesignLinks(nextRows);
+    try {
+      await saveVaultSettingsToServer({ vaultDesignLinks: nextRows });
+      setVaultDesignForm({
+        title: "",
+        folderUrl: "",
+        owner: "",
+        lastReview: "",
+        note: "",
+      });
+      setSetupMessage("Vault design folder record added.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save vault design link");
+    }
+  }
+
+  async function addVaultNetworkDoc() {
+    if (!requireAdminAction()) return;
+    if (!vaultNetworkDocForm.title.trim()) {
+      setError("Document title is required.");
+      return;
+    }
+    const row: VaultNetworkDoc = {
+      id: Date.now(),
+      title: vaultNetworkDocForm.title.trim(),
+      docType: vaultNetworkDocForm.docType.trim(),
+      fileUrl: vaultNetworkDocForm.fileUrl.trim(),
+      version: vaultNetworkDocForm.version.trim(),
+      lastReview: vaultNetworkDocForm.lastReview,
+      owner: vaultNetworkDocForm.owner.trim(),
+      note: vaultNetworkDocForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextRows = [row, ...vaultNetworkDocs];
+    setVaultNetworkDocs(nextRows);
+    try {
+      await saveVaultSettingsToServer({ vaultNetworkDocs: nextRows });
+      setVaultNetworkDocForm({
+        title: "",
+        docType: "Network Diagram",
+        fileUrl: "",
+        version: "",
+        lastReview: "",
+        owner: "",
+        note: "",
+      });
+      setSetupMessage("Vault network doc record added.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save vault network doc");
+    }
+  }
+
+  async function addVaultCctvRecord() {
+    if (!requireAdminAction()) return;
+    if (!vaultCctvForm.site.trim() || !vaultCctvForm.nvrName.trim()) {
+      setError("Site and NVR name are required.");
+      return;
+    }
+    const row: VaultCctvRecord = {
+      id: Date.now(),
+      site: vaultCctvForm.site.trim(),
+      nvrName: vaultCctvForm.nvrName.trim(),
+      loginUrl: vaultCctvForm.loginUrl.trim(),
+      username: vaultCctvForm.username.trim(),
+      cameraGroup: vaultCctvForm.cameraGroup.trim(),
+      retentionDays: Number(vaultCctvForm.retentionDays || 0),
+      lastAngleReview: vaultCctvForm.lastAngleReview,
+      note: vaultCctvForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextRows = [row, ...vaultCctvRecords];
+    setVaultCctvRecords(nextRows);
+    try {
+      await saveVaultSettingsToServer({ vaultCctvRecords: nextRows });
+      setVaultCctvForm({
+        site: "",
+        nvrName: "",
+        loginUrl: "",
+        username: "",
+        cameraGroup: "",
+        retentionDays: "30",
+        lastAngleReview: "",
+        note: "",
+      });
+      setSetupMessage("Vault CCTV record added.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save vault CCTV record");
+    }
+  }
+
+  async function removeVaultRow(kind: "accounts" | "credentials" | "design" | "network" | "cctv", id: number) {
+    if (!requireAdminAction()) return;
+    if (!window.confirm("Delete this record?")) return;
+    try {
+      if (kind === "accounts") {
+        const nextRows = vaultAccounts.filter((row) => row.id !== id);
+        setVaultAccounts(nextRows);
+        await saveVaultSettingsToServer({ vaultAccounts: nextRows });
+      } else if (kind === "credentials") {
+        const nextRows = vaultCredentials.filter((row) => row.id !== id);
+        setVaultCredentials(nextRows);
+        await saveVaultSettingsToServer({ vaultCredentials: nextRows });
+      } else if (kind === "design") {
+        const nextRows = vaultDesignLinks.filter((row) => row.id !== id);
+        setVaultDesignLinks(nextRows);
+        await saveVaultSettingsToServer({ vaultDesignLinks: nextRows });
+      } else if (kind === "network") {
+        const nextRows = vaultNetworkDocs.filter((row) => row.id !== id);
+        setVaultNetworkDocs(nextRows);
+        await saveVaultSettingsToServer({ vaultNetworkDocs: nextRows });
+      } else {
+        const nextRows = vaultCctvRecords.filter((row) => row.id !== id);
+        setVaultCctvRecords(nextRows);
+        await saveVaultSettingsToServer({ vaultCctvRecords: nextRows });
+      }
+      setSetupMessage("Vault record deleted.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete vault record");
+    }
+  }
+
   async function toggleMaintenanceReminderOffset(dayOffset: number) {
     if (!requireAdminAction()) return;
     const current = [...maintenanceReminderOffsets];
@@ -5595,7 +6212,7 @@ export default function App() {
     };
     const next = [entry, ...readAuditFallback()].slice(0, 500);
     writeAuditFallback(next);
-    if (isAdmin && tab === "setup") {
+    if (isAdmin && (tab === "setup" || tab === "vault")) {
       setAuditLogs((prev) => [entry, ...prev].slice(0, 300));
     }
   }
@@ -7183,6 +7800,30 @@ export default function App() {
       return;
     }
 
+    const fromStatusForEdit = editingAsset?.status || "Active";
+    const statusChangedInEdit = fromStatusForEdit !== assetEditForm.status;
+    let statusChangeReason = "";
+    let statusChangeBy = "";
+    if (statusChangedInEdit) {
+      const suggestedReason = "Updated from asset edit";
+      const reasonInput = window.prompt(
+        `Provide reason for status change (${assetStatusLabel(fromStatusForEdit)} -> ${assetStatusLabel(assetEditForm.status)}):`,
+        suggestedReason
+      );
+      if (reasonInput === null || !reasonInput.trim()) {
+        alert(t.statusReasonRequired);
+        return;
+      }
+      const suggestedBy = authUser?.displayName || authUser?.username || "";
+      const byInput = window.prompt("Verified By:", suggestedBy);
+      if (byInput === null || !byInput.trim()) {
+        alert(t.statusVerifiedByRequired);
+        return;
+      }
+      statusChangeReason = reasonInput.trim();
+      statusChangeBy = byInput.trim();
+    }
+
     const payload = {
       location: assetEditForm.location.trim(),
       pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
@@ -7206,6 +7847,9 @@ export default function App() {
       photo: assetEditForm.photo || "",
       photos: normalizeAssetPhotos(assetEditForm),
       status: assetEditForm.status,
+      statusChangeReason,
+      statusChangeBy,
+      fromStatus: fromStatusForEdit,
     };
 
     setBusy(true);
@@ -7224,7 +7868,8 @@ export default function App() {
                 date: new Date().toISOString(),
                 fromStatus: a.status || "Active",
                 toStatus: payload.status,
-                reason: "Updated from asset edit",
+                reason: statusChangeReason,
+                by: statusChangeBy,
               },
               ...(a.statusHistory || []),
             ]
@@ -7273,6 +7918,13 @@ export default function App() {
       setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("UPDATE", "asset", String(editingAssetId), `location=${payload.location}`);
+      if (statusChangedInEdit) {
+        const changedAsset = nextLocal.find((a) => a.id === editingAssetId);
+        const changedAssetId = changedAsset?.assetId || String(editingAssetId);
+        alert(
+          `Status updated: ${changedAssetId}\n${assetStatusLabel(fromStatusForEdit)} -> ${assetStatusLabel(payload.status)}\nReason: ${statusChangeReason}\nBy: ${statusChangeBy}`
+        );
+      }
       setEditingAssetId(null);
       await loadData();
     } catch (err) {
@@ -8405,7 +9057,17 @@ export default function App() {
       writeAssetFallback(nextLocal);
       setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
-      appendUiAudit("UPDATE_STATUS", "asset", String(id), status);
+      const fromStatus = nextStatusEntry.fromStatus || "Unknown";
+      appendUiAudit(
+        "UPDATE_STATUS",
+        "asset",
+        String(id),
+        `${assetStatusLabel(fromStatus)} -> ${assetStatusLabel(status)} | ${reason} | ${verifiedBy}`
+      );
+      const assetCode = current?.assetId || String(id);
+      alert(
+        `Status updated: ${assetCode}\n${assetStatusLabel(fromStatus)} -> ${assetStatusLabel(status)}\nReason: ${reason}\nBy: ${verifiedBy}`
+      );
       await loadData();
       return true;
     } catch (err) {
@@ -8605,6 +9267,28 @@ export default function App() {
         : [],
     [detailAsset, sortByNewestDate]
   );
+  const detailMaintenanceVisibleEntries = useMemo(
+    () =>
+      assetDetailSections.showAllMaintenance
+        ? detailMaintenanceEntries
+        : detailMaintenanceEntries.slice(0, 1),
+    [assetDetailSections.showAllMaintenance, detailMaintenanceEntries]
+  );
+  const detailTransferVisibleEntries = useMemo(
+    () =>
+      assetDetailSections.showAllTransfer
+        ? detailTransferEntries
+        : detailTransferEntries.slice(0, 1),
+    [assetDetailSections.showAllTransfer, detailTransferEntries]
+  );
+  useEffect(() => {
+    if (!assetDetailId) return;
+    setAssetDetailSections({
+      showDetails: true,
+      showAllMaintenance: false,
+      showAllTransfer: false,
+    });
+  }, [assetDetailId]);
   const editingAsset = useMemo(
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
@@ -8683,6 +9367,7 @@ export default function App() {
     const status = String(statusRaw || "").trim().toLowerCase();
     if (status === "retired") return "row-asset-retired";
     if (status === "maintenance") return "row-asset-maintenance";
+    if (status === "inactive") return "row-asset-inactive";
     return "";
   }, []);
   const isReplacementDone = useCallback((typeRaw: string, completionRaw: string) => {
@@ -8715,6 +9400,7 @@ export default function App() {
       const statusClass = assetStatusRowClass(statusRaw);
       if (statusClass === "row-asset-retired") return "row-maint-retired";
       if (statusClass === "row-asset-maintenance") return "row-maint-maintenance";
+      if (statusClass === "row-asset-inactive") return "row-maint-inactive";
       return "";
     },
     [assetStatusRowClass, isBrokenMaintenance, isReplacementDone]
@@ -10465,6 +11151,7 @@ export default function App() {
   const quickCountStatusAssets = useMemo(() => {
     const buckets = {
       active: [] as Asset[],
+      inactive: [] as Asset[],
       retired: [] as Asset[],
       underMaintenance: [] as Asset[],
       broken: [] as Asset[],
@@ -10483,6 +11170,7 @@ export default function App() {
         );
 
       if (status === "retired") buckets.retired.push(asset);
+      else if (status === "inactive") buckets.inactive.push(asset);
       else if (status === "maintenance" || hasOpenMaintenance) buckets.underMaintenance.push(asset);
       else buckets.active.push(asset);
 
@@ -10494,6 +11182,7 @@ export default function App() {
   const quickCountStatusSummary = useMemo(
     () => ({
       active: quickCountStatusAssets.active.length,
+      inactive: quickCountStatusAssets.inactive.length,
       retired: quickCountStatusAssets.retired.length,
       underMaintenance: quickCountStatusAssets.underMaintenance.length,
       broken: quickCountStatusAssets.broken.length,
@@ -10517,56 +11206,55 @@ export default function App() {
     const name = String(labelOrName || "").toLowerCase();
     const isFacility = String(category || "").toUpperCase() === "FACILITY";
     const isSafety = String(category || "").toUpperCase() === "SAFETY";
+    const icon = (Icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>) => (
+      <Icon size={18} aria-hidden={true} />
+    );
 
     if (code === "PC" || name.includes("computer")) {
-      if (name.includes("desktop")) return "🖥";
-      if (name.includes("aio") || name.includes("all-in-one")) return "🖥";
-      if (name.includes("mini pc") || name.includes("mac mini")) return "🖥";
-      if (name.includes("imac")) return "🖥";
-      return "🖥";
+      return icon(Monitor);
     }
-    if (code === "LAP" || name.includes("laptop")) return "💻";
-    if (code === "TAB" || name.includes("ipad") || name.includes("tablet")) return "📱";
-    if (code === "MON" || name.includes("monitor")) return "🖥";
-    if (code === "KBD" || name.includes("keyboard")) return "⌨";
-    if (code === "MSE" || name.includes("mouse")) return "🖱";
-    if (code === "PRN" || name.includes("printer")) return "🖨";
-    if (code === "SW" || name.includes("switch")) return "🔀";
-    if (code === "AP" || name.includes("access point") || name.includes("wifi")) return "📶";
-    if (code === "CAM" || code === "DCM" || name.includes("camera") || name.includes("cctv")) return "📷";
-    if (code === "WBC" || name.includes("webcam")) return "🎥";
-    if (code === "SLP" || name.includes("projector")) return "📽";
-    if (code === "TV" || name.includes("tv")) return "📺";
-    if (code === "SPK" || name.includes("speaker")) return "🔊";
-    if (code === "UWF" || name.includes("usb wifi")) return "📡";
-    if (code === "RMT" || name.includes("remote")) return "🎛";
-    if (code === "ADP" || name.includes("adapter")) return "🔌";
+    if (code === "LAP" || name.includes("laptop")) return icon(Laptop);
+    if (code === "TAB" || name.includes("ipad") || name.includes("tablet")) return icon(Tablet);
+    if (code === "MON" || name.includes("monitor")) return icon(Monitor);
+    if (code === "KBD" || name.includes("keyboard")) return icon(Keyboard);
+    if (code === "MSE" || name.includes("mouse")) return icon(Mouse);
+    if (code === "PRN" || name.includes("printer")) return icon(Printer);
+    if (code === "SW" || name.includes("switch")) return icon(ArrowLeftRight);
+    if (code === "AP" || name.includes("access point") || name.includes("wifi")) return icon(Wifi);
+    if (code === "CAM" || code === "DCM" || name.includes("camera") || name.includes("cctv")) return icon(Camera);
+    if (code === "WBC" || name.includes("webcam")) return icon(Webcam);
+    if (code === "SLP" || name.includes("projector")) return icon(Monitor);
+    if (code === "TV" || name.includes("tv")) return icon(Tv);
+    if (code === "SPK" || name.includes("speaker")) return icon(Volume2);
+    if (code === "UWF" || name.includes("usb wifi")) return icon(Usb);
+    if (code === "RMT" || name.includes("remote")) return icon(Settings);
+    if (code === "ADP" || name.includes("adapter")) return icon(Usb);
 
-    if (code === "FE" || name.includes("fire extinguisher")) return "🧯";
-    if (code === "SD" || name.includes("smoke detector")) return "🚨";
-    if (code === "EL" || name.includes("emergency light")) return "💡";
-    if (code === "FB" || name.includes("fire bell")) return "🔔";
-    if (code === "FCP" || name.includes("control panel")) return "🧰";
+    if (code === "FE" || name.includes("fire extinguisher")) return icon(Flame);
+    if (code === "SD" || name.includes("smoke detector")) return icon(Bell);
+    if (code === "EL" || name.includes("emergency light")) return icon(Lightbulb);
+    if (code === "FB" || name.includes("fire bell")) return icon(Bell);
+    if (code === "FCP" || name.includes("control panel")) return icon(Settings);
 
-    if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return "❄";
-    if (code === "FPN" || name.includes("front panel")) return "🧩";
-    if (code === "RPN" || name.includes("rear panel")) return "🧱";
-    if (code === "TBL" || name.includes("table")) return "🪑";
-    if (code === "CHR" || name.includes("chair")) return "🪑";
+    if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return icon(Snowflake);
+    if (code === "FPN" || name.includes("front panel")) return icon(Puzzle);
+    if (code === "RPN" || name.includes("rear panel")) return icon(Puzzle);
+    if (code === "TBL" || name.includes("table")) return icon(Building2);
+    if (code === "CHR" || name.includes("chair")) return icon(Building2);
 
-    if (isSafety) return "🛡";
-    if (isFacility) return "🏢";
-    return "📦";
+    if (isSafety) return icon(Shield);
+    if (isFacility) return icon(Building2);
+    return icon(Package);
   }
   function quickCountItemIcon(itemName: string) {
     return itemTypeIcon("", "", itemName);
   }
   function inventorySupplyIcon(itemName: string) {
     const name = String(itemName || "").toLowerCase();
-    if (name.includes("hand tissue") || name.includes("tissue") || name.includes("paper")) return "🧻";
-    if (name.includes("cleaner") || name.includes("soap") || name.includes("shampoo")) return "🧴";
-    if (name.includes("trash bag") || name.includes("bin bag")) return "🗑";
-    return "🧽";
+    if (name.includes("hand tissue") || name.includes("tissue") || name.includes("paper")) return <FileText size={18} aria-hidden={true} />;
+    if (name.includes("cleaner") || name.includes("soap") || name.includes("shampoo")) return <Lightbulb size={18} aria-hidden={true} />;
+    if (name.includes("trash bag") || name.includes("bin bag")) return <Package size={18} aria-hidden={true} />;
+    return <Package size={18} aria-hidden={true} />;
   }
   const renderQuickCountPanel = (source: "dashboard" | "reports") => {
     const isDashboard = source === "dashboard";
@@ -10816,6 +11504,14 @@ export default function App() {
               </button>
               <button
                 type="button"
+                className="report-quick-status-pill report-quick-status-btn report-quick-status-inactive"
+                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យមិនប្រើ" : "Inactive Assets", quickCountStatusAssets.inactive)}
+              >
+                <span>{lang === "km" ? "មិនប្រើ" : "Inactive"}</span>
+                <strong>{quickCountStatusSummary.inactive}</strong>
+              </button>
+              <button
+                type="button"
                 className="report-quick-status-pill report-quick-status-btn report-quick-status-retired"
                 onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Defective Assets", quickCountStatusAssets.retired)}
               >
@@ -10848,7 +11544,7 @@ export default function App() {
                           }
                         >
                           <span className="report-quick-item-label">
-                            <span className="report-quick-item-icon" aria-hidden="true">{quickCountItemIcon(row.itemName)}</span>
+                            <span className="report-quick-item-icon" aria-hidden={true}>{quickCountItemIcon(row.itemName)}</span>
                             <span>{row.itemName}</span>
                           </span>
                           <strong className="report-quick-count-value">{row.count}</strong>
@@ -11929,8 +12625,8 @@ export default function App() {
   if (authLoading) {
     return (
       <main className="app-shell">
-        <div className="bg-orb bg-orb-a" aria-hidden="true" />
-        <div className="bg-orb bg-orb-b" aria-hidden="true" />
+        <div className="bg-orb bg-orb-a" aria-hidden={true} />
+        <div className="bg-orb bg-orb-b" aria-hidden={true} />
         <section className="app-card">
           <p className="eyebrow">{t.school}</p>
           <h1>{t.title}</h1>
@@ -12086,8 +12782,8 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <div className="bg-orb bg-orb-a" aria-hidden="true" />
-      <div className="bg-orb bg-orb-b" aria-hidden="true" />
+      <div className="bg-orb bg-orb-a" aria-hidden={true} />
+      <div className="bg-orb bg-orb-b" aria-hidden={true} />
 
       <section className="app-card app-card-layout">
         <header className="topbar">
@@ -12218,7 +12914,7 @@ export default function App() {
                               setMobileMenuOpen(false);
                             }}
                           >
-                            <span className="mobile-menu-nav-icon" aria-hidden="true">{navIcon(item.id)}</span>
+                            <span className="mobile-menu-nav-icon" aria-hidden={true}>{navIcon(item.id)}</span>
                             <span className="mobile-menu-nav-label">{item.label}</span>
                           </button>
                         ))}
@@ -12285,7 +12981,7 @@ export default function App() {
                   aria-expanded={mobileNotificationOpen}
                   aria-label={t.maintenanceNotifications}
                 >
-                  <span aria-hidden="true">🔔</span>
+                  <Bell size={16} aria-hidden={true} />
                   {maintenanceNotificationUnread > 0 ? (
                     <span className="mobile-notify-badge">
                       {maintenanceNotificationUnread > 99 ? "99+" : maintenanceNotificationUnread}
@@ -12450,7 +13146,7 @@ export default function App() {
                             setScheduleAlertModal("scheduled");
                           }}
                         >
-                          <span className="maintenance-item-card-icon" aria-hidden="true">
+                          <span className="maintenance-item-card-icon" aria-hidden={true}>
                             {quickCountItemIcon(row.itemName)}
                           </span>
                           <span className="maintenance-item-card-name">{row.itemName}</span>
@@ -13222,7 +13918,7 @@ export default function App() {
                                     ) : null}
                                   </div>
                                 ) : (
-                                  <div key={`pack-slot-${item.type}`} className="setpack-item-slot" aria-hidden="true" />
+                                  <div key={`pack-slot-${item.type}`} className="setpack-item-slot" aria-hidden={true} />
                                 )
                               ))}
                             </div>
@@ -13849,6 +14545,22 @@ export default function App() {
                     <h2>Asset Detail - {detailAsset.assetId}</h2>
                     <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
                   </div>
+                  <div className="panel-row" style={{ marginTop: 6 }}>
+                    <h3 className="section-title" style={{ margin: 0 }}>Asset Details</h3>
+                    <button
+                      type="button"
+                      className="tab btn-small"
+                      onClick={() =>
+                        setAssetDetailSections((prev) => ({
+                          ...prev,
+                          showDetails: !prev.showDetails,
+                        }))
+                      }
+                    >
+                      {assetDetailSections.showDetails ? "Hide Details" : "View Details"}
+                    </button>
+                  </div>
+                  {assetDetailSections.showDetails ? (
                   <div className="form-grid asset-detail-grid">
                     <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(detailAsset.campus)}</div></div>
                     <div className="field"><span>{t.category}</span><div className="detail-value">{detailAsset.category}</div></div>
@@ -13891,10 +14603,27 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  ) : null}
 
-                  <h3 className="section-title">Maintenance History</h3>
-                  <div className="table-wrap">
-                    <table>
+                  <div className="panel-row" style={{ marginTop: 8 }}>
+                    <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
+                    {detailMaintenanceEntries.length > 1 ? (
+                      <button
+                        type="button"
+                        className="tab btn-small"
+                        onClick={() =>
+                          setAssetDetailSections((prev) => ({
+                            ...prev,
+                            showAllMaintenance: !prev.showAllMaintenance,
+                          }))
+                        }
+                      >
+                        {assetDetailSections.showAllMaintenance ? "Show Latest" : "Show All"}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="table-wrap maintenance-history-modal-table-wrap">
+                    <table className="maintenance-history-modal-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -13908,8 +14637,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {detailMaintenanceEntries.length ? (
-                          detailMaintenanceEntries.map((h) => (
+                        {detailMaintenanceVisibleEntries.length ? (
+                          detailMaintenanceVisibleEntries.map((h) => (
                             <tr key={`detail-history-${h.id}`}>
                               <td>{formatDate(h.date)}</td>
                               <td>{h.type}</td>
@@ -13930,7 +14659,23 @@ export default function App() {
                     </table>
                   </div>
 
-                  <h3 className="section-title">Transfer History</h3>
+                  <div className="panel-row" style={{ marginTop: 8 }}>
+                    <h3 className="section-title" style={{ margin: 0 }}>Transfer History</h3>
+                    {detailTransferEntries.length > 1 ? (
+                      <button
+                        type="button"
+                        className="tab btn-small"
+                        onClick={() =>
+                          setAssetDetailSections((prev) => ({
+                            ...prev,
+                            showAllTransfer: !prev.showAllTransfer,
+                          }))
+                        }
+                      >
+                        {assetDetailSections.showAllTransfer ? "Show Latest" : "Show All"}
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="table-wrap">
                     <table>
                       <thead>
@@ -13948,8 +14693,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {detailTransferEntries.length ? (
-                          detailTransferEntries.map((h) => {
+                        {detailTransferVisibleEntries.length ? (
+                          detailTransferVisibleEntries.map((h) => {
                             const custody = detailCustodyEntries.find(
                               (entry) =>
                                 String(entry.date || "").slice(0, 10) === String(h.date || "").slice(0, 10) &&
@@ -14431,8 +15176,8 @@ export default function App() {
                     </div>
                   </div>
                   <p className="tiny">Purchase: {formatDate(historyAsset.purchaseDate || "-")} | Warranty: {formatDate(historyAsset.warrantyUntil || "-")}</p>
-                  <div className="table-wrap" style={{ marginTop: 12 }}>
-                    <table>
+                  <div className="table-wrap maintenance-history-modal-table-wrap" style={{ marginTop: 12 }}>
+                    <table className="maintenance-history-modal-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -15274,7 +16019,7 @@ export default function App() {
                               className="inventory-daily-gallery-card"
                               onClick={() => openInventoryQuickOut(item)}
                             >
-                              <span className="inventory-daily-gallery-icon" aria-hidden="true">
+                              <span className="inventory-daily-gallery-icon" aria-hidden={true}>
                                 {inventorySupplyIcon(item.itemName)}
                               </span>
                               <span className="inventory-daily-gallery-name">{item.itemName}</span>
@@ -16826,47 +17571,76 @@ export default function App() {
 
             <div className="panel" style={{ marginTop: 12 }}>
               <h3 className="section-title">{lang === "km" ? "កំណត់ត្រាថែទាំចុងក្រោយ (5)" : "Latest Maintenance (Last 5)"}</h3>
-              <div className="table-wrap">
-                <table className="latest-maint-table">
-                  <thead>
-                    <tr>
-                      <th>{t.date}</th>
-                      <th>{lang === "km" ? "Asset" : "Asset"}</th>
-                      <th>{lang === "km" ? "Campus Code" : "Campus Code"}</th>
-                      <th>{lang === "km" ? "ប្រភេទថែទាំ" : "Maintenance Type"}</th>
-                      <th>{lang === "km" ? "ការងារធ្វើ" : "Work Detail"}</th>
-                      <th>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {latestMaintenanceRows.length ? (
-                      latestMaintenanceRows.map((row) => (
-                        <tr
-                          key={`maintenance-dashboard-latest-${row.rowId}`}
-                          className="latest-maint-row"
-                          onClick={() => setLatestMaintenanceDetailRowId(row.rowId)}
-                        >
-                          <td>{formatDate(row.date || "-")}</td>
-                          <td className="latest-maint-asset-cell">
-                            <strong>{row.assetId}</strong>
-                            <div className="tiny">{assetItemName(row.category, row.assetType || "", "")}</div>
-                          </td>
-                          <td><strong>{CAMPUS_CODE[row.campus] || "CX"}</strong></td>
-                          <td>{row.type || "-"}</td>
-                          <td title={row.note || row.condition || "-"}>
-                            <span className="latest-maint-work">{row.note || row.condition || "-"}</span>
-                          </td>
-                          <td>{row.completion || "-"}</td>
-                        </tr>
-                      ))
-                    ) : (
+              {isPhoneView ? (
+                <div className="latest-maint-mobile-list">
+                  {latestMaintenanceRows.length ? (
+                    latestMaintenanceRows.map((row) => (
+                      <button
+                        type="button"
+                        key={`maintenance-dashboard-latest-mobile-${row.rowId}`}
+                        className="latest-maint-mobile-card"
+                        onClick={() => setLatestMaintenanceDetailRowId(row.rowId)}
+                      >
+                        <div className="latest-maint-mobile-top">
+                          <strong>{row.assetId}</strong>
+                          <span>{formatDate(row.date || "-")}</span>
+                        </div>
+                        <div className="latest-maint-mobile-meta">
+                          <span>{assetItemName(row.category, row.assetType || "", "")}</span>
+                          <span>{CAMPUS_CODE[row.campus] || "CX"}</span>
+                          <span>{row.type || "-"}</span>
+                          <span>{row.completion || "-"}</span>
+                        </div>
+                        <p className="latest-maint-mobile-note">{row.note || row.condition || "-"}</p>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="tiny">No maintenance records yet.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table className="latest-maint-table">
+                    <thead>
                       <tr>
-                        <td colSpan={6}>No maintenance records yet.</td>
+                        <th>{t.date}</th>
+                        <th>{lang === "km" ? "Asset" : "Asset"}</th>
+                        <th>{lang === "km" ? "Campus Code" : "Campus Code"}</th>
+                        <th>{lang === "km" ? "ប្រភេទថែទាំ" : "Maintenance Type"}</th>
+                        <th>{lang === "km" ? "ការងារធ្វើ" : "Work Detail"}</th>
+                        <th>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {latestMaintenanceRows.length ? (
+                        latestMaintenanceRows.map((row) => (
+                          <tr
+                            key={`maintenance-dashboard-latest-${row.rowId}`}
+                            className="latest-maint-row"
+                            onClick={() => setLatestMaintenanceDetailRowId(row.rowId)}
+                          >
+                            <td>{formatDate(row.date || "-")}</td>
+                            <td className="latest-maint-asset-cell">
+                              <strong>{row.assetId}</strong>
+                              <div className="tiny">{assetItemName(row.category, row.assetType || "", "")}</div>
+                            </td>
+                            <td><strong>{CAMPUS_CODE[row.campus] || "CX"}</strong></td>
+                            <td>{row.type || "-"}</td>
+                            <td title={row.note || row.condition || "-"}>
+                              <span className="latest-maint-work">{row.note || row.condition || "-"}</span>
+                            </td>
+                            <td>{row.completion || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6}>No maintenance records yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="panel" style={{ marginTop: 12 }}>
@@ -17888,7 +18662,7 @@ export default function App() {
                       : (lang === "km" ? "តម្រង" : "Filters")}
                   </button>
                   {isPhoneView ? (
-                    <button type="button" className="tab" onClick={resetReportFilters}>
+                    <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
                       {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                     </button>
                   ) : null}
@@ -18619,44 +19393,73 @@ export default function App() {
 
             {reportType === "maintenance_completion" && (
               <>
-                <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>{t.assetId}</th>
-                        <th>Asset Photo</th>
-                        <th>Maintenance Photo</th>
-                        <th>{t.campus}</th>
-                        <th>Type</th>
-                        <th>Work Status</th>
-                        <th>Condition</th>
-                        <th>Note</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {maintenanceCompletionRows.length ? (
-                        maintenanceCompletionRows.map((r) => (
-                          <tr key={`report-completion-${r.rowId}`}>
-                            <td>{formatDate(r.date || "-")}</td>
-                            <td><strong>{r.assetId}</strong></td>
-                            <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
-                            <td>{renderAssetPhoto(r.photo || "", "maintenance")}</td>
-                            <td>{campusLabel(r.campus)}</td>
-                            <td>{r.type || "-"}</td>
-                            <td>{r.completion || "-"}</td>
-                            <td>{r.condition || "-"}</td>
-                            <td>{r.note || "-"}</td>
-                          </tr>
-                        ))
-                      ) : (
+                {isPhoneView ? (
+                  <div className="report-mobile-only report-card-list">
+                    {maintenanceCompletionRows.length ? (
+                      maintenanceCompletionRows.map((r) => (
+                        <article key={`report-completion-mobile-${r.rowId}`} className="report-card">
+                          <div className="report-card-head">
+                            <div>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</div>
+                            <div>
+                              <strong>{r.assetId}</strong>
+                              <div className="tiny">{formatDate(r.date || "-")}</div>
+                            </div>
+                          </div>
+                          <div className="report-card-meta">
+                            <div><strong>{t.campus}:</strong> {campusLabel(r.campus)}</div>
+                            <div><strong>Type:</strong> {r.type || "-"}</div>
+                            <div><strong>Work Status:</strong> {r.completion || "-"}</div>
+                            <div><strong>Condition:</strong> {r.condition || "-"}</div>
+                            <div><strong>Maintenance Photo:</strong></div>
+                            <div>{renderAssetPhoto(r.photo || "", "maintenance")}</div>
+                            <div><strong>Note:</strong> {r.note || "-"}</div>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">No maintenance records in selected range.</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
+                    <table>
+                      <thead>
                         <tr>
-                          <td colSpan={9}>No maintenance records in selected range.</td>
+                          <th>Date</th>
+                          <th>{t.assetId}</th>
+                          <th>Asset Photo</th>
+                          <th>Maintenance Photo</th>
+                          <th>{t.campus}</th>
+                          <th>Type</th>
+                          <th>Work Status</th>
+                          <th>Condition</th>
+                          <th>Note</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {maintenanceCompletionRows.length ? (
+                          maintenanceCompletionRows.map((r) => (
+                            <tr key={`report-completion-${r.rowId}`}>
+                              <td>{formatDate(r.date || "-")}</td>
+                              <td><strong>{r.assetId}</strong></td>
+                              <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
+                              <td>{renderAssetPhoto(r.photo || "", "maintenance")}</td>
+                              <td>{campusLabel(r.campus)}</td>
+                              <td>{r.type || "-"}</td>
+                              <td>{r.completion || "-"}</td>
+                              <td>{r.condition || "-"}</td>
+                              <td>{r.note || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={9}>No maintenance records in selected range.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </>
             )}
 
@@ -18723,8 +19526,9 @@ export default function App() {
           </section>
         )}
 
-        {tab === "setup" && (
+        {(tab === "setup" || tab === "vault") && (
           <>
+          {tab === "setup" && (
           <section className="panel">
             <div className="row-actions setup-tabs-row">
               {canAccessMenu("setup.campus", "setup") ? (
@@ -18764,8 +19568,9 @@ export default function App() {
               ) : null}
             </div>
           </section>
+          )}
 
-          {setupView === "campus" && canAccessMenu("setup.campus", "setup") && (
+          {tab === "setup" && setupView === "campus" && canAccessMenu("setup.campus", "setup") && (
           <section className="panel">
             <h2>{t.campusNameSetup}</h2>
             <p className="tiny">{t.campusFixedHelp}</p>
@@ -18850,7 +19655,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "users" && canAccessMenu("setup.users", "setup") && (
+          {tab === "setup" && setupView === "users" && canAccessMenu("setup.users", "setup") && (
           <section className="panel">
             <h2>{t.userSetup}</h2>
             <div className="form-grid">
@@ -18924,7 +19729,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "permissions" && canAccessMenu("setup.permissions", "setup") && (
+          {tab === "setup" && setupView === "permissions" && canAccessMenu("setup.permissions", "setup") && (
           <section className="panel">
             <h2>{t.accountPermissionSetup}</h2>
             <p className="tiny">{t.permissionHelp}</p>
@@ -19238,7 +20043,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "backup" && canAccessMenu("setup.backup", "setup") && (
+          {tab === "setup" && setupView === "backup" && canAccessMenu("setup.backup", "setup") && (
           <section className="panel">
             <h2>Backup & Audit</h2>
             <p className="backup-subline">Backup database to file, restore when needed, and track user actions.</p>
@@ -19311,7 +20116,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "items" && canAccessMenu("setup.items", "setup") && (
+          {tab === "setup" && setupView === "items" && canAccessMenu("setup.items", "setup") && (
           <section className="panel">
             <h2>{t.itemNameSetup}</h2>
             <div className="form-grid">
@@ -19382,7 +20187,7 @@ export default function App() {
                       <td>{row.category}</td>
                       <td><strong>{row.code}</strong></td>
                       <td>
-                        <span className="item-setup-icon" aria-hidden="true">
+                        <span className="item-setup-icon" aria-hidden={true}>
                           {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
                         </span>
                       </td>
@@ -19402,7 +20207,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "locations" && canAccessMenu("setup.locations", "setup") && (
+          {tab === "setup" && setupView === "locations" && canAccessMenu("setup.locations", "setup") && (
           <section className="panel">
             <h2>{t.locationSetup}</h2>
             <div className="form-grid">
@@ -19466,7 +20271,7 @@ export default function App() {
           </section>
           )}
 
-          {setupView === "calendar" && canAccessMenu("setup.calendar", "setup") && (
+          {tab === "setup" && setupView === "calendar" && canAccessMenu("setup.calendar", "setup") && (
           <section className="panel">
             <h2>Calendar Event Setup</h2>
             <p className="tiny">Manage holidays and school events from here. Changes apply to all calendar views.</p>
@@ -19569,6 +20374,220 @@ export default function App() {
             </div>
           </section>
           )}
+
+          {tab === "vault" && canAccessMenu("vault.dashboard", "vault") && (
+          <section className="panel">
+            <h2>IT Operations Vault</h2>
+            <p className="tiny">Central place for school IT operations records with linked documentation (Google Drive / external links).</p>
+            <div className="report-quick-status-grid vault-status-grid" style={{ marginBottom: 10 }}>
+              <article className="report-quick-status-pill"><span>System Accounts</span><strong>{vaultAccounts.length}</strong></article>
+              <article className="report-quick-status-pill"><span>Website Logins</span><strong>{vaultCredentials.length}</strong></article>
+              <article className="report-quick-status-pill"><span>Design Folders</span><strong>{vaultDesignLinks.length}</strong></article>
+              <article className="report-quick-status-pill"><span>Network Docs</span><strong>{vaultNetworkDocs.length}</strong></article>
+              <article className="report-quick-status-pill"><span>CCTV Records</span><strong>{vaultCctvRecords.length}</strong></article>
+            </div>
+            <div className="row-actions setup-tabs-row vault-subtabs" style={{ marginBottom: 10 }}>
+              {canAccessMenu("vault.dashboard", "vault") ? (
+              <button className={`tab ${vaultTab === "dashboard" ? "tab-active" : ""}`} onClick={() => setVaultTab("dashboard")}>
+                Dashboard
+              </button>
+              ) : null}
+              {canAccessMenu("vault.accounts", "vault") ? (
+              <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>
+                System Accounts
+              </button>
+              ) : null}
+              {canAccessMenu("vault.credentials", "vault") ? (
+              <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>
+                Website Logins
+              </button>
+              ) : null}
+              {canAccessMenu("vault.design", "vault") ? (
+              <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>
+                Design Folders
+              </button>
+              ) : null}
+              {canAccessMenu("vault.network", "vault") ? (
+              <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>
+                Network Docs
+              </button>
+              ) : null}
+              {canAccessMenu("vault.cctv", "vault") ? (
+              <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>
+                CCTV Control
+              </button>
+              ) : null}
+            </div>
+
+            {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
+              <div className="panel" style={{ padding: 12, marginBottom: 12 }}>
+                <h3 className="section-title" style={{ marginTop: 0 }}>Vault Dashboard</h3>
+                <p className="tiny" style={{ marginBottom: 10 }}>
+                  Track website logins (username/password), iCloud/service access, design folders, network docs, and CCTV records in one place.
+                </p>
+                <div className="report-quick-status-grid vault-dashboard-shortcuts">
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("credentials")}><span>Website Logins</span><strong>{vaultCredentials.length}</strong></button>
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("design")}><span>Design Folders</span><strong>{vaultDesignLinks.length}</strong></button>
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("network")}><span>Network Docs</span><strong>{vaultNetworkDocs.length}</strong></button>
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("cctv")}><span>CCTV Control</span><strong>{vaultCctvRecords.length}</strong></button>
+                </div>
+              </div>
+            )}
+
+            {vaultTab === "accounts" && canAccessMenu("vault.accounts", "vault") && (
+              <>
+                <div className="form-grid">
+                  <label className="field"><span>System</span><input className="input" value={vaultAccountForm.systemName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, systemName: e.target.value }))} /></label>
+                  <label className="field"><span>Account Name</span><input className="input" value={vaultAccountForm.accountName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, accountName: e.target.value }))} /></label>
+                  <label className="field"><span>Owner</span><input className="input" value={vaultAccountForm.owner} onChange={(e) => setVaultAccountForm((f) => ({ ...f, owner: e.target.value }))} /></label>
+                  <label className="field"><span>Role</span><input className="input" value={vaultAccountForm.role} onChange={(e) => setVaultAccountForm((f) => ({ ...f, role: e.target.value }))} /></label>
+                  <label className="field">
+                    <span>Status</span>
+                    <select className="input" value={vaultAccountForm.status} onChange={(e) => setVaultAccountForm((f) => ({ ...f, status: e.target.value }))}>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </label>
+                  <label className="field"><span>Review Date</span><input type="date" className="input" value={vaultAccountForm.reviewDate} onChange={(e) => setVaultAccountForm((f) => ({ ...f, reviewDate: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultAccountForm.note} onChange={(e) => setVaultAccountForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultAccount}>Add Account Record</button></div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead><tr><th>System</th><th>Account</th><th>Owner</th><th>Role</th><th>Status</th><th>Review</th><th>Note</th><th>{t.delete}</th></tr></thead>
+                    <tbody>
+                      {vaultAccounts.length ? vaultAccounts.map((row) => (
+                        <tr key={`vault-account-${row.id}`}>
+                          <td>{row.systemName || "-"}</td><td><strong>{row.accountName || "-"}</strong></td><td>{row.owner || "-"}</td><td>{row.role || "-"}</td><td>{row.status || "-"}</td><td>{formatDate(row.reviewDate || "-")}</td><td>{row.note || "-"}</td>
+                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={8}>No account records yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {vaultTab === "credentials" && canAccessMenu("vault.credentials", "vault") && (
+              <>
+                <div className="form-grid">
+                  <label className="field"><span>System</span><input className="input" value={vaultCredentialForm.systemName} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, systemName: e.target.value }))} /></label>
+                  <label className="field"><span>Login URL / Google Drive SOP</span><input className="input" value={vaultCredentialForm.loginUrl} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://... or https://drive.google.com/..." /></label>
+                  <label className="field"><span>Username</span><input className="input" value={vaultCredentialForm.username} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, username: e.target.value }))} /></label>
+                  <label className="field"><span>Password / Secret</span><input className="input" type="text" value={vaultCredentialForm.password} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, password: e.target.value }))} placeholder="Website/iCloud password or secret" /></label>
+                  <label className="field"><span>Password Hint (Optional)</span><input className="input" value={vaultCredentialForm.secretHint} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, secretHint: e.target.value }))} placeholder="Example: stored in sealed envelope A1" /></label>
+                  <label className="field"><span>2FA</span><input className="input" value={vaultCredentialForm.twoFa} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, twoFa: e.target.value }))} /></label>
+                  <label className="field"><span>Recovery</span><input className="input" value={vaultCredentialForm.recovery} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, recovery: e.target.value }))} /></label>
+                  <label className="field"><span>Last Updated</span><input type="date" className="input" value={vaultCredentialForm.lastUpdated} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, lastUpdated: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCredentialForm.note} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCredential}>Add Website Login</button></div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead><tr><th>System</th><th>Login URL</th><th>Username</th><th>Password</th><th>Hint</th><th>2FA</th><th>Recovery</th><th>Updated</th><th>{t.delete}</th></tr></thead>
+                    <tbody>
+                      {vaultCredentials.length ? vaultCredentials.map((row) => (
+                        <tr key={`vault-credential-${row.id}`}>
+                          <td>{row.systemName || "-"}</td><td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td><strong>{row.username || "-"}</strong></td>
+                          <td>{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"} <button className="tab btn-small" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide" : "View"}</button></td>
+                          <td>{row.secretHint || "-"}</td><td>{row.twoFa || "-"}</td><td>{row.recovery || "-"}</td><td>{formatDate(row.lastUpdated || "-")}</td>
+                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={9}>No website login records yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {vaultTab === "design" && canAccessMenu("vault.design", "vault") && (
+              <>
+                <div className="form-grid">
+                  <label className="field"><span>Design Name</span><input className="input" value={vaultDesignForm.title} onChange={(e) => setVaultDesignForm((f) => ({ ...f, title: e.target.value }))} /></label>
+                  <label className="field"><span>Design Folder Link (Google Drive)</span><input className="input" value={vaultDesignForm.folderUrl} onChange={(e) => setVaultDesignForm((f) => ({ ...f, folderUrl: e.target.value }))} placeholder="https://drive.google.com/..." /></label>
+                  <label className="field"><span>Owner</span><input className="input" value={vaultDesignForm.owner} onChange={(e) => setVaultDesignForm((f) => ({ ...f, owner: e.target.value }))} /></label>
+                  <label className="field"><span>Last Review</span><input type="date" className="input" value={vaultDesignForm.lastReview} onChange={(e) => setVaultDesignForm((f) => ({ ...f, lastReview: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultDesignForm.note} onChange={(e) => setVaultDesignForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultDesignLink}>Add Design Folder</button></div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead><tr><th>Design</th><th>Folder</th><th>Owner</th><th>Review</th><th>Note</th><th>{t.delete}</th></tr></thead>
+                    <tbody>
+                      {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
+                        <tr key={`vault-design-${row.id}`}>
+                          <td><strong>{row.title || "-"}</strong></td>
+                          <td>{row.folderUrl ? <a href={row.folderUrl} target="_blank" rel="noreferrer">Open Folder</a> : "-"}</td>
+                          <td>{row.owner || "-"}</td>
+                          <td>{formatDate(row.lastReview || "-")}</td>
+                          <td>{row.note || "-"}</td>
+                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("design", row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={6}>No design folder links yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {vaultTab === "network" && canAccessMenu("vault.network", "vault") && (
+              <>
+                <div className="form-grid">
+                  <label className="field"><span>Title</span><input className="input" value={vaultNetworkDocForm.title} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, title: e.target.value }))} /></label>
+                  <label className="field"><span>Type</span><input className="input" value={vaultNetworkDocForm.docType} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, docType: e.target.value }))} /></label>
+                  <label className="field"><span>Google Drive / File Link</span><input className="input" value={vaultNetworkDocForm.fileUrl} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, fileUrl: e.target.value }))} placeholder="https://drive.google.com/..." /></label>
+                  <label className="field"><span>Version</span><input className="input" value={vaultNetworkDocForm.version} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, version: e.target.value }))} /></label>
+                  <label className="field"><span>Last Review</span><input type="date" className="input" value={vaultNetworkDocForm.lastReview} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, lastReview: e.target.value }))} /></label>
+                  <label className="field"><span>Owner</span><input className="input" value={vaultNetworkDocForm.owner} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, owner: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultNetworkDocForm.note} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultNetworkDoc}>Add Network Doc</button></div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead><tr><th>Title</th><th>Type</th><th>File/Link</th><th>Version</th><th>Review</th><th>Owner</th><th>Note</th><th>{t.delete}</th></tr></thead>
+                    <tbody>
+                      {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
+                        <tr key={`vault-network-${row.id}`}>
+                          <td><strong>{row.title || "-"}</strong></td><td>{row.docType || "-"}</td><td>{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.version || "-"}</td><td>{formatDate(row.lastReview || "-")}</td><td>{row.owner || "-"}</td><td>{row.note || "-"}</td>
+                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={8}>No network documents yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {vaultTab === "cctv" && canAccessMenu("vault.cctv", "vault") && (
+              <>
+                <div className="form-grid">
+                  <label className="field"><span>Site/Campus</span><input className="input" value={vaultCctvForm.site} onChange={(e) => setVaultCctvForm((f) => ({ ...f, site: e.target.value }))} /></label>
+                  <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
+                  <label className="field"><span>Login URL / Google Drive Map</span><input className="input" value={vaultCctvForm.loginUrl} onChange={(e) => setVaultCctvForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://... or https://drive.google.com/..." /></label>
+                  <label className="field"><span>Username</span><input className="input" value={vaultCctvForm.username} onChange={(e) => setVaultCctvForm((f) => ({ ...f, username: e.target.value }))} /></label>
+                  <label className="field"><span>Camera Group / Angle Area</span><input className="input" value={vaultCctvForm.cameraGroup} onChange={(e) => setVaultCctvForm((f) => ({ ...f, cameraGroup: e.target.value }))} /></label>
+                  <label className="field"><span>Retention Days</span><input type="number" min={0} className="input" value={vaultCctvForm.retentionDays} onChange={(e) => setVaultCctvForm((f) => ({ ...f, retentionDays: e.target.value }))} /></label>
+                  <label className="field"><span>Last Angle Review</span><input type="date" className="input" value={vaultCctvForm.lastAngleReview} onChange={(e) => setVaultCctvForm((f) => ({ ...f, lastAngleReview: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCctvForm.note} onChange={(e) => setVaultCctvForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>Add CCTV Record</button></div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>Username</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.delete}</th></tr></thead>
+                    <tbody>
+                      {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
+                        <tr key={`vault-cctv-${row.id}`}>
+                          <td>{row.site || "-"}</td><td><strong>{row.nvrName || "-"}</strong></td><td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.username || "-"}</td><td>{row.cameraGroup || "-"}</td><td>{row.retentionDays || 0} days</td><td>{formatDate(row.lastAngleReview || "-")}</td>
+                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={8}>No CCTV records yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </section>
+          )}
           </>
         )}
           </section>
@@ -19587,7 +20606,7 @@ export default function App() {
               </div>
               {inventoryQuickOutSelectedItem ? (
                 <>
-                  <div className="inventory-quickout-hero-icon-wrap" aria-hidden="true">
+                  <div className="inventory-quickout-hero-icon-wrap" aria-hidden={true}>
                     <span className="inventory-quickout-hero-icon">
                       {inventorySupplyIcon(inventoryQuickOutSelectedItem.itemName)}
                     </span>
