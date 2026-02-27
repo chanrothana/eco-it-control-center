@@ -4016,14 +4016,6 @@ export default function App() {
       };
     });
   }, [quickOutEcoMonth, getHolidayEvent]);
-  const quickOutEcoSelectedEvents = useMemo(() => {
-    const rows = holidayLookup.get(quickOutEcoSelectedDate) || [];
-    return rows.map((row) => ({
-      id: row.id,
-      name: String(row.name || "").trim(),
-      type: normalizeCalendarEventType(row.type),
-    }));
-  }, [holidayLookup, quickOutEcoSelectedDate]);
   const inventoryDailyTodayRows = useMemo(() => {
     const date = inventoryDailyForm.date;
     return [...inventoryVisibleTxns]
@@ -6047,6 +6039,21 @@ export default function App() {
       photo: "",
     }));
     setInventoryItemFileKey((k) => k + 1);
+    setError("");
+  }
+
+  function deleteInventoryItem(row: (typeof inventoryBalanceRows)[number]) {
+    if (!requireAdminAction()) return;
+    const hasTxnHistory = inventoryTxns.some((tx) => tx.itemId === row.id);
+    if (hasTxnHistory) {
+      setError("Cannot delete item with transaction history. Delete transactions first.");
+      return;
+    }
+    if (!window.confirm(`Delete item ${row.itemCode} - ${row.itemName}?`)) return;
+    const nextItems = inventoryItems.filter((item) => item.id !== row.id);
+    setInventoryItems(nextItems);
+    void persistInventorySettings(nextItems, inventoryTxns);
+    appendUiAudit("DELETE", "inventory_item", row.itemCode, `${row.campus} | ${row.itemName}`);
     setError("");
   }
 
@@ -14684,6 +14691,7 @@ export default function App() {
                         <th>Unit</th>
                         <th>Opening</th>
                         <th>Min</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -14699,11 +14707,23 @@ export default function App() {
                             <td>{row.unit}</td>
                             <td>{row.openingQty}</td>
                             <td>{row.minStock}</td>
+                            <td>
+                              <div className="asset-row-actions">
+                                <button
+                                  className="btn-danger"
+                                  disabled={!isAdmin}
+                                  onClick={() => deleteInventoryItem(row)}
+                                  title={t.delete}
+                                >
+                                  X
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={9}>No inventory items yet.</td>
+                          <td colSpan={10}>No inventory items yet.</td>
                         </tr>
                       )}
                     </tbody>
@@ -19095,7 +19115,7 @@ export default function App() {
                         />
                         <button
                           type="button"
-                          className="tab quickout-date-icon-btn"
+                          className="quickout-date-icon-btn"
                           onClick={openQuickOutEcoPicker}
                           aria-label="Open Eco Calendar"
                         >
@@ -19107,56 +19127,25 @@ export default function App() {
                       ) : null}
                       {quickOutEcoPickerOpen ? (
                         <div className="quickout-eco-inline-panel">
-                          <div className="panel-row">
-                            <strong>{quickOutEcoMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}</strong>
-                            <div className="row-actions">
-                              <button
-                                type="button"
-                                className="tab"
-                                onClick={() => setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                              >
-                                {calendarPrevLabel}
-                              </button>
-                              <button
-                                type="button"
-                                className="tab"
-                                onClick={() => setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                              >
-                                {calendarNextLabel}
-                              </button>
-                            </div>
-                          </div>
-                          <div className="calendar-grid">
-                            {["S", "M", "T", "W", "T", "F", "S"].map((d, idx) => (
-                              <div key={`quickout-eco-head-${d}-${idx}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
-                            ))}
+                          <strong className="quickout-eco-title">
+                            {quickOutEcoMonth.toLocaleString(undefined, { month: "short", year: "numeric" })}
+                          </strong>
+                          <div className="calendar-grid quickout-eco-grid">
                             {quickOutEcoGridDays.map((d) => (
                               <button
                                 key={`quickout-eco-day-${d.ymd}`}
                                 type="button"
                                 className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${quickOutEcoSelectedDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""}`}
+                                disabled={!d.inMonth}
                                 onClick={() => {
                                   setQuickOutEcoSelectedDate(d.ymd);
                                   setInventoryQuickOutModal((prev) => (prev ? { ...prev, date: d.ymd } : prev));
                                   setQuickOutEcoPickerOpen(false);
                                 }}
                               >
-                                <span>{d.day}</span>
-                                {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
+                                {d.inMonth ? <span>{d.day}</span> : null}
                               </button>
                             ))}
-                          </div>
-                          <div className="quickout-eco-events">
-                            <div className="tiny"><strong>{formatDate(quickOutEcoSelectedDate)}</strong></div>
-                            {quickOutEcoSelectedEvents.length ? (
-                              quickOutEcoSelectedEvents.map((event) => (
-                                <div key={`quickout-eco-event-${event.id}`} className={`calendar-type-badge calendar-type-${event.type}`}>
-                                  {calendarEventTypeLabel(event.type)}: {event.name}
-                                </div>
-                              ))
-                            ) : (
-                              <div className="tiny">{lang === "km" ? "មិនមានព្រឹត្តិការណ៍" : "No Eco event on this date."}</div>
-                            )}
                           </div>
                         </div>
                       ) : null}
