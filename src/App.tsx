@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, EyeOff, Lightbulb } from "lucide-react";
+import { Calendar, Eye, EyeOff, Lightbulb } from "lucide-react";
 import QRCode from "qrcode";
 import "./App.css";
 
@@ -2727,10 +2727,15 @@ export default function App() {
       authUser?.assetSubviewAccess !== "list_only" &&
       canAccessMenu("assets.register", "assets")
   );
-  const showMaintenanceDashboard = !isAdmin && canAccessMenu("maintenance.record", "maintenance");
+  const showMaintenanceDashboard = !maintenanceQuickMode && !isAdmin && canAccessMenu("maintenance.record", "maintenance");
   const navMenuItems = useMemo(
-    () => navItems.filter((item) => allowedNavModules.has(item.id)),
-    [navItems, allowedNavModules]
+    () =>
+      navItems.filter((item) => {
+        if (!allowedNavModules.has(item.id)) return false;
+        if (maintenanceQuickMode) return false;
+        return true;
+      }),
+    [navItems, allowedNavModules, maintenanceQuickMode]
   );
   const navSections = useMemo(() => {
     const labels: Record<NavSection, string> =
@@ -2860,10 +2865,14 @@ export default function App() {
   const calendarNextLabel = isPhoneView ? ">" : "Next";
 
   useEffect(() => {
+    if (maintenanceQuickMode) {
+      if (tab !== "inventory") setTab("inventory");
+      return;
+    }
     if (!navMenuItems.some((item) => item.id === tab)) {
       setTab(navMenuItems[0]?.id || "dashboard");
     }
-  }, [navMenuItems, tab]);
+  }, [maintenanceQuickMode, navMenuItems, tab]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -3306,6 +3315,12 @@ export default function App() {
   }>(null);
   const [inventoryQuickOutFileKey, setInventoryQuickOutFileKey] = useState(0);
   const [inventoryQuickReasonTipsOpen, setInventoryQuickReasonTipsOpen] = useState(false);
+  const [quickOutEcoPickerOpen, setQuickOutEcoPickerOpen] = useState(false);
+  const [quickOutEcoMonth, setQuickOutEcoMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [quickOutEcoSelectedDate, setQuickOutEcoSelectedDate] = useState(() => toYmd(new Date()));
   const [editingInventoryTxnId, setEditingInventoryTxnId] = useState<number | null>(null);
   const [inventoryTxnEditForm, setInventoryTxnEditForm] = useState({
     itemId: "",
@@ -3738,6 +3753,34 @@ export default function App() {
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === inventoryItemForm.campus)),
     [locations, inventoryItemForm.campus]
   );
+  const canViewAllInventoryCampuses = useMemo(
+    () => !authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses),
+    [authUser]
+  );
+  const inventoryVisibleCampusSet = useMemo(
+    () => (canViewAllInventoryCampuses ? null : new Set(allowedCampuses)),
+    [canViewAllInventoryCampuses, allowedCampuses]
+  );
+  const inventoryVisibleItems = useMemo(
+    () =>
+      inventoryVisibleCampusSet
+        ? inventoryItems.filter((item) => inventoryVisibleCampusSet.has(item.campus))
+        : inventoryItems,
+    [inventoryItems, inventoryVisibleCampusSet]
+  );
+  const inventoryVisibleItemIds = useMemo(
+    () => new Set(inventoryVisibleItems.map((item) => item.id)),
+    [inventoryVisibleItems]
+  );
+  const inventoryVisibleTxns = useMemo(
+    () =>
+      inventoryVisibleCampusSet
+        ? inventoryTxns.filter(
+            (tx) => inventoryVisibleCampusSet.has(tx.campus) || inventoryVisibleItemIds.has(Number(tx.itemId || 0))
+          )
+        : inventoryTxns,
+    [inventoryTxns, inventoryVisibleCampusSet, inventoryVisibleItemIds]
+  );
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
     return `${item.itemCode} - ${item.itemName} • ${inventoryCampusLabel(item.campus)}`;
   }, [inventoryCampusLabel]);
@@ -3769,8 +3812,8 @@ export default function App() {
     [inventoryMasterOptions, inventoryItemForm.masterItemKey]
   );
   const inventoryTxnSelectedItem = useMemo(
-    () => inventoryItems.find((item) => String(item.id) === String(inventoryTxnForm.itemId || "")) || null,
-    [inventoryItems, inventoryTxnForm.itemId]
+    () => inventoryVisibleItems.find((item) => String(item.id) === String(inventoryTxnForm.itemId || "")) || null,
+    [inventoryVisibleItems, inventoryTxnForm.itemId]
   );
   const inventoryTxnIsBorrow = useMemo(
     () => inventoryTxnForm.type === "BORROW_OUT" || inventoryTxnForm.type === "BORROW_IN" || inventoryTxnForm.type === "BORROW_CONSUME",
@@ -3782,13 +3825,13 @@ export default function App() {
   );
   const inventoryBalanceRows = useMemo(() => {
     const byItem = new Map<number, { in: number; out: number }>();
-    for (const tx of inventoryTxns) {
+    for (const tx of inventoryVisibleTxns) {
       const current = byItem.get(tx.itemId) || { in: 0, out: 0 };
       if (isInventoryTxnIn(tx.type)) current.in += tx.qty;
       if (isInventoryTxnOut(tx.type)) current.out += tx.qty;
       byItem.set(tx.itemId, current);
     }
-    let rows = inventoryItems.map((item) => {
+    let rows = inventoryVisibleItems.map((item) => {
       const total = byItem.get(item.id) || { in: 0, out: 0 };
       const currentStock = Number(item.openingQty || 0) + total.in - total.out;
       return {
@@ -3806,7 +3849,7 @@ export default function App() {
       );
     }
     return rows.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryItems, inventoryTxns, inventorySearch]);
+  }, [inventoryVisibleItems, inventoryVisibleTxns, inventorySearch]);
   const inventoryLowStockRows = useMemo(
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
@@ -3818,10 +3861,10 @@ export default function App() {
   const cleaningSupplyMonthlyOptions = useMemo(() => {
     const validMonths = new Set<string>();
     const supplyItems = new Map<number, InventoryItem>();
-    for (const item of inventoryItems) {
+    for (const item of inventoryVisibleItems) {
       if (isCleaningSupplyItem(item)) supplyItems.set(item.id, item);
     }
-    for (const tx of inventoryTxns) {
+    for (const tx of inventoryVisibleTxns) {
       if (!isInventoryTxnUsageOut(tx.type)) continue;
       if (!supplyItems.has(tx.itemId)) continue;
       const month = String(tx.date || "").slice(0, 7);
@@ -3829,15 +3872,15 @@ export default function App() {
     }
     validMonths.add(toYmd(new Date()).slice(0, 7));
     return Array.from(validMonths).sort((a, b) => b.localeCompare(a));
-  }, [inventoryItems, inventoryTxns]);
+  }, [inventoryVisibleItems, inventoryVisibleTxns]);
   const cleaningSupplyMonthlyCampusRows = useMemo(() => {
     const month = inventorySupplyMonth;
     const supplyItems = new Map<number, InventoryItem>();
-    for (const item of inventoryItems) {
+    for (const item of inventoryVisibleItems) {
       if (isCleaningSupplyItem(item)) supplyItems.set(item.id, item);
     }
     const campusTotals = new Map<string, number>();
-    for (const tx of inventoryTxns) {
+    for (const tx of inventoryVisibleTxns) {
       if (!isInventoryTxnUsageOut(tx.type)) continue;
       if (!supplyItems.has(tx.itemId)) continue;
       if (String(tx.date || "").slice(0, 7) !== month) continue;
@@ -3850,7 +3893,7 @@ export default function App() {
       .sort((a, b) => b.qty - a.qty);
     const max = rows.reduce((m, row) => Math.max(m, row.qty), 0);
     return { rows, max: max > 0 ? max : 1 };
-  }, [inventorySupplyMonth, inventoryItems, inventoryTxns]);
+  }, [inventorySupplyMonth, inventoryVisibleItems, inventoryVisibleTxns]);
   useEffect(() => {
     if (!cleaningSupplyMonthlyOptions.length) return;
     if (!cleaningSupplyMonthlyOptions.includes(inventorySupplyMonth)) {
@@ -3858,58 +3901,58 @@ export default function App() {
     }
   }, [cleaningSupplyMonthlyOptions, inventorySupplyMonth]);
   const inventoryTxnsRows = useMemo(() => {
-    return [...inventoryTxns]
+    return [...inventoryVisibleTxns]
       .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
       .filter((row) => {
         const q = inventorySearch.trim().toLowerCase();
         if (!q) return true;
         return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.by || ""} ${row.note || ""}`.toLowerCase().includes(q);
       });
-  }, [inventoryTxns, inventorySearch]);
+  }, [inventoryVisibleTxns, inventorySearch]);
   const inventoryStockMap = useMemo(() => {
     const totals = new Map<number, { in: number; out: number }>();
-    for (const tx of inventoryTxns) {
+    for (const tx of inventoryVisibleTxns) {
       const cur = totals.get(tx.itemId) || { in: 0, out: 0 };
       if (isInventoryTxnIn(tx.type)) cur.in += tx.qty;
       if (isInventoryTxnOut(tx.type)) cur.out += tx.qty;
       totals.set(tx.itemId, cur);
     }
     const out = new Map<number, number>();
-    for (const item of inventoryItems) {
+    for (const item of inventoryVisibleItems) {
       const total = totals.get(item.id) || { in: 0, out: 0 };
       out.set(item.id, Number(item.openingQty || 0) + total.in - total.out);
     }
     return out;
-  }, [inventoryItems, inventoryTxns]);
+  }, [inventoryVisibleItems, inventoryVisibleTxns]);
   const inventoryDailyItemOptions = useMemo(() => {
     const q = String(inventoryDailyForm.search || "").trim().toLowerCase();
-    let list = [...inventoryItems];
+    let list = [...inventoryVisibleItems];
     if (q) {
       list = list.filter((item) =>
         `${item.itemCode} ${item.itemName} ${inventoryAliasText(item.itemName)} ${item.location} ${item.vendor || ""}`.toLowerCase().includes(q)
       );
     }
     return list.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryItems, inventoryDailyForm.search]);
+  }, [inventoryVisibleItems, inventoryDailyForm.search]);
   const inventoryDailyOutGalleryItems = useMemo(
     () => inventoryDailyItemOptions.filter((item) => isCleaningSupplyItem(item)),
     [inventoryDailyItemOptions]
   );
   const inventoryDailySelectedItem = useMemo(
-    () => inventoryItems.find((item) => String(item.id) === String(inventoryDailyForm.itemId || "")) || null,
-    [inventoryItems, inventoryDailyForm.itemId]
+    () => inventoryVisibleItems.find((item) => String(item.id) === String(inventoryDailyForm.itemId || "")) || null,
+    [inventoryVisibleItems, inventoryDailyForm.itemId]
   );
   const inventoryQuickOutSelectedItem = useMemo(
     () =>
       inventoryQuickOutModal
-        ? inventoryItems.find((item) => String(item.id) === String(inventoryQuickOutModal.itemId)) || null
+        ? inventoryVisibleItems.find((item) => String(item.id) === String(inventoryQuickOutModal.itemId)) || null
         : null,
-    [inventoryItems, inventoryQuickOutModal]
+    [inventoryVisibleItems, inventoryQuickOutModal]
   );
   const inventoryQuickOutReasonSuggestions = useMemo(() => {
     if (!inventoryQuickOutSelectedItem) return [] as string[];
     const set = new Set<string>();
-    for (const tx of inventoryTxns) {
+    for (const tx of inventoryVisibleTxns) {
       if (tx.type !== "OUT" || tx.itemId !== inventoryQuickOutSelectedItem.id) continue;
       const note = String(tx.note || "").trim();
       if (!note) continue;
@@ -3917,7 +3960,7 @@ export default function App() {
       if (set.size >= 6) break;
     }
     return Array.from(set);
-  }, [inventoryTxns, inventoryQuickOutSelectedItem]);
+  }, [inventoryVisibleTxns, inventoryQuickOutSelectedItem]);
   const holidayLookup = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const event of calendarEvents) {
@@ -3939,18 +3982,60 @@ export default function App() {
     return { name, type: normalizeCalendarEventType(type) };
   }, [holidayLookup]);
   const getHolidayName = useCallback((ymd: string) => getHolidayEvent(ymd).name, [getHolidayEvent]);
+  const quickOutDateBadge = useMemo(() => {
+    if (!inventoryQuickOutModal?.date) return "";
+    const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
+    if (!ymd) return "";
+    const holiday = getHolidayEvent(ymd);
+    if (holiday.name) return `Eco Holiday: ${holiday.name}`;
+    const day = new Date(`${ymd}T00:00:00`).getDay();
+    if (day === 0 || day === 6) return "Weekend";
+    return "";
+  }, [inventoryQuickOutModal?.date, getHolidayEvent]);
+  const quickOutEcoGridDays = useMemo(() => {
+    const year = quickOutEcoMonth.getFullYear();
+    const month = quickOutEcoMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay();
+    const endOffset = 6 - lastDay.getDay();
+    const totalCells = startOffset + lastDay.getDate() + endOffset;
+    const startDate = new Date(year, month, 1 - startOffset);
+    return Array.from({ length: totalCells }, (_, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const ymd = toYmd(d);
+      const holiday = getHolidayEvent(ymd);
+      return {
+        ymd,
+        day: d.getDate(),
+        weekday: d.getDay(),
+        inMonth: d.getMonth() === month,
+        holidayName: holiday.name,
+        holidayType: holiday.type,
+      };
+    });
+  }, [quickOutEcoMonth, getHolidayEvent]);
+  const quickOutEcoSelectedEvents = useMemo(() => {
+    const rows = holidayLookup.get(quickOutEcoSelectedDate) || [];
+    return rows.map((row) => ({
+      id: row.id,
+      name: String(row.name || "").trim(),
+      type: normalizeCalendarEventType(row.type),
+    }));
+  }, [holidayLookup, quickOutEcoSelectedDate]);
   const inventoryDailyTodayRows = useMemo(() => {
     const date = inventoryDailyForm.date;
-    return [...inventoryTxns]
+    return [...inventoryVisibleTxns]
       .filter((tx) => tx.date === date)
       .sort((a, b) => b.id - a.id)
       .slice(0, 12);
-  }, [inventoryTxns, inventoryDailyForm.date]);
+  }, [inventoryVisibleTxns, inventoryDailyForm.date]);
   const inventoryDailyUsageTrend = useMemo(() => {
     const endYmd = normalizeYmdInput(inventoryDailyForm.date) || toYmd(new Date());
     const selectedItemId = Number(inventoryDailyForm.itemId || 0);
     const itemLookup = new Map<number, InventoryItem>();
-    for (const item of inventoryItems) itemLookup.set(item.id, item);
+    for (const item of inventoryVisibleItems) itemLookup.set(item.id, item);
     const rows: Array<{
       ymd: string;
       qty: number;
@@ -3960,7 +4045,7 @@ export default function App() {
     for (let i = 13; i >= 0; i -= 1) {
       const ymd = shiftYmd(endYmd, -i);
       let qty = 0;
-      for (const tx of inventoryTxns) {
+      for (const tx of inventoryVisibleTxns) {
         if (tx.date !== ymd) continue;
         if (!isInventoryTxnUsageOut(tx.type)) continue;
         const item = itemLookup.get(tx.itemId);
@@ -3981,7 +4066,7 @@ export default function App() {
       max: max > 0 ? max : 1,
       rows,
     };
-  }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryItems, inventoryTxns, getHolidayName]);
+  }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryVisibleItems, inventoryVisibleTxns, getHolidayName]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -4000,12 +4085,12 @@ export default function App() {
   }, []);
   const inventoryPurchaseRows = useMemo(() => {
     const outByItem = new Map<number, number>();
-    for (const tx of inventoryTxns) {
+    for (const tx of inventoryVisibleTxns) {
       if (!isInventoryTxnUsageOut(tx.type)) continue;
       if (tx.date < inventoryPurchaseWindow.startYmd || tx.date > inventoryPurchaseWindow.endYmd) continue;
       outByItem.set(tx.itemId, (outByItem.get(tx.itemId) || 0) + tx.qty);
     }
-    let list = inventoryItems.map((item) => {
+    let list = inventoryVisibleItems.map((item) => {
       const currentStock = inventoryStockMap.get(item.id) || 0;
       const usedQty = outByItem.get(item.id) || 0;
       const min = Number(item.minStock || 0);
@@ -4022,7 +4107,7 @@ export default function App() {
     return list
       .sort((a, b) => b.suggestedQty - a.suggestedQty || b.usedQty - a.usedQty || a.itemCode.localeCompare(b.itemCode))
       .slice(0, 30);
-  }, [inventoryItems, inventoryTxns, inventoryPurchaseWindow, inventoryStockMap]);
+  }, [inventoryVisibleItems, inventoryVisibleTxns, inventoryPurchaseWindow, inventoryStockMap]);
 
   const setupLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === locationCampus)),
@@ -5987,7 +6072,7 @@ export default function App() {
       setError("Please select item, date, and quantity.");
       return false;
     }
-    const item = inventoryItems.find((i) => i.id === itemId);
+    const item = inventoryVisibleItems.find((i) => i.id === itemId);
     if (!item) {
       setError("Item not found.");
       return false;
@@ -6015,10 +6100,10 @@ export default function App() {
       const ok = window.confirm(`Stock OUT on ${dayType} - ${txDate}. Confirm record?`);
       if (!ok) return false;
     }
-    const inQty = inventoryTxns
+    const inQty = inventoryVisibleTxns
       .filter((x) => x.itemId === itemId && isInventoryTxnIn(x.type))
       .reduce((a, b) => a + b.qty, 0);
-    const outQty = inventoryTxns
+    const outQty = inventoryVisibleTxns
       .filter((x) => x.itemId === itemId && isInventoryTxnOut(x.type))
       .reduce((a, b) => a + b.qty, 0);
     const currentStock = Number(item.openingQty || 0) + inQty - outQty;
@@ -6141,6 +6226,7 @@ export default function App() {
   function closeInventoryQuickOut() {
     setInventoryQuickOutModal(null);
     setInventoryQuickReasonTipsOpen(false);
+    setQuickOutEcoPickerOpen(false);
     setInventoryQuickOutFileKey((k) => k + 1);
   }
   async function copyMaintenanceQuickLink() {
@@ -6158,17 +6244,29 @@ export default function App() {
   }
   function openInventoryQuickOut(item: InventoryItem) {
     const recorder = authUser?.displayName || authUser?.username || "";
+    const baseDate = normalizeYmdInput(inventoryDailyForm.date || toYmd(new Date())) || toYmd(new Date());
+    const base = new Date(`${baseDate}T00:00:00`);
     setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", itemId: String(item.id) }));
     setInventoryQuickOutModal({
       itemId: String(item.id),
-      date: inventoryDailyForm.date || toYmd(new Date()),
+      date: baseDate,
       qty: "",
       by: recorder,
       note: "",
       photo: "",
     });
+    setQuickOutEcoMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+    setQuickOutEcoSelectedDate(baseDate);
+    setQuickOutEcoPickerOpen(false);
     setInventoryQuickReasonTipsOpen(false);
     setInventoryQuickOutFileKey((k) => k + 1);
+  }
+  function openQuickOutEcoPicker() {
+    const baseDate = normalizeYmdInput(inventoryQuickOutModal?.date || toYmd(new Date())) || toYmd(new Date());
+    const base = new Date(`${baseDate}T00:00:00`);
+    setQuickOutEcoMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+    setQuickOutEcoSelectedDate(baseDate);
+    setQuickOutEcoPickerOpen(true);
   }
   async function onInventoryQuickOutPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -6376,19 +6474,19 @@ export default function App() {
       return;
     }
 
-    const item = inventoryItems.find((i) => i.id === itemId);
+    const item = inventoryVisibleItems.find((i) => i.id === itemId);
     if (!item) {
       setError("Item not found.");
       return;
     }
 
-    const currentRow = inventoryTxns.find((x) => x.id === editingInventoryTxnId);
+    const currentRow = inventoryVisibleTxns.find((x) => x.id === editingInventoryTxnId);
     if (!currentRow) {
       setError("Transaction not found.");
       return;
     }
 
-    const rowsWithoutCurrent = inventoryTxns.filter((x) => x.id !== editingInventoryTxnId);
+    const rowsWithoutCurrent = inventoryVisibleTxns.filter((x) => x.id !== editingInventoryTxnId);
     const inQty = rowsWithoutCurrent
       .filter((x) => x.itemId === itemId && isInventoryTxnIn(x.type))
       .reduce((a, b) => a + b.qty, 0);
@@ -6441,7 +6539,7 @@ export default function App() {
     if (!requireAdminAction()) return;
     if (!window.confirm("Delete this transaction?")) return;
 
-    const item = inventoryItems.find((i) => i.id === row.itemId);
+    const item = inventoryVisibleItems.find((i) => i.id === row.itemId);
     if (!item) {
       setError("Item not found.");
       return;
@@ -14622,7 +14720,7 @@ export default function App() {
                     <span>Item</span>
                     <select className="input" value={inventoryTxnForm.itemId} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, itemId: e.target.value }))}>
                       <option value="">Select item</option>
-                      {inventoryItems
+                      {inventoryVisibleItems
                         .slice()
                         .sort((a, b) => a.itemCode.localeCompare(b.itemCode))
                         .map((item) => (
@@ -14743,7 +14841,7 @@ export default function App() {
                                     value={inventoryTxnEditForm.itemId}
                                     onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, itemId: e.target.value }))}
                                   >
-                                    {inventoryItems
+                                    {inventoryVisibleItems
                                       .slice()
                                       .sort((a, b) => a.itemCode.localeCompare(b.itemCode))
                                       .map((item) => (
@@ -14754,10 +14852,10 @@ export default function App() {
                                   </select>
                                 </td>
                                 <td>
-                                  {inventoryItems.find((i) => String(i.id) === inventoryTxnEditForm.itemId)?.itemName || "-"}
+                                  {inventoryVisibleItems.find((i) => String(i.id) === inventoryTxnEditForm.itemId)?.itemName || "-"}
                                 </td>
                                 <td>
-                                  {campusLabel(inventoryItems.find((i) => String(i.id) === inventoryTxnEditForm.itemId)?.campus || row.campus)}
+                                  {campusLabel(inventoryVisibleItems.find((i) => String(i.id) === inventoryTxnEditForm.itemId)?.campus || row.campus)}
                                 </td>
                                 <td>
                                   <select
@@ -14857,7 +14955,7 @@ export default function App() {
                       : "Phone-friendly daily IN/OUT for maintenance staff."}
                   </p>
                 </div>
-                {isPhoneView && inventoryDailyForm.type === "OUT" ? (
+                {(maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT" ? (
                   <article className="panel inventory-daily-gallery-panel">
                     <div className="panel-row">
                       <h3 className="section-title">{lang === "km" ? "ជ្រើសសម្ភារៈចេញស្តុកលឿន" : "Quick Stock-Out Gallery"}</h3>
@@ -14891,7 +14989,7 @@ export default function App() {
                   </article>
                 ) : null}
 
-                {!(isPhoneView && inventoryDailyForm.type === "OUT") ? (
+                {!(((maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT")) ? (
                 <div className="inventory-daily-grid">
                   <label className="field field-wide">
                     <span>{lang === "km" ? "ស្វែងរកសម្ភារៈ" : "Search Item"}</span>
@@ -14995,7 +15093,7 @@ export default function App() {
                 </div>
                 ) : null}
 
-                {!(isPhoneView && inventoryDailyForm.type === "OUT") && inventoryDailySelectedItem ? (
+                {!(((maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT")) && inventoryDailySelectedItem ? (
                   <div className="inventory-daily-stock-note">
                     <strong>{inventoryDailySelectedItem.itemCode}</strong> - {inventoryDailySelectedItem.itemName}
                     {" | "}
@@ -15043,7 +15141,7 @@ export default function App() {
                 </article>
                 ) : null}
 
-                {!(isPhoneView && inventoryDailyForm.type === "OUT") ? (
+                {!(((maintenanceQuickMode || isPhoneView) && inventoryDailyForm.type === "OUT")) ? (
                 <div className="asset-actions">
                   <div className="tiny">
                     {lang === "km"
@@ -18986,14 +19084,82 @@ export default function App() {
                     );
                   })()}
                   <div className="form-grid" style={{ marginTop: 10 }}>
-                    <label className="field">
+                    <label className="field quickout-date-field">
                       <span>{t.date}</span>
-                      <input
-                        className="input"
-                        type="date"
-                        value={inventoryQuickOutModal.date}
-                        onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, date: e.target.value } : prev))}
-                      />
+                      <div className="quickout-date-input-wrap">
+                        <input
+                          className="input"
+                          type="text"
+                          readOnly
+                          value={formatDate(inventoryQuickOutModal.date)}
+                        />
+                        <button
+                          type="button"
+                          className="tab quickout-date-icon-btn"
+                          onClick={openQuickOutEcoPicker}
+                          aria-label="Open Eco Calendar"
+                        >
+                          <Calendar size={18} />
+                        </button>
+                      </div>
+                      {quickOutDateBadge ? (
+                        <small className="tiny inventory-quickout-date-badge">{quickOutDateBadge}</small>
+                      ) : null}
+                      {quickOutEcoPickerOpen ? (
+                        <div className="quickout-eco-inline-panel">
+                          <div className="panel-row">
+                            <strong>{quickOutEcoMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}</strong>
+                            <div className="row-actions">
+                              <button
+                                type="button"
+                                className="tab"
+                                onClick={() => setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                              >
+                                {calendarPrevLabel}
+                              </button>
+                              <button
+                                type="button"
+                                className="tab"
+                                onClick={() => setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                              >
+                                {calendarNextLabel}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="calendar-grid">
+                            {["S", "M", "T", "W", "T", "F", "S"].map((d, idx) => (
+                              <div key={`quickout-eco-head-${d}-${idx}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
+                            ))}
+                            {quickOutEcoGridDays.map((d) => (
+                              <button
+                                key={`quickout-eco-day-${d.ymd}`}
+                                type="button"
+                                className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${quickOutEcoSelectedDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""}`}
+                                onClick={() => {
+                                  setQuickOutEcoSelectedDate(d.ymd);
+                                  setInventoryQuickOutModal((prev) => (prev ? { ...prev, date: d.ymd } : prev));
+                                  setQuickOutEcoPickerOpen(false);
+                                }}
+                              >
+                                <span>{d.day}</span>
+                                {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="quickout-eco-events">
+                            <div className="tiny"><strong>{formatDate(quickOutEcoSelectedDate)}</strong></div>
+                            {quickOutEcoSelectedEvents.length ? (
+                              quickOutEcoSelectedEvents.map((event) => (
+                                <div key={`quickout-eco-event-${event.id}`} className={`calendar-type-badge calendar-type-${event.type}`}>
+                                  {calendarEventTypeLabel(event.type)}: {event.name}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="tiny">{lang === "km" ? "មិនមានព្រឹត្តិការណ៍" : "No Eco event on this date."}</div>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
                     </label>
                     <label className="field">
                       <span>{lang === "km" ? "បរិមាណចេញ" : "Stock Out Qty"}</span>
@@ -19079,7 +19245,6 @@ export default function App() {
             </section>
           </div>
         ) : null}
-
         {scheduleScopeModal ? (
           <div className="modal-backdrop" onClick={() => setScheduleScopeModal(null)}>
             <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
