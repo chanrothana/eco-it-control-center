@@ -603,16 +603,29 @@ function isAdminRole(role: AuthRole) {
 function hasGlobalCampusAccess(role: AuthRole, campuses?: unknown) {
   if (role === "Super Admin") return true;
   if (!Array.isArray(campuses)) return false;
-  return campuses.map((v) => String(v || "").trim()).includes("ALL");
+  const normalized = normalizeRoleCampuses(role, campuses);
+  return normalized.length >= CAMPUS_LIST.length;
 }
 function normalizeRoleCampuses(role: AuthRole, campuses?: unknown) {
   if (role === "Super Admin") return ["ALL"];
-  if (Array.isArray(campuses) && campuses.map((v) => String(v || "").trim().toUpperCase()).includes("ALL")) {
-    return [...CAMPUS_LIST];
-  }
   const selected = Array.isArray(campuses)
-    ? Array.from(new Set(campuses.map((v) => String(v || "").trim()).filter((v) => CAMPUS_LIST.includes(v))))
+    ? Array.from(
+        new Set(
+          campuses
+            .map((v) => String(v || "").trim())
+            .filter(Boolean)
+            .map((value) => {
+              const upper = value.toUpperCase();
+              if (upper === "ALL") return "ALL";
+              if (CAMPUS_LIST.includes(value)) return value;
+              return CODE_TO_CAMPUS[value] || CODE_TO_CAMPUS[upper] || "";
+            })
+            .filter(Boolean)
+        )
+      )
     : [];
+  if (selected.includes("ALL")) return [...CAMPUS_LIST];
+  if (selected.length >= CAMPUS_LIST.length) return [...CAMPUS_LIST];
   return selected;
 }
 function defaultMenuAccessFor(role: AuthRole, modules: NavModule[], assetSubviewAccess: AssetSubviewAccess) {
@@ -3893,7 +3906,7 @@ export default function App() {
   const allowedCampuses = useMemo(() => {
     if (!authUser) return CAMPUS_LIST;
     if (hasGlobalCampusAccess(authUser.role, authUser.campuses)) return CAMPUS_LIST;
-    const campuses = Array.isArray(authUser.campuses) ? authUser.campuses : [];
+    const campuses = normalizeRoleCampuses(authUser.role, authUser.campuses);
     if (!campuses.length) return CAMPUS_LIST;
     return CAMPUS_LIST.filter((c) => campuses.includes(c));
   }, [authUser]);

@@ -1,48 +1,6 @@
 {
   "assets": [
     {
-      "id": 1772249057296,
-      "seq": 2,
-      "assetId": "C2.1-FC-AC-0002",
-      "name": "C2.1-FC-AC-0002",
-      "maintenanceHistory": [],
-      "transferHistory": [],
-      "custodyHistory": [],
-      "created": "2026-02-28T03:24:17.296Z",
-      "campus": "Chaktomuk Campus",
-      "category": "FACILITY",
-      "type": "AC",
-      "pcType": "",
-      "location": "Teacher Office",
-      "setCode": "",
-      "parentAssetId": "",
-      "componentRole": "",
-      "componentRequired": false,
-      "assignedTo": "",
-      "custodyStatus": "IN_STOCK",
-      "brand": "",
-      "model": "DWP-817T/DWP-817S",
-      "serialNumber": "",
-      "specs": "",
-      "purchaseDate": "2026-02-28",
-      "warrantyUntil": "",
-      "vendor": "Fresh Water",
-      "notes": "",
-      "nextMaintenanceDate": "",
-      "scheduleNote": "",
-      "repeatMode": "NONE",
-      "repeatWeekOfMonth": 0,
-      "repeatWeekday": 0,
-      "photo": "/uploads/assets/1772249057288-ae0f6796780a.jpg",
-      "photos": [
-        "/uploads/assets/1772249057288-ae0f6796780a.jpg",
-        "/uploads/assets/1772249057290-3f96d6c5312a.jpg",
-        "/uploads/assets/1772249057292-612e0ada99da.jpg",
-        "/uploads/assets/1772249057292-fd66ec07c026.jpg"
-      ],
-      "status": "Active"
-    },
-    {
       "id": 1772201940622,
       "seq": 1,
       "assetId": "C2.1-IT-UWF-0001",
@@ -3863,11 +3821,6 @@
   ],
   "locations": [
     {
-      "id": 1772248741307,
-      "campus": "Chaktomuk Campus",
-      "name": "Walk Way Ground Floor"
-    },
-    {
       "id": 1772175232246,
       "campus": "Boeung Snor Campus",
       "name": "Stock Room Eco 41"
@@ -4071,44 +4024,107 @@
         "reports.verification_summary",
         "reports.qr_labels"
       ]
+    },
+    {
+      "id": 6,
+      "username": "eco.admin",
+      "password": "scrypt$33f7d1aa99e73ff89ef1d234764bb863$46a8d08364fbc51082a9fecebf334868d99db98062aebf8ffb2ebdc004224c5793042a59993241a8553114c11dcc95285c46c5a9ad696df61c1bd36f0ba5faa9",
+      "displayName": "Eco_Admin",
+      "role": "Admin",
+      "campuses": [
+        "Chaktomuk Campus",
+        "Chaktomuk Campus (C2.2)",
+        "Boeung Snor Campus",
+        "Veng Sreng Campus",
+        "Samdach Pan Campus"
+      ],
+      "modules": [
+        "dashboard",
+        "assets",
+        "inventory",
+        "tickets",
+        "schedule",
+        "transfer",
+        "maintenance",
+        "verification",
+        "reports",
+        "vault",
+        "setup"
+      ],
+      "assetSubviewAccess": "both",
+      "menuAccess": [
+        "dashboard",
+        "dashboard.overview",
+        "dashboard.schedule",
+        "dashboard.activity",
+        "assets",
+        "assets.register",
+        "assets.list",
+        "inventory",
+        "inventory.main",
+        "schedule",
+        "schedule.main",
+        "transfer",
+        "transfer.main",
+        "maintenance",
+        "maintenance.record",
+        "maintenance.history",
+        "reports",
+        "reports.asset_master",
+        "reports.set_code",
+        "reports.asset_by_location",
+        "reports.overdue",
+        "reports.transfer",
+        "reports.staff_borrowing",
+        "reports.maintenance_completion",
+        "reports.verification_summary",
+        "reports.qr_labels",
+        "vault",
+        "vault.dashboard",
+        "vault.accounts",
+        "vault.credentials",
+        "vault.design",
+        "vault.network",
+        "vault.cctv"
+      ]
     }
   ],
   "auditLogs": [
     {
-      "id": 1772249057972,
-      "date": "2026-02-28T03:24:17.296Z",
-      "action": "CREATE",
-      "entity": "asset",
-      "entityId": "C2.1-FC-AC-0002",
-      "summary": "Chaktomuk Campus | Teacher Office",
-      "actor": {
-        "id": 1,
-        "username": "admin",
-        "displayName": "Eco Admin",
-        "role": "Super Admin"
-      }
-    },
-    {
-      "id": 1772248742056,
-      "date": "2026-02-28T03:19:01.307Z",
-      "action": "CREATE",
-      "entity": "location",
-      "entityId": "1772248741307",
-      "summary": "Chaktomuk Campus | Walk Way Ground Floor",
-      "actor": {
-        "id": 1,
-        "username": "admin",
-        "displayName": "Eco Admin",
-        "role": "Super Admin"
-      }
-    },
-    {
-      "id": 1772248170472,
-      "date": "2026-02-28T03:09:29.733Z",
+      "id": 1772250166414,
+      "date": "2026-02-28T03:42:45.762Z",
       "action": "BACKUP_IMPORT",
       "entity": "system",
       "entityId": "db",
       "summary": "Database restored from backup",
+      "actor": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Super Admin"
+      }
+    },
+    {
+      "id": 1772250084653,
+      "date": "2026-02-28T03:41:23.772Z",
+      "action": "UPDATE",
+      "entity": "auth_user_permission",
+      "entityId": "6",
+      "summary": "username=eco.admin; role=Admin; campuses=Chaktomuk Campus,Chaktomuk Campus (C2.2),Boeung Snor Campus,Veng Sreng Campus,Samdach Pan Campus; assetAccess=both; menuAccess=33; passwordUpdated=no",
+      "actor": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Super Admin"
+      }
+    },
+    {
+      "id": 1772249968581,
+      "date": "2026-02-28T03:39:28.053Z",
+      "action": "CREATE",
+      "entity": "auth_user",
+      "entityId": "6",
+      "summary": "username=eco.admin; role=Admin; campuses=Samdach Pan Campus,Chaktomuk Campus,Chaktomuk Campus (C2.2),Boeung Snor Campus,Veng Sreng Campus; assetAccess=both; menuAccess=33",
       "actor": {
         "id": 1,
         "username": "admin",
@@ -7878,13 +7894,60 @@
         "id": 3,
         "username": "rothana",
         "displayName": "Him Chanrothana",
-        "role": "Super Admin",
-        "campuses": [
-          "ALL"
+        "role": "Viewer",
+        "campuses": [],
+        "modules": [
+          "dashboard",
+          "assets",
+          "inventory",
+          "tickets",
+          "schedule",
+          "transfer",
+          "maintenance",
+          "verification",
+          "reports",
+          "setup"
         ],
-        "modules": [],
         "assetSubviewAccess": "both",
-        "menuAccess": []
+        "menuAccess": [
+          "dashboard",
+          "dashboard.overview",
+          "dashboard.schedule",
+          "dashboard.activity",
+          "assets",
+          "assets.register",
+          "assets.list",
+          "inventory",
+          "inventory.main",
+          "tickets",
+          "tickets.main",
+          "schedule",
+          "schedule.main",
+          "transfer",
+          "transfer.main",
+          "maintenance",
+          "maintenance.record",
+          "maintenance.history",
+          "verification",
+          "verification.record",
+          "verification.history",
+          "reports",
+          "reports.asset_master",
+          "reports.set_code",
+          "reports.asset_by_location",
+          "reports.overdue",
+          "reports.transfer",
+          "reports.maintenance_completion",
+          "reports.verification_summary",
+          "reports.qr_labels",
+          "setup",
+          "setup.campus",
+          "setup.users",
+          "setup.permissions",
+          "setup.backup",
+          "setup.items",
+          "setup.locations"
+        ]
       }
     },
     {
@@ -7908,13 +7971,60 @@
         "id": 3,
         "username": "rothana",
         "displayName": "Him Chanrothana",
-        "role": "Super Admin",
-        "campuses": [
-          "ALL"
+        "role": "Viewer",
+        "campuses": [],
+        "modules": [
+          "dashboard",
+          "assets",
+          "inventory",
+          "tickets",
+          "schedule",
+          "transfer",
+          "maintenance",
+          "verification",
+          "reports",
+          "setup"
         ],
-        "modules": [],
         "assetSubviewAccess": "both",
-        "menuAccess": []
+        "menuAccess": [
+          "dashboard",
+          "dashboard.overview",
+          "dashboard.schedule",
+          "dashboard.activity",
+          "assets",
+          "assets.register",
+          "assets.list",
+          "inventory",
+          "inventory.main",
+          "tickets",
+          "tickets.main",
+          "schedule",
+          "schedule.main",
+          "transfer",
+          "transfer.main",
+          "maintenance",
+          "maintenance.record",
+          "maintenance.history",
+          "verification",
+          "verification.record",
+          "verification.history",
+          "reports",
+          "reports.asset_master",
+          "reports.set_code",
+          "reports.asset_by_location",
+          "reports.overdue",
+          "reports.transfer",
+          "reports.maintenance_completion",
+          "reports.verification_summary",
+          "reports.qr_labels",
+          "setup",
+          "setup.campus",
+          "setup.users",
+          "setup.permissions",
+          "setup.backup",
+          "setup.items",
+          "setup.locations"
+        ]
       }
     },
     {
@@ -7968,13 +8078,60 @@
         "id": 3,
         "username": "rothana",
         "displayName": "Him Chanrothana",
-        "role": "Super Admin",
-        "campuses": [
-          "ALL"
+        "role": "Viewer",
+        "campuses": [],
+        "modules": [
+          "dashboard",
+          "assets",
+          "inventory",
+          "tickets",
+          "schedule",
+          "transfer",
+          "maintenance",
+          "verification",
+          "reports",
+          "setup"
         ],
-        "modules": [],
         "assetSubviewAccess": "both",
-        "menuAccess": []
+        "menuAccess": [
+          "dashboard",
+          "dashboard.overview",
+          "dashboard.schedule",
+          "dashboard.activity",
+          "assets",
+          "assets.register",
+          "assets.list",
+          "inventory",
+          "inventory.main",
+          "tickets",
+          "tickets.main",
+          "schedule",
+          "schedule.main",
+          "transfer",
+          "transfer.main",
+          "maintenance",
+          "maintenance.record",
+          "maintenance.history",
+          "verification",
+          "verification.record",
+          "verification.history",
+          "reports",
+          "reports.asset_master",
+          "reports.set_code",
+          "reports.asset_by_location",
+          "reports.overdue",
+          "reports.transfer",
+          "reports.maintenance_completion",
+          "reports.verification_summary",
+          "reports.qr_labels",
+          "setup",
+          "setup.campus",
+          "setup.users",
+          "setup.permissions",
+          "setup.backup",
+          "setup.items",
+          "setup.locations"
+        ]
       }
     },
     {
@@ -8038,6 +8195,21 @@
       }
     },
     {
+      "token": "1803f4498eb602387e0b42f512aae5c9ed30dd9151496dc7",
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Super Admin",
+        "campuses": [
+          "ALL"
+        ],
+        "modules": [],
+        "assetSubviewAccess": "both",
+        "menuAccess": []
+      }
+    },
+    {
       "token": "f7794b67fce2e71154f1e5f4370324f172bad00f36a90e5a",
       "user": {
         "id": 1,
@@ -8053,7 +8225,7 @@
       }
     },
     {
-      "token": "f925396590151103c5397c2f611f5ff445fcf16f74e93e8a",
+      "token": "10f628c462e3c75e70e27677b1e5e42be92537b25fd49d0a",
       "user": {
         "id": 1,
         "username": "admin",
@@ -8068,7 +8240,7 @@
       }
     },
     {
-      "token": "8f9a1fe8f55710deb72d77d214d93493a4aaffd5f9adaa88",
+      "token": "e451eae9622e79916087af26b3c7fef06c79f0d74736d7fb",
       "user": {
         "id": 1,
         "username": "admin",
@@ -8083,7 +8255,7 @@
       }
     },
     {
-      "token": "d1ffa48d2affeebf8c82f11531cd4dcd55c70eafc6c8d814",
+      "token": "a348220c8f21b3a9960cd9ea2942c810a3f134b88e4818bf",
       "user": {
         "id": 1,
         "username": "admin",
@@ -8098,7 +8270,7 @@
       }
     },
     {
-      "token": "baa0420718e463b698df7dd196eaaed421a968820fa49139",
+      "token": "2417a6d4a945d7700a8de4d39f42fddc5165a7a00abf9229",
       "user": {
         "id": 1,
         "username": "admin",
@@ -8113,24 +8285,46 @@
       }
     },
     {
-      "token": "3e6be6fa21569cb05f6a91c7f679af1f1e1d3253284cee7e",
+      "token": "37cb9167098311c758acd667b749555eea3b2717514dad5b",
       "user": {
-        "id": 5,
-        "username": "hour",
-        "displayName": "Ly Hour",
-        "role": "Viewer",
+        "id": 1,
+        "username": "admin",
+        "displayName": "Eco Admin",
+        "role": "Super Admin",
         "campuses": [
-          "Boeung Snor Campus"
+          "ALL"
+        ],
+        "modules": [],
+        "assetSubviewAccess": "both",
+        "menuAccess": []
+      }
+    },
+    {
+      "token": "4992738bfcc594c02685c84e306875d9b53d9f0caed49a53",
+      "user": {
+        "id": 6,
+        "username": "eco.admin",
+        "displayName": "Eco_Admin",
+        "role": "Admin",
+        "campuses": [
+          "Chaktomuk Campus",
+          "Chaktomuk Campus (C2.2)",
+          "Boeung Snor Campus",
+          "Veng Sreng Campus",
+          "Samdach Pan Campus"
         ],
         "modules": [
           "dashboard",
           "assets",
           "inventory",
+          "tickets",
           "schedule",
           "transfer",
           "maintenance",
           "verification",
-          "reports"
+          "reports",
+          "vault",
+          "setup"
         ],
         "assetSubviewAccess": "both",
         "menuAccess": [
@@ -8139,6 +8333,7 @@
           "dashboard.schedule",
           "dashboard.activity",
           "assets",
+          "assets.register",
           "assets.list",
           "inventory",
           "inventory.main",
@@ -8149,9 +8344,6 @@
           "maintenance",
           "maintenance.record",
           "maintenance.history",
-          "verification",
-          "verification.record",
-          "verification.history",
           "reports",
           "reports.asset_master",
           "reports.set_code",
@@ -8161,159 +8353,15 @@
           "reports.staff_borrowing",
           "reports.maintenance_completion",
           "reports.verification_summary",
-          "reports.qr_labels"
+          "reports.qr_labels",
+          "vault",
+          "vault.dashboard",
+          "vault.accounts",
+          "vault.credentials",
+          "vault.design",
+          "vault.network",
+          "vault.cctv"
         ]
-      }
-    },
-    {
-      "token": "c92a17e64a6c55c7f9ba49478b6d61da02da7f9a8e3a9d8c",
-      "user": {
-        "id": 5,
-        "username": "hour",
-        "displayName": "Ly Hour",
-        "role": "Viewer",
-        "campuses": [
-          "Boeung Snor Campus"
-        ],
-        "modules": [
-          "dashboard",
-          "assets",
-          "inventory",
-          "schedule",
-          "transfer",
-          "maintenance",
-          "verification",
-          "reports"
-        ],
-        "assetSubviewAccess": "both",
-        "menuAccess": [
-          "dashboard",
-          "dashboard.overview",
-          "dashboard.schedule",
-          "dashboard.activity",
-          "assets",
-          "assets.list",
-          "inventory",
-          "inventory.main",
-          "schedule",
-          "schedule.main",
-          "transfer",
-          "transfer.main",
-          "maintenance",
-          "maintenance.record",
-          "maintenance.history",
-          "verification",
-          "verification.record",
-          "verification.history",
-          "reports",
-          "reports.asset_master",
-          "reports.set_code",
-          "reports.asset_by_location",
-          "reports.overdue",
-          "reports.transfer",
-          "reports.staff_borrowing",
-          "reports.maintenance_completion",
-          "reports.verification_summary",
-          "reports.qr_labels"
-        ]
-      }
-    },
-    {
-      "token": "d05144105419c316521ec72cf87de3111fe7c042675a086e",
-      "user": {
-        "id": 5,
-        "username": "hour",
-        "displayName": "Ly Hour",
-        "role": "Viewer",
-        "campuses": [
-          "Boeung Snor Campus"
-        ],
-        "modules": [
-          "dashboard",
-          "assets",
-          "inventory",
-          "schedule",
-          "transfer",
-          "maintenance",
-          "verification",
-          "reports"
-        ],
-        "assetSubviewAccess": "both",
-        "menuAccess": [
-          "dashboard",
-          "dashboard.overview",
-          "dashboard.schedule",
-          "dashboard.activity",
-          "assets",
-          "assets.list",
-          "inventory",
-          "inventory.main",
-          "schedule",
-          "schedule.main",
-          "transfer",
-          "transfer.main",
-          "maintenance",
-          "maintenance.record",
-          "maintenance.history",
-          "verification",
-          "verification.record",
-          "verification.history",
-          "reports",
-          "reports.asset_master",
-          "reports.set_code",
-          "reports.asset_by_location",
-          "reports.overdue",
-          "reports.transfer",
-          "reports.staff_borrowing",
-          "reports.maintenance_completion",
-          "reports.verification_summary",
-          "reports.qr_labels"
-        ]
-      }
-    },
-    {
-      "token": "6139addd0426478f6ad291262c1cda19689a9845d5d2e87f",
-      "user": {
-        "id": 1,
-        "username": "admin",
-        "displayName": "Eco Admin",
-        "role": "Super Admin",
-        "campuses": [
-          "ALL"
-        ],
-        "modules": [],
-        "assetSubviewAccess": "both",
-        "menuAccess": []
-      }
-    },
-    {
-      "token": "02375486537e9f33e386d6a57b966e14b225816407f6b98b",
-      "user": {
-        "id": 1,
-        "username": "admin",
-        "displayName": "Eco Admin",
-        "role": "Super Admin",
-        "campuses": [
-          "ALL"
-        ],
-        "modules": [],
-        "assetSubviewAccess": "both",
-        "menuAccess": []
-      }
-    },
-    {
-      "token": "e9d007cf21e79823c60c8a0e9c47e7c0943b02ff747983dd",
-      "user": {
-        "id": 1,
-        "username": "admin",
-        "displayName": "Eco Admin",
-        "role": "Super Admin",
-        "campuses": [
-          "ALL"
-        ],
-        "modules": [],
-        "assetSubviewAccess": "both",
-        "menuAccess": []
       }
     }
   ],
