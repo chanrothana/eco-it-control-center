@@ -3915,6 +3915,11 @@ tr.row-maint-maintenance:hover td {
   color: #00353a;
 }
 
+/* In day cells, show event label as plain text (no rounded badge box). */
+.calendar-day .calendar-event-tag {
+  display: none !important;
+}
+
 .calendar-day .calendar-hover-popup {
   position: absolute;
   left: 50%;
@@ -5702,6 +5707,15 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: 1fr !important;
   }
 
+  .workspace-main .form-grid.asset-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+  }
+
+  .workspace-main .asset-detail-grid .field-wide {
+    grid-column: 1 / -1 !important;
+  }
+
   .workspace-main .form-grid.maintenance-record-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -5824,6 +5838,77 @@ tr.row-maint-maintenance:hover td {
     overflow-wrap: normal !important;
     font-size: 12px;
     padding: 8px;
+  }
+
+  .modal-panel .asset-detail-history-wrap {
+    overflow-x: hidden !important;
+  }
+
+  .modal-panel .asset-detail-history-wrap table,
+  .modal-panel .asset-detail-history-wrap .maintenance-history-modal-table,
+  .modal-panel .asset-detail-history-wrap .asset-detail-transfer-table,
+  .modal-panel .asset-detail-history-wrap .asset-detail-custody-table,
+  .modal-panel .asset-detail-history-wrap .asset-detail-status-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: fixed;
+  }
+
+  .modal-panel .asset-detail-history-wrap thead {
+    display: none;
+  }
+
+  .modal-panel .asset-detail-history-wrap tbody {
+    display: grid;
+    gap: 8px;
+  }
+
+  .modal-panel .asset-detail-history-wrap tr {
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid #d9e4f5;
+    border-radius: 10px;
+    background: #f7fbff;
+  }
+
+  .modal-panel .asset-detail-history-wrap tr.asset-detail-empty-row {
+    display: table-row;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .modal-panel .asset-detail-history-wrap tr.asset-detail-empty-row td {
+    display: table-cell !important;
+    white-space: normal !important;
+    text-align: center;
+    padding: 10px 8px;
+  }
+
+  .modal-panel .asset-detail-history-wrap td {
+    display: grid;
+    grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    padding: 0 !important;
+    border: 0;
+    background: transparent;
+    font-size: 12px;
+  }
+
+  .modal-panel .asset-detail-history-wrap td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    line-height: 1.25;
+    color: #5a7096;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .maintenance-history-modal-table th:nth-child(5),
@@ -6166,6 +6251,14 @@ tr.row-maint-maintenance:hover td {
 
   .modal-panel .table-wrap table {
     min-width: 760px !important;
+  }
+
+  .modal-panel .asset-detail-history-wrap table,
+  .modal-panel .asset-detail-history-wrap .maintenance-history-modal-table,
+  .modal-panel .asset-detail-history-wrap .asset-detail-transfer-table,
+  .modal-panel .asset-detail-history-wrap .asset-detail-custody-table,
+  .modal-panel .asset-detail-history-wrap .asset-detail-status-table {
+    min-width: 0 !important;
   }
 
   .report-table-wrap table,

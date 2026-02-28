@@ -30,6 +30,7 @@ import {
   Volume2,
   Webcam,
   Wifi,
+  Droplets,
   Wrench,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -895,8 +896,6 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
     { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
-    { itemEn: "Front Panel", itemKm: "ផ្នែកខាងមុខ", code: "FPN" },
-    { itemEn: "Rear Panel", itemKm: "ផ្នែកខាងក្រោយ", code: "RPN" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
   ],
@@ -913,6 +912,7 @@ const SHARED_LOCATION_KEYWORDS = [
   "compuer lap",
 ];
 const DESKTOP_PARENT_TYPE = "PC";
+const WATER_DISPENSER_MAIN_TYPE = "WDP";
 const PC_TYPE_OPTIONS = [
   { value: "Desktop", en: "Desktop", km: "កុំព្យូទ័រ Desktop" },
   { value: "AIO", en: "All-in-One (AIO)", km: "All-in-One (AIO)" },
@@ -971,7 +971,8 @@ function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF"
 }
 
 function canLinkToParentAsset(type: string): boolean {
-  return String(type || "").toUpperCase() !== DESKTOP_PARENT_TYPE;
+  const code = String(type || "").toUpperCase();
+  return code !== DESKTOP_PARENT_TYPE && code !== WATER_DISPENSER_MAIN_TYPE;
 }
 
 const TEXT = {
@@ -4874,7 +4875,6 @@ export default function App() {
     if (parentAssetsForEdit.some((asset) => asset.assetId === assetEditForm.parentAssetId)) return;
     setAssetEditForm((prev) => ({ ...prev, parentAssetId: "", setCode: "" }));
   }, [assetEditForm.useExistingSet, assetEditForm.parentAssetId, parentAssetsForEdit]);
-
   useEffect(() => {
     const isDesktop = assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE;
     if (isDesktop) return;
@@ -5371,15 +5371,16 @@ export default function App() {
   async function createAsset() {
     if (!requireAdminAction()) return;
     const isDesktopAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DESKTOP_PARENT_TYPE;
+    const shouldLinkToParent = !isDesktopAsset && (isLinkableForCreate && assetForm.useExistingSet);
     const createPack = isDesktopAsset && assetForm.createSetPack;
     const packItems = (Object.entries(setPackDraft) as Array<[SetPackChildType, SetPackChildDraft]>)
       .filter(([, draft]) => draft.enabled);
     const createSetCode = isDesktopAsset
       ? suggestedDesktopSetCode
-      : (isLinkableForCreate && assetForm.useExistingSet ? assetForm.setCode.trim() : "");
+      : (shouldLinkToParent ? assetForm.setCode.trim() : "");
     const createParentAssetId = isDesktopAsset
       ? ""
-      : (isLinkableForCreate && assetForm.useExistingSet ? assetForm.parentAssetId.trim().toUpperCase() : "");
+      : (shouldLinkToParent ? assetForm.parentAssetId.trim().toUpperCase() : "");
     if (!assetForm.location) {
       alert(t.locationRequired);
       return;
@@ -5388,7 +5389,7 @@ export default function App() {
       alert(t.pcTypeRequired);
       return;
     }
-    if (isLinkableForCreate && assetForm.useExistingSet && !createParentAssetId) {
+    if (shouldLinkToParent && !createParentAssetId) {
       alert(t.selectParentAsset);
       return;
     }
@@ -7824,6 +7825,8 @@ export default function App() {
       !!editingAsset && editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     const editingIsLinkable =
       !!editingAsset && canLinkToParentAsset(editingAsset.type);
+    const editingShouldLinkToParent =
+      !!editingAsset && !editingIsDesktop && (editingIsLinkable && assetEditForm.useExistingSet);
     const needsUser =
       !!editingAsset &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
@@ -7832,7 +7835,7 @@ export default function App() {
       alert(t.userRequired);
       return;
     }
-    if (editingIsLinkable && assetEditForm.useExistingSet && !assetEditForm.parentAssetId.trim()) {
+    if (editingShouldLinkToParent && !assetEditForm.parentAssetId.trim()) {
       alert(t.selectParentAsset);
       return;
     }
@@ -7870,10 +7873,10 @@ export default function App() {
       pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
       setCode: editingIsDesktop
         ? assetEditForm.setCode.trim()
-        : (editingIsLinkable && assetEditForm.useExistingSet ? assetEditForm.setCode.trim() : ""),
+        : (editingShouldLinkToParent ? assetEditForm.setCode.trim() : ""),
       parentAssetId: editingIsDesktop
         ? ""
-        : (editingIsLinkable && assetEditForm.useExistingSet ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
+        : (editingShouldLinkToParent ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
       componentRole: assetEditForm.componentRole.trim(),
       componentRequired: Boolean(assetEditForm.componentRequired),
       assignedTo: assetEditForm.assignedTo.trim(),
@@ -9333,6 +9336,10 @@ export default function App() {
   const editingAsset = useMemo(
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
+  );
+  const editingIsLinkableAsset = useMemo(
+    () => (editingAsset ? canLinkToParentAsset(editingAsset.type) : false),
+    [editingAsset]
   );
   const editingSetPackChildren = useMemo<Partial<Record<SetPackChildType, Asset>>>(() => {
     if (!editingAsset) return {};
@@ -11309,7 +11316,7 @@ export default function App() {
     if (code === "FCP" || name.includes("control panel")) return icon(Settings);
 
     if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return icon(Snowflake);
-    if (code === "WDP" || name.includes("water dispenser")) return icon(Building2);
+    if (code === "WDP" || name.includes("water dispenser")) return icon(Droplets);
     if (code === "FPN" || name.includes("front panel")) return icon(Puzzle);
     if (code === "RPN" || name.includes("rear panel")) return icon(Puzzle);
     if (code === "TBL" || name.includes("table")) return icon(Building2);
@@ -14934,7 +14941,7 @@ export default function App() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="table-wrap maintenance-history-modal-table-wrap">
+                  <div className="table-wrap maintenance-history-modal-table-wrap asset-detail-history-wrap">
                     <table className="maintenance-history-modal-table">
                       <thead>
                         <tr>
@@ -14952,18 +14959,18 @@ export default function App() {
                         {detailMaintenanceVisibleEntries.length ? (
                           detailMaintenanceVisibleEntries.map((h) => (
                             <tr key={`detail-history-${h.id}`}>
-                              <td>{formatDate(h.date)}</td>
-                              <td>{h.type}</td>
-                              <td>{h.completion || "-"}</td>
-                              <td>{h.condition || "-"}</td>
-                              <td>{h.note}</td>
-                              <td>{renderAssetPhoto(h.photo || "", "maintenance")}</td>
-                              <td>{h.cost || "-"}</td>
-                              <td>{h.by || "-"}</td>
+                              <td data-label="Date">{formatDate(h.date)}</td>
+                              <td data-label="Type">{h.type}</td>
+                              <td data-label="Work Status">{h.completion || "-"}</td>
+                              <td data-label="Condition">{h.condition || "-"}</td>
+                              <td data-label="Note">{h.note}</td>
+                              <td data-label="Photo">{renderAssetPhoto(h.photo || "", "maintenance")}</td>
+                              <td data-label="Cost">{h.cost || "-"}</td>
+                              <td data-label="By">{h.by || "-"}</td>
                             </tr>
                           ))
                         ) : (
-                          <tr>
+                          <tr className="asset-detail-empty-row">
                             <td colSpan={8}>No maintenance records yet.</td>
                           </tr>
                         )}
@@ -14988,8 +14995,8 @@ export default function App() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="table-wrap">
-                    <table>
+                  <div className="table-wrap asset-detail-history-wrap">
+                    <table className="asset-detail-transfer-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -15015,21 +15022,21 @@ export default function App() {
                             );
                             return (
                             <tr key={`detail-transfer-${h.id}`}>
-                              <td>{formatDate(h.date)}</td>
-                              <td>{campusLabel(h.fromCampus)}</td>
-                              <td>{h.fromLocation || "-"}</td>
-                              <td>{campusLabel(h.toCampus)}</td>
-                              <td>{h.toLocation || "-"}</td>
-                              <td>{custody?.fromUser || "-"}</td>
-                              <td>{custody?.toUser || "-"}</td>
-                              <td>{custody?.responsibilityAck ? "Yes" : "No"}</td>
-                              <td>{h.reason || "-"}</td>
-                              <td>{h.by || "-"}</td>
+                              <td data-label="Date">{formatDate(h.date)}</td>
+                              <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
+                              <td data-label="From Location">{h.fromLocation || "-"}</td>
+                              <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
+                              <td data-label="To Location">{h.toLocation || "-"}</td>
+                              <td data-label="From Staff">{custody?.fromUser || "-"}</td>
+                              <td data-label="To Staff">{custody?.toUser || "-"}</td>
+                              <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
+                              <td data-label="Reason">{h.reason || "-"}</td>
+                              <td data-label="By">{h.by || "-"}</td>
                             </tr>
                           );
                           })
                         ) : (
-                          <tr>
+                          <tr className="asset-detail-empty-row">
                             <td colSpan={10}>No transfer history yet.</td>
                           </tr>
                         )}
@@ -15038,8 +15045,8 @@ export default function App() {
                   </div>
 
                   <h3 className="section-title">Custody History</h3>
-                  <div className="table-wrap">
-                    <table>
+                  <div className="table-wrap asset-detail-history-wrap">
+                    <table className="asset-detail-custody-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -15055,17 +15062,17 @@ export default function App() {
                         {detailCustodyEntries.length ? (
                           detailCustodyEntries.map((h) => (
                             <tr key={`detail-custody-${h.id}`}>
-                              <td>{formatDate(h.date)}</td>
-                              <td>{h.action || "-"}</td>
-                              <td>{h.fromUser || "-"}</td>
-                              <td>{h.toUser || "-"}</td>
-                              <td>{h.responsibilityAck ? "Yes" : "No"}</td>
-                              <td>{h.by || "-"}</td>
-                              <td>{h.note || "-"}</td>
+                              <td data-label="Date">{formatDate(h.date)}</td>
+                              <td data-label="Action">{h.action || "-"}</td>
+                              <td data-label="From User">{h.fromUser || "-"}</td>
+                              <td data-label="To User">{h.toUser || "-"}</td>
+                              <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
+                              <td data-label="By">{h.by || "-"}</td>
+                              <td data-label="Note">{h.note || "-"}</td>
                             </tr>
                           ))
                         ) : (
-                          <tr>
+                          <tr className="asset-detail-empty-row">
                             <td colSpan={7}>No custody history yet.</td>
                           </tr>
                         )}
@@ -15074,8 +15081,8 @@ export default function App() {
                   </div>
 
                   <h3 className="section-title">Status Timeline</h3>
-                  <div className="table-wrap">
-                    <table>
+                  <div className="table-wrap asset-detail-history-wrap">
+                    <table className="asset-detail-status-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -15088,14 +15095,14 @@ export default function App() {
                         {detailStatusEntries.length ? (
                           detailStatusEntries.map((h) => (
                             <tr key={`detail-status-${h.id}`}>
-                              <td>{formatDate(h.date)}</td>
-                              <td>{assetStatusLabel(h.fromStatus)}</td>
-                              <td>{assetStatusLabel(h.toStatus)}</td>
-                              <td>{h.reason || "-"}</td>
+                              <td data-label="Date">{formatDate(h.date)}</td>
+                              <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
+                              <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
+                              <td data-label="Reason">{h.reason || "-"}</td>
                             </tr>
                           ))
                         ) : (
-                          <tr>
+                          <tr className="asset-detail-empty-row">
                             <td colSpan={4}>No status timeline yet.</td>
                           </tr>
                         )}
@@ -15174,7 +15181,7 @@ export default function App() {
                           placeholder="SET-C2.2-001"
                         />
                       </label>
-                    ) : canLinkToParentAsset(editingAsset.type) ? (
+                    ) : editingIsLinkableAsset ? (
                       <>
                         <label className="field field-wide">
                           <span>{t.linkToParentAsset}</span>
