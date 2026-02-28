@@ -13,6 +13,31 @@ try {
   DatabaseSync = null;
 }
 
+function readPackageVersion() {
+  try {
+    const pkgPath = path.join(__dirname, "..", "package.json");
+    const raw = fsSync.readFileSync(pkgPath, "utf8");
+    const parsed = JSON.parse(raw);
+    const version = String(parsed.version || "").trim();
+    return version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+const PACKAGE_VERSION = readPackageVersion();
+const DEPLOY_COMMIT = String(
+  process.env.RENDER_GIT_COMMIT ||
+  process.env.GITHUB_SHA ||
+  process.env.COMMIT_SHA ||
+  process.env.SOURCE_VERSION ||
+  ""
+).trim();
+const SHORT_DEPLOY_COMMIT = DEPLOY_COMMIT ? DEPLOY_COMMIT.slice(0, 7) : "";
+const APP_BUILD_VERSION = SHORT_DEPLOY_COMMIT
+  ? `v${PACKAGE_VERSION}-${SHORT_DEPLOY_COMMIT}`
+  : `v${PACKAGE_VERSION}`;
+
 const HOST = process.env.API_HOST || process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 4000);
 const NODE_ENV = String(process.env.NODE_ENV || "development").toLowerCase();
@@ -1925,7 +1950,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/health") {
-      sendJson(res, 200, { ok: true });
+      sendJson(res, 200, {
+        ok: true,
+        version: APP_BUILD_VERSION,
+        packageVersion: PACKAGE_VERSION,
+        commit: SHORT_DEPLOY_COMMIT || "",
+      });
       return;
     }
 

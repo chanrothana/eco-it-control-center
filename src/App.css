@@ -1133,26 +1133,85 @@ h2 {
 }
 
 .report-card {
-  border: 1px solid #d9e3f1;
-  border-radius: 12px;
-  background: #ffffff;
-  padding: 10px;
+  border: 1px solid #bfd2ec;
+  border-radius: 16px;
+  background: #f7fbff;
+  padding: 12px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .report-card-head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
+  align-items: start;
+}
+
+.report-card-photo {
+  width: 90px;
+  justify-self: end;
+}
+
+.report-card-photo .table-photo,
+.report-card-photo .photo-placeholder {
+  width: 90px;
+  height: 90px;
+}
+
+.report-card-title {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.report-card-id {
+  display: inline-flex;
   align-items: center;
+  max-width: 100%;
+  width: fit-content;
+  font-family: var(--font-head);
+  font-size: 15px;
+  line-height: 1.2;
+  padding: 7px 10px;
+  border: 1px solid #d8ba92;
+  border-radius: 12px;
+  background: #fff9ef;
+  color: #5c3a1b;
+  overflow-wrap: anywhere;
+}
+
+.report-card-sub {
+  margin: 0;
+  font-weight: 700;
+  color: #5f7398;
 }
 
 .report-card-meta {
   display: grid;
-  gap: 4px;
-  font-size: 14px;
-  color: #2b3b5f;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 10px;
+  font-size: 13px;
+  color: #334f7b;
+}
+
+.report-card-meta > div {
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.report-card-meta strong {
+  color: #2b416b;
+}
+
+.report-card-row-wide {
+  grid-column: 1 / -1;
+}
+
+.report-card-photo-row {
+  display: grid;
+  justify-items: center;
+  padding-top: 2px;
 }
 
 .maintenance-title-row {
@@ -3417,45 +3476,68 @@ tr.row-maint-maintenance:hover td {
 .latest-maint-mobile-card {
   width: 100%;
   text-align: left;
-  border: 1px solid #c8d7ee;
-  border-radius: 12px;
-  background: #f9fcff;
-  padding: 10px;
+  border: 1px solid #bfd2ec;
+  border-radius: 16px;
+  background: #f7fbff;
+  padding: 12px;
   display: grid;
-  gap: 6px;
-  color: #23385f;
+  gap: 9px;
+  color: #2a3f67;
 }
 
 .latest-maint-mobile-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
-.latest-maint-mobile-top strong {
+.latest-maint-mobile-id {
   font-family: var(--font-head);
-  font-size: 16px;
+  font-size: 15px;
+  line-height: 1.2;
+  padding: 7px 10px;
+  border: 1px solid #d8ba92;
+  border-radius: 12px;
+  background: #fff9ef;
+  color: #5c3a1b;
 }
 
-.latest-maint-mobile-top span {
+.latest-maint-mobile-date {
   font-size: 12px;
-  color: #5d7297;
+  color: #5f7398;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .latest-maint-mobile-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 8px;
-  font-size: 12px;
-  color: #3f567f;
+  gap: 6px 10px;
+  font-size: 13px;
+  color: #324f7b;
+}
+
+.latest-maint-mobile-meta span {
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.latest-maint-mobile-meta strong {
+  color: #2b416b;
 }
 
 .latest-maint-mobile-note {
   margin: 0;
   font-size: 13px;
   line-height: 1.35;
-  color: #253b62;
+  color: #2b416b;
+  padding-top: 2px;
+  border-top: 1px dashed #c8d7ec;
+}
+
+.latest-maint-mobile-note strong {
+  color: #29466f;
 }
 
 .latest-maint-row:hover td {
@@ -3727,6 +3809,7 @@ tr.row-maint-maintenance:hover td {
   justify-content: center;
   align-items: center;
   text-align: center;
+  min-inline-size: 0;
 }
 
 .calendar-head {
@@ -5841,7 +5924,8 @@ tr.row-maint-maintenance:hover td {
   }
 
   .modal-panel .asset-detail-history-wrap {
-    overflow-x: hidden !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .modal-panel .asset-detail-history-wrap table,
@@ -5866,10 +5950,10 @@ tr.row-maint-maintenance:hover td {
   .modal-panel .asset-detail-history-wrap tr {
     display: grid;
     gap: 6px;
-    padding: 8px;
+    padding: 10px;
     border: 1px solid #d9e4f5;
     border-radius: 10px;
-    background: #f7fbff;
+    background: #f8fbff;
   }
 
   .modal-panel .asset-detail-history-wrap tr.asset-detail-empty-row {
@@ -5888,21 +5972,22 @@ tr.row-maint-maintenance:hover td {
   }
 
   .modal-panel .asset-detail-history-wrap td {
-    display: grid;
-    grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
-    gap: 8px;
+    display: block;
     align-items: start;
     white-space: normal !important;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-    padding: 0 !important;
+    word-break: normal !important;
+    overflow-wrap: break-word;
+    padding: 2px 0 !important;
     border: 0;
     background: transparent;
     font-size: 12px;
+    line-height: 1.35;
   }
 
   .modal-panel .asset-detail-history-wrap td::before {
     content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
     font-size: 11px;
     line-height: 1.25;
     color: #5a7096;
@@ -5913,8 +5998,59 @@ tr.row-maint-maintenance:hover td {
 
   .maintenance-history-modal-table th:nth-child(5),
   .maintenance-history-modal-table td:nth-child(5) {
-    min-width: 240px;
+    min-width: 0;
     white-space: normal !important;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Date"] {
+    grid-column: 1;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Type"] {
+    grid-column: 2;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Work Status"] {
+    grid-column: 1;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Condition"] {
+    grid-column: 2;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Cost"] {
+    grid-column: 1;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="By"] {
+    grid-column: 2;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Noted"] {
+    grid-column: 1 / -1;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Photo"] {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Photo"]::before {
+    text-align: left;
+  }
+
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Photo"] .photo-preview,
+  .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Photo"] .photo-placeholder {
+    width: min(72vw, 220px);
+    height: min(46vw, 150px);
+    margin: 6px auto 0;
+    border-radius: 10px;
+    object-fit: cover;
   }
 
   .report-quick-count-result {
@@ -6273,6 +6409,51 @@ tr.row-maint-maintenance:hover td {
   .calendar-day {
     min-height: 52px;
     padding: 6px;
+  }
+
+  .dashboard-calendar-grid {
+    gap: 4px;
+    grid-template-columns: repeat(7, calc((100% - 24px) / 7));
+  }
+
+  .dashboard-calendar-grid .calendar-day {
+    min-height: 36px;
+    padding: 4px 2px;
+    font-size: 11px;
+  }
+
+  .dashboard-calendar-grid .calendar-head {
+    min-height: 28px;
+    font-size: 11px;
+  }
+
+  .dashboard-calendar-grid .calendar-day small {
+    top: 4px;
+    right: 4px;
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+
+  .calendar-grid,
+  .dashboard-calendar-grid {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(7, calc((100% - 24px) / 7));
+    justify-content: space-between;
+  }
+
+  .calendar-grid .calendar-day,
+  .calendar-grid .calendar-head,
+  .dashboard-calendar-grid .calendar-day,
+  .dashboard-calendar-grid .calendar-head {
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-calendar-grid .calendar-day,
+  .dashboard-calendar-grid .calendar-head {
+    font-size: 10px;
   }
 
   .stat-value {

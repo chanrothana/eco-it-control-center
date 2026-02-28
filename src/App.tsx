@@ -3091,6 +3091,16 @@ export default function App() {
     (nextTab: NavModule) => {
       setMobileNotificationOpen(false);
       setMobileMenuOpen(false);
+      const isPhoneNavNow = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
+      if (nextTab === "assets" && isPhoneNavNow) {
+        if (canOpenAssetRegister) {
+          setAssetsView("register");
+        } else if (canAccessMenu("assets.list", "assets")) {
+          setAssetsView("list");
+        }
+        setTab(nextTab);
+        return;
+      }
       if (nextTab === "assets" && canAccessMenu("assets.list", "assets")) {
         setAssetsView("list");
       }
@@ -3100,7 +3110,7 @@ export default function App() {
       }
       setTab(nextTab);
     },
-    [canAccessMenu]
+    [canAccessMenu, canOpenAssetRegister]
   );
   const handlePhoneLogoHome = useCallback(() => {
     setTab("dashboard");
@@ -3307,6 +3317,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [appVersionBadge, setAppVersionBadge] = useState(APP_VERSION);
 
   const [assetForm, setAssetForm] = useState({
     campus: CAMPUS_LIST[0],
@@ -3734,6 +3745,28 @@ export default function App() {
   useEffect(() => {
     trySetLocalStorage("ui_lang", lang);
   }, [lang]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadRuntimeVersion = async () => {
+      try {
+        const res = await fetch("/api/health", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) return;
+        const payload = (await res.json()) as { version?: string };
+        const version = String(payload?.version || "").trim();
+        if (!cancelled && version) setAppVersionBadge(version);
+      } catch {
+        // Keep static fallback if server health endpoint is unavailable.
+      }
+    };
+    void loadRuntimeVersion();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (rememberLogin) {
@@ -14976,7 +15009,7 @@ export default function App() {
                               <td data-label="Type">{h.type}</td>
                               <td data-label="Work Status">{h.completion || "-"}</td>
                               <td data-label="Condition">{h.condition || "-"}</td>
-                              <td data-label="Note">{h.note}</td>
+                              <td data-label="Noted">{h.note}</td>
                               <td data-label="Photo">{renderAssetPhoto(h.photo || "", "maintenance")}</td>
                               <td data-label="Cost">{h.cost || "-"}</td>
                               <td data-label="By">{h.by || "-"}</td>
@@ -17914,16 +17947,18 @@ export default function App() {
                         onClick={() => setLatestMaintenanceDetailRowId(row.rowId)}
                       >
                         <div className="latest-maint-mobile-top">
-                          <strong>{row.assetId}</strong>
-                          <span>{formatDate(row.date || "-")}</span>
+                          <strong className="latest-maint-mobile-id">{row.assetId}</strong>
+                          <span className="latest-maint-mobile-date">{formatDate(row.date || "-")}</span>
                         </div>
                         <div className="latest-maint-mobile-meta">
-                          <span>{assetItemName(row.category, row.assetType || "", "")}</span>
-                          <span>{CAMPUS_CODE[row.campus] || "CX"}</span>
-                          <span>{row.type || "-"}</span>
-                          <span>{row.completion || "-"}</span>
+                          <span><strong>{t.name}:</strong> {assetItemName(row.category, row.assetType || "", "")}</span>
+                          <span><strong>{t.campus}:</strong> {CAMPUS_CODE[row.campus] || "CX"}</span>
+                          <span><strong>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}:</strong> {row.type || "-"}</span>
+                          <span><strong>{lang === "km" ? "ស្ថានភាពការងារ" : "Status"}:</strong> {row.completion || "-"}</span>
                         </div>
-                        <p className="latest-maint-mobile-note">{row.note || row.condition || "-"}</p>
+                        <p className="latest-maint-mobile-note">
+                          <strong>{t.notes}:</strong> {row.note || row.condition || "-"}
+                        </p>
                       </button>
                     ))
                   ) : (
@@ -18272,10 +18307,10 @@ export default function App() {
                   sortedMaintenanceRows.map((row) => (
                     <article key={`maint-history-mobile-${row.rowId}`} className="report-card">
                       <div className="report-card-head">
-                        <div>{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</div>
-                        <div>
-                          <strong>{row.assetId}</strong>
-                          <div className="tiny">{formatDate(row.date || "-")}</div>
+                        <div className="report-card-photo">{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</div>
+                        <div className="report-card-title">
+                          <strong className="report-card-id">{row.assetId}</strong>
+                          <div className="tiny report-card-sub">{formatDate(row.date || "-")}</div>
                         </div>
                       </div>
                       <div className="report-card-meta">
@@ -18285,12 +18320,13 @@ export default function App() {
                         <div><strong>{t.location}:</strong> {row.location || "-"}</div>
                         <div><strong>Type:</strong> {row.type || "-"}</div>
                         <div><strong>Work Status:</strong> {row.completion || "-"}</div>
-                        <div><strong>Condition:</strong> {row.condition || "-"}</div>
-                        <div><strong>Note:</strong> {row.note || "-"}</div>
                         <div><strong>{t.status}:</strong> {assetStatusLabel(row.status)}</div>
                         <div><strong>Cost:</strong> {row.cost || "-"}</div>
                         <div><strong>By:</strong> {row.by || "-"}</div>
-                        <div><strong>Maintenance Photo:</strong> {renderAssetPhoto(row.photo || "", "maintenance")}</div>
+                        <div><strong>Condition:</strong> {row.condition || "-"}</div>
+                        <div className="report-card-row-wide"><strong>Note:</strong> {row.note || "-"}</div>
+                        <div className="report-card-row-wide"><strong>Maintenance Photo:</strong></div>
+                        <div className="report-card-row-wide report-card-photo-row">{renderAssetPhoto(row.photo || "", "maintenance")}</div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">
                         <button
@@ -19423,10 +19459,10 @@ export default function App() {
                       assetMasterReportRows.map((row) => (
                         <article key={`report-mobile-asset-${row.key}`} className="report-card">
                           <div className="report-card-head">
-                            <div>{renderAssetPhoto(row.photo || "", row.assetId)}</div>
-                            <div>
-                              <strong>{row.assetId}</strong>
-                              <div className="tiny">{row.status || "-"}</div>
+                            <div className="report-card-photo">{renderAssetPhoto(row.photo || "", row.assetId)}</div>
+                            <div className="report-card-title">
+                              <strong className="report-card-id">{row.assetId}</strong>
+                              <div className="tiny report-card-sub">{row.status || "-"}</div>
                             </div>
                           </div>
                           <div className="report-card-meta">
@@ -19805,10 +19841,10 @@ export default function App() {
                       maintenanceCompletionRows.map((r) => (
                         <article key={`report-completion-mobile-${r.rowId}`} className="report-card">
                           <div className="report-card-head">
-                            <div>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</div>
-                            <div>
-                              <strong>{r.assetId}</strong>
-                              <div className="tiny">{formatDate(r.date || "-")}</div>
+                            <div className="report-card-photo">{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</div>
+                            <div className="report-card-title">
+                              <strong className="report-card-id">{r.assetId}</strong>
+                              <div className="tiny report-card-sub">{formatDate(r.date || "-")}</div>
                             </div>
                           </div>
                           <div className="report-card-meta">
@@ -19816,9 +19852,9 @@ export default function App() {
                             <div><strong>Type:</strong> {r.type || "-"}</div>
                             <div><strong>Work Status:</strong> {r.completion || "-"}</div>
                             <div><strong>Condition:</strong> {r.condition || "-"}</div>
-                            <div><strong>Maintenance Photo:</strong></div>
-                            <div>{renderAssetPhoto(r.photo || "", "maintenance")}</div>
-                            <div><strong>Note:</strong> {r.note || "-"}</div>
+                            <div className="report-card-row-wide"><strong>Maintenance Photo:</strong></div>
+                            <div className="report-card-row-wide report-card-photo-row">{renderAssetPhoto(r.photo || "", "maintenance")}</div>
+                            <div className="report-card-row-wide"><strong>Note:</strong> {r.note || "-"}</div>
                           </div>
                         </article>
                       ))
@@ -21902,7 +21938,7 @@ export default function App() {
             onClick={() => setUpdateNotesOpen(true)}
             title={lang === "km" ? "មើលកំណត់ត្រាកំណែ" : "View update notes"}
           >
-            {APP_VERSION}
+            {appVersionBadge}
           </button>
         </div>
       </section>
