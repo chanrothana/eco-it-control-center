@@ -1316,6 +1316,20 @@ h2 {
   margin-bottom: 6px;
 }
 
+.permission-scroll-box {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.permission-scroll-box-sm {
+  max-height: 220px;
+}
+
+.permission-scroll-box-lg {
+  max-height: 360px;
+}
+
 .filter-menu-columns {
   min-width: 250px;
 }

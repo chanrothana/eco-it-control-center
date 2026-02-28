@@ -724,6 +724,92 @@ function normalizeInventoryTxns(input) {
     }));
 }
 
+function normalizeVaultAccounts(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      systemName: toText(row.systemName),
+      accountName: toText(row.accountName),
+      owner: toText(row.owner),
+      role: toText(row.role),
+      status: toText(row.status) || "Active",
+      reviewDate: toText(row.reviewDate),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultCredentials(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      systemName: toText(row.systemName),
+      loginUrl: toText(row.loginUrl),
+      username: toText(row.username),
+      password: toText(row.password),
+      secretHint: toText(row.secretHint),
+      twoFa: toText(row.twoFa),
+      recovery: toText(row.recovery),
+      lastUpdated: toText(row.lastUpdated),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultDesignLinks(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      title: toText(row.title),
+      folderUrl: toText(row.folderUrl),
+      owner: toText(row.owner),
+      note: toText(row.note),
+      lastReview: toText(row.lastReview),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultNetworkDocs(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      title: toText(row.title),
+      docType: toText(row.docType),
+      fileUrl: toText(row.fileUrl),
+      version: toText(row.version),
+      lastReview: toText(row.lastReview),
+      owner: toText(row.owner),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizeVaultCctvRecords(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      site: toText(row.site),
+      nvrName: toText(row.nvrName),
+      loginUrl: toText(row.loginUrl),
+      username: toText(row.username),
+      cameraGroup: toText(row.cameraGroup),
+      retentionDays: Number(row.retentionDays || 0),
+      lastAngleReview: toText(row.lastAngleReview),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
   const settings =
@@ -739,6 +825,11 @@ function normalizeImportedDb(input) {
   const maintenanceReminderOffsets = normalizeMaintenanceReminderOffsets(settings.maintenanceReminderOffsets);
   const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
   const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
+  const vaultAccounts = normalizeVaultAccounts(settings.vaultAccounts);
+  const vaultCredentials = normalizeVaultCredentials(settings.vaultCredentials);
+  const vaultDesignLinks = normalizeVaultDesignLinks(settings.vaultDesignLinks);
+  const vaultNetworkDocs = normalizeVaultNetworkDocs(settings.vaultNetworkDocs);
+  const vaultCctvRecords = normalizeVaultCctvRecords(settings.vaultCctvRecords);
   const normalizedAssets = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
@@ -765,6 +856,11 @@ function normalizeImportedDb(input) {
       maintenanceReminderOffsets,
       inventoryItems,
       inventoryTxns,
+      vaultAccounts,
+      vaultCredentials,
+      vaultDesignLinks,
+      vaultNetworkDocs,
+      vaultCctvRecords,
     },
   };
 }
@@ -1938,6 +2034,11 @@ const server = http.createServer(async (req, res) => {
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
           inventoryItems: normalizeInventoryItems(settings.inventoryItems),
           inventoryTxns: normalizeInventoryTxns(settings.inventoryTxns),
+          vaultAccounts: normalizeVaultAccounts(settings.vaultAccounts),
+          vaultCredentials: normalizeVaultCredentials(settings.vaultCredentials),
+          vaultDesignLinks: normalizeVaultDesignLinks(settings.vaultDesignLinks),
+          vaultNetworkDocs: normalizeVaultNetworkDocs(settings.vaultNetworkDocs),
+          vaultCctvRecords: normalizeVaultCctvRecords(settings.vaultCctvRecords),
         },
       });
       return;
@@ -1979,6 +2080,26 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryTxns")
           ? normalizeInventoryTxns(incoming.inventoryTxns)
           : normalizeInventoryTxns(current.inventoryTxns);
+      const nextVaultAccounts =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultAccounts")
+          ? normalizeVaultAccounts(incoming.vaultAccounts)
+          : normalizeVaultAccounts(current.vaultAccounts);
+      const nextVaultCredentials =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultCredentials")
+          ? normalizeVaultCredentials(incoming.vaultCredentials)
+          : normalizeVaultCredentials(current.vaultCredentials);
+      const nextVaultDesignLinks =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultDesignLinks")
+          ? normalizeVaultDesignLinks(incoming.vaultDesignLinks)
+          : normalizeVaultDesignLinks(current.vaultDesignLinks);
+      const nextVaultNetworkDocs =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultNetworkDocs")
+          ? normalizeVaultNetworkDocs(incoming.vaultNetworkDocs)
+          : normalizeVaultNetworkDocs(current.vaultNetworkDocs);
+      const nextVaultCctvRecords =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultCctvRecords")
+          ? normalizeVaultCctvRecords(incoming.vaultCctvRecords)
+          : normalizeVaultCctvRecords(current.vaultCctvRecords);
       db.settings = {
         ...current,
         campusNames: nextCampusNames,
@@ -1987,6 +2108,11 @@ const server = http.createServer(async (req, res) => {
         maintenanceReminderOffsets: nextMaintenanceReminderOffsets,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
+        vaultAccounts: nextVaultAccounts,
+        vaultCredentials: nextVaultCredentials,
+        vaultDesignLinks: nextVaultDesignLinks,
+        vaultNetworkDocs: nextVaultNetworkDocs,
+        vaultCctvRecords: nextVaultCctvRecords,
       };
       appendAuditLog(db, admin, "UPDATE", "settings", "campusNames", "Updated campus name settings");
       await writeDb(db);
@@ -2682,28 +2808,43 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const incomingHistory = Array.isArray(body.statusHistory) ? body.statusHistory : [];
+      const currentStatus = toText(db.assets[idx].status) || "Unknown";
+      if (currentStatus === status) {
+        sendJson(res, 200, { asset: db.assets[idx] });
+        return;
+      }
+      const reason = toText(body.reason);
+      const by = toText(body.by);
+      if (!reason) {
+        sendJson(res, 400, { error: "Reason is required" });
+        return;
+      }
+      if (!by) {
+        sendJson(res, 400, { error: "Verified By is required" });
+        return;
+      }
       const currentStatusHistory = Array.isArray(db.assets[idx].statusHistory)
         ? db.assets[idx].statusHistory
         : [];
-      const statusHistory =
-        incomingHistory.length > 0
-          ? incomingHistory
-          : [
-              {
-                id: Date.now(),
-                date: new Date().toISOString(),
-                fromStatus: toText(body.fromStatus) || toText(db.assets[idx].status) || "Unknown",
-                toStatus: status,
-                reason: toText(body.reason),
-                by: toText(body.by),
-              },
-              ...currentStatusHistory,
-            ];
+      const statusEntry = {
+        id: Date.now(),
+        date: new Date().toISOString(),
+        fromStatus: currentStatus,
+        toStatus: status,
+        reason,
+        by,
+      };
 
       db.assets[idx].status = status;
-      db.assets[idx].statusHistory = statusHistory;
-      appendAuditLog(db, admin, "UPDATE_STATUS", "asset", db.assets[idx].assetId || String(id), status);
+      db.assets[idx].statusHistory = [statusEntry, ...currentStatusHistory];
+      appendAuditLog(
+        db,
+        admin,
+        "UPDATE_STATUS",
+        "asset",
+        db.assets[idx].assetId || String(id),
+        `${currentStatus} -> ${status} | ${reason} | ${by}`
+      );
       await writeDb(db);
       sendJson(res, 200, { asset: db.assets[idx] });
       return;
@@ -2922,6 +3063,35 @@ const server = http.createServer(async (req, res) => {
       const nextCustodyStatus = normalizeCustodyStatus(
         cleaned.custodyStatus || (incomingAssignedTo ? "ASSIGNED" : "IN_STOCK")
       );
+      const currentStatus = toText(current.status) || "Active";
+      const nextStatus = toText(cleaned.status) || "Active";
+      const statusChanged = currentStatus !== nextStatus;
+      const statusChangeReason = toText(body.statusChangeReason || body.reason);
+      const statusChangeBy = toText(body.statusChangeBy || body.by);
+      if (statusChanged) {
+        if (!statusChangeReason) {
+          sendJson(res, 400, { error: "Reason is required when changing status" });
+          return;
+        }
+        if (!statusChangeBy) {
+          sendJson(res, 400, { error: "Verified By is required when changing status" });
+          return;
+        }
+      }
+      const currentStatusHistory = Array.isArray(current.statusHistory) ? current.statusHistory : [];
+      const nextStatusHistory = statusChanged
+        ? [
+            {
+              id: Date.now(),
+              date: new Date().toISOString(),
+              fromStatus: currentStatus,
+              toStatus: nextStatus,
+              reason: statusChangeReason,
+              by: statusChangeBy,
+            },
+            ...currentStatusHistory,
+          ]
+        : currentStatusHistory;
       const photoChanged = toText(current.photo) !== toText(mainPhoto);
       db.assets[idx] = {
         ...current,
@@ -2930,6 +3100,7 @@ const server = http.createServer(async (req, res) => {
         photos: nextPhotos,
         maintenanceHistory: nextHistory,
         transferHistory: nextTransferHistory,
+        statusHistory: nextStatusHistory,
         custodyHistory: finalCustodyHistory,
         custodyStatus: nextCustodyStatus,
         name: current.assetId,

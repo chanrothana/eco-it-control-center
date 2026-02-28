@@ -894,6 +894,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   ],
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
+    { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
     { itemEn: "Front Panel", itemKm: "ផ្នែកខាងមុខ", code: "FPN" },
     { itemEn: "Rear Panel", itemKm: "ផ្នែកខាងក្រោយ", code: "RPN" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
@@ -2959,6 +2960,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
+  const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
   const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
@@ -3071,6 +3073,21 @@ export default function App() {
   const handleNavChange = useCallback((nextTab: NavModule) => {
     setTab(nextTab);
   }, []);
+  const handleMobileNavChange = useCallback(
+    (nextTab: NavModule) => {
+      setMobileNotificationOpen(false);
+      setMobileMenuOpen(false);
+      if (nextTab === "assets" && canAccessMenu("assets.list", "assets")) {
+        setAssetsView("list");
+      }
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => setTab(nextTab));
+        return;
+      }
+      setTab(nextTab);
+    },
+    [canAccessMenu]
+  );
   const handlePhoneLogoHome = useCallback(() => {
     setTab("dashboard");
     window.location.reload();
@@ -3726,6 +3743,21 @@ export default function App() {
   useEffect(() => {
     if (!isPhoneView) setReportMobileFiltersOpen(false);
   }, [isPhoneView]);
+  useEffect(() => {
+    if (!quickOutEcoPickerOpen) return;
+    const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (quickOutEcoWrapRef.current?.contains(target)) return;
+      setQuickOutEcoPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideTap);
+    document.addEventListener("touchstart", handleOutsideTap);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTap);
+      document.removeEventListener("touchstart", handleOutsideTap);
+    };
+  }, [quickOutEcoPickerOpen]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
     setTab("inventory");
@@ -7161,9 +7193,14 @@ export default function App() {
   function openQuickOutEcoPicker() {
     const baseDate = normalizeYmdInput(inventoryQuickOutModal?.date || toYmd(new Date())) || toYmd(new Date());
     const base = new Date(`${baseDate}T00:00:00`);
-    setQuickOutEcoMonth(new Date(base.getFullYear(), base.getMonth(), 1));
-    setQuickOutEcoSelectedDate(baseDate);
-    setQuickOutEcoPickerOpen(true);
+    setQuickOutEcoPickerOpen((prev) => {
+      const nextOpen = !prev;
+      if (nextOpen) {
+        setQuickOutEcoMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+        setQuickOutEcoSelectedDate(baseDate);
+      }
+      return nextOpen;
+    });
   }
   async function onInventoryQuickOutPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -11272,6 +11309,7 @@ export default function App() {
     if (code === "FCP" || name.includes("control panel")) return icon(Settings);
 
     if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return icon(Snowflake);
+    if (code === "WDP" || name.includes("water dispenser")) return icon(Building2);
     if (code === "FPN" || name.includes("front panel")) return icon(Puzzle);
     if (code === "RPN" || name.includes("rear panel")) return icon(Puzzle);
     if (code === "TBL" || name.includes("table")) return icon(Building2);
@@ -12944,10 +12982,7 @@ export default function App() {
                             key={`mobile-nav-btn-${item.id}`}
                             type="button"
                             className={`mobile-menu-nav-btn ${tab === item.id ? "mobile-menu-nav-btn-active" : ""}`}
-                            onClick={() => {
-                              handleNavChange(item.id);
-                              setMobileMenuOpen(false);
-                            }}
+                            onClick={() => handleMobileNavChange(item.id)}
                           >
                             <span className="mobile-menu-nav-icon" aria-hidden={true}>{navIcon(item.id)}</span>
                             <span className="mobile-menu-nav-label">{item.label}</span>
@@ -20181,7 +20216,7 @@ export default function App() {
                         ? campusLabel(authCreateForm.campuses[0])
                         : `${authCreateForm.campuses.length} campuses`}
                   </summary>
-                  <div className="filter-menu-list" style={{ maxHeight: 220 }}>
+                  <div className="filter-menu-list permission-scroll-box permission-scroll-box-sm">
                     {CAMPUS_LIST.map((campus) => (
                       <label key={`new-auth-campus-${campus}`} className="filter-menu-item">
                         <input
@@ -20259,7 +20294,7 @@ export default function App() {
                 </div>
                 <details className="filter-menu">
                   <summary>{lang === "km" ? "ជ្រើសម៉ឺនុយដែលអាចមើលឃើញ" : "Select visible menus"}</summary>
-                  <div className="filter-menu-list" style={{ maxHeight: 360 }}>
+                  <div className="filter-menu-list permission-scroll-box permission-scroll-box-lg">
                     {MENU_ACCESS_TREE.map((node) => {
                       const moduleChecked = isModuleFullyChecked(authCreateForm.menuAccess, node.module);
                       return (
@@ -20983,7 +21018,7 @@ export default function App() {
                     );
                   })()}
                   <div className="form-grid" style={{ marginTop: 10 }}>
-                    <label className="field quickout-date-field">
+                    <label className="field quickout-date-field" ref={quickOutEcoWrapRef}>
                       <span>{t.date}</span>
                       <div className="quickout-date-input-wrap">
                         <input
