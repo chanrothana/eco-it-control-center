@@ -1,4 +1,4 @@
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   ArrowLeftRight,
   BarChart3,
@@ -19,6 +19,7 @@ import {
   Monitor,
   Mouse,
   Package,
+  PcCase,
   Printer,
   Puzzle,
   Settings,
@@ -2971,6 +2972,14 @@ export default function App() {
   }, []);
 
   const [tab, setTab] = useState<NavModule>("dashboard");
+  const [, startTabTransition] = useTransition();
+  const [expandedNavModule, setExpandedNavModule] = useState<NavModule | null>(null);
+  type NavSubItem = {
+    key: string;
+    label: string;
+    active: boolean;
+    onSelect: () => void;
+  };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
@@ -3084,39 +3093,387 @@ export default function App() {
       }))
       .filter((section) => section.items.length > 0);
   }, [lang, navMenuItems]);
+  const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
+  const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
+  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
+  const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance" | "daily">("items");
+  const [transferView, setTransferView] = useState<"record" | "history">("history");
+  const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
+  const [verificationView, setVerificationView] = useState<"record" | "history">("record");
   const handleNavChange = useCallback((nextTab: NavModule) => {
-    setTab(nextTab);
+    startTabTransition(() => {
+      setTab(nextTab);
+    });
   }, []);
   const handleMobileNavChange = useCallback(
-    (nextTab: NavModule) => {
+    (nextTab: NavModule, options?: { closeMenu?: boolean }) => {
+      const shouldCloseMenu = options?.closeMenu ?? true;
       setMobileNotificationOpen(false);
-      setMobileMenuOpen(false);
+      if (shouldCloseMenu) setMobileMenuOpen(false);
       const isPhoneNavNow = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
       if (nextTab === "assets" && isPhoneNavNow) {
-        if (canOpenAssetRegister) {
-          setAssetsView("register");
-        } else if (canAccessMenu("assets.list", "assets")) {
+        startTabTransition(() => {
+          if (canOpenAssetRegister) {
+            setAssetsView("register");
+          } else if (canAccessMenu("assets.list", "assets")) {
+            setAssetsView("list");
+          }
+          setTab(nextTab);
+        });
+        return;
+      }
+      startTabTransition(() => {
+        if (nextTab === "assets" && canAccessMenu("assets.list", "assets")) {
           setAssetsView("list");
         }
         setTab(nextTab);
-        return;
-      }
-      if (nextTab === "assets" && canAccessMenu("assets.list", "assets")) {
-        setAssetsView("list");
-      }
-      if (typeof window !== "undefined") {
-        window.requestAnimationFrame(() => setTab(nextTab));
-        return;
-      }
-      setTab(nextTab);
+      });
     },
     [canAccessMenu, canOpenAssetRegister]
+  );
+  const getNavSubItems = useCallback(
+    (module: NavModule): NavSubItem[] => {
+      switch (module) {
+        case "assets":
+          return [
+            ...(canOpenAssetRegister
+              ? [
+                  {
+                    key: "assets.register",
+                    label: lang === "km" ? "ចុះបញ្ជី" : "Register",
+                    active: assetsView === "register",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setAssetsView("register");
+                        setTab("assets");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("assets.list", "assets")
+              ? [
+                  {
+                    key: "assets.list",
+                    label: lang === "km" ? "បញ្ជី" : "List",
+                    active: assetsView === "list",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setAssetsView("list");
+                        setTab("assets");
+                      }),
+                  },
+                  {
+                    key: "assets.gallery",
+                    label: lang === "km" ? "រូបភាព" : "Gallery",
+                    active: assetsView === "gallery",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setAssetsView("gallery");
+                        setTab("assets");
+                      }),
+                  },
+                ]
+              : []),
+          ];
+        case "inventory":
+          return [
+            {
+              key: "inventory.items",
+              label: lang === "km" ? "កំណត់ទំនិញ" : "Item Setup",
+              active: inventoryView === "items",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setInventoryView("items");
+                  setTab("inventory");
+                }),
+            },
+            {
+              key: "inventory.daily",
+              label: lang === "km" ? "ប្រើប្រាស់ប្រចាំថ្ងៃ" : "Daily Usage",
+              active: inventoryView === "daily",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setInventoryView("daily");
+                  setTab("inventory");
+                }),
+            },
+            {
+              key: "inventory.stock",
+              label: lang === "km" ? "ស្តុកចេញ-ចូល" : "Stock In/Out",
+              active: inventoryView === "stock",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setInventoryView("stock");
+                  setTab("inventory");
+                }),
+            },
+            {
+              key: "inventory.balance",
+              label: lang === "km" ? "សមតុល្យ" : "Balance",
+              active: inventoryView === "balance",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setInventoryView("balance");
+                  setTab("inventory");
+                }),
+            },
+          ];
+        case "schedule":
+          return [
+            {
+              key: "schedule.calendar",
+              label: lang === "km" ? "ប្រតិទិន" : "Eco Calendar",
+              active: scheduleView === "calendar",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setScheduleView("calendar");
+                  setTab("schedule");
+                }),
+            },
+            {
+              key: "schedule.bulk",
+              label: lang === "km" ? "កំណត់ជាក្រុម" : "Bulk Campus",
+              active: scheduleView === "bulk",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setScheduleView("bulk");
+                  setTab("schedule");
+                }),
+            },
+            {
+              key: "schedule.single",
+              label: lang === "km" ? "តាមទ្រព្យ" : "By Asset",
+              active: scheduleView === "single",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setScheduleView("single");
+                  setTab("schedule");
+                }),
+            },
+          ];
+        case "transfer":
+          return [
+            {
+              key: "transfer.history",
+              label: lang === "km" ? "ប្រវត្តិ" : "History",
+              active: transferView === "history",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setTransferView("history");
+                  setTab("transfer");
+                }),
+            },
+            {
+              key: "transfer.record",
+              label: lang === "km" ? "កត់ត្រា" : "Record",
+              active: transferView === "record",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setTransferView("record");
+                  setTab("transfer");
+                }),
+            },
+          ];
+        case "maintenance":
+          return [
+            ...(canAccessMenu("maintenance.dashboard", "maintenance")
+              ? [
+                  {
+                    key: "maintenance.dashboard",
+                    label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
+                    active: maintenanceView === "dashboard",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setMaintenanceView("dashboard");
+                        setTab("maintenance");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("maintenance.record", "maintenance")
+              ? [
+                  {
+                    key: "maintenance.record",
+                    label: lang === "km" ? "កត់ត្រា" : "Record",
+                    active: maintenanceView === "record",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setMaintenanceView("record");
+                        setTab("maintenance");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("maintenance.history", "maintenance")
+              ? [
+                  {
+                    key: "maintenance.history",
+                    label: lang === "km" ? "ប្រវត្តិ" : "History",
+                    active: maintenanceView === "history",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setMaintenanceView("history");
+                        setTab("maintenance");
+                      }),
+                  },
+                ]
+              : []),
+          ];
+        case "verification":
+          return [
+            ...(canAccessMenu("verification.record", "verification")
+              ? [
+                  {
+                    key: "verification.record",
+                    label: lang === "km" ? "កត់ត្រា" : "Record",
+                    active: verificationView === "record",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setVerificationView("record");
+                        setTab("verification");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("verification.history", "verification")
+              ? [
+                  {
+                    key: "verification.history",
+                    label: lang === "km" ? "ប្រវត្តិ" : "History",
+                    active: verificationView === "history",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setVerificationView("history");
+                        setTab("verification");
+                      }),
+                  },
+                ]
+              : []),
+          ];
+        case "setup":
+          if (!isAdmin) return [];
+          return [
+            ...(canAccessMenu("setup.campus", "setup")
+              ? [
+                  {
+                    key: "setup.campus",
+                    label: lang === "km" ? "សាខា" : "Campuses",
+                    active: setupView === "campus",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("campus");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("setup.users", "setup")
+              ? [
+                  {
+                    key: "setup.users",
+                    label: lang === "km" ? "អ្នកប្រើ" : "Users",
+                    active: setupView === "users",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("users");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("setup.permissions", "setup")
+              ? [
+                  {
+                    key: "setup.permissions",
+                    label: lang === "km" ? "សិទ្ធិ" : "Permissions",
+                    active: setupView === "permissions",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("permissions");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("setup.backup", "setup")
+              ? [
+                  {
+                    key: "setup.backup",
+                    label: lang === "km" ? "បម្រុងទុក" : "Backup",
+                    active: setupView === "backup",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("backup");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("setup.items", "setup")
+              ? [
+                  {
+                    key: "setup.items",
+                    label: lang === "km" ? "ឈ្មោះទំនិញ" : "Items",
+                    active: setupView === "items",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("items");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("setup.locations", "setup")
+              ? [
+                  {
+                    key: "setup.locations",
+                    label: lang === "km" ? "ទីតាំង" : "Locations",
+                    active: setupView === "locations",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("locations");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
+            ...(canAccessMenu("setup.calendar", "setup")
+              ? [
+                  {
+                    key: "setup.calendar",
+                    label: lang === "km" ? "ប្រតិទិន" : "Calendar",
+                    active: setupView === "calendar",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("calendar");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
+          ];
+        default:
+          return [];
+      }
+    },
+    [
+      assetsView,
+      canAccessMenu,
+      canOpenAssetRegister,
+      inventoryView,
+      isAdmin,
+      lang,
+      maintenanceView,
+      scheduleView,
+      setupView,
+      transferView,
+      verificationView,
+    ]
   );
   const handlePhoneLogoHome = useCallback(() => {
     setTab("dashboard");
     window.location.reload();
   }, []);
-  const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
   const [assetGalleryCardSize, setAssetGalleryCardSize] = useState(180);
   const [campusFilter, setCampusFilter] = useState("ALL");
   const [assetCampusFilter, setAssetCampusFilter] = useState("ALL");
@@ -3134,13 +3491,7 @@ export default function App() {
   const [verificationResultFilter, setVerificationResultFilter] = useState("ALL");
   const [verificationDateFrom, setVerificationDateFrom] = useState("");
   const [verificationDateTo, setVerificationDateTo] = useState("");
-  const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
-  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
-  const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance" | "daily">("items");
   const [inventoryBalanceMode, setInventoryBalanceMode] = useState<"all" | "low">("all");
-  const [transferView, setTransferView] = useState<"record" | "history">("history");
-  const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
-  const [verificationView, setVerificationView] = useState<"record" | "history">("record");
   const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
   const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState("ALL");
   const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
@@ -3262,11 +3613,7 @@ export default function App() {
       if (!touch) return;
       const deltaX = touch.clientX - startX;
       const deltaY = Math.abs(touch.clientY - startY);
-      const startedAtLeftEdge = startX <= 28;
-      if (!mobileMenuOpen && startedAtLeftEdge && deltaX > 46 && deltaY < 48) {
-        setMobileNotificationOpen(false);
-        setMobileMenuOpen(true);
-      } else if (mobileMenuOpen && deltaX < -42 && deltaY < 48) {
+      if (mobileMenuOpen && deltaX < -42 && deltaY < 48) {
         setMobileMenuOpen(false);
       }
       mobileSwipeStartXRef.current = null;
@@ -11335,9 +11682,7 @@ export default function App() {
       <Icon size={18} aria-hidden={true} />
     );
 
-    if (code === "PC" || name.includes("computer")) {
-      return icon(Monitor);
-    }
+    if (code === "PC" || name.includes("computer")) return icon(PcCase);
     if (code === "LAP" || name.includes("laptop")) return icon(Laptop);
     if (code === "TAB" || name.includes("ipad") || name.includes("tablet")) return icon(Tablet);
     if (code === "MON" || name.includes("monitor")) return icon(Monitor);
@@ -12996,15 +13341,38 @@ export default function App() {
               <section key={section.section} className="main-nav-section">
                 <p className="main-nav-section-label">{section.label}</p>
                 <div className="main-nav-list">
-                  {section.items.map((item) => (
-                    <button
-                      key={item.id}
-                      className={`main-nav-btn ${tab === item.id ? "main-nav-btn-active" : ""}`}
-                      onClick={() => handleNavChange(item.id)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                  {section.items.map((item) => {
+                    const subItems = getNavSubItems(item.id);
+                    const hasSubmenu = subItems.length > 0;
+                    const showSubmenu = expandedNavModule === item.id && hasSubmenu;
+                    return (
+                      <div key={item.id} className="main-nav-item-group">
+                        <button
+                          className={`main-nav-btn ${tab === item.id ? "main-nav-btn-active" : ""}`}
+                          onClick={() => {
+                            setExpandedNavModule((prev) => (hasSubmenu ? (prev === item.id ? null : item.id) : null));
+                            handleNavChange(item.id);
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                        {showSubmenu ? (
+                          <div className="main-nav-sublist">
+                            {subItems.map((sub) => (
+                              <button
+                                key={`main-nav-sub-${item.id}-${sub.key}`}
+                                type="button"
+                                className={`main-nav-sub-btn ${sub.active ? "main-nav-sub-btn-active" : ""}`}
+                                onClick={sub.onSelect}
+                              >
+                                {sub.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -13022,25 +13390,65 @@ export default function App() {
               ) : null}
               <aside className={`mobile-side-drawer ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}>
                 <div className="mobile-menu-head">
+                  <button
+                    type="button"
+                    className="mobile-menu-close-btn"
+                    aria-label="Close menu"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    ✕
+                  </button>
                   <strong>{t.menu}</strong>
-                  <span>{lang === "km" ? "អូសពីឆ្វេងដើម្បីបើក/បិទ" : "Swipe from left to open/close"}</span>
+                  <span>{lang === "km" ? "ចុចប៊ូតុងម៉ឺនុយ ដើម្បីបើក/បិទ" : "Tap menu button to open/close"}</span>
                 </div>
                 <div className="mobile-menu-sections">
                   {navSections.map((section) => (
                     <section key={`mobile-nav-${section.section}`} className="mobile-menu-section">
                       <p className="mobile-menu-section-label">{section.label}</p>
                       <div className="mobile-menu-grid">
-                        {section.items.map((item) => (
-                          <button
-                            key={`mobile-nav-btn-${item.id}`}
-                            type="button"
-                            className={`mobile-menu-nav-btn ${tab === item.id ? "mobile-menu-nav-btn-active" : ""}`}
-                            onClick={() => handleMobileNavChange(item.id)}
-                          >
-                            <span className="mobile-menu-nav-icon" aria-hidden={true}>{navIcon(item.id)}</span>
-                            <span className="mobile-menu-nav-label">{item.label}</span>
-                          </button>
-                        ))}
+                        {section.items.map((item) => {
+                          const subItems = getNavSubItems(item.id);
+                          const hasSubmenu = subItems.length > 0;
+                          const showSubmenu = expandedNavModule === item.id && hasSubmenu;
+                          return (
+                            <div key={`mobile-nav-item-${item.id}`} className="mobile-menu-item-group">
+                              <button
+                                type="button"
+                                className={`mobile-menu-nav-btn ${tab === item.id ? "mobile-menu-nav-btn-active" : ""}`}
+                                onClick={() => {
+                                  if (hasSubmenu) {
+                                    setExpandedNavModule((prev) => (prev === item.id ? null : item.id));
+                                    return;
+                                  }
+                                  setExpandedNavModule(null);
+                                  handleMobileNavChange(item.id, { closeMenu: true });
+                                }}
+                              >
+                                <span className="mobile-menu-nav-icon" aria-hidden={true}>{navIcon(item.id)}</span>
+                                <span className="mobile-menu-nav-label">{item.label}</span>
+                              </button>
+                              {showSubmenu ? (
+                                <div className="mobile-menu-sublist">
+                                  {subItems.map((sub) => (
+                                    <button
+                                      key={`mobile-sub-${item.id}-${sub.key}`}
+                                      type="button"
+                                      className={`mobile-menu-sub-btn ${sub.active ? "mobile-menu-sub-btn-active" : ""}`}
+                                      onClick={() => {
+                                        setMobileNotificationOpen(false);
+                                        setMobileMenuOpen(false);
+                                        setExpandedNavModule(item.id);
+                                        sub.onSelect();
+                                      }}
+                                    >
+                                      {sub.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     </section>
                   ))}
@@ -13094,6 +13502,20 @@ export default function App() {
               </aside>
 
               <div className="mobile-nav-topline">
+                {!mobileMenuOpen ? (
+                  <button
+                    className="mobile-hamburger-btn"
+                    type="button"
+                    onClick={() => {
+                      setMobileNotificationOpen(false);
+                      setMobileMenuOpen(true);
+                    }}
+                    aria-expanded={false}
+                    aria-label="Open menu"
+                  >
+                    <span className="mobile-hamburger-icon" aria-hidden={true}>☰</span>
+                  </button>
+                ) : null}
                 <button
                   className={`mobile-notify-btn ${mobileNotificationOpen ? "mobile-notify-btn-active" : ""}`}
                   type="button"
@@ -17327,136 +17749,233 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div className="table-wrap" style={{ marginTop: 12 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>{t.assetId}</th>
-                      <th>{t.photo}</th>
-                      <th>{t.campus}</th>
-                      <th>{t.status}</th>
-                      <th>Schedule Note</th>
-                      <th>{t.actions}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedDateItems.length ? (
-                      selectedDateItems.map((asset) => (
-                        <tr key={`selected-${asset.id}`}>
-                          <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
-                          <td>
-                            <button
-                              className="tab btn-small"
-                              disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                              onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
-                            >
-                              <strong>{asset.assetId}</strong>
-                            </button>
-                          </td>
-                          <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
-                          <td>{campusLabel(asset.campus)}</td>
-                          <td>{assetStatusLabel(asset.status)}</td>
-                          <td>{asset.scheduleNote || "-"}</td>
-                          <td>
-                            <div className="row-actions">
+              {isPhoneView ? (
+                <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
+                  {selectedDateItems.length ? (
+                    selectedDateItems.map((asset) => (
+                      <article key={`selected-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                        <div className="schedule-mobile-card-head">
+                          <strong>{asset.assetId}</strong>
+                          <span>{formatDate(asset.nextMaintenanceDate || "-")}</span>
+                        </div>
+                        <div className="schedule-mobile-card-body">
+                          <div>{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
+                          <div className="schedule-mobile-card-meta">
+                            <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                            <div>{campusLabel(asset.campus)}</div>
+                            <div>{t.status}: {assetStatusLabel(asset.status)}</div>
+                            <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
+                          </div>
+                        </div>
+                        <div className="row-actions">
+                          <button
+                            className="btn-primary btn-small"
+                            disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                            onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
+                          >
+                            Record
+                          </button>
+                          <button
+                            className="tab btn-small"
+                            disabled={!isAdmin}
+                            onClick={() => editScheduleForAsset(asset)}
+                          >
+                            {t.edit}
+                          </button>
+                          <button
+                            className="btn-danger"
+                            disabled={!isAdmin || busy}
+                            onClick={() => clearScheduleForAsset(asset.id)}
+                            title={t.delete}
+                          >
+                            X
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">No schedule on {selectedCalendarDate}.</div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>{t.assetId}</th>
+                        <th>{t.photo}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.status}</th>
+                        <th>Schedule Note</th>
+                        <th>{t.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedDateItems.length ? (
+                        selectedDateItems.map((asset) => (
+                          <tr key={`selected-${asset.id}`}>
+                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                            <td>
                               <button
-                                className="btn-primary btn-small"
+                                className="tab btn-small"
                                 disabled={!canAccessMenu("maintenance.record", "maintenance")}
                                 onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
                               >
-                                Record
+                                <strong>{asset.assetId}</strong>
                               </button>
-                              <button
-                                className="tab btn-small"
-                                disabled={!isAdmin}
-                                onClick={() => editScheduleForAsset(asset)}
-                              >
-                                {t.edit}
-                              </button>
-                              <button
-                                className="btn-danger"
-                                disabled={!isAdmin || busy}
-                                onClick={() => clearScheduleForAsset(asset.id)}
-                                title={t.delete}
-                              >
-                                X
-                              </button>
-                            </div>
-                          </td>
+                            </td>
+                            <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
+                            <td>{campusLabel(asset.campus)}</td>
+                            <td>{assetStatusLabel(asset.status)}</td>
+                            <td>{asset.scheduleNote || "-"}</td>
+                            <td>
+                              <div className="row-actions">
+                                <button
+                                  className="btn-primary btn-small"
+                                  disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                  onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
+                                >
+                                  Record
+                                </button>
+                                <button
+                                  className="tab btn-small"
+                                  disabled={!isAdmin}
+                                  onClick={() => editScheduleForAsset(asset)}
+                                >
+                                  {t.edit}
+                                </button>
+                                <button
+                                  className="btn-danger"
+                                  disabled={!isAdmin || busy}
+                                  onClick={() => clearScheduleForAsset(asset.id)}
+                                  title={t.delete}
+                                >
+                                  X
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7}>No schedule on {selectedCalendarDate}.</td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7}>No schedule on {selectedCalendarDate}.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <h4 className="section-title" style={{ marginTop: 12 }}>
                 {lang === "km" ? "បញ្ជីកាលវិភាគទាំងអស់" : "All Scheduled List"}
               </h4>
-              <div className="table-wrap" style={{ marginTop: 12 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{t.assetId}</th>
-                      <th>{t.name}</th>
-                      <th>{t.campus}</th>
-                      <th>{t.location}</th>
-                      <th>{t.date}</th>
-                      <th>{lang === "km" ? "របៀប" : "Mode"}</th>
-                      <th>{t.scheduleNote}</th>
-                      <th>{t.actions}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scheduleListRows.length ? (
-                      scheduleListRows.map((asset) => (
-                        <tr key={`schedule-list-row-${asset.id}`}>
-                          <td><strong>{asset.assetId}</strong></td>
-                          <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                          <td>{campusLabel(asset.campus)}</td>
-                          <td>{asset.location || "-"}</td>
-                          <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
-                          <td>
+              {isPhoneView ? (
+                <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
+                  {scheduleListRows.length ? (
+                    scheduleListRows.map((asset) => (
+                      <article key={`schedule-list-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                        <div className="schedule-mobile-card-head">
+                          <strong>{asset.assetId}</strong>
+                          <span>{formatDate(asset.nextMaintenanceDate || "-")}</span>
+                        </div>
+                        <div className="schedule-mobile-card-meta">
+                          <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                          <div>{campusLabel(asset.campus)} | {asset.location || "-"}</div>
+                          <div>
+                            {lang === "km" ? "របៀប" : "Mode"}:{" "}
                             {asset.repeatMode === "MONTHLY_WEEKDAY"
                               ? monthlyRepeatLabel(Number(asset.repeatWeekOfMonth || 1), Number(asset.repeatWeekday || 6))
                               : "Does not repeat"}
-                          </td>
-                          <td>{asset.scheduleNote || "-"}</td>
-                          <td>
-                            <div className="row-actions">
-                              <button
-                                className="tab btn-small"
-                                disabled={!isAdmin}
-                                onClick={() => handleScheduleRowAction(asset, "edit")}
-                              >
-                                {t.edit}
-                              </button>
-                              <button
-                                className="btn-danger"
-                                disabled={!isAdmin || busy}
-                                onClick={() => {
-                                  void handleScheduleRowAction(asset, "delete");
-                                }}
-                                title={t.delete}
-                              >
-                                X
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
+                          </div>
+                          <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
+                        </div>
+                        <div className="row-actions">
+                          <button
+                            className="tab btn-small"
+                            disabled={!isAdmin}
+                            onClick={() => handleScheduleRowAction(asset, "edit")}
+                          >
+                            {t.edit}
+                          </button>
+                          <button
+                            className="btn-danger"
+                            disabled={!isAdmin || busy}
+                            onClick={() => {
+                              void handleScheduleRowAction(asset, "delete");
+                            }}
+                            title={t.delete}
+                          >
+                            X
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
                       <tr>
-                        <td colSpan={8}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
+                        <th>{t.assetId}</th>
+                        <th>{t.name}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.location}</th>
+                        <th>{t.date}</th>
+                        <th>{lang === "km" ? "របៀប" : "Mode"}</th>
+                        <th>{t.scheduleNote}</th>
+                        <th>{t.actions}</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {scheduleListRows.length ? (
+                        scheduleListRows.map((asset) => (
+                          <tr key={`schedule-list-row-${asset.id}`}>
+                            <td><strong>{asset.assetId}</strong></td>
+                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                            <td>{campusLabel(asset.campus)}</td>
+                            <td>{asset.location || "-"}</td>
+                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                            <td>
+                              {asset.repeatMode === "MONTHLY_WEEKDAY"
+                                ? monthlyRepeatLabel(Number(asset.repeatWeekOfMonth || 1), Number(asset.repeatWeekday || 6))
+                                : "Does not repeat"}
+                            </td>
+                            <td>{asset.scheduleNote || "-"}</td>
+                            <td>
+                              <div className="row-actions">
+                                <button
+                                  className="tab btn-small"
+                                  disabled={!isAdmin}
+                                  onClick={() => handleScheduleRowAction(asset, "edit")}
+                                >
+                                  {t.edit}
+                                </button>
+                                <button
+                                  className="btn-danger"
+                                  disabled={!isAdmin || busy}
+                                  onClick={() => {
+                                    void handleScheduleRowAction(asset, "delete");
+                                  }}
+                                  title={t.delete}
+                                >
+                                  X
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
               </>
             )}
@@ -21774,40 +22293,66 @@ export default function App() {
                 <h2>{quickCountModal.title}</h2>
                 <button className="tab" onClick={() => setQuickCountModal(null)}>{t.close}</button>
               </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{t.assetId}</th>
-                      <th>{t.photo}</th>
-                      <th>{t.campus}</th>
-                      <th>{t.category}</th>
-                      <th>{t.name}</th>
-                      <th>{t.location}</th>
-                      <th>{t.status}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quickCountModal.assets.length ? (
-                      quickCountModal.assets.map((asset) => (
-                        <tr key={`quick-count-modal-asset-${asset.id}`}>
-                          <td><strong>{asset.assetId}</strong></td>
-                          <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
-                          <td>{campusLabel(asset.campus)}</td>
-                          <td>{asset.category}</td>
-                          <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                          <td>{asset.location || "-"}</td>
-                          <td>{assetStatusLabel(asset.status || "-")}</td>
-                        </tr>
-                      ))
-                    ) : (
+              {isPhoneView ? (
+                <div className="quick-count-mobile-list">
+                  {quickCountModal.assets.length ? (
+                    quickCountModal.assets.map((asset) => (
+                      <article key={`quick-count-mobile-asset-${asset.id}`} className={`quick-count-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                        <div className="quick-count-mobile-head">
+                          <strong>{asset.assetId}</strong>
+                          <span>{assetStatusLabel(asset.status || "-")}</span>
+                        </div>
+                        <div className="quick-count-mobile-body">
+                          <div>{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
+                          <div className="quick-count-mobile-meta">
+                            <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                            <div>{t.campus}: {campusLabel(asset.campus)}</div>
+                            <div>{t.category}: {asset.category}</div>
+                            <div>{t.location}: {asset.location || "-"}</div>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
                       <tr>
-                        <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
+                        <th>{t.assetId}</th>
+                        <th>{t.photo}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.category}</th>
+                        <th>{t.name}</th>
+                        <th>{t.location}</th>
+                        <th>{t.status}</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {quickCountModal.assets.length ? (
+                        quickCountModal.assets.map((asset) => (
+                          <tr key={`quick-count-modal-asset-${asset.id}`}>
+                            <td><strong>{asset.assetId}</strong></td>
+                            <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
+                            <td>{campusLabel(asset.campus)}</td>
+                            <td>{asset.category}</td>
+                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                            <td>{asset.location || "-"}</td>
+                            <td>{assetStatusLabel(asset.status || "-")}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           </div>
         )}
