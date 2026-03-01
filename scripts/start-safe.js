@@ -5,7 +5,7 @@ const path = require("path");
 
 const PORTS = [3000, 4000];
 const isPhoneMode = process.argv.includes("--phone");
-const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
+const apiHost = isPhoneMode ? "0.0.0.0" : "";
 const webHost = isPhoneMode ? "0.0.0.0" : "";
 const children = [];
 let shuttingDown = false;
@@ -76,7 +76,7 @@ function runStartRunner() {
 
   const apiChild = spawn("node", [path.join("server", "server.js")], {
     stdio: "inherit",
-    env: { ...process.env, API_HOST: apiHost },
+    env: { ...process.env, ...(apiHost ? { API_HOST: apiHost } : {}) },
     shell: process.platform === "win32",
   });
   attachChildLifecycle(apiChild, "API server");

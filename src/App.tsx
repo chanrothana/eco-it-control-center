@@ -3560,12 +3560,17 @@ export default function App() {
   const [isPhoneView, setIsPhoneView] = useState(
     () => (typeof window !== "undefined" ? window.innerWidth <= 768 : false)
   );
+  const useMobileCardLayout =
+    isPhoneView || (typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false);
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const todayYmd = toYmd(new Date());
   const calendarPrevLabel = isPhoneView ? "<" : "Prev";
   const calendarNextLabel = isPhoneView ? ">" : "Next";
+  const calendarWeekdayLabels = isPhoneView
+    ? ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+    : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   useEffect(() => {
     if (maintenanceQuickMode) {
@@ -10420,15 +10425,31 @@ export default function App() {
     return [...stats.byCampus].sort((a, b) => b.assets - a.assets)[0] || null;
   }, [stats.byCampus]);
 
+  function isRenderablePhotoSource(value: string) {
+    const text = String(value || "").trim();
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return (
+      lower.startsWith("data:image/") ||
+      lower.startsWith("blob:") ||
+      lower.startsWith("http://") ||
+      lower.startsWith("https://") ||
+      lower.startsWith("/uploads/") ||
+      lower.startsWith("uploads/") ||
+      lower.startsWith("/api/")
+    );
+  }
+
   function renderAssetPhoto(photo: string, alt = "asset") {
-    if (!photo) return <span className="photo-empty">-</span>;
+    const src = String(photo || "").trim();
+    if (!isRenderablePhotoSource(src)) return <span className="photo-empty">{t.noPhoto}</span>;
     return (
       <button
         className="photo-thumb-btn"
-        onClick={() => setPreviewImage(photo)}
+        onClick={() => setPreviewImage(src)}
         title="Open photo"
       >
-        <img src={photo} alt={alt} className="table-photo" />
+        <img src={src} alt={alt} className="table-photo" />
       </button>
     );
   }
@@ -13363,7 +13384,10 @@ export default function App() {
                                 key={`main-nav-sub-${item.id}-${sub.key}`}
                                 type="button"
                                 className={`main-nav-sub-btn ${sub.active ? "main-nav-sub-btn-active" : ""}`}
-                                onClick={sub.onSelect}
+                                onClick={() => {
+                                  setExpandedNavModule(null);
+                                  sub.onSelect();
+                                }}
                               >
                                 {sub.label}
                               </button>
@@ -13437,7 +13461,7 @@ export default function App() {
                                       onClick={() => {
                                         setMobileNotificationOpen(false);
                                         setMobileMenuOpen(false);
-                                        setExpandedNavModule(item.id);
+                                        setExpandedNavModule(null);
                                         sub.onSelect();
                                       }}
                                     >
@@ -13777,10 +13801,10 @@ export default function App() {
                     <p className="tiny dashboard-calendar-month">
                       {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
                     </p>
-                    <div className="calendar-grid dashboard-calendar-grid">
-                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
+                    <div className={`calendar-grid dashboard-calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
+                      {calendarWeekdayLabels.map((d, idx) => (
                         <div
-                          key={`dash-cal-head-${d}`}
+                          key={`dash-cal-head-${d}-${idx}`}
                           className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
                         >
                           {d}
@@ -13876,7 +13900,10 @@ export default function App() {
 
                 {renderQuickCountPanel("dashboard")}
 
-                <div className="dashboard-clean-grid dashboard-calendar-stock-grid" style={{ marginTop: 12 }}>
+                <div
+                  className={`dashboard-clean-grid dashboard-calendar-stock-grid ${isPhoneView ? "dashboard-calendar-stock-grid-phone" : ""}`}
+                  style={{ marginTop: 12 }}
+                >
                   <article className="panel dashboard-widget dashboard-calendar-panel">
                     <div className="dashboard-widget-head">
                       <h3 className="section-title">Eco Calendar View</h3>
@@ -13906,10 +13933,10 @@ export default function App() {
                     <p className="tiny dashboard-calendar-month">
                       {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
                     </p>
-                    <div className="calendar-grid dashboard-calendar-grid">
-                      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
+                    <div className={`calendar-grid dashboard-calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
+                      {calendarWeekdayLabels.map((d, idx) => (
                         <div
-                          key={`dash-cal-head-${d}`}
+                          key={`dash-cal-head-${d}-${idx}`}
                           className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
                         >
                           {d}
@@ -13944,7 +13971,10 @@ export default function App() {
                     <div className="dashboard-widget-head">
                       <h3 className="section-title">Stock Balance & Low Stock Alerts</h3>
                     </div>
-                    <div className="stats-grid dashboard-stock-stats" style={{ marginBottom: 10 }}>
+                    <div
+                      className={`stats-grid dashboard-stock-stats ${isPhoneView ? "dashboard-stock-stats-phone-single" : ""}`}
+                      style={{ marginBottom: 10 }}
+                    >
                       <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryBalanceView("all")}>
                         <div className="stat-label">Total Inventory Items</div>
                         <div className="stat-value">{inventoryBalanceRows.length}</div>
@@ -17728,9 +17758,9 @@ export default function App() {
                   {calendarNextLabel}
                 </button>
               </div>
-              <div className="calendar-grid">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
-                  <div key={d} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
+              <div className={`calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
+                {calendarWeekdayLabels.map((d, idx) => (
+                  <div key={`${d}-${idx}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
                 ))}
                 {calendarGridDays.map((d) => (
                   <button
@@ -18287,50 +18317,76 @@ export default function App() {
             {transferView === "history" && (
               <>
             <h3 className="section-title">Transfer History</h3>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.date}</th>
-                    <th>{t.assetId}</th>
-                    <th>From Campus</th>
-                    <th>From Location</th>
-                    <th>To Campus</th>
-                    <th>To Location</th>
-                    <th>From Staff</th>
-                    <th>To Staff</th>
-                    <th>Ack</th>
-                    <th>By</th>
-                    <th>Reason</th>
-                    <th>{t.notes}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allTransferRows.length ? (
-                    allTransferRows.map((row) => (
-                      <tr key={`transfer-history-tab-${row.rowId}`}>
-                        <td>{formatDate(row.date || "-")}</td>
-                        <td><strong>{row.assetId}</strong></td>
-                        <td>{campusLabel(row.fromCampus)}</td>
-                        <td>{row.fromLocation || "-"}</td>
-                        <td>{campusLabel(row.toCampus)}</td>
-                        <td>{row.toLocation || "-"}</td>
-                        <td>{row.fromUser || "-"}</td>
-                        <td>{row.toUser || "-"}</td>
-                        <td>{row.responsibilityAck}</td>
-                        <td>{row.by || "-"}</td>
-                        <td>{row.reason || "-"}</td>
-                        <td>{row.note || "-"}</td>
-                      </tr>
-                    ))
-                  ) : (
+            {isPhoneView ? (
+              <div className="transfer-mobile-history-list">
+                {allTransferRows.length ? (
+                  allTransferRows.map((row) => (
+                    <article key={`transfer-history-mobile-${row.rowId}`} className="transfer-mobile-history-card">
+                      <div className="transfer-mobile-history-head">
+                        <strong>{row.assetId}</strong>
+                        <span>{formatDate(row.date || "-")}</span>
+                      </div>
+                      <div className="transfer-mobile-history-meta">
+                        <div>From: {campusLabel(row.fromCampus)} | {row.fromLocation || "-"}</div>
+                        <div>To: {campusLabel(row.toCampus)} | {row.toLocation || "-"}</div>
+                        <div>Staff: {row.fromUser || "-"} {"->"} {row.toUser || "-"}</div>
+                        <div>Ack: {row.responsibilityAck}</div>
+                        <div>By: {row.by || "-"}</div>
+                        <div>Reason: {row.reason || "-"}</div>
+                        <div>{t.notes}: {row.note || "-"}</div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">No transfer history yet.</div>
+                )}
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={12}>No transfer history yet.</td>
+                      <th>{t.date}</th>
+                      <th>{t.assetId}</th>
+                      <th>From Campus</th>
+                      <th>From Location</th>
+                      <th>To Campus</th>
+                      <th>To Location</th>
+                      <th>From Staff</th>
+                      <th>To Staff</th>
+                      <th>Ack</th>
+                      <th>By</th>
+                      <th>Reason</th>
+                      <th>{t.notes}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {allTransferRows.length ? (
+                      allTransferRows.map((row) => (
+                        <tr key={`transfer-history-tab-${row.rowId}`}>
+                          <td>{formatDate(row.date || "-")}</td>
+                          <td><strong>{row.assetId}</strong></td>
+                          <td>{campusLabel(row.fromCampus)}</td>
+                          <td>{row.fromLocation || "-"}</td>
+                          <td>{campusLabel(row.toCampus)}</td>
+                          <td>{row.toLocation || "-"}</td>
+                          <td>{row.fromUser || "-"}</td>
+                          <td>{row.toUser || "-"}</td>
+                          <td>{row.responsibilityAck}</td>
+                          <td>{row.by || "-"}</td>
+                          <td>{row.reason || "-"}</td>
+                          <td>{row.note || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={12}>No transfer history yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
               </>
             )}
           </section>
@@ -18430,9 +18486,9 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <div className="calendar-grid">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, idx) => (
-                  <div key={`maintenance-dashboard-head-${d}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
+              <div className={`calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
+                {calendarWeekdayLabels.map((d, idx) => (
+                  <div key={`maintenance-dashboard-head-${d}-${idx}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
                 ))}
                 {calendarGridDays.map((d) => (
                   <button
@@ -22067,7 +22123,34 @@ export default function App() {
                 <button className="tab" onClick={() => setOverviewModal(null)}>{t.close}</button>
               </div>
               <div className="table-wrap modal-sticky-table-wrap">
-                {overviewModalData.mode === "assets" ? (
+                {overviewModalData.mode === "assets" && useMobileCardLayout ? (
+                  <div className="quick-count-mobile-list">
+                    {overviewModalData.assets.length ? (
+                      overviewModalData.assets.map((asset) => (
+                        <article
+                          key={`overview-mobile-asset-${overviewModal}-${asset.id}`}
+                          className={`quick-count-mobile-card ${assetStatusRowClass(asset.status || "")}`}
+                        >
+                          <div className="quick-count-mobile-head">
+                            <strong>{asset.assetId}</strong>
+                            <span>{assetStatusLabel(asset.status || "-")}</span>
+                          </div>
+                          <div className="quick-count-mobile-body">
+                            <div>{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
+                            <div className="quick-count-mobile-meta">
+                              <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                              <div>{t.campus}: {campusLabel(asset.campus)}</div>
+                              <div>{t.category}: {asset.category}</div>
+                              <div>{t.location}: {asset.location || "-"}</div>
+                            </div>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</div>
+                    )}
+                  </div>
+                ) : overviewModalData.mode === "assets" ? (
                   <table>
                     <thead>
                       <tr>
