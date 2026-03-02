@@ -742,7 +742,7 @@ body {
 
 .mobile-notify-stock-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   gap: 8px;
 }
 
@@ -6504,6 +6504,46 @@ tr.row-maint-maintenance:hover td {
     align-items: flex-start;
     gap: 8px;
     flex-wrap: wrap;
+  }
+
+  .workspace-main .asset-mobile-foot {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .workspace-main .asset-mobile-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: calc(100% - 122px);
+  }
+
+  .workspace-main .asset-mobile-status .status-select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .workspace-main .asset-mobile-foot .row-actions {
+    margin-left: auto;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .workspace-main .asset-mobile-foot .row-actions .btn-icon-transfer,
+  .workspace-main .asset-mobile-foot .row-actions .btn-icon-edit,
+  .workspace-main .asset-mobile-foot .row-actions .btn-danger {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0;
   }
 
   .workspace-main .panel-row.calendar-nav-line {

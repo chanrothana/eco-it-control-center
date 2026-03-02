@@ -750,11 +750,35 @@ function normalizeInventoryTxns(input) {
       photo: toText(row.photo),
       approvalStatus: toUpper(row.approvalStatus),
       approvalRequestedBy: toText(row.approvalRequestedBy),
+      approvalRequestedUser: toText(row.approvalRequestedUser),
       approvalRequestedAt: toText(row.approvalRequestedAt),
       approvalDecisionBy: toText(row.approvalDecisionBy),
       approvalDecisionAt: toText(row.approvalDecisionAt),
       approvalDecisionNote: toText(row.approvalDecisionNote),
     }));
+}
+
+function normalizeInventoryApprovalRoutingMap(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out = {};
+  for (const [rawRequester, rawApprovers] of Object.entries(input)) {
+    const requester = toText(rawRequester).toLowerCase();
+    if (!requester) continue;
+    const approvers = Array.isArray(rawApprovers)
+      ? rawApprovers
+      : rawApprovers && typeof rawApprovers === "string"
+        ? [rawApprovers]
+        : [];
+    const normalizedApprovers = Array.from(
+      new Set(
+        approvers
+          .map((value) => toText(value).toLowerCase())
+          .filter(Boolean)
+      )
+    );
+    out[requester] = normalizedApprovers;
+  }
+  return out;
 }
 
 const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL"]);
@@ -943,6 +967,7 @@ function normalizeImportedDb(input) {
   const staffUsers = normalizeStaffUsers(settings.staffUsers);
   const calendarEvents = normalizeCalendarEvents(settings.calendarEvents);
   const maintenanceReminderOffsets = normalizeMaintenanceReminderOffsets(settings.maintenanceReminderOffsets);
+  const inventoryApprovalRouting = normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting);
   const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
   const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
   const vaultAccounts = normalizeVaultAccounts(settings.vaultAccounts);
@@ -974,6 +999,7 @@ function normalizeImportedDb(input) {
       staffUsers,
       calendarEvents,
       maintenanceReminderOffsets,
+      inventoryApprovalRouting,
       inventoryItems,
       inventoryTxns,
       vaultAccounts,
@@ -1043,6 +1069,19 @@ function normalizeNotificationEntries(input) {
           )
         )
       : [];
+    const targetUsernames = Array.isArray(row.targetUsernames)
+      ? Array.from(
+          new Set(
+            row.targetUsernames
+              .map((value) => toText(value).toLowerCase())
+              .filter(Boolean)
+          )
+        )
+      : [];
+    const legacyTargetUsername = toText(row.targetUsername).toLowerCase();
+    if (legacyTargetUsername && !targetUsernames.includes(legacyTargetUsername)) {
+      targetUsernames.push(legacyTargetUsername);
+    }
     out.push({
       id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
       key,
@@ -1055,6 +1094,7 @@ function normalizeNotificationEntries(input) {
       scheduleDate: toText(row.scheduleDate),
       createdAt,
       readBy,
+      targetUsernames,
       generatedBy: toText(row.generatedBy) || "system",
     });
   }
@@ -1178,9 +1218,42 @@ function markNotificationReadByUser(notification, username) {
 }
 
 function notificationVisibleToUser(notification, user) {
+  const kind = toText(notification && notification.kind);
+  const targetUsernames = Array.isArray(notification && notification.targetUsernames)
+    ? notification.targetUsernames.map((value) => toText(value).toLowerCase()).filter(Boolean)
+    : [];
+  const username = toText(user && user.username).toLowerCase();
+  if (kind === "inventory_out_approval") {
+    if (targetUsernames.length && username) return targetUsernames.includes(username);
+    const campus = toText(notification && notification.campus);
+    return isAdminRole(user && user.role) && (!campus || userCanAccessCampus(user, campus));
+  }
+  if (kind === "inventory_out_decision") {
+    if (targetUsernames.length && username) return targetUsernames.includes(username);
+    return false;
+  }
   const campus = toText(notification && notification.campus);
   if (!campus) return true;
   return userCanAccessCampus(user, campus);
+}
+
+function resolveInventoryApprovalApprovers(db, requesterUsername, campusName) {
+  const requester = toText(requesterUsername).toLowerCase();
+  const campus = toText(campusName);
+  const settings = db && db.settings && typeof db.settings === "object" ? db.settings : {};
+  const routing = normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting);
+  const users = Array.isArray(db && db.users) ? db.users.map((row) => sanitizeUser(row)) : [];
+  const eligibleAdmins = users.filter((row) => isAdminRole(row.role) && (!campus || userCanAccessCampus(row, campus)));
+  const eligibleAdminSet = new Set(
+    eligibleAdmins
+      .map((row) => toText(row.username).toLowerCase())
+      .filter(Boolean)
+  );
+  const mappedTargets = (routing[requester] || []).filter((username) => eligibleAdminSet.has(username));
+  const targets = (mappedTargets.length ? mappedTargets : Array.from(eligibleAdminSet)).filter(
+    (username) => username && username !== requester
+  );
+  return Array.from(new Set(targets));
 }
 
 function projectNotificationForUser(notification, user) {
@@ -2162,6 +2235,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         settings: {
           ...settings,
+          inventoryApprovalRouting: normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting),
           staffUsers: normalizeStaffUsers(settings.staffUsers),
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
           inventoryItems: normalizeInventoryItems(settings.inventoryItems),
@@ -2204,6 +2278,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "maintenanceReminderOffsets")
           ? normalizeMaintenanceReminderOffsets(incoming.maintenanceReminderOffsets)
           : normalizeMaintenanceReminderOffsets(current.maintenanceReminderOffsets);
+      const nextInventoryApprovalRouting =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryApprovalRouting")
+          ? normalizeInventoryApprovalRoutingMap(incoming.inventoryApprovalRouting)
+          : normalizeInventoryApprovalRoutingMap(current.inventoryApprovalRouting);
       const nextInventoryItems =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryItems")
           ? normalizeInventoryItems(incoming.inventoryItems)
@@ -2238,6 +2316,7 @@ const server = http.createServer(async (req, res) => {
         staffUsers: nextStaffUsers,
         calendarEvents: nextCalendarEvents,
         maintenanceReminderOffsets: nextMaintenanceReminderOffsets,
+        inventoryApprovalRouting: nextInventoryApprovalRouting,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
         vaultAccounts: nextVaultAccounts,
@@ -3033,12 +3112,14 @@ const server = http.createServer(async (req, res) => {
                 : "",
         approvalStatus,
         approvalRequestedBy: approvalStatus === "PENDING" ? approvalRequestedBy : "",
+        approvalRequestedUser: approvalStatus === "PENDING" ? toText(user.username) : "",
         approvalRequestedAt: approvalStatus === "PENDING" ? approvalRequestedAt : "",
         approvalDecisionBy: approvalStatus === "APPROVED" ? (approvalDecisionBy || toText(user.displayName) || toText(user.username)) : "",
         approvalDecisionAt: approvalStatus === "APPROVED" ? (approvalDecisionAt || new Date().toISOString()) : "",
         approvalDecisionNote: approvalStatus === "APPROVED" ? approvalDecisionNote : "",
       };
       if (approvalStatus === "PENDING") {
+        const approverTargets = resolveInventoryApprovalApprovers(db, txn.approvalRequestedUser, txn.campus);
         upsertNotification(db, {
           id: Date.now() + Math.floor(Math.random() * 1000),
           key: `inventory-out-approval:${txn.id}`,
@@ -3051,6 +3132,7 @@ const server = http.createServer(async (req, res) => {
           scheduleDate: txn.date,
           createdAt: new Date().toISOString(),
           readBy: [],
+          targetUsernames: approverTargets,
           generatedBy: "inventory-out-approval",
         });
       }
@@ -3131,6 +3213,31 @@ const server = http.createServer(async (req, res) => {
       };
       const nextTxns = txns.slice();
       nextTxns[txIdx] = updated;
+      const requesterUser = toText(current.approvalRequestedUser).toLowerCase();
+      if (requesterUser) {
+        const isApproved = status === "APPROVED";
+        const requesterTitle = isApproved
+          ? `Stock OUT approved: ${toText(updated.itemCode) || "Item"}`
+          : `Stock OUT rejected: ${toText(updated.itemCode) || "Item"}`;
+        const requesterMessage = isApproved
+          ? `${toText(updated.itemName) || "Item"} (${Number(updated.qty) || 0}) was approved by ${toText(updated.approvalDecisionBy) || "manager"}.`
+          : `${toText(updated.itemName) || "Item"} (${Number(updated.qty) || 0}) was rejected by ${toText(updated.approvalDecisionBy) || "manager"}${decisionNote ? `: ${decisionNote}` : "."}`;
+        upsertNotification(db, {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          key: `inventory-out-decision:${Number(updated.id) || 0}`,
+          kind: "inventory_out_decision",
+          title: requesterTitle,
+          message: requesterMessage,
+          assetId: toText(updated.itemCode),
+          assetDbId: Number(updated.itemId) || 0,
+          campus: toText(updated.campus),
+          scheduleDate: toText(updated.date),
+          createdAt: new Date().toISOString(),
+          readBy: [],
+          targetUsernames: [requesterUser],
+          generatedBy: "inventory-out-approval-decision",
+        });
+      }
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(
         db,

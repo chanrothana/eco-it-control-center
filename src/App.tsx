@@ -309,11 +309,13 @@ type AuditLog = {
     role?: string;
   };
 };
+type InventoryApprovalRoutingMap = Record<string, string[]>;
 type ServerSettings = {
   campusNames?: Record<string, string>;
   staffUsers?: StaffUser[];
   calendarEvents?: CalendarEvent[];
   maintenanceReminderOffsets?: number[];
+  inventoryApprovalRouting?: InventoryApprovalRoutingMap;
   inventoryItems?: InventoryItem[];
   inventoryTxns?: InventoryTxn[];
   itemTemplates?: ItemTemplate[];
@@ -429,6 +431,23 @@ function parseInventoryApprovalNotificationTxnId(row: Pick<MaintenanceNotificati
   if (String(row.kind || "") !== "inventory_out_approval") return 0;
   const match = String(row.key || "").match(/^inventory-out-approval:(\d+)$/);
   return match ? Number(match[1]) || 0 : 0;
+}
+function normalizeInventoryApprovalRoutingMap(input: unknown): InventoryApprovalRoutingMap {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out: InventoryApprovalRoutingMap = {};
+  for (const [rawRequester, rawApprovers] of Object.entries(input as Record<string, unknown>)) {
+    const requester = String(rawRequester || "").trim().toLowerCase();
+    if (!requester) continue;
+    const rows = Array.isArray(rawApprovers) ? rawApprovers : [];
+    out[requester] = Array.from(
+      new Set(
+        rows
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  }
+  return out;
 }
 const LOCATION_FALLBACK_KEY = "it_locations_fallback_v1";
 const ASSET_FALLBACK_KEY = "it_assets_fallback_v1";
@@ -660,6 +679,10 @@ function normalizeRoleCampuses(role: AuthRole, campuses?: unknown) {
   if (selected.includes("ALL")) return [...CAMPUS_LIST];
   if (selected.length >= CAMPUS_LIST.length) return [...CAMPUS_LIST];
   return selected;
+}
+function hasCampusOverlap(campusesA: string[], campusesB: string[]) {
+  const setA = new Set(campusesA || []);
+  return (campusesB || []).some((campus) => setA.has(campus));
 }
 function defaultMenuAccessFor(role: AuthRole, modules: NavModule[], assetSubviewAccess: AssetSubviewAccess) {
   const allowed = new Set(modules);
@@ -4449,6 +4472,7 @@ export default function App() {
   const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
+  const [inventoryApprovalRoutingMap, setInventoryApprovalRoutingMap] = useState<InventoryApprovalRoutingMap>({});
   const [authCreateForm, setAuthCreateForm] = useState({
     staffId: "",
     username: "",
@@ -6331,6 +6355,9 @@ export default function App() {
         setMaintenanceReminderOffsets(
           normalizeMaintenanceReminderOffsets(settingsRes.settings?.maintenanceReminderOffsets)
         );
+        setInventoryApprovalRoutingMap(
+          normalizeInventoryApprovalRoutingMap(settingsRes.settings?.inventoryApprovalRouting)
+        );
         const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
         const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
         const fallbackInventoryItems = readInventoryItemFallback();
@@ -6945,6 +6972,39 @@ export default function App() {
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
       throw err;
+    }
+  }
+
+  async function saveInventoryApprovalRoutingToServer(nextMap: InventoryApprovalRoutingMap) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: { inventoryApprovalRouting: nextMap } }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function updateInventoryApprovalRouting(requesterUsername: string, approverUsername: string, checked: boolean) {
+    if (!requireAdminAction()) return;
+    const requester = String(requesterUsername || "").trim().toLowerCase();
+    const approver = String(approverUsername || "").trim().toLowerCase();
+    if (!requester || !approver) return;
+    const nextMap = { ...inventoryApprovalRoutingMap };
+    const current = Array.isArray(nextMap[requester]) ? nextMap[requester] : [];
+    const nextApprovers = checked
+      ? Array.from(new Set([...current, approver]))
+      : current.filter((value) => value !== approver);
+    if (nextApprovers.length) nextMap[requester] = nextApprovers;
+    else delete nextMap[requester];
+    setInventoryApprovalRoutingMap(nextMap);
+    try {
+      await saveInventoryApprovalRoutingToServer(nextMap);
+      setSetupMessage(lang === "km" ? "បានរក្សាទុកខ្សែអនុម័តរួចរាល់។" : "Approval line saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save approval line.");
     }
   }
 
@@ -10913,7 +10973,7 @@ export default function App() {
         itemName,
         itemPhoto: item?.photo || txn?.photo || "",
         requestBy: txn?.approvalRequestedBy || txn?.by || "-",
-        reason: txn?.note || "-",
+        reason: txn?.note || row.message || "-",
         requestDateTime: txn?.approvalRequestedAt || row.createdAt,
       };
     },
@@ -10955,6 +11015,28 @@ export default function App() {
   const filterLabel = useMemo(
     () => (campusFilter === "ALL" ? t.allCampuses : campusLabel(campusFilter)),
     [campusFilter, t.allCampuses, campusLabel]
+  );
+  const approvalRequesterAccounts = useMemo(
+    () => authAccounts.filter((row) => !isAdminRole(normalizeRole(row.role))),
+    [authAccounts]
+  );
+  const approvalManagerAccounts = useMemo(
+    () => authAccounts.filter((row) => isAdminRole(normalizeRole(row.role))),
+    [authAccounts]
+  );
+  const getApproverCandidatesForRequester = useCallback(
+    (requester: AuthAccount) => {
+      const requesterRole = normalizeRole(requester.role);
+      const requesterCampuses = normalizeRoleCampuses(requesterRole, requester.campuses);
+      return approvalManagerAccounts.filter((manager) => {
+        const managerRole = normalizeRole(manager.role);
+        if (!isAdminRole(managerRole)) return false;
+        const managerCampuses = normalizeRoleCampuses(managerRole, manager.campuses);
+        if (managerRole === "Super Admin") return true;
+        return hasCampusOverlap(requesterCampuses, managerCampuses);
+      });
+    },
+    [approvalManagerAccounts]
   );
   const historyAsset = useMemo(
     () => assets.find((a) => a.id === historyAssetId) || null,
@@ -14970,10 +15052,10 @@ export default function App() {
                               }}
                             >
                               <div className="mobile-notify-item-head">
-                                <strong>{lang === "km" ? "Approval required: Stock" : "Approval required: Stock"}</strong>
+                                <strong>{lang === "km" ? "សំណើរចេញស្តុក រង់ចាំអនុម័ត" : "Approval required: Stock"}</strong>
                                 <span className="tiny">{formatDateTime(meta.requestDateTime)}</span>
                               </div>
-                              <div className="mobile-notify-stock-row"><span>{lang === "km" ? "Subject" : "Subject"}:</span><strong>{lang === "km" ? "Stock Out" : "Stock Out"}</strong></div>
+                              <div className="mobile-notify-stock-row"><span>{lang === "km" ? "ប្រធានបទ" : "Subject"}:</span><strong>{lang === "km" ? "សំណើរចេញស្តុក" : "Stock Out"}</strong></div>
                               <div className="mobile-notify-stock-item-row">
                                 {meta.itemPhoto ? (
                                   <img src={meta.itemPhoto} alt={meta.itemName} className="mobile-notify-stock-photo" />
@@ -14986,31 +15068,35 @@ export default function App() {
                                 </div>
                               </div>
                               <div className="mobile-notify-stock-meta-grid">
-                                <div><span>{lang === "km" ? "Request by" : "Request by"}:</span><strong>{meta.requestBy}</strong></div>
-                                <div><span>{lang === "km" ? "Date & Time" : "Date & Time"}:</span><strong>{formatDateTime(meta.requestDateTime)}</strong></div>
-                                <div className="mobile-notify-stock-reason"><span>{lang === "km" ? "Reason" : "Reason"}:</span><strong>{meta.reason}</strong></div>
+                                <div><span>{lang === "km" ? "អ្នកស្នើរ" : "Request by"}:</span><strong>{meta.requestBy}</strong></div>
+                                <div><span>{lang === "km" ? "កាលបរិច្ឆេទ និងម៉ោង" : "Date & Time"}:</span><strong>{formatDateTime(meta.requestDateTime)}</strong></div>
+                                <div className="mobile-notify-stock-reason"><span>{lang === "km" ? "មូលហេតុ" : "Reason"}:</span><strong>{meta.reason}</strong></div>
                               </div>
                               <div className="row-actions mobile-notify-stock-actions" onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  className="btn-danger btn-small"
-                                  disabled={busy || !meta.txn}
-                                  onClick={() => {
-                                    if (meta.txn) void setInventoryTxnApproval(meta.txn, "REJECTED");
-                                  }}
-                                >
-                                  {lang === "km" ? "Reject" : "Reject"}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-primary btn-small"
-                                  disabled={busy || !meta.txn}
-                                  onClick={() => {
-                                    if (meta.txn) void setInventoryTxnApproval(meta.txn, "APPROVED");
-                                  }}
-                                >
-                                  {lang === "km" ? "Approval" : "Approval"}
-                                </button>
+                                {isAdmin ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn-danger btn-small"
+                                      disabled={busy || !meta.txn}
+                                      onClick={() => {
+                                        if (meta.txn) void setInventoryTxnApproval(meta.txn, "REJECTED");
+                                      }}
+                                    >
+                                      {lang === "km" ? "បដិសេធ" : "Reject"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn-primary btn-small"
+                                      disabled={busy || !meta.txn}
+                                      onClick={() => {
+                                        if (meta.txn) void setInventoryTxnApproval(meta.txn, "APPROVED");
+                                      }}
+                                    >
+                                      {lang === "km" ? "អនុម័ត" : "Approval"}
+                                    </button>
+                                  </>
+                                ) : null}
                                 {!row.read ? (
                                   <button
                                     type="button"
@@ -15019,7 +15105,7 @@ export default function App() {
                                       void markMaintenanceNotificationRead(row.id);
                                     }}
                                   >
-                                    {lang === "km" ? "Mark as Read" : "Mark as Read"}
+                                    {lang === "km" ? "សម្គាល់ថាបានអាន" : "Mark as Read"}
                                   </button>
                                 ) : null}
                               </div>
@@ -18521,11 +18607,11 @@ export default function App() {
                       : "Phone-friendly daily Stock-Out record for maintenance staff."}
                   </p>
                 </div>
-                {isAdmin && inventoryPendingApprovalRows.length ? (
+                {inventoryPendingApprovalRows.length ? (
                   <article className="panel" id="inventory-pending-approval-board" style={{ marginBottom: 8 }}>
                     <div className="panel-row">
-                      <h3 className="section-title">{lang === "km" ? "សំណើចេញស្តុករង់ចាំអនុម័ត" : "Pending Stock-Out Approvals"}</h3>
-                      <span className="tiny">{inventoryPendingApprovalRows.length} {lang === "km" ? "សំណើ" : "requests"}</span>
+                      <h3 className="section-title">{lang === "km" ? "សំណើរចេញស្តុក រង់ចាំអនុម័ត" : "Pending Stock-Out Approvals"}</h3>
+                      <span className="tiny">{inventoryPendingApprovalRows.length} {lang === "km" ? "សំណើរ" : "requests"}</span>
                     </div>
                     {isPhoneView ? (
                       <div className="inventory-pending-mobile-list">
@@ -18554,17 +18640,21 @@ export default function App() {
                               </div>
                             </div>
                             <div className="inventory-pending-mobile-note">
-                              <small>{t.notes}</small>
+                              <small>{lang === "km" ? "មូលហេតុ" : "Reason"}</small>
                               <div>{row.note || "-"}</div>
                             </div>
-                            <div className="inventory-pending-mobile-actions">
-                              <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
-                                {lang === "km" ? "អនុម័ត" : "Approve"}
-                              </button>
-                              <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
-                                {lang === "km" ? "បដិសេធ" : "Reject"}
-                              </button>
-                            </div>
+                            {isAdmin ? (
+                              <div className="inventory-pending-mobile-actions">
+                                <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
+                                  {lang === "km" ? "អនុម័ត" : "Approve"}
+                                </button>
+                                <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
+                                  {lang === "km" ? "បដិសេធ" : "Reject"}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="tiny">{lang === "km" ? "ស្ថានភាព៖ រង់ចាំអនុម័ត" : "Status: Pending approval"}</div>
+                            )}
                           </article>
                         ))}
                       </div>
@@ -18579,8 +18669,8 @@ export default function App() {
                               <th>{t.campus}</th>
                               <th>Qty</th>
                               <th>{t.by}</th>
-                              <th>{t.notes}</th>
-                              <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th>
+                              <th>{lang === "km" ? "មូលហេតុ" : "Reason"}</th>
+                              {isAdmin ? <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th> : null}
                             </tr>
                           </thead>
                           <tbody>
@@ -18593,16 +18683,18 @@ export default function App() {
                                 <td>{row.qty}</td>
                                 <td>{row.by || row.approvalRequestedBy || "-"}</td>
                                 <td>{row.note || "-"}</td>
-                                <td>
-                                  <div className="asset-row-actions">
-                                    <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
-                                      {lang === "km" ? "អនុម័ត" : "Approve"}
-                                    </button>
-                                    <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
-                                      {lang === "km" ? "បដិសេធ" : "Reject"}
-                                    </button>
-                                  </div>
-                                </td>
+                                {isAdmin ? (
+                                  <td>
+                                    <div className="asset-row-actions">
+                                      <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
+                                        {lang === "km" ? "អនុម័ត" : "Approve"}
+                                      </button>
+                                      <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
+                                        {lang === "km" ? "បដិសេធ" : "Reject"}
+                                      </button>
+                                    </div>
+                                  </td>
+                                ) : null}
                               </tr>
                             ))}
                           </tbody>
@@ -23296,6 +23388,76 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+            <article className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-row">
+                <h3 className="section-title">{lang === "km" ? "ខ្សែអនុម័តសំណើរចេញស្តុក" : "Stock Approval Line"}</h3>
+                <span className="tiny">{lang === "km" ? "កំណត់អ្នកគ្រប់គ្រងសម្រាប់បុគ្គលិកនីមួយៗ" : "Assign manager approvers per staff account"}</span>
+              </div>
+              <div className="table-wrap">
+                <table className="permission-user-table">
+                  <thead>
+                    <tr>
+                      <th>{lang === "km" ? "គណនីបុគ្គលិក" : "Staff Account"}</th>
+                      <th>{t.accessCampus}</th>
+                      <th>{lang === "km" ? "អ្នកអនុម័ត (Manager)" : "Approver Managers"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {approvalRequesterAccounts.length ? (
+                      approvalRequesterAccounts.map((requester) => {
+                        const requesterRole = normalizeRole(requester.role);
+                        const requesterCampuses = normalizeRoleCampuses(requesterRole, requester.campuses);
+                        const requesterCampusText = requesterCampuses.length
+                          ? requesterCampuses.map((campus) => CAMPUS_CODE[campus] || campus).join(", ")
+                          : "-";
+                        const requesterKey = String(requester.username || "").trim().toLowerCase();
+                        const selectedApprovers = inventoryApprovalRoutingMap[requesterKey] || [];
+                        const candidateManagers = getApproverCandidatesForRequester(requester);
+                        return (
+                          <tr key={`approval-routing-${requester.id}`}>
+                            <td>
+                              <strong>{requester.username}</strong>
+                              <div className="tiny">{requester.displayName}</div>
+                            </td>
+                            <td>{requesterCampusText}</td>
+                            <td>
+                              {candidateManagers.length ? (
+                                <div className="filter-menu-list permission-scroll-box permission-scroll-box-sm" style={{ minWidth: 260 }}>
+                                  {candidateManagers.map((manager) => {
+                                    const managerKey = String(manager.username || "").trim().toLowerCase();
+                                    return (
+                                      <label key={`approval-route-${requesterKey}-${managerKey}`} className="filter-menu-item">
+                                        <input
+                                          type="checkbox"
+                                          disabled={!isAdmin || busy}
+                                          checked={selectedApprovers.includes(managerKey)}
+                                          onChange={(e) => {
+                                            void updateInventoryApprovalRouting(requesterKey, managerKey, e.target.checked);
+                                          }}
+                                        />
+                                        <span>
+                                          {manager.displayName} ({manager.username})
+                                        </span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <span className="tiny">{lang === "km" ? "មិនមាន Manager ត្រូវ Campus នេះ" : "No matching manager for this campus"}</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={3}>{lang === "km" ? "មិនមានគណនីបុគ្គលិក" : "No staff accounts found."}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </article>
           </section>
           )}
 
