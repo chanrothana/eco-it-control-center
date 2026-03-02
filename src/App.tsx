@@ -819,7 +819,7 @@ const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "BORROW_IN", label: "Borrow Return (In)" },
   { value: "BORROW_CONSUME", label: "Borrow Consume" },
 ] as const;
-const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP"] as const;
+const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
 const INVENTORY_MASTER_ITEMS = [
   { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
@@ -2741,10 +2741,10 @@ function parseAirconSpecs(specsRaw: string) {
   let acHasFrontPanel = false;
   let acHasOutdoor = false;
   let acComponentNote = "";
-  const typeMatch = specs.match(/(?:^|\n)\s*AC Type:\s*([^\n]+)/i);
-  const hpMatch = specs.match(/(?:^|\n)\s*Capacity:\s*([^\n]+)/i);
-  const includedMatch = specs.match(/(?:^|\n)\s*Included:\s*([^\n]+)/i);
-  const componentNoteMatch = specs.match(/(?:^|\n)\s*Components? Note:\s*([^\n]+)/i);
+  const typeMatch = specs.match(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Components? Note:|$))/i);
+  const hpMatch = specs.match(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Components? Note:|$))/i);
+  const includedMatch = specs.match(/Included:\s*([^|\n;]+?)(?=\s*(?:Components? Note:|$))/i);
+  const componentNoteMatch = specs.match(/Components? Note:\s*([^\n|;]+)/i);
   if (typeMatch?.[1]) acType = String(typeMatch[1]).trim();
   if (hpMatch?.[1]) acHp = String(hpMatch[1]).trim();
   if (includedMatch?.[1]) {
@@ -2755,14 +2755,21 @@ function parseAirconSpecs(specsRaw: string) {
       includedText.includes("outdoor unit") ||
       includedText.includes("back unit") ||
       includedText.includes("rear unit");
+  } else {
+    // Default for legacy AC records: working unit should include both front and outdoor parts.
+    acHasFrontPanel = true;
+    acHasOutdoor = true;
   }
   if (componentNoteMatch?.[1]) acComponentNote = String(componentNoteMatch[1]).trim();
   const cleanedSpecs = specs
-    .replace(/(?:^|\n)\s*AC Type:\s*[^\n]+\s*/gi, "\n")
-    .replace(/(?:^|\n)\s*Capacity:\s*[^\n]+\s*/gi, "\n")
-    .replace(/(?:^|\n)\s*Included:\s*[^\n]+\s*/gi, "\n")
-    .replace(/(?:^|\n)\s*Components? Note:\s*[^\n]+\s*/gi, "\n")
+    .replace(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Components? Note:|$))/gi, "")
+    .replace(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Components? Note:|$))/gi, "")
+    .replace(/Included:\s*([^|\n;]+?)(?=\s*(?:Components? Note:|$))/gi, "")
+    .replace(/Components? Note:\s*([^\n|;]+)/gi, "")
+    .replace(/[|;]+/g, "\n")
+    .replace(/\n\s*,/g, "\n")
     .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
     .trim();
   return {
     acType,
@@ -3008,6 +3015,16 @@ export default function App() {
     | "name"
     | "location"
     | "status";
+  type StaffBorrowingSortKey =
+    | "assetId"
+    | "itemName"
+    | "campus"
+    | "location"
+    | "assignedTo"
+    | "sinceDate"
+    | "responsibilityAck"
+    | "lastAction"
+    | "note";
   type AssetMasterSortKey =
     | "photo"
     | "assetId"
@@ -3612,6 +3629,13 @@ export default function App() {
     direction: "asc" | "desc";
   }>({
     key: "assetId",
+    direction: "asc",
+  });
+  const [staffBorrowingSort, setStaffBorrowingSort] = useState<{
+    key: StaffBorrowingSortKey;
+    direction: "asc" | "desc";
+  }>({
+    key: "assignedTo",
     direction: "asc",
   });
   const [reportType, setReportType] = useState<ReportType>("asset_master");
@@ -5418,6 +5442,13 @@ export default function App() {
   }, [suggestedDesktopSetCode]);
   useEffect(() => {
     setAssetForm((prev) => {
+      if (isAirconAsset(prev.category, prev.type) && (!prev.acHasFrontPanel || !prev.acHasOutdoor)) {
+        return {
+          ...prev,
+          acHasFrontPanel: true,
+          acHasOutdoor: true,
+        };
+      }
       if (isAirconAsset(prev.category, prev.type)) return prev;
       if (
         prev.acType ||
@@ -5977,6 +6008,10 @@ export default function App() {
       return;
     }
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
+    if (createIsAircon && (!assetForm.acHasFrontPanel || !assetForm.acHasOutdoor)) {
+      alert("Air-Con requires both Front Unit and Back Unit (Outdoor) components.");
+      return;
+    }
     const createSpecs = createIsAircon
       ? buildAirconSpecs(assetForm.specs, assetForm.acType, assetForm.acHp, {
           hasRemote: assetForm.acHasRemote,
@@ -8419,7 +8454,7 @@ export default function App() {
       acHasFrontPanel: parsedAircon.acHasFrontPanel,
       acHasOutdoor: parsedAircon.acHasOutdoor,
       acComponentNote: parsedAircon.acComponentNote,
-      specs: parsedAircon.specs,
+      specs: parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
@@ -8581,6 +8616,13 @@ export default function App() {
     }
 
     const editingAsset = assets.find((a) => a.id === editingAssetId);
+    if (
+      isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") &&
+      (!assetEditForm.acHasFrontPanel || !assetEditForm.acHasOutdoor)
+    ) {
+      alert("Air-Con requires both Front Unit and Back Unit (Outdoor) components.");
+      return;
+    }
     const editingIsDesktop =
       !!editingAsset && editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     const editingIsLinkable =
@@ -11244,6 +11286,18 @@ export default function App() {
     });
   }
 
+  function toggleStaffBorrowingSort(key: StaffBorrowingSortKey) {
+    setStaffBorrowingSort((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  }
+
   useEffect(() => {
     if (scheduleForm.assetId) return;
     if (scheduleAssets.length) {
@@ -11352,6 +11406,35 @@ export default function App() {
       })
       .sort((a, b) => a.assignedTo.localeCompare(b.assignedTo) || a.assetId.localeCompare(b.assetId));
   }, [assets, assetItemName]);
+  const sortedStaffBorrowingRows = useMemo(() => {
+    const direction = staffBorrowingSort.direction === "asc" ? 1 : -1;
+    const text = (value: string) => String(value || "").toLowerCase();
+    return [...staffBorrowingRows].sort((a, b) => {
+      if (staffBorrowingSort.key === "campus") {
+        return campusLabel(a.campus).localeCompare(campusLabel(b.campus)) * direction;
+      }
+      if (staffBorrowingSort.key === "sinceDate") {
+        return String(a.sinceDate || "").localeCompare(String(b.sinceDate || "")) * direction;
+      }
+      const aValue =
+        staffBorrowingSort.key === "assetId" ? a.assetId :
+        staffBorrowingSort.key === "itemName" ? a.itemName :
+        staffBorrowingSort.key === "location" ? a.location :
+        staffBorrowingSort.key === "assignedTo" ? a.assignedTo :
+        staffBorrowingSort.key === "responsibilityAck" ? a.responsibilityAck :
+        staffBorrowingSort.key === "lastAction" ? a.lastAction :
+        a.note;
+      const bValue =
+        staffBorrowingSort.key === "assetId" ? b.assetId :
+        staffBorrowingSort.key === "itemName" ? b.itemName :
+        staffBorrowingSort.key === "location" ? b.location :
+        staffBorrowingSort.key === "assignedTo" ? b.assignedTo :
+        staffBorrowingSort.key === "responsibilityAck" ? b.responsibilityAck :
+        staffBorrowingSort.key === "lastAction" ? b.lastAction :
+        b.note;
+      return text(aValue || "").localeCompare(text(bValue || "")) * direction;
+    });
+  }, [staffBorrowingRows, staffBorrowingSort, campusLabel]);
 
   const maintenanceCompletionRows = useMemo(() => {
     return allMaintenanceRows.filter((row) => {
@@ -12715,7 +12798,7 @@ export default function App() {
     } else if (reportType === "staff_borrowing") {
       title = "Staff Asset Assignment List Report";
       columns = ["Asset ID", "Photo", "Item", "Campus", "Location", "Assigned To", "Since", "Ack", "Last Action", "Note"];
-      rows = staffBorrowingRows.map((r) => [
+      rows = sortedStaffBorrowingRows.map((r) => [
         r.assetId,
         toPrintablePhotoUrl(r.assetPhoto || ""),
         r.itemName || "-",
@@ -12821,7 +12904,7 @@ export default function App() {
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
         : reportType === "staff_borrowing"
-        ? `<p><strong>Borrowed / Assigned Assets:</strong> ${staffBorrowingRows.length}</p>`
+        ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
         : reportType === "asset_master"
         ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>`
         : reportType === "set_code"
@@ -15056,7 +15139,7 @@ export default function App() {
                               onChange={(e) => setAssetForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
                               style={{ marginRight: 8 }}
                             />
-                            Front Panel
+                            Front Unit (Indoor)
                           </label>
                           <label className="tab setpack-include-item">
                             <input
@@ -15065,7 +15148,7 @@ export default function App() {
                               onChange={(e) => setAssetForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
                               style={{ marginRight: 8 }}
                             />
-                            Outdoor Unit
+                            Back Unit (Outdoor)
                           </label>
                         </div>
                       </label>
@@ -16372,7 +16455,7 @@ export default function App() {
                                 onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
                                 style={{ marginRight: 8 }}
                               />
-                              Front Panel
+                              Front Unit (Indoor)
                             </label>
                             <label className="tab setpack-include-item">
                               <input
@@ -16381,7 +16464,7 @@ export default function App() {
                                 onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
                                 style={{ marginRight: 8 }}
                               />
-                              Outdoor Unit
+                              Back Unit (Outdoor)
                             </label>
                           </div>
                         </label>
@@ -21026,21 +21109,93 @@ export default function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>{t.assetId}</th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "assetId" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("assetId")}
+                        >
+                          {t.assetId} {staffBorrowingSort.key === "assetId" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
                       <th>{t.photo}</th>
-                      <th>{t.name}</th>
-                      <th>{t.campus}</th>
-                      <th>{t.location}</th>
-                      <th>Assigned To</th>
-                      <th>Since</th>
-                      <th>Ack</th>
-                      <th>Last Action</th>
-                      <th>{t.notes}</th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "itemName" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("itemName")}
+                        >
+                          {t.name} {staffBorrowingSort.key === "itemName" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "campus" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("campus")}
+                        >
+                          {t.campus} {staffBorrowingSort.key === "campus" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "location" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("location")}
+                        >
+                          {t.location} {staffBorrowingSort.key === "location" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "assignedTo" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("assignedTo")}
+                        >
+                          Assigned To {staffBorrowingSort.key === "assignedTo" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "sinceDate" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("sinceDate")}
+                        >
+                          Since {staffBorrowingSort.key === "sinceDate" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "responsibilityAck" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("responsibilityAck")}
+                        >
+                          Ack {staffBorrowingSort.key === "responsibilityAck" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "lastAction" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("lastAction")}
+                        >
+                          Last Action {staffBorrowingSort.key === "lastAction" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${staffBorrowingSort.key === "note" ? "is-active" : ""}`}
+                          onClick={() => toggleStaffBorrowingSort("note")}
+                        >
+                          {t.notes} {staffBorrowingSort.key === "note" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {staffBorrowingRows.length ? (
-                      staffBorrowingRows.map((r) => (
+                    {sortedStaffBorrowingRows.length ? (
+                      sortedStaffBorrowingRows.map((r) => (
                         <tr key={`report-staff-borrow-${r.assetDbId}`}>
                           <td><strong>{r.assetId}</strong></td>
                           <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
