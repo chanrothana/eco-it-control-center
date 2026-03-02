@@ -88,6 +88,7 @@ type MaintenanceEntry = {
   cost?: string;
   by?: string;
   photo?: string;
+  photos?: string[];
 };
 type VerificationEntry = {
   id: number;
@@ -818,18 +819,8 @@ const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "BORROW_IN", label: "Borrow Return (In)" },
   { value: "BORROW_CONSUME", label: "Borrow Consume" },
 ] as const;
-const INVENTORY_MONTHLY_ITEM_COLORS = [
-  "#2f6cb7",
-  "#25a87c",
-  "#e88a3a",
-  "#805ad5",
-  "#dd6b20",
-  "#d53f8c",
-  "#2b6cb0",
-  "#319795",
-  "#c05621",
-  "#718096",
-];
+const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP"] as const;
+const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
 const INVENTORY_MASTER_ITEMS = [
   { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
   { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", spec: "", unit: "pcs", aliases: ["hand tissue", "tissue", "ក្រដាសដៃ"] },
@@ -986,7 +977,7 @@ function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF"
 
 function canLinkToParentAsset(type: string): boolean {
   const code = String(type || "").toUpperCase();
-  return code !== DESKTOP_PARENT_TYPE && code !== WATER_DISPENSER_MAIN_TYPE;
+  return code !== DESKTOP_PARENT_TYPE && code !== WATER_DISPENSER_MAIN_TYPE && code !== "AC";
 }
 
 const TEXT = {
@@ -2559,10 +2550,15 @@ function mergeAssets(primary: Asset[], secondary: Asset[]) {
         const old = prevById.get(h.id);
         seen.add(h.id);
         if (!old) return h;
+        const mergedPhotos = normalizeAssetPhotos({
+          photo: h.photo || old.photo || "",
+          photos: [...(old.photos || []), ...(h.photos || [])],
+        });
         return {
           ...old,
           ...h,
-          photo: h.photo || old.photo || "",
+          photo: mergedPhotos[0] || "",
+          photos: mergedPhotos,
         };
       });
       for (const old of prevHistory) {
@@ -2704,6 +2700,110 @@ function normalizeAssetPhotos(input: { photo?: string; photos?: string[] }) {
     out.unshift(single);
   }
   return out.slice(0, MAX_ASSET_PHOTOS);
+}
+
+function normalizeAssetSerialKey(value: string) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function findDuplicateAssetSerial(list: Asset[], serialNumber: string, excludeId?: number) {
+  const key = normalizeAssetSerialKey(serialNumber);
+  if (!key) return null;
+  return (
+    list.find(
+      (asset) =>
+        Number(asset.id) !== Number(excludeId || 0) &&
+        normalizeAssetSerialKey(String(asset.serialNumber || "")) === key
+    ) || null
+  );
+}
+
+function isAirconAsset(category: string, type: string) {
+  return String(category || "").toUpperCase() === "FACILITY" && String(type || "").toUpperCase() === "AC";
+}
+
+function parseAirconSpecs(specsRaw: string) {
+  const specs = String(specsRaw || "").trim();
+  if (!specs) {
+    return {
+      acType: "",
+      acHp: "",
+      acHasRemote: false,
+      acHasFrontPanel: false,
+      acHasOutdoor: false,
+      acComponentNote: "",
+      specs: "",
+    };
+  }
+  let acType = "";
+  let acHp = "";
+  let acHasRemote = false;
+  let acHasFrontPanel = false;
+  let acHasOutdoor = false;
+  let acComponentNote = "";
+  const typeMatch = specs.match(/(?:^|\n)\s*AC Type:\s*([^\n]+)/i);
+  const hpMatch = specs.match(/(?:^|\n)\s*Capacity:\s*([^\n]+)/i);
+  const includedMatch = specs.match(/(?:^|\n)\s*Included:\s*([^\n]+)/i);
+  const componentNoteMatch = specs.match(/(?:^|\n)\s*Components? Note:\s*([^\n]+)/i);
+  if (typeMatch?.[1]) acType = String(typeMatch[1]).trim();
+  if (hpMatch?.[1]) acHp = String(hpMatch[1]).trim();
+  if (includedMatch?.[1]) {
+    const includedText = String(includedMatch[1]).toLowerCase();
+    acHasRemote = includedText.includes("remote");
+    acHasFrontPanel = includedText.includes("front panel");
+    acHasOutdoor =
+      includedText.includes("outdoor unit") ||
+      includedText.includes("back unit") ||
+      includedText.includes("rear unit");
+  }
+  if (componentNoteMatch?.[1]) acComponentNote = String(componentNoteMatch[1]).trim();
+  const cleanedSpecs = specs
+    .replace(/(?:^|\n)\s*AC Type:\s*[^\n]+\s*/gi, "\n")
+    .replace(/(?:^|\n)\s*Capacity:\s*[^\n]+\s*/gi, "\n")
+    .replace(/(?:^|\n)\s*Included:\s*[^\n]+\s*/gi, "\n")
+    .replace(/(?:^|\n)\s*Components? Note:\s*[^\n]+\s*/gi, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+  return {
+    acType,
+    acHp,
+    acHasRemote,
+    acHasFrontPanel,
+    acHasOutdoor,
+    acComponentNote,
+    specs: cleanedSpecs,
+  };
+}
+
+function buildAirconSpecs(
+  baseSpecs: string,
+  acType: string,
+  acHp: string,
+  components?: {
+    hasRemote: boolean;
+    hasFrontPanel: boolean;
+    hasOutdoor: boolean;
+    componentNote: string;
+  }
+) {
+  const normalized = parseAirconSpecs(baseSpecs);
+  const out: string[] = [];
+  const type = String(acType || "").trim();
+  const hp = String(acHp || "").trim();
+  const hasRemote = components ? Boolean(components.hasRemote) : normalized.acHasRemote;
+  const hasFrontPanel = components ? Boolean(components.hasFrontPanel) : normalized.acHasFrontPanel;
+  const hasOutdoor = components ? Boolean(components.hasOutdoor) : normalized.acHasOutdoor;
+  const componentNote = components ? String(components.componentNote || "").trim() : normalized.acComponentNote;
+  if (type) out.push(`AC Type: ${type}`);
+  if (hp) out.push(`Capacity: ${hp}`);
+  const included: string[] = [];
+  if (hasRemote) included.push("Remote");
+  if (hasFrontPanel) included.push("Front Panel");
+  if (hasOutdoor) included.push("Outdoor Unit");
+  if (included.length) out.push(`Included: ${included.join(", ")}`);
+  if (componentNote) out.push(`Components Note: ${componentNote}`);
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
 }
 
 function normalizeAssetForUi(asset: Asset): Asset {
@@ -3687,6 +3787,12 @@ export default function App() {
     brand: "",
     model: "",
     serialNumber: "",
+    acType: "",
+    acHp: "",
+    acHasRemote: false,
+    acHasFrontPanel: false,
+    acHasOutdoor: false,
+    acComponentNote: "",
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -3786,6 +3892,12 @@ export default function App() {
     brand: "",
     model: "",
     serialNumber: "",
+    acType: "",
+    acHp: "",
+    acHasRemote: false,
+    acHasFrontPanel: false,
+    acHasOutdoor: false,
+    acComponentNote: "",
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -3811,6 +3923,7 @@ export default function App() {
     cost: "",
     by: "",
     photo: "",
+    photos: [] as string[],
   });
   const [verificationRecordForm, setVerificationRecordForm] = useState({
     assetId: "",
@@ -4093,6 +4206,8 @@ export default function App() {
     by: "",
     note: "",
   });
+  const [inventoryFullDateFrom, setInventoryFullDateFrom] = useState(() => shiftYmd(toYmd(new Date()), -30));
+  const [inventoryFullDateTo, setInventoryFullDateTo] = useState(() => toYmd(new Date()));
 
   useEffect(() => {
     trySetLocalStorage("ui_lang", lang);
@@ -4911,13 +5026,6 @@ export default function App() {
       };
     });
   }, [quickOutEcoMonth, getHolidayEvent]);
-  const inventoryDailyTodayRows = useMemo(() => {
-    const date = inventoryDailyForm.date;
-    return [...inventoryVisibleTxns]
-      .filter((tx) => tx.date === date)
-      .sort((a, b) => b.id - a.id)
-      .slice(0, 12);
-  }, [inventoryVisibleTxns, inventoryDailyForm.date]);
   const inventoryMonthlyItemCampusTrend = useMemo(() => {
     const now = new Date();
     const month = toYmd(now).slice(0, 7);
@@ -5061,6 +5169,16 @@ export default function App() {
       rows,
     };
   }, [inventoryVisibleItems, inventoryVisibleTxns]);
+  const inventoryCampusDailyMatrix = useMemo(() => {
+    const days = inventoryMonthlyCampusOutDiagrams.rows[0]?.dayRows.map((row) => row.day) || [];
+    const max = Math.max(
+      1,
+      ...inventoryMonthlyCampusOutDiagrams.rows.flatMap((campusRow) =>
+        campusRow.dayRows.map((dayRow) => Number(dayRow.total || 0))
+      )
+    );
+    return { days, max };
+  }, [inventoryMonthlyCampusOutDiagrams]);
   const inventoryDailyUsageByCampus = useMemo(() => {
     const endYmd = normalizeYmdInput(inventoryDailyForm.date) || toYmd(new Date());
     const selectedItemId = Number(inventoryDailyForm.itemId || 0);
@@ -5100,6 +5218,41 @@ export default function App() {
     );
     return { campuses, rows };
   }, [inventoryDailyForm.date, inventoryDailyForm.itemId, inventoryVisibleItems, inventoryVisibleTxns, inventoryCampusLabel]);
+  const inventoryRecentYmdSet = useMemo(() => {
+    const today = toYmd(new Date());
+    const yesterday = shiftYmd(today, -1);
+    return new Set([yesterday, today]);
+  }, []);
+  const inventoryUsageSummaryRows = useMemo(
+    () => inventoryDailyUsageByCampus.rows.filter((row) => inventoryRecentYmdSet.has(row.ymd)),
+    [inventoryDailyUsageByCampus, inventoryRecentYmdSet]
+  );
+  const inventoryRecentTxnRows = useMemo(
+    () =>
+      [...inventoryVisibleTxns]
+        .filter((tx) => inventoryRecentYmdSet.has(normalizeYmdInput(tx.date) || tx.date))
+        .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id),
+    [inventoryVisibleTxns, inventoryRecentYmdSet]
+  );
+  const inventoryFullDateRangeInvalid = useMemo(() => {
+    const from = normalizeYmdInput(inventoryFullDateFrom);
+    const to = normalizeYmdInput(inventoryFullDateTo);
+    return Boolean(from && to && from > to);
+  }, [inventoryFullDateFrom, inventoryFullDateTo]);
+  const inventoryFullTxnRows = useMemo(() => {
+    const from = normalizeYmdInput(inventoryFullDateFrom);
+    const to = normalizeYmdInput(inventoryFullDateTo);
+    if (from && to && from > to) return [] as InventoryTxn[];
+    return [...inventoryVisibleTxns]
+      .filter((tx) => {
+        const date = normalizeYmdInput(tx.date);
+        if (!date) return false;
+        if (from && date < from) return false;
+        if (to && date > to) return false;
+        return true;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  }, [inventoryVisibleTxns, inventoryFullDateFrom, inventoryFullDateTo]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -5263,6 +5416,30 @@ export default function App() {
       return prev;
     });
   }, [suggestedDesktopSetCode]);
+  useEffect(() => {
+    setAssetForm((prev) => {
+      if (isAirconAsset(prev.category, prev.type)) return prev;
+      if (
+        prev.acType ||
+        prev.acHp ||
+        prev.acHasRemote ||
+        prev.acHasFrontPanel ||
+        prev.acHasOutdoor ||
+        prev.acComponentNote
+      ) {
+        return {
+          ...prev,
+          acType: "",
+          acHp: "",
+          acHasRemote: false,
+          acHasFrontPanel: false,
+          acHasOutdoor: false,
+          acComponentNote: "",
+        };
+      }
+      return prev;
+    });
+  }, [assetForm.category, assetForm.type]);
   useEffect(() => {
     if (!assetForm.useExistingSet || !assetForm.parentAssetId) return;
     if (parentAssetsForCreate.some((asset) => asset.assetId === assetForm.parentAssetId)) return;
@@ -5799,6 +5976,44 @@ export default function App() {
       alert(t.userRequired);
       return;
     }
+    const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
+    const createSpecs = createIsAircon
+      ? buildAirconSpecs(assetForm.specs, assetForm.acType, assetForm.acHp, {
+          hasRemote: assetForm.acHasRemote,
+          hasFrontPanel: assetForm.acHasFrontPanel,
+          hasOutdoor: assetForm.acHasOutdoor,
+          componentNote: assetForm.acComponentNote,
+        })
+      : assetForm.specs;
+    const mainSerial = assetForm.serialNumber.trim();
+    const duplicateMain = findDuplicateAssetSerial(assets, mainSerial);
+    if (duplicateMain) {
+      setError(`Serial number already exists: ${duplicateMain.assetId}`);
+      return;
+    }
+    if (createPack) {
+      const localPackSerials = new Map<string, string>();
+      for (const [typeCode, draft] of packItems) {
+        const serial = String(draft.serialNumber || "").trim();
+        if (!serial) continue;
+        const key = normalizeAssetSerialKey(serial);
+        if (!key) continue;
+        const duplicateExisting = findDuplicateAssetSerial(assets, serial);
+        if (duplicateExisting) {
+          setError(`Serial number already exists: ${duplicateExisting.assetId}`);
+          return;
+        }
+        if (mainSerial && normalizeAssetSerialKey(mainSerial) === key) {
+          setError(`Duplicate serial in set pack (${typeCode}): ${serial}`);
+          return;
+        }
+        if (localPackSerials.has(key)) {
+          setError(`Duplicate serial in set pack: ${serial}`);
+          return;
+        }
+        localPackSerials.set(key, typeCode);
+      }
+    }
 
     setBusy(true);
     setError("");
@@ -5814,6 +6029,7 @@ export default function App() {
           componentRole: assetForm.componentRole.trim(),
           componentRequired: Boolean(assetForm.componentRequired),
           custodyStatus: assetForm.assignedTo ? "ASSIGNED" : "IN_STOCK",
+          specs: createSpecs,
         }),
       });
 
@@ -5864,6 +6080,12 @@ export default function App() {
         brand: "",
         model: "",
         serialNumber: "",
+        acType: "",
+        acHp: "",
+        acHasRemote: false,
+        acHasFrontPanel: false,
+        acHasOutdoor: false,
+        acComponentNote: "",
         specs: "",
         purchaseDate: "",
         warrantyUntil: "",
@@ -5931,7 +6153,7 @@ export default function App() {
           brand: assetForm.brand,
           model: assetForm.model,
           serialNumber: assetForm.serialNumber,
-          specs: assetForm.specs,
+          specs: createSpecs,
           purchaseDate: assetForm.purchaseDate,
           warrantyUntil: assetForm.warrantyUntil,
           vendor: assetForm.vendor,
@@ -6055,6 +6277,12 @@ export default function App() {
           brand: "",
           model: "",
           serialNumber: "",
+          acType: "",
+          acHp: "",
+          acHasRemote: false,
+          acHasFrontPanel: false,
+          acHasOutdoor: false,
+          acComponentNote: "",
           specs: "",
           purchaseDate: "",
           warrantyUntil: "",
@@ -7290,7 +7518,7 @@ export default function App() {
     []
   );
 
-  function createInventoryItem() {
+  async function createInventoryItem() {
     if (!requireAdminAction()) return;
     const itemCode = (inventoryItemForm.itemCode.trim().toUpperCase() || autoInventoryItemCode);
     const masterItem = INVENTORY_MASTER_ITEMS.find((item) => item.key === inventoryItemForm.masterItemKey);
@@ -7342,9 +7570,38 @@ export default function App() {
       photo: inventoryItemForm.photo || "",
       created: new Date().toISOString(),
     };
-    const nextItems = [row, ...inventoryItems];
-    setInventoryItems(nextItems);
-    void persistInventorySettings(nextItems, inventoryTxns);
+    setBusy(true);
+    setError("");
+    try {
+      try {
+        const res = await requestJson<{ item: InventoryItem }>("/api/inventory/items", {
+          method: "POST",
+          body: JSON.stringify({
+            campus: row.campus,
+            category: row.category,
+            itemCode: row.itemCode,
+            itemName: row.itemName,
+            unit: row.unit,
+            openingQty: row.openingQty,
+            minStock: row.minStock,
+            location: row.location,
+            vendor: row.vendor || "",
+            notes: row.notes || "",
+            photo: row.photo || "",
+          }),
+        });
+        setInventoryItems((prev) => [res.item, ...prev.filter((item) => item.id !== res.item.id)]);
+      } catch (err) {
+        if (!isMissingRouteError(err)) throw err;
+        const nextItems = [row, ...inventoryItems];
+        setInventoryItems(nextItems);
+        void persistInventorySettings(nextItems, inventoryTxns);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create inventory item");
+      setBusy(false);
+      return;
+    }
     appendUiAudit("CREATE", "inventory_item", row.itemCode, `${row.campus} | ${row.itemName}`);
     setInventoryCodeManual(false);
     setInventoryItemForm((f) => ({
@@ -7360,10 +7617,11 @@ export default function App() {
       photo: "",
     }));
     setInventoryItemFileKey((k) => k + 1);
+    setBusy(false);
     setError("");
   }
 
-  function deleteInventoryItem(row: (typeof inventoryBalanceRows)[number]) {
+  async function deleteInventoryItem(row: (typeof inventoryBalanceRows)[number]) {
     if (!requireAdminAction()) return;
     const hasTxnHistory = inventoryTxns.some((tx) => tx.itemId === row.id);
     if (hasTxnHistory) {
@@ -7371,14 +7629,29 @@ export default function App() {
       return;
     }
     if (!window.confirm(`Delete item ${row.itemCode} - ${row.itemName}?`)) return;
-    const nextItems = inventoryItems.filter((item) => item.id !== row.id);
-    setInventoryItems(nextItems);
-    void persistInventorySettings(nextItems, inventoryTxns);
+    setBusy(true);
+    setError("");
+    try {
+      try {
+        await requestJson<{ ok: boolean }>(`/api/inventory/items/${row.id}`, { method: "DELETE" });
+        setInventoryItems((prev) => prev.filter((item) => item.id !== row.id));
+      } catch (err) {
+        if (!isMissingRouteError(err)) throw err;
+        const nextItems = inventoryItems.filter((item) => item.id !== row.id);
+        setInventoryItems(nextItems);
+        void persistInventorySettings(nextItems, inventoryTxns);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete inventory item");
+      setBusy(false);
+      return;
+    }
     appendUiAudit("DELETE", "inventory_item", row.itemCode, `${row.campus} | ${row.itemName}`);
+    setBusy(false);
     setError("");
   }
 
-  function saveInventoryTxnEntry(values: {
+  async function saveInventoryTxnEntry(values: {
     itemId: string;
     date: string;
     type: InventoryTxn["type"];
@@ -7492,17 +7765,48 @@ export default function App() {
               ? "CONSUMED"
               : undefined,
     };
-    const nextTxns = [tx, ...inventoryTxns];
-    setInventoryTxns(nextTxns);
-    void persistInventorySettings(inventoryItems, nextTxns);
+    setBusy(true);
+    try {
+      try {
+        const res = await requestJson<{ txn: InventoryTxn }>("/api/inventory/txns", {
+          method: "POST",
+          body: JSON.stringify({
+            itemId: item.id,
+            date: values.date,
+            type: values.type,
+            qty,
+            by: values.by.trim(),
+            note: values.note.trim(),
+            fromCampus,
+            toCampus,
+            expectedReturnDate,
+            requestedBy,
+            approvedBy,
+            receivedBy,
+            photo: cleanedPhoto,
+          }),
+        });
+        setInventoryTxns((prev) => [res.txn, ...prev.filter((entry) => entry.id !== res.txn.id)]);
+      } catch (err) {
+        if (!isMissingRouteError(err)) throw err;
+        const nextTxns = [tx, ...inventoryTxns];
+        setInventoryTxns(nextTxns);
+        void persistInventorySettings(inventoryItems, nextTxns);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save inventory transaction");
+      setBusy(false);
+      return false;
+    }
     appendUiAudit("CREATE", "inventory_txn", `${item.itemCode}-${tx.id}`, `${tx.type} ${tx.qty} ${item.unit}`);
+    setBusy(false);
     setError("");
     return true;
   }
 
-  function createInventoryTxn() {
+  async function createInventoryTxn() {
     if (!requireAdminAction()) return;
-    const saved = saveInventoryTxnEntry({
+    const saved = await saveInventoryTxnEntry({
       itemId: inventoryTxnForm.itemId,
       date: inventoryTxnForm.date,
       type: inventoryTxnForm.type,
@@ -7533,8 +7837,8 @@ export default function App() {
     });
   }
 
-  function createInventoryDailyTxn() {
-    const saved = saveInventoryTxnEntry({
+  async function createInventoryDailyTxn() {
+    const saved = await saveInventoryTxnEntry({
       itemId: inventoryDailyForm.itemId,
       date: inventoryDailyForm.date,
       type: inventoryDailyForm.type,
@@ -7615,30 +7919,31 @@ export default function App() {
       alert(t.photoProcessError);
     }
   }
-  function saveInventoryQuickOut() {
+  async function saveInventoryQuickOut() {
     if (!inventoryQuickOutModal) return;
+    const modal = inventoryQuickOutModal;
     const recorder = authUser?.displayName || authUser?.username || "";
-    const reason = inventoryQuickOutModal.note.trim();
+    const reason = modal.note.trim();
     if (!reason) {
       setError("Please enter reason for stock-out.");
       return;
     }
-    const saved = saveInventoryTxnEntry({
-      itemId: inventoryQuickOutModal.itemId,
-      date: inventoryQuickOutModal.date,
+    const saved = await saveInventoryTxnEntry({
+      itemId: modal.itemId,
+      date: modal.date,
       type: "OUT",
-      qty: inventoryQuickOutModal.qty,
+      qty: modal.qty,
       by: recorder,
       note: reason,
-      photo: inventoryQuickOutModal.photo,
+      photo: modal.photo,
       requirePhoto: true,
     });
     if (!saved) return;
     setInventoryDailyForm((prev) => ({
       ...prev,
       type: "OUT",
-      itemId: inventoryQuickOutModal.itemId,
-      date: inventoryQuickOutModal.date,
+      itemId: modal.itemId,
+      date: modal.date,
       by: recorder || prev.by,
       qty: "",
       note: "",
@@ -7796,7 +8101,7 @@ export default function App() {
     });
   }
 
-  function updateInventoryTxn() {
+  async function updateInventoryTxn() {
     if (!requireAdminAction()) return;
     if (editingInventoryTxnId === null) return;
 
@@ -7832,32 +8137,56 @@ export default function App() {
       return;
     }
 
-    const nextTxns = inventoryTxns.map((x) =>
-        x.id === editingInventoryTxnId
-          ? {
-              ...x,
-              itemId: item.id,
-              campus: item.campus,
-              itemCode: item.itemCode,
-              itemName: item.itemName,
-              date: inventoryTxnEditForm.date,
-              type: inventoryTxnEditForm.type,
-              qty,
-              by: inventoryTxnEditForm.by.trim(),
-              note: inventoryTxnEditForm.note.trim(),
-              borrowStatus:
-                inventoryTxnEditForm.type === "BORROW_OUT"
-                  ? (x.borrowStatus || "BORROW_OPEN")
-                  : inventoryTxnEditForm.type === "BORROW_IN"
-                    ? "CLOSED"
-                    : inventoryTxnEditForm.type === "BORROW_CONSUME"
-                      ? "CONSUMED"
-                      : undefined,
-            }
-          : x
-      );
-    setInventoryTxns(nextTxns);
-    void persistInventorySettings(inventoryItems, nextTxns);
+    setBusy(true);
+    setError("");
+    try {
+      try {
+        const res = await requestJson<{ txn: InventoryTxn }>(`/api/inventory/txns/${editingInventoryTxnId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            itemId: item.id,
+            date: inventoryTxnEditForm.date,
+            type: inventoryTxnEditForm.type,
+            qty,
+            by: inventoryTxnEditForm.by.trim(),
+            note: inventoryTxnEditForm.note.trim(),
+          }),
+        });
+        setInventoryTxns((prev) => prev.map((x) => (x.id === editingInventoryTxnId ? res.txn : x)));
+      } catch (err) {
+        if (!isMissingRouteError(err)) throw err;
+        const nextTxns = inventoryTxns.map((x) =>
+          x.id === editingInventoryTxnId
+            ? {
+                ...x,
+                itemId: item.id,
+                campus: item.campus,
+                itemCode: item.itemCode,
+                itemName: item.itemName,
+                date: inventoryTxnEditForm.date,
+                type: inventoryTxnEditForm.type,
+                qty,
+                by: inventoryTxnEditForm.by.trim(),
+                note: inventoryTxnEditForm.note.trim(),
+                borrowStatus:
+                  inventoryTxnEditForm.type === "BORROW_OUT"
+                    ? (x.borrowStatus || "BORROW_OPEN")
+                    : inventoryTxnEditForm.type === "BORROW_IN"
+                      ? "CLOSED"
+                      : inventoryTxnEditForm.type === "BORROW_CONSUME"
+                        ? "CONSUMED"
+                        : undefined,
+              }
+            : x
+        );
+        setInventoryTxns(nextTxns);
+        void persistInventorySettings(inventoryItems, nextTxns);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update transaction");
+      setBusy(false);
+      return;
+    }
     appendUiAudit(
       "UPDATE",
       "inventory_txn",
@@ -7865,10 +8194,11 @@ export default function App() {
       `${currentRow.type} ${currentRow.qty} -> ${inventoryTxnEditForm.type} ${qty}`
     );
     cancelInventoryTxnEdit();
+    setBusy(false);
     setError("");
   }
 
-  function deleteInventoryTxn(row: InventoryTxn) {
+  async function deleteInventoryTxn(row: InventoryTxn) {
     if (!requireAdminAction()) return;
     if (!window.confirm("Delete this transaction?")) return;
 
@@ -7893,13 +8223,28 @@ export default function App() {
       }
     }
 
-    const nextTxns = inventoryTxns.filter((x) => x.id !== row.id);
-    setInventoryTxns(nextTxns);
-    void persistInventorySettings(inventoryItems, nextTxns);
+    setBusy(true);
+    setError("");
+    try {
+      try {
+        await requestJson<{ ok: boolean }>(`/api/inventory/txns/${row.id}`, { method: "DELETE" });
+        setInventoryTxns((prev) => prev.filter((x) => x.id !== row.id));
+      } catch (err) {
+        if (!isMissingRouteError(err)) throw err;
+        const nextTxns = inventoryTxns.filter((x) => x.id !== row.id);
+        setInventoryTxns(nextTxns);
+        void persistInventorySettings(inventoryItems, nextTxns);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete transaction");
+      setBusy(false);
+      return;
+    }
     if (editingInventoryTxnId === row.id) {
       cancelInventoryTxnEdit();
     }
     appendUiAudit("DELETE", "inventory_txn", `${row.itemCode}-${row.id}`, `${row.type} ${row.qty}`);
+    setBusy(false);
     setError("");
   }
 
@@ -8043,6 +8388,17 @@ export default function App() {
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
     const photos = normalizeAssetPhotos(asset);
+    const parsedAircon = isAirconAsset(asset.category, asset.type)
+      ? parseAirconSpecs(asset.specs || "")
+      : {
+          acType: "",
+          acHp: "",
+          acHasRemote: false,
+          acHasFrontPanel: false,
+          acHasOutdoor: false,
+          acComponentNote: "",
+          specs: asset.specs || "",
+        };
     setAssetEditForm({
       location: asset.location || "",
       pcType: asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
@@ -8057,7 +8413,13 @@ export default function App() {
       brand: asset.brand || "",
       model: asset.model || "",
       serialNumber: asset.serialNumber || "",
-      specs: asset.specs || "",
+      acType: parsedAircon.acType,
+      acHp: parsedAircon.acHp,
+      acHasRemote: parsedAircon.acHasRemote,
+      acHasFrontPanel: parsedAircon.acHasFrontPanel,
+      acHasOutdoor: parsedAircon.acHasOutdoor,
+      acComponentNote: parsedAircon.acComponentNote,
+      specs: parsedAircon.specs,
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
@@ -8281,7 +8643,14 @@ export default function App() {
       brand: assetEditForm.brand.trim(),
       model: assetEditForm.model.trim(),
       serialNumber: assetEditForm.serialNumber.trim(),
-      specs: assetEditForm.specs.trim(),
+      specs: isAirconAsset(editingAsset?.category || "", editingAsset?.type || "")
+        ? buildAirconSpecs(assetEditForm.specs.trim(), assetEditForm.acType, assetEditForm.acHp, {
+            hasRemote: assetEditForm.acHasRemote,
+            hasFrontPanel: assetEditForm.acHasFrontPanel,
+            hasOutdoor: assetEditForm.acHasOutdoor,
+            componentNote: assetEditForm.acComponentNote,
+          })
+        : assetEditForm.specs.trim(),
       purchaseDate: assetEditForm.purchaseDate.trim(),
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
@@ -8293,6 +8662,11 @@ export default function App() {
       statusChangeBy,
       fromStatus: fromStatusForEdit,
     };
+    const duplicateSerial = findDuplicateAssetSerial(assets, payload.serialNumber, editingAssetId);
+    if (duplicateSerial) {
+      setError(`Serial number already exists: ${duplicateSerial.assetId}`);
+      return;
+    }
 
     setBusy(true);
     setError("");
@@ -8764,17 +9138,27 @@ export default function App() {
   }
 
   async function onMaintenanceRecordPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const oversized = files.find((file) => file.size > 15 * 1024 * 1024);
+    if (oversized) {
       alert(t.photoLimit);
+      e.target.value = "";
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
-      setMaintenanceRecordForm((f) => ({ ...f, photo }));
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setMaintenanceRecordForm((f) => {
+        const merged = normalizeAssetPhotos({
+          photo: f.photo,
+          photos: [...(f.photos || []), ...optimized],
+        });
+        return { ...f, photo: merged[0] || "", photos: merged };
+      });
     } catch {
       alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -8804,6 +9188,7 @@ export default function App() {
       cost: maintenanceRecordForm.cost.trim(),
       by: maintenanceRecordForm.by.trim(),
       photo: maintenanceRecordForm.photo || "",
+      photos: normalizeAssetPhotos({ photo: maintenanceRecordForm.photo || "", photos: maintenanceRecordForm.photos || [] }),
     };
     const sourceAsset = assets.find((a) => a.id === assetId) || null;
     const maintenanceType = entry.type.trim().toLowerCase();
@@ -8917,6 +9302,7 @@ export default function App() {
         cost: "",
         by: "",
         photo: "",
+        photos: [],
       }));
       setMaintenanceRecordFileKey((k) => k + 1);
       setMaintenanceView("history");
@@ -9603,6 +9989,7 @@ export default function App() {
       cost: "",
       by: "",
       photo: "",
+      photos: [],
     });
     setMaintenanceRecordFileKey((k) => k + 1);
     setQuickRecordAssetId(asset.id);
@@ -14058,7 +14445,7 @@ export default function App() {
             {assetsView === "register" && canOpenAssetRegister && (
               <section className="panel">
                 <h2>{t.registerAsset}</h2>
-                <div className="form-grid">
+                <div className="form-grid inventory-item-grid">
                   <label className="field">
                     <span>{t.campus}</span>
                     <select className="input" value={assetForm.campus} onChange={(e) => setAssetForm((f) => ({ ...f, campus: e.target.value }))}>
@@ -14618,6 +15005,81 @@ export default function App() {
                     <span>{t.serialNumber}</span>
                     <input className="input" value={assetForm.serialNumber} onChange={(e) => setAssetForm((f) => ({ ...f, serialNumber: e.target.value }))} />
                   </label>
+                  {isAirconAsset(assetForm.category, assetForm.type) ? (
+                    <>
+                      <label className="field">
+                        <span>AC Type</span>
+                        <select
+                          className="input"
+                          value={assetForm.acType}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, acType: e.target.value }))}
+                        >
+                          <option value="">Select AC type</option>
+                          {AIRCON_TYPE_OPTIONS.map((option) => (
+                            <option key={`ac-type-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Capacity (HP)</span>
+                        <select
+                          className="input"
+                          value={assetForm.acHp}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, acHp: e.target.value }))}
+                        >
+                          <option value="">Select HP</option>
+                          {AIRCON_HP_OPTIONS.map((option) => (
+                            <option key={`ac-hp-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field field-wide">
+                        <span>Included Components</span>
+                        <div className="setpack-include-grid">
+                          <label className="tab setpack-include-item">
+                            <input
+                              type="checkbox"
+                              checked={assetForm.acHasRemote}
+                              onChange={(e) => setAssetForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
+                              style={{ marginRight: 8 }}
+                            />
+                            Remote
+                          </label>
+                          <label className="tab setpack-include-item">
+                            <input
+                              type="checkbox"
+                              checked={assetForm.acHasFrontPanel}
+                              onChange={(e) => setAssetForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
+                              style={{ marginRight: 8 }}
+                            />
+                            Front Panel
+                          </label>
+                          <label className="tab setpack-include-item">
+                            <input
+                              type="checkbox"
+                              checked={assetForm.acHasOutdoor}
+                              onChange={(e) => setAssetForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
+                              style={{ marginRight: 8 }}
+                            />
+                            Outdoor Unit
+                          </label>
+                        </div>
+                      </label>
+                      <label className="field field-wide">
+                        <span>Components Note</span>
+                        <input
+                          className="input"
+                          value={assetForm.acComponentNote}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, acComponentNote: e.target.value }))}
+                          placeholder="Remote model/serial, indoor/outdoor serial, missing parts..."
+                        />
+                      </label>
+                    </>
+                  ) : null}
                   <label className="field">
                     <span>{t.purchaseDate}</span>
                     <input type="date" className="input" value={assetForm.purchaseDate} onChange={(e) => setAssetForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
@@ -15859,6 +16321,81 @@ export default function App() {
                       <span>Serial Number</span>
                       <input className="input" value={assetEditForm.serialNumber} onChange={(e) => setAssetEditForm((f) => ({ ...f, serialNumber: e.target.value }))} />
                     </label>
+                    {isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                      <>
+                        <label className="field">
+                          <span>AC Type</span>
+                          <select
+                            className="input"
+                            value={assetEditForm.acType}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, acType: e.target.value }))}
+                          >
+                            <option value="">Select AC type</option>
+                            {AIRCON_TYPE_OPTIONS.map((option) => (
+                              <option key={`edit-ac-type-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Capacity (HP)</span>
+                          <select
+                            className="input"
+                            value={assetEditForm.acHp}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, acHp: e.target.value }))}
+                          >
+                            <option value="">Select HP</option>
+                            {AIRCON_HP_OPTIONS.map((option) => (
+                              <option key={`edit-ac-hp-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field field-wide">
+                          <span>Included Components</span>
+                          <div className="setpack-include-grid">
+                            <label className="tab setpack-include-item">
+                              <input
+                                type="checkbox"
+                                checked={assetEditForm.acHasRemote}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
+                                style={{ marginRight: 8 }}
+                              />
+                              Remote
+                            </label>
+                            <label className="tab setpack-include-item">
+                              <input
+                                type="checkbox"
+                                checked={assetEditForm.acHasFrontPanel}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
+                                style={{ marginRight: 8 }}
+                              />
+                              Front Panel
+                            </label>
+                            <label className="tab setpack-include-item">
+                              <input
+                                type="checkbox"
+                                checked={assetEditForm.acHasOutdoor}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
+                                style={{ marginRight: 8 }}
+                              />
+                              Outdoor Unit
+                            </label>
+                          </div>
+                        </label>
+                        <label className="field field-wide">
+                          <span>Components Note</span>
+                          <input
+                            className="input"
+                            value={assetEditForm.acComponentNote}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, acComponentNote: e.target.value }))}
+                            placeholder="Remote model/serial, indoor/outdoor serial, missing parts..."
+                          />
+                        </label>
+                      </>
+                    ) : null}
                     <label className="field">
                       <span>Purchase Date</span>
                       <input type="date" className="input" value={assetEditForm.purchaseDate} onChange={(e) => setAssetEditForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
@@ -16127,14 +16664,54 @@ export default function App() {
                     </label>
                     <label className="field field-wide">
                       <span>{t.photo}</span>
-                      <input
-                        key={maintenanceRecordFileKey}
-                        className="file-input"
-                        type="file"
-                        accept="image/*"
-                        onChange={onMaintenanceRecordPhotoFile}
-                      />
-                    </label>
+                    <input
+                      key={maintenanceRecordFileKey}
+                      className="file-input"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={onMaintenanceRecordPhotoFile}
+                    />
+                    {maintenanceRecordForm.photos.length ? (
+                      <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                        {maintenanceRecordForm.photos.map((url, index) => (
+                          <div key={`maintenance-record-photo-${index}`} className="asset-photo-chip">
+                            <img src={url} alt={`maintenance-${index + 1}`} className="asset-photo-chip-img" />
+                            <div className="asset-photo-chip-actions">
+                              <button
+                                type="button"
+                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                onClick={() =>
+                                  setMaintenanceRecordForm((f) => {
+                                    const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
+                                    const [picked] = next.splice(index, 1);
+                                    if (!picked) return f;
+                                    next.unshift(picked);
+                                    return { ...f, photo: next[0] || "", photos: next };
+                                  })
+                                }
+                              >
+                                {index === 0 ? "Main" : "Set Main"}
+                              </button>
+                              <button
+                                type="button"
+                                className="tab"
+                                onClick={() =>
+                                  setMaintenanceRecordForm((f) => {
+                                    const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
+                                    next.splice(index, 1);
+                                    return { ...f, photo: next[0] || "", photos: next };
+                                  })
+                                }
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </label>
                   </div>
                   <div className="asset-actions">
                     <div className="tiny">Save maintenance directly from List Asset.</div>
@@ -16433,7 +17010,7 @@ export default function App() {
                       ))}
                     </select>
                   </label>
-                  <label className="field">
+                  <label className="field field-wide">
                     <span>Item Master</span>
                     <select
                       className="input"
@@ -16456,7 +17033,7 @@ export default function App() {
                       </small>
                     )}
                   </label>
-                  <label className="field">
+                  <label className="field field-wide">
                     <span>Item Code</span>
                     <div style={{ display: "flex", gap: 8 }}>
                       <input
@@ -16969,120 +17546,58 @@ export default function App() {
 
                 {!maintenanceQuickMode ? (
                 <article className="panel inventory-usage-panel">
-                  <div className="panel-row">
-                    <h3 className="section-title">
-                      {lang === "km" ? "ប្រៀបធៀបចេញស្តុកតាម Item/Campus (ខែបច្ចុប្បន្ន)" : "Item/Campus Out Compare (Current Month)"}
-                    </h3>
-                    <span className="tiny">{inventoryMonthlyItemCampusTrend.monthLabel}</span>
-                  </div>
-                  <div className="inventory-item-campus-chart-wrap">
-                    <div className="inventory-item-campus-legend">
-                      {inventoryMonthlyItemCampusTrend.campuses.map((campus, index) => (
-                        <span key={`item-campus-legend-${campus}`} className="inventory-item-campus-legend-item">
-                          <span className={`inventory-item-campus-legend-dot inventory-item-campus-color-${index + 1}`} />
-                          <span>{campus}</span>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="inventory-item-campus-chart-grid">
-                      <div className="inventory-item-campus-yaxis">
-                        {inventoryMonthlyItemCampusTrend.yTicks.map((tick) => (
-                          <div key={`item-campus-tick-${tick.percent}`} className="inventory-item-campus-y-tick">
-                            {tick.value}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="inventory-item-campus-groups">
-                        {inventoryMonthlyItemCampusTrend.rows.map((row) => (
-                          <div key={`item-campus-group-${row.itemCode}`} className="inventory-item-campus-group">
-                            <div className="inventory-item-campus-bars">
-                              {inventoryMonthlyItemCampusTrend.campuses.map((campus, index) => {
-                                const qty = Number(row.campusQty[campus] || 0);
-                                const height = qty > 0 ? Math.max(8, Math.round((qty / inventoryMonthlyItemCampusTrend.max) * 100)) : 6;
-                                return (
-                                  <div
-                                    key={`item-campus-bar-${row.itemCode}-${campus}`}
-                                    className="inventory-item-campus-bar-btn"
-                                    title={`${row.itemCode} | ${campus}: ${qty} pcs`}
-                                  >
-                                    <strong>{qty}</strong>
-                                    <div className={`inventory-item-campus-bar-fill inventory-item-campus-color-${index + 1}`} style={{ height: `${height}%` }} />
-                                    <span>{campus}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="inventory-item-campus-item-label">
-                              <strong>{row.itemName}</strong>
-                              <span>{row.itemCode}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
                   <div className="inventory-campus-monthly-compare-wrap">
                     <div className="panel-row">
                       <h4 className="section-title">{lang === "km" ? "ដ្យាក្រាមចេញស្តុកប្រចាំថ្ងៃតាមសាខា (ថ្ងៃទី 1 ដល់ចុងខែ)" : "Daily Stock Out by Campus (Day 1 to Month End)"}</h4>
                       <span className="tiny">{inventoryMonthlyCampusOutDiagrams.monthLabel}</span>
                     </div>
-                    <div className="inventory-campus-monthly-legend">
-                      {inventoryMonthlyCampusOutDiagrams.itemCodes.map((code, index) => (
-                        <span key={`inventory-monthly-item-legend-${code}`} className="inventory-campus-monthly-legend-item">
-                          <span
-                            className="inventory-campus-monthly-legend-dot"
-                            style={{ background: INVENTORY_MONTHLY_ITEM_COLORS[index % INVENTORY_MONTHLY_ITEM_COLORS.length] }}
-                          />
-                          <span>{code} - {inventoryMonthlyCampusOutDiagrams.itemNameByCode.get(code) || code}</span>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="inventory-campus-monthly-grid">
-                      {inventoryMonthlyCampusOutDiagrams.rows.map((campusRow) => (
-                        <article key={`inventory-campus-month-${campusRow.campus}`} className="inventory-campus-monthly-card">
-                          <div className="inventory-campus-monthly-card-head">
-                            <strong>{inventoryCampusLabel(campusRow.campus)}</strong>
-                            <span className="tiny">Max/day: {campusRow.maxDailyTotal}</span>
-                          </div>
-                          <div className="inventory-campus-monthly-chart">
-                            {campusRow.dayRows.map((dayRow) => {
-                              const barHeight = dayRow.total > 0
-                                ? Math.max(8, Math.round((dayRow.total / campusRow.maxDailyTotal) * 100))
-                                : 6;
-                              return (
-                                <div
-                                  key={`inventory-campus-day-${campusRow.campus}-${dayRow.ymd}`}
-                                  className="inventory-campus-monthly-col"
-                                  title={`${inventoryCampusLabel(campusRow.campus)} | ${formatDate(dayRow.ymd)} | Total ${dayRow.total} pcs`}
-                                >
-                                  <span className="inventory-campus-monthly-value">{dayRow.total}</span>
-                                  <div className="inventory-campus-monthly-stack-rail">
-                                    {dayRow.total > 0 ? (
-                                      <div className="inventory-campus-monthly-stack" style={{ height: `${barHeight}%` }}>
-                                        {inventoryMonthlyCampusOutDiagrams.itemCodes.map((code, index) => {
-                                          const qty = Number(dayRow.qtyByItem[code] || 0);
-                                          if (qty <= 0) return null;
-                                          return (
-                                            <span
-                                              key={`inventory-campus-day-seg-${campusRow.campus}-${dayRow.ymd}-${code}`}
-                                              className="inventory-campus-monthly-seg"
-                                              style={{
-                                                height: `${(qty / dayRow.total) * 100}%`,
-                                                background: INVENTORY_MONTHLY_ITEM_COLORS[index % INVENTORY_MONTHLY_ITEM_COLORS.length],
-                                              }}
-                                            />
-                                          );
-                                        })}
-                                      </div>
-                                    ) : null}
+                    <div className="inventory-campus-row-matrix-wrap">
+                      <div className="inventory-campus-row-matrix-scroll">
+                        <table className="inventory-campus-row-matrix">
+                          <thead>
+                            <tr>
+                              <th>{lang === "km" ? "សាខា" : "Campus"}</th>
+                              {inventoryCampusDailyMatrix.days.map((day) => (
+                                <th key={`matrix-head-day-${day}`}>{day}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {inventoryMonthlyCampusOutDiagrams.rows.map((campusRow) => (
+                              <tr key={`inventory-campus-row-${campusRow.campus}`}>
+                                <th>
+                                  <div className="inventory-campus-row-label">
+                                    <strong>{inventoryCampusLabel(campusRow.campus)}</strong>
+                                    <span className="tiny">Max/day: {campusRow.maxDailyTotal}</span>
                                   </div>
-                                  <span className="inventory-campus-monthly-day">{dayRow.day}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </article>
-                      ))}
+                                </th>
+                                {campusRow.dayRows.map((dayRow) => {
+                                  const qty = Number(dayRow.total || 0);
+                                  const ratio = qty > 0 ? qty / inventoryCampusDailyMatrix.max : 0;
+                                  const alpha = qty > 0 ? Math.max(0.22, Math.min(0.95, ratio)) : 0;
+                                  return (
+                                    <td
+                                      key={`inventory-campus-row-cell-${campusRow.campus}-${dayRow.day}`}
+                                      title={`${inventoryCampusLabel(campusRow.campus)} | ${formatDate(dayRow.ymd)} | Total: ${qty}`}
+                                      style={{
+                                        background: qty > 0 ? `rgba(38, 106, 188, ${alpha})` : "#edf3fd",
+                                        color: ratio >= 0.6 ? "#ffffff" : "#22406f",
+                                      }}
+                                    >
+                                      {qty || ""}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="tiny">
+                        {lang === "km"
+                          ? "ជួរនីមួយៗជាសាខា 1 ហើយជួរឈរជាថ្ងៃទី 1-31។ ពណ៌ចាស់ជាងមានន័យថាចេញស្តុកច្រើនជាង។"
+                          : "Each row is one campus and columns are day 1-31. Darker cells mean higher stock-out quantity."}
+                      </div>
                     </div>
                   </div>
                   <div className="table-wrap">
@@ -17097,22 +17612,30 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {inventoryDailyUsageByCampus.rows.map((row) => (
-                          <tr key={`daily-item-row-${row.ymd}`}>
-                            <td>{formatDate(row.ymd)}</td>
-                            {inventoryMonthlyItemCampusTrend.rows.map((itemRow) => {
-                              const qty = inventoryVisibleTxns
-                                .filter((tx) => tx.date === row.ymd && tx.itemCode === itemRow.itemCode && isInventoryTxnUsageOut(tx.type))
-                                .reduce((sum, tx) => sum + Number(tx.qty || 0), 0);
-                              return (
-                                <td key={`daily-item-cell-${row.ymd}-${itemRow.itemCode}`}>
-                                  {qty} pcs
-                                </td>
-                              );
-                            })}
-                            <td><strong>{row.total} pcs</strong></td>
+                        {inventoryUsageSummaryRows.length ? (
+                          inventoryUsageSummaryRows.map((row) => (
+                            <tr key={`daily-item-row-${row.ymd}`}>
+                              <td>{formatDate(row.ymd)}</td>
+                              {inventoryMonthlyItemCampusTrend.rows.map((itemRow) => {
+                                const qty = inventoryVisibleTxns
+                                  .filter((tx) => tx.date === row.ymd && tx.itemCode === itemRow.itemCode && isInventoryTxnUsageOut(tx.type))
+                                  .reduce((sum, tx) => sum + Number(tx.qty || 0), 0);
+                                return (
+                                  <td key={`daily-item-cell-${row.ymd}-${itemRow.itemCode}`}>
+                                    {qty} pcs
+                                  </td>
+                                );
+                              })}
+                              <td><strong>{row.total} pcs</strong></td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={Math.max(2, inventoryMonthlyItemCampusTrend.rows.length + 2)}>
+                              {lang === "km" ? "មិនមានកំណត់ត្រា Yesterday/Today" : "No records for yesterday/today."}
+                            </td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -17128,24 +17651,32 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {inventoryDailyUsageByCampus.rows.map((row) => (
-                          <tr key={`daily-campus-row-${row.ymd}`}>
-                            <td>{formatDate(row.ymd)}</td>
-                            {inventoryDailyUsageByCampus.campuses.map((campus) => (
-                              <td key={`daily-campus-cell-${row.ymd}-${campus}`}>
-                                {row.byCampus[campus] || 0}
-                              </td>
-                            ))}
-                            <td><strong>{row.total} pcs</strong></td>
+                        {inventoryUsageSummaryRows.length ? (
+                          inventoryUsageSummaryRows.map((row) => (
+                            <tr key={`daily-campus-row-${row.ymd}`}>
+                              <td>{formatDate(row.ymd)}</td>
+                              {inventoryDailyUsageByCampus.campuses.map((campus) => (
+                                <td key={`daily-campus-cell-${row.ymd}-${campus}`}>
+                                  {row.byCampus[campus] || 0}
+                                </td>
+                              ))}
+                              <td><strong>{row.total} pcs</strong></td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={Math.max(2, inventoryDailyUsageByCampus.campuses.length + 2)}>
+                              {lang === "km" ? "មិនមានកំណត់ត្រា Yesterday/Today" : "No records for yesterday/today."}
+                            </td>
                           </tr>
-                        ))}
+                        )}
                       </tbody>
                     </table>
                   </div>
                   <div className="tiny">
                     {lang === "km"
-                      ? "OUT នៅថ្ងៃអាទិត្យ/ថ្ងៃឈប់សម្រាក ត្រូវបញ្ចូល Note ហើយបញ្ជាក់ម្តងទៀត។"
-                      : "OUT on Sunday/holiday requires note and confirmation."}
+                      ? "បង្ហាញតែ Yesterday និង Today។ សម្រាប់ប្រវត្តិពេញ សូមប្រើ Full Records ខាងក្រោម។"
+                      : "Showing only Yesterday + Today. Use Full Records below for full history."}
                   </div>
                 </article>
                 ) : null}
@@ -17226,8 +17757,8 @@ export default function App() {
                 {!maintenanceQuickMode ? (
                 <article className="panel" style={{ marginTop: 12 }}>
                   <div className="panel-row">
-                    <h3 className="section-title">{lang === "km" ? "កំណត់ត្រាប្រចាំថ្ងៃ" : "Today Records"}</h3>
-                    <span className="tiny">{formatDate(inventoryDailyForm.date)}</span>
+                    <h3 className="section-title">{lang === "km" ? "កំណត់ត្រា Yesterday + Today" : "Yesterday + Today Records"}</h3>
+                    <span className="tiny">{lang === "km" ? "បង្ហាញតែកំណត់ត្រាថ្ងៃម្សិលមិញ និងថ្ងៃនេះ" : "Only shows yesterday and today"}</span>
                   </div>
                   <div className="table-wrap">
                     <table>
@@ -17243,8 +17774,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {inventoryDailyTodayRows.length ? (
-                          inventoryDailyTodayRows.map((row) => (
+                        {inventoryRecentTxnRows.length ? (
+                          inventoryRecentTxnRows.map((row) => (
                             <tr key={`daily-row-${row.id}`}>
                               <td>{formatDate(row.date)}</td>
                               <td><strong>{row.itemCode}</strong></td>
@@ -17257,7 +17788,76 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={7}>{lang === "km" ? "មិនទាន់មានកំណត់ត្រា" : "No records yet."}</td>
+                            <td colSpan={7}>{lang === "km" ? "មិនមានកំណត់ត្រា Yesterday/Today" : "No records for yesterday/today."}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="panel-row" style={{ marginTop: 12 }}>
+                    <h4 className="section-title">{lang === "km" ? "ប្រវត្តិពេញ (ជ្រើសកាលបរិច្ឆេទ)" : "Full Records (Date Range)"}</h4>
+                    <span className="tiny">{inventoryFullTxnRows.length} {lang === "km" ? "កំណត់ត្រា" : "records"}</span>
+                  </div>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>{lang === "km" ? "ថ្ងៃចាប់ផ្តើម" : "Start Date"}</span>
+                      <input
+                        type="date"
+                        className="input"
+                        value={inventoryFullDateFrom}
+                        onChange={(e) => setInventoryFullDateFrom(e.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ថ្ងៃបញ្ចប់" : "End Date"}</span>
+                      <input
+                        type="date"
+                        className="input"
+                        value={inventoryFullDateTo}
+                        onChange={(e) => setInventoryFullDateTo(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  {inventoryFullDateRangeInvalid ? (
+                    <div className="tiny" style={{ color: "#b03131", marginTop: 6 }}>
+                      {lang === "km" ? "ថ្ងៃចាប់ផ្តើម មិនអាចធំជាង ថ្ងៃបញ្ចប់" : "Start date cannot be after end date."}
+                    </div>
+                  ) : null}
+                  <div className="table-wrap" style={{ marginTop: 10 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t.date}</th>
+                          <th>Code</th>
+                          <th>Name</th>
+                          <th>{t.campus}</th>
+                          <th>Type</th>
+                          <th>Qty</th>
+                          <th>{t.by}</th>
+                          <th>{t.notes}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inventoryFullTxnRows.length ? (
+                          inventoryFullTxnRows.map((row) => (
+                            <tr key={`full-row-${row.id}`}>
+                              <td>{formatDate(row.date)}</td>
+                              <td><strong>{row.itemCode}</strong></td>
+                              <td>{row.itemName}</td>
+                              <td>{inventoryCampusLabel(row.campus)}</td>
+                              <td>{inventoryTxnTypeLabel(row.type)}</td>
+                              <td>{row.qty}</td>
+                              <td>{row.by || "-"}</td>
+                              <td>{row.note || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8}>
+                              {inventoryFullDateRangeInvalid
+                                ? (lang === "km" ? "សូមកែតម្រូវកាលបរិច្ឆេទជួរ" : "Please fix the date range.")
+                                : (lang === "km" ? "មិនមានទិន្នន័យក្នុងជួរថ្ងៃនេះ" : "No records in this date range.")}
+                            </td>
                           </tr>
                         )}
                       </tbody>
@@ -17342,56 +17942,98 @@ export default function App() {
                     <h3 className="section-title">Campus Usage Compare by Item (Selected Month)</h3>
                     <span className="tiny">{new Date(`${inventorySupplyMonth}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" })}</span>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Item</th>
-                          {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => (
-                            <th key={`item-campus-head-${campus}`}>{inventoryCampusLabel(campus)}</th>
-                          ))}
-                          <th>Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cleaningSupplyMonthlyItemCampusRows.rows.length ? (
-                          cleaningSupplyMonthlyItemCampusRows.rows.map((row) => (
-                            <tr key={`item-campus-row-${row.itemCode}`}>
-                              <td>
-                                <strong>{row.itemCode}</strong> - {row.itemName}
-                              </td>
+                  {isPhoneView ? (
+                    cleaningSupplyMonthlyItemCampusRows.rows.length ? (
+                      <div className="inventory-campus-item-cards">
+                        {cleaningSupplyMonthlyItemCampusRows.rows.map((row) => (
+                          <article key={`item-campus-card-${row.itemCode}`} className="inventory-campus-item-card">
+                            <div className="inventory-campus-item-card-head">
+                              <div>
+                                <strong>{row.itemCode}</strong>
+                                <div>{row.itemName}</div>
+                              </div>
+                              <span className="inventory-campus-item-total">{row.total}</span>
+                            </div>
+                            <div className="inventory-campus-item-campus-list">
                               {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => {
                                 const qty = Number(row.campusQty[campus] || 0);
                                 const percent = qty > 0
                                   ? Math.max(8, Math.round((qty / cleaningSupplyMonthlyItemCampusRows.max) * 100))
                                   : 0;
                                 return (
-                                  <td key={`item-campus-cell-${row.itemCode}-${campus}`}>
-                                    <div className="inventory-supply-mini-bar" title={`${row.itemCode} | ${inventoryCampusLabel(campus)} | ${qty}`}>
-                                      <div className="inventory-supply-mini-track">
-                                        <div
-                                          className="inventory-supply-mini-fill"
-                                          style={{ width: `${percent}%`, opacity: qty > 0 ? 1 : 0.25 }}
-                                        />
-                                      </div>
+                                  <div key={`item-campus-card-row-${row.itemCode}-${campus}`} className="inventory-campus-item-campus-row">
+                                    <div className="inventory-campus-item-campus-meta">
+                                      <span>{inventoryCampusLabel(campus)}</span>
                                       <strong>{qty}</strong>
                                     </div>
-                                  </td>
+                                    <div className="inventory-supply-mini-track">
+                                      <div
+                                        className="inventory-supply-mini-fill"
+                                        style={{ width: `${percent}%`, opacity: qty > 0 ? 1 : 0.25 }}
+                                      />
+                                    </div>
+                                  </div>
                                 );
                               })}
-                              <td><strong>{row.total}</strong></td>
-                            </tr>
-                          ))
-                        ) : (
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="tiny">No cleaning-supply usage in this month.</p>
+                    )
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
                           <tr>
-                            <td colSpan={Math.max(3, cleaningSupplyMonthlyItemCampusRows.campuses.length + 2)}>
-                              No cleaning-supply usage in this month.
-                            </td>
+                            <th>Item</th>
+                            {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => (
+                              <th key={`item-campus-head-${campus}`}>{inventoryCampusLabel(campus)}</th>
+                            ))}
+                            <th>Total</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {cleaningSupplyMonthlyItemCampusRows.rows.length ? (
+                            cleaningSupplyMonthlyItemCampusRows.rows.map((row) => (
+                              <tr key={`item-campus-row-${row.itemCode}`}>
+                                <td>
+                                  <strong>{row.itemCode}</strong> - {row.itemName}
+                                </td>
+                                {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => {
+                                  const qty = Number(row.campusQty[campus] || 0);
+                                  const percent = qty > 0
+                                    ? Math.max(8, Math.round((qty / cleaningSupplyMonthlyItemCampusRows.max) * 100))
+                                    : 0;
+                                  return (
+                                    <td key={`item-campus-cell-${row.itemCode}-${campus}`}>
+                                      <div className="inventory-supply-mini-bar" title={`${row.itemCode} | ${inventoryCampusLabel(campus)} | ${qty}`}>
+                                        <div className="inventory-supply-mini-track">
+                                          <div
+                                            className="inventory-supply-mini-fill"
+                                            style={{ width: `${percent}%`, opacity: qty > 0 ? 1 : 0.25 }}
+                                          />
+                                        </div>
+                                        <strong>{qty}</strong>
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                                <td><strong>{row.total}</strong></td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={Math.max(3, cleaningSupplyMonthlyItemCampusRows.campuses.length + 2)}>
+                                No cleaning-supply usage in this month.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </article>
                 <div className="table-wrap">
                   <table>
@@ -18812,8 +19454,48 @@ export default function App() {
                   className="file-input"
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={onMaintenanceRecordPhotoFile}
                 />
+                {maintenanceRecordForm.photos.length ? (
+                  <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                    {maintenanceRecordForm.photos.map((url, index) => (
+                      <div key={`maintenance-record-main-photo-${index}`} className="asset-photo-chip">
+                        <img src={url} alt={`maintenance-main-${index + 1}`} className="asset-photo-chip-img" />
+                        <div className="asset-photo-chip-actions">
+                          <button
+                            type="button"
+                            className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                            onClick={() =>
+                              setMaintenanceRecordForm((f) => {
+                                const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
+                                const [picked] = next.splice(index, 1);
+                                if (!picked) return f;
+                                next.unshift(picked);
+                                return { ...f, photo: next[0] || "", photos: next };
+                              })
+                            }
+                          >
+                            {index === 0 ? "Main" : "Set Main"}
+                          </button>
+                          <button
+                            type="button"
+                            className="tab"
+                            onClick={() =>
+                              setMaintenanceRecordForm((f) => {
+                                const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
+                                next.splice(index, 1);
+                                return { ...f, photo: next[0] || "", photos: next };
+                              })
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </label>
             </div>
             <div className="asset-actions">
