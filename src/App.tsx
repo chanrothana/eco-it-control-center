@@ -921,6 +921,9 @@ function calendarEventBadgeLabel(type: CalendarEventType) {
       return "Holiday";
   }
 }
+function isNonWorkingHolidayType(type: CalendarEventType | "") {
+  return type === "public" || type === "break";
+}
 const MAINTENANCE_COMPLETION_OPTIONS = [
   { value: "Done", label: "Already Done" },
   { value: "Not Yet", label: "Not Yet Done" },
@@ -5574,13 +5577,29 @@ export default function App() {
     const type = matches[0]?.type || classifyHolidayEvent(names[0] || "");
     return { name, type: normalizeCalendarEventType(type) };
   }, [holidayLookup]);
-  const getHolidayName = useCallback((ymd: string) => getHolidayEvent(ymd).name, [getHolidayEvent]);
   const quickOutDateBadge = useMemo(() => {
     if (!inventoryQuickOutModal?.date) return "";
     const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
     if (!ymd) return "";
     const holiday = getHolidayEvent(ymd);
-    if (holiday.name) return lang === "km" ? `ថ្ងៃឈប់សម្រាក៖ ${holiday.name}` : `Eco Holiday: ${holiday.name}`;
+    if (holiday.name) {
+      if (isNonWorkingHolidayType(holiday.type)) {
+        return lang === "km" ? `ថ្ងៃឈប់សម្រាក៖ ${holiday.name}` : `Eco Holiday: ${holiday.name}`;
+      }
+      const kmTypeLabel: Record<CalendarEventType, string> = {
+        public: "ថ្ងៃឈប់សម្រាក",
+        break: "វិស្សមកាល",
+        ptc: "PTC",
+        term_end: "បញ្ចប់ឆមាស",
+        term_start: "ចាប់ផ្តើមឆមាស",
+        camp: "ជំរំ",
+        celebration: "ព្រឹត្តិការណ៍",
+      };
+      const typeLabel = lang === "km"
+        ? kmTypeLabel[normalizeCalendarEventType(holiday.type)]
+        : calendarEventTypeLabel(normalizeCalendarEventType(holiday.type));
+      return `${typeLabel}: ${holiday.name}`;
+    }
     const day = new Date(`${ymd}T00:00:00`).getDay();
     if (day === 0 || day === 6) return lang === "km" ? "ចុងសប្តាហ៍" : "Weekend";
     return "";
@@ -8767,19 +8786,20 @@ export default function App() {
       return { ok: false };
     }
     const txDate = normalizeYmdInput(values.date);
-    const holidayName = txDate ? getHolidayName(txDate) : "";
+    const holiday = txDate ? getHolidayEvent(txDate) : { name: "", type: "" as CalendarEventType | "" };
+    const isRedHoliday = Boolean(holiday.name) && isNonWorkingHolidayType(holiday.type);
     const day = txDate ? new Date(`${txDate}T00:00:00`).getDay() : -1;
     const isWeekend = day === 0 || day === 6;
     const needsManagerApproval =
       isInventoryTxnUsageOut(values.type) &&
       item.category === "SUPPLY" &&
       Boolean(txDate) &&
-      (isWeekend || Boolean(holidayName));
+      (isWeekend || isRedHoliday);
     const needsNonWorkingCheck =
       isInventoryTxnUsageOut(values.type) &&
       item.category === "SUPPLY" &&
       Boolean(txDate) &&
-      (isWeekend || Boolean(holidayName));
+      (isWeekend || isRedHoliday);
     if (needsNonWorkingCheck) {
       if (!String(values.note || "").trim()) {
         setError(lang === "km" ? "ចុងសប្តាហ៍/ថ្ងៃឈប់សម្រាក ត្រូវបញ្ចូលមូលហេតុចេញស្តុក។" : "Weekend/Holiday stock out requires note.");

@@ -6277,14 +6277,28 @@ tr.row-maint-maintenance:hover td {
     box-shadow: 0 8px 16px rgba(20, 58, 136, 0.14);
   }
 
-  .mobile-settings-panel,
-  .mobile-notify-panel {
+  .mobile-settings-panel {
     width: 100%;
     margin-left: 0;
     border-radius: 14px;
     border-color: var(--mobile-line);
     box-shadow: var(--mobile-shadow);
     background: var(--mobile-surface) !important;
+  }
+
+  .mobile-notify-panel {
+    position: fixed;
+    top: calc(58px + env(safe-area-inset-top, 0px));
+    right: 8px;
+    z-index: 93;
+    width: min(92vw, 430px);
+    max-height: min(78vh, 620px);
+    margin: 0;
+    border-radius: 14px;
+    border-color: var(--mobile-line);
+    box-shadow: var(--mobile-shadow);
+    background: var(--mobile-surface) !important;
+    overflow: hidden;
   }
 
   .mobile-side-backdrop {
