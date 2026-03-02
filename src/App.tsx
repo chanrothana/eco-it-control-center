@@ -2245,6 +2245,29 @@ function inventoryAliasText(itemName: string) {
   const hit = INVENTORY_MASTER_ITEMS.find((item) => name.includes(item.nameEn.toLowerCase()));
   return hit ? hit.aliases.join(" ") : "";
 }
+const INVENTORY_KM_NAME_MAP: Record<string, string> = {
+  tissue: "ក្រដាស់ជូតមាត់",
+  "hand tissue": "ក្រដាស់ជូតដៃ",
+  "toilet paper": "ក្រដាស់កង",
+  "washing hand shampoo": "សាប៊ូលាងដៃ",
+  alcohol: "អាល់កុល",
+  "floor shampoo": "សាប៊ូជូតឥដ្ឋ",
+  plastic: "ស្រោមដៃថង់",
+  "plastic glove": "ស្រោមដៃថង់",
+};
+function inventoryDisplayName(itemName: string, lang: Lang) {
+  const raw = String(itemName || "").trim();
+  if (lang !== "km" || !raw) return raw;
+  const key = normalizeInventoryCompareText(raw);
+  if (INVENTORY_KM_NAME_MAP[key]) return INVENTORY_KM_NAME_MAP[key];
+  const base = normalizeInventoryCompareText(raw.replace(/\s*\([^)]*\)\s*$/, ""));
+  if (INVENTORY_KM_NAME_MAP[base]) {
+    const specMatch = raw.match(/\(([^)]*)\)\s*$/);
+    return specMatch ? `${INVENTORY_KM_NAME_MAP[base]} (${specMatch[1]})` : INVENTORY_KM_NAME_MAP[base];
+  }
+  const hit = Object.entries(INVENTORY_KM_NAME_MAP).find(([en]) => key.startsWith(`${en} `) || key.includes(en));
+  return hit ? hit[1] : raw;
+}
 function normalizeInventoryCompareText(value: string) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -4477,6 +4500,11 @@ export default function App() {
   useEffect(() => {
     trySetLocalStorage("ui_lang", lang);
   }, [lang]);
+  useEffect(() => {
+    if (!maintenanceQuickMode) return;
+    if (lang !== "km") setLang("km");
+    trySetLocalStorage("ui_lang", "km");
+  }, [maintenanceQuickMode, lang]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5000,8 +5028,8 @@ export default function App() {
     [inventoryTxns, inventoryVisibleCampusSet, inventoryVisibleItemIds]
   );
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
-    return `${item.itemCode} - ${item.itemName} • ${inventoryCampusLabel(item.campus)}`;
-  }, [inventoryCampusLabel]);
+    return `${item.itemCode} - ${inventoryDisplayName(item.itemName, lang)} • ${inventoryCampusLabel(item.campus)}`;
+  }, [inventoryCampusLabel, lang]);
   const usedInventoryMasterKeysForCampus = useMemo(() => {
     const out = new Set<string>();
     if (inventoryItemForm.category !== "SUPPLY") return out;
@@ -8150,7 +8178,7 @@ export default function App() {
       itemCode,
       itemName,
       unit,
-      openingQty: 0,
+      openingQty: Math.max(0, Math.round(openingQty)),
       minStock: Math.max(0, Math.round(minStock)),
       location,
       vendor: inventoryItemForm.vendor.trim(),
@@ -8473,13 +8501,13 @@ export default function App() {
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(maintenanceQuickLink);
-        alert("Maintenance quick link copied.");
+        alert(lang === "km" ? "បានចម្លងតំណភ្ជាប់បុគ្គលិករួចហើយ។" : "Maintenance quick link copied.");
         return;
       }
     } catch {
       // fallback below
     }
-    window.prompt("Copy maintenance quick link", maintenanceQuickLink);
+    window.prompt(lang === "km" ? "ចម្លងតំណភ្ជាប់បុគ្គលិក" : "Copy maintenance quick link", maintenanceQuickLink);
   }
   function openInventoryQuickOut(item: InventoryItem) {
     const recorder = authUser?.displayName || authUser?.username || "";
@@ -14399,8 +14427,13 @@ export default function App() {
 
               <label className="field campus-field">
                 <span>{t.language}</span>
-                <select value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="input">
-                  <option value="en">{t.english}</option>
+                <select
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value as Lang)}
+                  className="input"
+                  disabled={maintenanceQuickMode}
+                >
+                  {!maintenanceQuickMode ? <option value="en">{t.english}</option> : null}
                   <option value="km">{t.khmer}</option>
                 </select>
               </label>
@@ -14565,8 +14598,9 @@ export default function App() {
                       setLang(e.target.value as Lang);
                     }}
                     className="input"
+                    disabled={maintenanceQuickMode}
                   >
-                    <option value="en">{t.english}</option>
+                    {!maintenanceQuickMode ? <option value="en">{t.english}</option> : null}
                     <option value="km">{t.khmer}</option>
                   </select>
                 </label>
@@ -17670,11 +17704,11 @@ export default function App() {
           <>
             <section className="panel">
               <div className="panel-row">
-                <h2>{maintenanceQuickMode ? "Maintenance Quick Record" : "Inventory Control"}</h2>
+                <h2>{maintenanceQuickMode ? (lang === "km" ? "កំណត់ត្រាថែទាំរហ័ស" : "Maintenance Quick Record") : "Inventory Control"}</h2>
                 {maintenanceQuickMode ? (
                   <div className="row-actions">
                     <button type="button" className="tab btn-small" onClick={copyMaintenanceQuickLink}>
-                      Copy Staff Link
+                      {lang === "km" ? "ចម្លងតំណភ្ជាប់បុគ្គលិក" : "Copy Staff Link"}
                     </button>
                   </div>
                 ) : (
@@ -17795,8 +17829,14 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Opening Qty</span>
-                    <input className="input" type="number" min="0" value={inventoryItemForm.openingQty} readOnly />
-                    <small className="tiny">Opening starts at 0. Use monthly Stock In refill or Borrow Return (In).</small>
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      value={inventoryItemForm.openingQty}
+                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, openingQty: e.target.value }))}
+                    />
+                    <small className="tiny">Set starting balance for this item.</small>
                   </label>
                   <label className="field">
                     <span>Min Stock Alert</span>
@@ -17842,7 +17882,7 @@ export default function App() {
                           <tr key={`inv-item-row-${row.id}`}>
                             <td><strong>{row.itemCode}</strong></td>
                             <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                            <td>{row.itemName}</td>
+                            <td>{inventoryDisplayName(row.itemName, lang)}</td>
                             <td>{row.category}</td>
                             <td>{inventoryCampusLabel(row.campus)}</td>
                             <td>{row.location}</td>
@@ -18020,7 +18060,7 @@ export default function App() {
                                   </select>
                                 </td>
                                 <td>
-                                  {inventoryVisibleItems.find((i) => String(i.id) === inventoryTxnEditForm.itemId)?.itemName || "-"}
+                                  {inventoryDisplayName(inventoryVisibleItems.find((i) => String(i.id) === inventoryTxnEditForm.itemId)?.itemName || "-", lang)}
                                 </td>
                                 <td>
                                   {campusLabel(inventoryVisibleItems.find((i) => String(i.id) === inventoryTxnEditForm.itemId)?.campus || row.campus)}
@@ -18075,7 +18115,7 @@ export default function App() {
                               <>
                                 <td>{formatDate(row.date)}</td>
                                 <td><strong>{row.itemCode}</strong></td>
-                                <td>{row.itemName}</td>
+                                <td>{inventoryDisplayName(row.itemName, lang)}</td>
                                 <td>{inventoryCampusLabel(row.campus)}</td>
                                 <td>{inventoryTxnTypeLabel(row.type)}</td>
                                 <td>{row.qty}</td>
@@ -18140,18 +18180,26 @@ export default function App() {
                               className="inventory-daily-gallery-card"
                               onClick={() => openInventoryQuickOut(item)}
                             >
-                              <span className="inventory-daily-gallery-icon" aria-hidden={true}>
-                                {inventorySupplyIcon(item.itemName)}
-                              </span>
-                              <span className="inventory-daily-gallery-name">{item.itemName}</span>
+                              {item.photo ? (
+                                <img
+                                  src={item.photo}
+                                  alt={inventoryDisplayName(item.itemName, lang)}
+                                  className="inventory-daily-gallery-photo"
+                                />
+                              ) : (
+                                <span className="inventory-daily-gallery-icon" aria-hidden={true}>
+                                  {inventorySupplyIcon(item.itemName)}
+                                </span>
+                              )}
+                              <span className="inventory-daily-gallery-name">{inventoryDisplayName(item.itemName, lang)}</span>
                               <span className="inventory-daily-gallery-meta">
-                                {item.itemCode} | {inventoryCampusLabel(item.campus)} | Stock: {currentStock}
+                                {item.itemCode} | {inventoryCampusLabel(item.campus)} | {lang === "km" ? `ស្តុក៖ ${currentStock}` : `Stock: ${currentStock}`}
                               </span>
                             </button>
                           );
                         })
                       ) : (
-                        <div className="tiny">No cleaning supply items found.</div>
+                        <div className="tiny">{lang === "km" ? "មិនមានសម្ភារៈប្រើប្រាស់សម្រាប់សម្អាតទេ។" : "No cleaning supply items found."}</div>
                       )}
                     </div>
                   </article>
@@ -18263,7 +18311,7 @@ export default function App() {
 
                 {!(inventoryDailyForm.type === "OUT") && inventoryDailySelectedItem ? (
                   <div className="inventory-daily-stock-note">
-                    <strong>{inventoryDailySelectedItem.itemCode}</strong> - {inventoryDailySelectedItem.itemName}
+                    <strong>{inventoryDailySelectedItem.itemCode}</strong> - {inventoryDisplayName(inventoryDailySelectedItem.itemName, lang)}
                     {" | "}
                     {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}: <strong>{inventoryStockMap.get(inventoryDailySelectedItem.id) || 0}</strong>
                     {" | "}
@@ -18333,7 +18381,7 @@ export default function App() {
                         <tr>
                           <th>{t.date}</th>
                           {inventoryMonthlyItemCampusTrend.rows.map((row) => (
-                            <th key={`daily-item-head-${row.itemCode}`}>{row.itemCode} - {row.itemName}</th>
+                            <th key={`daily-item-head-${row.itemCode}`}>{row.itemCode} - {inventoryDisplayName(row.itemName, lang)}</th>
                           ))}
                           <th>Total</th>
                         </tr>
@@ -18462,7 +18510,7 @@ export default function App() {
                           inventoryPurchaseRows.map((row) => (
                             <tr key={`purchase-row-${row.id}`}>
                               <td><strong>{row.itemCode}</strong></td>
-                              <td>{row.itemName}</td>
+                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
                               <td>{inventoryCampusLabel(row.campus)}</td>
                               <td>{row.usedQty}</td>
                               <td>{row.currentStock}</td>
@@ -18506,7 +18554,7 @@ export default function App() {
                             <tr key={`daily-row-${row.id}`}>
                               <td>{formatDate(row.date)}</td>
                               <td><strong>{row.itemCode}</strong></td>
-                              <td>{row.itemName}</td>
+                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
                               <td>{inventoryTxnTypeLabel(row.type)}</td>
                               <td>{row.qty}</td>
                               <td>{row.by || "-"}</td>
@@ -18570,7 +18618,7 @@ export default function App() {
                             <tr key={`full-row-${row.id}`}>
                               <td>{formatDate(row.date)}</td>
                               <td><strong>{row.itemCode}</strong></td>
-                              <td>{row.itemName}</td>
+                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
                               <td>{inventoryCampusLabel(row.campus)}</td>
                               <td>{inventoryTxnTypeLabel(row.type)}</td>
                               <td>{row.qty}</td>
@@ -18677,7 +18725,7 @@ export default function App() {
                             <div className="inventory-campus-item-card-head">
                               <div>
                                 <strong>{row.itemCode}</strong>
-                                <div>{row.itemName}</div>
+                                <div>{inventoryDisplayName(row.itemName, lang)}</div>
                               </div>
                               <span className="inventory-campus-item-total">{row.total}</span>
                             </div>
@@ -18726,7 +18774,7 @@ export default function App() {
                             cleaningSupplyMonthlyItemCampusRows.rows.map((row) => (
                               <tr key={`item-campus-row-${row.itemCode}`}>
                                 <td>
-                                  <strong>{row.itemCode}</strong> - {row.itemName}
+                                  <strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}
                                 </td>
                                 {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => {
                                   const qty = Number(row.campusQty[campus] || 0);
@@ -18786,7 +18834,7 @@ export default function App() {
                           <tr key={`inv-balance-row-${row.id}`}>
                             <td><strong>{row.itemCode}</strong></td>
                             <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                            <td>{row.itemName}</td>
+                            <td>{inventoryDisplayName(row.itemName, lang)}</td>
                             <td>{row.category}</td>
                             <td>{inventoryCampusLabel(row.campus)}</td>
                             <td>{row.location}</td>
@@ -23351,9 +23399,17 @@ export default function App() {
               {inventoryQuickOutSelectedItem ? (
                 <>
                   <div className="inventory-quickout-hero-icon-wrap" aria-hidden={true}>
-                    <span className="inventory-quickout-hero-icon">
-                      {inventorySupplyIcon(inventoryQuickOutSelectedItem.itemName)}
-                    </span>
+                    {inventoryQuickOutSelectedItem.photo ? (
+                      <img
+                        src={inventoryQuickOutSelectedItem.photo}
+                        alt={inventoryDisplayName(inventoryQuickOutSelectedItem.itemName, lang)}
+                        className="inventory-quickout-hero-photo"
+                      />
+                    ) : (
+                      <span className="inventory-quickout-hero-icon">
+                        {inventorySupplyIcon(inventoryQuickOutSelectedItem.itemName)}
+                      </span>
+                    )}
                   </div>
                   {(() => {
                     const currentStock = inventoryStockMap.get(inventoryQuickOutSelectedItem.id) || 0;
@@ -23362,7 +23418,7 @@ export default function App() {
                       <div className="inventory-daily-stock-note inventory-quickout-stock-note-grid">
                         <div className="inventory-quickout-item-col">
                           <div className="inventory-quickout-item-line">
-                            <strong>{inventoryQuickOutSelectedItem.itemCode}</strong> - {inventoryQuickOutSelectedItem.itemName}
+                            <strong>{inventoryQuickOutSelectedItem.itemCode}</strong> - {inventoryDisplayName(inventoryQuickOutSelectedItem.itemName, lang)}
                           </div>
                           <div className="inventory-quickout-location-line">
                             <span>{lang === "km" ? "ទីតាំង" : "Location"}:</span> <strong>{inventoryQuickOutSelectedItem.location}</strong>
