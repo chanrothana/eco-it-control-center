@@ -1079,6 +1079,15 @@ function normalizeNotificationEntries(input) {
           )
         )
       : [];
+    const closedBy = Array.isArray(row.closedBy)
+      ? Array.from(
+          new Set(
+            row.closedBy
+              .map((value) => toText(value).toLowerCase())
+              .filter(Boolean)
+          )
+        )
+      : [];
     const targetUsernames = Array.isArray(row.targetUsernames)
       ? Array.from(
           new Set(
@@ -1104,6 +1113,7 @@ function normalizeNotificationEntries(input) {
       scheduleDate: toText(row.scheduleDate),
       createdAt,
       readBy,
+      closedBy,
       targetUsernames,
       generatedBy: toText(row.generatedBy) || "system",
     });
@@ -1201,19 +1211,21 @@ function ensureMaintenanceScheduleNotifications(db, createdNotifications = null)
 function addMaintenanceDoneNotification(db, asset, entry) {
   const completion = toText(entry && entry.completion);
   if (completion !== "Done") return false;
-  const key = `maintenance-done:${Number(asset && asset.id) || 0}:${Number(entry && entry.id) || 0}`;
+  const doneDate = toText(entry && entry.date) || toYmdUtc(new Date());
+  const key = `maintenance-done:${Number(asset && asset.id) || 0}:${doneDate}`;
   return upsertNotification(db, {
     id: Date.now() + Math.floor(Math.random() * 1000),
     key,
     kind: "maintenance_done",
     title: `Maintenance done: ${toText(asset && asset.assetId) || "Unknown Asset"}`,
-    message: `${toText(asset && asset.name) || "Asset"} was marked done on ${toText(entry && entry.date) || toYmdUtc(new Date())}.`,
+    message: `${toText(asset && asset.name) || "Asset"} was marked done on ${doneDate}.`,
     assetId: toText(asset && asset.assetId),
     assetDbId: Number(asset && asset.id) || 0,
     campus: toText(asset && asset.campus),
     scheduleDate: toText(asset && asset.nextMaintenanceDate),
     createdAt: new Date().toISOString(),
     readBy: [],
+    closedBy: [],
     generatedBy: "maintenance-done",
   });
 }
@@ -1227,12 +1239,25 @@ function markNotificationReadByUser(notification, username) {
   return true;
 }
 
+function markNotificationClosedByUser(notification, username) {
+  const user = toText(username).toLowerCase();
+  if (!user) return false;
+  const closedBy = Array.isArray(notification.closedBy) ? notification.closedBy : [];
+  if (closedBy.includes(user)) return false;
+  notification.closedBy = [...closedBy, user];
+  return true;
+}
+
 function notificationVisibleToUser(notification, user) {
   const kind = toText(notification && notification.kind);
+  const username = toText(user && user.username).toLowerCase();
+  const closedBy = Array.isArray(notification && notification.closedBy)
+    ? notification.closedBy.map((value) => toText(value).toLowerCase()).filter(Boolean)
+    : [];
+  if (username && closedBy.includes(username)) return false;
   const targetUsernames = Array.isArray(notification && notification.targetUsernames)
     ? notification.targetUsernames.map((value) => toText(value).toLowerCase()).filter(Boolean)
     : [];
-  const username = toText(user && user.username).toLowerCase();
   if (kind === "inventory_out_approval") {
     if (targetUsernames.length && username) return targetUsernames.includes(username);
     const campus = toText(notification && notification.campus);
@@ -2822,6 +2847,37 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const changed = markNotificationReadByUser(row, user.username);
+      if (changed) await writeDb(db);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    const notificationCloseMatch = url.pathname.match(/^\/api\/notifications\/(\d+)\/close$/);
+    if (req.method === "PATCH" && notificationCloseMatch) {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const id = Number(notificationCloseMatch[1]);
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const db = await readDb();
+      db.notifications = normalizeNotificationEntries(db.notifications);
+      const row = db.notifications.find((item) => Number(item.id) === id);
+      if (!row) {
+        sendJson(res, 404, { error: "Notification not found" });
+        return;
+      }
+      if (!notificationVisibleToUser(row, user)) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+      const changed =
+        markNotificationClosedByUser(row, user.username) ||
+        markNotificationReadByUser(row, user.username);
       if (changed) await writeDb(db);
       sendJson(res, 200, { ok: true });
       return;

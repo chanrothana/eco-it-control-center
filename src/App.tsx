@@ -434,7 +434,9 @@ type MaintenanceNotification = {
   scheduleDate?: string;
   createdAt: string;
   readBy?: string[];
+  closedBy?: string[];
   read?: boolean;
+  closed?: boolean;
 };
 
 function parseInventoryApprovalNotificationTxnId(row: Pick<MaintenanceNotification, "kind" | "key">) {
@@ -3976,6 +3978,10 @@ export default function App() {
   const [assetCategoryMultiFilter, setAssetCategoryMultiFilter] = useState<string[]>(["ALL"]);
   const [assetNameMultiFilter, setAssetNameMultiFilter] = useState<string[]>(["ALL"]);
   const [assetLocationMultiFilter, setAssetLocationMultiFilter] = useState<string[]>(["ALL"]);
+  const [assetCampusFilterSearch, setAssetCampusFilterSearch] = useState("");
+  const [assetLocationFilterSearch, setAssetLocationFilterSearch] = useState("");
+  const [assetCategoryFilterSearch, setAssetCategoryFilterSearch] = useState("");
+  const [assetNameFilterSearch, setAssetNameFilterSearch] = useState("");
   const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
   const [maintenanceDateFrom, setMaintenanceDateFrom] = useState("");
@@ -5034,6 +5040,34 @@ export default function App() {
       )
     ).sort((a, b) => a.localeCompare(b));
   }, [assets]);
+  const filteredAssetCampusFilterOptions = useMemo(() => {
+    const query = assetCampusFilterSearch.trim().toLowerCase();
+    if (!query) return assetCampusFilterOptions;
+    return assetCampusFilterOptions.filter((campus) => {
+      const label = campusLabel(campus);
+      return campus.toLowerCase().includes(query) || label.toLowerCase().includes(query);
+    });
+  }, [assetCampusFilterOptions, assetCampusFilterSearch, campusLabel]);
+  const filteredAssetLocationFilterOptions = useMemo(() => {
+    const query = assetLocationFilterSearch.trim().toLowerCase();
+    if (!query) return assetLocationFilterOptions;
+    return assetLocationFilterOptions.filter((location) => location.toLowerCase().includes(query));
+  }, [assetLocationFilterOptions, assetLocationFilterSearch]);
+  const filteredAssetCategoryFilterOptions = useMemo(() => {
+    const query = assetCategoryFilterSearch.trim().toLowerCase();
+    if (!query) return CATEGORY_OPTIONS;
+    return CATEGORY_OPTIONS.filter((category) => {
+      const label = lang === "km" ? category.km : category.en;
+      return category.value.toLowerCase().includes(query) || label.toLowerCase().includes(query);
+    });
+  }, [assetCategoryFilterSearch, lang]);
+  const filteredAssetNameFilterOptions = useMemo(() => {
+    const query = assetNameFilterSearch.trim().toLowerCase();
+    if (!query) return assetNameFilterOptions;
+    return assetNameFilterOptions.filter((option) => {
+      return option.value.toLowerCase().includes(query) || option.label.toLowerCase().includes(query);
+    });
+  }, [assetNameFilterOptions, assetNameFilterSearch]);
   const applyMultiFilterSelection = useCallback(
     (
       prev: string[],
@@ -6579,6 +6613,20 @@ export default function App() {
     } catch (err) {
       if (isUnauthorizedError(err)) return;
       setError(err instanceof Error ? err.message : "Failed to update notifications");
+    }
+  }
+
+  async function closeMaintenanceNotification(id: number) {
+    if (!id) return;
+    try {
+      await requestJson<{ ok: boolean }>(`/api/notifications/${id}/close`, {
+        method: "PATCH",
+      });
+      setMaintenanceNotifications((prev) => prev.filter((row) => Number(row.id) !== Number(id)));
+      setMaintenanceNotificationUnread((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      if (isUnauthorizedError(err)) return;
+      setError(err instanceof Error ? err.message : "Failed to close notification");
     }
   }
 
@@ -15196,7 +15244,10 @@ export default function App() {
                                 <strong>{lang === "km" ? "សំណើរចេញស្តុក រង់ចាំអនុម័ត" : "Approval required: Stock"}</strong>
                                 <span className="tiny">{formatDateTime(meta.requestDateTime)}</span>
                               </div>
-                              <div className="mobile-notify-stock-row"><span>{lang === "km" ? "ប្រធានបទ" : "Subject"}:</span><strong>{lang === "km" ? "សំណើរចេញស្តុក" : "Stock Out"}</strong></div>
+                              <div className="mobile-notify-stock-subject">
+                                <span>{lang === "km" ? "ប្រធានបទ" : "Subject"}:</span>
+                                <strong>{lang === "km" ? "សំណើរចេញស្តុក" : "Stock Out"}</strong>
+                              </div>
                               <div className="mobile-notify-stock-item-row">
                                 {meta.itemPhoto ? (
                                   <img src={meta.itemPhoto} alt={meta.itemName} className="mobile-notify-stock-photo" />
@@ -15211,7 +15262,10 @@ export default function App() {
                               <div className="mobile-notify-stock-meta-grid">
                                 <div><span>{lang === "km" ? "អ្នកស្នើរ" : "Request by"}:</span><strong>{meta.requestBy}</strong></div>
                                 <div><span>{lang === "km" ? "កាលបរិច្ឆេទ និងម៉ោង" : "Date & Time"}:</span><strong>{formatDateTime(meta.requestDateTime)}</strong></div>
-                                <div className="mobile-notify-stock-reason"><span>{lang === "km" ? "មូលហេតុ" : "Reason"}:</span><strong>{meta.reason}</strong></div>
+                              </div>
+                              <div className="mobile-notify-stock-reason">
+                                <span>{lang === "km" ? "មូលហេតុ" : "Reason"}:</span>
+                                <strong>{meta.reason}</strong>
                               </div>
                               <div className="row-actions mobile-notify-stock-actions" onClick={(e) => e.stopPropagation()}>
                                 {isAdmin ? (
@@ -15273,6 +15327,28 @@ export default function App() {
                               >
                                 {t.openMaintenance}
                               </button>
+                              {row.kind === "maintenance_done" ? (
+                                <button
+                                  type="button"
+                                  className="tab btn-small"
+                                  onClick={() => {
+                                    if (!row.read) void markMaintenanceNotificationRead(row.id);
+                                  }}
+                                >
+                                  {lang === "km" ? "បានកត់សម្គាល់" : "Noted"}
+                                </button>
+                              ) : null}
+                              {row.kind === "maintenance_done" ? (
+                                <button
+                                  type="button"
+                                  className="tab btn-small"
+                                  onClick={() => {
+                                    void closeMaintenanceNotification(row.id);
+                                  }}
+                                >
+                                  {lang === "km" ? "បិទកិច្ចការ" : "Close Task"}
+                                </button>
+                              ) : null}
                               {!row.read ? (
                                 <button
                                   type="button"
@@ -16543,9 +16619,17 @@ export default function App() {
                             )
                           }
                         />
-                        {t.allCampuses}
+                        <span className="filter-menu-item-label">{t.allCampuses}</span>
                       </label>
-                      {assetCampusFilterOptions.map((campus) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetCampusFilterSearch}
+                          onChange={(e) => setAssetCampusFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        />
+                      </div>
+                      {filteredAssetCampusFilterOptions.map((campus) => (
                         <label key={`asset-campus-filter-${campus}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -16561,9 +16645,12 @@ export default function App() {
                               )
                             }
                           />
-                          {campusLabel(campus)}
+                          <span className="filter-menu-item-label">{campusLabel(campus)}</span>
                         </label>
                       ))}
+                      {!filteredAssetCampusFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
@@ -16584,9 +16671,17 @@ export default function App() {
                             )
                           }
                         />
-                        All Locations
+                        <span className="filter-menu-item-label">All Locations</span>
                       </label>
-                      {assetLocationFilterOptions.map((location) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetLocationFilterSearch}
+                          onChange={(e) => setAssetLocationFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                        />
+                      </div>
+                      {filteredAssetLocationFilterOptions.map((location) => (
                         <label key={`asset-location-filter-${location}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -16602,9 +16697,12 @@ export default function App() {
                               )
                             }
                           />
-                          {location}
+                          <span className="filter-menu-item-label">{location}</span>
                         </label>
                       ))}
+                      {!filteredAssetLocationFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
@@ -16630,9 +16728,17 @@ export default function App() {
                             )
                           }
                         />
-                        {t.allCategories}
+                        <span className="filter-menu-item-label">{t.allCategories}</span>
                       </label>
-                      {CATEGORY_OPTIONS.map((category) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetCategoryFilterSearch}
+                          onChange={(e) => setAssetCategoryFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                        />
+                      </div>
+                      {filteredAssetCategoryFilterOptions.map((category) => (
                         <label key={`asset-category-filter-${category.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -16648,9 +16754,12 @@ export default function App() {
                               )
                             }
                           />
-                          {lang === "km" ? category.km : category.en}
+                          <span className="filter-menu-item-label">{lang === "km" ? category.km : category.en}</span>
                         </label>
                       ))}
+                      {!filteredAssetCategoryFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
@@ -16676,9 +16785,17 @@ export default function App() {
                             )
                           }
                         />
-                        {`All ${t.name}s`}
+                        <span className="filter-menu-item-label">{`All ${t.name}s`}</span>
                       </label>
-                      {assetNameFilterOptions.map((option) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetNameFilterSearch}
+                          onChange={(e) => setAssetNameFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
+                        />
+                      </div>
+                      {filteredAssetNameFilterOptions.map((option) => (
                         <label key={`asset-name-filter-${option.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -16694,9 +16811,12 @@ export default function App() {
                               )
                             }
                           />
-                          {option.label}
+                          <span className="filter-menu-item-label">{option.label}</span>
                         </label>
                       ))}
+                      {!filteredAssetNameFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
@@ -16933,9 +17053,17 @@ export default function App() {
                             )
                           }
                         />
-                        {t.allCampuses}
+                        <span className="filter-menu-item-label">{t.allCampuses}</span>
                       </label>
-                      {assetCampusFilterOptions.map((campus) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetCampusFilterSearch}
+                          onChange={(e) => setAssetCampusFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        />
+                      </div>
+                      {filteredAssetCampusFilterOptions.map((campus) => (
                         <label key={`asset-gallery-campus-filter-${campus}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -16951,9 +17079,12 @@ export default function App() {
                               )
                             }
                           />
-                          {campusLabel(campus)}
+                          <span className="filter-menu-item-label">{campusLabel(campus)}</span>
                         </label>
                       ))}
+                      {!filteredAssetCampusFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
@@ -16974,9 +17105,17 @@ export default function App() {
                             )
                           }
                         />
-                        All Locations
+                        <span className="filter-menu-item-label">All Locations</span>
                       </label>
-                      {assetLocationFilterOptions.map((location) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetLocationFilterSearch}
+                          onChange={(e) => setAssetLocationFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                        />
+                      </div>
+                      {filteredAssetLocationFilterOptions.map((location) => (
                         <label key={`asset-gallery-location-filter-${location}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -16992,9 +17131,12 @@ export default function App() {
                               )
                             }
                           />
-                          {location}
+                          <span className="filter-menu-item-label">{location}</span>
                         </label>
                       ))}
+                      {!filteredAssetLocationFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
@@ -17015,9 +17157,17 @@ export default function App() {
                             )
                           }
                         />
-                        {t.allCategories}
+                        <span className="filter-menu-item-label">{t.allCategories}</span>
                       </label>
-                      {CATEGORY_OPTIONS.map((category) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetCategoryFilterSearch}
+                          onChange={(e) => setAssetCategoryFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                        />
+                      </div>
+                      {filteredAssetCategoryFilterOptions.map((category) => (
                         <label key={`asset-gallery-category-filter-${category.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -17033,9 +17183,12 @@ export default function App() {
                               )
                             }
                           />
-                          {lang === "km" ? category.km : category.en}
+                          <span className="filter-menu-item-label">{lang === "km" ? category.km : category.en}</span>
                         </label>
                       ))}
+                      {!filteredAssetCategoryFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
@@ -17061,9 +17214,17 @@ export default function App() {
                             )
                           }
                         />
-                        {`All ${t.name}s`}
+                        <span className="filter-menu-item-label">{`All ${t.name}s`}</span>
                       </label>
-                      {assetNameFilterOptions.map((option) => (
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetNameFilterSearch}
+                          onChange={(e) => setAssetNameFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
+                        />
+                      </div>
+                      {filteredAssetNameFilterOptions.map((option) => (
                         <label key={`asset-gallery-name-filter-${option.value}`} className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -17079,9 +17240,12 @@ export default function App() {
                               )
                             }
                           />
-                          {option.label}
+                          <span className="filter-menu-item-label">{option.label}</span>
                         </label>
                       ))}
+                      {!filteredAssetNameFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
                     </div>
                   </details>
                   <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
