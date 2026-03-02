@@ -230,7 +230,7 @@ type InventoryTxn = {
   itemCode: string;
   itemName: string;
   date: string;
-  type: "IN" | "OUT" | "BORROW_OUT" | "BORROW_IN" | "BORROW_CONSUME";
+  type: "IN" | "OUT" | "SET" | "BORROW_OUT" | "BORROW_IN" | "BORROW_CONSUME";
   qty: number;
   by?: string;
   note?: string;
@@ -310,11 +310,29 @@ type ServerSettings = {
   maintenanceReminderOffsets?: number[];
   inventoryItems?: InventoryItem[];
   inventoryTxns?: InventoryTxn[];
+  itemTemplates?: ItemTemplate[];
   vaultAccounts?: VaultAccount[];
   vaultCredentials?: VaultCredential[];
   vaultDesignLinks?: VaultDesignLink[];
   vaultNetworkDocs?: VaultNetworkDoc[];
   vaultCctvRecords?: VaultCctvRecord[];
+};
+type ItemTemplate = {
+  id: number;
+  name: string;
+  category: string;
+  type: string;
+  brand?: string;
+  model?: string;
+  vendor?: string;
+  specs?: string;
+  acType?: string;
+  acHp?: string;
+  acHasRemote?: boolean;
+  acHasFrontPanel?: boolean;
+  acHasOutdoor?: boolean;
+  acComponentNote?: string;
+  created: string;
 };
 type VaultAccount = {
   id: number;
@@ -406,6 +424,7 @@ const USER_FALLBACK_KEY = "it_users_fallback_v1";
 const CAMPUS_NAME_FALLBACK_KEY = "it_campus_names_fallback_v1";
 const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
 const ITEM_TYPE_FALLBACK_KEY = "it_item_types_fallback_v1";
+const ITEM_TEMPLATE_FALLBACK_KEY = "it_item_templates_fallback_v1";
 const CALENDAR_EVENT_FALLBACK_KEY = "it_calendar_events_v1";
 const VAULT_ACCOUNTS_FALLBACK_KEY = "it_vault_accounts_v1";
 const VAULT_CREDENTIALS_FALLBACK_KEY = "it_vault_credentials_v1";
@@ -815,6 +834,7 @@ const INVENTORY_CATEGORY_OPTIONS = [
 const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "IN", label: "Stock In" },
   { value: "OUT", label: "Stock Out" },
+  { value: "SET", label: "Set Current Stock (Super Admin)" },
   { value: "BORROW_OUT", label: "Borrow Out" },
   { value: "BORROW_IN", label: "Borrow Return (In)" },
   { value: "BORROW_CONSUME", label: "Borrow Consume" },
@@ -890,6 +910,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Switch", itemKm: "ស្វិច", code: "SW" },
     { itemEn: "Access Point", itemKm: "ឧបករណ៍ចែកសញ្ញា", code: "AP" },
     { itemEn: "CCTV Camera", itemKm: "កាមេរ៉ាសុវត្ថិភាព", code: "CAM" },
+    { itemEn: "Finger Print", itemKm: "ម៉ាស៊ីនស្គេនម្រាមដៃ", code: "FGP" },
   ],
   SAFETY: [
     { itemEn: "Fire Extinguisher", itemKm: "បំពង់ពន្លត់អគ្គិភ័យ", code: "FE" },
@@ -1442,13 +1463,17 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "")
         .trim()
         .replace(/\/+$/, "");
+  const isLocalhostClient =
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1"].includes(String(window.location.hostname || "").toLowerCase());
+  const effectiveApiBaseOverride = isLocalhostClient ? "" : apiBaseOverride;
   const autoApiBase = getAutoApiBaseForHost().replace(/\/+$/, "");
   const candidates: string[] = url.startsWith("/api/") ? [] : [url];
 
   if (url.startsWith("/api/")) {
-    if (apiBaseOverride) candidates.push(`${apiBaseOverride}${url}`);
+    if (effectiveApiBaseOverride) candidates.push(`${effectiveApiBaseOverride}${url}`);
     if (ENV_API_BASE_URL) candidates.push(`${ENV_API_BASE_URL}${url}`);
-    if (!apiBaseOverride && !ENV_API_BASE_URL) {
+    if (!effectiveApiBaseOverride && !ENV_API_BASE_URL) {
       candidates.push(url);
       if (autoApiBase) candidates.push(`${autoApiBase}${url}`);
     }
@@ -1655,6 +1680,41 @@ function writeItemTypeFallback(map: Record<string, Array<{ itemEn: string; itemK
   trySetLocalStorage(ITEM_TYPE_FALLBACK_KEY, JSON.stringify(map));
 }
 
+function readItemTemplateFallback(): ItemTemplate[] {
+  if (SERVER_ONLY_STORAGE) return [];
+  try {
+    const raw = localStorage.getItem(ITEM_TEMPLATE_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((row) => ({
+        id: Number(row?.id) || Date.now() + Math.floor(Math.random() * 10000),
+        name: String(row?.name || "").trim(),
+        category: String(row?.category || "IT").trim().toUpperCase(),
+        type: String(row?.type || "").trim().toUpperCase(),
+        brand: String(row?.brand || "").trim(),
+        model: String(row?.model || "").trim(),
+        vendor: String(row?.vendor || "").trim(),
+        specs: String(row?.specs || "").trim(),
+        acType: String(row?.acType || "").trim(),
+        acHp: String(row?.acHp || "").trim(),
+        acHasRemote: Boolean(row?.acHasRemote),
+        acHasFrontPanel: Boolean(row?.acHasFrontPanel),
+        acHasOutdoor: Boolean(row?.acHasOutdoor),
+        acComponentNote: String(row?.acComponentNote || "").trim(),
+        created: String(row?.created || new Date().toISOString()),
+      }))
+      .filter((row) => row.name && row.type);
+  } catch {
+    return [];
+  }
+}
+
+function writeItemTemplateFallback(rows: ItemTemplate[]) {
+  if (SERVER_ONLY_STORAGE) return;
+  trySetLocalStorage(ITEM_TEMPLATE_FALLBACK_KEY, JSON.stringify(rows));
+}
+
 function normalizeModulesByRole(role: AuthRole, modules?: unknown): NavModule[] {
   const allowed = new Set(ALL_NAV_MODULES);
   const list = Array.isArray(modules) ? modules.filter((x): x is NavModule => typeof x === "string" && allowed.has(x as NavModule)) : [];
@@ -1856,6 +1916,7 @@ function clearAllFallbackCaches() {
     CAMPUS_NAME_FALLBACK_KEY,
     ITEM_NAME_FALLBACK_KEY,
     ITEM_TYPE_FALLBACK_KEY,
+    ITEM_TEMPLATE_FALLBACK_KEY,
     AUTH_PERMISSION_FALLBACK_KEY,
     AUTH_ACCOUNTS_FALLBACK_KEY,
     AUDIT_FALLBACK_KEY,
@@ -2143,8 +2204,37 @@ function isInventoryTxnIn(type: InventoryTxn["type"]) {
 function isInventoryTxnOut(type: InventoryTxn["type"]) {
   return type === "OUT" || type === "BORROW_OUT" || type === "BORROW_CONSUME";
 }
+function isInventoryTxnSet(type: InventoryTxn["type"]) {
+  return type === "SET";
+}
 function isInventoryTxnUsageOut(type: InventoryTxn["type"]) {
   return type === "OUT" || type === "BORROW_CONSUME";
+}
+function calcInventoryCurrentStockFromRows(
+  item: Pick<InventoryItem, "id" | "openingQty">,
+  txns: InventoryTxn[]
+) {
+  const openingQty = Math.max(0, Number(item.openingQty || 0));
+  const rows = txns
+    .filter((tx) => Number(tx.itemId) === Number(item.id))
+    .slice()
+    .sort((a, b) => {
+      const aDate = normalizeYmdInput(a.date) || String(a.date || "");
+      const bDate = normalizeYmdInput(b.date) || String(b.date || "");
+      if (aDate !== bDate) return aDate.localeCompare(bDate);
+      return Number(a.id || 0) - Number(b.id || 0);
+    });
+  let stock = openingQty;
+  for (const tx of rows) {
+    const qty = Math.max(0, Number(tx.qty || 0));
+    if (isInventoryTxnSet(tx.type)) {
+      stock = qty;
+      continue;
+    }
+    if (isInventoryTxnIn(tx.type)) stock += qty;
+    if (isInventoryTxnOut(tx.type)) stock -= qty;
+  }
+  return stock;
 }
 function inventoryTxnTypeLabel(type: InventoryTxn["type"]) {
   const row = INVENTORY_TXN_TYPE_OPTIONS.find((option) => option.value === type);
@@ -2993,6 +3083,138 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
   );
 }
 
+type InventoryItemPickerProps = {
+  value: string;
+  items: InventoryItem[];
+  onChange: (itemId: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  getLabel: (item: InventoryItem) => string;
+};
+
+function InventoryItemPicker({
+  value,
+  items,
+  onChange,
+  placeholder = "Select item",
+  disabled,
+  getLabel,
+}: InventoryItemPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const prevValueRef = useRef(value);
+  const selected = items.find((i) => String(i.id) === value) || null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setOpen(false);
+      setSearch("");
+    }
+  }, [value]);
+
+  const filtered = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) => {
+      const label = getLabel(item);
+      return `${item.itemCode} ${item.itemName} ${item.campus} ${item.category} ${label}`
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [items, deferredSearch, getLabel]);
+
+  const selectItem = useCallback(
+    (itemId: string) => {
+      onChange(itemId);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange]
+  );
+
+  return (
+    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="asset-picker-trigger input"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen(true)}
+      >
+        {selected ? (
+          <span className="asset-picker-selected">
+            {selected.photo ? (
+              <img src={selected.photo} alt={selected.itemCode} className="asset-picker-thumb" />
+            ) : (
+              <span className="asset-picker-thumb-empty">-</span>
+            )}
+            <span>{getLabel(selected)}</span>
+          </span>
+        ) : (
+          <span className="asset-picker-placeholder">{placeholder}</span>
+        )}
+        <span className="asset-picker-caret">▾</span>
+      </button>
+      {open ? (
+        <div className="asset-picker-menu">
+          <input
+            className="input asset-picker-search"
+            placeholder="Search by code or name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="asset-picker-list">
+            {filtered.length ? (
+              filtered.map((item) => (
+                <button
+                  type="button"
+                  key={`inventory-picker-${item.id}`}
+                  className={`asset-picker-option ${String(item.id) === value ? "asset-picker-option-active" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectItem(String(item.id));
+                  }}
+                  onClick={() => selectItem(String(item.id))}
+                >
+                  {item.photo ? (
+                    <img src={item.photo} alt={item.itemCode} className="asset-picker-thumb" />
+                  ) : (
+                    <span className="asset-picker-thumb-empty">-</span>
+                  )}
+                  <span>{getLabel(item)}</span>
+                </button>
+              ))
+            ) : (
+              <div className="asset-picker-empty">No items found.</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function App() {
   type MaintenanceSortKey =
     | "assetId"
@@ -3075,6 +3297,7 @@ export default function App() {
         : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
   );
   const isAdmin = authUser ? isAdminRole(authUser.role) : false;
+  const isSuperAdmin = authUser?.role === "Super Admin";
   const maintenanceQuickMode = useMemo(() => {
     if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
@@ -4100,6 +4323,24 @@ export default function App() {
     code: "",
     name: "",
   });
+  const [itemTemplates, setItemTemplates] = useState<ItemTemplate[]>(() => readItemTemplateFallback());
+  const [itemTemplateForm, setItemTemplateForm] = useState({
+    name: "",
+    category: "FACILITY",
+    type: "AC",
+    brand: "",
+    model: "",
+    vendor: "",
+    specs: "",
+    acType: "",
+    acHp: "",
+    acHasRemote: false,
+    acHasFrontPanel: true,
+    acHasOutdoor: true,
+    acComponentNote: "",
+  });
+  const [editingItemTemplateId, setEditingItemTemplateId] = useState<number | null>(null);
+  const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
   const [authCreateForm, setAuthCreateForm] = useState({
@@ -4173,7 +4414,7 @@ export default function App() {
     itemCode: "",
     itemName: "",
     unit: "pcs",
-    openingQty: "",
+    openingQty: "0",
     minStock: "",
     location: "",
     vendor: "",
@@ -4484,6 +4725,9 @@ export default function App() {
     writeItemTypeFallback(customTypeOptions);
   }, [customTypeOptions]);
   useEffect(() => {
+    writeItemTemplateFallback(itemTemplates);
+  }, [itemTemplates]);
+  useEffect(() => {
     writeInventoryItemFallback(inventoryItems);
   }, [inventoryItems]);
   useEffect(() => {
@@ -4536,8 +4780,12 @@ export default function App() {
   );
   const inventoryCampusLabel = useCallback(
     (campus: string) => {
-      if (campus === "C2" || campus === "C2.1" || campus === "C2.2") return "C2";
-      return inventoryRecordCampusCode(campus) === "C2" ? "C2" : campusLabel(campus);
+      const raw = String(campus || "").trim();
+      if (!raw) return "-";
+      if (raw === "C2" || raw === "C2.1") return campusLabel("Chaktomuk Campus");
+      if (raw === "C2.2") return campusLabel("Chaktomuk Campus (C2.2)");
+      if (CODE_TO_CAMPUS[raw]) return campusLabel(CODE_TO_CAMPUS[raw]);
+      return campusLabel(raw);
     },
     [campusLabel]
   );
@@ -4785,6 +5033,10 @@ export default function App() {
     () => inventoryVisibleItems.find((item) => String(item.id) === String(inventoryTxnForm.itemId || "")) || null,
     [inventoryVisibleItems, inventoryTxnForm.itemId]
   );
+  const inventoryTxnTypeOptions = useMemo(
+    () => INVENTORY_TXN_TYPE_OPTIONS.filter((option) => option.value !== "SET" || isSuperAdmin),
+    [isSuperAdmin]
+  );
   const inventoryTxnIsBorrow = useMemo(
     () => inventoryTxnForm.type === "BORROW_OUT" || inventoryTxnForm.type === "BORROW_IN" || inventoryTxnForm.type === "BORROW_CONSUME",
     [inventoryTxnForm.type]
@@ -4803,7 +5055,7 @@ export default function App() {
     }
     let rows = inventoryVisibleItems.map((item) => {
       const total = byItem.get(item.id) || { in: 0, out: 0 };
-      const currentStock = Number(item.openingQty || 0) + total.in - total.out;
+      const currentStock = calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns);
       return {
         ...item,
         stockIn: total.in,
@@ -4944,17 +5196,9 @@ export default function App() {
       });
   }, [inventoryVisibleTxns, inventorySearch]);
   const inventoryStockMap = useMemo(() => {
-    const totals = new Map<number, { in: number; out: number }>();
-    for (const tx of inventoryVisibleTxns) {
-      const cur = totals.get(tx.itemId) || { in: 0, out: 0 };
-      if (isInventoryTxnIn(tx.type)) cur.in += tx.qty;
-      if (isInventoryTxnOut(tx.type)) cur.out += tx.qty;
-      totals.set(tx.itemId, cur);
-    }
     const out = new Map<number, number>();
     for (const item of inventoryVisibleItems) {
-      const total = totals.get(item.id) || { in: 0, out: 0 };
-      out.set(item.id, Number(item.openingQty || 0) + total.in - total.out);
+      out.set(item.id, calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns));
     }
     return out;
   }, [inventoryVisibleItems, inventoryVisibleTxns]);
@@ -5367,6 +5611,52 @@ export default function App() {
     }
     return Array.from(byModel.values()).sort((a, b) => a.model.localeCompare(b.model));
   }, [assets]);
+  const brandSuggestions = useMemo(() => {
+    const out = new Set<string>();
+    for (const asset of assets) {
+      const brand = String(asset.brand || "").trim();
+      if (brand) out.add(brand);
+    }
+    for (const tpl of itemTemplates) {
+      const brand = String(tpl.brand || "").trim();
+      if (brand) out.add(brand);
+    }
+    return Array.from(out).sort((a, b) => a.localeCompare(b));
+  }, [assets, itemTemplates]);
+  const itemTemplateTypeOptions = useMemo(
+    () => allTypeOptions[itemTemplateForm.category] || allTypeOptions.IT || TYPE_OPTIONS.IT,
+    [allTypeOptions, itemTemplateForm.category]
+  );
+  const createTemplateOptions = useMemo(
+    () =>
+      itemTemplates
+        .filter(
+          (tpl) =>
+            tpl.category === assetForm.category &&
+            tpl.type === String(assetForm.type || "").toUpperCase()
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [itemTemplates, assetForm.category, assetForm.type]
+  );
+
+  const applyItemTemplateToCreate = useCallback((template: ItemTemplate) => {
+    const isAc = isAirconAsset(template.category, template.type);
+    setAssetForm((prev) => ({
+      ...prev,
+      category: template.category || prev.category,
+      type: template.type || prev.type,
+      brand: template.brand || "",
+      model: template.model || "",
+      vendor: template.vendor || "",
+      specs: template.specs || "",
+      acType: isAc ? String(template.acType || "") : "",
+      acHp: isAc ? String(template.acHp || "") : "",
+      acHasRemote: isAc ? Boolean(template.acHasRemote) : false,
+      acHasFrontPanel: isAc ? Boolean(template.acHasFrontPanel) : false,
+      acHasOutdoor: isAc ? Boolean(template.acHasOutdoor) : false,
+      acComponentNote: isAc ? String(template.acComponentNote || "") : "",
+    }));
+  }, []);
   const applyModelTemplate = useCallback((rawModel: string) => {
     const input = String(rawModel || "").trim();
     if (!input) {
@@ -5476,6 +5766,17 @@ export default function App() {
     if (parentAssetsForCreate.some((asset) => asset.assetId === assetForm.parentAssetId)) return;
     setAssetForm((prev) => ({ ...prev, parentAssetId: "", setCode: "" }));
   }, [assetForm.useExistingSet, assetForm.parentAssetId, parentAssetsForCreate]);
+  useEffect(() => {
+    if (!selectedCreateTemplateId) return;
+    if (createTemplateOptions.some((tpl) => String(tpl.id) === selectedCreateTemplateId)) return;
+    setSelectedCreateTemplateId("");
+  }, [selectedCreateTemplateId, createTemplateOptions]);
+  useEffect(() => {
+    if (!selectedCreateTemplateId) return;
+    const target = itemTemplates.find((tpl) => String(tpl.id) === selectedCreateTemplateId);
+    if (!target) return;
+    applyItemTemplateToCreate(target);
+  }, [selectedCreateTemplateId, itemTemplates, applyItemTemplateToCreate]);
   useEffect(() => {
     if (!assetEditForm.useExistingSet || !assetEditForm.parentAssetId) return;
     if (parentAssetsForEdit.some((asset) => asset.assetId === assetEditForm.parentAssetId)) return;
@@ -5641,6 +5942,20 @@ export default function App() {
       unit: first.unit,
     }));
   }, [inventoryMasterOptions, inventoryItemForm.masterItemKey, inventoryItemForm.itemName, inventoryItemForm.unit]);
+  useEffect(() => {
+    if (inventoryDailyForm.type !== "OUT") {
+      setInventoryDailyForm((prev) => ({ ...prev, type: "OUT" }));
+    }
+  }, [inventoryDailyForm.type]);
+  useEffect(() => {
+    if (isSuperAdmin) return;
+    if (inventoryTxnForm.type === "SET") {
+      setInventoryTxnForm((prev) => ({ ...prev, type: "IN" }));
+    }
+    if (inventoryTxnEditForm.type === "SET") {
+      setInventoryTxnEditForm((prev) => ({ ...prev, type: "IN" }));
+    }
+  }, [isSuperAdmin, inventoryTxnForm.type, inventoryTxnEditForm.type]);
   useEffect(() => {
     if (!selectedInventoryMaster) return;
     setInventoryItemForm((f) => ({
@@ -5827,6 +6142,9 @@ export default function App() {
         const nextVaultDesignLinks = normalizeVaultDesignLinks(settingsRes.settings?.vaultDesignLinks);
         const nextVaultNetworkDocs = normalizeVaultNetworkDocs(settingsRes.settings?.vaultNetworkDocs);
         const nextVaultCctvRecords = normalizeVaultCctvRecords(settingsRes.settings?.vaultCctvRecords);
+        const serverItemTemplates = Array.isArray(settingsRes.settings?.itemTemplates)
+          ? normalizeArray<ItemTemplate>(settingsRes.settings?.itemTemplates as unknown[])
+          : [];
         const settingsObj = settingsRes.settings || {};
         setVaultAccounts(
           Object.prototype.hasOwnProperty.call(settingsObj, "vaultAccounts")
@@ -5853,6 +6171,29 @@ export default function App() {
             ? nextVaultCctvRecords
             : readVaultCctvFallback()
         );
+        setItemTemplates(
+          Object.prototype.hasOwnProperty.call(settingsObj, "itemTemplates")
+            ? serverItemTemplates
+                .map((tpl) => ({
+                  id: Number(tpl.id) || Date.now() + Math.floor(Math.random() * 10000),
+                  name: String(tpl.name || "").trim(),
+                  category: String(tpl.category || "IT").trim().toUpperCase(),
+                  type: String(tpl.type || "").trim().toUpperCase(),
+                  brand: String(tpl.brand || "").trim(),
+                  model: String(tpl.model || "").trim(),
+                  vendor: String(tpl.vendor || "").trim(),
+                  specs: String(tpl.specs || "").trim(),
+                  acType: String(tpl.acType || "").trim(),
+                  acHp: String(tpl.acHp || "").trim(),
+                  acHasRemote: Boolean(tpl.acHasRemote),
+                  acHasFrontPanel: Boolean(tpl.acHasFrontPanel),
+                  acHasOutdoor: Boolean(tpl.acHasOutdoor),
+                  acComponentNote: String(tpl.acComponentNote || "").trim(),
+                  created: String(tpl.created || new Date().toISOString()),
+                }))
+                .filter((tpl) => tpl.name && tpl.type)
+            : readItemTemplateFallback()
+        );
       } catch {
         // Keep local settings if /api/settings is unavailable.
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
@@ -5864,6 +6205,7 @@ export default function App() {
         setVaultDesignLinks(readVaultDesignLinksFallback());
         setVaultNetworkDocs(readVaultNetworkDocsFallback());
         setVaultCctvRecords(readVaultCctvFallback());
+        setItemTemplates(readItemTemplateFallback());
       }
 
       const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
@@ -6132,6 +6474,7 @@ export default function App() {
         photos: [],
         status: "Active",
       }));
+      setSelectedCreateTemplateId("");
       setSetPackDraft(defaultSetPackDraft());
       setSetPackDetailOpen({
         MON: false,
@@ -6329,6 +6672,7 @@ export default function App() {
           photos: [],
           status: "Active",
         }));
+        setSelectedCreateTemplateId("");
         setSetPackDraft(defaultSetPackDraft());
         setSetPackDetailOpen({
           MON: false,
@@ -6407,6 +6751,18 @@ export default function App() {
       await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
         method: "PATCH",
         body: JSON.stringify({ settings: payload }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function saveItemTemplatesToServer(nextRows: ItemTemplate[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: { itemTemplates: nextRows } }),
       });
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
@@ -7446,6 +7802,193 @@ export default function App() {
     setError("");
   }
 
+  async function addItemTemplate() {
+    if (!requireAdminAction()) return;
+    const name = String(itemTemplateForm.name || "").trim();
+    const category = String(itemTemplateForm.category || "").trim().toUpperCase();
+    const type = String(itemTemplateForm.type || "").trim().toUpperCase();
+    if (!name || !category || !type) {
+      setError("Template name, category, and type are required.");
+      return;
+    }
+    const exists = itemTemplates.some(
+      (tpl) =>
+        tpl.id !== editingItemTemplateId &&
+        tpl.name.toLowerCase() === name.toLowerCase() &&
+        tpl.category === category &&
+        tpl.type === type
+    );
+    if (exists) {
+      setError(`Template already exists: ${name} (${category}/${type})`);
+      return;
+    }
+    const isAc = isAirconAsset(category, type);
+    const row: ItemTemplate = {
+      id: editingItemTemplateId || Date.now(),
+      name,
+      category,
+      type,
+      brand: String(itemTemplateForm.brand || "").trim(),
+      model: String(itemTemplateForm.model || "").trim(),
+      vendor: String(itemTemplateForm.vendor || "").trim(),
+      specs: String(itemTemplateForm.specs || "").trim(),
+      acType: isAc ? String(itemTemplateForm.acType || "").trim() : "",
+      acHp: isAc ? String(itemTemplateForm.acHp || "").trim() : "",
+      acHasRemote: isAc ? Boolean(itemTemplateForm.acHasRemote) : false,
+      acHasFrontPanel: isAc ? Boolean(itemTemplateForm.acHasFrontPanel) : false,
+      acHasOutdoor: isAc ? Boolean(itemTemplateForm.acHasOutdoor) : false,
+      acComponentNote: isAc ? String(itemTemplateForm.acComponentNote || "").trim() : "",
+      created:
+        editingItemTemplateId !== null
+          ? String(itemTemplates.find((tpl) => tpl.id === editingItemTemplateId)?.created || new Date().toISOString())
+          : new Date().toISOString(),
+    };
+    const nextRows =
+      editingItemTemplateId === null
+        ? [row, ...itemTemplates]
+        : itemTemplates.map((tpl) => (tpl.id === editingItemTemplateId ? row : tpl));
+    setItemTemplates(nextRows);
+    setItemTemplateForm((prev) => ({
+      ...prev,
+      name: "",
+      brand: "",
+      model: "",
+      vendor: "",
+      specs: "",
+      acType: "",
+      acHp: "",
+      acHasRemote: false,
+      acHasFrontPanel: true,
+      acHasOutdoor: true,
+      acComponentNote: "",
+    }));
+    setEditingItemTemplateId(null);
+    setSetupMessage(`${editingItemTemplateId === null ? "Added" : "Updated"} template: ${name}`);
+    setError("");
+    try {
+      await saveItemTemplatesToServer(nextRows);
+    } catch (err) {
+      setSetupMessage(`Template saved locally only: ${err instanceof Error ? err.message : "Cannot sync server"}`);
+    }
+  }
+
+  async function deleteItemTemplate(id: number) {
+    if (!requireAdminAction()) return;
+    const nextRows = itemTemplates.filter((tpl) => tpl.id !== id);
+    setItemTemplates(nextRows);
+    if (selectedCreateTemplateId === String(id)) setSelectedCreateTemplateId("");
+    if (editingItemTemplateId === id) {
+      setEditingItemTemplateId(null);
+      setItemTemplateForm({
+        name: "",
+        category: "FACILITY",
+        type: "AC",
+        brand: "",
+        model: "",
+        vendor: "",
+        specs: "",
+        acType: "",
+        acHp: "",
+        acHasRemote: false,
+        acHasFrontPanel: true,
+        acHasOutdoor: true,
+        acComponentNote: "",
+      });
+    }
+    setSetupMessage("Template removed.");
+    try {
+      await saveItemTemplatesToServer(nextRows);
+    } catch (err) {
+      setSetupMessage(`Template removed locally only: ${err instanceof Error ? err.message : "Cannot sync server"}`);
+    }
+  }
+
+  function startEditItemTemplate(template: ItemTemplate) {
+    setEditingItemTemplateId(template.id);
+    setItemTemplateForm({
+      name: template.name || "",
+      category: template.category || "FACILITY",
+      type: template.type || "AC",
+      brand: template.brand || "",
+      model: template.model || "",
+      vendor: template.vendor || "",
+      specs: template.specs || "",
+      acType: template.acType || "",
+      acHp: template.acHp || "",
+      acHasRemote: Boolean(template.acHasRemote),
+      acHasFrontPanel: Boolean(template.acHasFrontPanel),
+      acHasOutdoor: Boolean(template.acHasOutdoor),
+      acComponentNote: template.acComponentNote || "",
+    });
+  }
+
+  function cancelEditItemTemplate() {
+    setEditingItemTemplateId(null);
+    setItemTemplateForm({
+      name: "",
+      category: "FACILITY",
+      type: "AC",
+      brand: "",
+      model: "",
+      vendor: "",
+      specs: "",
+      acType: "",
+      acHp: "",
+      acHasRemote: false,
+      acHasFrontPanel: true,
+      acHasOutdoor: true,
+      acComponentNote: "",
+    });
+  }
+
+  async function saveCurrentAssetFormAsTemplate() {
+    if (!requireAdminAction()) return;
+    const defaultName = `${assetItemName(assetForm.category, assetForm.type, assetForm.pcType || "")} ${assetForm.brand || ""} ${assetForm.model || ""}`.trim();
+    const nameInput = window.prompt("Template name:", defaultName);
+    if (nameInput === null) return;
+    const name = String(nameInput || "").trim();
+    if (!name) {
+      setError("Template name is required.");
+      return;
+    }
+    const category = String(assetForm.category || "").trim().toUpperCase();
+    const type = String(assetForm.type || "").trim().toUpperCase();
+    const exists = itemTemplates.some(
+      (tpl) => tpl.name.toLowerCase() === name.toLowerCase() && tpl.category === category && tpl.type === type
+    );
+    if (exists) {
+      setError(`Template already exists: ${name} (${category}/${type})`);
+      return;
+    }
+    const isAc = isAirconAsset(category, type);
+    const row: ItemTemplate = {
+      id: Date.now(),
+      name,
+      category,
+      type,
+      brand: String(assetForm.brand || "").trim(),
+      model: String(assetForm.model || "").trim(),
+      vendor: String(assetForm.vendor || "").trim(),
+      specs: String(assetForm.specs || "").trim(),
+      acType: isAc ? String(assetForm.acType || "").trim() : "",
+      acHp: isAc ? String(assetForm.acHp || "").trim() : "",
+      acHasRemote: isAc ? Boolean(assetForm.acHasRemote) : false,
+      acHasFrontPanel: isAc ? Boolean(assetForm.acHasFrontPanel) : false,
+      acHasOutdoor: isAc ? Boolean(assetForm.acHasOutdoor) : false,
+      acComponentNote: isAc ? String(assetForm.acComponentNote || "").trim() : "",
+      created: new Date().toISOString(),
+    };
+    const nextRows = [row, ...itemTemplates];
+    setItemTemplates(nextRows);
+    setSelectedCreateTemplateId(String(row.id));
+    setSetupMessage(`Saved template from current form: ${name}`);
+    try {
+      await saveItemTemplatesToServer(nextRows);
+    } catch (err) {
+      setSetupMessage(`Template saved locally only: ${err instanceof Error ? err.message : "Cannot sync server"}`);
+    }
+  }
+
   function startEditUser(user: StaffUser) {
     setEditingUserId(user.id);
     setUserForm({
@@ -7562,12 +8105,22 @@ export default function App() {
       : inventoryItemForm.itemName.trim();
     const location = inventoryItemForm.location.trim();
     const unit = masterItem ? masterItem.unit : (inventoryItemForm.unit.trim() || "pcs");
+    const openingQty = Number(inventoryItemForm.openingQty || 0);
+    const minStock = Number(inventoryItemForm.minStock || 0);
     if (!masterItem) {
       setError("Please select item master.");
       return;
     }
     if (!itemCode || !itemName || !location) {
       setError("Item code, item master, and location are required.");
+      return;
+    }
+    if (!Number.isFinite(openingQty) || openingQty < 0) {
+      setError("Opening Qty must be 0 or higher.");
+      return;
+    }
+    if (!Number.isFinite(minStock) || minStock < 0) {
+      setError("Min Stock must be 0 or higher.");
       return;
     }
     if (
@@ -7597,8 +8150,8 @@ export default function App() {
       itemCode,
       itemName,
       unit,
-      openingQty: Math.max(0, Number(inventoryItemForm.openingQty || 0)),
-      minStock: Math.max(0, Number(inventoryItemForm.minStock || 0)),
+      openingQty: 0,
+      minStock: Math.max(0, Math.round(minStock)),
       location,
       vendor: inventoryItemForm.vendor.trim(),
       notes: inventoryItemForm.notes.trim(),
@@ -7644,7 +8197,7 @@ export default function App() {
       itemCode: "",
       masterItemKey: "",
       itemName: "",
-      openingQty: "",
+      openingQty: "0",
       minStock: "",
       location: inventoryLocations[0]?.name || "",
       vendor: "",
@@ -7703,8 +8256,10 @@ export default function App() {
     receivedBy?: string;
   }) {
     const itemId = Number(values.itemId);
-    const qty = Math.max(0, Number(values.qty || 0));
-    if (!itemId || !values.date || qty <= 0) {
+    const rawQty = Number(values.qty || 0);
+    const qty = Math.max(0, Math.round(rawQty));
+    const isSetStock = values.type === "SET";
+    if (!itemId || !values.date || !Number.isFinite(rawQty) || (!isSetStock && qty <= 0)) {
       setError("Please select item, date, and quantity.");
       return false;
     }
@@ -7716,6 +8271,10 @@ export default function App() {
     const cleanedPhoto = String(values.photo || "").trim();
     if (values.requirePhoto && isInventoryTxnUsageOut(values.type) && !cleanedPhoto) {
       setError("Please take photo for stock-out record.");
+      return false;
+    }
+    if (isSetStock && !isSuperAdmin) {
+      setError("Only Super Admin can use Set Current Stock.");
       return false;
     }
     const txDate = normalizeYmdInput(values.date);
@@ -7736,16 +8295,29 @@ export default function App() {
       const ok = window.confirm(`Stock OUT on ${dayType} - ${txDate}. Confirm record?`);
       if (!ok) return false;
     }
-    const inQty = inventoryVisibleTxns
-      .filter((x) => x.itemId === itemId && isInventoryTxnIn(x.type))
-      .reduce((a, b) => a + b.qty, 0);
-    const outQty = inventoryVisibleTxns
-      .filter((x) => x.itemId === itemId && isInventoryTxnOut(x.type))
-      .reduce((a, b) => a + b.qty, 0);
-    const currentStock = Number(item.openingQty || 0) + inQty - outQty;
+    const currentStock = calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns);
     if (isInventoryTxnOut(values.type) && qty > currentStock) {
       setError(`Not enough stock. Current: ${currentStock}`);
       return false;
+    }
+    if (values.type === "IN") {
+      const txMonth = String(normalizeYmdInput(values.date) || values.date).slice(0, 7);
+      const hasMonthlyRefill = inventoryVisibleTxns.some(
+        (tx) =>
+          tx.itemId === itemId &&
+          tx.type === "IN" &&
+          String(normalizeYmdInput(tx.date) || tx.date).slice(0, 7) === txMonth
+      );
+      if (hasMonthlyRefill) {
+        setError("Monthly refill already recorded for this item. Use Borrow Return (In) for cross-campus stock.");
+        return false;
+      }
+    }
+    if (isSetStock) {
+      const proceed = window.confirm(
+        `Set Current Stock will replace ${item.itemCode} from ${currentStock} to ${qty}. This is correction mode. Continue?`
+      );
+      if (!proceed) return false;
     }
     const fromCampus = String(values.fromCampus || "").trim();
     const toCampus = String(values.toCampus || "").trim();
@@ -8112,6 +8684,10 @@ export default function App() {
   }
 
   function startInventoryTxnEdit(row: InventoryTxn) {
+    if (row.type === "SET" && !isSuperAdmin) {
+      setError("Only Super Admin can edit Set Current Stock transactions.");
+      return;
+    }
     setEditingInventoryTxnId(row.id);
     setInventoryTxnEditForm({
       itemId: String(row.itemId),
@@ -8141,8 +8717,10 @@ export default function App() {
     if (editingInventoryTxnId === null) return;
 
     const itemId = Number(inventoryTxnEditForm.itemId);
-    const qty = Math.max(0, Number(inventoryTxnEditForm.qty || 0));
-    if (!itemId || !inventoryTxnEditForm.date || qty <= 0) {
+    const rawQty = Number(inventoryTxnEditForm.qty || 0);
+    const qty = Math.max(0, Math.round(rawQty));
+    const isSetStock = inventoryTxnEditForm.type === "SET";
+    if (!itemId || !inventoryTxnEditForm.date || !Number.isFinite(rawQty) || (!isSetStock && qty <= 0)) {
       setError("Please select item, date, and quantity.");
       return;
     }
@@ -8158,18 +8736,35 @@ export default function App() {
       setError("Transaction not found.");
       return;
     }
+    if ((currentRow.type === "SET" || isSetStock) && !isSuperAdmin) {
+      setError("Only Super Admin can edit Set Current Stock transactions.");
+      return;
+    }
 
     const rowsWithoutCurrent = inventoryVisibleTxns.filter((x) => x.id !== editingInventoryTxnId);
-    const inQty = rowsWithoutCurrent
-      .filter((x) => x.itemId === itemId && isInventoryTxnIn(x.type))
-      .reduce((a, b) => a + b.qty, 0);
-    const outQty = rowsWithoutCurrent
-      .filter((x) => x.itemId === itemId && isInventoryTxnOut(x.type))
-      .reduce((a, b) => a + b.qty, 0);
-    const currentStock = Number(item.openingQty || 0) + inQty - outQty;
+    const currentStock = calcInventoryCurrentStockFromRows(item, rowsWithoutCurrent);
     if (isInventoryTxnOut(inventoryTxnEditForm.type) && qty > currentStock) {
       setError(`Not enough stock. Current: ${currentStock}`);
       return;
+    }
+    if (inventoryTxnEditForm.type === "IN") {
+      const txMonth = String(normalizeYmdInput(inventoryTxnEditForm.date) || inventoryTxnEditForm.date).slice(0, 7);
+      const hasMonthlyRefill = rowsWithoutCurrent.some(
+        (tx) =>
+          tx.itemId === itemId &&
+          tx.type === "IN" &&
+          String(normalizeYmdInput(tx.date) || tx.date).slice(0, 7) === txMonth
+      );
+      if (hasMonthlyRefill) {
+        setError("Monthly refill already recorded for this item. Use Borrow Return (In) for cross-campus stock.");
+        return;
+      }
+    }
+    if (isSetStock) {
+      const proceed = window.confirm(
+        `Set Current Stock will replace ${item.itemCode} from ${currentStock} to ${qty}. This is correction mode. Continue?`
+      );
+      if (!proceed) return;
     }
 
     setBusy(true);
@@ -8235,6 +8830,10 @@ export default function App() {
 
   async function deleteInventoryTxn(row: InventoryTxn) {
     if (!requireAdminAction()) return;
+    if (row.type === "SET" && !isSuperAdmin) {
+      setError("Only Super Admin can delete Set Current Stock transactions.");
+      return;
+    }
     if (!window.confirm("Delete this transaction?")) return;
 
     const item = inventoryVisibleItems.find((i) => i.id === row.itemId);
@@ -8243,19 +8842,11 @@ export default function App() {
       return;
     }
 
-    if (isInventoryTxnIn(row.type)) {
-      const rowsWithoutCurrent = inventoryTxns.filter((x) => x.id !== row.id);
-      const inQty = rowsWithoutCurrent
-        .filter((x) => x.itemId === row.itemId && isInventoryTxnIn(x.type))
-        .reduce((a, b) => a + b.qty, 0);
-      const outQty = rowsWithoutCurrent
-        .filter((x) => x.itemId === row.itemId && isInventoryTxnOut(x.type))
-        .reduce((a, b) => a + b.qty, 0);
-      const currentStock = Number(item.openingQty || 0) + inQty - outQty;
-      if (currentStock < 0) {
-        setError("Cannot delete this transaction because it would make stock negative.");
-        return;
-      }
+    const rowsWithoutCurrent = inventoryTxns.filter((x) => x.id !== row.id);
+    const currentStock = calcInventoryCurrentStockFromRows(item, rowsWithoutCurrent);
+    if (currentStock < 0) {
+      setError("Cannot delete this transaction because it would make stock negative.");
+      return;
     }
 
     setBusy(true);
@@ -12187,6 +12778,7 @@ export default function App() {
     if (code === "SLP" || name.includes("projector")) return icon(Monitor);
     if (code === "TV" || name.includes("tv")) return icon(Tv);
     if (code === "SPK" || name.includes("speaker")) return icon(Volume2);
+    if (code === "FGP" || name.includes("finger print") || name.includes("fingerprint")) return icon(Shield);
     if (code === "UWF" || name.includes("usb wifi")) return icon(Usb);
     if (code === "RMT" || name.includes("remote")) return icon(Settings);
     if (code === "ADP" || name.includes("adapter")) return icon(Usb);
@@ -14610,6 +15202,21 @@ export default function App() {
                       ))}
                     </select>
                   </label>
+                  <label className="field field-wide">
+                    <span>Item Template</span>
+                    <select
+                      className="input"
+                      value={selectedCreateTemplateId}
+                      onChange={(e) => setSelectedCreateTemplateId(e.target.value)}
+                    >
+                      <option value="">No template</option>
+                      {createTemplateOptions.map((tpl) => (
+                        <option key={`create-template-${tpl.id}`} value={String(tpl.id)}>
+                          {tpl.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   {assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE ? (
                     <>
                       <label className="field">
@@ -15063,7 +15670,17 @@ export default function App() {
                   )}
                   <label className="field">
                     <span>{t.brand}</span>
-                    <input className="input" value={assetForm.brand} onChange={(e) => setAssetForm((f) => ({ ...f, brand: e.target.value }))} />
+                    <input
+                      className="input"
+                      list="asset-brand-options-create"
+                      value={assetForm.brand}
+                      onChange={(e) => setAssetForm((f) => ({ ...f, brand: e.target.value }))}
+                    />
+                    <datalist id="asset-brand-options-create">
+                      {brandSuggestions.map((brand) => (
+                        <option key={`brand-create-${brand.toLowerCase()}`} value={brand} />
+                      ))}
+                    </datalist>
                   </label>
                   <label className="field">
                     <span>{t.model}</span>
@@ -15275,7 +15892,17 @@ export default function App() {
                       </div>
                     ))}
                   </div>
-                  <button className="btn-primary" disabled={busy || !isAdmin} onClick={createAsset}>{t.createAsset}</button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="tab"
+                      type="button"
+                      disabled={busy || !isAdmin}
+                      onClick={() => void saveCurrentAssetFormAsTemplate()}
+                    >
+                      Save as Template
+                    </button>
+                    <button className="btn-primary" disabled={busy || !isAdmin} onClick={createAsset}>{t.createAsset}</button>
+                  </div>
                 </div>
               </section>
             )}
@@ -16394,7 +17021,17 @@ export default function App() {
                     </label>
                     <label className="field">
                       <span>Brand</span>
-                      <input className="input" value={assetEditForm.brand} onChange={(e) => setAssetEditForm((f) => ({ ...f, brand: e.target.value }))} />
+                      <input
+                        className="input"
+                        list="asset-brand-options-edit"
+                        value={assetEditForm.brand}
+                        onChange={(e) => setAssetEditForm((f) => ({ ...f, brand: e.target.value }))}
+                      />
+                      <datalist id="asset-brand-options-edit">
+                        {brandSuggestions.map((brand) => (
+                          <option key={`brand-edit-${brand.toLowerCase()}`} value={brand} />
+                        ))}
+                      </datalist>
                     </label>
                     <label className="field">
                       <span>Model</span>
@@ -17061,7 +17698,7 @@ export default function App() {
                 <div className="tabs">
                   <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
                   <button className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
-                    {lang === "km" ? "កត់ត្រាប្រចាំថ្ងៃ" : "Daily IN/OUT"}
+                    {lang === "km" ? "កត់ត្រាចេញស្តុកប្រចាំថ្ងៃ" : "Daily Stock Out"}
                   </button>
                   <button className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>Stock In/Out</button>
                   <button className={`tab ${inventoryView === "balance" ? "tab-active" : ""}`} onClick={() => setInventoryView("balance")}>Balance & Alerts</button>
@@ -17158,7 +17795,8 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Opening Qty</span>
-                    <input className="input" type="number" min="0" value={inventoryItemForm.openingQty} onChange={(e) => setInventoryItemForm((f) => ({ ...f, openingQty: e.target.value }))} />
+                    <input className="input" type="number" min="0" value={inventoryItemForm.openingQty} readOnly />
+                    <small className="tiny">Opening starts at 0. Use monthly Stock In refill or Borrow Return (In).</small>
                   </label>
                   <label className="field">
                     <span>Min Stock Alert</span>
@@ -17242,15 +17880,13 @@ export default function App() {
                 <div className="form-grid">
                   <label className="field field-wide">
                     <span>Item</span>
-                    <select className="input" value={inventoryTxnForm.itemId} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, itemId: e.target.value }))}>
-                      <option value="">Select item</option>
-                      {inventoryVisibleItems
-                        .slice()
-                        .sort((a, b) => a.itemCode.localeCompare(b.itemCode))
-                        .map((item) => (
-                          <option key={`inv-tx-item-${item.id}`} value={String(item.id)}>{inventoryItemLabel(item)}</option>
-                        ))}
-                    </select>
+                    <InventoryItemPicker
+                      value={inventoryTxnForm.itemId}
+                      items={inventoryVisibleItems.slice().sort((a, b) => a.itemCode.localeCompare(b.itemCode))}
+                      onChange={(itemId) => setInventoryTxnForm((f) => ({ ...f, itemId }))}
+                      placeholder="Select item"
+                      getLabel={inventoryItemLabel}
+                    />
                   </label>
                   <label className="field">
                     <span>{t.date}</span>
@@ -17259,12 +17895,15 @@ export default function App() {
                   <label className="field">
                     <span>Type</span>
                     <select className="input" value={inventoryTxnForm.type} onChange={(e) => setInventoryTxnForm((f) => ({ ...f, type: e.target.value as InventoryTxn["type"] }))}>
-                      {INVENTORY_TXN_TYPE_OPTIONS.map((typeOption) => (
+                      {inventoryTxnTypeOptions.map((typeOption) => (
                         <option key={`inv-txn-type-${typeOption.value}`} value={typeOption.value}>
                           {typeOption.label}
                         </option>
                       ))}
                     </select>
+                    {inventoryTxnForm.type === "IN" ? (
+                      <small className="tiny">Monthly refill is allowed once per item per month.</small>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Quantity</span>
@@ -17324,6 +17963,11 @@ export default function App() {
                     </>
                   ) : null}
                 </div>
+                {inventoryTxnForm.type === "SET" ? (
+                  <p className="alert">
+                    Super Admin only: Set Current Stock will replace current quantity (correction mode), not add stock.
+                  </p>
+                ) : null}
                 <div className="asset-actions">
                   <div className="tiny">Track stock in/out and campus borrow flow in one register.</div>
                   <button className="btn-primary" disabled={!isAdmin} onClick={createInventoryTxn}>Save Transaction</button>
@@ -17387,7 +18031,7 @@ export default function App() {
                                     value={inventoryTxnEditForm.type}
                                     onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, type: e.target.value as InventoryTxn["type"] }))}
                                   >
-                                    {INVENTORY_TXN_TYPE_OPTIONS.map((typeOption) => (
+                                    {inventoryTxnTypeOptions.map((typeOption) => (
                                       <option key={`inv-edit-type-${typeOption.value}`} value={typeOption.value}>
                                         {typeOption.label}
                                       </option>
@@ -17446,10 +18090,10 @@ export default function App() {
                                 <td>{row.note || "-"}</td>
                                 <td>
                                   <div className="asset-row-actions">
-                                    <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startInventoryTxnEdit(row)} title="Edit">
+                                    <button className="btn-icon-edit" disabled={!isAdmin || (row.type === "SET" && !isSuperAdmin)} onClick={() => startInventoryTxnEdit(row)} title="Edit">
                                       ✎
                                     </button>
-                                    <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteInventoryTxn(row)} title={t.delete}>
+                                    <button className="btn-danger" disabled={!isAdmin || (row.type === "SET" && !isSuperAdmin)} onClick={() => deleteInventoryTxn(row)} title={t.delete}>
                                       X
                                     </button>
                                   </div>
@@ -17475,8 +18119,8 @@ export default function App() {
                   <h2>{lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)"}</h2>
                   <p className="tiny">
                     {lang === "km"
-                      ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រា IN / OUT តាមទូរស័ព្ទបានលឿន។"
-                      : "Phone-friendly daily IN/OUT for maintenance staff."}
+                      ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
+                      : "Phone-friendly daily Stock-Out record for maintenance staff."}
                   </p>
                 </div>
                 {inventoryDailyForm.type === "OUT" ? (
@@ -21505,6 +22149,252 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="panel" style={{ marginTop: 14 }}>
+              <h3>Item Templates</h3>
+              <div className="form-grid inventory-item-grid">
+                <label className="field">
+                  <span>Template Name</span>
+                  <input
+                    className="input"
+                    placeholder="AC Panasonic Wall 1.5HP"
+                    value={itemTemplateForm.name}
+                    disabled={!isAdmin}
+                    onChange={(e) => setItemTemplateForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t.category}</span>
+                  <select
+                    className="input"
+                    value={itemTemplateForm.category}
+                    disabled={!isAdmin}
+                    onChange={(e) =>
+                      setItemTemplateForm((f) => ({
+                        ...f,
+                        category: e.target.value,
+                        type: (allTypeOptions[e.target.value] || allTypeOptions.IT || TYPE_OPTIONS.IT)[0]?.code || "",
+                      }))
+                    }
+                  >
+                    {CATEGORY_OPTIONS.map((cat) => (
+                      <option key={`tpl-cat-${cat.value}`} value={cat.value}>
+                        {cat.value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.typeCode}</span>
+                  <select
+                    className="input"
+                    value={itemTemplateForm.type}
+                    disabled={!isAdmin}
+                    onChange={(e) => setItemTemplateForm((f) => ({ ...f, type: e.target.value }))}
+                  >
+                    {itemTemplateTypeOptions.map((opt) => (
+                      <option key={`tpl-type-${opt.code}`} value={opt.code}>
+                        {itemNames[`${itemTemplateForm.category}:${opt.code}`] || opt.itemEn} ({opt.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.brand}</span>
+                  <input
+                    className="input"
+                    list="setup-brand-options"
+                    value={itemTemplateForm.brand}
+                    disabled={!isAdmin}
+                    onChange={(e) => setItemTemplateForm((f) => ({ ...f, brand: e.target.value }))}
+                  />
+                  <datalist id="setup-brand-options">
+                    {brandSuggestions.map((brand) => (
+                      <option key={`tpl-brand-${brand.toLowerCase()}`} value={brand} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className="field">
+                  <span>{t.model}</span>
+                  <input
+                    className="input"
+                    value={itemTemplateForm.model}
+                    disabled={!isAdmin}
+                    onChange={(e) => setItemTemplateForm((f) => ({ ...f, model: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t.vendor}</span>
+                  <input
+                    className="input"
+                    value={itemTemplateForm.vendor}
+                    disabled={!isAdmin}
+                    onChange={(e) => setItemTemplateForm((f) => ({ ...f, vendor: e.target.value }))}
+                  />
+                </label>
+                {isAirconAsset(itemTemplateForm.category, itemTemplateForm.type) ? (
+                  <>
+                    <label className="field">
+                      <span>AC Type</span>
+                      <select
+                        className="input"
+                        value={itemTemplateForm.acType}
+                        disabled={!isAdmin}
+                        onChange={(e) => setItemTemplateForm((f) => ({ ...f, acType: e.target.value }))}
+                      >
+                        <option value="">Select AC type</option>
+                        {AIRCON_TYPE_OPTIONS.map((option) => (
+                          <option key={`setup-ac-type-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Capacity (HP)</span>
+                      <select
+                        className="input"
+                        value={itemTemplateForm.acHp}
+                        disabled={!isAdmin}
+                        onChange={(e) => setItemTemplateForm((f) => ({ ...f, acHp: e.target.value }))}
+                      >
+                        <option value="">Select HP</option>
+                        {AIRCON_HP_OPTIONS.map((option) => (
+                          <option key={`setup-ac-hp-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field field-wide">
+                      <span>Included Components</span>
+                      <div className="setpack-include-grid">
+                        <label className="tab setpack-include-item">
+                          <input
+                            type="checkbox"
+                            checked={itemTemplateForm.acHasRemote}
+                            disabled={!isAdmin}
+                            onChange={(e) => setItemTemplateForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
+                            style={{ marginRight: 8 }}
+                          />
+                          Remote
+                        </label>
+                        <label className="tab setpack-include-item">
+                          <input
+                            type="checkbox"
+                            checked={itemTemplateForm.acHasFrontPanel}
+                            disabled={!isAdmin}
+                            onChange={(e) => setItemTemplateForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
+                            style={{ marginRight: 8 }}
+                          />
+                          Front Unit (Indoor)
+                        </label>
+                        <label className="tab setpack-include-item">
+                          <input
+                            type="checkbox"
+                            checked={itemTemplateForm.acHasOutdoor}
+                            disabled={!isAdmin}
+                            onChange={(e) => setItemTemplateForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
+                            style={{ marginRight: 8 }}
+                          />
+                          Back Unit (Outdoor)
+                        </label>
+                      </div>
+                    </label>
+                    <label className="field field-wide">
+                      <span>Components Note</span>
+                      <input
+                        className="input"
+                        value={itemTemplateForm.acComponentNote}
+                        disabled={!isAdmin}
+                        onChange={(e) => setItemTemplateForm((f) => ({ ...f, acComponentNote: e.target.value }))}
+                        placeholder="Default note for this AC model"
+                      />
+                    </label>
+                  </>
+                ) : null}
+                <label className="field field-wide">
+                  <span>{t.specs}</span>
+                  <textarea
+                    className="textarea"
+                    value={itemTemplateForm.specs}
+                    disabled={!isAdmin}
+                    onChange={(e) => setItemTemplateForm((f) => ({ ...f, specs: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="asset-actions">
+                <div className="tiny">Create templates for repeated models, then use them from Register Asset.</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {editingItemTemplateId !== null ? (
+                    <button className="tab" disabled={!isAdmin} onClick={cancelEditItemTemplate}>
+                      Cancel
+                    </button>
+                  ) : null}
+                  <button className="btn-primary" disabled={!isAdmin} onClick={() => void addItemTemplate()}>
+                    {editingItemTemplateId !== null ? "Update Template" : "Save Template"}
+                  </button>
+                </div>
+              </div>
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>{t.category}</th>
+                      <th>{t.typeCode}</th>
+                      <th>{t.brand}</th>
+                      <th>{t.model}</th>
+                      <th>AC Spec</th>
+                      <th>{t.edit}</th>
+                      <th>{t.delete}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemTemplates.length ? (
+                      itemTemplates
+                        .slice()
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((tpl) => (
+                          <tr key={`item-template-${tpl.id}`}>
+                            <td><strong>{tpl.name}</strong></td>
+                            <td>{tpl.category}</td>
+                            <td>{tpl.type}</td>
+                            <td>{tpl.brand || "-"}</td>
+                            <td>{tpl.model || "-"}</td>
+                            <td>
+                              {isAirconAsset(tpl.category, tpl.type)
+                                ? [tpl.acType || "-", tpl.acHp || "-"].join(" | ")
+                                : "-"}
+                            </td>
+                            <td>
+                              <button
+                                className="tab"
+                                disabled={!isAdmin}
+                                onClick={() => startEditItemTemplate(tpl)}
+                              >
+                                {t.edit}
+                              </button>
+                            </td>
+                            <td>
+                              <button
+                                className="btn-danger"
+                                disabled={!isAdmin}
+                                onClick={() => void deleteItemTemplate(tpl.id)}
+                              >
+                                X
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8}>No templates yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </section>
           )}

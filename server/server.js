@@ -81,9 +81,9 @@ const CAMPUS_MAP = {
 };
 const CAMPUS_NAMES = Object.values(CAMPUS_MAP);
 const TYPE_CODES = {
-  IT: ["PC", "LAP", "TAB", "MON", "KBD", "MSE", "DCM", "SLP", "ADP", "RMT", "UWF", "WBC", "TV", "SPK", "PRN", "SW", "AP", "CAM"],
+  IT: ["PC", "LAP", "TAB", "MON", "KBD", "MSE", "DCM", "SLP", "ADP", "RMT", "UWF", "WBC", "TV", "SPK", "PRN", "SW", "AP", "CAM", "FGP"],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "FPN", "RPN", "TBL", "CHR"],
+  FACILITY: ["AC", "WDP", "FPN", "RPN", "TBL", "CHR"],
 };
 const TYPE_LABELS = {
   PC: "Computer",
@@ -104,12 +104,14 @@ const TYPE_LABELS = {
   SW: "Switch",
   AP: "Access Point",
   CAM: "CCTV Camera",
+  FGP: "Finger Print",
   FE: "Fire Extinguisher",
   SD: "Smoke Detector",
   EL: "Emergency Light",
   FB: "Fire Bell",
   FCP: "Fire Control Panel",
   AC: "Air Conditioner",
+  WDP: "Water Dispenser",
   FPN: "Front Panel",
   RPN: "Rear Panel",
   TBL: "Table",
@@ -749,6 +751,89 @@ function normalizeInventoryTxns(input) {
     }));
 }
 
+const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL"]);
+const INVENTORY_TXN_TYPE_SET = new Set(["IN", "OUT", "SET", "BORROW_OUT", "BORROW_IN", "BORROW_CONSUME"]);
+
+function normalizeInventoryCategory(value) {
+  const raw = toUpper(value);
+  if (!raw) return "";
+  return INVENTORY_CATEGORY_SET.has(raw) ? raw : "";
+}
+
+function normalizeInventoryTxnType(value) {
+  const raw = toUpper(value);
+  if (!raw) return "";
+  return INVENTORY_TXN_TYPE_SET.has(raw) ? raw : "";
+}
+
+function isInventoryTxnInType(type) {
+  return type === "IN" || type === "BORROW_IN";
+}
+
+function isInventoryTxnOutType(type) {
+  return type === "OUT" || type === "BORROW_OUT" || type === "BORROW_CONSUME";
+}
+function isInventoryTxnSetType(type) {
+  return type === "SET";
+}
+
+function isInventoryUsageOutType(type) {
+  return type === "OUT" || type === "BORROW_CONSUME";
+}
+
+function inventoryCampusGroupCode(campusName) {
+  const campus = normalizeCampusInput(campusName);
+  const code = campusCode(campus);
+  if (code === "C2.1" || code === "C2.2") return "C2";
+  return code || "CX";
+}
+
+function getSettingsObject(db) {
+  if (!db.settings || typeof db.settings !== "object") db.settings = {};
+  return db.settings;
+}
+
+function getInventoryState(db) {
+  const settings = getSettingsObject(db);
+  const items = normalizeInventoryItems(settings.inventoryItems);
+  const txns = normalizeInventoryTxns(settings.inventoryTxns);
+  return { settings, items, txns };
+}
+
+function setInventoryState(db, settings, items, txns) {
+  db.settings = {
+    ...settings,
+    inventoryItems: normalizeInventoryItems(items),
+    inventoryTxns: normalizeInventoryTxns(txns),
+  };
+}
+
+function calcInventoryCurrentStock(item, txns, excludeTxnId = 0) {
+  const opening = Math.max(0, Number(item && item.openingQty) || 0);
+  const rows = (Array.isArray(txns) ? txns : [])
+    .filter((row) => Number(row && row.itemId) === Number(item && item.id))
+    .filter((row) => !(excludeTxnId && Number(row && row.id) === Number(excludeTxnId)))
+    .slice()
+    .sort((a, b) => {
+      const aDate = toText(a && a.date);
+      const bDate = toText(b && b.date);
+      if (aDate !== bDate) return aDate < bDate ? -1 : 1;
+      return (Number(a && a.id) || 0) - (Number(b && b.id) || 0);
+    });
+  let stock = opening;
+  for (const row of rows) {
+    const qty = Math.max(0, Number(row && row.qty) || 0);
+    const type = normalizeInventoryTxnType(row && row.type);
+    if (isInventoryTxnSetType(type)) {
+      stock = qty;
+      continue;
+    }
+    if (isInventoryTxnInType(type)) stock += qty;
+    if (isInventoryTxnOutType(type)) stock -= qty;
+  }
+  return stock;
+}
+
 function normalizeVaultAccounts(input) {
   if (!Array.isArray(input)) return [];
   return input
@@ -1263,7 +1348,9 @@ async function normalizeHistoryEntries(entries, group = "maintenance") {
   for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
     const photo = await normalizePhotoValue(entry.photo, group);
-    out.push({ ...entry, photo });
+    const photos = await normalizePhotoList(entry.photos, group, 5);
+    if (photo && !photos.includes(photo)) photos.unshift(photo);
+    out.push({ ...entry, photo: photos[0] || photo, photos: photos.slice(0, 5) });
   }
   return out;
 }
@@ -1356,6 +1443,10 @@ function normalizeCampusInput(value) {
 function campusCode(name) {
   const hit = Object.entries(CAMPUS_MAP).find(([, full]) => full === name);
   return hit ? hit[0] : "CX";
+}
+
+function normalizeSerialKey(value) {
+  return toUpper(value);
 }
 
 function validateAsset(body) {
@@ -1767,7 +1858,7 @@ function dashboard(db, campus) {
 
 function toPublicAssetView(asset) {
   const source = asset && typeof asset === "object" ? asset : {};
-  const maintenanceHistory = Array.isArray(source.maintenanceHistory)
+      const maintenanceHistory = Array.isArray(source.maintenanceHistory)
     ? source.maintenanceHistory.map((entry) => ({
         id: Number(entry?.id || 0),
         date: toText(entry?.date),
@@ -1778,6 +1869,7 @@ function toPublicAssetView(asset) {
         cost: toText(entry?.cost),
         by: toText(entry?.by),
         photo: toText(entry?.photo),
+        photos: Array.isArray(entry?.photos) ? entry.photos.map((p) => toText(p)).filter(Boolean) : [],
       }))
     : [];
   const transferHistory = Array.isArray(source.transferHistory)
@@ -2608,6 +2700,476 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/inventory/items") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const campus = normalizeCampusInput(url.searchParams.get("campus"));
+      const q = toText(url.searchParams.get("q")).toLowerCase();
+      const db = await readDb();
+      const { items } = getInventoryState(db);
+      let rows = filterByCampusPermission(items, user, (row) => toText(row.campus));
+      if (campus) {
+        if (!userCanAccessCampus(user, campus)) {
+          sendJson(res, 200, { items: [] });
+          return;
+        }
+        rows = rows.filter((row) => toText(row.campus) === campus);
+      }
+      if (q) {
+        rows = rows.filter((row) => {
+          const hay = `${toText(row.itemCode)} ${toText(row.itemName)} ${toText(row.location)} ${toText(row.vendor)}`.toLowerCase();
+          return hay.includes(q);
+        });
+      }
+      sendJson(res, 200, { items: rows });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/inventory/txns") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const campus = normalizeCampusInput(url.searchParams.get("campus"));
+      const itemId = Number(url.searchParams.get("itemId") || 0);
+      const db = await readDb();
+      const { txns } = getInventoryState(db);
+      let rows = filterByCampusPermission(txns, user, (row) => toText(row.campus));
+      if (campus) {
+        if (!userCanAccessCampus(user, campus)) {
+          sendJson(res, 200, { txns: [] });
+          return;
+        }
+        rows = rows.filter((row) => toText(row.campus) === campus);
+      }
+      if (itemId) rows = rows.filter((row) => Number(row.itemId) === itemId);
+      sendJson(res, 200, { txns: rows });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/inventory/items") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const campus = normalizeCampusInput(body.campus);
+      const category = normalizeInventoryCategory(body.category);
+      const itemCode = toUpper(body.itemCode);
+      const itemName = toText(body.itemName);
+      const unit = toText(body.unit);
+      const location = toText(body.location);
+      const openingQty = Math.max(0, Number(body.openingQty || 0));
+      const minStock = Math.max(0, Number(body.minStock || 0));
+      const vendor = toText(body.vendor);
+      const notes = toText(body.notes);
+      if (!campus || !category || !itemCode || !itemName || !unit || !location) {
+        sendJson(res, 400, { error: "campus, category, itemCode, itemName, unit, location are required" });
+        return;
+      }
+      if (!userCanAccessCampus(admin, campus)) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+      if (!Number.isFinite(openingQty) || !Number.isFinite(minStock)) {
+        sendJson(res, 400, { error: "openingQty and minStock must be numbers" });
+        return;
+      }
+
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const codeExists = items.some(
+        (row) =>
+          toUpper(row.itemCode) === itemCode &&
+          inventoryCampusGroupCode(row.campus) === inventoryCampusGroupCode(campus)
+      );
+      if (codeExists) {
+        sendJson(res, 409, { error: "Item code already exists in this campus group" });
+        return;
+      }
+      const photo = await normalizePhotoValue(body.photo, "inventory");
+      const item = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        campus,
+        category,
+        itemCode,
+        itemName,
+        unit,
+        openingQty,
+        minStock,
+        location,
+        vendor,
+        notes,
+        photo,
+        created: new Date().toISOString(),
+      };
+      const nextItems = [item, ...items];
+      setInventoryState(db, settings, nextItems, txns);
+      appendAuditLog(db, admin, "CREATE", "inventory_item", itemCode, `${campus} | ${itemName}`);
+      await writeDb(db);
+      sendJson(res, 201, { item });
+      return;
+    }
+
+    const inventoryItemMatch = url.pathname.match(/^\/api\/inventory\/items\/(\d+)$/);
+    if (req.method === "PATCH" && inventoryItemMatch) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const itemId = Number(inventoryItemMatch[1]);
+      if (!itemId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const body = await parseBody(req);
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const idx = items.findIndex((row) => Number(row.id) === itemId);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Item not found" });
+        return;
+      }
+      const current = items[idx];
+      const campus = normalizeCampusInput(body.campus || current.campus);
+      const category = normalizeInventoryCategory(body.category || current.category);
+      const itemCode = toUpper(body.itemCode || current.itemCode);
+      const itemName = toText(body.itemName || current.itemName);
+      const unit = toText(body.unit || current.unit);
+      const location = toText(body.location || current.location);
+      const openingQty = Math.max(0, Number(body.openingQty ?? current.openingQty ?? 0));
+      const minStock = Math.max(0, Number(body.minStock ?? current.minStock ?? 0));
+      const vendor = toText(body.vendor ?? current.vendor);
+      const notes = toText(body.notes ?? current.notes);
+      if (!campus || !category || !itemCode || !itemName || !unit || !location) {
+        sendJson(res, 400, { error: "campus, category, itemCode, itemName, unit, location are required" });
+        return;
+      }
+      if (!userCanAccessCampus(admin, campus)) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+      const duplicateCode = items.some(
+        (row) =>
+          Number(row.id) !== itemId &&
+          toUpper(row.itemCode) === itemCode &&
+          inventoryCampusGroupCode(row.campus) === inventoryCampusGroupCode(campus)
+      );
+      if (duplicateCode) {
+        sendJson(res, 409, { error: "Item code already exists in this campus group" });
+        return;
+      }
+      const nextPhoto = Object.prototype.hasOwnProperty.call(body, "photo")
+        ? await normalizePhotoValue(body.photo, "inventory")
+        : toText(current.photo);
+      const updated = {
+        ...current,
+        campus,
+        category,
+        itemCode,
+        itemName,
+        unit,
+        openingQty,
+        minStock,
+        location,
+        vendor,
+        notes,
+        photo: nextPhoto,
+      };
+      const nextItems = items.slice();
+      nextItems[idx] = updated;
+      setInventoryState(db, settings, nextItems, txns);
+      appendAuditLog(db, admin, "UPDATE", "inventory_item", updated.itemCode, `${updated.campus} | ${updated.itemName}`);
+      await writeDb(db);
+      sendJson(res, 200, { item: updated });
+      return;
+    }
+
+    if (req.method === "DELETE" && inventoryItemMatch) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const itemId = Number(inventoryItemMatch[1]);
+      if (!itemId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const current = items.find((row) => Number(row.id) === itemId);
+      if (!current) {
+        sendJson(res, 404, { error: "Item not found" });
+        return;
+      }
+      if (txns.some((row) => Number(row.itemId) === itemId)) {
+        sendJson(res, 400, { error: "Cannot delete item with transaction history" });
+        return;
+      }
+      const nextItems = items.filter((row) => Number(row.id) !== itemId);
+      setInventoryState(db, settings, nextItems, txns);
+      appendAuditLog(db, admin, "DELETE", "inventory_item", toText(current.itemCode), `${toText(current.campus)} | ${toText(current.itemName)}`);
+      await writeDb(db);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/inventory/txns") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!(isAdminRole(user.role) || canRecordMaintenance(user))) {
+        sendJson(res, 403, { error: "Inventory record permission required" });
+        return;
+      }
+      const body = await parseBody(req);
+      const itemId = Number(body.itemId || 0);
+      const date = toText(body.date);
+      const type = normalizeInventoryTxnType(body.type);
+      const qtyRaw = Number(body.qty || 0);
+      const qty = Math.max(0, Math.round(qtyRaw));
+      if (!itemId || !date || !type || !Number.isFinite(qtyRaw) || (type !== "SET" && qty <= 0)) {
+        sendJson(res, 400, { error: "itemId, date, type, qty are required" });
+        return;
+      }
+      if (type === "SET" && toText(user.role) !== "Super Admin") {
+        sendJson(res, 403, { error: "Only Super Admin can use Set Current Stock" });
+        return;
+      }
+
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const item = items.find((row) => Number(row.id) === itemId);
+      if (!item) {
+        sendJson(res, 404, { error: "Item not found" });
+        return;
+      }
+      if (!userCanAccessCampus(user, toText(item.campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+
+      const fromCampus = toText(body.fromCampus);
+      const toCampus = toText(body.toCampus);
+      const expectedReturnDate = toText(body.expectedReturnDate);
+      const requestedBy = toText(body.requestedBy);
+      const approvedBy = toText(body.approvedBy);
+      const receivedBy = toText(body.receivedBy);
+
+      if ((type === "BORROW_OUT" || type === "BORROW_CONSUME") && (!toCampus || !requestedBy || !approvedBy)) {
+        sendJson(res, 400, { error: "Borrow Out/Consume requires toCampus, requestedBy, approvedBy" });
+        return;
+      }
+      if (type === "BORROW_IN" && (!fromCampus || !receivedBy)) {
+        sendJson(res, 400, { error: "Borrow Return requires fromCampus and receivedBy" });
+        return;
+      }
+
+      const currentStock = calcInventoryCurrentStock(item, txns);
+      if (isInventoryTxnOutType(type) && qty > currentStock) {
+        sendJson(res, 400, { error: `Not enough stock. Current: ${currentStock}` });
+        return;
+      }
+      if (type === "IN") {
+        const txMonth = String(date).slice(0, 7);
+        const hasMonthlyRefill = txns.some(
+          (row) =>
+            Number(row.itemId) === Number(item.id) &&
+            normalizeInventoryTxnType(row.type) === "IN" &&
+            String(toText(row.date)).slice(0, 7) === txMonth
+        );
+        if (hasMonthlyRefill) {
+          sendJson(res, 400, { error: "Monthly refill already recorded for this item. Use Borrow Return (In) for cross-campus stock." });
+          return;
+        }
+      }
+
+      const photo = await normalizePhotoValue(body.photo, "inventory");
+      const txn = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        itemId: item.id,
+        campus: toText(item.campus),
+        itemCode: toText(item.itemCode),
+        itemName: toText(item.itemName),
+        date,
+        type,
+        qty,
+        by: toText(body.by),
+        note: toText(body.note),
+        fromCampus: type === "BORROW_IN" ? fromCampus : toText(item.campus),
+        toCampus: type === "BORROW_OUT" || type === "BORROW_CONSUME" ? toCampus : toText(item.campus),
+        expectedReturnDate: type === "BORROW_OUT" ? expectedReturnDate : "",
+        requestedBy,
+        approvedBy,
+        receivedBy,
+        photo,
+        borrowStatus:
+          type === "BORROW_OUT"
+            ? "BORROW_OPEN"
+            : type === "BORROW_IN"
+              ? "CLOSED"
+              : type === "BORROW_CONSUME"
+                ? "CONSUMED"
+                : "",
+      };
+      const nextTxns = [txn, ...txns];
+      setInventoryState(db, settings, items, nextTxns);
+      appendAuditLog(db, user, "CREATE", "inventory_txn", `${txn.itemCode}-${txn.id}`, `${type} ${qty} ${item.unit}`);
+      await writeDb(db);
+      sendJson(res, 201, { txn });
+      return;
+    }
+
+    const inventoryTxnMatch = url.pathname.match(/^\/api\/inventory\/txns\/(\d+)$/);
+    if (req.method === "PATCH" && inventoryTxnMatch) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const txnId = Number(inventoryTxnMatch[1]);
+      if (!txnId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const body = await parseBody(req);
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const txIdx = txns.findIndex((row) => Number(row.id) === txnId);
+      if (txIdx === -1) {
+        sendJson(res, 404, { error: "Transaction not found" });
+        return;
+      }
+      const current = txns[txIdx];
+      const itemId = Number(body.itemId || current.itemId || 0);
+      const item = items.find((row) => Number(row.id) === itemId);
+      if (!item) {
+        sendJson(res, 404, { error: "Item not found" });
+        return;
+      }
+      if (!userCanAccessCampus(admin, toText(item.campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+      const date = toText(body.date || current.date);
+      const type = normalizeInventoryTxnType(body.type || current.type);
+      const qtyRaw = Number(body.qty ?? current.qty ?? 0);
+      const qty = Math.max(0, Math.round(qtyRaw));
+      if (!date || !type || !Number.isFinite(qtyRaw) || (type !== "SET" && qty <= 0)) {
+        sendJson(res, 400, { error: "date, type, qty are required" });
+        return;
+      }
+      if ((type === "SET" || normalizeInventoryTxnType(current.type) === "SET") && toText(admin.role) !== "Super Admin") {
+        sendJson(res, 403, { error: "Only Super Admin can edit Set Current Stock transactions" });
+        return;
+      }
+
+      const fromCampus = toText(body.fromCampus ?? current.fromCampus);
+      const toCampus = toText(body.toCampus ?? current.toCampus);
+      const expectedReturnDate = toText(body.expectedReturnDate ?? current.expectedReturnDate);
+      const requestedBy = toText(body.requestedBy ?? current.requestedBy);
+      const approvedBy = toText(body.approvedBy ?? current.approvedBy);
+      const receivedBy = toText(body.receivedBy ?? current.receivedBy);
+      if ((type === "BORROW_OUT" || type === "BORROW_CONSUME") && (!toCampus || !requestedBy || !approvedBy)) {
+        sendJson(res, 400, { error: "Borrow Out/Consume requires toCampus, requestedBy, approvedBy" });
+        return;
+      }
+      if (type === "BORROW_IN" && (!fromCampus || !receivedBy)) {
+        sendJson(res, 400, { error: "Borrow Return requires fromCampus and receivedBy" });
+        return;
+      }
+      const stockWithoutCurrent = calcInventoryCurrentStock(item, txns, txnId);
+      if (isInventoryTxnOutType(type) && qty > stockWithoutCurrent) {
+        sendJson(res, 400, { error: `Not enough stock. Current: ${stockWithoutCurrent}` });
+        return;
+      }
+      if (type === "IN") {
+        const txMonth = String(date).slice(0, 7);
+        const hasMonthlyRefill = txns.some(
+          (row) =>
+            Number(row.id) !== Number(txnId) &&
+            Number(row.itemId) === Number(item.id) &&
+            normalizeInventoryTxnType(row.type) === "IN" &&
+            String(toText(row.date)).slice(0, 7) === txMonth
+        );
+        if (hasMonthlyRefill) {
+          sendJson(res, 400, { error: "Monthly refill already recorded for this item. Use Borrow Return (In) for cross-campus stock." });
+          return;
+        }
+      }
+      const nextPhoto = Object.prototype.hasOwnProperty.call(body, "photo")
+        ? await normalizePhotoValue(body.photo, "inventory")
+        : toText(current.photo);
+      const updated = {
+        ...current,
+        itemId: item.id,
+        campus: toText(item.campus),
+        itemCode: toText(item.itemCode),
+        itemName: toText(item.itemName),
+        date,
+        type,
+        qty,
+        by: toText(body.by ?? current.by),
+        note: toText(body.note ?? current.note),
+        fromCampus: type === "BORROW_IN" ? fromCampus : toText(item.campus),
+        toCampus: type === "BORROW_OUT" || type === "BORROW_CONSUME" ? toCampus : toText(item.campus),
+        expectedReturnDate: type === "BORROW_OUT" ? expectedReturnDate : "",
+        requestedBy,
+        approvedBy,
+        receivedBy,
+        photo: nextPhoto,
+        borrowStatus:
+          type === "BORROW_OUT"
+            ? (toText(current.borrowStatus) || "BORROW_OPEN")
+            : type === "BORROW_IN"
+              ? "CLOSED"
+              : type === "BORROW_CONSUME"
+                ? "CONSUMED"
+                : "",
+      };
+      const nextTxns = txns.slice();
+      nextTxns[txIdx] = updated;
+      setInventoryState(db, settings, items, nextTxns);
+      appendAuditLog(db, admin, "UPDATE", "inventory_txn", `${updated.itemCode}-${updated.id}`, `${updated.type} ${updated.qty}`);
+      await writeDb(db);
+      sendJson(res, 200, { txn: updated });
+      return;
+    }
+
+    if (req.method === "DELETE" && inventoryTxnMatch) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const txnId = Number(inventoryTxnMatch[1]);
+      if (!txnId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const current = txns.find((row) => Number(row.id) === txnId);
+      if (!current) {
+        sendJson(res, 404, { error: "Transaction not found" });
+        return;
+      }
+      const item = items.find((row) => Number(row.id) === Number(current.itemId));
+      if (!item) {
+        sendJson(res, 404, { error: "Item not found" });
+        return;
+      }
+      if (normalizeInventoryTxnType(current.type) === "SET" && toText(admin.role) !== "Super Admin") {
+        sendJson(res, 403, { error: "Only Super Admin can delete Set Current Stock transactions" });
+        return;
+      }
+      const stockWithoutCurrent = calcInventoryCurrentStock(item, txns, txnId);
+      if (stockWithoutCurrent < 0) {
+        sendJson(res, 400, { error: "Cannot delete this transaction because it would make stock negative" });
+        return;
+      }
+      const nextTxns = txns.filter((row) => Number(row.id) !== txnId);
+      setInventoryState(db, settings, items, nextTxns);
+      appendAuditLog(db, admin, "DELETE", "inventory_txn", `${toText(current.itemCode)}-${txnId}`, `${toText(current.type)} ${Number(current.qty) || 0}`);
+      await writeDb(db);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/assets") {
       const user = getAuthUser(req);
       if (!user) {
@@ -2657,6 +3219,18 @@ const server = http.createServer(async (req, res) => {
       const initialTransferHistory = normalizeTransferEntries(body.transferHistory);
       const initialCustodyHistory = normalizeCustodyEntries(body.custodyHistory);
       const db = await readDb();
+      const serialKey = normalizeSerialKey(cleaned.serialNumber);
+      if (serialKey) {
+        const duplicateSerial = (Array.isArray(db.assets) ? db.assets : []).find(
+          (row) => normalizeSerialKey(row && row.serialNumber) === serialKey
+        );
+        if (duplicateSerial) {
+          sendJson(res, 409, {
+            error: `Serial number already exists (${toText(duplicateSerial.assetId) || "existing asset"})`,
+          });
+          return;
+        }
+      }
       const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
       const assetId = `${campusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || cleaned.category}-${cleaned.type}-${pad(seq, 4)}`;
       const custodyStatus = normalizeCustodyStatus(cleaned.custodyStatus || (cleaned.assignedTo ? "ASSIGNED" : "IN_STOCK"));
@@ -2898,6 +3472,8 @@ const server = http.createServer(async (req, res) => {
       const nextCost = toText(body.cost);
       const nextBy = toText(body.by);
       const nextPhoto = await normalizePhotoValue(body.photo, "maintenance");
+      const hasNextPhotos = Array.isArray(body.photos);
+      const nextPhotos = await normalizePhotoList(body.photos, "maintenance", 5);
       const nextCompletion = normalizeCompletion(body.completion);
       const nextCondition = toText(body.condition);
 
@@ -2918,6 +3494,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       const current = history[hIdx] || {};
+      const currentPhotos = Array.isArray(current.photos)
+        ? current.photos.map((p) => toText(p)).filter(Boolean)
+        : (toText(current.photo) ? [toText(current.photo)] : []);
+      let resolvedPhotos = hasNextPhotos ? nextPhotos : [...currentPhotos];
+      if (nextPhoto && !resolvedPhotos.includes(nextPhoto)) resolvedPhotos.unshift(nextPhoto);
+      resolvedPhotos = resolvedPhotos.slice(0, 5);
       const updated = {
         ...current,
         date: nextDate || toText(current.date),
@@ -2927,7 +3509,8 @@ const server = http.createServer(async (req, res) => {
         note: nextNote || toText(current.note),
         cost: nextCost,
         by: nextBy,
-        photo: nextPhoto,
+        photo: resolvedPhotos[0] || nextPhoto || toText(current.photo),
+        photos: resolvedPhotos,
       };
       if (!updated.date || !updated.type || !updated.note) {
         sendJson(res, 400, { error: "date, type, note are required" });
@@ -3046,6 +3629,20 @@ const server = http.createServer(async (req, res) => {
       if (typeof cleaned === "string") {
         sendJson(res, 400, { error: cleaned });
         return;
+      }
+      const serialKey = normalizeSerialKey(cleaned.serialNumber);
+      if (serialKey) {
+        const duplicateSerial = (Array.isArray(db.assets) ? db.assets : []).find(
+          (row) =>
+            Number(row && row.id) !== id &&
+            normalizeSerialKey(row && row.serialNumber) === serialKey
+        );
+        if (duplicateSerial) {
+          sendJson(res, 409, {
+            error: `Serial number already exists (${toText(duplicateSerial.assetId) || "existing asset"})`,
+          });
+          return;
+        }
       }
 
       const nextPhoto = await normalizePhotoValue(cleaned.photo, "assets");
@@ -3172,6 +3769,8 @@ const server = http.createServer(async (req, res) => {
       const cost = toText(body.cost);
       const by = toText(body.by);
       const photo = await normalizePhotoValue(body.photo, "maintenance");
+      const photos = await normalizePhotoList(body.photos, "maintenance", 5);
+      if (photo && !photos.includes(photo)) photos.unshift(photo);
       const completion = normalizeCompletion(body.completion);
       const condition = toText(body.condition);
       if (!date || !type || !note) {
@@ -3199,7 +3798,8 @@ const server = http.createServer(async (req, res) => {
         note,
         cost,
         by,
-        photo,
+        photo: photos[0] || photo,
+        photos: photos.slice(0, 5),
       };
       db.assets[idx].maintenanceHistory = Array.isArray(db.assets[idx].maintenanceHistory)
         ? [entry, ...db.assets[idx].maintenanceHistory]
