@@ -242,6 +242,12 @@ type InventoryTxn = {
   receivedBy?: string;
   borrowStatus?: "BORROW_OPEN" | "PARTIAL_RETURN" | "CLOSED" | "CONSUMED";
   photo?: string;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
+  approvalRequestedBy?: string;
+  approvalRequestedAt?: string;
+  approvalDecisionBy?: string;
+  approvalDecisionAt?: string;
+  approvalDecisionNote?: string;
 };
 
 type DashboardStats = {
@@ -2210,6 +2216,12 @@ function isInventoryTxnSet(type: InventoryTxn["type"]) {
 function isInventoryTxnUsageOut(type: InventoryTxn["type"]) {
   return type === "OUT" || type === "BORROW_CONSUME";
 }
+function isInventoryTxnStockEffective(tx: InventoryTxn) {
+  if (isInventoryTxnOut(tx.type) && (tx.approvalStatus === "PENDING" || tx.approvalStatus === "REJECTED")) {
+    return false;
+  }
+  return true;
+}
 function calcInventoryCurrentStockFromRows(
   item: Pick<InventoryItem, "id" | "openingQty">,
   txns: InventoryTxn[]
@@ -2226,6 +2238,7 @@ function calcInventoryCurrentStockFromRows(
     });
   let stock = openingQty;
   for (const tx of rows) {
+    if (!isInventoryTxnStockEffective(tx)) continue;
     const qty = Math.max(0, Number(tx.qty || 0));
     if (isInventoryTxnSet(tx.type)) {
       stock = qty;
@@ -2239,6 +2252,12 @@ function calcInventoryCurrentStockFromRows(
 function inventoryTxnTypeLabel(type: InventoryTxn["type"]) {
   const row = INVENTORY_TXN_TYPE_OPTIONS.find((option) => option.value === type);
   return row ? row.label : type;
+}
+function inventoryTxnApprovalLabel(tx: InventoryTxn, lang: Lang) {
+  if (!isInventoryTxnUsageOut(tx.type)) return "";
+  if (tx.approvalStatus === "PENDING") return lang === "km" ? "រង់ចាំអនុម័ត" : "Pending Approval";
+  if (tx.approvalStatus === "REJECTED") return lang === "km" ? "បានបដិសេធ" : "Rejected";
+  return "";
 }
 function inventoryAliasText(itemName: string) {
   const name = String(itemName || "").toLowerCase();
@@ -5236,6 +5255,13 @@ export default function App() {
         return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.by || ""} ${row.note || ""}`.toLowerCase().includes(q);
       });
   }, [inventoryVisibleTxns, inventorySearch]);
+  const inventoryPendingApprovalRows = useMemo(
+    () =>
+      inventoryVisibleTxns
+        .filter((tx) => isInventoryTxnUsageOut(tx.type) && tx.approvalStatus === "PENDING")
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0)),
+    [inventoryVisibleTxns]
+  );
   const inventoryStockMap = useMemo(() => {
     const out = new Map<number, number>();
     for (const item of inventoryVisibleItems) {
@@ -5349,11 +5375,36 @@ export default function App() {
     const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
     if (!ymd) return "";
     const holiday = getHolidayEvent(ymd);
-    if (holiday.name) return `Eco Holiday: ${holiday.name}`;
+    if (holiday.name) return lang === "km" ? `ថ្ងៃឈប់សម្រាក៖ ${holiday.name}` : `Eco Holiday: ${holiday.name}`;
     const day = new Date(`${ymd}T00:00:00`).getDay();
-    if (day === 0 || day === 6) return "Weekend";
+    if (day === 0 || day === 6) return lang === "km" ? "ចុងសប្តាហ៍" : "Weekend";
     return "";
-  }, [inventoryQuickOutModal?.date, getHolidayEvent]);
+  }, [inventoryQuickOutModal?.date, getHolidayEvent, lang]);
+  const quickOutDisplayDate = useMemo(() => {
+    if (!inventoryQuickOutModal?.date) return "";
+    const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
+    if (!ymd) return inventoryQuickOutModal.date;
+    const date = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return inventoryQuickOutModal.date;
+    return date.toLocaleDateString(lang === "km" ? "km-KH" : "en-US", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }, [inventoryQuickOutModal?.date, lang]);
+  const quickOutEcoMonthLabel = useMemo(
+    () =>
+      quickOutEcoMonth.toLocaleDateString(lang === "km" ? "km-KH" : "en-US", {
+        month: "long",
+        year: "numeric",
+      }),
+    [quickOutEcoMonth, lang]
+  );
+  const quickOutEcoCanGoPrevMonth = useMemo(() => {
+    const now = new Date();
+    const minMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return quickOutEcoMonth.getTime() > minMonth.getTime();
+  }, [quickOutEcoMonth]);
   const quickOutEcoGridDays = useMemo(() => {
     const year = quickOutEcoMonth.getFullYear();
     const month = quickOutEcoMonth.getMonth();
@@ -8338,33 +8389,38 @@ export default function App() {
     requestedBy?: string;
     approvedBy?: string;
     receivedBy?: string;
-  }) {
+  }): Promise<{ ok: boolean; pendingApproval?: boolean }> {
     const itemId = Number(values.itemId);
     const rawQty = Number(values.qty || 0);
     const qty = Math.max(0, Math.round(rawQty));
     const isSetStock = values.type === "SET";
     if (!itemId || !values.date || !Number.isFinite(rawQty) || (!isSetStock && qty <= 0)) {
       setError("Please select item, date, and quantity.");
-      return false;
+      return { ok: false };
     }
     const item = inventoryVisibleItems.find((i) => i.id === itemId);
     if (!item) {
       setError("Item not found.");
-      return false;
+      return { ok: false };
     }
     const cleanedPhoto = String(values.photo || "").trim();
     if (values.requirePhoto && isInventoryTxnUsageOut(values.type) && !cleanedPhoto) {
       setError("Please take photo for stock-out record.");
-      return false;
+      return { ok: false };
     }
     if (isSetStock && !isSuperAdmin) {
       setError("Only Super Admin can use Set Current Stock.");
-      return false;
+      return { ok: false };
     }
     const txDate = normalizeYmdInput(values.date);
     const holidayName = txDate ? getHolidayName(txDate) : "";
     const day = txDate ? new Date(`${txDate}T00:00:00`).getDay() : -1;
     const isWeekend = day === 0 || day === 6;
+    const needsManagerApproval =
+      isInventoryTxnUsageOut(values.type) &&
+      item.category === "SUPPLY" &&
+      Boolean(txDate) &&
+      (isWeekend || Boolean(holidayName));
     const needsNonWorkingCheck =
       isInventoryTxnUsageOut(values.type) &&
       item.category === "SUPPLY" &&
@@ -8373,16 +8429,13 @@ export default function App() {
     if (needsNonWorkingCheck) {
       if (!String(values.note || "").trim()) {
         setError("Weekend/Holiday stock out requires note.");
-        return false;
+        return { ok: false };
       }
-      const dayType = holidayName ? `Holiday (${holidayName})` : "Weekend";
-      const ok = window.confirm(`Stock OUT on ${dayType} - ${txDate}. Confirm record?`);
-      if (!ok) return false;
     }
     const currentStock = calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns);
     if (isInventoryTxnOut(values.type) && qty > currentStock) {
       setError(`Not enough stock. Current: ${currentStock}`);
-      return false;
+      return { ok: false };
     }
     if (values.type === "IN") {
       const txMonth = String(normalizeYmdInput(values.date) || values.date).slice(0, 7);
@@ -8394,14 +8447,14 @@ export default function App() {
       );
       if (hasMonthlyRefill) {
         setError("Monthly refill already recorded for this item. Use Borrow Return (In) for cross-campus stock.");
-        return false;
+        return { ok: false };
       }
     }
     if (isSetStock) {
       const proceed = window.confirm(
         `Set Current Stock will replace ${item.itemCode} from ${currentStock} to ${qty}. This is correction mode. Continue?`
       );
-      if (!proceed) return false;
+      if (!proceed) return { ok: false };
     }
     const fromCampus = String(values.fromCampus || "").trim();
     const toCampus = String(values.toCampus || "").trim();
@@ -8412,21 +8465,21 @@ export default function App() {
     if (values.type === "BORROW_OUT" || values.type === "BORROW_CONSUME") {
       if (!toCampus || !requestedBy || !approvedBy) {
         setError("Borrow Out/Consume requires destination campus, requested by, and approved by.");
-        return false;
+        return { ok: false };
       }
       if (toCampus === item.campus) {
         setError("Destination campus must be different from source campus.");
-        return false;
+        return { ok: false };
       }
     }
     if (values.type === "BORROW_IN") {
       if (!fromCampus || !receivedBy) {
         setError("Borrow Return requires source campus and received by.");
-        return false;
+        return { ok: false };
       }
       if (fromCampus === item.campus) {
         setError("Source campus must be different from current campus.");
-        return false;
+        return { ok: false };
       }
     }
     const tx: InventoryTxn = {
@@ -8455,6 +8508,12 @@ export default function App() {
             : values.type === "BORROW_CONSUME"
               ? "CONSUMED"
               : undefined,
+      approvalStatus: needsManagerApproval ? "PENDING" : "APPROVED",
+      approvalRequestedBy: needsManagerApproval ? (authUser?.displayName || authUser?.username || values.by.trim()) : "",
+      approvalRequestedAt: needsManagerApproval ? new Date().toISOString() : "",
+      approvalDecisionBy: needsManagerApproval ? "" : (authUser?.displayName || authUser?.username || values.by.trim()),
+      approvalDecisionAt: needsManagerApproval ? "" : new Date().toISOString(),
+      approvalDecisionNote: "",
     };
     setBusy(true);
     try {
@@ -8475,6 +8534,12 @@ export default function App() {
             approvedBy,
             receivedBy,
             photo: cleanedPhoto,
+            approvalStatus: needsManagerApproval ? "PENDING" : "APPROVED",
+            approvalRequestedBy: needsManagerApproval ? (authUser?.displayName || authUser?.username || values.by.trim()) : "",
+            approvalRequestedAt: needsManagerApproval ? new Date().toISOString() : "",
+            approvalDecisionBy: needsManagerApproval ? "" : (authUser?.displayName || authUser?.username || values.by.trim()),
+            approvalDecisionAt: needsManagerApproval ? "" : new Date().toISOString(),
+            approvalDecisionNote: "",
           }),
         });
         setInventoryTxns((prev) => [res.txn, ...prev.filter((entry) => entry.id !== res.txn.id)]);
@@ -8487,12 +8552,12 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save inventory transaction");
       setBusy(false);
-      return false;
+      return { ok: false };
     }
     appendUiAudit("CREATE", "inventory_txn", `${item.itemCode}-${tx.id}`, `${tx.type} ${tx.qty} ${item.unit}`);
     setBusy(false);
     setError("");
-    return true;
+    return { ok: true, pendingApproval: needsManagerApproval };
   }
 
   async function createInventoryTxn() {
@@ -8511,7 +8576,7 @@ export default function App() {
       approvedBy: inventoryTxnForm.approvedBy,
       receivedBy: inventoryTxnForm.receivedBy,
     });
-    if (!saved) return;
+    if (!saved.ok) return;
     setInventoryTxnForm({
       itemId: "",
       date: toYmd(new Date()),
@@ -8537,7 +8602,10 @@ export default function App() {
       by: inventoryDailyForm.by,
       note: inventoryDailyForm.note,
     });
-    if (!saved) return;
+    if (!saved.ok) return;
+    if (saved.pendingApproval) {
+      setError(lang === "km" ? "បានផ្ញើសំណើរចេញស្តុក ទៅអ្នកគ្រប់គ្រងសម្រាប់អនុម័ត។" : "Stock-out request sent to manager for approval.");
+    }
     setInventoryDailyForm((prev) => ({
       ...prev,
       itemId: "",
@@ -8567,7 +8635,9 @@ export default function App() {
   }
   function openInventoryQuickOut(item: InventoryItem) {
     const recorder = authUser?.displayName || authUser?.username || "";
-    const baseDate = normalizeYmdInput(inventoryDailyForm.date || toYmd(new Date())) || toYmd(new Date());
+    const today = toYmd(new Date());
+    const pickedDate = normalizeYmdInput(inventoryDailyForm.date || today) || today;
+    const baseDate = pickedDate < today ? today : pickedDate;
     const base = new Date(`${baseDate}T00:00:00`);
     setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", itemId: String(item.id) }));
     setInventoryQuickOutModal({
@@ -8585,7 +8655,9 @@ export default function App() {
     setInventoryQuickOutFileKey((k) => k + 1);
   }
   function openQuickOutEcoPicker() {
-    const baseDate = normalizeYmdInput(inventoryQuickOutModal?.date || toYmd(new Date())) || toYmd(new Date());
+    const today = toYmd(new Date());
+    const pickedDate = normalizeYmdInput(inventoryQuickOutModal?.date || today) || today;
+    const baseDate = pickedDate < today ? today : pickedDate;
     const base = new Date(`${baseDate}T00:00:00`);
     setQuickOutEcoPickerOpen((prev) => {
       const nextOpen = !prev;
@@ -8613,6 +8685,11 @@ export default function App() {
   async function saveInventoryQuickOut() {
     if (!inventoryQuickOutModal) return;
     const modal = inventoryQuickOutModal;
+    const txDate = normalizeYmdInput(modal.date);
+    if (txDate && txDate < todayYmd) {
+      setError(lang === "km" ? "មិនអាចជ្រើសថ្ងៃមុនថ្ងៃនេះបានទេ។" : "Cannot select a date before today.");
+      return;
+    }
     const recorder = authUser?.displayName || authUser?.username || "";
     const reason = modal.note.trim();
     if (!reason) {
@@ -8629,7 +8706,7 @@ export default function App() {
       photo: modal.photo,
       requirePhoto: true,
     });
-    if (!saved) return;
+    if (!saved.ok) return;
     setInventoryDailyForm((prev) => ({
       ...prev,
       type: "OUT",
@@ -8640,6 +8717,30 @@ export default function App() {
       note: "",
     }));
     closeInventoryQuickOut();
+    if (saved.pendingApproval) {
+      setError(lang === "km" ? "បានផ្ញើសំណើរចេញស្តុក ទៅអ្នកគ្រប់គ្រងសម្រាប់អនុម័ត។" : "Stock-out request sent to manager for approval.");
+    }
+  }
+  async function setInventoryTxnApproval(tx: InventoryTxn, decision: "APPROVED" | "REJECTED") {
+    if (!requireAdminAction()) return;
+    const note =
+      decision === "REJECTED"
+        ? window.prompt(lang === "km" ? "មូលហេតុបដិសេធ" : "Reason for rejection", "") || ""
+        : "";
+    if (decision === "REJECTED" && !note.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await requestJson<{ txn: InventoryTxn }>(`/api/inventory/txns/${tx.id}/approval`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: decision, note: note.trim() }),
+      });
+      setInventoryTxns((prev) => prev.map((row) => (row.id === res.txn.id ? res.txn : row)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update approval");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function exportPurchaseRequestCsv() {
@@ -18185,7 +18286,10 @@ export default function App() {
                                 <td><strong>{row.itemCode}</strong></td>
                                 <td>{inventoryDisplayName(row.itemName, lang)}</td>
                                 <td>{inventoryCampusLabel(row.campus)}</td>
-                                <td>{inventoryTxnTypeLabel(row.type)}</td>
+                                <td>
+                                  {inventoryTxnTypeLabel(row.type)}
+                                  {inventoryTxnApprovalLabel(row, lang) ? ` (${inventoryTxnApprovalLabel(row, lang)})` : ""}
+                                </td>
                                 <td>{row.qty}</td>
                                 <td>
                                   {row.type === "BORROW_OUT" || row.type === "BORROW_CONSUME"
@@ -18231,6 +18335,53 @@ export default function App() {
                       : "Phone-friendly daily Stock-Out record for maintenance staff."}
                   </p>
                 </div>
+                {isAdmin && inventoryPendingApprovalRows.length ? (
+                  <article className="panel" style={{ marginBottom: 8 }}>
+                    <div className="panel-row">
+                      <h3 className="section-title">{lang === "km" ? "សំណើចេញស្តុករង់ចាំអនុម័ត" : "Pending Stock-Out Approvals"}</h3>
+                      <span className="tiny">{inventoryPendingApprovalRows.length} {lang === "km" ? "សំណើ" : "requests"}</span>
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{t.date}</th>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>{t.campus}</th>
+                            <th>Qty</th>
+                            <th>{t.by}</th>
+                            <th>{t.notes}</th>
+                            <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inventoryPendingApprovalRows.map((row) => (
+                            <tr key={`inv-pending-${row.id}`}>
+                              <td>{formatDate(row.date)}</td>
+                              <td><strong>{row.itemCode}</strong></td>
+                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                              <td>{inventoryCampusLabel(row.campus)}</td>
+                              <td>{row.qty}</td>
+                              <td>{row.by || row.approvalRequestedBy || "-"}</td>
+                              <td>{row.note || "-"}</td>
+                              <td>
+                                <div className="asset-row-actions">
+                                  <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
+                                    {lang === "km" ? "អនុម័ត" : "Approve"}
+                                  </button>
+                                  <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
+                                    {lang === "km" ? "បដិសេធ" : "Reject"}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                ) : null}
                 {inventoryDailyForm.type === "OUT" ? (
                   <article className="panel inventory-daily-gallery-panel">
                     <div className="panel-row">
@@ -18633,7 +18784,10 @@ export default function App() {
                               <td>{formatDate(row.date)}</td>
                               <td><strong>{row.itemCode}</strong></td>
                               <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                              <td>{inventoryTxnTypeLabel(row.type)}</td>
+                              <td>
+                                {inventoryTxnTypeLabel(row.type)}
+                                {inventoryTxnApprovalLabel(row, lang) ? ` (${inventoryTxnApprovalLabel(row, lang)})` : ""}
+                              </td>
                               <td>{row.qty}</td>
                               <td>{row.by || "-"}</td>
                               <td>{row.note || "-"}</td>
@@ -18698,7 +18852,10 @@ export default function App() {
                               <td><strong>{row.itemCode}</strong></td>
                               <td>{inventoryDisplayName(row.itemName, lang)}</td>
                               <td>{inventoryCampusLabel(row.campus)}</td>
-                              <td>{inventoryTxnTypeLabel(row.type)}</td>
+                              <td>
+                                {inventoryTxnTypeLabel(row.type)}
+                                {inventoryTxnApprovalLabel(row, lang) ? ` (${inventoryTxnApprovalLabel(row, lang)})` : ""}
+                              </td>
                               <td>{row.qty}</td>
                               <td>{row.by || "-"}</td>
                               <td>{row.note || "-"}</td>
@@ -23517,7 +23674,7 @@ export default function App() {
                           className="input"
                           type="text"
                           readOnly
-                          value={formatDate(inventoryQuickOutModal.date)}
+                          value={quickOutDisplayDate}
                         />
                         <button
                           type="button"
@@ -23535,14 +23692,22 @@ export default function App() {
                         <div className="quickout-eco-inline-panel">
                           <div className="quickout-eco-head">
                             <strong className="quickout-eco-title">
-                              {quickOutEcoMonth.toLocaleString(undefined, { month: "short", year: "numeric" })}
+                              {quickOutEcoMonthLabel}
                             </strong>
                             <div className="quickout-eco-nav">
                               <button
                                 type="button"
                                 className="quickout-eco-nav-btn"
                                 aria-label="Previous month"
-                                onClick={() => setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                                disabled={!quickOutEcoCanGoPrevMonth}
+                                onClick={() =>
+                                  setQuickOutEcoMonth((prev) => {
+                                    const candidate = new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
+                                    const now = new Date();
+                                    const minMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                                    return candidate < minMonth ? minMonth : candidate;
+                                  })
+                                }
                               >
                                 {"<"}
                               </button>
@@ -23561,8 +23726,8 @@ export default function App() {
                               <button
                                 key={`quickout-eco-day-${d.ymd}`}
                                 type="button"
-                                className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${quickOutEcoSelectedDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""}`}
-                                disabled={!d.inMonth}
+                                className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.ymd < todayYmd ? "calendar-day-locked" : ""} ${quickOutEcoSelectedDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""}`}
+                                disabled={!d.inMonth || d.ymd < todayYmd}
                                 onClick={() => {
                                   setQuickOutEcoSelectedDate(d.ymd);
                                   setInventoryQuickOutModal((prev) => (prev ? { ...prev, date: d.ymd } : prev));

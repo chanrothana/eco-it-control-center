@@ -2382,6 +2382,11 @@ label.backup-action-btn {
   border-radius: 9px;
 }
 
+.quickout-eco-grid .calendar-day.calendar-day-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .quickout-eco-events {
   margin-top: 10px;
   display: grid;

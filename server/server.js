@@ -748,6 +748,12 @@ function normalizeInventoryTxns(input) {
       receivedBy: toText(row.receivedBy),
       borrowStatus: toText(row.borrowStatus),
       photo: toText(row.photo),
+      approvalStatus: toUpper(row.approvalStatus),
+      approvalRequestedBy: toText(row.approvalRequestedBy),
+      approvalRequestedAt: toText(row.approvalRequestedAt),
+      approvalDecisionBy: toText(row.approvalDecisionBy),
+      approvalDecisionAt: toText(row.approvalDecisionAt),
+      approvalDecisionNote: toText(row.approvalDecisionNote),
     }));
 }
 
@@ -822,8 +828,12 @@ function calcInventoryCurrentStock(item, txns, excludeTxnId = 0) {
     });
   let stock = opening;
   for (const row of rows) {
-    const qty = Math.max(0, Number(row && row.qty) || 0);
     const type = normalizeInventoryTxnType(row && row.type);
+    const approvalStatus = toUpper(row && row.approvalStatus);
+    if (isInventoryTxnOutType(type) && (approvalStatus === "PENDING" || approvalStatus === "REJECTED")) {
+      continue;
+    }
+    const qty = Math.max(0, Number(row && row.qty) || 0);
     if (isInventoryTxnSetType(type)) {
       stock = qty;
       continue;
@@ -2955,6 +2965,16 @@ const server = http.createServer(async (req, res) => {
       const requestedBy = toText(body.requestedBy);
       const approvedBy = toText(body.approvedBy);
       const receivedBy = toText(body.receivedBy);
+      const approvalStatusRaw = toUpper(body.approvalStatus);
+      const approvalStatus =
+        type === "OUT"
+          ? (approvalStatusRaw === "PENDING" || approvalStatusRaw === "REJECTED" ? approvalStatusRaw : "APPROVED")
+          : "";
+      const approvalRequestedBy = toText(body.approvalRequestedBy) || toText(user.displayName) || toText(user.username);
+      const approvalRequestedAt = toText(body.approvalRequestedAt) || new Date().toISOString();
+      const approvalDecisionBy = toText(body.approvalDecisionBy);
+      const approvalDecisionAt = toText(body.approvalDecisionAt);
+      const approvalDecisionNote = toText(body.approvalDecisionNote);
 
       if ((type === "BORROW_OUT" || type === "BORROW_CONSUME") && (!toCampus || !requestedBy || !approvedBy)) {
         sendJson(res, 400, { error: "Borrow Out/Consume requires toCampus, requestedBy, approvedBy" });
@@ -3011,12 +3031,117 @@ const server = http.createServer(async (req, res) => {
               : type === "BORROW_CONSUME"
                 ? "CONSUMED"
                 : "",
+        approvalStatus,
+        approvalRequestedBy: approvalStatus === "PENDING" ? approvalRequestedBy : "",
+        approvalRequestedAt: approvalStatus === "PENDING" ? approvalRequestedAt : "",
+        approvalDecisionBy: approvalStatus === "APPROVED" ? (approvalDecisionBy || toText(user.displayName) || toText(user.username)) : "",
+        approvalDecisionAt: approvalStatus === "APPROVED" ? (approvalDecisionAt || new Date().toISOString()) : "",
+        approvalDecisionNote: approvalStatus === "APPROVED" ? approvalDecisionNote : "",
       };
+      if (approvalStatus === "PENDING") {
+        upsertNotification(db, {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          key: `inventory-out-approval:${txn.id}`,
+          kind: "inventory_out_approval",
+          title: `Approval required: Stock OUT ${txn.itemCode}`,
+          message: `${txn.itemName} (${txn.qty}) at ${txn.campus} on ${txn.date}. Requested by ${txn.approvalRequestedBy || txn.by || "staff"}.`,
+          assetId: txn.itemCode,
+          assetDbId: Number(txn.itemId) || 0,
+          campus: txn.campus,
+          scheduleDate: txn.date,
+          createdAt: new Date().toISOString(),
+          readBy: [],
+          generatedBy: "inventory-out-approval",
+        });
+      }
       const nextTxns = [txn, ...txns];
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(db, user, "CREATE", "inventory_txn", `${txn.itemCode}-${txn.id}`, `${type} ${qty} ${item.unit}`);
       await writeDb(db);
       sendJson(res, 201, { txn });
+      return;
+    }
+
+    const inventoryTxnApprovalMatch = url.pathname.match(/^\/api\/inventory\/txns\/(\d+)\/approval$/);
+    if (req.method === "PATCH" && inventoryTxnApprovalMatch) {
+      const approver = getAuthUser(req);
+      if (!approver) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!isAdminRole(approver.role)) {
+        sendJson(res, 403, { error: "Manager approval required" });
+        return;
+      }
+      const txnId = Number(inventoryTxnApprovalMatch[1]);
+      if (!txnId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const body = await parseBody(req);
+      const status = toUpper(body.status);
+      if (status !== "APPROVED" && status !== "REJECTED") {
+        sendJson(res, 400, { error: "status must be APPROVED or REJECTED" });
+        return;
+      }
+      const decisionNote = toText(body.note);
+      if (status === "REJECTED" && !decisionNote) {
+        sendJson(res, 400, { error: "Rejection reason is required" });
+        return;
+      }
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const txIdx = txns.findIndex((row) => Number(row.id) === txnId);
+      if (txIdx === -1) {
+        sendJson(res, 404, { error: "Transaction not found" });
+        return;
+      }
+      const current = txns[txIdx];
+      if (normalizeInventoryTxnType(current.type) !== "OUT") {
+        sendJson(res, 400, { error: "Approval is only available for Stock OUT requests" });
+        return;
+      }
+      if (toUpper(current.approvalStatus) !== "PENDING") {
+        sendJson(res, 400, { error: "Only pending requests can be updated" });
+        return;
+      }
+      const item = items.find((row) => Number(row.id) === Number(current.itemId));
+      if (!item) {
+        sendJson(res, 404, { error: "Item not found" });
+        return;
+      }
+      if (!userCanAccessCampus(approver, toText(item.campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+      if (status === "APPROVED") {
+        const currentStock = calcInventoryCurrentStock(item, txns);
+        const qty = Math.max(0, Number(current.qty || 0));
+        if (qty > currentStock) {
+          sendJson(res, 400, { error: `Not enough stock at approval time. Current: ${currentStock}` });
+          return;
+        }
+      }
+      const updated = {
+        ...current,
+        approvalStatus: status,
+        approvalDecisionBy: toText(approver.displayName) || toText(approver.username),
+        approvalDecisionAt: new Date().toISOString(),
+        approvalDecisionNote: decisionNote,
+      };
+      const nextTxns = txns.slice();
+      nextTxns[txIdx] = updated;
+      setInventoryState(db, settings, items, nextTxns);
+      appendAuditLog(
+        db,
+        approver,
+        "UPDATE",
+        "inventory_txn_approval",
+        `${updated.itemCode}-${updated.id}`,
+        `${status}${decisionNote ? ` | ${decisionNote}` : ""}`
+      );
+      await writeDb(db);
+      sendJson(res, 200, { txn: updated });
       return;
     }
 
