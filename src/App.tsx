@@ -4703,6 +4703,12 @@ export default function App() {
     if (!campuses.length) return CAMPUS_LIST;
     return CAMPUS_LIST.filter((c) => campuses.includes(c));
   }, [authUser]);
+  const maintenanceLockedCampus = useMemo(() => {
+    if (!maintenanceQuickMode) return "";
+    if (allowedCampuses.length) return allowedCampuses[0];
+    if (campusFilter !== "ALL") return campusFilter;
+    return CAMPUS_LIST[0] || "";
+  }, [maintenanceQuickMode, allowedCampuses, campusFilter]);
 
   useEffect(() => {
     if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
@@ -4714,6 +4720,13 @@ export default function App() {
       setCampusFilter(allowedCampuses[0] || "ALL");
     }
   }, [authUser, campusFilter, allowedCampuses]);
+  useEffect(() => {
+    if (!maintenanceQuickMode) return;
+    if (!maintenanceLockedCampus) return;
+    if (campusFilter !== maintenanceLockedCampus) {
+      setCampusFilter(maintenanceLockedCampus);
+    }
+  }, [maintenanceQuickMode, maintenanceLockedCampus, campusFilter]);
 
   useEffect(() => {
     if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
@@ -14417,12 +14430,16 @@ export default function App() {
             <div className="top-controls top-controls-grid">
               <label className="field campus-field">
                 <span>{t.view}</span>
-                <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
-                  {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                  {allowedCampuses.map((campus) => (
-                    <option key={campus} value={campus}>{campusLabel(campus)}</option>
-                  ))}
-                </select>
+                {maintenanceQuickMode ? (
+                  <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
+                ) : (
+                  <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
+                    {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
+                    {allowedCampuses.map((campus) => (
+                      <option key={campus} value={campus}>{campusLabel(campus)}</option>
+                    ))}
+                  </select>
+                )}
               </label>
 
               <label className="field campus-field">
@@ -14575,19 +14592,23 @@ export default function App() {
 
                 <label className="field">
                   <span>{t.view}</span>
-                  <select
-                    value={campusFilter}
-                    onChange={(e) => {
-                      setCampusFilter(e.target.value);
-                      setMobileMenuOpen(false);
-                    }}
-                    className="input"
-                  >
-                    {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                    {allowedCampuses.map((campus) => (
-                      <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                    ))}
-                  </select>
+                  {maintenanceQuickMode ? (
+                    <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
+                  ) : (
+                    <select
+                      value={campusFilter}
+                      onChange={(e) => {
+                        setCampusFilter(e.target.value);
+                        setMobileMenuOpen(false);
+                      }}
+                      className="input"
+                    >
+                      {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
+                      {allowedCampuses.map((campus) => (
+                        <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                      ))}
+                    </select>
+                  )}
                 </label>
 
                 <label className="field">
