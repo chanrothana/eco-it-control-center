@@ -4176,6 +4176,11 @@ th {
   text-decoration: underline;
 }
 
+.modal-panel .table-wrap table thead th.popup-sortable-th {
+  cursor: pointer;
+  user-select: none;
+}
+
 tbody tr:nth-child(2n) td {
   background: #fbfdff;
 }

@@ -3290,6 +3290,16 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 403, { error: "Campus access denied" });
         return;
       }
+      const approverUsername = toText(approver.username).toLowerCase();
+      const allowedApproverTargets = resolveInventoryApprovalApprovers(
+        db,
+        toText(current.approvalRequestedUser),
+        toText(current.campus) || toText(item.campus)
+      );
+      if (!approverUsername || !allowedApproverTargets.includes(approverUsername)) {
+        sendJson(res, 403, { error: "Only assigned approver manager can update this request" });
+        return;
+      }
       if (status === "APPROVED") {
         const currentStock = calcInventoryCurrentStock(item, txns);
         const qty = Math.max(0, Number(current.qty || 0));

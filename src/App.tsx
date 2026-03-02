@@ -244,6 +244,7 @@ type InventoryTxn = {
   photo?: string;
   approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
   approvalRequestedBy?: string;
+  approvalRequestedUser?: string;
   approvalRequestedAt?: string;
   approvalDecisionBy?: string;
   approvalDecisionAt?: string;
@@ -435,6 +436,7 @@ type MaintenanceNotification = {
   createdAt: string;
   readBy?: string[];
   closedBy?: string[];
+  targetUsernames?: string[];
   read?: boolean;
   closed?: boolean;
 };
@@ -444,6 +446,50 @@ function parseInventoryApprovalNotificationTxnId(row: Pick<MaintenanceNotificati
   const match = String(row.key || "").match(/^inventory-out-approval:(\d+)$/);
   return match ? Number(match[1]) || 0 : 0;
 }
+
+function normalizePopupSortCellText(value: string) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function parsePopupSortCellValue(value: string) {
+  const raw = normalizePopupSortCellText(value);
+  if (!raw) return { kind: "text" as const, value: "" };
+
+  const numericRaw = raw.replace(/,/g, "");
+  if (/^-?\d+(\.\d+)?$/.test(numericRaw)) {
+    return { kind: "number" as const, value: Number(numericRaw) };
+  }
+
+  const isLikelyDate =
+    /^\d{4}-\d{2}-\d{2}/.test(raw) ||
+    /^\d{4}-[A-Za-z]{3}-\d{2}/.test(raw) ||
+    /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(raw) ||
+    /^[A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}/.test(raw);
+  if (isLikelyDate) {
+    const parsedMs = Date.parse(raw.replace(/-/g, " "));
+    if (Number.isFinite(parsedMs)) {
+      return { kind: "date" as const, value: parsedMs };
+    }
+  }
+
+  return { kind: "text" as const, value: raw.toLowerCase() };
+}
+
+function comparePopupSortCellValues(aRaw: string, bRaw: string) {
+  const a = parsePopupSortCellValue(aRaw);
+  const b = parsePopupSortCellValue(bRaw);
+  if (a.kind === b.kind) {
+    if (a.kind === "number" || a.kind === "date") {
+      return Number(a.value) - Number(b.value);
+    }
+    return String(a.value).localeCompare(String(b.value), undefined, { numeric: true, sensitivity: "base" });
+  }
+  return normalizePopupSortCellText(aRaw).localeCompare(normalizePopupSortCellText(bRaw), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 function normalizeInventoryApprovalCampusValue(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -11161,6 +11207,35 @@ export default function App() {
     [inventoryTxnById, inventoryItems, lang]
   );
 
+  const canCurrentUserApproveInventoryRequest = useCallback(
+    (txn?: InventoryTxn | null, notification?: MaintenanceNotification | null) => {
+      const currentUsername = String(authUser?.username || "").trim().toLowerCase();
+      if (!currentUsername || !isAdmin) return false;
+      const requesterUsername = String(txn?.approvalRequestedUser || "").trim().toLowerCase();
+      if (requesterUsername && requesterUsername === currentUsername) return false;
+
+      const notificationTargets = Array.isArray(notification?.targetUsernames)
+        ? notification!.targetUsernames!.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+        : [];
+      if (notificationTargets.length) {
+        return notificationTargets.includes(currentUsername);
+      }
+
+      if (requesterUsername) {
+        const route = inventoryApprovalRoutingMap[requesterUsername];
+        const routeApprovers = Array.isArray(route?.approvers)
+          ? route.approvers.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+          : [];
+        if (routeApprovers.length) {
+          return routeApprovers.includes(currentUsername);
+        }
+      }
+
+      return true;
+    },
+    [authUser?.username, inventoryApprovalRoutingMap, isAdmin]
+  );
+
   function openNotificationTarget(row: MaintenanceNotification) {
     if (row.kind === "inventory_out_approval") {
       setTab("inventory");
@@ -13746,6 +13821,102 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const decorateSortablePopupHeaders = () => {
+      const headers = document.querySelectorAll<HTMLTableCellElement>(".modal-panel .table-wrap table thead th");
+      headers.forEach((th) => {
+        if (th.querySelector("button, input, select, textarea")) return;
+        th.classList.add("popup-sortable-th");
+        th.setAttribute("role", "button");
+        th.setAttribute("tabindex", "0");
+        if (!th.getAttribute("aria-sort")) th.setAttribute("aria-sort", "none");
+      });
+    };
+
+    const sortPopupTableByHeader = (headerCell: HTMLTableCellElement) => {
+      const table = headerCell.closest("table");
+      const theadRow = headerCell.closest("thead tr");
+      if (!table || !theadRow) return;
+      if (headerCell.querySelector("button, input, select, textarea")) return;
+      const tbody = table.tBodies[0];
+      if (!tbody) return;
+      const allHeaders = Array.from(theadRow.children).filter(
+        (node) => node instanceof HTMLTableCellElement
+      ) as HTMLTableCellElement[];
+      const colIndex = allHeaders.indexOf(headerCell);
+      if (colIndex < 0) return;
+      const allRows = Array.from(tbody.querySelectorAll(":scope > tr"));
+      if (allRows.length <= 1) return;
+
+      const nextDir = headerCell.dataset.sortDir === "asc" ? "desc" : "asc";
+      allHeaders.forEach((th) => {
+        th.removeAttribute("data-sort-dir");
+        th.setAttribute("aria-sort", "none");
+      });
+      headerCell.dataset.sortDir = nextDir;
+      headerCell.setAttribute("aria-sort", nextDir === "asc" ? "ascending" : "descending");
+
+      const sortableRows = allRows
+        .map((row, idx) => ({ row, idx }))
+        .filter(({ row }) => {
+          const onlyCell = row.children[0] as HTMLTableCellElement | undefined;
+          if (!onlyCell) return false;
+          if (row.children.length === 1 && Number(onlyCell.colSpan || 0) > 1) return false;
+          return Boolean(row.children[colIndex]);
+        })
+        .map(({ row, idx }) => {
+          const cell = row.children[colIndex] as HTMLTableCellElement | undefined;
+          const text = normalizePopupSortCellText(cell?.textContent || "");
+          return { row, idx, text };
+        });
+      const fixedRows = allRows.filter((row) => !sortableRows.some((item) => item.row === row));
+
+      sortableRows.sort((a, b) => {
+        const compared = comparePopupSortCellValues(a.text, b.text);
+        if (compared !== 0) return nextDir === "asc" ? compared : -compared;
+        return a.idx - b.idx;
+      });
+
+      const fragment = document.createDocumentFragment();
+      sortableRows.forEach((item) => fragment.appendChild(item.row));
+      fixedRows.forEach((row) => fragment.appendChild(row));
+      tbody.appendChild(fragment);
+    };
+
+    const onDocClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const headerCell = target.closest(".modal-panel .table-wrap table thead th.popup-sortable-th") as HTMLTableCellElement | null;
+      if (!headerCell) return;
+      sortPopupTableByHeader(headerCell);
+    };
+
+    const onDocKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      const headerCell = target.closest(".modal-panel .table-wrap table thead th.popup-sortable-th") as HTMLTableCellElement | null;
+      if (!headerCell) return;
+      event.preventDefault();
+      sortPopupTableByHeader(headerCell);
+    };
+
+    decorateSortablePopupHeaders();
+    const observer = new MutationObserver(() => {
+      decorateSortablePopupHeaders();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener("click", onDocClick, true);
+    document.addEventListener("keydown", onDocKeyDown);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("click", onDocClick, true);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+  }, []);
+
   const qrFilteredRows = useMemo(() => {
     return qrLabelRows.filter((row) => {
       if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
@@ -15222,6 +15393,7 @@ export default function App() {
                       maintenanceNotifications.map((row) => (
                         row.kind === "inventory_out_approval" ? (() => {
                           const meta = getStockApprovalNotificationMeta(row);
+                          const canApproveThisRequest = canCurrentUserApproveInventoryRequest(meta.txn, row);
                           return (
                             <article
                               key={`mobile-notify-${row.id}`}
@@ -15268,7 +15440,7 @@ export default function App() {
                                 <strong>{meta.reason}</strong>
                               </div>
                               <div className="row-actions mobile-notify-stock-actions" onClick={(e) => e.stopPropagation()}>
-                                {isAdmin ? (
+                                {canApproveThisRequest ? (
                                   <>
                                     <button
                                       type="button"
@@ -18924,6 +19096,7 @@ export default function App() {
                           const item = inventoryVisibleItemById.get(Number(row.itemId));
                           const itemPhoto = item?.photo || row.photo || "";
                           const itemName = inventoryDisplayName(row.itemName, lang);
+                          const canApproveThisRequest = canCurrentUserApproveInventoryRequest(row, null);
                           return (
                             <article key={`inv-pending-mobile-${row.id}`} className="inventory-pending-mobile-card">
                               <div className="inventory-pending-mobile-head">
@@ -18963,7 +19136,7 @@ export default function App() {
                                 <small>{lang === "km" ? "មូលហេតុ" : "Reason"}</small>
                                 <div>{row.note || (lang === "km" ? "មិនបានបញ្ជាក់" : "Not provided")}</div>
                               </div>
-                              {isAdmin ? (
+                              {canApproveThisRequest ? (
                                 <div className="inventory-pending-mobile-actions">
                                   <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
                                     {lang === "km" ? "អនុម័ត" : "Approve"}
@@ -19006,14 +19179,18 @@ export default function App() {
                                 <td>{row.note || "-"}</td>
                                 {isAdmin ? (
                                   <td>
-                                    <div className="asset-row-actions">
-                                      <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
-                                        {lang === "km" ? "អនុម័ត" : "Approve"}
-                                      </button>
-                                      <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
-                                        {lang === "km" ? "បដិសេធ" : "Reject"}
-                                      </button>
-                                    </div>
+                                    {canCurrentUserApproveInventoryRequest(row, null) ? (
+                                      <div className="asset-row-actions">
+                                        <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
+                                          {lang === "km" ? "អនុម័ត" : "Approve"}
+                                        </button>
+                                        <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
+                                          {lang === "km" ? "បដិសេធ" : "Reject"}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="tiny">{lang === "km" ? "រង់ចាំអនុម័ត" : "Pending approval"}</span>
+                                    )}
                                   </td>
                                 ) : null}
                               </tr>
