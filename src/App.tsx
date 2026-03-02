@@ -1009,6 +1009,10 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Keyboard", itemKm: "ក្តារចុច", code: "KBD" },
     { itemEn: "Mouse", itemKm: "កណ្ដុរ", code: "MSE" },
     { itemEn: "Digital Camera", itemKm: "កាមេរ៉ាឌីជីថល", code: "DCM" },
+    { itemEn: "Camera Battery", itemKm: "ថ្មកាមេរ៉ា", code: "BAT" },
+    { itemEn: "Battery Charger", itemKm: "ឆ្នាំងសាកថ្ម", code: "CHB" },
+    { itemEn: "Memory Card", itemKm: "កាតមេម៉ូរី", code: "MCD" },
+    { itemEn: "Camera Bag", itemKm: "កាបូបកាមេរ៉ា", code: "BAG" },
     { itemEn: "Slide Projector", itemKm: "ម៉ាស៊ីនបញ្ចាំងស្លាយ", code: "SLP" },
     { itemEn: "Power Adapter", itemKm: "អាដាប់ទ័រ", code: "ADP" },
     { itemEn: "Remote Control", itemKm: "រីម៉ូត", code: "RMT" },
@@ -1049,6 +1053,14 @@ const SHARED_LOCATION_KEYWORDS = [
 ];
 const DESKTOP_PARENT_TYPE = "PC";
 const WATER_DISPENSER_MAIN_TYPE = "WDP";
+const LAPTOP_TYPE = "LAP";
+const DIGITAL_CAMERA_TYPE = "DCM";
+const DIGITAL_CAMERA_COMPONENT_TYPES = ["BAT", "CHB", "MCD", "BAG"] as const;
+const MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS = [
+  "USB",
+  "Bluetooth",
+  "Set Keyboard and Mouse (Bluetooth)",
+] as const;
 const PC_TYPE_OPTIONS = [
   { value: "Desktop", en: "Desktop", km: "កុំព្យូទ័រ Desktop" },
   { value: "AIO", en: "All-in-One (AIO)", km: "All-in-One (AIO)" },
@@ -1058,6 +1070,8 @@ const PC_TYPE_OPTIONS = [
   { value: "Other", en: "Other", km: "ផ្សេងៗ" },
 ] as const;
 type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE" | "UWF" | "WBC";
+type LaptopAccessoryType = "ADP" | "MSE" | "KBD" | "MON";
+type CameraComponentType = "BAT" | "CHB" | "MCD" | "BAG";
 type SetPackChildDraft = {
   enabled: boolean;
   status: string;
@@ -1101,14 +1115,43 @@ function defaultSetPackDraft(): Record<SetPackChildType, SetPackChildDraft> {
   };
 }
 
+function defaultLaptopAccessoryDraft(): Record<LaptopAccessoryType, SetPackChildDraft> {
+  return {
+    ADP: defaultSetPackChildDraft(),
+    MSE: defaultSetPackChildDraft(),
+    KBD: defaultSetPackChildDraft(),
+    MON: defaultSetPackChildDraft(),
+  };
+}
+
+function defaultCameraComponentDraft(): Record<CameraComponentType, SetPackChildDraft> {
+  return {
+    BAT: defaultSetPackChildDraft(),
+    CHB: defaultSetPackChildDraft(),
+    MCD: defaultSetPackChildDraft(),
+    BAG: defaultSetPackChildDraft(),
+  };
+}
+
 function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF" | "WBC" {
   if (type === "MON2") return "MON";
   return type;
 }
 
-function canLinkToParentAsset(type: string): boolean {
-  const code = String(type || "").toUpperCase();
-  return code !== DESKTOP_PARENT_TYPE && code !== WATER_DISPENSER_MAIN_TYPE && code !== "AC";
+function canLinkToParentAsset(category: string, type: string): boolean {
+  const normalizedCategory = String(category || "").trim().toUpperCase();
+  if (normalizedCategory === "SAFETY") return false;
+  const code = String(type || "").trim().toUpperCase();
+  return (
+    code !== DESKTOP_PARENT_TYPE &&
+    code !== LAPTOP_TYPE &&
+    code !== DIGITAL_CAMERA_TYPE &&
+    !DIGITAL_CAMERA_COMPONENT_TYPES.includes(code as (typeof DIGITAL_CAMERA_COMPONENT_TYPES)[number]) &&
+    code !== WATER_DISPENSER_MAIN_TYPE &&
+    code !== "AC" &&
+    code !== "TBL" &&
+    code !== "CHR"
+  );
 }
 
 const TEXT = {
@@ -1167,6 +1210,16 @@ const TEXT = {
     includeMouse: "Include Mouse",
     includeUsbWifi: "Include USB WiFi",
     includeWebcam: "Include Webcam",
+    laptopAccessories: "Laptop Accessories",
+    includeAdapter: "Include Adapter",
+    includeExtraMonitor: "Include Extra Monitor",
+    laptopAccessoryHint: "Laptop can include accessories without linking to an existing parent asset.",
+    cameraComponents: "Camera Components",
+    includeBattery: "Include Battery",
+    includeBatteryCharger: "Include Charger Battery",
+    includeMemoryCard: "Include Memory Card",
+    includeCameraBag: "Include Bag",
+    cameraComponentHint: "Digital Camera can include components without linking to an existing parent asset.",
     linkToParentAsset: "Link to parent asset",
     selectParentAsset: "Select Parent Asset",
     componentRole: "Component Role",
@@ -1371,6 +1424,16 @@ const TEXT = {
     includeMouse: "រួមបញ្ចូល Mouse",
     includeUsbWifi: "រួមបញ្ចូល USB WiFi",
     includeWebcam: "រួមបញ្ចូល Webcam",
+    laptopAccessories: "គ្រឿងបន្ថែម Laptop",
+    includeAdapter: "រួមបញ្ចូល Adapter",
+    includeExtraMonitor: "រួមបញ្ចូល Monitor បន្ថែម",
+    laptopAccessoryHint: "Laptop អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
+    cameraComponents: "គ្រឿងបន្ថែមកាមេរ៉ា",
+    includeBattery: "រួមបញ្ចូលថ្ម",
+    includeBatteryCharger: "រួមបញ្ចូលឆ្នាំងសាកថ្ម",
+    includeMemoryCard: "រួមបញ្ចូលកាតមេម៉ូរី",
+    includeCameraBag: "រួមបញ្ចូលកាបូប",
+    cameraComponentHint: "កាមេរ៉ាឌីជីថល អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
     linkToParentAsset: "ភ្ជាប់ទៅ Asset មេ",
     selectParentAsset: "ជ្រើស Asset មេ",
     componentRole: "តួនាទីគ្រឿងបន្ថែម",
@@ -3296,6 +3359,145 @@ type InventoryItemPickerProps = {
   getLabel: (item: InventoryItem) => string;
 };
 
+type ParentAssetPickerProps = {
+  value: string;
+  assets: Asset[];
+  onChange: (assetId: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  getLabel: (asset: Asset) => string;
+};
+
+function ParentAssetPicker({
+  value,
+  assets,
+  onChange,
+  placeholder = "Select parent asset",
+  disabled,
+  getLabel,
+}: ParentAssetPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const prevValueRef = useRef(value);
+  const selected = assets.find((a) => a.assetId === value) || null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setOpen(false);
+      setSearch("");
+    }
+  }, [value]);
+
+  const filtered = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return assets;
+    return assets.filter((a) => {
+      const label = getLabel(a);
+      const staff = String(a.assignedTo || "").trim();
+      return `${a.assetId} ${label} ${a.name} ${a.location} ${a.campus} ${a.category} ${a.type} ${staff}`
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [assets, deferredSearch, getLabel]);
+
+  const selectAsset = useCallback(
+    (assetId: string) => {
+      onChange(assetId);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange]
+  );
+
+  return (
+    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="asset-picker-trigger input"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen(true)}
+      >
+        {selected ? (
+          <span className="asset-picker-selected">
+            {selected.photo ? (
+              <img src={selected.photo} alt={selected.assetId} className="asset-picker-thumb" />
+            ) : (
+              <span className="asset-picker-thumb-empty">-</span>
+            )}
+            <span className="parent-asset-picker-selected-content">
+              <span className="parent-asset-picker-option-title">{getLabel(selected)}</span>
+              <span className="parent-asset-picker-option-meta">Staff: {selected.assignedTo || "-"}</span>
+            </span>
+          </span>
+        ) : (
+          <span className="asset-picker-placeholder">{placeholder}</span>
+        )}
+        <span className="asset-picker-caret">▾</span>
+      </button>
+      {open ? (
+        <div className="asset-picker-menu">
+          <input
+            className="input asset-picker-search"
+            placeholder="Search by ID, name, or staff..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="asset-picker-list">
+            {filtered.length ? (
+              filtered.map((asset) => (
+                <button
+                  type="button"
+                  key={`parent-asset-picker-${asset.id}`}
+                  className={`asset-picker-option ${asset.assetId === value ? "asset-picker-option-active" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectAsset(asset.assetId);
+                  }}
+                  onClick={() => selectAsset(asset.assetId)}
+                >
+                  {asset.photo ? (
+                    <img src={asset.photo} alt={asset.assetId} className="asset-picker-thumb" />
+                  ) : (
+                    <span className="asset-picker-thumb-empty">-</span>
+                  )}
+                  <span className="parent-asset-picker-option-content">
+                    <span className="parent-asset-picker-option-title">{getLabel(asset)}</span>
+                    <span className="parent-asset-picker-option-meta">Staff: {asset.assignedTo || "-"}</span>
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="asset-picker-empty">No assets found.</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function InventoryItemPicker({
   value,
   items,
@@ -4286,6 +4488,60 @@ export default function App() {
     UWF: false,
     WBC: false,
   });
+  const [laptopAccessoryEnabled, setLaptopAccessoryEnabled] = useState<Record<LaptopAccessoryType, boolean>>({
+    ADP: true,
+    MSE: false,
+    KBD: false,
+    MON: false,
+  });
+  const [laptopAccessoryDraft, setLaptopAccessoryDraft] = useState<Record<LaptopAccessoryType, SetPackChildDraft>>(
+    () => defaultLaptopAccessoryDraft()
+  );
+  const [laptopAccessoryFileKey, setLaptopAccessoryFileKey] = useState<Record<LaptopAccessoryType, number>>({
+    ADP: 0,
+    MSE: 0,
+    KBD: 0,
+    MON: 0,
+  });
+  const laptopAccessoryPhotoInputRefs = useRef<Record<LaptopAccessoryType, HTMLInputElement | null>>({
+    ADP: null,
+    MSE: null,
+    KBD: null,
+    MON: null,
+  });
+  const [laptopAccessoryDetailOpen, setLaptopAccessoryDetailOpen] = useState<Record<LaptopAccessoryType, boolean>>({
+    ADP: false,
+    MSE: false,
+    KBD: false,
+    MON: false,
+  });
+  const [cameraComponentEnabled, setCameraComponentEnabled] = useState<Record<CameraComponentType, boolean>>({
+    BAT: true,
+    CHB: true,
+    MCD: true,
+    BAG: false,
+  });
+  const [cameraComponentDraft, setCameraComponentDraft] = useState<Record<CameraComponentType, SetPackChildDraft>>(
+    () => defaultCameraComponentDraft()
+  );
+  const [cameraComponentFileKey, setCameraComponentFileKey] = useState<Record<CameraComponentType, number>>({
+    BAT: 0,
+    CHB: 0,
+    MCD: 0,
+    BAG: 0,
+  });
+  const cameraComponentPhotoInputRefs = useRef<Record<CameraComponentType, HTMLInputElement | null>>({
+    BAT: null,
+    CHB: null,
+    MCD: null,
+    BAG: null,
+  });
+  const [cameraComponentDetailOpen, setCameraComponentDetailOpen] = useState<Record<CameraComponentType, boolean>>({
+    BAT: false,
+    CHB: false,
+    MCD: false,
+    BAG: false,
+  });
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
     MON2: false,
@@ -5001,7 +5257,11 @@ export default function App() {
   }, [customTypeOptions]);
 
   const currentTypeOptions = useMemo(
-    () => allTypeOptions[assetForm.category] || allTypeOptions.IT || TYPE_OPTIONS.IT,
+    () => {
+      const base = allTypeOptions[assetForm.category] || allTypeOptions.IT || TYPE_OPTIONS.IT;
+      if (assetForm.category !== "IT") return base;
+      return base.filter((opt) => !DIGITAL_CAMERA_COMPONENT_TYPES.includes(opt.code as (typeof DIGITAL_CAMERA_COMPONENT_TYPES)[number]));
+    },
     [assetForm.category, allTypeOptions]
   );
 
@@ -5214,6 +5474,32 @@ export default function App() {
       MSE: `${campusCode}-${categoryCode("IT")}-MSE-${pad4(baseMse)}`,
       UWF: `${campusCode}-${categoryCode("IT")}-UWF-${pad4(baseUwf)}`,
       WBC: `${campusCode}-${categoryCode("IT")}-WBC-${pad4(baseWbc)}`,
+    };
+  }, [assets, assetForm.campus]);
+  const laptopAccessorySuggestedAssetId = useMemo<Record<LaptopAccessoryType, string>>(() => {
+    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
+    const baseAdp = calcNextSeq(assets, assetForm.campus, "IT", "ADP");
+    const baseMse = calcNextSeq(assets, assetForm.campus, "IT", "MSE");
+    const baseKbd = calcNextSeq(assets, assetForm.campus, "IT", "KBD");
+    const baseMon = calcNextSeq(assets, assetForm.campus, "IT", "MON");
+    return {
+      ADP: `${campusCode}-${categoryCode("IT")}-ADP-${pad4(baseAdp)}`,
+      MSE: `${campusCode}-${categoryCode("IT")}-MSE-${pad4(baseMse)}`,
+      KBD: `${campusCode}-${categoryCode("IT")}-KBD-${pad4(baseKbd)}`,
+      MON: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon)}`,
+    };
+  }, [assets, assetForm.campus]);
+  const cameraComponentSuggestedAssetId = useMemo<Record<CameraComponentType, string>>(() => {
+    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
+    const baseBat = calcNextSeq(assets, assetForm.campus, "IT", "BAT");
+    const baseChb = calcNextSeq(assets, assetForm.campus, "IT", "CHB");
+    const baseMcd = calcNextSeq(assets, assetForm.campus, "IT", "MCD");
+    const baseBag = calcNextSeq(assets, assetForm.campus, "IT", "BAG");
+    return {
+      BAT: `${campusCode}-${categoryCode("IT")}-BAT-${pad4(baseBat)}`,
+      CHB: `${campusCode}-${categoryCode("IT")}-CHB-${pad4(baseChb)}`,
+      MCD: `${campusCode}-${categoryCode("IT")}-MCD-${pad4(baseMcd)}`,
+      BAG: `${campusCode}-${categoryCode("IT")}-BAG-${pad4(baseBag)}`,
     };
   }, [assets, assetForm.campus]);
   const parentAssetsForEdit = useMemo(() => {
@@ -5938,9 +6224,28 @@ export default function App() {
     () => assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE,
     [assetForm.category, assetForm.type]
   );
-  const isLinkableForCreate = useMemo(
-    () => canLinkToParentAsset(assetForm.type),
+  const isLaptopAssetForCreate = useMemo(
+    () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === LAPTOP_TYPE,
+    [assetForm.category, assetForm.type]
+  );
+  const isDigitalCameraAssetForCreate = useMemo(
+    () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === DIGITAL_CAMERA_TYPE,
+    [assetForm.category, assetForm.type]
+  );
+  const isMouseKeyboardTypeForCreate = useMemo(
+    () => {
+      const type = String(assetForm.type || "").trim().toUpperCase();
+      return type === "MSE" || type === "KBD";
+    },
     [assetForm.type]
+  );
+  const isLinkableForCreate = useMemo(
+    () => canLinkToParentAsset(assetForm.category, assetForm.type),
+    [assetForm.category, assetForm.type]
+  );
+  const isSafetyCategoryForCreate = useMemo(
+    () => String(assetForm.category || "").trim().toUpperCase() === "SAFETY",
+    [assetForm.category]
   );
   const modelTemplates = useMemo(() => {
     const byModel = new Map<
@@ -6083,7 +6388,7 @@ export default function App() {
           createSetPack: false,
         };
       }
-      if (!canLinkToParentAsset(prev.type) && (prev.useExistingSet || prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
+      if (!canLinkToParentAsset(prev.category, prev.type) && (prev.useExistingSet || prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
         return { ...prev, useExistingSet: false, setCode: "", parentAssetId: "", componentRole: "", componentRequired: false };
       }
       if (!prev.useExistingSet && (prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
@@ -6165,6 +6470,52 @@ export default function App() {
       WBC: prev.WBC + 1,
     }));
   }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    const isLaptop = assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === LAPTOP_TYPE;
+    if (isLaptop) return;
+    setLaptopAccessoryEnabled({
+      ADP: true,
+      MSE: false,
+      KBD: false,
+      MON: false,
+    });
+    setLaptopAccessoryDraft(defaultLaptopAccessoryDraft());
+    setLaptopAccessoryDetailOpen({
+      ADP: false,
+      MSE: false,
+      KBD: false,
+      MON: false,
+    });
+    setLaptopAccessoryFileKey((prev) => ({
+      ADP: prev.ADP + 1,
+      MSE: prev.MSE + 1,
+      KBD: prev.KBD + 1,
+      MON: prev.MON + 1,
+    }));
+  }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    const isDigitalCamera = assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === DIGITAL_CAMERA_TYPE;
+    if (isDigitalCamera) return;
+    setCameraComponentEnabled({
+      BAT: true,
+      CHB: true,
+      MCD: true,
+      BAG: false,
+    });
+    setCameraComponentDraft(defaultCameraComponentDraft());
+    setCameraComponentDetailOpen({
+      BAT: false,
+      CHB: false,
+      MCD: false,
+      BAG: false,
+    });
+    setCameraComponentFileKey((prev) => ({
+      BAT: prev.BAT + 1,
+      CHB: prev.CHB + 1,
+      MCD: prev.MCD + 1,
+      BAG: prev.BAG + 1,
+    }));
+  }, [assetForm.category, assetForm.type]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -6196,6 +6547,24 @@ export default function App() {
       { type: "WBC", label: t.includeWebcam },
     ],
     [t.includeMonitor, t.includeKeyboard, t.includeMouse, t.includeUsbWifi, t.includeWebcam]
+  );
+  const laptopAccessoryMeta = useMemo<Array<{ type: LaptopAccessoryType; label: string }>>(
+    () => [
+      { type: "ADP", label: t.includeAdapter },
+      { type: "MSE", label: t.includeMouse },
+      { type: "KBD", label: t.includeKeyboard },
+      { type: "MON", label: t.includeExtraMonitor },
+    ],
+    [t.includeAdapter, t.includeMouse, t.includeKeyboard, t.includeExtraMonitor]
+  );
+  const cameraComponentMeta = useMemo<Array<{ type: CameraComponentType; label: string }>>(
+    () => [
+      { type: "BAT", label: t.includeBattery },
+      { type: "CHB", label: t.includeBatteryCharger },
+      { type: "MCD", label: t.includeMemoryCard },
+      { type: "BAG", label: t.includeCameraBag },
+    ],
+    [t.includeBattery, t.includeBatteryCharger, t.includeMemoryCard, t.includeCameraBag]
   );
 
   useEffect(() => {
@@ -6698,8 +7067,20 @@ export default function App() {
   async function createAsset() {
     if (!requireAdminAction()) return;
     const isDesktopAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DESKTOP_PARENT_TYPE;
+    const isLaptopAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === LAPTOP_TYPE;
+    const isDigitalCameraAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DIGITAL_CAMERA_TYPE;
     const shouldLinkToParent = !isDesktopAsset && (isLinkableForCreate && assetForm.useExistingSet);
     const createPack = isDesktopAsset && assetForm.createSetPack;
+    const createLaptopAccessories = isLaptopAsset
+      ? (Object.entries(laptopAccessoryEnabled) as Array<[LaptopAccessoryType, boolean]>)
+          .filter(([, enabled]) => enabled)
+          .map(([type]) => ({ type, draft: laptopAccessoryDraft[type] }))
+      : [];
+    const createCameraComponents = isDigitalCameraAsset
+      ? (Object.entries(cameraComponentEnabled) as Array<[CameraComponentType, boolean]>)
+          .filter(([, enabled]) => enabled)
+          .map(([type]) => ({ type, draft: cameraComponentDraft[type] }))
+      : [];
     const packItems = (Object.entries(setPackDraft) as Array<[SetPackChildType, SetPackChildDraft]>)
       .filter(([, draft]) => draft.enabled);
     const createSetCode = isDesktopAsset
@@ -6770,6 +7151,52 @@ export default function App() {
         localPackSerials.set(key, typeCode);
       }
     }
+    if (createLaptopAccessories.length) {
+      const localAccessorySerials = new Map<string, string>();
+      for (const { type, draft } of createLaptopAccessories) {
+        const serial = String(draft.serialNumber || "").trim();
+        if (!serial) continue;
+        const key = normalizeAssetSerialKey(serial);
+        if (!key) continue;
+        const duplicateExisting = findDuplicateAssetSerial(assets, serial);
+        if (duplicateExisting) {
+          setError(`Serial number already exists: ${duplicateExisting.assetId}`);
+          return;
+        }
+        if (mainSerial && normalizeAssetSerialKey(mainSerial) === key) {
+          setError(`Duplicate serial in laptop accessory (${type}): ${serial}`);
+          return;
+        }
+        if (localAccessorySerials.has(key)) {
+          setError(`Duplicate serial in laptop accessories: ${serial}`);
+          return;
+        }
+        localAccessorySerials.set(key, type);
+      }
+    }
+    if (createCameraComponents.length) {
+      const localCameraComponentSerials = new Map<string, string>();
+      for (const { type, draft } of createCameraComponents) {
+        const serial = String(draft.serialNumber || "").trim();
+        if (!serial) continue;
+        const key = normalizeAssetSerialKey(serial);
+        if (!key) continue;
+        const duplicateExisting = findDuplicateAssetSerial(assets, serial);
+        if (duplicateExisting) {
+          setError(`Serial number already exists: ${duplicateExisting.assetId}`);
+          return;
+        }
+        if (mainSerial && normalizeAssetSerialKey(mainSerial) === key) {
+          setError(`Duplicate serial in camera component (${type}): ${serial}`);
+          return;
+        }
+        if (localCameraComponentSerials.has(key)) {
+          setError(`Duplicate serial in camera components: ${serial}`);
+          return;
+        }
+        localCameraComponentSerials.set(key, type);
+      }
+    }
 
     setBusy(true);
     setError("");
@@ -6816,6 +7243,68 @@ export default function App() {
               scheduleNote: "",
               photo: packPhotos[0] || "",
               photos: packPhotos,
+              status: draft.status || assetForm.status,
+            }),
+          });
+        }
+      }
+      if (createLaptopAccessories.length && created.asset?.assetId) {
+        for (const { type, draft } of createLaptopAccessories) {
+          const accessoryPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: "IT",
+              type,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created laptop accessory for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: accessoryPhotos[0] || "",
+              photos: accessoryPhotos,
+              status: draft.status || assetForm.status,
+            }),
+          });
+        }
+      }
+      if (createCameraComponents.length && created.asset?.assetId) {
+        for (const { type, draft } of createCameraComponents) {
+          const componentPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: "IT",
+              type,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created camera component for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: componentPhotos[0] || "",
+              photos: componentPhotos,
               status: draft.status || assetForm.status,
             }),
           });
@@ -6870,6 +7359,44 @@ export default function App() {
         MSE: prev.MSE + 1,
         UWF: prev.UWF + 1,
         WBC: prev.WBC + 1,
+      }));
+      setLaptopAccessoryEnabled({
+        ADP: true,
+        MSE: false,
+        KBD: false,
+        MON: false,
+      });
+      setLaptopAccessoryDraft(defaultLaptopAccessoryDraft());
+      setLaptopAccessoryDetailOpen({
+        ADP: false,
+        MSE: false,
+        KBD: false,
+        MON: false,
+      });
+      setLaptopAccessoryFileKey((prev) => ({
+        ADP: prev.ADP + 1,
+        MSE: prev.MSE + 1,
+        KBD: prev.KBD + 1,
+        MON: prev.MON + 1,
+      }));
+      setCameraComponentEnabled({
+        BAT: true,
+        CHB: true,
+        MCD: true,
+        BAG: false,
+      });
+      setCameraComponentDraft(defaultCameraComponentDraft());
+      setCameraComponentDetailOpen({
+        BAT: false,
+        CHB: false,
+        MCD: false,
+        BAG: false,
+      });
+      setCameraComponentFileKey((prev) => ({
+        BAT: prev.BAT + 1,
+        CHB: prev.CHB + 1,
+        MCD: prev.MCD + 1,
+        BAG: prev.BAG + 1,
       }));
       setModelTemplateNote("");
       setAssetFileKey((k) => k + 1);
@@ -7013,6 +7540,114 @@ export default function App() {
             nextLocal = [child, ...nextLocal];
           }
         }
+        if (createLaptopAccessories.length) {
+          for (const { type, draft } of createLaptopAccessories) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", type);
+            const accessoryPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: "IT",
+              type,
+              pcType: "",
+              seq: childSeq,
+              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${type}-${pad4(childSeq)}`,
+              name: assetItemName("IT", type),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created laptop accessory for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: draft.status || assetForm.status,
+                  reason: "Asset created as laptop accessory",
+                },
+              ],
+              photo: accessoryPhotos[0] || "",
+              photos: accessoryPhotos,
+              status: draft.status || assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
+        if (createCameraComponents.length) {
+          for (const { type, draft } of createCameraComponents) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", type);
+            const componentPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: "IT",
+              type,
+              pcType: "",
+              seq: childSeq,
+              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${type}-${pad4(childSeq)}`,
+              name: assetItemName("IT", type),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created camera component for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: draft.status || assetForm.status,
+                  reason: "Asset created as camera component",
+                },
+              ],
+              photo: componentPhotos[0] || "",
+              photos: componentPhotos,
+              status: draft.status || assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
         writeAssetFallback(nextLocal);
         setAssets(
           effectiveAssetCampusFilter === "ALL"
@@ -7068,6 +7703,44 @@ export default function App() {
           MSE: prev.MSE + 1,
           UWF: prev.UWF + 1,
           WBC: prev.WBC + 1,
+        }));
+        setLaptopAccessoryEnabled({
+          ADP: true,
+          MSE: false,
+          KBD: false,
+          MON: false,
+        });
+        setLaptopAccessoryDraft(defaultLaptopAccessoryDraft());
+        setLaptopAccessoryDetailOpen({
+          ADP: false,
+          MSE: false,
+          KBD: false,
+          MON: false,
+        });
+        setLaptopAccessoryFileKey((prev) => ({
+          ADP: prev.ADP + 1,
+          MSE: prev.MSE + 1,
+          KBD: prev.KBD + 1,
+          MON: prev.MON + 1,
+        }));
+        setCameraComponentEnabled({
+          BAT: true,
+          CHB: true,
+          MCD: true,
+          BAG: false,
+        });
+        setCameraComponentDraft(defaultCameraComponentDraft());
+        setCameraComponentDetailOpen({
+          BAT: false,
+          CHB: false,
+          MCD: false,
+          BAG: false,
+        });
+        setCameraComponentFileKey((prev) => ({
+          BAT: prev.BAT + 1,
+          CHB: prev.CHB + 1,
+          MCD: prev.MCD + 1,
+          BAG: prev.BAG + 1,
         }));
         setModelTemplateNote("");
         setAssetFileKey((k) => k + 1);
@@ -9591,7 +10264,7 @@ export default function App() {
         : "",
       setCode: asset.setCode || "",
       parentAssetId: asset.parentAssetId || "",
-      useExistingSet: canLinkToParentAsset(asset.type) && !!asset.parentAssetId,
+      useExistingSet: canLinkToParentAsset(asset.category, asset.type) && !!asset.parentAssetId,
       componentRole: asset.componentRole || "",
       componentRequired: Boolean(asset.componentRequired),
       assignedTo: asset.assignedTo || "",
@@ -9776,7 +10449,7 @@ export default function App() {
     const editingIsDesktop =
       !!editingAsset && editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     const editingIsLinkable =
-      !!editingAsset && canLinkToParentAsset(editingAsset.type);
+      !!editingAsset && canLinkToParentAsset(editingAsset.category, editingAsset.type);
     const editingShouldLinkToParent =
       !!editingAsset && !editingIsDesktop && (editingIsLinkable && assetEditForm.useExistingSet);
     const needsUser =
@@ -11169,6 +11842,66 @@ export default function App() {
       e.target.value = "";
     }
   }
+  async function onLaptopAccessoryPhotoFile(type: LaptopAccessoryType, e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setLaptopAccessoryDraft((prev) => {
+        const merged = normalizeAssetPhotos({
+          photo: prev[type].photo,
+          photos: [...(prev[type].photos || []), ...optimized],
+        }).slice(0, MAX_SET_PACK_PHOTOS);
+        return {
+          ...prev,
+          [type]: {
+            ...prev[type],
+            photo: merged[0] || "",
+            photos: merged,
+          },
+        };
+      });
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+  async function onCameraComponentPhotoFile(type: CameraComponentType, e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setCameraComponentDraft((prev) => {
+        const merged = normalizeAssetPhotos({
+          photo: prev[type].photo,
+          photos: [...(prev[type].photos || []), ...optimized],
+        }).slice(0, MAX_SET_PACK_PHOTOS);
+        return {
+          ...prev,
+          [type]: {
+            ...prev[type],
+            photo: merged[0] || "",
+            photos: merged,
+          },
+        };
+      });
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
 
   function openQuickRecordModal(asset: Asset) {
     setMaintenanceRecordForm({
@@ -11415,7 +12148,18 @@ export default function App() {
     [assets, editingAssetId]
   );
   const editingIsLinkableAsset = useMemo(
-    () => (editingAsset ? canLinkToParentAsset(editingAsset.type) : false),
+    () => (editingAsset ? canLinkToParentAsset(editingAsset.category, editingAsset.type) : false),
+    [editingAsset]
+  );
+  const editingIsMouseKeyboardType = useMemo(
+    () => {
+      const type = String(editingAsset?.type || "").trim().toUpperCase();
+      return type === "MSE" || type === "KBD";
+    },
+    [editingAsset]
+  );
+  const editingIsSafetyAsset = useMemo(
+    () => String(editingAsset?.category || "").trim().toUpperCase() === "SAFETY",
     [editingAsset]
   );
   const editingSetPackChildren = useMemo<Partial<Record<SetPackChildType, Asset>>>(() => {
@@ -16073,7 +16817,7 @@ export default function App() {
                       readOnly
                     />
                   </label>
-                  <label className="field field-wide">
+                  <label className="field">
                     <span>{t.location}</span>
                     <select className="input" value={assetForm.location} onChange={(e) => setAssetForm((f) => ({ ...f, location: e.target.value }))}>
                       {campusLocations.length ? null : <option value="">{t.selectLocation}</option>}
@@ -16082,7 +16826,7 @@ export default function App() {
                       ))}
                     </select>
                   </label>
-                  <label className="field field-wide">
+                  <label className="field">
                     <span>Item Template</span>
                     <select
                       className="input"
@@ -16465,9 +17209,667 @@ export default function App() {
                           </div>
                         ) : null}
                     </>
-                  ) : isLinkableForCreate ? (
+                  ) : isLaptopAssetForCreate ? (
                     <>
                       <label className="field field-wide">
+                        <span>{t.laptopAccessories}</span>
+                        <div className="setpack-toggle-row">
+                          <span className="tiny">{t.laptopAccessoryHint}</span>
+                        </div>
+                        <div className="setpack-include-grid">
+                          {laptopAccessoryMeta.map((item) => (
+                            <label key={`laptop-accessory-${item.type}`} className="tab setpack-include-item">
+                              <input
+                                type="checkbox"
+                                checked={laptopAccessoryEnabled[item.type]}
+                                onChange={(e) =>
+                                  setLaptopAccessoryEnabled((prev) => ({
+                                    ...prev,
+                                    [item.type]: e.target.checked,
+                                  }))
+                                }
+                                style={{ marginRight: 8 }}
+                              />
+                              {item.label}
+                            </label>
+                          ))}
+                        </div>
+                      </label>
+                      <div className="field field-wide">
+                        <div className="setpack-card-grid">
+                          {laptopAccessoryMeta.map((item) => (
+                            laptopAccessoryEnabled[item.type] ? (
+                              <div
+                                key={`laptop-accessory-details-${item.type}`}
+                                className={`setpack-item-card${laptopAccessoryDetailOpen[item.type] ? " setpack-item-card-open" : ""}`}
+                              >
+                                <div className="setpack-item-head">
+                                  <div>
+                                    <strong>{item.label}</strong>
+                                    <div className="tiny">
+                                      {t.assetId}: {laptopAccessorySuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="tab setpack-detail-btn"
+                                    onClick={() =>
+                                      setLaptopAccessoryDetailOpen((prev) => ({
+                                        ...prev,
+                                        [item.type]: !prev[item.type],
+                                      }))
+                                    }
+                                  >
+                                    {laptopAccessoryDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                  </button>
+                                </div>
+                                {laptopAccessoryDetailOpen[item.type] ? (
+                                  <div className="form-grid">
+                                    <label className="field">
+                                      <span>{t.status}</span>
+                                      <select
+                                        className="input"
+                                        value={laptopAccessoryDraft[item.type].status}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              status: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      >
+                                        {ASSET_STATUS_OPTIONS.map((status) => (
+                                          <option key={`laptop-accessory-${item.type}-status-${status.value}`} value={status.value}>
+                                            {lang === "km" ? status.km : status.en}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.brand}</span>
+                                      <input
+                                        className="input"
+                                        value={laptopAccessoryDraft[item.type].brand}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              brand: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.model}</span>
+                                      <input
+                                        className="input"
+                                        list="asset-model-options"
+                                        value={laptopAccessoryDraft[item.type].model}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              model: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.serialNumber}</span>
+                                      <input
+                                        className="input"
+                                        value={laptopAccessoryDraft[item.type].serialNumber}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              serialNumber: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.purchaseDate}</span>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        value={laptopAccessoryDraft[item.type].purchaseDate}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              purchaseDate: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.warrantyUntil}</span>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        value={laptopAccessoryDraft[item.type].warrantyUntil}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              warrantyUntil: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.vendor}</span>
+                                      <input
+                                        className="input"
+                                        value={laptopAccessoryDraft[item.type].vendor}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              vendor: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field field-wide">
+                                      <span>{t.specs}</span>
+                                      <textarea
+                                        className="textarea"
+                                        value={laptopAccessoryDraft[item.type].specs}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              specs: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field field-wide">
+                                      <span>{t.notes}</span>
+                                      <textarea
+                                        className="textarea"
+                                        value={laptopAccessoryDraft[item.type].notes}
+                                        onChange={(e) =>
+                                          setLaptopAccessoryDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              notes: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <div className="field field-wide">
+                                      <span>{t.photo}</span>
+                                      <input
+                                        key={laptopAccessoryFileKey[item.type]}
+                                        ref={(el) => {
+                                          laptopAccessoryPhotoInputRefs.current[item.type] = el;
+                                        }}
+                                        className="file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={(e) => onLaptopAccessoryPhotoFile(item.type, e)}
+                                      />
+                                      <div className="photo-preview-wrap">
+                                        {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length ? (
+                                          <img
+                                            src={normalizeAssetPhotos(laptopAccessoryDraft[item.type])[0]}
+                                            alt={`${item.label} preview`}
+                                            className="photo-preview"
+                                          />
+                                        ) : (
+                                          <div className="photo-placeholder">{t.noPhoto}</div>
+                                        )}
+                                        <div className="photo-preview-actions">
+                                          <button
+                                            className="btn-icon-edit"
+                                            type="button"
+                                            title="Change Photo"
+                                            aria-label="Change Photo"
+                                            onClick={() => laptopAccessoryPhotoInputRefs.current[item.type]?.click()}
+                                          >
+                                            ✎
+                                          </button>
+                                          <button
+                                            className="btn-danger"
+                                            type="button"
+                                            title="Delete Photo"
+                                            aria-label="Delete Photo"
+                                            disabled={!normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length}
+                                            onClick={() => {
+                                              setLaptopAccessoryDraft((prev) => ({
+                                                ...prev,
+                                                [item.type]: {
+                                                  ...prev[item.type],
+                                                  photo: "",
+                                                  photos: [],
+                                                },
+                                              }));
+                                              setLaptopAccessoryFileKey((prev) => ({
+                                                ...prev,
+                                                [item.type]: prev[item.type] + 1,
+                                              }));
+                                            }}
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="asset-photo-gallery">
+                                        {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                          <div key={`laptop-accessory-photo-${item.type}-${index}`} className="asset-photo-chip">
+                                            <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                            <div className="asset-photo-chip-actions">
+                                              <button
+                                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                                type="button"
+                                                onClick={() =>
+                                                  setLaptopAccessoryDraft((prev) => {
+                                                    const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
+                                                    const hit = next.indexOf(url);
+                                                    if (hit <= 0) return prev;
+                                                    next.splice(hit, 1);
+                                                    next.unshift(url);
+                                                    return {
+                                                      ...prev,
+                                                      [item.type]: {
+                                                        ...prev[item.type],
+                                                        photo: next[0] || "",
+                                                        photos: next,
+                                                      },
+                                                    };
+                                                  })
+                                                }
+                                              >
+                                                {index === 0 ? "Main" : "Set Main"}
+                                              </button>
+                                              <button
+                                                className="btn-danger"
+                                                type="button"
+                                                onClick={() =>
+                                                  setLaptopAccessoryDraft((prev) => {
+                                                    const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
+                                                    return {
+                                                      ...prev,
+                                                      [item.type]: {
+                                                        ...prev[item.type],
+                                                        photo: next[0] || "",
+                                                        photos: next,
+                                                      },
+                                                    };
+                                                  })
+                                                }
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div key={`laptop-accessory-slot-${item.type}`} className="setpack-item-slot" aria-hidden={true} />
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : isDigitalCameraAssetForCreate ? (
+                    <>
+                      <label className="field">
+                        <span>{t.cameraComponents}</span>
+                        <div className="setpack-toggle-row">
+                          <span className="tiny">{t.cameraComponentHint}</span>
+                        </div>
+                        <div className="setpack-include-grid">
+                          {cameraComponentMeta.map((item) => (
+                            <label key={`camera-component-${item.type}`} className="tab setpack-include-item">
+                              <input
+                                type="checkbox"
+                                checked={cameraComponentEnabled[item.type]}
+                                onChange={(e) =>
+                                  setCameraComponentEnabled((prev) => ({
+                                    ...prev,
+                                    [item.type]: e.target.checked,
+                                  }))
+                                }
+                                style={{ marginRight: 8 }}
+                              />
+                              {item.label}
+                            </label>
+                          ))}
+                        </div>
+                      </label>
+                      <div className="field field-wide">
+                        <div className="setpack-card-grid">
+                          {cameraComponentMeta.map((item) => (
+                            cameraComponentEnabled[item.type] ? (
+                              <div
+                                key={`camera-component-details-${item.type}`}
+                                className={`setpack-item-card${cameraComponentDetailOpen[item.type] ? " setpack-item-card-open" : ""}`}
+                              >
+                                <div className="setpack-item-head">
+                                  <div>
+                                    <strong>{item.label}</strong>
+                                    <div className="tiny">
+                                      {t.assetId}: {cameraComponentSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="tab setpack-detail-btn"
+                                    onClick={() =>
+                                      setCameraComponentDetailOpen((prev) => ({
+                                        ...prev,
+                                        [item.type]: !prev[item.type],
+                                      }))
+                                    }
+                                  >
+                                    {cameraComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                  </button>
+                                </div>
+                                {cameraComponentDetailOpen[item.type] ? (
+                                  <div className="form-grid">
+                                    <label className="field">
+                                      <span>{t.status}</span>
+                                      <select
+                                        className="input"
+                                        value={cameraComponentDraft[item.type].status}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              status: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      >
+                                        {ASSET_STATUS_OPTIONS.map((status) => (
+                                          <option key={`camera-component-${item.type}-status-${status.value}`} value={status.value}>
+                                            {lang === "km" ? status.km : status.en}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.brand}</span>
+                                      <input
+                                        className="input"
+                                        value={cameraComponentDraft[item.type].brand}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              brand: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.model}</span>
+                                      <input
+                                        className="input"
+                                        list="asset-model-options"
+                                        value={cameraComponentDraft[item.type].model}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              model: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.serialNumber}</span>
+                                      <input
+                                        className="input"
+                                        value={cameraComponentDraft[item.type].serialNumber}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              serialNumber: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.purchaseDate}</span>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        value={cameraComponentDraft[item.type].purchaseDate}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              purchaseDate: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.warrantyUntil}</span>
+                                      <input
+                                        type="date"
+                                        className="input"
+                                        value={cameraComponentDraft[item.type].warrantyUntil}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              warrantyUntil: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field">
+                                      <span>{t.vendor}</span>
+                                      <input
+                                        className="input"
+                                        value={cameraComponentDraft[item.type].vendor}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              vendor: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field field-wide">
+                                      <span>{t.specs}</span>
+                                      <textarea
+                                        className="textarea"
+                                        value={cameraComponentDraft[item.type].specs}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              specs: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label className="field field-wide">
+                                      <span>{t.notes}</span>
+                                      <textarea
+                                        className="textarea"
+                                        value={cameraComponentDraft[item.type].notes}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              notes: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <div className="field field-wide">
+                                      <span>{t.photo}</span>
+                                      <input
+                                        key={cameraComponentFileKey[item.type]}
+                                        ref={(el) => {
+                                          cameraComponentPhotoInputRefs.current[item.type] = el;
+                                        }}
+                                        className="file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={(e) => onCameraComponentPhotoFile(item.type, e)}
+                                      />
+                                      <div className="photo-preview-wrap">
+                                        {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
+                                          <img
+                                            src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
+                                            alt={`${item.label} preview`}
+                                            className="photo-preview"
+                                          />
+                                        ) : (
+                                          <div className="photo-placeholder">{t.noPhoto}</div>
+                                        )}
+                                        <div className="photo-preview-actions">
+                                          <button
+                                            className="btn-icon-edit"
+                                            type="button"
+                                            title="Change Photo"
+                                            aria-label="Change Photo"
+                                            onClick={() => cameraComponentPhotoInputRefs.current[item.type]?.click()}
+                                          >
+                                            ✎
+                                          </button>
+                                          <button
+                                            className="btn-danger"
+                                            type="button"
+                                            title="Delete Photo"
+                                            aria-label="Delete Photo"
+                                            disabled={!normalizeAssetPhotos(cameraComponentDraft[item.type]).length}
+                                            onClick={() => {
+                                              setCameraComponentDraft((prev) => ({
+                                                ...prev,
+                                                [item.type]: {
+                                                  ...prev[item.type],
+                                                  photo: "",
+                                                  photos: [],
+                                                },
+                                              }));
+                                              setCameraComponentFileKey((prev) => ({
+                                                ...prev,
+                                                [item.type]: prev[item.type] + 1,
+                                              }));
+                                            }}
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="asset-photo-gallery">
+                                        {normalizeAssetPhotos(cameraComponentDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                          <div key={`camera-component-photo-${item.type}-${index}`} className="asset-photo-chip">
+                                            <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                            <div className="asset-photo-chip-actions">
+                                              <button
+                                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                                type="button"
+                                                onClick={() =>
+                                                  setCameraComponentDraft((prev) => {
+                                                    const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
+                                                    const hit = next.indexOf(url);
+                                                    if (hit <= 0) return prev;
+                                                    next.splice(hit, 1);
+                                                    next.unshift(url);
+                                                    return {
+                                                      ...prev,
+                                                      [item.type]: {
+                                                        ...prev[item.type],
+                                                        photo: next[0] || "",
+                                                        photos: next,
+                                                      },
+                                                    };
+                                                  })
+                                                }
+                                              >
+                                                {index === 0 ? "Main" : "Set Main"}
+                                              </button>
+                                              <button
+                                                className="btn-danger"
+                                                type="button"
+                                                onClick={() =>
+                                                  setCameraComponentDraft((prev) => {
+                                                    const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
+                                                    return {
+                                                      ...prev,
+                                                      [item.type]: {
+                                                        ...prev[item.type],
+                                                        photo: next[0] || "",
+                                                        photos: next,
+                                                      },
+                                                    };
+                                                  })
+                                                }
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div key={`camera-component-slot-${item.type}`} className="setpack-item-slot" aria-hidden={true} />
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (!isSafetyCategoryForCreate && isLinkableForCreate) ? (
+                    <>
+                      <label className="field">
                         <span>{t.linkToParentAsset}</span>
                         <div className="setpack-toggle-row">
                           <span className="tiny">{t.linkToParentAsset}</span>
@@ -16491,39 +17893,51 @@ export default function App() {
                         </div>
                       </label>
                       {assetForm.useExistingSet ? (
-                        <label className="field field-wide">
+                        <label className="field">
                           <span>{t.selectParentAsset}</span>
-                          <select
-                            className="input"
+                          <ParentAssetPicker
                             value={assetForm.parentAssetId}
-                            onChange={(e) => {
-                              const parent = parentAssetsForCreate.find((a) => a.assetId === e.target.value);
+                            assets={parentAssetsForCreate}
+                            placeholder="-"
+                            getLabel={(asset) =>
+                              `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.location || "-"})`
+                            }
+                            onChange={(assetId) => {
+                              const parent = parentAssetsForCreate.find((a) => a.assetId === assetId);
                               setAssetForm((f) => ({
                                 ...f,
-                                parentAssetId: e.target.value,
+                                parentAssetId: assetId,
                                 setCode: parent?.setCode || "",
                               }));
                             }}
-                          >
-                            <option value="">-</option>
-                            {parentAssetsForCreate.map((asset) => (
-                              <option key={`parent-create-${asset.id}`} value={asset.assetId}>
-                                {asset.assetId} - {assetItemName(asset.category, asset.type, asset.pcType || "")} ({asset.location || "-"})
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </label>
                       ) : null}
                       {assetForm.useExistingSet ? (
                         <>
                           <label className="field">
                             <span>{t.componentRole}</span>
-                            <input
-                              className="input"
-                              value={assetForm.componentRole}
-                              onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
-                              placeholder="Adapter / Remote / Front Panel"
-                            />
+                            {isMouseKeyboardTypeForCreate ? (
+                              <select
+                                className="input"
+                                value={assetForm.componentRole}
+                                onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
+                              >
+                                <option value="">Select connection/set type</option>
+                                {MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.map((option) => (
+                                  <option key={`mk-component-role-create-${option}`} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                className="input"
+                                value={assetForm.componentRole}
+                                onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                placeholder="Adapter / Remote / Front Panel"
+                              />
+                            )}
                           </label>
                           <label className="field">
                             <span>{t.componentRequired}</span>
@@ -17805,7 +19219,7 @@ export default function App() {
                         ))}
                       </select>
                     </label>
-                    <label className="field field-wide">
+                    <label className="field">
                       <span>{t.location}</span>
                       <input
                         className="input"
@@ -17823,9 +19237,9 @@ export default function App() {
                           placeholder="SET-C2.2-001"
                         />
                       </label>
-                    ) : editingIsLinkableAsset ? (
+                    ) : (!editingIsSafetyAsset && editingIsLinkableAsset) ? (
                       <>
-                        <label className="field field-wide">
+                        <label className="field">
                           <span>{t.linkToParentAsset}</span>
                           <div className="setpack-toggle-row">
                             <span className="tiny">{t.linkToParentAsset}</span>
@@ -17849,39 +19263,57 @@ export default function App() {
                           </div>
                         </label>
                         {assetEditForm.useExistingSet ? (
-                          <label className="field field-wide">
+                          <label className="field">
                             <span>{t.selectParentAsset}</span>
-                            <select
-                              className="input"
+                            <ParentAssetPicker
                               value={assetEditForm.parentAssetId}
-                              onChange={(e) => {
-                                const parent = parentAssetsForEdit.find((a) => a.assetId === e.target.value);
+                              assets={parentAssetsForEdit}
+                              placeholder="-"
+                              getLabel={(asset) =>
+                                `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.location || "-"})`
+                              }
+                              onChange={(assetId) => {
+                                const parent = parentAssetsForEdit.find((a) => a.assetId === assetId);
                                 setAssetEditForm((f) => ({
                                   ...f,
-                                  parentAssetId: e.target.value,
+                                  parentAssetId: assetId,
                                   setCode: parent?.setCode || "",
                                 }));
                               }}
-                            >
-                              <option value="">-</option>
-                              {parentAssetsForEdit.map((asset) => (
-                                <option key={`parent-edit-${asset.id}`} value={asset.assetId}>
-                                  {asset.assetId} - {assetItemName(asset.category, asset.type, asset.pcType || "")} ({asset.location || "-"})
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </label>
                         ) : null}
                         {assetEditForm.useExistingSet ? (
                           <>
                             <label className="field">
                               <span>{t.componentRole}</span>
-                              <input
-                                className="input"
-                                value={assetEditForm.componentRole}
-                                onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
-                                placeholder="Adapter / Remote / Front Panel"
-                              />
+                              {editingIsMouseKeyboardType ? (
+                                <select
+                                  className="input"
+                                  value={assetEditForm.componentRole}
+                                  onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                >
+                                  <option value="">Select connection/set type</option>
+                                  {assetEditForm.componentRole &&
+                                  !MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.includes(
+                                    assetEditForm.componentRole as (typeof MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS)[number]
+                                  ) ? (
+                                    <option value={assetEditForm.componentRole}>{assetEditForm.componentRole}</option>
+                                  ) : null}
+                                  {MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.map((option) => (
+                                    <option key={`mk-component-role-edit-${option}`} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  className="input"
+                                  value={assetEditForm.componentRole}
+                                  onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                  placeholder="Adapter / Remote / Front Panel"
+                                />
+                              )}
                             </label>
                             <label className="field">
                               <span>{t.componentRequired}</span>

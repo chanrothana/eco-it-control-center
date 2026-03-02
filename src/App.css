@@ -195,18 +195,19 @@ body {
 
 .top-controls-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(180px, auto));
+  grid-template-columns: repeat(4, minmax(156px, auto));
   gap: 8px;
   align-items: end;
-  margin-top: 36px;
+  margin-top: 0;
+  order: 1;
 }
 
 .top-right {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: flex-end;
-  gap: 16px;
+  gap: 10px;
   min-height: 100%;
 }
 
@@ -217,6 +218,46 @@ body {
   object-fit: contain;
   filter: drop-shadow(0 4px 12px rgba(40, 28, 12, 0.12));
   display: block;
+  order: 2;
+}
+
+@media (min-width: 769px) {
+  .app-shell {
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+
+  .app-card.app-card-layout {
+    padding-top: 8px;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 14;
+    padding: 12px;
+  }
+
+  .top-controls-grid {
+    grid-template-columns: repeat(4, minmax(148px, auto));
+    gap: 6px;
+  }
+
+  .top-controls-grid .field > span {
+    font-size: 12px;
+  }
+
+  .top-controls-grid .input,
+  .top-controls-grid .detail-value {
+    min-height: 40px;
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+
+  .top-controls-grid .tab {
+    height: 40px;
+    font-size: 14px;
+    padding: 0 13px;
+  }
 }
 
 .workspace-shell {
@@ -2564,6 +2605,40 @@ label.backup-action-btn {
   cursor: not-allowed;
 }
 
+@media (min-width: 1101px) {
+  .inventory-quickout-modal {
+    width: min(980px, calc(100vw - 44px));
+    max-width: 980px;
+    max-height: min(96vh, 980px);
+    padding: 14px 16px;
+  }
+
+  .inventory-quickout-modal h2 {
+    font-size: clamp(32px, 2.3vw, 46px);
+  }
+
+  .inventory-quickout-modal .panel-row {
+    margin-bottom: 8px;
+  }
+
+  .inventory-quickout-hero-icon-wrap {
+    margin: 0 0 6px;
+  }
+
+  .inventory-quickout-modal .form-grid {
+    margin-top: 8px !important;
+    gap: 8px 12px;
+  }
+
+  .inventory-quickout-modal .field > span {
+    margin-bottom: 4px;
+  }
+
+  .inventory-quickout-photo-preview {
+    max-height: 160px;
+  }
+}
+
 .quickout-eco-events {
   margin-top: 10px;
   display: grid;
@@ -3557,6 +3632,26 @@ label.backup-action-btn {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.parent-asset-picker-selected-content,
+.parent-asset-picker-option-content {
+  display: grid;
+  min-width: 0;
+}
+
+.parent-asset-picker-option-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.parent-asset-picker-option-meta {
+  font-size: 12px;
+  color: #6c7691;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .asset-picker-placeholder {
@@ -5471,7 +5566,7 @@ tr.row-maint-maintenance:hover td {
 
   .top-controls-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 20px;
+    margin-top: 0;
   }
 
   .workspace-shell {
