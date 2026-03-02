@@ -764,11 +764,18 @@ function normalizeInventoryApprovalRoutingMap(input) {
   for (const [rawRequester, rawApprovers] of Object.entries(input)) {
     const requester = toText(rawRequester).toLowerCase();
     if (!requester) continue;
-    const approvers = Array.isArray(rawApprovers)
-      ? rawApprovers
-      : rawApprovers && typeof rawApprovers === "string"
-        ? [rawApprovers]
-        : [];
+    const campus =
+      rawApprovers && typeof rawApprovers === "object" && !Array.isArray(rawApprovers)
+        ? normalizeCampusInput(toText(rawApprovers.campus))
+        : "";
+    const approvers =
+      rawApprovers && typeof rawApprovers === "object" && !Array.isArray(rawApprovers)
+        ? (Array.isArray(rawApprovers.approvers) ? rawApprovers.approvers : [])
+        : Array.isArray(rawApprovers)
+          ? rawApprovers
+          : rawApprovers && typeof rawApprovers === "string"
+            ? [rawApprovers]
+            : [];
     const normalizedApprovers = Array.from(
       new Set(
         approvers
@@ -776,7 +783,10 @@ function normalizeInventoryApprovalRoutingMap(input) {
           .filter(Boolean)
       )
     );
-    out[requester] = normalizedApprovers;
+    out[requester] = {
+      campus,
+      approvers: normalizedApprovers,
+    };
   }
   return out;
 }
@@ -1239,21 +1249,48 @@ function notificationVisibleToUser(notification, user) {
 
 function resolveInventoryApprovalApprovers(db, requesterUsername, campusName) {
   const requester = toText(requesterUsername).toLowerCase();
-  const campus = toText(campusName);
+  const requestCampus = toText(campusName);
   const settings = db && db.settings && typeof db.settings === "object" ? db.settings : {};
   const routing = normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting);
   const users = Array.isArray(db && db.users) ? db.users.map((row) => sanitizeUser(row)) : [];
+  const routeEntry = routing[requester] || { campus: "", approvers: [] };
+  const campus = toText(routeEntry.campus) || requestCampus;
   const eligibleAdmins = users.filter((row) => isAdminRole(row.role) && (!campus || userCanAccessCampus(row, campus)));
   const eligibleAdminSet = new Set(
     eligibleAdmins
       .map((row) => toText(row.username).toLowerCase())
       .filter(Boolean)
   );
-  const mappedTargets = (routing[requester] || []).filter((username) => eligibleAdminSet.has(username));
+  const mappedTargets = (Array.isArray(routeEntry.approvers) ? routeEntry.approvers : []).filter((username) => eligibleAdminSet.has(username));
   const targets = (mappedTargets.length ? mappedTargets : Array.from(eligibleAdminSet)).filter(
     (username) => username && username !== requester
   );
   return Array.from(new Set(targets));
+}
+
+function parseInventoryApprovalTxnIdFromNotificationKey(key) {
+  const match = toText(key).match(/^inventory-out-approval:(\d+)$/);
+  return match ? Number(match[1]) || 0 : 0;
+}
+
+function backfillInventoryApprovalNotificationTargets(db) {
+  if (!db || typeof db !== "object") return false;
+  db.notifications = normalizeNotificationEntries(db.notifications);
+  const { txns } = getInventoryState(db);
+  let changed = false;
+  for (const row of db.notifications) {
+    if (toText(row.kind) !== "inventory_out_approval") continue;
+    const existingTargets = Array.isArray(row.targetUsernames) ? row.targetUsernames.filter(Boolean) : [];
+    if (existingTargets.length) continue;
+    const txnId = parseInventoryApprovalTxnIdFromNotificationKey(row.key);
+    if (!txnId) continue;
+    const tx = txns.find((item) => Number(item.id) === txnId);
+    if (!tx) continue;
+    const targets = resolveInventoryApprovalApprovers(db, toText(tx.approvalRequestedUser), toText(tx.campus));
+    row.targetUsernames = targets;
+    changed = true;
+  }
+  return changed;
 }
 
 function projectNotificationForUser(notification, user) {
@@ -2728,7 +2765,8 @@ const server = http.createServer(async (req, res) => {
       const db = await readDb();
       const createdNotifications = [];
       const generated = ensureMaintenanceScheduleNotifications(db, createdNotifications);
-      if (generated) {
+      const backfilled = backfillInventoryApprovalNotificationTargets(db);
+      if (generated || backfilled) {
         await writeDb(db);
         void sendTelegramMaintenanceBatch(createdNotifications);
       }
