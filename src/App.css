@@ -2044,17 +2044,105 @@ label.backup-action-btn {
 .inventory-daily-panel {
   display: grid;
   gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.inventory-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.inventory-shell > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inventory-shell .panel,
+.inventory-shell .panel-filters,
+.inventory-shell .tabs,
+.inventory-shell .row-actions,
+.inventory-shell .asset-actions,
+.inventory-shell .inventory-supply-compare-panel,
+.inventory-shell .inventory-daily-panel,
+.inventory-shell .inventory-usage-panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inventory-shell .panel-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.inventory-shell .panel-row > * {
+  min-width: 0;
+}
+
+.inventory-shell h2,
+.inventory-shell .section-title,
+.inventory-shell .tiny {
+  overflow-wrap: anywhere;
+}
+
+.inventory-shell .table-wrap,
+.inventory-shell .inventory-campus-row-matrix-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .inventory-daily-gallery-panel {
   display: grid;
   gap: 10px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.inventory-daily-gallery-panel .panel-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.inventory-daily-gallery-panel .panel-row .tiny {
+  margin-left: auto;
+  text-align: right;
+  white-space: normal;
 }
 
 .inventory-daily-gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 8px;
+  min-width: 0;
+}
+
+.inventory-daily-campus-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-daily-campus-group {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-daily-campus-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inventory-daily-campus-group-title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 16px;
+  color: #3b4f78;
 }
 
 .inventory-daily-gallery-card {
@@ -2067,6 +2155,7 @@ label.backup-action-btn {
   display: grid;
   gap: 6px;
   justify-items: center;
+  min-width: 0;
 }
 
 .inventory-daily-gallery-icon {
@@ -2091,6 +2180,7 @@ label.backup-action-btn {
   color: #5f7399;
   font-size: 12px;
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .inventory-quickout-modal {
@@ -2353,6 +2443,9 @@ label.backup-action-btn {
   display: grid;
   gap: 10px;
   overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .inventory-usage-chart {
@@ -2745,6 +2838,9 @@ label.backup-action-btn {
   background: #f8fbff;
   display: grid;
   gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .inventory-campus-row-matrix-wrap {
@@ -2754,10 +2850,28 @@ label.backup-action-btn {
   padding: 10px;
   display: grid;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .inventory-campus-row-matrix-scroll {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+}
+
+.inventory-daily-panel .panel-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.inventory-daily-panel .panel-row > * {
+  min-width: 0;
+}
+
+.inventory-daily-panel .section-title {
+  overflow-wrap: anywhere;
 }
 
 .inventory-campus-row-matrix {
@@ -3344,18 +3458,23 @@ table {
 }
 
 .asset-list-table {
-  min-width: 0;
+  min-width: 100%;
+  width: 100%;
   table-layout: fixed;
+}
+
+.asset-list-table.table-compact {
+  min-width: 100%;
 }
 
 .asset-list-table th:nth-child(1),
 .asset-list-table td:nth-child(1) {
-  width: 13%;
+  width: 14%;
 }
 
 .asset-list-table th:nth-child(2),
 .asset-list-table td:nth-child(2) {
-  width: 18%;
+  width: 20%;
 }
 
 .asset-list-table th:nth-child(3),
@@ -3365,27 +3484,30 @@ table {
 
 .asset-list-table th:nth-child(4),
 .asset-list-table td:nth-child(4) {
-  width: 7%;
+  width: 6%;
 }
 
 .asset-list-table th:nth-child(5),
 .asset-list-table td:nth-child(5) {
-  width: 12%;
+  width: 15%;
 }
 
 .asset-list-table th:nth-child(6),
 .asset-list-table td:nth-child(6) {
-  width: 19%;
+  width: 12%;
 }
 
 .asset-list-table th:nth-child(7),
 .asset-list-table td:nth-child(7) {
   width: 9%;
+  padding-left: 8px;
+  padding-right: 12px;
 }
 
 .asset-list-table th:nth-child(8),
 .asset-list-table td:nth-child(8) {
-  width: 13%;
+  width: 10%;
+  padding-left: 12px;
 }
 
 .asset-list-table td:nth-child(2),
@@ -3399,35 +3521,40 @@ table {
 
 .asset-list-table td:nth-child(6) {
   white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
+}
+
+.asset-list-location-text {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.2;
 }
 
 .asset-list-table td:nth-child(8) .status-select {
+  width: 100%;
   max-width: 100%;
-  min-width: 120px;
-}
-
-.asset-list-table td:nth-child(8) {
-  padding-left: 14px;
+  min-width: 0;
 }
 
 .asset-list-table .row-actions {
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 8px;
   justify-content: flex-start;
-  margin-left: -6px;
+  margin-left: -4px;
 }
 
 .asset-list-table .row-actions .btn-icon-transfer,
 .asset-list-table .row-actions .btn-icon-edit,
 .asset-list-table .row-actions .btn-danger {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
   padding: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   display: inline-grid;
   place-items: center;
   line-height: 1;

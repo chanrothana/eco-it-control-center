@@ -5257,6 +5257,49 @@ export default function App() {
     () => inventoryDailyItemOptions.filter((item) => isCleaningSupplyItem(item)),
     [inventoryDailyItemOptions]
   );
+  const inventoryDailyOutGalleryByCampus = useMemo(() => {
+    const CAMPUS_GROUP_ORDER: Record<string, number> = {
+      C1: 1,
+      C2: 2,
+      C3: 3,
+      C4: 4,
+    };
+    const CAMPUS_GROUP_LABEL: Record<string, string> = {
+      C1: "Samdach Pan Campus",
+      C2: "Chaktomuk Campus",
+      C3: "Boeung Snor Campus",
+      C4: "Veng Sreng Campus",
+    };
+    const resolveCampusGroupKey = (rawCampus: string) => {
+      const code = inventoryRecordCampusCode(rawCampus);
+      if (CAMPUS_GROUP_ORDER[code]) return code;
+      const text = String(rawCampus || "").trim().toLowerCase();
+      if (text.includes("samdach")) return "C1";
+      if (text.includes("chaktomuk")) return "C2";
+      if (text.includes("boeung") || text.includes("beung")) return "C3";
+      if (text.includes("veng sreng")) return "C4";
+      return code || rawCampus;
+    };
+    const groups = new Map<string, { campus: string; label: string; items: InventoryItem[] }>();
+    for (const item of inventoryDailyOutGalleryItems) {
+      const campus = resolveCampusGroupKey(item.campus);
+      if (!groups.has(campus)) {
+        groups.set(campus, { campus, label: CAMPUS_GROUP_LABEL[campus] || inventoryCampusLabel(campus), items: [] });
+      }
+      groups.get(campus)?.items.push(item);
+    }
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        items: group.items.slice().sort((a, b) => a.itemCode.localeCompare(b.itemCode)),
+      }))
+      .sort(
+        (a, b) =>
+          (CAMPUS_GROUP_ORDER[a.campus] || Number.MAX_SAFE_INTEGER) -
+            (CAMPUS_GROUP_ORDER[b.campus] || Number.MAX_SAFE_INTEGER) ||
+          a.label.localeCompare(b.label)
+      );
+  }, [inventoryDailyOutGalleryItems, inventoryCampusLabel]);
   const inventoryDailySelectedItem = useMemo(
     () => inventoryVisibleItems.find((item) => String(item.id) === String(inventoryDailyForm.itemId || "")) || null,
     [inventoryVisibleItems, inventoryDailyForm.itemId]
@@ -16297,7 +16340,11 @@ export default function App() {
                                 {renderAssetPhoto(asset.photo || "", asset.assetId)}
                               </td>
                               <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                              <td>{asset.location || "-"}</td>
+                              <td>
+                                <span className="asset-list-location-text" title={asset.location || "-"}>
+                                  {asset.location || "-"}
+                                </span>
+                              </td>
                               <td>
                                 {isAdmin ? (
                                   <div className="row-actions">
@@ -17722,7 +17769,7 @@ export default function App() {
         )}
 
         {tab === "inventory" && (
-          <>
+          <div className="inventory-shell">
             <section className="panel">
               <div className="panel-row">
                 <h2>{maintenanceQuickMode ? (lang === "km" ? "កំណត់ត្រាថែទាំរហ័ស" : "Maintenance Quick Record") : "Inventory Control"}</h2>
@@ -18190,35 +18237,45 @@ export default function App() {
                       <h3 className="section-title">{lang === "km" ? "ជ្រើសសម្ភារៈចេញស្តុកលឿន" : "Quick Stock-Out Gallery"}</h3>
                       <span className="tiny">{lang === "km" ? "ចុច Item ដើម្បីកត់ត្រាលឿន" : "Tap item to stock out quickly"}</span>
                     </div>
-                    <div className="inventory-daily-gallery-grid">
-                      {inventoryDailyOutGalleryItems.length ? (
-                        inventoryDailyOutGalleryItems.map((item) => {
-                          const currentStock = inventoryStockMap.get(item.id) || 0;
-                          return (
-                            <button
-                              key={`daily-out-gallery-${item.id}`}
-                              type="button"
-                              className="inventory-daily-gallery-card"
-                              onClick={() => openInventoryQuickOut(item)}
-                            >
-                              {item.photo ? (
-                                <img
-                                  src={item.photo}
-                                  alt={inventoryDisplayName(item.itemName, lang)}
-                                  className="inventory-daily-gallery-photo"
-                                />
-                              ) : (
-                                <span className="inventory-daily-gallery-icon" aria-hidden={true}>
-                                  {inventorySupplyIcon(item.itemName)}
-                                </span>
-                              )}
-                              <span className="inventory-daily-gallery-name">{inventoryDisplayName(item.itemName, lang)}</span>
-                              <span className="inventory-daily-gallery-meta">
-                                {item.itemCode} | {inventoryCampusLabel(item.campus)} | {lang === "km" ? `ស្តុក៖ ${currentStock}` : `Stock: ${currentStock}`}
-                              </span>
-                            </button>
-                          );
-                        })
+                    <div className="inventory-daily-campus-groups">
+                      {inventoryDailyOutGalleryByCampus.length ? (
+                        inventoryDailyOutGalleryByCampus.map((group) => (
+                          <section key={`daily-out-campus-${group.campus}`} className="inventory-daily-campus-group">
+                            <div className="inventory-daily-campus-group-head">
+                              <h4 className="inventory-daily-campus-group-title">{group.label}</h4>
+                              <span className="tiny">{group.items.length} items</span>
+                            </div>
+                            <div className="inventory-daily-gallery-grid">
+                              {group.items.map((item) => {
+                                const currentStock = inventoryStockMap.get(item.id) || 0;
+                                return (
+                                  <button
+                                    key={`daily-out-gallery-${item.id}`}
+                                    type="button"
+                                    className="inventory-daily-gallery-card"
+                                    onClick={() => openInventoryQuickOut(item)}
+                                  >
+                                    {item.photo ? (
+                                      <img
+                                        src={item.photo}
+                                        alt={inventoryDisplayName(item.itemName, lang)}
+                                        className="inventory-daily-gallery-photo"
+                                      />
+                                    ) : (
+                                      <span className="inventory-daily-gallery-icon" aria-hidden={true}>
+                                        {inventorySupplyIcon(item.itemName)}
+                                      </span>
+                                    )}
+                                    <span className="inventory-daily-gallery-name">{inventoryDisplayName(item.itemName, lang)}</span>
+                                    <span className="inventory-daily-gallery-meta">
+                                      {item.itemCode} | {inventoryCampusLabel(item.campus)} | {lang === "km" ? `ស្តុក៖ ${currentStock}` : `Stock: ${currentStock}`}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </section>
+                        ))
                       ) : (
                         <div className="tiny">{lang === "km" ? "មិនមានសម្ភារៈប្រើប្រាស់សម្រាប់សម្អាតទេ។" : "No cleaning supply items found."}</div>
                       )}
@@ -18879,7 +18936,7 @@ export default function App() {
                 </div>
               </section>
             )}
-          </>
+          </div>
         )}
 
         {tab === "schedule" && (
