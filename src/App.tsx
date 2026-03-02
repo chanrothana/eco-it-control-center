@@ -424,6 +424,12 @@ type MaintenanceNotification = {
   readBy?: string[];
   read?: boolean;
 };
+
+function parseInventoryApprovalNotificationTxnId(row: Pick<MaintenanceNotification, "kind" | "key">) {
+  if (String(row.kind || "") !== "inventory_out_approval") return 0;
+  const match = String(row.key || "").match(/^inventory-out-approval:(\d+)$/);
+  return match ? Number(match[1]) || 0 : 0;
+}
 const LOCATION_FALLBACK_KEY = "it_locations_fallback_v1";
 const ASSET_FALLBACK_KEY = "it_assets_fallback_v1";
 const USER_FALLBACK_KEY = "it_users_fallback_v1";
@@ -2286,6 +2292,64 @@ function inventoryDisplayName(itemName: string, lang: Lang) {
   }
   const hit = Object.entries(INVENTORY_KM_NAME_MAP).find(([en]) => key.startsWith(`${en} `) || key.includes(en));
   return hit ? hit[1] : raw;
+}
+const KHMER_DIGITS_MAP: Record<string, string> = {
+  "0": "០",
+  "1": "១",
+  "2": "២",
+  "3": "៣",
+  "4": "៤",
+  "5": "៥",
+  "6": "៦",
+  "7": "៧",
+  "8": "៨",
+  "9": "៩",
+};
+const KHMER_MONTHS = [
+  "មករា",
+  "កុម្ភៈ",
+  "មីនា",
+  "មេសា",
+  "ឧសភា",
+  "មិថុនា",
+  "កក្កដា",
+  "សីហា",
+  "កញ្ញា",
+  "តុលា",
+  "វិច្ឆិកា",
+  "ធ្នូ",
+] as const;
+const LOCATION_KM_MAP: Record<string, string> = {
+  "teacher office": "ការិយាល័យគ្រូ",
+  "front office": "ការិយាល័យខាងមុខ",
+  "admin office": "ការិយាល័យរដ្ឋបាល",
+  "it office": "ការិយាល័យ IT",
+  "classroom eco 01": "ថ្នាក់រៀន Eco 01",
+  "classroom eco 02": "ថ្នាក់រៀន Eco 02",
+  "classroom eco 03": "ថ្នាក់រៀន Eco 03",
+  "classroom eco 04": "ថ្នាក់រៀន Eco 04",
+};
+function toKhmerDigits(value: string | number) {
+  return String(value).replace(/[0-9]/g, (d) => KHMER_DIGITS_MAP[d] || d);
+}
+function formatKhmerDateYmd(ymd: string) {
+  const normalized = normalizeYmdInput(ymd);
+  if (!normalized) return ymd;
+  const [year, month, day] = normalized.split("-").map((v) => Number(v));
+  if (!year || !month || !day) return ymd;
+  const monthName = KHMER_MONTHS[Math.max(0, Math.min(11, month - 1))];
+  return `${toKhmerDigits(day)} ${monthName} ${toKhmerDigits(year)}`;
+}
+function formatKhmerMonthYear(date: Date) {
+  const monthName = KHMER_MONTHS[date.getMonth()] || "";
+  return `${monthName} ${toKhmerDigits(date.getFullYear())}`;
+}
+function inventoryLocationLabel(location: string, lang: Lang) {
+  const raw = String(location || "").trim();
+  if (!raw) return "-";
+  if (lang !== "km") return raw;
+  const key = raw.toLowerCase();
+  return LOCATION_KM_MAP[key] || raw;
 }
 function normalizeInventoryCompareText(value: string) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -5384,9 +5448,10 @@ export default function App() {
     if (!inventoryQuickOutModal?.date) return "";
     const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
     if (!ymd) return inventoryQuickOutModal.date;
+    if (lang === "km") return formatKhmerDateYmd(ymd);
     const date = new Date(`${ymd}T00:00:00`);
     if (Number.isNaN(date.getTime())) return inventoryQuickOutModal.date;
-    return date.toLocaleDateString(lang === "km" ? "km-KH" : "en-US", {
+    return date.toLocaleDateString("en-US", {
       day: "2-digit",
       month: "long",
       year: "numeric",
@@ -5394,10 +5459,12 @@ export default function App() {
   }, [inventoryQuickOutModal?.date, lang]);
   const quickOutEcoMonthLabel = useMemo(
     () =>
-      quickOutEcoMonth.toLocaleDateString(lang === "km" ? "km-KH" : "en-US", {
-        month: "long",
-        year: "numeric",
-      }),
+      lang === "km"
+        ? formatKhmerMonthYear(quickOutEcoMonth)
+        : quickOutEcoMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          }),
     [quickOutEcoMonth, lang]
   );
   const quickOutEcoCanGoPrevMonth = useMemo(() => {
@@ -8428,7 +8495,7 @@ export default function App() {
       (isWeekend || Boolean(holidayName));
     if (needsNonWorkingCheck) {
       if (!String(values.note || "").trim()) {
-        setError("Weekend/Holiday stock out requires note.");
+        setError(lang === "km" ? "ចុងសប្តាហ៍/ថ្ងៃឈប់សម្រាក ត្រូវបញ្ចូលមូលហេតុចេញស្តុក។" : "Weekend/Holiday stock out requires note.");
         return { ok: false };
       }
     }
@@ -8693,7 +8760,7 @@ export default function App() {
     const recorder = authUser?.displayName || authUser?.username || "";
     const reason = modal.note.trim();
     if (!reason) {
-      setError("Please enter reason for stock-out.");
+      setError(lang === "km" ? "សូមបញ្ចូលមូលហេតុចេញស្តុក។" : "Please enter reason for stock-out.");
       return;
     }
     const saved = await saveInventoryTxnEntry({
@@ -10825,7 +10892,48 @@ export default function App() {
     }));
   }
 
-  function openMaintenanceFromNotification(row: MaintenanceNotification) {
+  const inventoryTxnById = useMemo(() => {
+    const map = new Map<number, InventoryTxn>();
+    for (const row of inventoryTxns) {
+      map.set(Number(row.id), row);
+    }
+    return map;
+  }, [inventoryTxns]);
+
+  const getStockApprovalNotificationMeta = useCallback(
+    (row: MaintenanceNotification) => {
+      const txnId = parseInventoryApprovalNotificationTxnId(row);
+      const txn = txnId ? inventoryTxnById.get(txnId) || null : null;
+      const item = txn ? inventoryItems.find((entry) => Number(entry.id) === Number(txn.itemId)) || null : null;
+      const itemName = txn ? inventoryDisplayName(txn.itemName, lang) : row.assetId || "-";
+      return {
+        txnId,
+        txn,
+        item,
+        itemName,
+        itemPhoto: item?.photo || txn?.photo || "",
+        requestBy: txn?.approvalRequestedBy || txn?.by || "-",
+        reason: txn?.note || "-",
+        requestDateTime: txn?.approvalRequestedAt || row.createdAt,
+      };
+    },
+    [inventoryTxnById, inventoryItems, lang]
+  );
+
+  function openNotificationTarget(row: MaintenanceNotification) {
+    if (row.kind === "inventory_out_approval") {
+      setTab("inventory");
+      setInventoryView("daily");
+      setInventoryDailyForm((prev) => ({ ...prev, type: "OUT" }));
+      setMobileNotificationOpen(false);
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => {
+          const panel = document.getElementById("inventory-pending-approval-board");
+          if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 120);
+      }
+      return;
+    }
     const byDbId = assets.find((asset) => Number(asset.id) === Number(row.assetDbId));
     const byAssetId = assets.find(
       (asset) => String(asset.assetId || "").trim().toUpperCase() === String(row.assetId || "").trim().toUpperCase()
@@ -14841,39 +14949,117 @@ export default function App() {
                   <div className="mobile-notify-list">
                     {maintenanceNotifications.length ? (
                       maintenanceNotifications.map((row) => (
-                        <article
-                          key={`mobile-notify-${row.id}`}
-                          className={`mobile-notify-item ${row.read ? "" : "mobile-notify-item-unread"}`}
-                        >
-                          <div className="mobile-notify-item-head">
-                            <strong>{row.title}</strong>
-                            <span className="tiny">{formatDateTime(row.createdAt)}</span>
-                          </div>
-                          <p className="tiny">{row.message}</p>
-                          <div className="row-actions">
-                            <button
-                              type="button"
-                              className="tab btn-small"
+                        row.kind === "inventory_out_approval" ? (() => {
+                          const meta = getStockApprovalNotificationMeta(row);
+                          return (
+                            <article
+                              key={`mobile-notify-${row.id}`}
+                              className={`mobile-notify-item mobile-notify-stock-card ${row.read ? "" : "mobile-notify-item-unread"}`}
                               onClick={() => {
                                 if (!row.read) void markMaintenanceNotificationRead(row.id);
-                                openMaintenanceFromNotification(row);
+                                openNotificationTarget(row);
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  if (!row.read) void markMaintenanceNotificationRead(row.id);
+                                  openNotificationTarget(row);
+                                }
                               }}
                             >
-                              {t.openMaintenance}
-                            </button>
-                            {!row.read ? (
+                              <div className="mobile-notify-item-head">
+                                <strong>{lang === "km" ? "Approval required: Stock" : "Approval required: Stock"}</strong>
+                                <span className="tiny">{formatDateTime(meta.requestDateTime)}</span>
+                              </div>
+                              <div className="mobile-notify-stock-row"><span>{lang === "km" ? "Subject" : "Subject"}:</span><strong>{lang === "km" ? "Stock Out" : "Stock Out"}</strong></div>
+                              <div className="mobile-notify-stock-item-row">
+                                {meta.itemPhoto ? (
+                                  <img src={meta.itemPhoto} alt={meta.itemName} className="mobile-notify-stock-photo" />
+                                ) : (
+                                  <div className="mobile-notify-stock-photo mobile-notify-stock-photo-empty" aria-hidden={true}>-</div>
+                                )}
+                                <div className="mobile-notify-stock-item-meta">
+                                  <strong>{meta.itemName}</strong>
+                                  <span>{meta.txn?.itemCode || row.assetId || "-"}</span>
+                                </div>
+                              </div>
+                              <div className="mobile-notify-stock-meta-grid">
+                                <div><span>{lang === "km" ? "Request by" : "Request by"}:</span><strong>{meta.requestBy}</strong></div>
+                                <div><span>{lang === "km" ? "Date & Time" : "Date & Time"}:</span><strong>{formatDateTime(meta.requestDateTime)}</strong></div>
+                                <div className="mobile-notify-stock-reason"><span>{lang === "km" ? "Reason" : "Reason"}:</span><strong>{meta.reason}</strong></div>
+                              </div>
+                              <div className="row-actions mobile-notify-stock-actions" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  className="btn-danger btn-small"
+                                  disabled={busy || !meta.txn}
+                                  onClick={() => {
+                                    if (meta.txn) void setInventoryTxnApproval(meta.txn, "REJECTED");
+                                  }}
+                                >
+                                  {lang === "km" ? "Reject" : "Reject"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-primary btn-small"
+                                  disabled={busy || !meta.txn}
+                                  onClick={() => {
+                                    if (meta.txn) void setInventoryTxnApproval(meta.txn, "APPROVED");
+                                  }}
+                                >
+                                  {lang === "km" ? "Approval" : "Approval"}
+                                </button>
+                                {!row.read ? (
+                                  <button
+                                    type="button"
+                                    className="tab btn-small"
+                                    onClick={() => {
+                                      void markMaintenanceNotificationRead(row.id);
+                                    }}
+                                  >
+                                    {lang === "km" ? "Mark as Read" : "Mark as Read"}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </article>
+                          );
+                        })() : (
+                          <article
+                            key={`mobile-notify-${row.id}`}
+                            className={`mobile-notify-item ${row.read ? "" : "mobile-notify-item-unread"}`}
+                          >
+                            <div className="mobile-notify-item-head">
+                              <strong>{row.title}</strong>
+                              <span className="tiny">{formatDateTime(row.createdAt)}</span>
+                            </div>
+                            <p className="tiny">{row.message}</p>
+                            <div className="row-actions">
                               <button
                                 type="button"
                                 className="tab btn-small"
                                 onClick={() => {
-                                  void markMaintenanceNotificationRead(row.id);
+                                  if (!row.read) void markMaintenanceNotificationRead(row.id);
+                                  openNotificationTarget(row);
                                 }}
                               >
-                                {t.markRead}
+                                {t.openMaintenance}
                               </button>
-                            ) : null}
-                          </div>
-                        </article>
+                              {!row.read ? (
+                                <button
+                                  type="button"
+                                  className="tab btn-small"
+                                  onClick={() => {
+                                    void markMaintenanceNotificationRead(row.id);
+                                  }}
+                                >
+                                  {t.markRead}
+                                </button>
+                              ) : null}
+                            </div>
+                          </article>
+                        )
                       ))
                     ) : (
                       <p className="tiny">{t.noMaintenanceNotifications}</p>
@@ -18336,50 +18522,93 @@ export default function App() {
                   </p>
                 </div>
                 {isAdmin && inventoryPendingApprovalRows.length ? (
-                  <article className="panel" style={{ marginBottom: 8 }}>
+                  <article className="panel" id="inventory-pending-approval-board" style={{ marginBottom: 8 }}>
                     <div className="panel-row">
                       <h3 className="section-title">{lang === "km" ? "សំណើចេញស្តុករង់ចាំអនុម័ត" : "Pending Stock-Out Approvals"}</h3>
                       <span className="tiny">{inventoryPendingApprovalRows.length} {lang === "km" ? "សំណើ" : "requests"}</span>
                     </div>
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>{t.date}</th>
-                            <th>Code</th>
-                            <th>Name</th>
-                            <th>{t.campus}</th>
-                            <th>Qty</th>
-                            <th>{t.by}</th>
-                            <th>{t.notes}</th>
-                            <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {inventoryPendingApprovalRows.map((row) => (
-                            <tr key={`inv-pending-${row.id}`}>
-                              <td>{formatDate(row.date)}</td>
-                              <td><strong>{row.itemCode}</strong></td>
-                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                              <td>{inventoryCampusLabel(row.campus)}</td>
-                              <td>{row.qty}</td>
-                              <td>{row.by || row.approvalRequestedBy || "-"}</td>
-                              <td>{row.note || "-"}</td>
-                              <td>
-                                <div className="asset-row-actions">
-                                  <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
-                                    {lang === "km" ? "អនុម័ត" : "Approve"}
-                                  </button>
-                                  <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
-                                    {lang === "km" ? "បដិសេធ" : "Reject"}
-                                  </button>
-                                </div>
-                              </td>
+                    {isPhoneView ? (
+                      <div className="inventory-pending-mobile-list">
+                        {inventoryPendingApprovalRows.map((row) => (
+                          <article key={`inv-pending-mobile-${row.id}`} className="inventory-pending-mobile-card">
+                            <div className="inventory-pending-mobile-head">
+                              <strong>{row.itemCode}</strong>
+                              <span>{formatDate(row.date)}</span>
+                            </div>
+                            <div className="inventory-pending-mobile-grid">
+                              <div>
+                                <small>{lang === "km" ? "ឈ្មោះ" : "Name"}</small>
+                                <div>{inventoryDisplayName(row.itemName, lang)}</div>
+                              </div>
+                              <div>
+                                <small>{t.campus}</small>
+                                <div>{inventoryCampusLabel(row.campus)}</div>
+                              </div>
+                              <div>
+                                <small>Qty</small>
+                                <div>{row.qty}</div>
+                              </div>
+                              <div>
+                                <small>{t.by}</small>
+                                <div>{row.by || row.approvalRequestedBy || "-"}</div>
+                              </div>
+                            </div>
+                            <div className="inventory-pending-mobile-note">
+                              <small>{t.notes}</small>
+                              <div>{row.note || "-"}</div>
+                            </div>
+                            <div className="inventory-pending-mobile-actions">
+                              <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
+                                {lang === "km" ? "អនុម័ត" : "Approve"}
+                              </button>
+                              <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
+                                {lang === "km" ? "បដិសេធ" : "Reject"}
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>{t.date}</th>
+                              <th>Code</th>
+                              <th>Name</th>
+                              <th>{t.campus}</th>
+                              <th>Qty</th>
+                              <th>{t.by}</th>
+                              <th>{t.notes}</th>
+                              <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {inventoryPendingApprovalRows.map((row) => (
+                              <tr key={`inv-pending-${row.id}`}>
+                                <td>{formatDate(row.date)}</td>
+                                <td><strong>{row.itemCode}</strong></td>
+                                <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                                <td>{inventoryCampusLabel(row.campus)}</td>
+                                <td>{row.qty}</td>
+                                <td>{row.by || row.approvalRequestedBy || "-"}</td>
+                                <td>{row.note || "-"}</td>
+                                <td>
+                                  <div className="asset-row-actions">
+                                    <button className="btn-primary btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "APPROVED")}>
+                                      {lang === "km" ? "អនុម័ត" : "Approve"}
+                                    </button>
+                                    <button className="btn-danger btn-small" disabled={busy} onClick={() => void setInventoryTxnApproval(row, "REJECTED")}>
+                                      {lang === "km" ? "បដិសេធ" : "Reject"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </article>
                 ) : null}
                 {inventoryDailyForm.type === "OUT" ? (
@@ -23656,7 +23885,7 @@ export default function App() {
                             <strong>{inventoryQuickOutSelectedItem.itemCode}</strong> - {inventoryDisplayName(inventoryQuickOutSelectedItem.itemName, lang)}
                           </div>
                           <div className="inventory-quickout-location-line">
-                            <span>{lang === "km" ? "ទីតាំង" : "Location"}:</span> <strong>{inventoryQuickOutSelectedItem.location}</strong>
+                            <span>{lang === "km" ? "ទីតាំង" : "Location"}:</span> <strong>{inventoryLocationLabel(inventoryQuickOutSelectedItem.location, lang)}</strong>
                           </div>
                         </div>
                         <div className={`inventory-quickout-stock-col ${isLowStock ? "is-low-stock" : ""}`}>
@@ -23734,7 +23963,7 @@ export default function App() {
                                   setQuickOutEcoPickerOpen(false);
                                 }}
                               >
-                                {d.inMonth ? <span>{d.day}</span> : null}
+                                {d.inMonth ? <span>{lang === "km" ? toKhmerDigits(d.day) : d.day}</span> : null}
                                 {d.holidayName ? (
                                   <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
                                     {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
@@ -23820,7 +24049,7 @@ export default function App() {
                       onClick={saveInventoryQuickOut}
                       disabled={!inventoryQuickOutModal.itemId || !inventoryQuickOutModal.qty || !inventoryQuickOutModal.date || !inventoryQuickOutModal.photo}
                     >
-                      {lang === "km" ? "រក្សាទុក OUT" : "Save Stock Out"}
+                      {lang === "km" ? "រក្សាទុក ការបើកឥវ៉ាន់" : "Save Stock Out"}
                     </button>
                   </div>
                 </>
