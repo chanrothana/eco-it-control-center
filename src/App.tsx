@@ -15838,6 +15838,45 @@ export default function App() {
       <div className="bg-orb bg-orb-a" aria-hidden={true} />
       <div className="bg-orb bg-orb-b" aria-hidden={true} />
 
+      {!isPhoneView ? (
+        <section className="app-top-controls-wrap">
+          <div className="top-controls top-controls-grid app-top-controls-grid">
+            <label className="field campus-field">
+              <span>{t.view}</span>
+              {maintenanceQuickMode ? (
+                <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
+              ) : (
+                <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
+                  {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
+                  {allowedCampuses.map((campus) => (
+                    <option key={campus} value={campus}>{campusLabel(campus)}</option>
+                  ))}
+                </select>
+              )}
+            </label>
+
+            <label className="field campus-field">
+              <span>{t.language}</span>
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Lang)}
+                className="input"
+                disabled={maintenanceQuickMode}
+              >
+                {!maintenanceQuickMode ? <option value="en">{t.english}</option> : null}
+                <option value="km">{t.khmer}</option>
+              </select>
+            </label>
+
+            <label className="field campus-field">
+              <span>{t.account}</span>
+              <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
+            </label>
+            <button className="tab" onClick={handleLogout}>{t.logout}</button>
+          </div>
+        </section>
+      ) : null}
+
       <section className="app-card app-card-layout">
         <header className="topbar">
           <div className="brand-block">
@@ -15885,40 +15924,6 @@ export default function App() {
                 img.style.display = "none";
               }}
             />
-            <div className="top-controls top-controls-grid">
-              <label className="field campus-field">
-                <span>{t.view}</span>
-                {maintenanceQuickMode ? (
-                  <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
-                ) : (
-                  <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
-                    {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                    {allowedCampuses.map((campus) => (
-                      <option key={campus} value={campus}>{campusLabel(campus)}</option>
-                    ))}
-                  </select>
-                )}
-              </label>
-
-              <label className="field campus-field">
-                <span>{t.language}</span>
-                <select
-                  value={lang}
-                  onChange={(e) => setLang(e.target.value as Lang)}
-                  className="input"
-                  disabled={maintenanceQuickMode}
-                >
-                  {!maintenanceQuickMode ? <option value="en">{t.english}</option> : null}
-                  <option value="km">{t.khmer}</option>
-                </select>
-              </label>
-
-              <label className="field campus-field">
-                <span>{t.account}</span>
-                <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
-              </label>
-              <button className="tab" onClick={handleLogout}>{t.logout}</button>
-            </div>
           </div>
         </header>
 
@@ -17539,334 +17544,321 @@ export default function App() {
                       </div>
                     </>
                   ) : isDigitalCameraAssetForCreate ? (
-                    <>
-                      <label className="field">
-                        <span>{t.cameraComponents}</span>
-                        <div className="setpack-toggle-row">
-                          <span className="tiny">{t.cameraComponentHint}</span>
-                        </div>
-                        <div className="setpack-include-grid">
-                          {cameraComponentMeta.map((item) => (
-                            <label key={`camera-component-${item.type}`} className="tab setpack-include-item">
-                              <input
-                                type="checkbox"
-                                checked={cameraComponentEnabled[item.type]}
-                                onChange={(e) =>
-                                  setCameraComponentEnabled((prev) => ({
+                    <div className="field field-wide">
+                      <span>{t.cameraComponents}</span>
+                      <div className="setpack-toggle-row">
+                        <span className="tiny">{t.cameraComponentHint}</span>
+                      </div>
+                      <div className="setpack-component-list">
+                        {cameraComponentMeta.map((item) => (
+                          <div
+                            key={`camera-component-row-${item.type}`}
+                            className={`setpack-component-row${cameraComponentEnabled[item.type] ? " setpack-component-row-enabled" : ""}`}
+                          >
+                            <div className="setpack-component-main">
+                              <label className="setpack-component-check">
+                                <input
+                                  type="checkbox"
+                                  checked={cameraComponentEnabled[item.type]}
+                                  onChange={(e) =>
+                                    setCameraComponentEnabled((prev) => ({
+                                      ...prev,
+                                      [item.type]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>{item.label}</span>
+                              </label>
+                              <span className="tiny">
+                                {t.assetId}: {cameraComponentSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
+                              </span>
+                              <button
+                                type="button"
+                                className="tab setpack-detail-btn"
+                                disabled={!cameraComponentEnabled[item.type]}
+                                onClick={() =>
+                                  setCameraComponentDetailOpen((prev) => ({
                                     ...prev,
-                                    [item.type]: e.target.checked,
+                                    [item.type]: !prev[item.type],
                                   }))
                                 }
-                                style={{ marginRight: 8 }}
-                              />
-                              {item.label}
-                            </label>
-                          ))}
-                        </div>
-                      </label>
-                      <div className="field field-wide">
-                        <div className="setpack-card-grid">
-                          {cameraComponentMeta.map((item) => (
-                            cameraComponentEnabled[item.type] ? (
-                              <div
-                                key={`camera-component-details-${item.type}`}
-                                className={`setpack-item-card${cameraComponentDetailOpen[item.type] ? " setpack-item-card-open" : ""}`}
                               >
-                                <div className="setpack-item-head">
-                                  <div>
-                                    <strong>{item.label}</strong>
-                                    <div className="tiny">
-                                      {t.assetId}: {cameraComponentSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="tab setpack-detail-btn"
-                                    onClick={() =>
-                                      setCameraComponentDetailOpen((prev) => ({
-                                        ...prev,
-                                        [item.type]: !prev[item.type],
-                                      }))
-                                    }
-                                  >
-                                    {cameraComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
-                                  </button>
-                                </div>
-                                {cameraComponentDetailOpen[item.type] ? (
-                                  <div className="form-grid">
-                                    <label className="field">
-                                      <span>{t.status}</span>
-                                      <select
-                                        className="input"
-                                        value={cameraComponentDraft[item.type].status}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              status: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      >
-                                        {ASSET_STATUS_OPTIONS.map((status) => (
-                                          <option key={`camera-component-${item.type}-status-${status.value}`} value={status.value}>
-                                            {lang === "km" ? status.km : status.en}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </label>
-                                    <label className="field">
-                                      <span>{t.brand}</span>
-                                      <input
-                                        className="input"
-                                        value={cameraComponentDraft[item.type].brand}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              brand: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>{t.model}</span>
-                                      <input
-                                        className="input"
-                                        list="asset-model-options"
-                                        value={cameraComponentDraft[item.type].model}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              model: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>{t.serialNumber}</span>
-                                      <input
-                                        className="input"
-                                        value={cameraComponentDraft[item.type].serialNumber}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              serialNumber: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>{t.purchaseDate}</span>
-                                      <input
-                                        type="date"
-                                        className="input"
-                                        value={cameraComponentDraft[item.type].purchaseDate}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              purchaseDate: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>{t.warrantyUntil}</span>
-                                      <input
-                                        type="date"
-                                        className="input"
-                                        value={cameraComponentDraft[item.type].warrantyUntil}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              warrantyUntil: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label className="field">
-                                      <span>{t.vendor}</span>
-                                      <input
-                                        className="input"
-                                        value={cameraComponentDraft[item.type].vendor}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              vendor: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label className="field field-wide">
-                                      <span>{t.specs}</span>
-                                      <textarea
-                                        className="textarea"
-                                        value={cameraComponentDraft[item.type].specs}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              specs: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <label className="field field-wide">
-                                      <span>{t.notes}</span>
-                                      <textarea
-                                        className="textarea"
-                                        value={cameraComponentDraft[item.type].notes}
-                                        onChange={(e) =>
-                                          setCameraComponentDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              notes: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
-                                    <div className="field field-wide">
-                                      <span>{t.photo}</span>
-                                      <input
-                                        key={cameraComponentFileKey[item.type]}
-                                        ref={(el) => {
-                                          cameraComponentPhotoInputRefs.current[item.type] = el;
-                                        }}
-                                        className="file-input"
-                                        type="file"
-                                        accept="image/*"
-                                        multiple
-                                        onChange={(e) => onCameraComponentPhotoFile(item.type, e)}
-                                      />
-                                      <div className="photo-preview-wrap">
-                                        {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
-                                          <img
-                                            src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
-                                            alt={`${item.label} preview`}
-                                            className="photo-preview"
-                                          />
-                                        ) : (
-                                          <div className="photo-placeholder">{t.noPhoto}</div>
-                                        )}
-                                        <div className="photo-preview-actions">
-                                          <button
-                                            className="btn-icon-edit"
-                                            type="button"
-                                            title="Change Photo"
-                                            aria-label="Change Photo"
-                                            onClick={() => cameraComponentPhotoInputRefs.current[item.type]?.click()}
-                                          >
-                                            ✎
-                                          </button>
-                                          <button
-                                            className="btn-danger"
-                                            type="button"
-                                            title="Delete Photo"
-                                            aria-label="Delete Photo"
-                                            disabled={!normalizeAssetPhotos(cameraComponentDraft[item.type]).length}
-                                            onClick={() => {
-                                              setCameraComponentDraft((prev) => ({
-                                                ...prev,
-                                                [item.type]: {
-                                                  ...prev[item.type],
-                                                  photo: "",
-                                                  photos: [],
-                                                },
-                                              }));
-                                              setCameraComponentFileKey((prev) => ({
-                                                ...prev,
-                                                [item.type]: prev[item.type] + 1,
-                                              }));
-                                            }}
-                                          >
-                                            ✕
-                                          </button>
-                                        </div>
+                                {cameraComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                              </button>
+                            </div>
+                            {cameraComponentEnabled[item.type] && cameraComponentDetailOpen[item.type] ? (
+                              <div className="setpack-component-detail-wrap">
+                                <div className="form-grid">
+                                  <label className="field">
+                                    <span>{t.status}</span>
+                                    <select
+                                      className="input"
+                                      value={cameraComponentDraft[item.type].status}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            status: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      {ASSET_STATUS_OPTIONS.map((status) => (
+                                        <option key={`camera-component-${item.type}-status-${status.value}`} value={status.value}>
+                                          {lang === "km" ? status.km : status.en}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.brand}</span>
+                                    <input
+                                      className="input"
+                                      value={cameraComponentDraft[item.type].brand}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            brand: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.model}</span>
+                                    <input
+                                      className="input"
+                                      list="asset-model-options"
+                                      value={cameraComponentDraft[item.type].model}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            model: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.serialNumber}</span>
+                                    <input
+                                      className="input"
+                                      value={cameraComponentDraft[item.type].serialNumber}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            serialNumber: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.purchaseDate}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={cameraComponentDraft[item.type].purchaseDate}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            purchaseDate: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.warrantyUntil}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={cameraComponentDraft[item.type].warrantyUntil}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            warrantyUntil: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.vendor}</span>
+                                    <input
+                                      className="input"
+                                      value={cameraComponentDraft[item.type].vendor}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            vendor: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-wide">
+                                    <span>{t.specs}</span>
+                                    <textarea
+                                      className="textarea"
+                                      value={cameraComponentDraft[item.type].specs}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            specs: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-wide">
+                                    <span>{t.notes}</span>
+                                    <textarea
+                                      className="textarea"
+                                      value={cameraComponentDraft[item.type].notes}
+                                      onChange={(e) =>
+                                        setCameraComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            notes: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <div className="field field-wide">
+                                    <span>{t.photo}</span>
+                                    <input
+                                      key={cameraComponentFileKey[item.type]}
+                                      ref={(el) => {
+                                        cameraComponentPhotoInputRefs.current[item.type] = el;
+                                      }}
+                                      className="file-input"
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      onChange={(e) => onCameraComponentPhotoFile(item.type, e)}
+                                    />
+                                    <div className="photo-preview-wrap">
+                                      {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
+                                        <img
+                                          src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
+                                          alt={`${item.label} preview`}
+                                          className="photo-preview"
+                                        />
+                                      ) : (
+                                        <div className="photo-placeholder">{t.noPhoto}</div>
+                                      )}
+                                      <div className="photo-preview-actions">
+                                        <button
+                                          className="btn-icon-edit"
+                                          type="button"
+                                          title="Change Photo"
+                                          aria-label="Change Photo"
+                                          onClick={() => cameraComponentPhotoInputRefs.current[item.type]?.click()}
+                                        >
+                                          ✎
+                                        </button>
+                                        <button
+                                          className="btn-danger"
+                                          type="button"
+                                          title="Delete Photo"
+                                          aria-label="Delete Photo"
+                                          disabled={!normalizeAssetPhotos(cameraComponentDraft[item.type]).length}
+                                          onClick={() => {
+                                            setCameraComponentDraft((prev) => ({
+                                              ...prev,
+                                              [item.type]: {
+                                                ...prev[item.type],
+                                                photo: "",
+                                                photos: [],
+                                              },
+                                            }));
+                                            setCameraComponentFileKey((prev) => ({
+                                              ...prev,
+                                              [item.type]: prev[item.type] + 1,
+                                            }));
+                                          }}
+                                        >
+                                          ✕
+                                        </button>
                                       </div>
-                                      <div className="asset-photo-gallery">
-                                        {normalizeAssetPhotos(cameraComponentDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
-                                          <div key={`camera-component-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                            <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
-                                            <div className="asset-photo-chip-actions">
-                                              <button
-                                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
-                                                type="button"
-                                                onClick={() =>
-                                                  setCameraComponentDraft((prev) => {
-                                                    const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
-                                                    const hit = next.indexOf(url);
-                                                    if (hit <= 0) return prev;
-                                                    next.splice(hit, 1);
-                                                    next.unshift(url);
-                                                    return {
-                                                      ...prev,
-                                                      [item.type]: {
-                                                        ...prev[item.type],
-                                                        photo: next[0] || "",
-                                                        photos: next,
-                                                      },
-                                                    };
-                                                  })
-                                                }
-                                              >
-                                                {index === 0 ? "Main" : "Set Main"}
-                                              </button>
-                                              <button
-                                                className="btn-danger"
-                                                type="button"
-                                                onClick={() =>
-                                                  setCameraComponentDraft((prev) => {
-                                                    const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
-                                                    return {
-                                                      ...prev,
-                                                      [item.type]: {
-                                                        ...prev[item.type],
-                                                        photo: next[0] || "",
-                                                        photos: next,
-                                                      },
-                                                    };
-                                                  })
-                                                }
-                                              >
-                                                ✕
-                                              </button>
-                                            </div>
+                                    </div>
+                                    <div className="asset-photo-gallery">
+                                      {normalizeAssetPhotos(cameraComponentDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                        <div key={`camera-component-photo-${item.type}-${index}`} className="asset-photo-chip">
+                                          <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                          <div className="asset-photo-chip-actions">
+                                            <button
+                                              className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                              type="button"
+                                              onClick={() =>
+                                                setCameraComponentDraft((prev) => {
+                                                  const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
+                                                  const hit = next.indexOf(url);
+                                                  if (hit <= 0) return prev;
+                                                  next.splice(hit, 1);
+                                                  next.unshift(url);
+                                                  return {
+                                                    ...prev,
+                                                    [item.type]: {
+                                                      ...prev[item.type],
+                                                      photo: next[0] || "",
+                                                      photos: next,
+                                                    },
+                                                  };
+                                                })
+                                              }
+                                            >
+                                              {index === 0 ? "Main" : "Set Main"}
+                                            </button>
+                                            <button
+                                              className="btn-danger"
+                                              type="button"
+                                              onClick={() =>
+                                                setCameraComponentDraft((prev) => {
+                                                  const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
+                                                  return {
+                                                    ...prev,
+                                                    [item.type]: {
+                                                      ...prev[item.type],
+                                                      photo: next[0] || "",
+                                                      photos: next,
+                                                    },
+                                                  };
+                                                })
+                                              }
+                                            >
+                                              ✕
+                                            </button>
                                           </div>
-                                        ))}
-                                      </div>
+                                        </div>
+                                      ))}
                                     </div>
                                   </div>
-                                ) : null}
+                                </div>
                               </div>
-                            ) : (
-                              <div key={`camera-component-slot-${item.type}`} className="setpack-item-slot" aria-hidden={true} />
-                            )
-                          ))}
-                        </div>
+                            ) : null}
+                          </div>
+                        ))}
                       </div>
-                    </>
+                    </div>
                   ) : (!isSafetyCategoryForCreate && isLinkableForCreate) ? (
                     <>
                       <label className="field">
