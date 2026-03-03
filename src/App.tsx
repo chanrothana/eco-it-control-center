@@ -958,6 +958,25 @@ const CAMPUS_CODE: Record<string, string> = {
 const CODE_TO_CAMPUS: Record<string, string> = Object.fromEntries(
   Object.entries(CAMPUS_CODE).map(([name, code]) => [code, name])
 );
+function compareCampusByCode(a: string, b: string) {
+  const parseCode = (campusName: string) => {
+    const code = String(CAMPUS_CODE[campusName] || "").toUpperCase();
+    const match = code.match(/^C(\d+)(?:\.(\d+))?$/);
+    if (!match) return { major: Number.POSITIVE_INFINITY, minor: Number.POSITIVE_INFINITY, code, campusName };
+    return {
+      major: Number(match[1]),
+      minor: Number(match[2] || 0),
+      code,
+      campusName,
+    };
+  };
+  const x = parseCode(a);
+  const y = parseCode(b);
+  if (x.major !== y.major) return x.major - y.major;
+  if (x.minor !== y.minor) return x.minor - y.minor;
+  if (x.code !== y.code) return x.code.localeCompare(y.code);
+  return a.localeCompare(b);
+}
 const MAX_ASSET_PHOTOS = 5;
 const MAX_SET_PACK_PHOTOS = 3;
 
@@ -5959,8 +5978,8 @@ export default function App() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [assets, assetItemName]);
   const assetCampusFilterOptions = useMemo(
-    () => [...allowedCampuses].sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
-    [allowedCampuses, campusLabel]
+    () => [...allowedCampuses].sort(compareCampusByCode),
+    [allowedCampuses]
   );
   const assetCategoryFilterOptions = useMemo(
     () => CATEGORY_OPTIONS.map((category) => category.value),
