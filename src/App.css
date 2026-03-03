@@ -3952,6 +3952,246 @@ label.backup-action-btn {
   color: #c52f3f;
 }
 
+.pool-dashboard-hero {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #d7e2f1;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff9ef, #fff4e3);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.pool-dashboard-kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #8a6a45;
+  font-weight: 700;
+}
+
+.pool-dashboard-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pool-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #cdd6e7;
+  background: #eef3fb;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pool-badge-good {
+  border-color: #b8dcbf;
+  background: #ecfbef;
+  color: #1f6a38;
+}
+
+.pool-badge-alert {
+  border-color: #f0c3bf;
+  background: #fff2f0;
+  color: #a53f35;
+}
+
+.pool-dashboard-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.pool-metric-card {
+  border: 1px solid #d7e2f1;
+  border-radius: 12px;
+  background: #f7faff;
+  padding: 12px;
+}
+
+.pool-metric-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #687392;
+}
+
+.pool-metric-value {
+  font-family: var(--font-head);
+  font-size: 30px;
+  line-height: 1;
+  margin: 8px 0 6px;
+}
+
+.pool-dashboard-health {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.pool-health-tile {
+  border: 1px solid #d9e2f1;
+  border-radius: 12px;
+  background: #f9fbff;
+  padding: 12px;
+}
+
+.pool-health-tile.is-good {
+  background: #f0faef;
+  border-color: #bcdfbf;
+}
+
+.pool-health-tile.is-alert {
+  background: #fff3f1;
+  border-color: #f0c7c2;
+}
+
+.pool-health-title {
+  font-size: 12px;
+  color: #65728f;
+  font-weight: 700;
+}
+
+.pool-health-value {
+  font-family: var(--font-head);
+  font-size: 28px;
+  margin: 8px 0 6px;
+  line-height: 1;
+}
+
+.pool-dashboard-quick-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pool-dashboard-bottom {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pool-dashboard-list-card {
+  border: 1px solid #e1c4a0;
+  border-radius: 12px;
+  background: #fff9f0;
+  padding: 12px;
+}
+
+.pool-alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pool-alert-item {
+  border: 1px solid #efccc7;
+  background: #fff2f0;
+  border-radius: 10px;
+  padding: 9px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.pool-alert-item span {
+  font-size: 13px;
+  color: #8b5f5a;
+}
+
+.pool-secondary-alerts {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.pool-secondary-alert,
+.pool-secondary-ok {
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid #e1d4bf;
+}
+
+.pool-secondary-alert {
+  background: #fff2f0;
+  border-color: #efccc7;
+  color: #a24a41;
+}
+
+.pool-secondary-ok {
+  background: #eefaf0;
+  border-color: #c3e0c8;
+  color: #2f6f43;
+}
+
+.pool-remark-feed {
+  display: grid;
+  gap: 8px;
+}
+
+.pool-remark-item {
+  border: 1px solid #d5dfed;
+  border-radius: 10px;
+  background: #f6faff;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pool-remark-item.is-complaint {
+  background: #fff3f2;
+  border-color: #efccc7;
+}
+
+.pool-remark-item.is-comment {
+  background: #f1fbf2;
+  border-color: #cbe2cd;
+}
+
+.pool-remark-main {
+  display: grid;
+  gap: 3px;
+}
+
+.pool-remark-main span {
+  font-size: 13px;
+  color: #6f6a7f;
+}
+
+.pool-remark-photo {
+  width: 54px;
+  height: 54px;
+  border-radius: 9px;
+  object-fit: cover;
+  border: 1px solid #d2dded;
+}
+
+.pool-empty-note {
+  border: 1px dashed #d8c8ac;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  color: #83674a;
+  background: #fff6e9;
+}
+
+@media (max-width: 980px) {
+  .pool-dashboard-bottom {
+    grid-template-columns: 1fr;
+  }
+}
+
 .table-wrap {
   overflow: auto;
   border: 1px solid #e1c4a0;

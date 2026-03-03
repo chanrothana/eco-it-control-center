@@ -251,6 +251,69 @@ type InventoryTxn = {
   approvalDecisionAt?: string;
   approvalDecisionNote?: string;
 };
+type PoolCleaningSchedule = {
+  id: number;
+  pool: string;
+  date: string;
+  shift: string;
+  task: string;
+  assignedTo?: string;
+  status: "Pending" | "Done";
+  note?: string;
+  created: string;
+};
+type PoolEquipmentCheck = {
+  id: number;
+  pool: string;
+  date: string;
+  category: "Cleaning" | "Chemical" | "Safety" | "Mechanical";
+  item: string;
+  condition: "Good" | "Need Service" | "Replace";
+  qty?: number;
+  unit?: string;
+  note?: string;
+  created: string;
+};
+type PoolChemicalRecord = {
+  id: number;
+  pool: string;
+  datetime: string;
+  chlorineFree?: number;
+  chlorineTotal?: number;
+  ph?: number;
+  alkalinity?: number;
+  calciumHardness?: number;
+  cyanuricAcid?: number;
+  temperature?: number;
+  operator?: string;
+  note?: string;
+  created: string;
+};
+type PoolOperationRecord = {
+  id: number;
+  pool: string;
+  datetime: string;
+  pumpStatus: "On" | "Off";
+  timerMode?: string;
+  filterPressure?: number;
+  backwashDone?: boolean;
+  operator?: string;
+  note?: string;
+  created: string;
+};
+type PoolComplaint = {
+  id: number;
+  pool: string;
+  date: string;
+  teacher: string;
+  entryType: "Complaint" | "Comment";
+  condition: string;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  status: "Open" | "In Progress" | "Resolved";
+  photo?: string;
+  note?: string;
+  created: string;
+};
 
 type DashboardStats = {
   totalAssets: number;
@@ -268,6 +331,7 @@ type NavModule =
   | "dashboard"
   | "assets"
   | "inventory"
+  | "pool"
   | "tickets"
   | "schedule"
   | "transfer"
@@ -330,6 +394,11 @@ type ServerSettings = {
   inventoryApprovalRouting?: InventoryApprovalRoutingMap;
   inventoryItems?: InventoryItem[];
   inventoryTxns?: InventoryTxn[];
+  poolCleaningSchedules?: PoolCleaningSchedule[];
+  poolEquipmentChecks?: PoolEquipmentCheck[];
+  poolChemicalRecords?: PoolChemicalRecord[];
+  poolOperationRecords?: PoolOperationRecord[];
+  poolComplaints?: PoolComplaint[];
   itemTemplates?: ItemTemplate[];
   vaultAccounts?: VaultAccount[];
   vaultCredentials?: VaultCredential[];
@@ -548,6 +617,11 @@ const AUTH_ACCOUNTS_FALLBACK_KEY = "it_auth_accounts_fallback_v1";
 const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
 const INVENTORY_ITEM_FALLBACK_KEY = "it_inventory_items_v1";
 const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
+const POOL_CLEANING_SCHEDULE_FALLBACK_KEY = "it_pool_cleaning_schedule_v1";
+const POOL_EQUIPMENT_FALLBACK_KEY = "it_pool_equipment_v1";
+const POOL_CHEMICAL_FALLBACK_KEY = "it_pool_chemical_v1";
+const POOL_OPERATION_FALLBACK_KEY = "it_pool_operation_v1";
+const POOL_COMPLAINT_FALLBACK_KEY = "it_pool_complaint_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
 const APP_VERSION = "v2.3.0";
 const DEFAULT_MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
@@ -576,6 +650,7 @@ const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "dashboard",
   "assets",
   "inventory",
+  "pool",
   "schedule",
   "transfer",
   "maintenance",
@@ -586,6 +661,7 @@ const ALL_NAV_MODULES: NavModule[] = [
   "dashboard",
   "assets",
   "inventory",
+  "pool",
   "tickets",
   "schedule",
   "transfer",
@@ -600,6 +676,7 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   dashboard: "core",
   assets: "core",
   inventory: "core",
+  pool: "operations",
   tickets: "operations",
   schedule: "operations",
   transfer: "operations",
@@ -639,6 +716,12 @@ const MENU_ACCESS_TREE: Array<{
     labelEn: "Inventory",
     labelKm: "ស្តុក",
     children: [{ key: "inventory.main", labelEn: "Inventory Management", labelKm: "គ្រប់គ្រងស្តុក" }],
+  },
+  {
+    module: "pool",
+    labelEn: "Pool Maintenance",
+    labelKm: "ថែទាំអាងហែលទឹក",
+    children: [{ key: "pool.main", labelEn: "Pool Operations", labelKm: "ប្រតិបត្តិការអាងទឹក" }],
   },
   {
     module: "tickets",
@@ -1045,6 +1128,8 @@ const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
 const REMOTE_TYPE_CODE = "RMT";
+const INACTIVE_TABLET_HOLDING_CAMPUS = "Chaktomuk Campus (C2.2)";
+const INACTIVE_TABLET_HOLDING_LOCATION = "Admin Office 2.2";
 const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
 const SHARED_LOCATION_KEYWORDS = [
   "teacher office",
@@ -1200,6 +1285,7 @@ const TEXT = {
     dashboard: "Dashboard",
     assets: "Assets",
     inventory: "Inventory",
+    pool: "Pool Maintenance",
     workOrders: "Work Orders",
     maintenanceHistory: "Maintenance History",
     setup: "Setup",
@@ -1316,6 +1402,12 @@ const TEXT = {
     schedule: "Schedule",
     transfer: "Transfer",
     maintenance: "Maintenance",
+    cleaningSchedule: "Cleaning Schedule",
+    cleaningEquipment: "Cleaning Equipment",
+    chemicalEquipment: "Chemical Equipment",
+    addChemicalRecord: "Add Chemical Record",
+    operationRecord: "Operation Record",
+    poolComplaints: "Pool Complaints",
     verification: "Verification",
     reports: "Reports",
     viewerMode: "Viewer mode: read-only access.",
@@ -1420,6 +1512,7 @@ const TEXT = {
     dashboard: "ផ្ទាំងសង្ខេប",
     assets: "ទ្រព្យសម្បត្តិ",
     inventory: "ស្តុក",
+    pool: "ថែទាំអាងហែលទឹក",
     workOrders: "ការងារជួសជុល",
     maintenanceHistory: "ប្រវត្តិថែទាំ",
     setup: "កំណត់រចនាសម្ព័ន្ធ",
@@ -1536,6 +1629,12 @@ const TEXT = {
     schedule: "កាលវិភាគ",
     transfer: "ផ្ទេរ",
     maintenance: "ថែទាំ",
+    cleaningSchedule: "កាលវិភាគសម្អាត",
+    cleaningEquipment: "ឧបករណ៍សម្អាត",
+    chemicalEquipment: "ឧបករណ៍គីមី",
+    addChemicalRecord: "កត់ត្រាគីមី",
+    operationRecord: "កំណត់ត្រាប្រតិបត្តិការ",
+    poolComplaints: "បញ្ហាអាងហែលទឹក",
     verification: "ត្រួតពិនិត្យ",
     reports: "របាយការណ៍",
     viewerMode: "របៀបអ្នកមើល: អាចមើលបានតែប៉ុណ្ណោះ។",
@@ -2136,6 +2235,11 @@ function clearAllFallbackCaches() {
     AUDIT_FALLBACK_KEY,
     INVENTORY_ITEM_FALLBACK_KEY,
     INVENTORY_TXN_FALLBACK_KEY,
+    POOL_CLEANING_SCHEDULE_FALLBACK_KEY,
+    POOL_EQUIPMENT_FALLBACK_KEY,
+    POOL_CHEMICAL_FALLBACK_KEY,
+    POOL_OPERATION_FALLBACK_KEY,
+    POOL_COMPLAINT_FALLBACK_KEY,
     VAULT_ACCOUNTS_FALLBACK_KEY,
     VAULT_CREDENTIALS_FALLBACK_KEY,
     VAULT_DESIGN_LINKS_FALLBACK_KEY,
@@ -2177,6 +2281,178 @@ function readInventoryTxnFallback(): InventoryTxn[] {
   } catch {
     return [];
   }
+}
+
+function normalizePoolCleaningSchedules(input: unknown): PoolCleaningSchedule[] {
+  return normalizeArray<PoolCleaningSchedule>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: String(row.pool || "").trim() || "Main Pool",
+      date: String(row.date || "").trim(),
+      shift: String(row.shift || "").trim(),
+      task: String(row.task || "").trim(),
+      assignedTo: String(row.assignedTo || "").trim(),
+      status: String(row.status || "").trim().toLowerCase() === "done" ? "Done" : "Pending",
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizePoolEquipmentChecks(input: unknown): PoolEquipmentCheck[] {
+  return normalizeArray<PoolEquipmentCheck>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => {
+      const categoryRaw = String(row.category || "").trim();
+      const conditionRaw = String(row.condition || "").trim();
+      const category = (["Cleaning", "Chemical", "Safety", "Mechanical"] as const).includes(categoryRaw as never)
+        ? (categoryRaw as PoolEquipmentCheck["category"])
+        : "Cleaning";
+      const condition = (["Good", "Need Service", "Replace"] as const).includes(conditionRaw as never)
+        ? (conditionRaw as PoolEquipmentCheck["condition"])
+        : "Good";
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        pool: String(row.pool || "").trim() || "Main Pool",
+        date: String(row.date || "").trim(),
+        category,
+        item: String(row.item || "").trim(),
+        condition,
+        qty: Number(row.qty || 0) || 0,
+        unit: String(row.unit || "").trim(),
+        note: String(row.note || "").trim(),
+        created: String(row.created || "").trim() || new Date().toISOString(),
+      };
+    });
+}
+
+function normalizePoolChemicalRecords(input: unknown): PoolChemicalRecord[] {
+  return normalizeArray<PoolChemicalRecord>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: String(row.pool || "").trim() || "Main Pool",
+      datetime: String(row.datetime || "").trim(),
+      chlorineFree: Number(row.chlorineFree || 0) || 0,
+      chlorineTotal: Number(row.chlorineTotal || 0) || 0,
+      ph: Number(row.ph || 0) || 0,
+      alkalinity: Number(row.alkalinity || 0) || 0,
+      calciumHardness: Number(row.calciumHardness || 0) || 0,
+      cyanuricAcid: Number(row.cyanuricAcid || 0) || 0,
+      temperature: Number(row.temperature || 0) || 0,
+      operator: String(row.operator || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizePoolOperationRecords(input: unknown): PoolOperationRecord[] {
+  return normalizeArray<PoolOperationRecord>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: String(row.pool || "").trim() || "Main Pool",
+      datetime: String(row.datetime || "").trim(),
+      pumpStatus: String(row.pumpStatus || "").trim().toLowerCase() === "off" ? "Off" : "On",
+      timerMode: String(row.timerMode || "").trim(),
+      filterPressure: Number(row.filterPressure || 0) || 0,
+      backwashDone: Boolean(row.backwashDone),
+      operator: String(row.operator || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function normalizePoolComplaints(input: unknown): PoolComplaint[] {
+  return normalizeArray<PoolComplaint>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: String(row.pool || "").trim() || "Main Pool",
+      date: String(row.date || "").trim() || toYmd(new Date()),
+      teacher: String(row.teacher || "").trim(),
+      entryType: String(row.entryType || "").trim().toLowerCase() === "comment" ? "Comment" : "Complaint",
+      condition: String(row.condition || "").trim(),
+      severity: (["Low", "Medium", "High", "Critical"] as const).includes(String(row.severity || "").trim() as never)
+        ? (String(row.severity || "").trim() as PoolComplaint["severity"])
+        : "Medium",
+      status: (["Open", "In Progress", "Resolved"] as const).includes(String(row.status || "").trim() as never)
+        ? (String(row.status || "").trim() as PoolComplaint["status"])
+        : "Open",
+      photo: String(row.photo || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }));
+}
+
+function readPoolCleaningScheduleFallback(): PoolCleaningSchedule[] {
+  try {
+    const raw = localStorage.getItem(POOL_CLEANING_SCHEDULE_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizePoolCleaningSchedules(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writePoolCleaningScheduleFallback(rows: PoolCleaningSchedule[]) {
+  trySetLocalStorage(POOL_CLEANING_SCHEDULE_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readPoolEquipmentFallback(): PoolEquipmentCheck[] {
+  try {
+    const raw = localStorage.getItem(POOL_EQUIPMENT_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizePoolEquipmentChecks(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writePoolEquipmentFallback(rows: PoolEquipmentCheck[]) {
+  trySetLocalStorage(POOL_EQUIPMENT_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readPoolChemicalFallback(): PoolChemicalRecord[] {
+  try {
+    const raw = localStorage.getItem(POOL_CHEMICAL_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizePoolChemicalRecords(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writePoolChemicalFallback(rows: PoolChemicalRecord[]) {
+  trySetLocalStorage(POOL_CHEMICAL_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readPoolOperationFallback(): PoolOperationRecord[] {
+  try {
+    const raw = localStorage.getItem(POOL_OPERATION_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizePoolOperationRecords(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writePoolOperationFallback(rows: PoolOperationRecord[]) {
+  trySetLocalStorage(POOL_OPERATION_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readPoolComplaintFallback(): PoolComplaint[] {
+  try {
+    const raw = localStorage.getItem(POOL_COMPLAINT_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizePoolComplaints(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writePoolComplaintFallback(rows: PoolComplaint[]) {
+  trySetLocalStorage(POOL_COMPLAINT_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function normalizeVaultAccounts(input: unknown): VaultAccount[] {
@@ -2628,6 +2904,13 @@ function toYmd(value: Date) {
   const m = String(value.getMonth() + 1).padStart(2, "0");
   const d = String(value.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function toIsoInput(value: Date) {
+  const ymd = toYmd(value);
+  const hh = String(value.getHours()).padStart(2, "0");
+  const mm = String(value.getMinutes()).padStart(2, "0");
+  return `${ymd}T${hh}:${mm}`;
 }
 
 function normalizeYmdInput(raw: string) {
@@ -3909,6 +4192,7 @@ export default function App() {
       { id: "dashboard", label: t.dashboard },
       { id: "assets", label: t.assets },
       { id: "inventory", label: t.inventory },
+      { id: "pool", label: t.pool },
       { id: "tickets", label: t.workOrders },
       { id: "schedule", label: t.schedule },
       { id: "transfer", label: t.transfer },
@@ -3928,6 +4212,8 @@ export default function App() {
         return <Boxes size={16} aria-hidden={true} />;
       case "inventory":
         return <Package size={16} aria-hidden={true} />;
+      case "pool":
+        return <Droplets size={16} aria-hidden={true} />;
       case "tickets":
         return <ClipboardList size={16} aria-hidden={true} />;
       case "schedule":
@@ -4014,6 +4300,7 @@ export default function App() {
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance" | "daily">("items");
+  const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
@@ -4132,6 +4419,69 @@ export default function App() {
                 startTabTransition(() => {
                   setInventoryView("balance");
                   setTab("inventory");
+                }),
+            },
+          ];
+        case "pool":
+          return [
+            {
+              key: "pool.dashboard",
+              label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
+              active: poolView === "dashboard",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setPoolView("dashboard");
+                  setTab("pool");
+                }),
+            },
+            {
+              key: "pool.schedule",
+              label: t.cleaningSchedule,
+              active: poolView === "schedule",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setPoolView("schedule");
+                  setTab("pool");
+                }),
+            },
+            {
+              key: "pool.equipment",
+              label: lang === "km" ? "ឧបករណ៍" : "Equipment",
+              active: poolView === "equipment",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setPoolView("equipment");
+                  setTab("pool");
+                }),
+            },
+            {
+              key: "pool.chemical",
+              label: lang === "km" ? "គីមី" : "Chemical",
+              active: poolView === "chemical",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setPoolView("chemical");
+                  setTab("pool");
+                }),
+            },
+            {
+              key: "pool.operations",
+              label: lang === "km" ? "ប្រតិបត្តិការ" : "Operations",
+              active: poolView === "operations",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setPoolView("operations");
+                  setTab("pool");
+                }),
+            },
+            {
+              key: "pool.complaints",
+              label: t.poolComplaints,
+              active: poolView === "complaints",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setPoolView("complaints");
+                  setTab("pool");
                 }),
             },
           ];
@@ -4381,8 +4731,11 @@ export default function App() {
       isAdmin,
       lang,
       maintenanceView,
+      poolView,
       scheduleView,
       setupView,
+      t.cleaningSchedule,
+      t.poolComplaints,
       transferView,
       verificationView,
     ]
@@ -4563,6 +4916,11 @@ export default function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>([]);
+  const [poolCleaningSchedules, setPoolCleaningSchedules] = useState<PoolCleaningSchedule[]>([]);
+  const [poolEquipmentChecks, setPoolEquipmentChecks] = useState<PoolEquipmentCheck[]>([]);
+  const [poolChemicalRecords, setPoolChemicalRecords] = useState<PoolChemicalRecord[]>([]);
+  const [poolOperationRecords, setPoolOperationRecords] = useState<PoolOperationRecord[]>([]);
+  const [poolComplaints, setPoolComplaints] = useState<PoolComplaint[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [locations, setLocations] = useState<LocationEntry[]>([]);
   const [users, setUsers] = useState<StaffUser[]>(() => readUserFallback());
@@ -4884,6 +5242,60 @@ export default function App() {
     note: "",
   });
   const [showTransferAssetPicker, setShowTransferAssetPicker] = useState(false);
+  const [poolInfo, setPoolInfo] = useState({
+    campus: "Campus 2.2",
+    name: "Main Pool",
+    sizeM3: "",
+    notes: "",
+  });
+  const [poolCleaningForm, setPoolCleaningForm] = useState({
+    date: toYmd(new Date()),
+    shift: "Morning",
+    task: "",
+    assignedTo: "",
+    status: "Pending" as PoolCleaningSchedule["status"],
+    note: "",
+  });
+  const [poolEquipmentForm, setPoolEquipmentForm] = useState({
+    date: toYmd(new Date()),
+    category: "Cleaning" as PoolEquipmentCheck["category"],
+    item: "",
+    condition: "Good" as PoolEquipmentCheck["condition"],
+    qty: "",
+    unit: "",
+    note: "",
+  });
+  const [poolChemicalForm, setPoolChemicalForm] = useState({
+    datetime: toIsoInput(new Date()),
+    chlorineFree: "",
+    chlorineTotal: "",
+    ph: "",
+    alkalinity: "",
+    calciumHardness: "",
+    cyanuricAcid: "",
+    temperature: "",
+    operator: "",
+    note: "",
+  });
+  const [poolOperationForm, setPoolOperationForm] = useState({
+    datetime: toIsoInput(new Date()),
+    pumpStatus: "On" as PoolOperationRecord["pumpStatus"],
+    timerMode: "",
+    filterPressure: "",
+    backwashDone: false,
+    operator: "",
+    note: "",
+  });
+  const [poolComplaintForm, setPoolComplaintForm] = useState({
+    date: toYmd(new Date()),
+    teacher: "",
+    entryType: "Complaint" as PoolComplaint["entryType"],
+    condition: "",
+    severity: "Medium" as PoolComplaint["severity"],
+    status: "Open" as PoolComplaint["status"],
+    photo: "",
+    note: "",
+  });
   const [transferFilterCampus, setTransferFilterCampus] = useState("ALL");
   const [transferFilterLocation, setTransferFilterLocation] = useState("ALL");
   const [transferFilterCategory, setTransferFilterCategory] = useState("ALL");
@@ -5423,6 +5835,21 @@ export default function App() {
   useEffect(() => {
     writeInventoryTxnFallback(inventoryTxns);
   }, [inventoryTxns]);
+  useEffect(() => {
+    writePoolCleaningScheduleFallback(poolCleaningSchedules);
+  }, [poolCleaningSchedules]);
+  useEffect(() => {
+    writePoolEquipmentFallback(poolEquipmentChecks);
+  }, [poolEquipmentChecks]);
+  useEffect(() => {
+    writePoolChemicalFallback(poolChemicalRecords);
+  }, [poolChemicalRecords]);
+  useEffect(() => {
+    writePoolOperationFallback(poolOperationRecords);
+  }, [poolOperationRecords]);
+  useEffect(() => {
+    writePoolComplaintFallback(poolComplaints);
+  }, [poolComplaints]);
   useEffect(() => {
     writeVaultAccountsFallback(vaultAccounts);
   }, [vaultAccounts]);
@@ -6423,14 +6850,119 @@ export default function App() {
       .slice(0, 30);
   }, [inventoryVisibleItems, inventoryVisibleTxns, inventoryPurchaseWindow, inventoryStockMap]);
 
+  const activePoolLabel = useMemo(() => {
+    const campus = String(poolInfo.campus || "").trim();
+    const name = String(poolInfo.name || "").trim() || "Main Pool";
+    return `${campus} - ${name}`;
+  }, [poolInfo.campus, poolInfo.name]);
+  const poolMatchesActive = useCallback(
+    (poolValue?: string) => {
+      const val = String(poolValue || "").trim().toLowerCase();
+      if (!val) return false;
+      const full = activePoolLabel.toLowerCase();
+      const legacyNameOnly = String(poolInfo.name || "").trim().toLowerCase();
+      return val === full || val === legacyNameOnly;
+    },
+    [activePoolLabel, poolInfo.name]
+  );
+  const activePoolCleaningSchedules = useMemo(
+    () => poolCleaningSchedules.filter((row) => poolMatchesActive(row.pool)),
+    [poolCleaningSchedules, poolMatchesActive]
+  );
+  const activePoolEquipmentChecks = useMemo(
+    () => poolEquipmentChecks.filter((row) => poolMatchesActive(row.pool)),
+    [poolEquipmentChecks, poolMatchesActive]
+  );
+  const activePoolChemicalRecords = useMemo(
+    () => poolChemicalRecords.filter((row) => poolMatchesActive(row.pool)),
+    [poolChemicalRecords, poolMatchesActive]
+  );
+  const activePoolOperationRecords = useMemo(
+    () => poolOperationRecords.filter((row) => poolMatchesActive(row.pool)),
+    [poolOperationRecords, poolMatchesActive]
+  );
+  const activePoolComplaints = useMemo(
+    () => poolComplaints.filter((row) => poolMatchesActive(row.pool)),
+    [poolComplaints, poolMatchesActive]
+  );
+
+  const poolDashboardData = useMemo(() => {
+    const recentComplaints = [...activePoolComplaints].sort((a, b) => {
+      const aKey = `${a.date || ""} ${a.created || ""}`;
+      const bKey = `${b.date || ""} ${b.created || ""}`;
+      return bKey.localeCompare(aKey);
+    });
+    const openComplaints = recentComplaints.filter((row) => row.entryType === "Complaint" && row.status !== "Resolved");
+    const criticalComplaints = openComplaints.filter((row) => row.severity === "Critical" || row.severity === "High");
+    const positiveComments = recentComplaints.filter((row) => row.entryType === "Comment");
+    const pendingCleaningToday = activePoolCleaningSchedules.filter(
+      (row) => row.date === todayYmd && row.status !== "Done"
+    );
+    const overdueCleaning = activePoolCleaningSchedules.filter(
+      (row) => row.status !== "Done" && row.date < todayYmd
+    );
+    const latestChemical = [...activePoolChemicalRecords]
+      .sort((a, b) => {
+        const aKey = `${a.datetime || ""} ${a.created || ""}`;
+        const bKey = `${b.datetime || ""} ${b.created || ""}`;
+        return bKey.localeCompare(aKey);
+      })[0];
+    const latestOperation = [...activePoolOperationRecords]
+      .sort((a, b) => {
+        const aKey = `${a.datetime || ""} ${a.created || ""}`;
+        const bKey = `${b.datetime || ""} ${b.created || ""}`;
+        return bKey.localeCompare(aKey);
+      })[0];
+    const latestPressure = Number(latestOperation?.filterPressure ?? 0);
+    const ph = Number(latestChemical?.ph ?? 0);
+    const freeCl = Number(latestChemical?.chlorineFree ?? 0);
+    const phInRange = ph >= 7.2 && ph <= 7.8;
+    const chlorineInRange = freeCl >= 1 && freeCl <= 3;
+    const waterQualityHealthy = phInRange && chlorineInRange;
+    const pressureHigh = latestPressure > 2.2;
+    return {
+      recentComplaints,
+      openComplaints,
+      criticalComplaints,
+      positiveComments,
+      pendingCleaningToday,
+      overdueCleaning,
+      latestChemical,
+      latestOperation,
+      phInRange,
+      chlorineInRange,
+      waterQualityHealthy,
+      pressureHigh,
+    };
+  }, [
+    activePoolComplaints,
+    activePoolCleaningSchedules,
+    activePoolChemicalRecords,
+    activePoolOperationRecords,
+    todayYmd,
+  ]);
+
   const setupLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === locationCampus)),
     [locations, locationCampus]
   );
 
+  const isInactiveTabletCreate = useMemo(() => {
+    const type = String(assetForm.type || "").trim().toUpperCase();
+    const status = String(assetForm.status || "").trim().toLowerCase();
+    return assetForm.category === "IT" && type === "TAB" && status === "inactive";
+  }, [assetForm.category, assetForm.type, assetForm.status]);
+  const isCreateStatusActive = useMemo(
+    () => String(assetForm.status || "").trim().toLowerCase() === "active",
+    [assetForm.status]
+  );
   const userRequired = useMemo(
-    () => USER_REQUIRED_TYPES.includes(assetForm.type) && !isSharedLocation(assetForm.location),
-    [assetForm.type, assetForm.location]
+    () =>
+      USER_REQUIRED_TYPES.includes(assetForm.type) &&
+      isCreateStatusActive &&
+      !isSharedLocation(assetForm.location) &&
+      !isInactiveTabletCreate,
+    [assetForm.type, assetForm.location, isInactiveTabletCreate, isCreateStatusActive]
   );
   const isPcAssetForCreate = useMemo(
     () => assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE,
@@ -6902,6 +7434,32 @@ export default function App() {
   }, [isPcAssetForCreate]);
 
   useEffect(() => {
+    if (!isInactiveTabletCreate) return;
+    setAssetForm((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      if (prev.campus !== INACTIVE_TABLET_HOLDING_CAMPUS) {
+        next.campus = INACTIVE_TABLET_HOLDING_CAMPUS;
+        changed = true;
+      }
+      if (prev.location !== INACTIVE_TABLET_HOLDING_LOCATION) {
+        next.location = INACTIVE_TABLET_HOLDING_LOCATION;
+        changed = true;
+      }
+      if (prev.assignedTo) {
+        next.assignedTo = "";
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [isInactiveTabletCreate]);
+  useEffect(() => {
+    if (isCreateStatusActive) return;
+    setAssetForm((prev) => (prev.assignedTo ? { ...prev, assignedTo: "" } : prev));
+  }, [isCreateStatusActive]);
+
+  useEffect(() => {
+    if (isInactiveTabletCreate) return;
     if (!campusLocations.length) {
       if (assetForm.location) {
         setAssetForm((f) => ({ ...f, location: "" }));
@@ -6911,7 +7469,7 @@ export default function App() {
     if (!campusLocations.some((loc) => loc.name === assetForm.location)) {
       setAssetForm((f) => ({ ...f, location: campusLocations[0].name }));
     }
-  }, [campusLocations, assetForm.location]);
+  }, [campusLocations, assetForm.location, isInactiveTabletCreate]);
   useEffect(() => {
     if (!inventoryLocations.length) return;
     if (!inventoryLocations.some((loc) => loc.name === inventoryItemForm.location)) {
@@ -7131,12 +7689,42 @@ export default function App() {
         );
         const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
         const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
+        const serverPoolCleaningSchedules = normalizePoolCleaningSchedules(settingsRes.settings?.poolCleaningSchedules);
+        const serverPoolEquipmentChecks = normalizePoolEquipmentChecks(settingsRes.settings?.poolEquipmentChecks);
+        const serverPoolChemicalRecords = normalizePoolChemicalRecords(settingsRes.settings?.poolChemicalRecords);
+        const serverPoolOperationRecords = normalizePoolOperationRecords(settingsRes.settings?.poolOperationRecords);
+        const serverPoolComplaints = normalizePoolComplaints(settingsRes.settings?.poolComplaints);
         const fallbackInventoryItems = readInventoryItemFallback();
         const fallbackInventoryTxns = readInventoryTxnFallback();
+        const fallbackPoolCleaningSchedules = readPoolCleaningScheduleFallback();
+        const fallbackPoolEquipmentChecks = readPoolEquipmentFallback();
+        const fallbackPoolChemicalRecords = readPoolChemicalFallback();
+        const fallbackPoolOperationRecords = readPoolOperationFallback();
+        const fallbackPoolComplaints = readPoolComplaintFallback();
         const nextInventoryItems = serverInventoryItems.length ? serverInventoryItems : fallbackInventoryItems;
         const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
+        const nextPoolCleaningSchedules = serverPoolCleaningSchedules.length
+          ? serverPoolCleaningSchedules
+          : fallbackPoolCleaningSchedules;
+        const nextPoolEquipmentChecks = serverPoolEquipmentChecks.length
+          ? serverPoolEquipmentChecks
+          : fallbackPoolEquipmentChecks;
+        const nextPoolChemicalRecords = serverPoolChemicalRecords.length
+          ? serverPoolChemicalRecords
+          : fallbackPoolChemicalRecords;
+        const nextPoolOperationRecords = serverPoolOperationRecords.length
+          ? serverPoolOperationRecords
+          : fallbackPoolOperationRecords;
+        const nextPoolComplaints = serverPoolComplaints.length
+          ? serverPoolComplaints
+          : fallbackPoolComplaints;
         setInventoryItems(nextInventoryItems);
         setInventoryTxns(nextInventoryTxns);
+        setPoolCleaningSchedules(nextPoolCleaningSchedules);
+        setPoolEquipmentChecks(nextPoolEquipmentChecks);
+        setPoolChemicalRecords(nextPoolChemicalRecords);
+        setPoolOperationRecords(nextPoolOperationRecords);
+        setPoolComplaints(nextPoolComplaints);
         const nextVaultAccounts = normalizeVaultAccounts(settingsRes.settings?.vaultAccounts);
         const nextVaultCredentials = normalizeVaultCredentials(settingsRes.settings?.vaultCredentials);
         const nextVaultDesignLinks = normalizeVaultDesignLinks(settingsRes.settings?.vaultDesignLinks);
@@ -7200,6 +7788,11 @@ export default function App() {
         setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
         setInventoryItems(readInventoryItemFallback());
         setInventoryTxns(readInventoryTxnFallback());
+        setPoolCleaningSchedules(readPoolCleaningScheduleFallback());
+        setPoolEquipmentChecks(readPoolEquipmentFallback());
+        setPoolChemicalRecords(readPoolChemicalFallback());
+        setPoolOperationRecords(readPoolOperationFallback());
+        setPoolComplaints(readPoolComplaintFallback());
         setVaultAccounts(readVaultAccountsFallback());
         setVaultCredentials(readVaultCredentialsFallback());
         setVaultDesignLinks(readVaultDesignLinksFallback());
@@ -7383,6 +7976,7 @@ export default function App() {
       alert(t.userRequired);
       return;
     }
+    const createAssignedTo = userRequired ? assetForm.assignedTo.trim() : "";
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
     if (createIsAircon && (!assetForm.acHasFrontPanel || !assetForm.acHasOutdoor)) {
       alert("Air-Con requires both Front Unit and Back Unit (Outdoor) components.");
@@ -7508,7 +8102,8 @@ export default function App() {
           parentAssetId: createParentAssetId,
           componentRole: needsComponentRole(assetForm.type) ? assetForm.componentRole.trim() : "",
           componentRequired: Boolean(assetForm.componentRequired),
-          custodyStatus: assetForm.assignedTo ? "ASSIGNED" : "IN_STOCK",
+          assignedTo: createAssignedTo,
+          custodyStatus: createAssignedTo ? "ASSIGNED" : "IN_STOCK",
           specs: createSpecs,
         }),
       });
@@ -7810,8 +8405,8 @@ export default function App() {
           parentAssetId: createParentAssetId,
           componentRole: needsComponentRole(assetForm.type) ? assetForm.componentRole.trim() : "",
           componentRequired: Boolean(assetForm.componentRequired),
-          assignedTo: assetForm.assignedTo,
-          custodyStatus: assetForm.assignedTo ? "ASSIGNED" : "IN_STOCK",
+          assignedTo: createAssignedTo,
+          custodyStatus: createAssignedTo ? "ASSIGNED" : "IN_STOCK",
           brand: assetForm.brand,
           model: assetForm.model,
           serialNumber: assetForm.serialNumber,
@@ -7830,7 +8425,7 @@ export default function App() {
           maintenanceHistory: [],
           verificationHistory: [],
           transferHistory: [],
-          custodyHistory: assetForm.assignedTo
+          custodyHistory: createAssignedTo
             ? [
                 {
                   id: Date.now() + 1,
@@ -7841,7 +8436,7 @@ export default function App() {
                   toCampus: assetForm.campus,
                   toLocation: assetForm.location,
                   fromUser: "",
-                  toUser: assetForm.assignedTo,
+                  toUser: createAssignedTo,
                   responsibilityAck: false,
                   by: authUser?.displayName || "",
                   note: "Initial assignment",
@@ -8312,6 +8907,212 @@ export default function App() {
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
       throw err;
+    }
+  }
+
+  async function savePoolSettingsToServer(
+    cleaningRows: PoolCleaningSchedule[],
+    equipmentRows: PoolEquipmentCheck[],
+    chemicalRows: PoolChemicalRecord[],
+    operationRows: PoolOperationRecord[],
+    complaintRows: PoolComplaint[]
+  ) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settings: {
+            poolCleaningSchedules: cleaningRows,
+            poolEquipmentChecks: equipmentRows,
+            poolChemicalRecords: chemicalRows,
+            poolOperationRecords: operationRows,
+            poolComplaints: complaintRows,
+          },
+        }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function addPoolCleaningSchedule() {
+    if (!requireAdminAction()) return;
+    if (!poolCleaningForm.date || !poolCleaningForm.task.trim()) {
+      setError("Pool cleaning date and task are required.");
+      return;
+    }
+    const row: PoolCleaningSchedule = {
+      id: Date.now(),
+      pool: activePoolLabel,
+      date: poolCleaningForm.date,
+      shift: poolCleaningForm.shift.trim(),
+      task: poolCleaningForm.task.trim(),
+      assignedTo: poolCleaningForm.assignedTo.trim(),
+      status: poolCleaningForm.status,
+      note: poolCleaningForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const next = [row, ...poolCleaningSchedules];
+    setPoolCleaningSchedules(next);
+    setPoolCleaningForm((prev) => ({ ...prev, task: "", assignedTo: "", status: "Pending", note: "" }));
+    try {
+      await savePoolSettingsToServer(next, poolEquipmentChecks, poolChemicalRecords, poolOperationRecords, poolComplaints);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save pool cleaning schedule");
+    }
+  }
+
+  async function addPoolEquipmentCheck() {
+    if (!requireAdminAction()) return;
+    if (!poolEquipmentForm.date || !poolEquipmentForm.item.trim()) {
+      setError("Equipment date and item are required.");
+      return;
+    }
+    const row: PoolEquipmentCheck = {
+      id: Date.now(),
+      pool: activePoolLabel,
+      date: poolEquipmentForm.date,
+      category: poolEquipmentForm.category,
+      item: poolEquipmentForm.item.trim(),
+      condition: poolEquipmentForm.condition,
+      qty: Number(poolEquipmentForm.qty || 0) || 0,
+      unit: poolEquipmentForm.unit.trim(),
+      note: poolEquipmentForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const next = [row, ...poolEquipmentChecks];
+    setPoolEquipmentChecks(next);
+    setPoolEquipmentForm((prev) => ({ ...prev, item: "", qty: "", unit: "", note: "" }));
+    try {
+      await savePoolSettingsToServer(poolCleaningSchedules, next, poolChemicalRecords, poolOperationRecords, poolComplaints);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save pool equipment check");
+    }
+  }
+
+  async function addPoolChemicalRecord() {
+    if (!requireAdminAction()) return;
+    if (!poolChemicalForm.datetime) {
+      setError("Chemical datetime is required.");
+      return;
+    }
+    const row: PoolChemicalRecord = {
+      id: Date.now(),
+      pool: activePoolLabel,
+      datetime: poolChemicalForm.datetime,
+      chlorineFree: Number(poolChemicalForm.chlorineFree || 0) || 0,
+      chlorineTotal: Number(poolChemicalForm.chlorineTotal || 0) || 0,
+      ph: Number(poolChemicalForm.ph || 0) || 0,
+      alkalinity: Number(poolChemicalForm.alkalinity || 0) || 0,
+      calciumHardness: Number(poolChemicalForm.calciumHardness || 0) || 0,
+      cyanuricAcid: Number(poolChemicalForm.cyanuricAcid || 0) || 0,
+      temperature: Number(poolChemicalForm.temperature || 0) || 0,
+      operator: poolChemicalForm.operator.trim(),
+      note: poolChemicalForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const next = [row, ...poolChemicalRecords];
+    setPoolChemicalRecords(next);
+    setPoolChemicalForm((prev) => ({
+      ...prev,
+      chlorineFree: "",
+      chlorineTotal: "",
+      ph: "",
+      alkalinity: "",
+      calciumHardness: "",
+      cyanuricAcid: "",
+      temperature: "",
+      note: "",
+    }));
+    try {
+      await savePoolSettingsToServer(poolCleaningSchedules, poolEquipmentChecks, next, poolOperationRecords, poolComplaints);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save pool chemical record");
+    }
+  }
+
+  async function addPoolOperationRecord() {
+    if (!requireAdminAction()) return;
+    if (!poolOperationForm.datetime) {
+      setError("Operation datetime is required.");
+      return;
+    }
+    const row: PoolOperationRecord = {
+      id: Date.now(),
+      pool: activePoolLabel,
+      datetime: poolOperationForm.datetime,
+      pumpStatus: poolOperationForm.pumpStatus,
+      timerMode: poolOperationForm.timerMode.trim(),
+      filterPressure: Number(poolOperationForm.filterPressure || 0) || 0,
+      backwashDone: Boolean(poolOperationForm.backwashDone),
+      operator: poolOperationForm.operator.trim(),
+      note: poolOperationForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const next = [row, ...poolOperationRecords];
+    setPoolOperationRecords(next);
+    setPoolOperationForm((prev) => ({ ...prev, timerMode: "", filterPressure: "", note: "" }));
+    try {
+      await savePoolSettingsToServer(poolCleaningSchedules, poolEquipmentChecks, poolChemicalRecords, next, poolComplaints);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save pool operation record");
+    }
+  }
+
+  async function addPoolComplaint() {
+    if (!requireAdminAction()) return;
+    if (!poolComplaintForm.date || !poolComplaintForm.teacher.trim() || !poolComplaintForm.condition.trim()) {
+      setError("Complaint date, reporter (teacher/staff), and condition are required.");
+      return;
+    }
+    const row: PoolComplaint = {
+      id: Date.now(),
+      pool: activePoolLabel,
+      date: poolComplaintForm.date,
+      teacher: poolComplaintForm.teacher.trim(),
+      entryType: poolComplaintForm.entryType,
+      condition: poolComplaintForm.condition.trim(),
+      severity: poolComplaintForm.severity,
+      status: poolComplaintForm.status,
+      photo: poolComplaintForm.photo || "",
+      note: poolComplaintForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const next = [row, ...poolComplaints];
+    setPoolComplaints(next);
+    setPoolComplaintForm((prev) => ({
+      ...prev,
+      teacher: "",
+      entryType: "Complaint",
+      condition: "",
+      severity: "Medium",
+      status: "Open",
+      photo: "",
+      note: "",
+    }));
+    try {
+      await savePoolSettingsToServer(poolCleaningSchedules, poolEquipmentChecks, poolChemicalRecords, poolOperationRecords, next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save pool complaint");
+    }
+  }
+
+  async function onPoolComplaintPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setPoolComplaintForm((prev) => ({ ...prev, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -10960,11 +11761,13 @@ export default function App() {
     const needsUser =
       !!editingAsset &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
+      String(assetEditForm.status || "").trim().toLowerCase() === "active" &&
       !isSharedLocation(assetEditForm.location);
     if (needsUser && !assetEditForm.assignedTo.trim()) {
       alert(t.userRequired);
       return;
     }
+    const editAssignedTo = needsUser ? assetEditForm.assignedTo.trim() : "";
     if (editingShouldLinkToParent && !assetEditForm.parentAssetId.trim()) {
       alert(t.selectParentAsset);
       return;
@@ -11009,7 +11812,7 @@ export default function App() {
         : (editingShouldLinkToParent ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
       componentRole: needsComponentRole(editingAsset?.type || "") ? assetEditForm.componentRole.trim() : "",
       componentRequired: Boolean(assetEditForm.componentRequired),
-      assignedTo: assetEditForm.assignedTo.trim(),
+      assignedTo: editAssignedTo,
       brand: assetEditForm.brand.trim(),
       model: assetEditForm.model.trim(),
       serialNumber: assetEditForm.serialNumber.trim(),
@@ -12697,6 +13500,18 @@ export default function App() {
     () => String(editingAsset?.category || "").trim().toUpperCase() === "SAFETY",
     [editingAsset]
   );
+  const editingStatusActive = useMemo(
+    () => String(assetEditForm.status || "").trim().toLowerCase() === "active",
+    [assetEditForm.status]
+  );
+  const editingUserRequired = useMemo(
+    () =>
+      !!editingAsset &&
+      USER_REQUIRED_TYPES.includes(editingAsset.type) &&
+      editingStatusActive &&
+      !isSharedLocation(assetEditForm.location),
+    [editingAsset, editingStatusActive, assetEditForm.location]
+  );
   const editingSetPackChildren = useMemo<Partial<Record<SetPackChildType, Asset>>>(() => {
     if (!editingAsset) return {};
     const isDesktopParent = editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
@@ -12754,6 +13569,10 @@ export default function App() {
       WBC: Boolean(editingSetPackChildren.WBC),
     });
   }, [editingAsset, editingSetPackChildren]);
+  useEffect(() => {
+    if (editingStatusActive) return;
+    setAssetEditForm((prev) => (prev.assignedTo ? { ...prev, assignedTo: "" } : prev));
+  }, [editingStatusActive]);
   const maintenanceDetailAsset = useMemo(
     () => assets.find((a) => a.id === maintenanceDetailAssetId) || null,
     [assets, maintenanceDetailAssetId]
@@ -17365,12 +18184,23 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>{t.location}</span>
-                    <select className="input" value={assetForm.location} onChange={(e) => setAssetForm((f) => ({ ...f, location: e.target.value }))}>
+                    <select
+                      className="input"
+                      value={assetForm.location}
+                      disabled={isInactiveTabletCreate}
+                      onChange={(e) => setAssetForm((f) => ({ ...f, location: e.target.value }))}
+                    >
+                      {isInactiveTabletCreate && !campusLocations.some((loc) => loc.name === INACTIVE_TABLET_HOLDING_LOCATION) ? (
+                        <option value={INACTIVE_TABLET_HOLDING_LOCATION}>{INACTIVE_TABLET_HOLDING_LOCATION}</option>
+                      ) : null}
                       {campusLocations.length ? null : <option value="">{t.selectLocation}</option>}
                       {campusLocations.map((loc) => (
                         <option key={loc.id} value={loc.name}>{loc.name}</option>
                       ))}
                     </select>
+                    {isInactiveTabletCreate ? (
+                      <div className="tiny">Inactive iPad/Tablet is stored at {INACTIVE_TABLET_HOLDING_LOCATION}.</div>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Item Template</span>
@@ -17693,12 +18523,12 @@ export default function App() {
                                         </div>
                                       </div>
                                       <div className="asset-photo-gallery">
-                                        {normalizeAssetPhotos(setPackDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                        {normalizeAssetPhotos(setPackDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                           <div key={`setpack-photo-${item.type}-${index}`} className="asset-photo-chip">
                                             <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                             <div className="asset-photo-chip-actions">
                                               <button
-                                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                                className="tab asset-photo-main-btn"
                                                 type="button"
                                                 onClick={() =>
                                                   setSetPackDraft((prev) => {
@@ -17717,9 +18547,7 @@ export default function App() {
                                                     };
                                                   })
                                                 }
-                                              >
-                                                {index === 0 ? "Main" : "Set Main"}
-                                              </button>
+                                              >Set Main</button>
                                               <button
                                                 className="btn-danger"
                                                 type="button"
@@ -18023,12 +18851,12 @@ export default function App() {
                                         </div>
                                       </div>
                                       <div className="asset-photo-gallery">
-                                        {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                        {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                           <div key={`laptop-accessory-photo-${item.type}-${index}`} className="asset-photo-chip">
                                             <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                             <div className="asset-photo-chip-actions">
                                               <button
-                                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                                className="tab asset-photo-main-btn"
                                                 type="button"
                                                 onClick={() =>
                                                   setLaptopAccessoryDraft((prev) => {
@@ -18047,9 +18875,7 @@ export default function App() {
                                                     };
                                                   })
                                                 }
-                                              >
-                                                {index === 0 ? "Main" : "Set Main"}
-                                              </button>
+                                              >Set Main</button>
                                               <button
                                                 className="btn-danger"
                                                 type="button"
@@ -18345,12 +19171,12 @@ export default function App() {
                                       </div>
                                     </div>
                                     <div className="asset-photo-gallery">
-                                      {normalizeAssetPhotos(cameraComponentDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                      {normalizeAssetPhotos(cameraComponentDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                         <div key={`camera-component-photo-${item.type}-${index}`} className="asset-photo-chip">
                                           <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                           <div className="asset-photo-chip-actions">
                                             <button
-                                              className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                              className="tab asset-photo-main-btn"
                                               type="button"
                                               onClick={() =>
                                                 setCameraComponentDraft((prev) => {
@@ -18369,9 +19195,7 @@ export default function App() {
                                                   };
                                                 })
                                               }
-                                            >
-                                              {index === 0 ? "Main" : "Set Main"}
-                                            </button>
+                                            >Set Main</button>
                                             <button
                                               className="btn-danger"
                                               type="button"
@@ -18664,12 +19488,12 @@ export default function App() {
                                       </div>
                                     </div>
                                     <div className="asset-photo-gallery">
-                                      {normalizeAssetPhotos(projectorComponentDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                      {normalizeAssetPhotos(projectorComponentDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                         <div key={`projector-component-photo-${item.type}-${index}`} className="asset-photo-chip">
                                           <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                           <div className="asset-photo-chip-actions">
                                             <button
-                                              className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                              className="tab asset-photo-main-btn"
                                               type="button"
                                               onClick={() =>
                                                 setProjectorComponentDraft((prev) => {
@@ -18688,9 +19512,7 @@ export default function App() {
                                                   };
                                                 })
                                               }
-                                            >
-                                              {index === 0 ? "Main" : "Set Main"}
-                                            </button>
+                                            >Set Main</button>
                                             <button
                                               className="btn-danger"
                                               type="button"
@@ -19025,12 +19847,12 @@ export default function App() {
                     </div>
                   </div>
                   <div className="asset-photo-gallery">
-                    {normalizeAssetPhotos(assetForm).slice(0, MAX_ASSET_PHOTOS).map((url, index) => (
+                    {normalizeAssetPhotos(assetForm).slice(1, MAX_ASSET_PHOTOS).map((url, index) => (
                       <div key={`create-photo-${index}`} className="asset-photo-chip">
                         <img src={url} alt={`asset-${index + 1}`} className="asset-photo-chip-img" />
                         <div className="asset-photo-chip-actions">
                           <button
-                            className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                            className="tab asset-photo-main-btn"
                             type="button"
                             disabled={!isAdmin}
                             onClick={() =>
@@ -19043,9 +19865,7 @@ export default function App() {
                                 return { ...f, photo: next[0] || "", photos: next };
                               })
                             }
-                          >
-                            {index === 0 ? "Main" : "Set Main"}
-                          </button>
+                          >Set Main</button>
                           <button
                             className="btn-danger"
                             type="button"
@@ -20287,21 +21107,30 @@ export default function App() {
                         ) : null}
                       </>
                     ) : null}
-                    <label className="field field-wide">
-                      <span>{t.user}</span>
-                      <select
-                        className="input"
-                        value={assetEditForm.assignedTo}
-                        onChange={(e) => setAssetEditForm((f) => ({ ...f, assignedTo: e.target.value }))}
-                      >
-                        <option value="">-</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.fullName}>
-                            {u.fullName} - {u.position}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    {editingStatusActive ? (
+                      <label className="field field-wide">
+                        <span>{t.user}</span>
+                        <select
+                          className="input"
+                          value={assetEditForm.assignedTo}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, assignedTo: e.target.value }))}
+                        >
+                          <option value="">-</option>
+                          {users.map((u) => (
+                            <option key={u.id} value={u.fullName}>
+                              {u.fullName} - {u.position}
+                            </option>
+                          ))}
+                        </select>
+                        {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
+                      </label>
+                    ) : (
+                      <div className="field field-wide">
+                        <span>{t.user}</span>
+                        <div className="detail-value">-</div>
+                        <p className="tiny">Status is not Active. User is not assigned.</p>
+                      </div>
+                    )}
                     <label className="field">
                       <span>Brand</span>
                       <input
@@ -20467,12 +21296,12 @@ export default function App() {
                       </div>
                     </div>
                     <div className="asset-photo-gallery">
-                      {normalizeAssetPhotos(assetEditForm).slice(0, MAX_ASSET_PHOTOS).map((url, index) => (
+                      {normalizeAssetPhotos(assetEditForm).slice(1, MAX_ASSET_PHOTOS).map((url, index) => (
                         <div key={`edit-photo-${index}`} className="asset-photo-chip">
                           <img src={url} alt={`asset-edit-${index + 1}`} className="asset-photo-chip-img" />
                           <div className="asset-photo-chip-actions">
                             <button
-                              className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                              className="tab asset-photo-main-btn"
                               type="button"
                               disabled={!isAdmin}
                               onClick={() =>
@@ -20485,9 +21314,7 @@ export default function App() {
                                   return { ...f, photo: next[0] || "", photos: next };
                                 })
                               }
-                            >
-                              {index === 0 ? "Main" : "Set Main"}
-                            </button>
+                            >Set Main</button>
                             <button
                               className="btn-danger"
                               type="button"
@@ -23192,6 +24019,342 @@ export default function App() {
               </>
             )}
           </section>
+        )}
+
+        {tab === "pool" && (
+          <>
+            <section className="panel">
+              <div className="tabs">
+                <button className={`tab ${poolView === "dashboard" ? "tab-active" : ""}`} onClick={() => setPoolView("dashboard")}>
+                  Dashboard
+                </button>
+                <button className={`tab ${poolView === "schedule" ? "tab-active" : ""}`} onClick={() => setPoolView("schedule")}>
+                  {t.cleaningSchedule}
+                </button>
+                <button className={`tab ${poolView === "equipment" ? "tab-active" : ""}`} onClick={() => setPoolView("equipment")}>
+                  {t.cleaningEquipment}
+                </button>
+                <button className={`tab ${poolView === "chemical" ? "tab-active" : ""}`} onClick={() => setPoolView("chemical")}>
+                  {t.addChemicalRecord}
+                </button>
+                <button className={`tab ${poolView === "operations" ? "tab-active" : ""}`} onClick={() => setPoolView("operations")}>
+                  {t.operationRecord}
+                </button>
+                <button className={`tab ${poolView === "complaints" ? "tab-active" : ""}`} onClick={() => setPoolView("complaints")}>
+                  {t.poolComplaints}
+                </button>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Pool Campus</span>
+                  <select
+                    className="input"
+                    value={poolInfo.campus}
+                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, campus: e.target.value }))}
+                  >
+                    <option value="Campus 2.2">Campus 2.2</option>
+                    <option value="Campus 4">Campus 4</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Pool Name</span>
+                  <input
+                    className="input"
+                    value={poolInfo.name}
+                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Main Pool"
+                  />
+                </label>
+                <label className="field">
+                  <span>Pool Size (m3)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    className="input"
+                    value={poolInfo.sizeM3}
+                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, sizeM3: e.target.value }))}
+                    placeholder="e.g. 450"
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span>Pool Information Note</span>
+                  <input
+                    className="input"
+                    value={poolInfo.notes}
+                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Depth, lane count, specific maintenance notes..."
+                  />
+                </label>
+              </div>
+              {poolView === "dashboard" ? (
+                <>
+                  <div className="pool-dashboard-hero">
+                    <div>
+                      <div className="pool-dashboard-kicker">Pool Live Board</div>
+                      <h3 className="section-title">Swimming Pool Operation Dashboard</h3>
+                      <div className="tiny">
+                        Track cleaning, water chemistry, pump status, and pool remarks from teachers or staff.
+                      </div>
+                      <div className="tiny">
+                        {activePoolLabel}{poolInfo.sizeM3 ? ` | Size ${poolInfo.sizeM3} m3` : ""}
+                      </div>
+                    </div>
+                    <div className="pool-dashboard-badges">
+                      <span className={`pool-badge ${poolDashboardData.waterQualityHealthy ? "pool-badge-good" : "pool-badge-alert"}`}>
+                        Water {poolDashboardData.waterQualityHealthy ? "Stable" : "Need Check"}
+                      </span>
+                      <span className={`pool-badge ${poolDashboardData.latestOperation?.pumpStatus === "On" ? "pool-badge-good" : "pool-badge-alert"}`}>
+                        Pump {poolDashboardData.latestOperation?.pumpStatus || "-"}
+                      </span>
+                      <span className={`pool-badge ${poolDashboardData.overdueCleaning.length ? "pool-badge-alert" : "pool-badge-good"}`}>
+                        Overdue Tasks {poolDashboardData.overdueCleaning.length}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="pool-dashboard-grid">
+                    <article className="pool-metric-card">
+                      <div className="pool-metric-label">Open Complaints</div>
+                      <div className="pool-metric-value">{poolDashboardData.openComplaints.length}</div>
+                      <div className="tiny">Complaints from teachers or staff waiting for resolution</div>
+                    </article>
+                    <article className="pool-metric-card">
+                      <div className="pool-metric-label">Critical / High</div>
+                      <div className="pool-metric-value">{poolDashboardData.criticalComplaints.length}</div>
+                      <div className="tiny">Priority items that need immediate action</div>
+                    </article>
+                    <article className="pool-metric-card">
+                      <div className="pool-metric-label">Today Pending Cleaning</div>
+                      <div className="pool-metric-value">{poolDashboardData.pendingCleaningToday.length}</div>
+                      <div className="tiny">Tasks scheduled today but not done</div>
+                    </article>
+                    <article className="pool-metric-card">
+                      <div className="pool-metric-label">Positive Comments</div>
+                      <div className="pool-metric-value">{poolDashboardData.positiveComments.length}</div>
+                      <div className="tiny">Good condition comments from teachers or staff</div>
+                    </article>
+                  </div>
+                  <div className="pool-dashboard-health">
+                    <article className={`pool-health-tile ${poolDashboardData.phInRange ? "is-good" : "is-alert"}`}>
+                      <div className="pool-health-title">Latest pH</div>
+                      <div className="pool-health-value">{poolDashboardData.latestChemical?.ph ?? "-"}</div>
+                      <div className="tiny">Target 7.2 - 7.8</div>
+                    </article>
+                    <article className={`pool-health-tile ${poolDashboardData.chlorineInRange ? "is-good" : "is-alert"}`}>
+                      <div className="pool-health-title">Free Chlorine</div>
+                      <div className="pool-health-value">{poolDashboardData.latestChemical?.chlorineFree ?? "-"}</div>
+                      <div className="tiny">Target 1.0 - 3.0 ppm</div>
+                    </article>
+                    <article className={`pool-health-tile ${poolDashboardData.latestOperation?.pumpStatus === "On" ? "is-good" : "is-alert"}`}>
+                      <div className="pool-health-title">Pump Status</div>
+                      <div className="pool-health-value">{poolDashboardData.latestOperation?.pumpStatus || "-"}</div>
+                      <div className="tiny">Current operation record</div>
+                    </article>
+                    <article className={`pool-health-tile ${poolDashboardData.pressureHigh ? "is-alert" : "is-good"}`}>
+                      <div className="pool-health-title">Filter Pressure</div>
+                      <div className="pool-health-value">{poolDashboardData.latestOperation?.filterPressure ?? "-"}</div>
+                      <div className="tiny">Alert if above 2.2 bar</div>
+                    </article>
+                  </div>
+                  <div className="pool-dashboard-quick-actions">
+                    <button type="button" className="tab" onClick={() => setPoolView("complaints")}>Manage Complaints</button>
+                    <button type="button" className="tab" onClick={() => setPoolView("schedule")}>Update Cleaning</button>
+                    <button type="button" className="tab" onClick={() => setPoolView("chemical")}>Add Chemical Log</button>
+                    <button type="button" className="tab" onClick={() => setPoolView("operations")}>Add Operation Log</button>
+                  </div>
+                  <div className="pool-dashboard-bottom">
+                    <div className="pool-dashboard-list-card">
+                      <div className="panel-row">
+                        <h3 className="section-title">Immediate Action Items</h3>
+                        <button type="button" className="tab btn-small" onClick={() => setPoolView("complaints")}>
+                          View All
+                        </button>
+                      </div>
+                      {poolDashboardData.criticalComplaints.length ? (
+                        <ul className="pool-alert-list">
+                          {poolDashboardData.criticalComplaints.slice(0, 5).map((row) => (
+                            <li key={`pool-critical-${row.id}`} className="pool-alert-item">
+                              <strong>{row.condition}</strong>
+                              <span>{row.teacher} | {row.severity} | {row.status}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="pool-empty-note">No critical complaints right now.</div>
+                      )}
+                      <div className="pool-secondary-alerts">
+                        {poolDashboardData.overdueCleaning.length ? (
+                          <div className="pool-secondary-alert">Overdue cleaning tasks: {poolDashboardData.overdueCleaning.length}</div>
+                        ) : (
+                          <div className="pool-secondary-ok">No overdue cleaning tasks.</div>
+                        )}
+                        {!poolDashboardData.waterQualityHealthy ? (
+                          <div className="pool-secondary-alert">Water chemistry out of range. Recheck chemical record.</div>
+                        ) : (
+                          <div className="pool-secondary-ok">Water chemistry within standard range.</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="pool-dashboard-list-card">
+                      <div className="panel-row">
+                        <h3 className="section-title">Pool Remarks Feed (Teacher / Staff)</h3>
+                        <button type="button" className="tab btn-small" onClick={() => setPoolView("complaints")}>
+                          Add Remark
+                        </button>
+                      </div>
+                      <div className="pool-remark-feed">
+                        {poolDashboardData.recentComplaints.length ? (
+                          poolDashboardData.recentComplaints.slice(0, 6).map((row) => (
+                            <article
+                              key={`pool-remark-feed-${row.id}`}
+                              className={`pool-remark-item ${row.entryType === "Complaint" ? "is-complaint" : "is-comment"}`}
+                            >
+                              <div className="pool-remark-main">
+                                <strong>{row.condition}</strong>
+                                <span>{formatDate(row.date)} | {row.teacher} | {row.severity} | {row.status}</span>
+                              </div>
+                              {row.photo ? <img src={row.photo} alt="pool incident" className="pool-remark-photo" /> : null}
+                            </article>
+                          ))
+                        ) : (
+                          <div className="pool-empty-note">No remarks yet.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+              {poolView === "schedule" ? (
+                <>
+                  <div className="form-grid">
+                    <label className="field"><span>{t.date}</span><input type="date" className="input" value={poolCleaningForm.date} onChange={(e) => setPoolCleaningForm((f) => ({ ...f, date: e.target.value }))} /></label>
+                    <label className="field"><span>Shift</span><select className="input" value={poolCleaningForm.shift} onChange={(e) => setPoolCleaningForm((f) => ({ ...f, shift: e.target.value }))}><option>Morning</option><option>Afternoon</option><option>Evening</option></select></label>
+                    <label className="field"><span>Task</span><input className="input" value={poolCleaningForm.task} onChange={(e) => setPoolCleaningForm((f) => ({ ...f, task: e.target.value }))} /></label>
+                    <label className="field"><span>Assigned To</span><input className="input" value={poolCleaningForm.assignedTo} onChange={(e) => setPoolCleaningForm((f) => ({ ...f, assignedTo: e.target.value }))} /></label>
+                    <label className="field"><span>{t.status}</span><select className="input" value={poolCleaningForm.status} onChange={(e) => setPoolCleaningForm((f) => ({ ...f, status: e.target.value as PoolCleaningSchedule["status"] }))}><option value="Pending">Pending</option><option value="Done">Done</option></select></label>
+                    <label className="field field-wide"><span>Note</span><input className="input" value={poolCleaningForm.note} onChange={(e) => setPoolCleaningForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                  </div>
+                  <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolCleaningSchedule()}>Save Cleaning Schedule</button></div>
+                  <div className="table-wrap"><table><thead><tr><th>{t.date}</th><th>Shift</th><th>Task</th><th>Assigned</th><th>{t.status}</th><th>Note</th></tr></thead><tbody>{activePoolCleaningSchedules.length ? activePoolCleaningSchedules.slice(0, 80).map((row) => <tr key={`pool-cleaning-${row.id}`}><td>{row.date}</td><td>{row.shift || "-"}</td><td>{row.task}</td><td>{row.assignedTo || "-"}</td><td>{row.status}</td><td>{row.note || "-"}</td></tr>) : <tr><td colSpan={6}>No cleaning schedule records yet.</td></tr>}</tbody></table></div>
+                </>
+              ) : null}
+              {poolView === "equipment" ? (
+                <>
+                  <div className="form-grid">
+                    <label className="field"><span>{t.date}</span><input type="date" className="input" value={poolEquipmentForm.date} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, date: e.target.value }))} /></label>
+                    <label className="field"><span>Category</span><select className="input" value={poolEquipmentForm.category} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, category: e.target.value as PoolEquipmentCheck["category"] }))}><option>Cleaning</option><option>Chemical</option><option>Safety</option><option>Mechanical</option></select></label>
+                    <label className="field"><span>Item</span><input className="input" value={poolEquipmentForm.item} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, item: e.target.value }))} /></label>
+                    <label className="field"><span>Condition</span><select className="input" value={poolEquipmentForm.condition} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, condition: e.target.value as PoolEquipmentCheck["condition"] }))}><option>Good</option><option>Need Service</option><option>Replace</option></select></label>
+                    <label className="field"><span>Qty</span><input className="input" type="number" value={poolEquipmentForm.qty} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, qty: e.target.value }))} /></label>
+                    <label className="field"><span>Unit</span><input className="input" value={poolEquipmentForm.unit} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, unit: e.target.value }))} /></label>
+                    <label className="field field-wide"><span>Note</span><input className="input" value={poolEquipmentForm.note} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                  </div>
+                  <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolEquipmentCheck()}>Save Equipment Check</button></div>
+                  <div className="table-wrap"><table><thead><tr><th>{t.date}</th><th>Category</th><th>Item</th><th>Condition</th><th>Qty</th><th>Note</th></tr></thead><tbody>{activePoolEquipmentChecks.length ? activePoolEquipmentChecks.slice(0, 80).map((row) => <tr key={`pool-equip-${row.id}`}><td>{row.date}</td><td>{row.category}</td><td>{row.item}</td><td>{row.condition}</td><td>{row.qty || 0} {row.unit || ""}</td><td>{row.note || "-"}</td></tr>) : <tr><td colSpan={6}>No equipment records yet.</td></tr>}</tbody></table></div>
+                </>
+              ) : null}
+              {poolView === "chemical" ? (
+                <>
+                  <div className="form-grid">
+                    <label className="field"><span>Date & Time</span><input type="datetime-local" className="input" value={poolChemicalForm.datetime} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, datetime: e.target.value }))} /></label>
+                    <label className="field"><span>Free Cl</span><input className="input" type="number" step="0.1" value={poolChemicalForm.chlorineFree} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, chlorineFree: e.target.value }))} /></label>
+                    <label className="field"><span>Total Cl</span><input className="input" type="number" step="0.1" value={poolChemicalForm.chlorineTotal} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, chlorineTotal: e.target.value }))} /></label>
+                    <label className="field"><span>pH</span><input className="input" type="number" step="0.1" value={poolChemicalForm.ph} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, ph: e.target.value }))} /></label>
+                    <label className="field"><span>Alkalinity</span><input className="input" type="number" step="0.1" value={poolChemicalForm.alkalinity} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, alkalinity: e.target.value }))} /></label>
+                    <label className="field"><span>Calcium</span><input className="input" type="number" step="0.1" value={poolChemicalForm.calciumHardness} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, calciumHardness: e.target.value }))} /></label>
+                    <label className="field"><span>Cyanuric Acid</span><input className="input" type="number" step="0.1" value={poolChemicalForm.cyanuricAcid} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, cyanuricAcid: e.target.value }))} /></label>
+                    <label className="field"><span>Temp (C)</span><input className="input" type="number" step="0.1" value={poolChemicalForm.temperature} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, temperature: e.target.value }))} /></label>
+                    <label className="field"><span>Operator</span><input className="input" value={poolChemicalForm.operator} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, operator: e.target.value }))} /></label>
+                    <label className="field field-wide"><span>Note</span><input className="input" value={poolChemicalForm.note} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                  </div>
+                  <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolChemicalRecord()}>Save Chemical Record</button></div>
+                  <div className="table-wrap"><table><thead><tr><th>Date/Time</th><th>Free Cl</th><th>Total Cl</th><th>pH</th><th>Temp</th><th>Operator</th></tr></thead><tbody>{activePoolChemicalRecords.length ? activePoolChemicalRecords.slice(0, 80).map((row) => <tr key={`pool-chem-${row.id}`}><td>{row.datetime}</td><td>{row.chlorineFree ?? "-"}</td><td>{row.chlorineTotal ?? "-"}</td><td>{row.ph ?? "-"}</td><td>{row.temperature ?? "-"}</td><td>{row.operator || "-"}</td></tr>) : <tr><td colSpan={6}>No chemical records yet.</td></tr>}</tbody></table></div>
+                </>
+              ) : null}
+              {poolView === "operations" ? (
+                <>
+                  <div className="form-grid">
+                    <label className="field"><span>Date & Time</span><input type="datetime-local" className="input" value={poolOperationForm.datetime} onChange={(e) => setPoolOperationForm((f) => ({ ...f, datetime: e.target.value }))} /></label>
+                    <label className="field"><span>Pump</span><select className="input" value={poolOperationForm.pumpStatus} onChange={(e) => setPoolOperationForm((f) => ({ ...f, pumpStatus: e.target.value as PoolOperationRecord["pumpStatus"] }))}><option>On</option><option>Off</option></select></label>
+                    <label className="field"><span>Timer Mode</span><input className="input" value={poolOperationForm.timerMode} onChange={(e) => setPoolOperationForm((f) => ({ ...f, timerMode: e.target.value }))} /></label>
+                    <label className="field"><span>Filter Pressure</span><input className="input" type="number" step="0.1" value={poolOperationForm.filterPressure} onChange={(e) => setPoolOperationForm((f) => ({ ...f, filterPressure: e.target.value }))} /></label>
+                    <label className="field"><span>Operator</span><input className="input" value={poolOperationForm.operator} onChange={(e) => setPoolOperationForm((f) => ({ ...f, operator: e.target.value }))} /></label>
+                    <label className="field">
+                      <span>Backwash Done</span>
+                      <input type="checkbox" checked={poolOperationForm.backwashDone} onChange={(e) => setPoolOperationForm((f) => ({ ...f, backwashDone: e.target.checked }))} />
+                    </label>
+                    <label className="field field-wide"><span>Note</span><input className="input" value={poolOperationForm.note} onChange={(e) => setPoolOperationForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                  </div>
+                  <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolOperationRecord()}>Save Operation Record</button></div>
+                  <div className="table-wrap"><table><thead><tr><th>Date/Time</th><th>Pump</th><th>Timer</th><th>Pressure</th><th>Backwash</th><th>Operator</th></tr></thead><tbody>{activePoolOperationRecords.length ? activePoolOperationRecords.slice(0, 80).map((row) => <tr key={`pool-op-${row.id}`}><td>{row.datetime}</td><td>{row.pumpStatus}</td><td>{row.timerMode || "-"}</td><td>{row.filterPressure ?? "-"}</td><td>{row.backwashDone ? "Yes" : "No"}</td><td>{row.operator || "-"}</td></tr>) : <tr><td colSpan={6}>No operation records yet.</td></tr>}</tbody></table></div>
+                </>
+              ) : null}
+              {poolView === "complaints" ? (
+                <>
+                  <div className="form-grid">
+                    <label className="field"><span>{t.date}</span><input type="date" className="input" value={poolComplaintForm.date} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, date: e.target.value }))} /></label>
+                    <label className="field"><span>Reporter (Teacher / Staff)</span><input className="input" value={poolComplaintForm.teacher} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, teacher: e.target.value }))} placeholder="Name of teacher or staff" /></label>
+                    <label className="field"><span>Remark Type</span><select className="input" value={poolComplaintForm.entryType} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, entryType: e.target.value as PoolComplaint["entryType"] }))}><option>Complaint</option><option>Comment</option></select></label>
+                    <label className="field"><span>Pool Condition / Complaint</span><input className="input" value={poolComplaintForm.condition} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, condition: e.target.value }))} placeholder="Water cloudy, pump noise, smell..." /></label>
+                    <label className="field"><span>Severity</span><select className="input" value={poolComplaintForm.severity} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, severity: e.target.value as PoolComplaint["severity"] }))}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
+                    <label className="field"><span>{t.status}</span><select className="input" value={poolComplaintForm.status} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, status: e.target.value as PoolComplaint["status"] }))}><option>Open</option><option>In Progress</option><option>Resolved</option></select></label>
+                    <label className="field"><span>Incident Photo</span><input type="file" accept="image/*" capture="environment" className="input" onChange={onPoolComplaintPhotoFile} /></label>
+                    <div className="field">
+                      <span>Photo Preview</span>
+                      <div className="photo-preview-wrap">
+                        {poolComplaintForm.photo ? (
+                          <img src={poolComplaintForm.photo} alt="incident preview" className="photo-preview" />
+                        ) : (
+                          <div className="photo-placeholder">{t.noPhoto}</div>
+                        )}
+                      </div>
+                    </div>
+                    <label className="field field-wide"><span>Note</span><input className="input" value={poolComplaintForm.note} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                  </div>
+                  <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolComplaint()}>Save Complaint</button></div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t.date}</th>
+                          <th>Reporter</th>
+                          <th>Type</th>
+                          <th>Condition</th>
+                          <th>Severity</th>
+                          <th>{t.status}</th>
+                          <th>Photo</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activePoolComplaints.length ? (
+                          activePoolComplaints.slice(0, 120).map((row) => (
+                            <tr
+                              key={`pool-complaint-${row.id}`}
+                              style={{
+                                background: row.entryType === "Complaint" ? "#fff3f2" : "#f3fff6",
+                              }}
+                            >
+                              <td>{row.date}</td>
+                              <td>{row.teacher}</td>
+                              <td>{row.entryType}</td>
+                              <td>{row.condition}</td>
+                              <td>{row.severity}</td>
+                              <td>{row.status}</td>
+                              <td>{row.photo ? <img src={row.photo} alt="incident" className="table-photo" /> : "-"}</td>
+                              <td>{row.note || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr><td colSpan={8}>No pool complaints yet.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </section>
+          </>
         )}
 
         {tab === "maintenance" && (
