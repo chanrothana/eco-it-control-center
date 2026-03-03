@@ -5,7 +5,8 @@ const path = require("path");
 
 const PORTS = [3000, 4000];
 const isPhoneMode = process.argv.includes("--phone");
-const apiHost = isPhoneMode ? "0.0.0.0" : "";
+// Local mode should stay loopback-only; phone mode exposes to LAN.
+const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
 const webHost = isPhoneMode ? "0.0.0.0" : "";
 const children = [];
 let shuttingDown = false;

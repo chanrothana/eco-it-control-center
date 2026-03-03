@@ -22,6 +22,7 @@ import {
   PcCase,
   Printer,
   Puzzle,
+  Search,
   Settings,
   Shield,
   Snowflake,
@@ -1014,8 +1015,6 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Memory Card", itemKm: "កាតមេម៉ូរី", code: "MCD" },
     { itemEn: "Camera Bag", itemKm: "កាបូបកាមេរ៉ា", code: "BAG" },
     { itemEn: "Slide Projector", itemKm: "ម៉ាស៊ីនបញ្ចាំងស្លាយ", code: "SLP" },
-    { itemEn: "Power Adapter", itemKm: "អាដាប់ទ័រ", code: "ADP" },
-    { itemEn: "Remote Control", itemKm: "រីម៉ូត", code: "RMT" },
     { itemEn: "USB WiFi Adapter", itemKm: "USB វ៉ាយហ្វាយ", code: "UWF" },
     { itemEn: "Webcam", itemKm: "កាមេរ៉ាវិប", code: "WBC" },
     { itemEn: "TV", itemKm: "ទូរទស្សន៍", code: "TV" },
@@ -1043,6 +1042,9 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 
 const USER_REQUIRED_TYPES = ["PC", "TAB", "SPK", "DCM"];
 const USB_WIFI_TYPE_CODE = "UWF";
+const WEBCAM_TYPE_CODE = "WBC";
+const TV_TYPE_CODE = "TV";
+const REMOTE_TYPE_CODE = "RMT";
 const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
 const SHARED_LOCATION_KEYWORDS = [
   "teacher office",
@@ -1055,6 +1057,21 @@ const DESKTOP_PARENT_TYPE = "PC";
 const WATER_DISPENSER_MAIN_TYPE = "WDP";
 const LAPTOP_TYPE = "LAP";
 const DIGITAL_CAMERA_TYPE = "DCM";
+const PROJECTOR_TYPE = "SLP";
+const NO_PARENT_LINK_TYPES = new Set([
+  DESKTOP_PARENT_TYPE,
+  LAPTOP_TYPE,
+  DIGITAL_CAMERA_TYPE,
+  PROJECTOR_TYPE,
+  USB_WIFI_TYPE_CODE,
+  TV_TYPE_CODE,
+  "AP",
+  "FGP",
+  "PRN",
+  "SPK",
+  "SW",
+  "CAM",
+]);
 const DIGITAL_CAMERA_COMPONENT_TYPES = ["BAT", "CHB", "MCD", "BAG"] as const;
 const MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS = [
   "USB",
@@ -1072,6 +1089,7 @@ const PC_TYPE_OPTIONS = [
 type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE" | "UWF" | "WBC";
 type LaptopAccessoryType = "ADP" | "MSE" | "KBD" | "MON";
 type CameraComponentType = "BAT" | "CHB" | "MCD" | "BAG";
+type ProjectorComponentType = "BAG" | "RMT" | "ADP" | "HDC";
 type SetPackChildDraft = {
   enabled: boolean;
   status: string;
@@ -1133,6 +1151,15 @@ function defaultCameraComponentDraft(): Record<CameraComponentType, SetPackChild
   };
 }
 
+function defaultProjectorComponentDraft(): Record<ProjectorComponentType, SetPackChildDraft> {
+  return {
+    BAG: defaultSetPackChildDraft(),
+    RMT: defaultSetPackChildDraft(),
+    ADP: defaultSetPackChildDraft(),
+    HDC: defaultSetPackChildDraft(),
+  };
+}
+
 function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF" | "WBC" {
   if (type === "MON2") return "MON";
   return type;
@@ -1143,15 +1170,17 @@ function canLinkToParentAsset(category: string, type: string): boolean {
   if (normalizedCategory === "SAFETY") return false;
   const code = String(type || "").trim().toUpperCase();
   return (
-    code !== DESKTOP_PARENT_TYPE &&
-    code !== LAPTOP_TYPE &&
-    code !== DIGITAL_CAMERA_TYPE &&
+    !NO_PARENT_LINK_TYPES.has(code) &&
     !DIGITAL_CAMERA_COMPONENT_TYPES.includes(code as (typeof DIGITAL_CAMERA_COMPONENT_TYPES)[number]) &&
     code !== WATER_DISPENSER_MAIN_TYPE &&
     code !== "AC" &&
     code !== "TBL" &&
     code !== "CHR"
   );
+}
+
+function needsComponentRole(type: string): boolean {
+  return String(type || "").trim().toUpperCase() !== WEBCAM_TYPE_CODE;
 }
 
 const TEXT = {
@@ -1220,6 +1249,12 @@ const TEXT = {
     includeMemoryCard: "Include Memory Card",
     includeCameraBag: "Include Bag",
     cameraComponentHint: "Digital Camera can include components without linking to an existing parent asset.",
+    projectorComponents: "Projector Components",
+    tvRemoteCount: "TV Remote Quantity",
+    tvRemoteHint: "TV is a main asset. Set how many remotes come with this TV (1 or 2).",
+    includeRemoteControl: "Include Remote",
+    includeHdmiCable: "Include HDMI Cable",
+    projectorComponentHint: "Slide Projector can include accessories without linking to an existing parent asset.",
     linkToParentAsset: "Link to parent asset",
     selectParentAsset: "Select Parent Asset",
     componentRole: "Component Role",
@@ -1434,6 +1469,12 @@ const TEXT = {
     includeMemoryCard: "រួមបញ្ចូលកាតមេម៉ូរី",
     includeCameraBag: "រួមបញ្ចូលកាបូប",
     cameraComponentHint: "កាមេរ៉ាឌីជីថល អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
+    projectorComponents: "គ្រឿងបន្ថែមម៉ាស៊ីនបញ្ចាំង",
+    tvRemoteCount: "ចំនួនរីម៉ូត TV",
+    tvRemoteHint: "TV ជា Asset មេ។ កំណត់ចំនួនរីម៉ូតដែលភ្ជាប់មកជាមួយ TV (1 ឬ 2)।",
+    includeRemoteControl: "រួមបញ្ចូលរីម៉ូត",
+    includeHdmiCable: "រួមបញ្ចូលខ្សែ HDMI",
+    projectorComponentHint: "ម៉ាស៊ីនបញ្ចាំង អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
     linkToParentAsset: "ភ្ជាប់ទៅ Asset មេ",
     selectParentAsset: "ជ្រើស Asset មេ",
     componentRole: "តួនាទីគ្រឿងបន្ថែម",
@@ -3368,6 +3409,136 @@ type ParentAssetPickerProps = {
   getLabel: (asset: Asset) => string;
 };
 
+type AssetTypePickerOption = {
+  code: string;
+  label: string;
+};
+
+type AssetTypePickerProps = {
+  value: string;
+  options: AssetTypePickerOption[];
+  onChange: (typeCode: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  getIcon?: (opt: AssetTypePickerOption) => React.ReactNode;
+};
+
+function AssetTypePicker({
+  value,
+  options,
+  onChange,
+  placeholder = "Select type code",
+  disabled,
+  searchPlaceholder = "Search type code...",
+  emptyText = "No type code found.",
+  getIcon,
+}: AssetTypePickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const prevValueRef = useRef(value);
+  const selected = options.find((opt) => String(opt.code) === value) || null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setOpen(false);
+      setSearch("");
+    }
+  }, [value]);
+
+  const filtered = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((opt) => `${opt.label} ${opt.code}`.toLowerCase().includes(q));
+  }, [options, deferredSearch]);
+
+  const selectType = useCallback(
+    (typeCode: string) => {
+      onChange(typeCode);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange]
+  );
+
+  return (
+    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="asset-picker-trigger input"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen(true)}
+      >
+        {selected ? (
+          <span className="asset-picker-selected">
+            <span>{selected.label} ({selected.code})</span>
+          </span>
+        ) : (
+          <span className="asset-picker-placeholder">{placeholder}</span>
+        )}
+        <span className="asset-picker-caret">▾</span>
+      </button>
+      {open ? (
+        <div className="asset-picker-menu">
+          <div className="type-code-picker-search-wrap">
+            <Search size={15} aria-hidden={true} className="type-code-picker-search-icon" />
+            <input
+              className="input asset-picker-search type-code-picker-search"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="asset-picker-list">
+            {filtered.length ? (
+              filtered.map((opt) => (
+                <button
+                  type="button"
+                  key={`type-code-picker-${opt.code}`}
+                  className={`asset-picker-option ${opt.code === value ? "asset-picker-option-active" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectType(opt.code);
+                  }}
+                  onClick={() => selectType(opt.code)}
+                >
+                  <span className="type-code-picker-icon">{getIcon ? getIcon(opt) : <Package size={16} aria-hidden={true} />}</span>
+                  <span>{opt.label} ({opt.code})</span>
+                </button>
+              ))
+            ) : (
+              <div className="asset-picker-empty">{emptyText}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ParentAssetPicker({
   value,
   assets,
@@ -4450,6 +4621,7 @@ export default function App() {
     acHasFrontPanel: false,
     acHasOutdoor: false,
     acComponentNote: "",
+    tvRemoteCount: "1",
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -4541,6 +4713,33 @@ export default function App() {
     CHB: false,
     MCD: false,
     BAG: false,
+  });
+  const [projectorComponentEnabled, setProjectorComponentEnabled] = useState<Record<ProjectorComponentType, boolean>>({
+    BAG: true,
+    RMT: true,
+    ADP: true,
+    HDC: true,
+  });
+  const [projectorComponentDraft, setProjectorComponentDraft] = useState<Record<ProjectorComponentType, SetPackChildDraft>>(
+    () => defaultProjectorComponentDraft()
+  );
+  const [projectorComponentFileKey, setProjectorComponentFileKey] = useState<Record<ProjectorComponentType, number>>({
+    BAG: 0,
+    RMT: 0,
+    ADP: 0,
+    HDC: 0,
+  });
+  const projectorComponentPhotoInputRefs = useRef<Record<ProjectorComponentType, HTMLInputElement | null>>({
+    BAG: null,
+    RMT: null,
+    ADP: null,
+    HDC: null,
+  });
+  const [projectorComponentDetailOpen, setProjectorComponentDetailOpen] = useState<Record<ProjectorComponentType, boolean>>({
+    BAG: false,
+    RMT: false,
+    ADP: false,
+    HDC: false,
   });
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
@@ -5502,6 +5701,19 @@ export default function App() {
       BAG: `${campusCode}-${categoryCode("IT")}-BAG-${pad4(baseBag)}`,
     };
   }, [assets, assetForm.campus]);
+  const projectorComponentSuggestedAssetId = useMemo<Record<ProjectorComponentType, string>>(() => {
+    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
+    const baseBag = calcNextSeq(assets, assetForm.campus, "IT", "BAG");
+    const baseRmt = calcNextSeq(assets, assetForm.campus, "IT", "RMT");
+    const baseAdp = calcNextSeq(assets, assetForm.campus, "IT", "ADP");
+    const baseHdc = calcNextSeq(assets, assetForm.campus, "IT", "HDC");
+    return {
+      BAG: `${campusCode}-${categoryCode("IT")}-BAG-${pad4(baseBag)}`,
+      RMT: `${campusCode}-${categoryCode("IT")}-RMT-${pad4(baseRmt)}`,
+      ADP: `${campusCode}-${categoryCode("IT")}-ADP-${pad4(baseAdp)}`,
+      HDC: `${campusCode}-${categoryCode("IT")}-HDC-${pad4(baseHdc)}`,
+    };
+  }, [assets, assetForm.campus]);
   const parentAssetsForEdit = useMemo(() => {
     const editing = assets.find((a) => a.id === editingAssetId);
     if (!editing) return [] as Asset[];
@@ -6232,6 +6444,14 @@ export default function App() {
     () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === DIGITAL_CAMERA_TYPE,
     [assetForm.category, assetForm.type]
   );
+  const isProjectorAssetForCreate = useMemo(
+    () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === PROJECTOR_TYPE,
+    [assetForm.category, assetForm.type]
+  );
+  const isTvAssetForCreate = useMemo(
+    () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === TV_TYPE_CODE,
+    [assetForm.category, assetForm.type]
+  );
   const isMouseKeyboardTypeForCreate = useMemo(
     () => {
       const type = String(assetForm.type || "").trim().toUpperCase();
@@ -6391,8 +6611,14 @@ export default function App() {
       if (!canLinkToParentAsset(prev.category, prev.type) && (prev.useExistingSet || prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
         return { ...prev, useExistingSet: false, setCode: "", parentAssetId: "", componentRole: "", componentRequired: false };
       }
+      if (!needsComponentRole(prev.type) && prev.componentRole) {
+        return { ...prev, componentRole: "" };
+      }
       if (!prev.useExistingSet && (prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
         return { ...prev, setCode: "", parentAssetId: "", componentRole: "", componentRequired: false };
+      }
+      if (String(prev.type || "").trim().toUpperCase() !== TV_TYPE_CODE && prev.tvRemoteCount !== "1") {
+        return { ...prev, tvRemoteCount: "1" };
       }
       return prev;
     });
@@ -6449,6 +6675,14 @@ export default function App() {
     if (parentAssetsForEdit.some((asset) => asset.assetId === assetEditForm.parentAssetId)) return;
     setAssetEditForm((prev) => ({ ...prev, parentAssetId: "", setCode: "" }));
   }, [assetEditForm.useExistingSet, assetEditForm.parentAssetId, parentAssetsForEdit]);
+  useEffect(() => {
+    if (editingAssetId === null) return;
+    const editingAsset = assets.find((a) => a.id === editingAssetId);
+    if (!editingAsset) return;
+    if (needsComponentRole(editingAsset.type)) return;
+    if (!assetEditForm.componentRole) return;
+    setAssetEditForm((prev) => ({ ...prev, componentRole: "" }));
+  }, [editingAssetId, assets, assetEditForm.componentRole]);
   useEffect(() => {
     const isDesktop = assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE;
     if (isDesktop) return;
@@ -6516,6 +6750,29 @@ export default function App() {
       BAG: prev.BAG + 1,
     }));
   }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    const isProjector = assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === PROJECTOR_TYPE;
+    if (isProjector) return;
+    setProjectorComponentEnabled({
+      BAG: true,
+      RMT: true,
+      ADP: true,
+      HDC: true,
+    });
+    setProjectorComponentDraft(defaultProjectorComponentDraft());
+    setProjectorComponentDetailOpen({
+      BAG: false,
+      RMT: false,
+      ADP: false,
+      HDC: false,
+    });
+    setProjectorComponentFileKey((prev) => ({
+      BAG: prev.BAG + 1,
+      RMT: prev.RMT + 1,
+      ADP: prev.ADP + 1,
+      HDC: prev.HDC + 1,
+    }));
+  }, [assetForm.category, assetForm.type]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -6565,6 +6822,15 @@ export default function App() {
       { type: "BAG", label: t.includeCameraBag },
     ],
     [t.includeBattery, t.includeBatteryCharger, t.includeMemoryCard, t.includeCameraBag]
+  );
+  const projectorComponentMeta = useMemo<Array<{ type: ProjectorComponentType; label: string }>>(
+    () => [
+      { type: "BAG", label: t.includeCameraBag },
+      { type: "RMT", label: t.includeRemoteControl },
+      { type: "ADP", label: t.includeAdapter },
+      { type: "HDC", label: t.includeHdmiCable },
+    ],
+    [t.includeCameraBag, t.includeRemoteControl, t.includeAdapter, t.includeHdmiCable]
   );
 
   useEffect(() => {
@@ -7069,6 +7335,8 @@ export default function App() {
     const isDesktopAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DESKTOP_PARENT_TYPE;
     const isLaptopAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === LAPTOP_TYPE;
     const isDigitalCameraAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DIGITAL_CAMERA_TYPE;
+    const isProjectorAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === PROJECTOR_TYPE;
+    const isTvAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === TV_TYPE_CODE;
     const shouldLinkToParent = !isDesktopAsset && (isLinkableForCreate && assetForm.useExistingSet);
     const createPack = isDesktopAsset && assetForm.createSetPack;
     const createLaptopAccessories = isLaptopAsset
@@ -7081,6 +7349,12 @@ export default function App() {
           .filter(([, enabled]) => enabled)
           .map(([type]) => ({ type, draft: cameraComponentDraft[type] }))
       : [];
+    const createProjectorComponents = isProjectorAsset
+      ? (Object.entries(projectorComponentEnabled) as Array<[ProjectorComponentType, boolean]>)
+          .filter(([, enabled]) => enabled)
+          .map(([type]) => ({ type, draft: projectorComponentDraft[type] }))
+      : [];
+    const createTvRemoteCount = isTvAsset ? Math.max(1, Math.min(2, Number(assetForm.tvRemoteCount || 1))) : 0;
     const packItems = (Object.entries(setPackDraft) as Array<[SetPackChildType, SetPackChildDraft]>)
       .filter(([, draft]) => draft.enabled);
     const createSetCode = isDesktopAsset
@@ -7197,6 +7471,29 @@ export default function App() {
         localCameraComponentSerials.set(key, type);
       }
     }
+    if (createProjectorComponents.length) {
+      const localProjectorComponentSerials = new Map<string, string>();
+      for (const { type, draft } of createProjectorComponents) {
+        const serial = String(draft.serialNumber || "").trim();
+        if (!serial) continue;
+        const key = normalizeAssetSerialKey(serial);
+        if (!key) continue;
+        const duplicateExisting = findDuplicateAssetSerial(assets, serial);
+        if (duplicateExisting) {
+          setError(`Serial number already exists: ${duplicateExisting.assetId}`);
+          return;
+        }
+        if (mainSerial && normalizeAssetSerialKey(mainSerial) === key) {
+          setError(`Duplicate serial in projector component (${type}): ${serial}`);
+          return;
+        }
+        if (localProjectorComponentSerials.has(key)) {
+          setError(`Duplicate serial in projector components: ${serial}`);
+          return;
+        }
+        localProjectorComponentSerials.set(key, type);
+      }
+    }
 
     setBusy(true);
     setError("");
@@ -7209,7 +7506,7 @@ export default function App() {
           type: assetForm.type.toUpperCase(),
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
-          componentRole: assetForm.componentRole.trim(),
+          componentRole: needsComponentRole(assetForm.type) ? assetForm.componentRole.trim() : "",
           componentRequired: Boolean(assetForm.componentRequired),
           custodyStatus: assetForm.assignedTo ? "ASSIGNED" : "IN_STOCK",
           specs: createSpecs,
@@ -7310,6 +7607,67 @@ export default function App() {
           });
         }
       }
+      if (createProjectorComponents.length && created.asset?.assetId) {
+        for (const { type, draft } of createProjectorComponents) {
+          const componentPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: "IT",
+              type,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created projector component for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: componentPhotos[0] || "",
+              photos: componentPhotos,
+              status: draft.status || assetForm.status,
+            }),
+          });
+        }
+      }
+      if (createTvRemoteCount && created.asset?.assetId) {
+        for (let index = 1; index <= createTvRemoteCount; index += 1) {
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: "IT",
+              type: REMOTE_TYPE_CODE,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: `Auto-created TV remote ${index}/${createTvRemoteCount} for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: "",
+              photos: [],
+              status: assetForm.status,
+            }),
+          });
+        }
+      }
 
       setAssetForm((f) => ({
         ...f,
@@ -7331,6 +7689,7 @@ export default function App() {
         acHasFrontPanel: false,
         acHasOutdoor: false,
         acComponentNote: "",
+        tvRemoteCount: "1",
         specs: "",
         purchaseDate: "",
         warrantyUntil: "",
@@ -7398,6 +7757,25 @@ export default function App() {
         MCD: prev.MCD + 1,
         BAG: prev.BAG + 1,
       }));
+      setProjectorComponentEnabled({
+        BAG: true,
+        RMT: true,
+        ADP: true,
+        HDC: true,
+      });
+      setProjectorComponentDraft(defaultProjectorComponentDraft());
+      setProjectorComponentDetailOpen({
+        BAG: false,
+        RMT: false,
+        ADP: false,
+        HDC: false,
+      });
+      setProjectorComponentFileKey((prev) => ({
+        BAG: prev.BAG + 1,
+        RMT: prev.RMT + 1,
+        ADP: prev.ADP + 1,
+        HDC: prev.HDC + 1,
+      }));
       setModelTemplateNote("");
       setAssetFileKey((k) => k + 1);
       appendUiAudit(
@@ -7430,7 +7808,7 @@ export default function App() {
           location: assetForm.location,
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
-          componentRole: assetForm.componentRole.trim(),
+          componentRole: needsComponentRole(assetForm.type) ? assetForm.componentRole.trim() : "",
           componentRequired: Boolean(assetForm.componentRequired),
           assignedTo: assetForm.assignedTo,
           custodyStatus: assetForm.assignedTo ? "ASSIGNED" : "IN_STOCK",
@@ -7648,6 +8026,113 @@ export default function App() {
             nextLocal = [child, ...nextLocal];
           }
         }
+        if (createProjectorComponents.length) {
+          for (const { type, draft } of createProjectorComponents) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", type);
+            const componentPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: "IT",
+              type,
+              pcType: "",
+              seq: childSeq,
+              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${type}-${pad4(childSeq)}`,
+              name: assetItemName("IT", type),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created projector component for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: draft.status || assetForm.status,
+                  reason: "Asset created as projector component",
+                },
+              ],
+              photo: componentPhotos[0] || "",
+              photos: componentPhotos,
+              status: draft.status || assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
+        if (createTvRemoteCount) {
+          for (let index = 1; index <= createTvRemoteCount; index += 1) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", REMOTE_TYPE_CODE);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: "IT",
+              type: REMOTE_TYPE_CODE,
+              pcType: "",
+              seq: childSeq,
+              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${REMOTE_TYPE_CODE}-${pad4(childSeq)}`,
+              name: assetItemName("IT", REMOTE_TYPE_CODE),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: `Auto-created TV remote ${index}/${createTvRemoteCount} for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: assetForm.status,
+                  reason: "Asset created as TV remote",
+                },
+              ],
+              photo: "",
+              photos: [],
+              status: assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
         writeAssetFallback(nextLocal);
         setAssets(
           effectiveAssetCampusFilter === "ALL"
@@ -7675,6 +8160,7 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          tvRemoteCount: "1",
           specs: "",
           purchaseDate: "",
           warrantyUntil: "",
@@ -7741,6 +8227,25 @@ export default function App() {
           CHB: prev.CHB + 1,
           MCD: prev.MCD + 1,
           BAG: prev.BAG + 1,
+        }));
+        setProjectorComponentEnabled({
+          BAG: true,
+          RMT: true,
+          ADP: true,
+          HDC: true,
+        });
+        setProjectorComponentDraft(defaultProjectorComponentDraft());
+        setProjectorComponentDetailOpen({
+          BAG: false,
+          RMT: false,
+          ADP: false,
+          HDC: false,
+        });
+        setProjectorComponentFileKey((prev) => ({
+          BAG: prev.BAG + 1,
+          RMT: prev.RMT + 1,
+          ADP: prev.ADP + 1,
+          HDC: prev.HDC + 1,
         }));
         setModelTemplateNote("");
         setAssetFileKey((k) => k + 1);
@@ -10502,7 +11007,7 @@ export default function App() {
       parentAssetId: editingIsDesktop
         ? ""
         : (editingShouldLinkToParent ? assetEditForm.parentAssetId.trim().toUpperCase() : ""),
-      componentRole: assetEditForm.componentRole.trim(),
+      componentRole: needsComponentRole(editingAsset?.type || "") ? assetEditForm.componentRole.trim() : "",
       componentRequired: Boolean(assetEditForm.componentRequired),
       assignedTo: assetEditForm.assignedTo.trim(),
       brand: assetEditForm.brand.trim(),
@@ -11883,6 +12388,36 @@ export default function App() {
     try {
       const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
       setCameraComponentDraft((prev) => {
+        const merged = normalizeAssetPhotos({
+          photo: prev[type].photo,
+          photos: [...(prev[type].photos || []), ...optimized],
+        }).slice(0, MAX_SET_PACK_PHOTOS);
+        return {
+          ...prev,
+          [type]: {
+            ...prev[type],
+            photo: merged[0] || "",
+            photos: merged,
+          },
+        };
+      });
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+  async function onProjectorComponentPhotoFile(type: ProjectorComponentType, e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setProjectorComponentDraft((prev) => {
         const merged = normalizeAssetPhotos({
           photo: prev[type].photo,
           photos: [...(prev[type].photos || []), ...optimized],
@@ -16784,11 +17319,17 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>{t.typeCode}</span>
-                    <select className="input" value={assetForm.type} onChange={(e) => setAssetForm((f) => ({ ...f, type: e.target.value }))}>
-                      {currentTypeOptions.map((opt) => (
-                        <option key={opt.code} value={opt.code}>{itemNames[`${assetForm.category}:${opt.code}`] || (lang === "km" ? opt.itemKm : opt.itemEn)} ({opt.code})</option>
-                      ))}
-                    </select>
+                    <AssetTypePicker
+                      value={assetForm.type}
+                      options={currentTypeOptions.map((opt) => ({
+                        code: opt.code,
+                        label: itemNames[`${assetForm.category}:${opt.code}`] || (lang === "km" ? opt.itemKm : opt.itemEn),
+                      }))}
+                      onChange={(typeCode) => setAssetForm((f) => ({ ...f, type: typeCode }))}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកកូដប្រភេទ..." : "Search type code..."}
+                      emptyText={lang === "km" ? "រកមិនឃើញប្រភេទ។" : "No type code found."}
+                      getIcon={(opt) => itemTypeIcon(assetForm.category, opt.code, opt.label)}
+                    />
                   </label>
                   {isPcAssetForCreate ? (
                     <label className="field">
@@ -17569,22 +18110,25 @@ export default function App() {
                                 />
                                 <span>{item.label}</span>
                               </label>
-                              <span className="tiny">
-                                {t.assetId}: {cameraComponentSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
-                              </span>
-                              <button
-                                type="button"
-                                className="tab setpack-detail-btn"
-                                disabled={!cameraComponentEnabled[item.type]}
-                                onClick={() =>
-                                  setCameraComponentDetailOpen((prev) => ({
-                                    ...prev,
-                                    [item.type]: !prev[item.type],
-                                  }))
-                                }
-                              >
-                                {cameraComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
-                              </button>
+                              {cameraComponentEnabled[item.type] ? (
+                                <>
+                                  <span className="tiny setpack-component-meta">
+                                    {t.assetId}: {cameraComponentSuggestedAssetId[item.type]} | {assetItemName("IT", item.type)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="tab setpack-detail-btn"
+                                    onClick={() =>
+                                      setCameraComponentDetailOpen((prev) => ({
+                                        ...prev,
+                                        [item.type]: !prev[item.type],
+                                      }))
+                                    }
+                                  >
+                                    {cameraComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                  </button>
+                                </>
+                              ) : null}
                             </div>
                             {cameraComponentEnabled[item.type] && cameraComponentDetailOpen[item.type] ? (
                               <div className="setpack-component-detail-wrap">
@@ -17859,6 +18403,345 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+                  ) : isProjectorAssetForCreate ? (
+                    <div className="field field-wide">
+                      <span>{t.projectorComponents}</span>
+                      <div className="setpack-toggle-row">
+                        <span className="tiny">{t.projectorComponentHint}</span>
+                      </div>
+                      <div className="setpack-component-list">
+                        {projectorComponentMeta.map((item) => (
+                          <div
+                            key={`projector-component-row-${item.type}`}
+                            className={`setpack-component-row${projectorComponentEnabled[item.type] ? " setpack-component-row-enabled" : ""}`}
+                          >
+                            <div className="setpack-component-main">
+                              <label className="setpack-component-check">
+                                <input
+                                  type="checkbox"
+                                  checked={projectorComponentEnabled[item.type]}
+                                  onChange={(e) =>
+                                    setProjectorComponentEnabled((prev) => ({
+                                      ...prev,
+                                      [item.type]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>{item.label}</span>
+                              </label>
+                              {projectorComponentEnabled[item.type] ? (
+                                <>
+                                  <span className="tiny setpack-component-meta">
+                                    {t.assetId}: {projectorComponentSuggestedAssetId[item.type]} | {assetItemName("IT", item.type)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="tab setpack-detail-btn"
+                                    onClick={() =>
+                                      setProjectorComponentDetailOpen((prev) => ({
+                                        ...prev,
+                                        [item.type]: !prev[item.type],
+                                      }))
+                                    }
+                                  >
+                                    {projectorComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                            {projectorComponentEnabled[item.type] && projectorComponentDetailOpen[item.type] ? (
+                              <div className="setpack-component-detail-wrap">
+                                <div className="form-grid">
+                                  <label className="field">
+                                    <span>{t.status}</span>
+                                    <select
+                                      className="input"
+                                      value={projectorComponentDraft[item.type].status}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            status: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      {ASSET_STATUS_OPTIONS.map((status) => (
+                                        <option key={`projector-component-${item.type}-status-${status.value}`} value={status.value}>
+                                          {lang === "km" ? status.km : status.en}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.brand}</span>
+                                    <input
+                                      className="input"
+                                      value={projectorComponentDraft[item.type].brand}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            brand: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.model}</span>
+                                    <input
+                                      className="input"
+                                      list="asset-model-options"
+                                      value={projectorComponentDraft[item.type].model}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            model: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.serialNumber}</span>
+                                    <input
+                                      className="input"
+                                      value={projectorComponentDraft[item.type].serialNumber}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            serialNumber: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.purchaseDate}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={projectorComponentDraft[item.type].purchaseDate}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            purchaseDate: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.warrantyUntil}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={projectorComponentDraft[item.type].warrantyUntil}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            warrantyUntil: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.vendor}</span>
+                                    <input
+                                      className="input"
+                                      value={projectorComponentDraft[item.type].vendor}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            vendor: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-wide">
+                                    <span>{t.specs}</span>
+                                    <textarea
+                                      className="textarea"
+                                      value={projectorComponentDraft[item.type].specs}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            specs: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-wide">
+                                    <span>{t.notes}</span>
+                                    <textarea
+                                      className="textarea"
+                                      value={projectorComponentDraft[item.type].notes}
+                                      onChange={(e) =>
+                                        setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            notes: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <div className="field field-wide">
+                                    <span>{t.photo}</span>
+                                    <input
+                                      key={projectorComponentFileKey[item.type]}
+                                      ref={(el) => {
+                                        projectorComponentPhotoInputRefs.current[item.type] = el;
+                                      }}
+                                      className="file-input"
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      onChange={(e) => onProjectorComponentPhotoFile(item.type, e)}
+                                    />
+                                    <div className="photo-preview-wrap">
+                                      {normalizeAssetPhotos(projectorComponentDraft[item.type]).length ? (
+                                        <img
+                                          src={normalizeAssetPhotos(projectorComponentDraft[item.type])[0]}
+                                          alt={`${item.label} preview`}
+                                          className="photo-preview"
+                                        />
+                                      ) : (
+                                        <div className="photo-placeholder">{t.noPhoto}</div>
+                                      )}
+                                      <div className="photo-preview-actions">
+                                        <button
+                                          className="btn-icon-edit"
+                                          type="button"
+                                          title="Change Photo"
+                                          aria-label="Change Photo"
+                                          onClick={() => projectorComponentPhotoInputRefs.current[item.type]?.click()}
+                                        >
+                                          ✎
+                                        </button>
+                                        <button
+                                          className="btn-danger"
+                                          type="button"
+                                          title="Delete Photo"
+                                          aria-label="Delete Photo"
+                                          disabled={!normalizeAssetPhotos(projectorComponentDraft[item.type]).length}
+                                          onClick={() => {
+                                            setProjectorComponentDraft((prev) => ({
+                                              ...prev,
+                                              [item.type]: {
+                                                ...prev[item.type],
+                                                photo: "",
+                                                photos: [],
+                                              },
+                                            }));
+                                            setProjectorComponentFileKey((prev) => ({
+                                              ...prev,
+                                              [item.type]: prev[item.type] + 1,
+                                            }));
+                                          }}
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="asset-photo-gallery">
+                                      {normalizeAssetPhotos(projectorComponentDraft[item.type]).slice(0, MAX_SET_PACK_PHOTOS).map((url, index) => (
+                                        <div key={`projector-component-photo-${item.type}-${index}`} className="asset-photo-chip">
+                                          <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                          <div className="asset-photo-chip-actions">
+                                            <button
+                                              className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                                              type="button"
+                                              onClick={() =>
+                                                setProjectorComponentDraft((prev) => {
+                                                  const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
+                                                  const hit = next.indexOf(url);
+                                                  if (hit <= 0) return prev;
+                                                  next.splice(hit, 1);
+                                                  next.unshift(url);
+                                                  return {
+                                                    ...prev,
+                                                    [item.type]: {
+                                                      ...prev[item.type],
+                                                      photo: next[0] || "",
+                                                      photos: next,
+                                                    },
+                                                  };
+                                                })
+                                              }
+                                            >
+                                              {index === 0 ? "Main" : "Set Main"}
+                                            </button>
+                                            <button
+                                              className="btn-danger"
+                                              type="button"
+                                              onClick={() =>
+                                                setProjectorComponentDraft((prev) => {
+                                                  const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
+                                                  return {
+                                                    ...prev,
+                                                    [item.type]: {
+                                                      ...prev[item.type],
+                                                      photo: next[0] || "",
+                                                      photos: next,
+                                                    },
+                                                  };
+                                                })
+                                              }
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : isTvAssetForCreate ? (
+                    <label className="field field-wide">
+                      <span>{t.tvRemoteCount}</span>
+                      <div className="setpack-toggle-row">
+                        <span className="tiny">{t.tvRemoteHint}</span>
+                      </div>
+                      <select
+                        className="input"
+                        value={assetForm.tvRemoteCount}
+                        onChange={(e) =>
+                          setAssetForm((f) => ({
+                            ...f,
+                            tvRemoteCount: e.target.value === "2" ? "2" : "1",
+                          }))
+                        }
+                      >
+                        <option value="1">1 {t.includeRemoteControl}</option>
+                        <option value="2">2 {t.includeRemoteControl}</option>
+                      </select>
+                    </label>
                   ) : (!isSafetyCategoryForCreate && isLinkableForCreate) ? (
                     <>
                       <label className="field">
@@ -17907,30 +18790,32 @@ export default function App() {
                       ) : null}
                       {assetForm.useExistingSet ? (
                         <>
-                          <label className="field">
-                            <span>{t.componentRole}</span>
-                            {isMouseKeyboardTypeForCreate ? (
-                              <select
-                                className="input"
-                                value={assetForm.componentRole}
-                                onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
-                              >
-                                <option value="">Select connection/set type</option>
-                                {MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.map((option) => (
-                                  <option key={`mk-component-role-create-${option}`} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                className="input"
-                                value={assetForm.componentRole}
-                                onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
-                                placeholder="Adapter / Remote / Front Panel"
-                              />
-                            )}
-                          </label>
+                          {needsComponentRole(assetForm.type) ? (
+                            <label className="field">
+                              <span>{t.componentRole}</span>
+                              {isMouseKeyboardTypeForCreate ? (
+                                <select
+                                  className="input"
+                                  value={assetForm.componentRole}
+                                  onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                >
+                                  <option value="">Select connection/set type</option>
+                                  {MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.map((option) => (
+                                    <option key={`mk-component-role-create-${option}`} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  className="input"
+                                  value={assetForm.componentRole}
+                                  onChange={(e) => setAssetForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                  placeholder="Adapter / Remote / Front Panel"
+                                />
+                              )}
+                            </label>
+                          ) : null}
                           <label className="field">
                             <span>{t.componentRequired}</span>
                             <input
@@ -19277,36 +20162,38 @@ export default function App() {
                         ) : null}
                         {assetEditForm.useExistingSet ? (
                           <>
-                            <label className="field">
-                              <span>{t.componentRole}</span>
-                              {editingIsMouseKeyboardType ? (
-                                <select
-                                  className="input"
-                                  value={assetEditForm.componentRole}
-                                  onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
-                                >
-                                  <option value="">Select connection/set type</option>
-                                  {assetEditForm.componentRole &&
-                                  !MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.includes(
-                                    assetEditForm.componentRole as (typeof MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS)[number]
-                                  ) ? (
-                                    <option value={assetEditForm.componentRole}>{assetEditForm.componentRole}</option>
-                                  ) : null}
-                                  {MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.map((option) => (
-                                    <option key={`mk-component-role-edit-${option}`} value={option}>
-                                      {option}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  className="input"
-                                  value={assetEditForm.componentRole}
-                                  onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
-                                  placeholder="Adapter / Remote / Front Panel"
-                                />
-                              )}
-                            </label>
+                            {needsComponentRole(editingAsset?.type || "") ? (
+                              <label className="field">
+                                <span>{t.componentRole}</span>
+                                {editingIsMouseKeyboardType ? (
+                                  <select
+                                    className="input"
+                                    value={assetEditForm.componentRole}
+                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                  >
+                                    <option value="">Select connection/set type</option>
+                                    {assetEditForm.componentRole &&
+                                    !MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.includes(
+                                      assetEditForm.componentRole as (typeof MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS)[number]
+                                    ) ? (
+                                      <option value={assetEditForm.componentRole}>{assetEditForm.componentRole}</option>
+                                    ) : null}
+                                    {MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS.map((option) => (
+                                      <option key={`mk-component-role-edit-${option}`} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    className="input"
+                                    value={assetEditForm.componentRole}
+                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, componentRole: e.target.value }))}
+                                    placeholder="Adapter / Remote / Front Panel"
+                                  />
+                                )}
+                              </label>
+                            ) : null}
                             <label className="field">
                               <span>{t.componentRequired}</span>
                               <input
