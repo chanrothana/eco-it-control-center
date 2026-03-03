@@ -2669,10 +2669,10 @@ function formatDate(value: string) {
   if (!value || value === "-") return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  const year = date.getFullYear();
-  const month = date.toLocaleString("en-US", { month: "short" });
   const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const month = date.toLocaleString("en-US", { month: "short" });
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
 }
 
 function formatDateTime(value: string) {
@@ -4829,6 +4829,7 @@ export default function App() {
     "location",
     "purchaseDate",
     "lastServiceDate",
+    "assignedTo",
     "status",
   ]);
   const [assetMasterSort, setAssetMasterSort] = useState<{
@@ -5777,6 +5778,11 @@ export default function App() {
     if (!campuses.length) return CAMPUS_LIST;
     return CAMPUS_LIST.filter((c) => campuses.includes(c));
   }, [authUser]);
+  const campusOptions = useMemo(() => [...CAMPUS_LIST].sort(compareCampusByCode), []);
+  const allowedCampusOptions = useMemo(
+    () => [...allowedCampuses].sort(compareCampusByCode),
+    [allowedCampuses]
+  );
   const maintenanceLockedCampus = useMemo(() => {
     if (!maintenanceQuickMode) return "";
     if (allowedCampuses.length) return allowedCampuses[0];
@@ -13662,8 +13668,8 @@ export default function App() {
     [assets, assetItemName]
   );
   const transferFilterCampusOptions = useMemo(
-    () => Array.from(new Set(transferRecordAssets.map((a) => a.campus).filter(Boolean))).sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
-    [transferRecordAssets, campusLabel]
+    () => Array.from(new Set(transferRecordAssets.map((a) => a.campus).filter(Boolean))).sort(compareCampusByCode),
+    [transferRecordAssets]
   );
   const transferFilterLocationOptions = useMemo(() => {
     let list = transferRecordAssets;
@@ -13726,9 +13732,7 @@ export default function App() {
     );
   }, [assets, campusFilter]);
   const maintenanceRecordCampusOptions = useMemo(() => {
-    return Array.from(new Set(maintenanceRecordAssetPool.map((a) => a.campus).filter(Boolean))).sort((a, b) =>
-      a.localeCompare(b)
-    );
+    return Array.from(new Set(maintenanceRecordAssetPool.map((a) => a.campus).filter(Boolean))).sort(compareCampusByCode);
   }, [maintenanceRecordAssetPool]);
   const maintenanceRecordCategoryOptions = useMemo(() => {
     let list = maintenanceRecordAssetPool;
@@ -13874,8 +13878,8 @@ export default function App() {
     [assets, scheduleQuickForm.assetId]
   );
   const scheduleQuickFilterCampusOptions = useMemo(
-    () => Array.from(new Set(scheduleSelectAssets.map((a) => a.campus).filter(Boolean))).sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
-    [scheduleSelectAssets, campusLabel]
+    () => Array.from(new Set(scheduleSelectAssets.map((a) => a.campus).filter(Boolean))).sort(compareCampusByCode),
+    [scheduleSelectAssets]
   );
   const scheduleQuickFilterLocationOptions = useMemo(() => {
     let list = scheduleSelectAssets;
@@ -15019,8 +15023,8 @@ export default function App() {
 
   const assetMasterCampusFilterOptions = useMemo(() => {
     const options = Array.from(new Set(assetMasterSetRows.map((row) => row.campus).filter(Boolean)));
-    return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
-  }, [assetMasterSetRows, campusLabel]);
+    return options.sort(compareCampusByCode);
+  }, [assetMasterSetRows]);
 
   const assetMasterRowsByCampusFilter = useMemo(() => {
     if (assetMasterCampusFilter.includes("ALL")) return assetMasterSetRows;
@@ -15092,6 +15096,7 @@ export default function App() {
       { key: "location", label: t.location, sortable: true },
       { key: "purchaseDate", label: "Purchase Date", sortable: true },
       { key: "lastServiceDate", label: "Last Service", sortable: true },
+      { key: "assignedTo", label: "User Control", sortable: true },
       { key: "status", label: t.status, sortable: true },
     ],
     [t.photo, t.assetId, t.category, t.campus, t.location, t.status]
@@ -15278,6 +15283,7 @@ export default function App() {
         "location",
         "purchaseDate",
         "lastServiceDate",
+        "assignedTo",
         "status",
       ]);
       return;
@@ -15358,8 +15364,8 @@ export default function App() {
     });
   }, [qrItemFilterOptions]);
   const quickCountCampusFilterOptions = useMemo(
-    () => [...CAMPUS_LIST].sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
-    [campusLabel]
+    () => [...CAMPUS_LIST].sort(compareCampusByCode),
+    []
   );
   const quickCountCategoryFilterOptions = useMemo(
     () => CATEGORY_OPTIONS.map((item) => item.value),
@@ -17221,7 +17227,7 @@ export default function App() {
               ) : (
                 <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
                   {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                  {allowedCampuses.map((campus) => (
+                  {allowedCampusOptions.map((campus) => (
                     <option key={campus} value={campus}>{campusLabel(campus)}</option>
                   ))}
                 </select>
@@ -17440,7 +17446,7 @@ export default function App() {
                       className="input"
                     >
                       {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                      {allowedCampuses.map((campus) => (
+                      {allowedCampusOptions.map((campus) => (
                         <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
                       ))}
                     </select>
@@ -18126,7 +18132,7 @@ export default function App() {
                   <label className="field">
                     <span>{t.campus}</span>
                     <select className="input" value={assetForm.campus} onChange={(e) => setAssetForm((f) => ({ ...f, campus: e.target.value }))}>
-                      {CAMPUS_LIST.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
+                      {campusOptions.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
                     </select>
                   </label>
                   <label className="field">
@@ -21628,7 +21634,7 @@ export default function App() {
                         value={transferForm.toCampus}
                         onChange={(e) => setTransferForm((f) => ({ ...f, toCampus: e.target.value, toLocation: "" }))}
                       >
-                        {CAMPUS_LIST.map((campus) => (
+                        {campusOptions.map((campus) => (
                           <option key={`quick-to-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
                         ))}
                       </select>
@@ -21704,7 +21710,7 @@ export default function App() {
                 <label className="field">
                   <span>{t.campus}</span>
                   <select className="input" value={ticketForm.campus} onChange={(e) => setTicketForm((f) => ({ ...f, campus: e.target.value }))}>
-                    {CAMPUS_LIST.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
+                    {campusOptions.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
                   </select>
                 </label>
                 <label className="field">
@@ -21842,7 +21848,7 @@ export default function App() {
                   <label className="field">
                     <span>Campus</span>
                     <select className="input" value={inventoryItemForm.campus} onChange={(e) => setInventoryItemForm((f) => ({ ...f, campus: e.target.value }))}>
-                      {CAMPUS_LIST.map((campus) => (
+                      {campusOptions.map((campus) => (
                         <option key={`inv-form-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
                       ))}
                     </select>
@@ -23127,7 +23133,7 @@ export default function App() {
                   onChange={(e) => setBulkScheduleForm((f) => ({ ...f, campus: e.target.value }))}
                 >
                   <option value="ALL">{t.allCampuses}</option>
-                  {CAMPUS_LIST.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <option key={`bulk-campus-${campus}`} value={campus}>
                       {campusLabel(campus)}
                     </option>
@@ -23863,7 +23869,7 @@ export default function App() {
                     }))
                   }
                 >
-                  {CAMPUS_LIST.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <option key={`to-campus-${campus}`} value={campus}>
                       {campusLabel(campus)}
                     </option>
@@ -24254,7 +24260,7 @@ export default function App() {
                     <label className="field field-wide"><span>Note</span><input className="input" value={poolCleaningForm.note} onChange={(e) => setPoolCleaningForm((f) => ({ ...f, note: e.target.value }))} /></label>
                   </div>
                   <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolCleaningSchedule()}>Save Cleaning Schedule</button></div>
-                  <div className="table-wrap"><table><thead><tr><th>{t.date}</th><th>Shift</th><th>Task</th><th>Assigned</th><th>{t.status}</th><th>Note</th></tr></thead><tbody>{activePoolCleaningSchedules.length ? activePoolCleaningSchedules.slice(0, 80).map((row) => <tr key={`pool-cleaning-${row.id}`}><td>{row.date}</td><td>{row.shift || "-"}</td><td>{row.task}</td><td>{row.assignedTo || "-"}</td><td>{row.status}</td><td>{row.note || "-"}</td></tr>) : <tr><td colSpan={6}>No cleaning schedule records yet.</td></tr>}</tbody></table></div>
+                  <div className="table-wrap"><table><thead><tr><th>{t.date}</th><th>Shift</th><th>Task</th><th>Assigned</th><th>{t.status}</th><th>Note</th></tr></thead><tbody>{activePoolCleaningSchedules.length ? activePoolCleaningSchedules.slice(0, 80).map((row) => <tr key={`pool-cleaning-${row.id}`}><td>{formatDate(row.date)}</td><td>{row.shift || "-"}</td><td>{row.task}</td><td>{row.assignedTo || "-"}</td><td>{row.status}</td><td>{row.note || "-"}</td></tr>) : <tr><td colSpan={6}>No cleaning schedule records yet.</td></tr>}</tbody></table></div>
                 </>
               ) : null}
               {poolView === "equipment" ? (
@@ -24269,7 +24275,7 @@ export default function App() {
                     <label className="field field-wide"><span>Note</span><input className="input" value={poolEquipmentForm.note} onChange={(e) => setPoolEquipmentForm((f) => ({ ...f, note: e.target.value }))} /></label>
                   </div>
                   <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolEquipmentCheck()}>Save Equipment Check</button></div>
-                  <div className="table-wrap"><table><thead><tr><th>{t.date}</th><th>Category</th><th>Item</th><th>Condition</th><th>Qty</th><th>Note</th></tr></thead><tbody>{activePoolEquipmentChecks.length ? activePoolEquipmentChecks.slice(0, 80).map((row) => <tr key={`pool-equip-${row.id}`}><td>{row.date}</td><td>{row.category}</td><td>{row.item}</td><td>{row.condition}</td><td>{row.qty || 0} {row.unit || ""}</td><td>{row.note || "-"}</td></tr>) : <tr><td colSpan={6}>No equipment records yet.</td></tr>}</tbody></table></div>
+                  <div className="table-wrap"><table><thead><tr><th>{t.date}</th><th>Category</th><th>Item</th><th>Condition</th><th>Qty</th><th>Note</th></tr></thead><tbody>{activePoolEquipmentChecks.length ? activePoolEquipmentChecks.slice(0, 80).map((row) => <tr key={`pool-equip-${row.id}`}><td>{formatDate(row.date)}</td><td>{row.category}</td><td>{row.item}</td><td>{row.condition}</td><td>{row.qty || 0} {row.unit || ""}</td><td>{row.note || "-"}</td></tr>) : <tr><td colSpan={6}>No equipment records yet.</td></tr>}</tbody></table></div>
                 </>
               ) : null}
               {poolView === "chemical" ? (
@@ -24287,7 +24293,7 @@ export default function App() {
                     <label className="field field-wide"><span>Note</span><input className="input" value={poolChemicalForm.note} onChange={(e) => setPoolChemicalForm((f) => ({ ...f, note: e.target.value }))} /></label>
                   </div>
                   <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolChemicalRecord()}>Save Chemical Record</button></div>
-                  <div className="table-wrap"><table><thead><tr><th>Date/Time</th><th>Free Cl</th><th>Total Cl</th><th>pH</th><th>Temp</th><th>Operator</th></tr></thead><tbody>{activePoolChemicalRecords.length ? activePoolChemicalRecords.slice(0, 80).map((row) => <tr key={`pool-chem-${row.id}`}><td>{row.datetime}</td><td>{row.chlorineFree ?? "-"}</td><td>{row.chlorineTotal ?? "-"}</td><td>{row.ph ?? "-"}</td><td>{row.temperature ?? "-"}</td><td>{row.operator || "-"}</td></tr>) : <tr><td colSpan={6}>No chemical records yet.</td></tr>}</tbody></table></div>
+                  <div className="table-wrap"><table><thead><tr><th>Date/Time</th><th>Free Cl</th><th>Total Cl</th><th>pH</th><th>Temp</th><th>Operator</th></tr></thead><tbody>{activePoolChemicalRecords.length ? activePoolChemicalRecords.slice(0, 80).map((row) => <tr key={`pool-chem-${row.id}`}><td>{formatDateTime(row.datetime)}</td><td>{row.chlorineFree ?? "-"}</td><td>{row.chlorineTotal ?? "-"}</td><td>{row.ph ?? "-"}</td><td>{row.temperature ?? "-"}</td><td>{row.operator || "-"}</td></tr>) : <tr><td colSpan={6}>No chemical records yet.</td></tr>}</tbody></table></div>
                 </>
               ) : null}
               {poolView === "operations" ? (
@@ -24305,7 +24311,7 @@ export default function App() {
                     <label className="field field-wide"><span>Note</span><input className="input" value={poolOperationForm.note} onChange={(e) => setPoolOperationForm((f) => ({ ...f, note: e.target.value }))} /></label>
                   </div>
                   <div className="asset-actions"><button className="btn-primary" disabled={busy || !isAdmin} onClick={() => void addPoolOperationRecord()}>Save Operation Record</button></div>
-                  <div className="table-wrap"><table><thead><tr><th>Date/Time</th><th>Pump</th><th>Timer</th><th>Pressure</th><th>Backwash</th><th>Operator</th></tr></thead><tbody>{activePoolOperationRecords.length ? activePoolOperationRecords.slice(0, 80).map((row) => <tr key={`pool-op-${row.id}`}><td>{row.datetime}</td><td>{row.pumpStatus}</td><td>{row.timerMode || "-"}</td><td>{row.filterPressure ?? "-"}</td><td>{row.backwashDone ? "Yes" : "No"}</td><td>{row.operator || "-"}</td></tr>) : <tr><td colSpan={6}>No operation records yet.</td></tr>}</tbody></table></div>
+                  <div className="table-wrap"><table><thead><tr><th>Date/Time</th><th>Pump</th><th>Timer</th><th>Pressure</th><th>Backwash</th><th>Operator</th></tr></thead><tbody>{activePoolOperationRecords.length ? activePoolOperationRecords.slice(0, 80).map((row) => <tr key={`pool-op-${row.id}`}><td>{formatDateTime(row.datetime)}</td><td>{row.pumpStatus}</td><td>{row.timerMode || "-"}</td><td>{row.filterPressure ?? "-"}</td><td>{row.backwashDone ? "Yes" : "No"}</td><td>{row.operator || "-"}</td></tr>) : <tr><td colSpan={6}>No operation records yet.</td></tr>}</tbody></table></div>
                 </>
               ) : null}
               {poolView === "complaints" ? (
@@ -24354,7 +24360,7 @@ export default function App() {
                                 background: row.entryType === "Complaint" ? "#fff3f2" : "#f3fff6",
                               }}
                             >
-                              <td>{row.date}</td>
+                              <td>{formatDate(row.date)}</td>
                               <td>{row.teacher}</td>
                               <td>{row.entryType}</td>
                               <td>{row.condition}</td>
@@ -25799,7 +25805,7 @@ export default function App() {
                     onChange={(e) => setQrCampusFilter(e.target.value)}
                   >
                     <option value="ALL">{t.allCampuses}</option>
-                    {CAMPUS_LIST.map((campus) => (
+                    {campusOptions.map((campus) => (
                       <option key={`qr-campus-${campus}`} value={campus}>
                         {campusLabel(campus)}
                       </option>
@@ -26068,6 +26074,7 @@ export default function App() {
                             <div><strong>{t.campus}:</strong> {campusLabel(row.campus)}</div>
                             <div><strong>{t.category}:</strong> {row.category || "-"}</div>
                             <div><strong>{t.location}:</strong> {row.location || "-"}</div>
+                            <div><strong>User Control:</strong> {row.assignedTo || "-"}</div>
                             <div><strong>Linked:</strong> {row.linkedTo || "-"}</div>
                             <div><strong>Item:</strong> {row.itemDescription || "-"}</div>
                             <div><strong>Purchase:</strong> {formatDate(row.purchaseDate || "-")}</div>
@@ -26729,7 +26736,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {CAMPUS_LIST.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <tr key={campus}>
                       <td><strong>{CAMPUS_CODE[campus] || "CX"}</strong></td>
                       <td>
@@ -27190,7 +27197,7 @@ export default function App() {
                         : `${authCreateForm.campuses.length} campuses`}
                   </summary>
                   <div className="filter-menu-list permission-scroll-box permission-scroll-box-sm">
-                    {CAMPUS_LIST.map((campus) => (
+                    {campusOptions.map((campus) => (
                       <label key={`new-auth-campus-${campus}`} className="filter-menu-item">
                         <input
                           type="checkbox"
@@ -27741,7 +27748,7 @@ export default function App() {
               <label className="field">
                 <span>{t.campus}</span>
                 <select className="input" value={locationCampus} onChange={(e) => setLocationCampus(e.target.value)}>
-                  {CAMPUS_LIST.map((campus) => (
+                  {campusOptions.map((campus) => (
                     <option key={campus} value={campus}>{campusLabel(campus)}</option>
                   ))}
                 </select>
