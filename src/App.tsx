@@ -4823,8 +4823,8 @@ export default function App() {
     "photo",
     "assetId",
     "linkedTo",
-    "itemDescription",
     "category",
+    "itemDescription",
     "campus",
     "location",
     "purchaseDate",
@@ -6289,6 +6289,50 @@ export default function App() {
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
   );
+  const dashboardStockCampusMatrix = useMemo(() => {
+    const campusSet = new Set<string>();
+    const itemMap = new Map<
+      string,
+      {
+        key: string;
+        itemName: string;
+        byCampus: Map<string, { stock: number; low: boolean }>;
+        totalStock: number;
+        lowCampusCount: number;
+      }
+    >();
+    for (const row of inventoryBalanceRows) {
+      const campus = String(row.campus || "");
+      if (!campus) continue;
+      campusSet.add(campus);
+      const itemKey = normalizeInventoryCompareText(row.itemName);
+      if (!itemMap.has(itemKey)) {
+        itemMap.set(itemKey, {
+          key: itemKey,
+          itemName: row.itemName,
+          byCampus: new Map(),
+          totalStock: 0,
+          lowCampusCount: 0,
+        });
+      }
+      const itemRow = itemMap.get(itemKey)!;
+      const current = itemRow.byCampus.get(campus) || { stock: 0, low: false };
+      current.stock += Number(row.currentStock || 0);
+      current.low = current.low || Boolean(row.lowStock);
+      itemRow.byCampus.set(campus, current);
+      itemRow.totalStock += Number(row.currentStock || 0);
+    }
+    const campuses = Array.from(campusSet).sort(compareCampusByCode);
+    const rows = Array.from(itemMap.values())
+      .map((row) => {
+        row.lowCampusCount = campuses.reduce((count, campus) => {
+          return count + (row.byCampus.get(campus)?.low ? 1 : 0);
+        }, 0);
+        return row;
+      })
+      .sort((a, b) => a.itemName.localeCompare(b.itemName));
+    return { campuses, rows };
+  }, [inventoryBalanceRows]);
   const inventoryBalanceDisplayRows = useMemo(
     () => (inventoryBalanceMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
     [inventoryBalanceMode, inventoryLowStockRows, inventoryBalanceRows]
@@ -15089,14 +15133,14 @@ export default function App() {
     () => [
       { key: "photo", label: t.photo, sortable: true },
       { key: "assetId", label: t.assetId, sortable: true },
-      { key: "linkedTo", label: "Linked To (Main Asset)", sortable: true },
-      { key: "itemDescription", label: "Item Description", sortable: true },
+      { key: "linkedTo", label: "Link to Main Asset", sortable: true },
       { key: "category", label: t.category, sortable: true },
+      { key: "itemDescription", label: "Item Description (Specification)", sortable: true },
       { key: "campus", label: t.campus, sortable: true },
       { key: "location", label: t.location, sortable: true },
       { key: "purchaseDate", label: "Purchase Date", sortable: true },
       { key: "lastServiceDate", label: "Last Service", sortable: true },
-      { key: "assignedTo", label: "User Control", sortable: true },
+      { key: "assignedTo", label: "Assigned To", sortable: true },
       { key: "status", label: t.status, sortable: true },
     ],
     [t.photo, t.assetId, t.category, t.campus, t.location, t.status]
@@ -15199,6 +15243,18 @@ export default function App() {
       return true;
     });
   }, [sortedAssetMasterRows, edAssetTemplate]);
+  const assetMasterItemBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of assetMasterReportRows) {
+      const name = String(row.itemName || "").trim() || "Unknown";
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [assetMasterReportRows]);
+  const assetMasterItemBreakdownText = useMemo(
+    () => assetMasterItemBreakdown.map(([name, count]) => `${name} = ${count}`).join(" | "),
+    [assetMasterItemBreakdown]
+  );
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
   const reportTypeOptions = useMemo(
     () =>
@@ -15232,13 +15288,20 @@ export default function App() {
   const selectedReportTypeLabel =
     reportTypeOptions.find((option) => option.value === reportType)?.label ||
     (lang === "km" ? "របាយការណ៍" : "Report");
+  const reportCampusName = useCallback(
+    (campus: string) => {
+      const label = campusLabel(campus);
+      const withoutPrefixCode = label.replace(/^\s*C\d+(?:\.\d+)?\s+/i, "");
+      const withoutSuffixCode = withoutPrefixCode.replace(/\s*\(C\d+(?:\.\d+)?\)\s*$/i, "");
+      return withoutSuffixCode.trim() || label;
+    },
+    [campusLabel]
+  );
   const assetMasterCampusTitle = useMemo(() => {
     if (assetMasterCampusFilter.includes("ALL")) return t.allCampuses;
     if (!assetMasterCampusFilter.length) return "-";
-    return assetMasterCampusFilter
-      .map((campus) => `${CAMPUS_CODE[campus] || "CX"} ${campusLabel(campus)}`)
-      .join(", ");
-  }, [assetMasterCampusFilter, campusLabel, t.allCampuses]);
+    return assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", ");
+  }, [assetMasterCampusFilter, reportCampusName, t.allCampuses]);
   const assetMasterItemTitle = useMemo(() => {
     if (assetMasterItemFilter.includes("ALL")) return lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names";
     if (!assetMasterItemFilter.length) return "-";
@@ -15291,25 +15354,28 @@ export default function App() {
       reportType === "qr_labels",
     [reportType]
   );
+  const resetAssetMasterReportFilters = useCallback(() => {
+    setAssetMasterCampusFilter(["ALL"]);
+    setAssetMasterCategoryFilter(["ALL"]);
+    setAssetMasterItemFilter(["ALL"]);
+    setEdAssetTemplate("ALL");
+    setAssetMasterVisibleColumns([
+      "photo",
+      "assetId",
+      "linkedTo",
+      "category",
+      "itemDescription",
+      "campus",
+      "location",
+      "purchaseDate",
+      "lastServiceDate",
+      "assignedTo",
+      "status",
+    ]);
+  }, []);
   const resetReportFilters = useCallback(() => {
     if (reportType === "asset_master") {
-      setAssetMasterCampusFilter(["ALL"]);
-      setAssetMasterCategoryFilter(["ALL"]);
-      setAssetMasterItemFilter(["ALL"]);
-      setEdAssetTemplate("ALL");
-      setAssetMasterVisibleColumns([
-        "photo",
-        "assetId",
-        "linkedTo",
-        "itemDescription",
-        "category",
-        "campus",
-        "location",
-        "purchaseDate",
-        "lastServiceDate",
-        "assignedTo",
-        "status",
-      ]);
+      resetAssetMasterReportFilters();
       return;
     }
     if (reportType === "maintenance_completion") {
@@ -15333,7 +15399,30 @@ export default function App() {
       setQrCategoryFilter("ALL");
       setQrItemFilter(["ALL"]);
     }
-  }, [reportType]);
+  }, [reportType, resetAssetMasterReportFilters]);
+
+  const resetAllReportFiltersOnRefresh = useCallback(() => {
+    const today = new Date();
+    const ymd = toYmd(today);
+    setReportType("asset_master");
+    resetAssetMasterReportFilters();
+    setQrCampusFilter("ALL");
+    setQrLocationFilter("ALL");
+    setQrCategoryFilter("ALL");
+    setQrItemFilter(["ALL"]);
+    setReportPeriodMode("month");
+    setReportMonth(ymd.slice(0, 7));
+    setReportDateFrom(`${ymd.slice(0, 7)}-01`);
+    setReportDateTo(ymd);
+    setReportYear(String(today.getFullYear()));
+    setReportTerm("Term 1");
+    setReportMobileFiltersOpen(false);
+  }, [resetAssetMasterReportFilters]);
+
+  useEffect(() => {
+    // Ensure all report filter selections start from default values on full page refresh.
+    resetAllReportFiltersOnRefresh();
+  }, [resetAllReportFiltersOnRefresh]);
 
   const qrLocationFilterOptions = useMemo(() => {
     const source =
@@ -15941,7 +16030,7 @@ export default function App() {
 
   useEffect(() => {
     setAssetMasterCategoryFilter((prev) => {
-      if (!assetMasterRowsByCampusFilter.length) return [];
+      if (!assetMasterRowsByCampusFilter.length) return ["ALL"];
       if (prev.includes("ALL")) return prev;
       return prev.filter((item) => assetMasterCategoryFilterOptions.includes(item));
     });
@@ -15949,7 +16038,7 @@ export default function App() {
 
   useEffect(() => {
     setAssetMasterItemFilter((prev) => {
-      if (!assetMasterRowsByCampusCategoryFilter.length) return [];
+      if (!assetMasterRowsByCampusCategoryFilter.length) return ["ALL"];
       if (prev.includes("ALL")) return prev;
       return prev.filter((item) => assetMasterItemFilterOptions.includes(item));
     });
@@ -16197,7 +16286,7 @@ export default function App() {
     if (reportType === "asset_master") {
       const campusTitle = assetMasterCampusFilter.includes("ALL")
         ? t.allCampuses
-        : assetMasterCampusFilter.map((campus) => `${CAMPUS_CODE[campus] || "CX"} ${campusLabel(campus)}`).join(", ");
+        : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", ");
       title = edAssetTemplate === "ALL"
         ? `Asset Master Register Report - ${campusTitle}`
         : `${selectedEdTemplateLabel} Report - ${campusTitle}`;
@@ -16217,7 +16306,7 @@ export default function App() {
             case "category":
               return row.category;
             case "campus":
-              return campusLabel(row.campus);
+              return reportCampusName(row.campus);
             case "itemDescription":
               return row.itemDescription;
             case "location":
@@ -16243,7 +16332,7 @@ export default function App() {
         toPrintablePhotoUrl(row.mainPhoto || ""),
         row.mainAssetId,
         row.mainItem,
-        campusLabel(row.campus),
+        reportCampusName(row.campus),
         String(row.totalItems),
         row.connectedItems.length
           ? `<div>${row.connectedItems
@@ -16261,7 +16350,7 @@ export default function App() {
       title = "Asset by Campus and Location Report";
       columns = ["Campus", "Location", "Total Units", "IT Units", "Safety Units", "Item Breakdown"];
       rows = locationAssetSummaryRows.map((r) => [
-        campusLabel(r.campus),
+        reportCampusName(r.campus),
         r.location,
         String(r.total),
         String(r.it),
@@ -16274,7 +16363,7 @@ export default function App() {
       rows = overdueScheduleAssets.map((a) => [
         formatDate(a.nextMaintenanceDate || "-"),
         a.assetId,
-        campusLabel(a.campus),
+        reportCampusName(a.campus),
         assetStatusLabel(a.status || "-"),
         a.scheduleNote || "-",
       ]);
@@ -16284,9 +16373,9 @@ export default function App() {
       rows = allTransferRows.map((r) => [
         r.date ? formatDate(r.date) : "-",
         r.assetId,
-        campusLabel(r.fromCampus),
+        reportCampusName(r.fromCampus),
         r.fromLocation || "-",
-        campusLabel(r.toCampus),
+        reportCampusName(r.toCampus),
         r.toLocation || "-",
         r.fromUser || "-",
         r.toUser || "-",
@@ -16301,7 +16390,7 @@ export default function App() {
         r.assetId,
         toPrintablePhotoUrl(r.assetPhoto || ""),
         r.itemName || "-",
-        campusLabel(r.campus),
+        reportCampusName(r.campus),
         r.location || "-",
         r.assignedTo || "-",
         formatDate(r.sinceDate || "-"),
@@ -16317,7 +16406,7 @@ export default function App() {
         r.assetId,
         toPrintablePhotoUrl(r.assetPhoto || ""),
         toPrintablePhotoUrl(r.photo || ""),
-        campusLabel(r.campus),
+        reportCampusName(r.campus),
         r.type || "-",
         r.completion || "-",
         r.condition || "-",
@@ -16335,7 +16424,7 @@ export default function App() {
         r.assetId,
         toPrintablePhotoUrl(r.assetPhoto || ""),
         toPrintablePhotoUrl(r.photo || ""),
-        campusLabel(r.campus),
+        reportCampusName(r.campus),
         r.result || "-",
         r.condition || "-",
         r.note || "-",
@@ -16405,7 +16494,13 @@ export default function App() {
         : reportType === "staff_borrowing"
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
         : reportType === "asset_master"
-        ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>`
+        ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>${
+            assetMasterItemBreakdown.length
+              ? `<p><strong>By Item:</strong> ${assetMasterItemBreakdown
+                  .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
+                  .join(" | ")}</p>`
+              : ""
+          }`
         : reportType === "set_code"
         ? `<p><strong>Total Set Codes:</strong> ${setCodeReportRows.length} | <strong>Total Assets in Sets:</strong> ${setCodeReportRows.reduce((sum, row) => sum + row.totalItems, 0)}</p>`
         : reportType === "qr_labels"
@@ -16416,7 +16511,7 @@ export default function App() {
         ? (() => {
             const campusText = assetMasterCampusFilter.includes("ALL")
               ? t.allCampuses
-              : assetMasterCampusFilter.map((campus) => `${CAMPUS_CODE[campus] || "CX"} ${campusLabel(campus)}`).join(", ");
+              : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", ");
             const itemText = assetMasterItemFilter.includes("ALL")
               ? (lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")
               : (assetMasterItemFilter.length ? assetMasterItemFilter.join(", ") : "-");
@@ -16463,7 +16558,7 @@ export default function App() {
           .report-head-logo { width: 210px; max-width: 36vw; height: auto; object-fit: contain; }
           p.meta { margin: 0 0 12px; color: #41584c; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 1px solid #cfded0; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
+          th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; }
           .qr-sticker-grid { display: grid; grid-template-columns: repeat(5, 116px); column-gap: 10px; row-gap: 10px; margin-top: 10px; width: 100%; justify-content: space-between; }
           .qr-sticker-wrap { width: 116px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
@@ -18112,30 +18207,40 @@ export default function App() {
                       </button>
                     </div>
                     <div className="table-wrap">
-                      <table>
+                      <table className="dashboard-stock-campus-matrix">
                         <thead>
                           <tr>
-                            <th>Code</th>
-                            <th>Name</th>
-                            <th>Current</th>
-                            <th>Min</th>
+                            <th>Item</th>
+                            {dashboardStockCampusMatrix.campuses.map((campus) => (
+                              <th key={`dash-stock-campus-head-${campus}`}>{inventoryCampusLabel(campus)}</th>
+                            ))}
+                            <th>Total</th>
                             <th>Alert</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {inventoryBalanceRows.length ? (
-                            inventoryBalanceRows.slice(0, 10).map((row) => (
-                              <tr key={`dash-stock-row-${row.id}`}>
-                                <td><strong>{row.itemCode}</strong></td>
-                                <td>{row.itemName}</td>
-                                <td>{row.currentStock}</td>
-                                <td>{row.minStock}</td>
-                                <td>{row.lowStock ? "Low" : "OK"}</td>
+                          {dashboardStockCampusMatrix.rows.length ? (
+                            dashboardStockCampusMatrix.rows.map((row) => (
+                              <tr key={`dash-stock-item-row-${row.key}`}>
+                                <td><strong>{row.itemName}</strong></td>
+                                {dashboardStockCampusMatrix.campuses.map((campus) => {
+                                  const value = row.byCampus.get(campus);
+                                  return (
+                                    <td
+                                      key={`dash-stock-item-cell-${row.key}-${campus}`}
+                                      className={value?.low ? "dashboard-stock-cell-low" : ""}
+                                    >
+                                      {value ? value.stock : "-"}
+                                    </td>
+                                  );
+                                })}
+                                <td><strong>{row.totalStock}</strong></td>
+                                <td>{row.lowCampusCount ? `Low (${row.lowCampusCount})` : "OK"}</td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={5}>No stock balance data.</td>
+                              <td colSpan={Math.max(3, dashboardStockCampusMatrix.campuses.length + 3)}>No stock balance data.</td>
                             </tr>
                           )}
                         </tbody>
@@ -25860,7 +25965,7 @@ export default function App() {
                     <option value="ALL">{t.allCampuses}</option>
                     {campusOptions.map((campus) => (
                       <option key={`qr-campus-${campus}`} value={campus}>
-                        {campusLabel(campus)}
+                        {reportCampusName(campus)}
                       </option>
                     ))}
                   </select>
@@ -25964,7 +26069,7 @@ export default function App() {
                               )
                             }
                           />
-                          <span>{campusLabel(campus)}</span>
+                          <span>{reportCampusName(campus)}</span>
                         </label>
                       ))}
                     </div>
@@ -26097,6 +26202,9 @@ export default function App() {
                 {edAssetTemplate !== "ALL" ? (
                   <span> Template: <strong>{selectedEdTemplateLabel}</strong></span>
                 ) : null}
+                {assetMasterItemBreakdownText ? (
+                  <span> | <strong>By Item:</strong> {assetMasterItemBreakdownText}</span>
+                ) : null}
               </div>
             )}
             {reportType === "set_code" && (
@@ -26124,10 +26232,10 @@ export default function App() {
                             </div>
                           </div>
                           <div className="report-card-meta">
-                            <div><strong>{t.campus}:</strong> {campusLabel(row.campus)}</div>
+                            <div><strong>{t.campus}:</strong> {reportCampusName(row.campus)}</div>
                             <div><strong>{t.category}:</strong> {row.category || "-"}</div>
                             <div><strong>{t.location}:</strong> {row.location || "-"}</div>
-                            <div><strong>User Control:</strong> {row.assignedTo || "-"}</div>
+                            <div><strong>Assigned To:</strong> {row.assignedTo || "-"}</div>
                             <div><strong>Linked:</strong> {row.linkedTo || "-"}</div>
                             <div><strong>Item:</strong> {row.itemDescription || "-"}</div>
                             <div><strong>Purchase:</strong> {formatDate(row.purchaseDate || "-")}</div>
@@ -26204,7 +26312,7 @@ export default function App() {
                                     return <td key={`${row.key}-category`}>{row.category || "-"}</td>;
                                   }
                                   if (column.key === "campus") {
-                                    return <td key={`${row.key}-campus`}>{campusLabel(row.campus)}</td>;
+                                    return <td key={`${row.key}-campus`}>{reportCampusName(row.campus)}</td>;
                                   }
                                   if (column.key === "itemDescription") {
                                     return (
@@ -26282,7 +26390,7 @@ export default function App() {
                           <td>{renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}</td>
                           <td>{row.mainAssetId}</td>
                           <td>{row.mainItem}</td>
-                          <td>{campusLabel(row.campus)}</td>
+                          <td>{reportCampusName(row.campus)}</td>
                           <td>{row.totalItems}</td>
                           <td>
                             {row.connectedItems.length ? (
@@ -26328,7 +26436,7 @@ export default function App() {
                         <tr key={`report-overdue-${a.id}`}>
                           <td>{formatDate(a.nextMaintenanceDate || "-")}</td>
                           <td><strong>{a.assetId}</strong></td>
-                          <td>{campusLabel(a.campus)}</td>
+                          <td>{reportCampusName(a.campus)}</td>
                           <td>{assetStatusLabel(a.status || "-")}</td>
                           <td>{a.scheduleNote || "-"}</td>
                         </tr>
@@ -26360,7 +26468,7 @@ export default function App() {
                     {locationAssetSummaryRows.length ? (
                       locationAssetSummaryRows.map((row) => (
                         <tr key={`report-loc-${row.campus}-${row.location}`}>
-                          <td>{campusLabel(row.campus)}</td>
+                          <td>{reportCampusName(row.campus)}</td>
                           <td>{row.location}</td>
                           <td><strong>{row.total}</strong></td>
                           <td>{row.it}</td>
@@ -26402,9 +26510,9 @@ export default function App() {
                         <tr key={`report-transfer-${r.rowId}`}>
                           <td>{r.date ? formatDate(r.date) : "-"}</td>
                           <td><strong>{r.assetId}</strong></td>
-                          <td>{campusLabel(r.fromCampus)}</td>
+                          <td>{reportCampusName(r.fromCampus)}</td>
                           <td>{r.fromLocation || "-"}</td>
-                          <td>{campusLabel(r.toCampus)}</td>
+                          <td>{reportCampusName(r.toCampus)}</td>
                           <td>{r.toLocation || "-"}</td>
                           <td>{r.fromUser || "-"}</td>
                           <td>{r.toUser || "-"}</td>
@@ -26519,7 +26627,7 @@ export default function App() {
                           <td><strong>{r.assetId}</strong></td>
                           <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
                           <td>{r.itemName}</td>
-                          <td>{campusLabel(r.campus)}</td>
+                          <td>{reportCampusName(r.campus)}</td>
                           <td>{r.location || "-"}</td>
                           <td>{r.assignedTo || "-"}</td>
                           <td>{formatDate(r.sinceDate || "-")}</td>
@@ -26553,7 +26661,7 @@ export default function App() {
                       <div className="qr-label-meta">
                         <div className="qr-label-asset-id">{row.assetId}</div>
                         <div>{row.itemName}</div>
-                        <div>{campusLabel(row.campus)} | {row.location || "-"}</div>
+                        <div>{reportCampusName(row.campus)} | {row.location || "-"}</div>
                         <div>Status: {assetStatusLabel(row.status || "-")} | SN: {String(row.serialNumber || "").trim() || "-"}</div>
                       </div>
                     </article>
@@ -26579,7 +26687,7 @@ export default function App() {
                             </div>
                           </div>
                           <div className="report-card-meta">
-                            <div><strong>{t.campus}:</strong> {campusLabel(r.campus)}</div>
+                            <div><strong>{t.campus}:</strong> {reportCampusName(r.campus)}</div>
                             <div><strong>Type:</strong> {r.type || "-"}</div>
                             <div><strong>Work Status:</strong> {r.completion || "-"}</div>
                             <div><strong>Condition:</strong> {r.condition || "-"}</div>
@@ -26617,7 +26725,7 @@ export default function App() {
                               <td><strong>{r.assetId}</strong></td>
                               <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
                               <td>{renderAssetPhoto(r.photo || "", "maintenance")}</td>
-                              <td>{campusLabel(r.campus)}</td>
+                              <td>{reportCampusName(r.campus)}</td>
                               <td>{r.type || "-"}</td>
                               <td>{r.completion || "-"}</td>
                               <td>{r.condition || "-"}</td>
@@ -26679,7 +26787,7 @@ export default function App() {
                             <td><strong>{r.assetId}</strong></td>
                             <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
                             <td>{renderAssetPhoto(r.photo || "", "verification")}</td>
-                            <td>{campusLabel(r.campus)}</td>
+                            <td>{reportCampusName(r.campus)}</td>
                             <td>{r.result || "-"}</td>
                             <td>{r.condition || "-"}</td>
                             <td>{r.note || "-"}</td>

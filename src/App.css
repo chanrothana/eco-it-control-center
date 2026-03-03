@@ -2257,6 +2257,22 @@ label.backup-action-btn {
   margin-top: 0;
 }
 
+.dashboard-stock-campus-matrix td:first-child,
+.dashboard-stock-campus-matrix th:first-child {
+  min-width: 220px;
+}
+
+.dashboard-stock-campus-matrix td,
+.dashboard-stock-campus-matrix th {
+  white-space: nowrap;
+}
+
+.dashboard-stock-cell-low {
+  background: #fff0f2 !important;
+  color: #a22c3c;
+  font-weight: 700;
+}
+
 .dashboard-focus-panel {
   display: grid;
   gap: 12px;
@@ -4893,7 +4909,12 @@ tr.row-maint-maintenance:hover td {
 }
 
 .report-table-wrap td {
+  font-size: 13px;
   line-height: 1.35;
+}
+
+.report-table-wrap th {
+  font-size: 13px;
 }
 
 .report-table-wrap table {
