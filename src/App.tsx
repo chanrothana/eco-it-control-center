@@ -15232,6 +15232,24 @@ export default function App() {
   const selectedReportTypeLabel =
     reportTypeOptions.find((option) => option.value === reportType)?.label ||
     (lang === "km" ? "របាយការណ៍" : "Report");
+  const assetMasterCampusTitle = useMemo(() => {
+    if (assetMasterCampusFilter.includes("ALL")) return t.allCampuses;
+    if (!assetMasterCampusFilter.length) return "-";
+    return assetMasterCampusFilter
+      .map((campus) => `${CAMPUS_CODE[campus] || "CX"} ${campusLabel(campus)}`)
+      .join(", ");
+  }, [assetMasterCampusFilter, campusLabel, t.allCampuses]);
+  const assetMasterItemTitle = useMemo(() => {
+    if (assetMasterItemFilter.includes("ALL")) return lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names";
+    if (!assetMasterItemFilter.length) return "-";
+    return assetMasterItemFilter.join(", ");
+  }, [assetMasterItemFilter, lang]);
+  const selectedReportDisplayTitle = useMemo(() => {
+    if (reportType === "asset_master") {
+      return `${selectedReportTypeLabel} - ${assetMasterCampusTitle}`;
+    }
+    return selectedReportTypeLabel;
+  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle]);
   const reportTypeGuideText = useMemo(() => {
     const guides: Record<ReportType, string> =
       lang === "km"
@@ -15259,6 +15277,12 @@ export default function App() {
           };
     return guides[reportType];
   }, [lang, reportType]);
+  const selectedReportDisplayGuide = useMemo(() => {
+    if (reportType === "asset_master") {
+      return `${lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"}: ${assetMasterItemTitle}`;
+    }
+    return reportTypeGuideText;
+  }, [reportType, lang, assetMasterItemTitle, reportTypeGuideText]);
   const hasReportFilters = useMemo(
     () =>
       reportType === "asset_master" ||
@@ -16171,7 +16195,12 @@ export default function App() {
     };
 
     if (reportType === "asset_master") {
-      title = edAssetTemplate === "ALL" ? "Asset Master Register Report" : `${selectedEdTemplateLabel} Report`;
+      const campusTitle = assetMasterCampusFilter.includes("ALL")
+        ? t.allCampuses
+        : assetMasterCampusFilter.map((campus) => `${CAMPUS_CODE[campus] || "CX"} ${campusLabel(campus)}`).join(", ");
+      title = edAssetTemplate === "ALL"
+        ? `Asset Master Register Report - ${campusTitle}`
+        : `${selectedEdTemplateLabel} Report - ${campusTitle}`;
       const visibleDefs = assetMasterColumnDefs.filter((def) => isAssetMasterColumnVisible(def.key));
       columns = visibleDefs.map((def) => def.label);
       rows = assetMasterReportRows.map((row) =>
@@ -16382,6 +16411,22 @@ export default function App() {
         : reportType === "qr_labels"
         ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length}</p>`
         : "";
+    const printMetaHtml =
+      reportType === "asset_master"
+        ? (() => {
+            const campusText = assetMasterCampusFilter.includes("ALL")
+              ? t.allCampuses
+              : assetMasterCampusFilter.map((campus) => `${CAMPUS_CODE[campus] || "CX"} ${campusLabel(campus)}`).join(", ");
+            const itemText = assetMasterItemFilter.includes("ALL")
+              ? (lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")
+              : (assetMasterItemFilter.length ? assetMasterItemFilter.join(", ") : "-");
+            return [
+              `<p class="meta">Generated: ${escapeHtml(generatedAt)}</p>`,
+              `<p class="meta">Campus: ${escapeHtml(campusText)}</p>`,
+              `<p class="meta">${escapeHtml(lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of")}: ${escapeHtml(itemText)}</p>`,
+            ].join("");
+          })()
+        : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
 
     const reportContentHtml =
       reportType === "qr_labels"
@@ -16413,6 +16458,9 @@ export default function App() {
         <style>
           body { font-family: "Segoe UI", Arial, sans-serif; margin: 20px; color: #1b2d23; }
           h1 { margin: 0 0 8px; font-size: 24px; }
+          .report-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+          .report-head-left { min-width: 0; flex: 1 1 auto; }
+          .report-head-logo { width: 210px; max-width: 36vw; height: auto; object-fit: contain; }
           p.meta { margin: 0 0 12px; color: #41584c; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
@@ -16430,9 +16478,14 @@ export default function App() {
         </style>
       </head>
       <body>
-        <h1>Eco International School</h1>
-        <h2>${escapeHtml(title)}</h2>
-        <p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>
+        <div class="report-head">
+          <div class="report-head-left">
+            <h1>Eco International School</h1>
+            <h2>${escapeHtml(title)}</h2>
+          </div>
+          <img class="report-head-logo" src="/eco-logo.png" alt="Eco International School logo" />
+        </div>
+        ${printMetaHtml}
         ${summaryHtml}
         ${reportContentHtml}
       </body>
@@ -26033,8 +26086,8 @@ export default function App() {
                 </div>
               )}
               <div className="report-builder-hint">
-                <strong>{selectedReportTypeLabel}</strong>
-                <span>{reportTypeGuideText}</span>
+                <strong>{selectedReportDisplayTitle}</strong>
+                <span>{selectedReportDisplayGuide}</span>
               </div>
             </div>
 
