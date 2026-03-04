@@ -29493,6 +29493,7 @@ export default function App() {
                             <div>{t.campus}: {campusLabel(asset.campus)}</div>
                             <div>{t.category}: {asset.category}</div>
                             <div>{t.location}: {asset.location || "-"}</div>
+                            <div>{t.user}: {asset.assignedTo || "-"}</div>
                           </div>
                         </div>
                       </article>
@@ -29512,6 +29513,7 @@ export default function App() {
                         <th>{t.category}</th>
                         <th>{t.name}</th>
                         <th>{t.location}</th>
+                        <th>{t.user}</th>
                         <th>{t.status}</th>
                       </tr>
                     </thead>
@@ -29525,12 +29527,13 @@ export default function App() {
                             <td>{asset.category}</td>
                             <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
                             <td>{asset.location || "-"}</td>
+                            <td>{asset.assignedTo || "-"}</td>
                             <td>{assetStatusLabel(asset.status || "-")}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
+                          <td colSpan={8}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
                         </tr>
                       )}
                     </tbody>
