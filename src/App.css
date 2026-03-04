@@ -1639,6 +1639,21 @@ h2 {
   text-overflow: ellipsis;
 }
 
+.filter-menu-item-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5678a8;
+  flex: 0 0 18px;
+}
+
+.filter-menu-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 .filter-menu-search-row {
   position: sticky;
   top: 0;
@@ -1762,6 +1777,26 @@ h2 {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, #4f88d8, #2fbf7f);
+}
+
+.maintenance-record-inline-triple {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.maintenance-quick-date-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.maintenance-quick-date-label {
+  font-weight: 700;
+  color: #2b416b;
+  white-space: nowrap;
 }
 
 .maintenance-campus-value {
@@ -6260,6 +6295,10 @@ tr.row-maint-maintenance:hover td {
     grid-column: auto;
   }
 
+  .maintenance-record-inline-triple {
+    grid-template-columns: 1fr;
+  }
+
   .top-controls,
   .panel-filters {
     flex-direction: column;
@@ -6518,6 +6557,13 @@ tr.row-maint-maintenance:hover td {
 
   .asset-list-scroll {
     max-height: 58vh;
+  }
+}
+
+@media (max-width: 768px) {
+  .maintenance-quick-date-nav {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 

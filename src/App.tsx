@@ -4792,6 +4792,7 @@ export default function App() {
   const [inventoryBalanceMode, setInventoryBalanceMode] = useState<"all" | "low">("all");
   const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
   const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState<string[]>(["ALL"]);
+  const [maintenanceRecordItemFilterSearch, setMaintenanceRecordItemFilterSearch] = useState("");
   const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
   const [maintenanceRecordCampusFilter, setMaintenanceRecordCampusFilter] = useState("ALL");
   const [maintenanceRecordScheduleJumpMode, setMaintenanceRecordScheduleJumpMode] = useState(false);
@@ -6997,7 +6998,7 @@ export default function App() {
   const maintenanceStockOutLabel = useMemo(() => {
     if (maintenanceQuickMode) {
       const ymd = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
-      return formatDate(ymd);
+      return formatKhmerDateYmd(ymd);
     }
     const month = String(maintenanceStockOutMonth || "").trim();
     if (!/^\d{4}-\d{2}$/.test(month)) return "-";
@@ -14259,6 +14260,11 @@ export default function App() {
       a.localeCompare(b)
     );
   }, [maintenanceRecordAssetPool, maintenanceRecordCampusFilter, maintenanceRecordCategoryFilter, assetItemName]);
+  const maintenanceRecordItemOptionsFiltered = useMemo(() => {
+    const q = String(maintenanceRecordItemFilterSearch || "").trim().toLowerCase();
+    if (!q) return maintenanceRecordItemOptions;
+    return maintenanceRecordItemOptions.filter((name) => String(name || "").toLowerCase().includes(q));
+  }, [maintenanceRecordItemOptions, maintenanceRecordItemFilterSearch]);
   const maintenanceRecordLocationOptions = useMemo(() => {
     let list = maintenanceRecordAssetPool;
     if (maintenanceRecordCampusFilter !== "ALL") {
@@ -23103,7 +23109,7 @@ export default function App() {
                       <h3 className="section-title">
                         {lang === "km" ? "របាយការណ៍ចេញស្តុកប្រចាំថ្ងៃ (មើលតែប៉ុណ្ណោះ)" : "Daily Stock-Out Information (View Only)"}
                       </h3>
-                      <div className="row-actions">
+                      <div className={`row-actions ${isPhoneView ? "maintenance-quick-date-nav" : ""}`}>
                         <button
                           type="button"
                           className="tab btn-small"
@@ -23112,10 +23118,7 @@ export default function App() {
                         >
                           {"<"}
                         </button>
-                        <span className="tiny">
-                          {maintenanceStockOutLabel} | {maintenanceStockOutRows.length}{" "}
-                          {lang === "km" ? "ប្រតិបត្តិការ" : "records"}
-                        </span>
+                        <span className="tiny maintenance-quick-date-label">{maintenanceStockOutLabel}</span>
                         <button
                           type="button"
                           className="tab btn-small"
@@ -23126,6 +23129,9 @@ export default function App() {
                           {">"}
                         </button>
                       </div>
+                    </div>
+                    <div className="tiny" style={{ marginBottom: 6 }}>
+                      {maintenanceStockOutRows.length} {lang === "km" ? "ប្រតិបត្តិការ" : "records"}
                     </div>
                     <div className="inventory-daily-stock-note" style={{ margin: "0 0 8px" }}>
                         <strong>{lang === "km" ? "សរុបចេញ" : "Total Stock Out"}:</strong> {maintenanceStockOutQtyTotal} pcs
@@ -25521,6 +25527,14 @@ export default function App() {
                         )}
                       </summary>
                       <div className="filter-menu-list">
+                        <div className="filter-menu-search-row">
+                          <input
+                            className="input filter-menu-search-input"
+                            value={maintenanceRecordItemFilterSearch}
+                            onChange={(e) => setMaintenanceRecordItemFilterSearch(e.target.value)}
+                            placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទំនិញ..." : "Search item name..."}
+                          />
+                        </div>
                         <label className="filter-menu-item">
                           <input
                             type="checkbox"
@@ -25536,9 +25550,10 @@ export default function App() {
                               )
                             }
                           />
+                          <span className="filter-menu-item-icon" aria-hidden={true}>{quickCountItemIcon("all")}</span>
                           <span className="filter-menu-item-label">{lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"}</span>
                         </label>
-                        {maintenanceRecordItemOptions.map((name) => (
+                        {maintenanceRecordItemOptionsFiltered.map((name) => (
                           <label key={`maintenance-record-item-${name}`} className="filter-menu-item">
                             <input
                               type="checkbox"
@@ -25554,9 +25569,13 @@ export default function App() {
                                 )
                               }
                             />
+                            <span className="filter-menu-item-icon" aria-hidden={true}>{quickCountItemIcon(name)}</span>
                             <span className="filter-menu-item-label">{name}</span>
                           </label>
                         ))}
+                        {!maintenanceRecordItemOptionsFiltered.length ? (
+                          <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                        ) : null}
                       </div>
                     </details>
                   </label>
@@ -25612,109 +25631,111 @@ export default function App() {
                   })}
                 </div>
               </div>
-              <label className="field field-wide quickout-date-field" ref={maintenanceRecordDateWrapRef}>
-                <span>{t.date}</span>
-                <div className="quickout-date-input-wrap">
-                  <input
-                    className="input"
-                    type="text"
-                    readOnly
-                    value={maintenanceRecordDisplayDate}
-                    placeholder="dd/mm/yyyy"
-                  />
-                  <button
-                    type="button"
-                    className="quickout-date-icon-btn"
-                    onClick={openMaintenanceRecordDatePicker}
-                    aria-label="Open Maintenance Calendar"
-                  >
-                    <Calendar size={18} />
-                  </button>
-                </div>
-                {maintenanceRecordDatePickerOpen ? (
-                  <div className="quickout-eco-inline-panel">
-                    <div className="quickout-eco-head">
-                      <strong className="quickout-eco-title">{maintenanceRecordDateMonthLabel}</strong>
-                      <div className="quickout-eco-nav">
-                        <button
-                          type="button"
-                          className="quickout-eco-nav-btn"
-                          aria-label="Previous month"
-                          disabled={!maintenanceRecordDateCanGoPrevMonth}
-                          onClick={() =>
-                            setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
-                          }
-                        >
-                          {"<"}
-                        </button>
-                        <button
-                          type="button"
-                          className="quickout-eco-nav-btn"
-                          aria-label="Next month"
-                          onClick={() =>
-                            setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
-                          }
-                        >
-                          {">"}
-                        </button>
-                      </div>
-                    </div>
-                    <CalendarGridTemplate
-                      weekdayLabels={calendarWeekdayLabels}
-                      days={maintenanceRecordDateGridDays}
-                      selectedDate={maintenanceRecordSelectedDate}
-                      todayYmd={todayYmd}
-                      onSelectDate={(ymd) => {
-                        setMaintenanceRecordSelectedDate(ymd);
-                        setMaintenanceRecordForm((f) => ({ ...f, date: ymd }));
-                        setMaintenanceRecordDatePickerOpen(false);
-                      }}
-                      isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
-                      gridClassName="quickout-eco-grid"
-                      renderHolidayTag={(d) =>
-                        d.holidayName ? (
-                          <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
-                            {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
-                          </em>
-                        ) : null
-                      }
-                      headKeyPrefix="maintenance-record-date-head"
-                      dayKeyPrefix="maintenance-record-date-day"
+              <div className="maintenance-record-inline-triple field-wide">
+                <label className="field quickout-date-field" ref={maintenanceRecordDateWrapRef}>
+                  <span>{t.date}</span>
+                  <div className="quickout-date-input-wrap">
+                    <input
+                      className="input"
+                      type="text"
+                      readOnly
+                      value={maintenanceRecordDisplayDate}
+                      placeholder="dd/mm/yyyy"
                     />
+                    <button
+                      type="button"
+                      className="quickout-date-icon-btn"
+                      onClick={openMaintenanceRecordDatePicker}
+                      aria-label="Open Maintenance Calendar"
+                    >
+                      <Calendar size={18} />
+                    </button>
                   </div>
-                ) : null}
-              </label>
-              <label className="field">
-                <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
-                <select
-                  className="input"
-                  value={maintenanceRecordForm.type}
-                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, type: e.target.value }))}
-                >
-                  {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
-                    <option key={`record-type-${opt}`} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span>
-                <select
-                  className="input"
-                  value={maintenanceRecordForm.completion}
-                  onChange={(e) =>
-                    setMaintenanceRecordForm((f) => ({
-                      ...f,
-                      completion: e.target.value as "Done" | "Not Yet",
-                    }))
-                  }
-                >
-                    {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {maintenanceCompletionText(opt.value)}
-                      </option>
+                  {maintenanceRecordDatePickerOpen ? (
+                    <div className="quickout-eco-inline-panel">
+                      <div className="quickout-eco-head">
+                        <strong className="quickout-eco-title">{maintenanceRecordDateMonthLabel}</strong>
+                        <div className="quickout-eco-nav">
+                          <button
+                            type="button"
+                            className="quickout-eco-nav-btn"
+                            aria-label="Previous month"
+                            disabled={!maintenanceRecordDateCanGoPrevMonth}
+                            onClick={() =>
+                              setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                            }
+                          >
+                            {"<"}
+                          </button>
+                          <button
+                            type="button"
+                            className="quickout-eco-nav-btn"
+                            aria-label="Next month"
+                            onClick={() =>
+                              setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                            }
+                          >
+                            {">"}
+                          </button>
+                        </div>
+                      </div>
+                      <CalendarGridTemplate
+                        weekdayLabels={calendarWeekdayLabels}
+                        days={maintenanceRecordDateGridDays}
+                        selectedDate={maintenanceRecordSelectedDate}
+                        todayYmd={todayYmd}
+                        onSelectDate={(ymd) => {
+                          setMaintenanceRecordSelectedDate(ymd);
+                          setMaintenanceRecordForm((f) => ({ ...f, date: ymd }));
+                          setMaintenanceRecordDatePickerOpen(false);
+                        }}
+                        isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
+                        gridClassName="quickout-eco-grid"
+                        renderHolidayTag={(d) =>
+                          d.holidayName ? (
+                            <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                              {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                            </em>
+                          ) : null
+                        }
+                        headKeyPrefix="maintenance-record-date-head"
+                        dayKeyPrefix="maintenance-record-date-day"
+                      />
+                    </div>
+                  ) : null}
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
+                  <select
+                    className="input"
+                    value={maintenanceRecordForm.type}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, type: e.target.value }))}
+                  >
+                    {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
+                      <option key={`record-type-${opt}`} value={opt}>{opt}</option>
                     ))}
-                </select>
-              </label>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span>
+                  <select
+                    className="input"
+                    value={maintenanceRecordForm.completion}
+                    onChange={(e) =>
+                      setMaintenanceRecordForm((f) => ({
+                        ...f,
+                        completion: e.target.value as "Done" | "Not Yet",
+                      }))
+                    }
+                  >
+                      {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {maintenanceCompletionText(opt.value)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </div>
               <label className="field field-wide">
                 <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
                 <input
