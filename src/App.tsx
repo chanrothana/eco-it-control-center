@@ -4193,12 +4193,6 @@ export default function App() {
     const mode = String(params.get("mode") || "").toLowerCase();
     return mode === "maintenance" || mode === "staff";
   }, []);
-  const maintenanceQuickLink = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    const params = new URLSearchParams(window.location.search);
-    params.set("mode", "maintenance");
-    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-  }, []);
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [, startTabTransition] = useTransition();
@@ -11209,19 +11203,6 @@ export default function App() {
     setInventoryQuickReasonTipsOpen(false);
     setQuickOutEcoPickerOpen(false);
     setInventoryQuickOutFileKey((k) => k + 1);
-  }
-  async function copyMaintenanceQuickLink() {
-    if (!maintenanceQuickLink) return;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(maintenanceQuickLink);
-        alert(lang === "km" ? "បានចម្លងតំណភ្ជាប់បុគ្គលិករួចហើយ។" : "Maintenance quick link copied.");
-        return;
-      }
-    } catch {
-      // fallback below
-    }
-    window.prompt(lang === "km" ? "ចម្លងតំណភ្ជាប់បុគ្គលិក" : "Copy maintenance quick link", maintenanceQuickLink);
   }
   function openMaintenanceRecordDatePicker() {
     const today = toYmd(new Date());
@@ -22549,16 +22530,10 @@ export default function App() {
 
         {tab === "inventory" && (
           <div className="inventory-shell">
-            <section className="panel">
-              <div className="panel-row">
-                <h2>{maintenanceQuickMode ? (lang === "km" ? "កំណត់ត្រាថែទាំរហ័ស" : "Maintenance Quick Record") : "Inventory Control"}</h2>
-                {maintenanceQuickMode ? (
-                  <div className="row-actions">
-                    <button type="button" className="tab btn-small" onClick={copyMaintenanceQuickLink}>
-                      {lang === "km" ? "ចម្លងតំណភ្ជាប់បុគ្គលិក" : "Copy Staff Link"}
-                    </button>
-                  </div>
-                ) : (
+            {!maintenanceQuickMode ? (
+              <section className="panel">
+                <div className="panel-row">
+                  <h2>Inventory Control</h2>
                   <div className="panel-filters">
                     <input
                       className="input"
@@ -22567,15 +22542,7 @@ export default function App() {
                       onChange={(e) => setInventorySearch(e.target.value)}
                     />
                   </div>
-                )}
-              </div>
-              {maintenanceQuickMode ? (
-                <p className="tiny">
-                  {lang === "km"
-                    ? "របៀបសម្រាប់បុគ្គលិកថែទាំ៖ កត់ត្រាចេញស្តុកតាម Gallery ប៉ុណ្ណោះ។"
-                    : "Maintenance staff mode: only quick recording flow is shown."}
-                </p>
-              ) : (
+                </div>
                 <div className="tabs">
                   <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
                   <button className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
@@ -22584,8 +22551,8 @@ export default function App() {
                   <button className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>Stock In/Out</button>
                   <button className={`tab ${inventoryView === "balance" ? "tab-active" : ""}`} onClick={() => setInventoryView("balance")}>Balance & Alerts</button>
                 </div>
-              )}
-            </section>
+              </section>
+            ) : null}
 
             {!maintenanceQuickMode && inventoryView === "items" && (
               <section className="panel">
