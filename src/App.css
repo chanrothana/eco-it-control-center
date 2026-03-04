@@ -6798,6 +6798,11 @@ tr.row-maint-maintenance:hover td {
     box-shadow: var(--mobile-shadow);
   }
 
+  .app-card-maintenance-quick .topbar {
+    position: relative;
+    top: auto;
+  }
+
   .top-right {
     align-items: stretch;
     gap: 0;
@@ -6851,6 +6856,11 @@ tr.row-maint-maintenance:hover td {
     font-size: clamp(20px, 6vw, 25px) !important;
     line-height: 1.08;
     margin: 28px 0 0;
+  }
+
+  .app-card-maintenance-quick .brand-title-mobile {
+    margin: 8px 0 0;
+    font-size: clamp(18px, 5.6vw, 22px) !important;
   }
 
   .subhead {

@@ -22,6 +22,7 @@ import {
   PcCase,
   Printer,
   Puzzle,
+  Radio,
   Search,
   Settings,
   Shield,
@@ -16085,7 +16086,7 @@ export default function App() {
 
     if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return icon(Snowflake);
     if (code === "WDP" || name.includes("water dispenser")) return icon(Droplets);
-    if (code === "WTK" || name.includes("walkie")) return icon(Wifi);
+    if (code === "WTK" || name.includes("walkie")) return icon(Radio);
     if (code === "FPN" || name.includes("front panel")) return icon(Puzzle);
     if (code === "RPN" || name.includes("rear panel")) return icon(Puzzle);
     if (code === "TBL" || name.includes("table")) return icon(Building2);
@@ -17804,7 +17805,7 @@ export default function App() {
         </section>
       ) : null}
 
-      <section className="app-card app-card-layout">
+      <section className={`app-card app-card-layout ${maintenanceQuickMode ? "app-card-maintenance-quick" : ""}`}>
         <header className="topbar">
           <div className="brand-block">
             {isPhoneView ? (
@@ -17832,7 +17833,11 @@ export default function App() {
               </button>
             ) : null}
             {isPhoneView ? null : <p className="eyebrow">{t.school}</p>}
-            <h1 className={isPhoneView ? "brand-title-mobile" : ""}>{t.title}</h1>
+            <h1 className={isPhoneView ? "brand-title-mobile" : ""}>
+              {isPhoneView && maintenanceQuickMode
+                ? (lang === "km" ? "របៀបថែទាំ" : "Maintenance Mode")
+                : t.title}
+            </h1>
             {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
           </div>
 

@@ -109,7 +109,7 @@ const TYPE_CODES = {
     "FGP",
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "WDP", "FPN", "RPN", "TBL", "CHR"],
+  FACILITY: ["AC", "WDP", "WTK", "FPN", "RPN", "TBL", "CHR"],
 };
 const TYPE_LABELS = {
   PC: "Computer",
@@ -144,6 +144,7 @@ const TYPE_LABELS = {
   FCP: "Fire Control Panel",
   AC: "Air Conditioner",
   WDP: "Water Dispenser",
+  WTK: "Walkie Talkie",
   FPN: "Front Panel",
   RPN: "Rear Panel",
   TBL: "Table",
