@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import "./App.css";
+import CalendarGridTemplate from "./components/CalendarGridTemplate";
 
 type Asset = {
   id: number;
@@ -1032,6 +1033,7 @@ const MAINTENANCE_COMPLETION_OPTIONS = [
   { value: "Done", label: "Already Done" },
   { value: "Not Yet", label: "Not Yet Done" },
 ];
+const MAX_MAINTENANCE_PHOTOS = 5;
 const MAINTENANCE_TYPE_OPTIONS = [
   "Preventive",
   "Corrective",
@@ -4794,7 +4796,7 @@ export default function App() {
   const [verificationDateTo, setVerificationDateTo] = useState("");
   const [inventoryBalanceMode, setInventoryBalanceMode] = useState<"all" | "low">("all");
   const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
-  const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState("ALL");
+  const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState<string[]>(["ALL"]);
   const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
   const [maintenanceRecordCampusFilter, setMaintenanceRecordCampusFilter] = useState("ALL");
   const [maintenanceRecordScheduleJumpMode, setMaintenanceRecordScheduleJumpMode] = useState(false);
@@ -4874,7 +4876,7 @@ export default function App() {
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
-  const [maintenanceStockOutMonth, setMaintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [maintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const todayYmd = toYmd(new Date());
   const calendarPrevLabel = isPhoneView ? "<" : "Prev";
   const calendarNextLabel = isPhoneView ? ">" : "Next";
@@ -6892,7 +6894,9 @@ export default function App() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
   }, [inventoryVisibleTxns, inventoryFullDateFrom, inventoryFullDateTo]);
   const maintenanceMonthlyStockOutRows = useMemo(() => {
-    const month = String(maintenanceStockOutMonth || "").trim();
+    const month = maintenanceQuickMode
+      ? String(todayYmd || "").slice(0, 7)
+      : String(maintenanceStockOutMonth || "").trim();
     if (!/^\d{4}-\d{2}$/.test(month)) return [] as InventoryTxn[];
     return [...inventoryVisibleTxns]
       .filter((tx) => {
@@ -6902,7 +6906,7 @@ export default function App() {
         return Boolean(date && date.startsWith(`${month}-`));
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
-  }, [inventoryVisibleTxns, maintenanceStockOutMonth]);
+  }, [inventoryVisibleTxns, maintenanceStockOutMonth, maintenanceQuickMode, todayYmd]);
   const maintenanceMonthlyStockOutCampusTotals = useMemo(() => {
     const out = new Map<string, number>();
     for (const tx of maintenanceMonthlyStockOutRows) {
@@ -6919,12 +6923,14 @@ export default function App() {
     [maintenanceMonthlyStockOutRows]
   );
   const maintenanceMonthlyStockOutLabel = useMemo(() => {
-    const month = String(maintenanceStockOutMonth || "").trim();
+    const month = maintenanceQuickMode
+      ? String(todayYmd || "").slice(0, 7)
+      : String(maintenanceStockOutMonth || "").trim();
     if (!/^\d{4}-\d{2}$/.test(month)) return "-";
     const date = new Date(`${month}-01T00:00:00`);
     if (Number.isNaN(date.getTime())) return month;
     return date.toLocaleString(undefined, { month: "long", year: "numeric" });
-  }, [maintenanceStockOutMonth]);
+  }, [maintenanceStockOutMonth, maintenanceQuickMode, todayYmd]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -12694,13 +12700,19 @@ export default function App() {
     }
     try {
       const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      let reachedLimit = false;
       setMaintenanceRecordForm((f) => {
         const merged = normalizeAssetPhotos({
           photo: f.photo,
           photos: [...(f.photos || []), ...optimized],
         });
-        return { ...f, photo: merged[0] || "", photos: merged };
+        const limited = merged.slice(0, MAX_MAINTENANCE_PHOTOS);
+        reachedLimit = merged.length > MAX_MAINTENANCE_PHOTOS;
+        return { ...f, photo: limited[0] || "", photos: limited };
       });
+      if (reachedLimit) {
+        alert(lang === "km" ? `អាចបញ្ចូលរូបបានអតិបរមា ${MAX_MAINTENANCE_PHOTOS} ប៉ុណ្ណោះ។` : `Maximum ${MAX_MAINTENANCE_PHOTOS} photos allowed.`);
+      }
     } catch {
       alert(t.photoProcessError);
     } finally {
@@ -12846,7 +12858,7 @@ export default function App() {
         condition: "",
         note: "",
         cost: "",
-        by: "",
+        by: authUser?.displayName || "",
         photo: "",
         photos: [],
       }));
@@ -14176,9 +14188,9 @@ export default function App() {
     if (maintenanceRecordCategoryFilter !== "ALL") {
       list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
     }
-    if (maintenanceRecordItemFilter !== "ALL") {
+    if (!maintenanceRecordItemFilter.includes("ALL")) {
       list = list.filter(
-        (a) => assetItemName(a.category, a.type, a.pcType || "") === maintenanceRecordItemFilter
+        (a) => maintenanceRecordItemFilter.includes(assetItemName(a.category, a.type, a.pcType || ""))
       );
     }
     return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) =>
@@ -14199,9 +14211,9 @@ export default function App() {
     if (maintenanceRecordCategoryFilter !== "ALL") {
       list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
     }
-    if (maintenanceRecordItemFilter !== "ALL") {
+    if (!maintenanceRecordItemFilter.includes("ALL")) {
       list = list.filter(
-        (a) => assetItemName(a.category, a.type, a.pcType || "") === maintenanceRecordItemFilter
+        (a) => maintenanceRecordItemFilter.includes(assetItemName(a.category, a.type, a.pcType || ""))
       );
     }
     if (maintenanceRecordLocationFilter !== "ALL") {
@@ -14666,6 +14678,13 @@ export default function App() {
       </button>
     );
   }
+  const maintenanceCompletionText = useCallback(
+    (completionRaw: string) => {
+      const isDone = String(completionRaw || "").trim().toLowerCase() === "done";
+      return `${isDone ? "✅" : "❌"} ${isDone ? t.alreadyDone : t.notYetDone}`;
+    },
+    [t.alreadyDone, t.notYetDone]
+  );
   useEffect(() => {
     if (maintenanceTypeFilter === "ALL") return;
     if (!maintenanceTypeOptions.includes(maintenanceTypeFilter)) {
@@ -14679,11 +14698,12 @@ export default function App() {
     }
   }, [maintenanceRecordCampusFilter, maintenanceRecordCampusOptions]);
   useEffect(() => {
-    if (maintenanceRecordItemFilter === "ALL") return;
-    if (!maintenanceRecordItemOptions.includes(maintenanceRecordItemFilter)) {
-      setMaintenanceRecordItemFilter("ALL");
-    }
-  }, [maintenanceRecordItemFilter, maintenanceRecordItemOptions]);
+    setMaintenanceRecordItemFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      const next = prev.filter((value) => maintenanceRecordItemOptions.includes(value));
+      return next.length ? next : ["ALL"];
+    });
+  }, [maintenanceRecordItemOptions]);
   useEffect(() => {
     if (maintenanceRecordLocationFilter === "ALL") return;
     if (!maintenanceRecordLocationOptions.includes(maintenanceRecordLocationFilter)) {
@@ -14697,6 +14717,10 @@ export default function App() {
     if (!maintenanceRecordForm.assetId || hasSelectedAsset) return;
     setMaintenanceRecordForm((f) => ({ ...f, assetId: "" }));
   }, [maintenanceRecordForm.assetId, maintenanceRecordFilteredAssets]);
+  useEffect(() => {
+    if (!authUser?.displayName) return;
+    setMaintenanceRecordForm((f) => ({ ...f, by: authUser.displayName }));
+  }, [authUser?.displayName]);
   useEffect(() => {
     if (verificationRecordItemFilter === "ALL") return;
     if (!verificationRecordItemOptions.includes(verificationRecordItemFilter)) {
@@ -14915,6 +14939,7 @@ export default function App() {
         weekday: d.getDay(),
         inMonth: d.getMonth() === month,
         hasItems: (scheduleByDate.get(ymd) || []).length > 0,
+        itemCount: (scheduleByDate.get(ymd) || []).length,
         holidayName: holiday.name,
         holidayType: holiday.type,
       };
@@ -17509,7 +17534,7 @@ export default function App() {
                             <tr key={`public-maint-${entry.id}`}>
                               <td>{formatDate(entry.date || "-")}</td>
                               <td>{entry.type || "-"}</td>
-                              <td>{entry.completion || "-"}</td>
+                              <td>{maintenanceCompletionText(entry.completion || "-")}</td>
                               <td>{entry.condition || "-"}</td>
                               <td>{entry.note || "-"}</td>
                               <td>{entry.by || "-"}</td>
@@ -18424,37 +18449,30 @@ export default function App() {
                     <p className="tiny dashboard-calendar-month">
                       {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
                     </p>
-                    <div className={`calendar-grid dashboard-calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
-                      {calendarWeekdayLabels.map((d, idx) => (
-                        <div
-                          key={`dash-cal-head-${d}-${idx}`}
-                          className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
-                        >
-                          {d}
-                        </div>
-                      ))}
-                      {calendarGridDays.map((d) => (
-                        <button
-                          key={`dash-cal-day-${d.ymd}`}
-                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
-                          onClick={() => {
-                            setSelectedCalendarDate(d.ymd);
-                            if (d.hasItems) {
-                              setScheduleAlertItemFilter("ALL");
-                              setScheduleAlertModal("selected");
-                            }
-                          }}
-                        >
-                          <span>{d.day}</span>
-                          {d.holidayName ? (
+                    <div className="dashboard-calendar-grid">
+                      <CalendarGridTemplate
+                        weekdayLabels={calendarWeekdayLabels}
+                        days={calendarGridDays}
+                        selectedDate={selectedCalendarDate}
+                        todayYmd={todayYmd}
+                        isPhoneView={isPhoneView}
+                        onSelectDate={(ymd) => {
+                          setSelectedCalendarDate(ymd);
+                          if (scheduleByDate.get(ymd)?.length) {
+                            setScheduleAlertItemFilter("ALL");
+                            setScheduleAlertModal("selected");
+                          }
+                        }}
+                        renderHolidayTag={(d) =>
+                          d.holidayName ? (
                             <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
                               {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
                             </em>
-                          ) : null}
-                          {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
-                          {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
-                        </button>
-                      ))}
+                          ) : null
+                        }
+                        headKeyPrefix="dash-cal-head"
+                        dayKeyPrefix="dash-cal-day"
+                      />
                     </div>
                   </article>
                 </div>
@@ -18556,37 +18574,30 @@ export default function App() {
                     <p className="tiny dashboard-calendar-month">
                       {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
                     </p>
-                    <div className={`calendar-grid dashboard-calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
-                      {calendarWeekdayLabels.map((d, idx) => (
-                        <div
-                          key={`dash-cal-head-${d}-${idx}`}
-                          className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}
-                        >
-                          {d}
-                        </div>
-                      ))}
-                      {calendarGridDays.map((d) => (
-                        <button
-                          key={`dash-cal-day-${d.ymd}`}
-                          className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
-                          onClick={() => {
-                            setSelectedCalendarDate(d.ymd);
-                            if (d.hasItems) {
-                              setScheduleAlertItemFilter("ALL");
-                              setScheduleAlertModal("selected");
-                            }
-                          }}
-                        >
-                          <span>{d.day}</span>
-                          {d.holidayName ? (
+                    <div className="dashboard-calendar-grid">
+                      <CalendarGridTemplate
+                        weekdayLabels={calendarWeekdayLabels}
+                        days={calendarGridDays}
+                        selectedDate={selectedCalendarDate}
+                        todayYmd={todayYmd}
+                        isPhoneView={isPhoneView}
+                        onSelectDate={(ymd) => {
+                          setSelectedCalendarDate(ymd);
+                          if (scheduleByDate.get(ymd)?.length) {
+                            setScheduleAlertItemFilter("ALL");
+                            setScheduleAlertModal("selected");
+                          }
+                        }}
+                        renderHolidayTag={(d) =>
+                          d.holidayName ? (
                             <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
                               {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
                             </em>
-                          ) : null}
-                          {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
-                          {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
-                        </button>
-                      ))}
+                          ) : null
+                        }
+                        headKeyPrefix="dash-cal-head"
+                        dayKeyPrefix="dash-cal-day"
+                      />
                     </div>
                   </article>
 
@@ -21302,7 +21313,7 @@ export default function App() {
                             <tr key={`detail-history-${h.id}`}>
                               <td data-label="Date">{formatDate(h.date)}</td>
                               <td data-label="Type">{h.type}</td>
-                              <td data-label="Work Status">{h.completion || "-"}</td>
+                              <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
                               <td data-label="Condition">{h.condition || "-"}</td>
                               <td data-label="Noted">{h.note}</td>
                               <td data-label="Photo">{renderAssetPhoto(h.photo || "", "maintenance")}</td>
@@ -22042,7 +22053,7 @@ export default function App() {
                             <tr key={h.id}>
                               <td>{formatDate(h.date)}</td>
                               <td>{h.type}</td>
-                              <td>{h.completion || "-"}</td>
+                              <td>{maintenanceCompletionText(h.completion || "-")}</td>
                               <td>{h.condition || "-"}</td>
                               <td>{h.note}</td>
                               <td>
@@ -22116,7 +22127,7 @@ export default function App() {
                       >
                         {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
                           <option key={`quick-${opt.value}`} value={opt.value}>
-                            {opt.value === "Done" ? t.alreadyDone : t.notYetDone}
+                            {maintenanceCompletionText(opt.value)}
                           </option>
                         ))}
                       </select>
@@ -22151,11 +22162,11 @@ export default function App() {
                       <input
                         className="input"
                         value={maintenanceRecordForm.by}
-                        onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
+                        readOnly
                       />
                     </label>
                     <label className="field field-wide">
-                      <span>{t.photo}</span>
+                      <span>{t.photo} ({MAX_MAINTENANCE_PHOTOS} max)</span>
                     <input
                       key={maintenanceRecordFileKey}
                       className="file-input"
@@ -22895,7 +22906,7 @@ export default function App() {
             )}
 
             {inventoryView === "daily" && (
-              <section className="panel inventory-daily-panel">
+              <section className={`panel inventory-daily-panel ${maintenanceQuickMode ? "inventory-daily-panel-quick" : ""}`}>
                 <div className="inventory-daily-head">
                   <h2>{lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)"}</h2>
                   <p className="tiny">
@@ -23022,7 +23033,7 @@ export default function App() {
                   </article>
                 ) : null}
                 {maintenanceQuickMode ? (
-                  <article className="panel" style={{ marginBottom: 10 }}>
+                  <article className="panel maintenance-stockout-history-panel" style={{ marginBottom: 10 }}>
                     <div className="panel-row">
                       <h3 className="section-title">
                         {lang === "km" ? "របាយការណ៍ចេញស្តុកប្រចាំខែ (មើលតែប៉ុណ្ណោះ)" : "Monthly Stock-Out Information (View Only)"}
@@ -23032,17 +23043,7 @@ export default function App() {
                         {lang === "km" ? "ប្រតិបត្តិការ" : "records"}
                       </span>
                     </div>
-                    <div className="inventory-daily-grid maintenance-stockout-summary-grid" style={{ marginBottom: 8 }}>
-                      <label className="field">
-                        <span>{lang === "km" ? "ខែ" : "Month"}</span>
-                        <input
-                          className="input"
-                          type="month"
-                          value={maintenanceStockOutMonth}
-                          onChange={(e) => setMaintenanceStockOutMonth(e.target.value)}
-                        />
-                      </label>
-                      <div className="inventory-daily-stock-note" style={{ margin: 0 }}>
+                    <div className="inventory-daily-stock-note" style={{ margin: "0 0 8px" }}>
                         <strong>{lang === "km" ? "សរុបចេញ" : "Total Stock Out"}:</strong> {maintenanceMonthlyStockOutQtyTotal} pcs
                         {" | "}
                         {maintenanceMonthlyStockOutCampusTotals.length
@@ -23052,28 +23053,27 @@ export default function App() {
                           : lang === "km"
                             ? "មិនមានទិន្នន័យ"
                             : "No data"}
-                      </div>
                     </div>
                     {isPhoneView ? (
                       <div className="maintenance-stockout-mobile-list">
                         {maintenanceMonthlyStockOutRows.length ? (
-                          maintenanceMonthlyStockOutRows.map((row) => (
-                            <article key={`maintenance-stock-out-mobile-${row.id}`} className="maintenance-stockout-mobile-card">
+                          maintenanceMonthlyStockOutRows.map((row) => {
+                            const item = inventoryVisibleItemById.get(Number(row.itemId));
+                            const itemPhoto = item?.photo || row.photo || "";
+                            return (
+                            <article key={`maintenance-stock-out-mobile-${row.id}`} className="maintenance-stockout-mobile-card maintenance-stockout-mobile-card-compact">
                               <div className="maintenance-stockout-mobile-head">
                                 <strong>{formatDate(row.date)}</strong>
                                 <span>{lang === "km" ? "បរិមាណ" : "Qty"}: {row.qty}</span>
                               </div>
-                              <div className="maintenance-stockout-mobile-item">
-                                <strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}
-                              </div>
-                              <div className="maintenance-stockout-mobile-grid">
-                                <div>
-                                  <small>{t.campus}</small>
-                                  <div>{inventoryCampusLabel(row.campus)}</div>
-                                </div>
-                                <div>
-                                  <small>{t.by}</small>
-                                  <div>{row.by || row.approvalRequestedBy || "-"}</div>
+                              <div className="maintenance-stockout-mobile-item-row">
+                                {itemPhoto ? (
+                                  <img src={itemPhoto} alt={inventoryDisplayName(row.itemName, lang)} className="maintenance-stockout-mobile-photo" />
+                                ) : (
+                                  <div className="maintenance-stockout-mobile-photo maintenance-stockout-mobile-photo-empty" aria-hidden={true}>-</div>
+                                )}
+                                <div className="maintenance-stockout-mobile-item">
+                                  {inventoryDisplayName(row.itemName, lang)}
                                 </div>
                               </div>
                               <div className="maintenance-stockout-mobile-reason">
@@ -23081,7 +23081,8 @@ export default function App() {
                                 <div>{row.note || "-"}</div>
                               </div>
                             </article>
-                          ))
+                          );
+                          })
                         ) : (
                           <div className="panel-note">
                             {lang === "km"
@@ -23135,7 +23136,7 @@ export default function App() {
                   </article>
                 ) : null}
                 {inventoryDailyForm.type === "OUT" ? (
-                  <article className="panel inventory-daily-gallery-panel">
+                  <article className="panel inventory-daily-gallery-panel maintenance-quick-select-panel">
                     <div className="panel-row">
                       <h3 className="section-title">{lang === "km" ? "ជ្រើសសម្ភារៈចេញស្តុកលឿន" : "Quick Stock-Out Gallery"}</h3>
                       <span className="tiny">{lang === "km" ? "ចុច Item ដើម្បីកត់ត្រាលឿន" : "Tap item to stock out quickly"}</span>
@@ -24162,27 +24163,23 @@ export default function App() {
                   {calendarNextLabel}
                 </button>
               </div>
-              <div className={`calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
-                {calendarWeekdayLabels.map((d, idx) => (
-                  <div key={`${d}-${idx}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
-                ))}
-                {calendarGridDays.map((d) => (
-                  <button
-                    key={d.ymd}
-                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
-                    onClick={() => openQuickScheduleCreate(d.ymd)}
-                  >
-                    <span>{d.day}</span>
-                    {d.holidayName ? (
-                      <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
-                        {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
-                      </em>
-                    ) : null}
-                    {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
-                    {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
-                  </button>
-                ))}
-              </div>
+              <CalendarGridTemplate
+                weekdayLabels={calendarWeekdayLabels}
+                days={calendarGridDays}
+                selectedDate={selectedCalendarDate}
+                todayYmd={todayYmd}
+                isPhoneView={isPhoneView}
+                onSelectDate={openQuickScheduleCreate}
+                renderHolidayTag={(d) =>
+                  d.holidayName ? (
+                    <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                      {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                    </em>
+                  ) : null
+                }
+                headKeyPrefix="schedule-head"
+                dayKeyPrefix="schedule-day"
+              />
               {isPhoneView ? (
                 <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
                   {selectedDateItems.length ? (
@@ -25226,27 +25223,23 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <div className={`calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
-                {calendarWeekdayLabels.map((d, idx) => (
-                  <div key={`maintenance-dashboard-head-${d}-${idx}`} className={`calendar-day calendar-head ${idx === 0 || idx === 6 ? "calendar-head-weekend" : ""}`}>{d}</div>
-                ))}
-                {calendarGridDays.map((d) => (
-                  <button
-                    key={`maintenance-dashboard-day-${d.ymd}`}
-                    className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.hasItems ? "calendar-has" : ""} ${selectedCalendarDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""} ${d.weekday <= 1 ? "calendar-popup-left" : d.weekday >= 5 ? "calendar-popup-right" : ""}`}
-                    onClick={() => setSelectedCalendarDate(d.ymd)}
-                  >
-                    <span>{d.day}</span>
-                    {d.holidayName ? (
-                      <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
-                        {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
-                      </em>
-                    ) : null}
-                    {d.hasItems ? <small>{(scheduleByDate.get(d.ymd) || []).length}</small> : null}
-                    {d.holidayName ? <div className="calendar-hover-popup">{d.holidayName}</div> : null}
-                  </button>
-                ))}
-              </div>
+              <CalendarGridTemplate
+                weekdayLabels={calendarWeekdayLabels}
+                days={calendarGridDays}
+                selectedDate={selectedCalendarDate}
+                todayYmd={todayYmd}
+                isPhoneView={isPhoneView}
+                onSelectDate={setSelectedCalendarDate}
+                renderHolidayTag={(d) =>
+                  d.holidayName ? (
+                    <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                      {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                    </em>
+                  ) : null
+                }
+                headKeyPrefix="maintenance-dashboard-head"
+                dayKeyPrefix="maintenance-dashboard-day"
+              />
             </div>
 
             <div className="panel" style={{ marginTop: 12 }}>
@@ -25269,7 +25262,7 @@ export default function App() {
                           <span><strong>{t.name}:</strong> {assetItemName(row.category, row.assetType || "", "")}</span>
                           <span><strong>{t.campus}:</strong> {CAMPUS_CODE[row.campus] || "CX"}</span>
                           <span><strong>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}:</strong> {row.type || "-"}</span>
-                          <span><strong>{lang === "km" ? "ស្ថានភាពការងារ" : "Status"}:</strong> {row.completion || "-"}</span>
+                          <span><strong>{lang === "km" ? "ស្ថានភាពការងារ" : "Status"}:</strong> {maintenanceCompletionText(row.completion || "-")}</span>
                         </div>
                         <p className="latest-maint-mobile-note">
                           <strong>{t.notes}:</strong> {row.note || row.condition || "-"}
@@ -25311,7 +25304,7 @@ export default function App() {
                             <td title={row.note || row.condition || "-"}>
                               <span className="latest-maint-work">{row.note || row.condition || "-"}</span>
                             </td>
-                            <td>{row.completion || "-"}</td>
+                            <td>{maintenanceCompletionText(row.completion || "-")}</td>
                           </tr>
                         ))
                       ) : (
@@ -25436,18 +25429,52 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>{lang === "km" ? "ឈ្មោះទំនិញ" : "Item Name"}</span>
-                    <select
-                      className="input"
-                      value={maintenanceRecordItemFilter}
-                      onChange={(e) => setMaintenanceRecordItemFilter(e.target.value)}
-                    >
-                      <option value="ALL">{lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"}</option>
-                      {maintenanceRecordItemOptions.map((name) => (
-                        <option key={`maintenance-record-item-${name}`} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
+                    <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                      <summary>
+                        {summarizeMultiFilter(
+                          maintenanceRecordItemFilter,
+                          lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"
+                        )}
+                      </summary>
+                      <div className="filter-menu-list">
+                        <label className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={maintenanceRecordItemFilter.includes("ALL")}
+                            onChange={(e) =>
+                              setMaintenanceRecordItemFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  "ALL",
+                                  maintenanceRecordItemOptions
+                                )
+                              )
+                            }
+                          />
+                          <span className="filter-menu-item-label">{lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"}</span>
+                        </label>
+                        {maintenanceRecordItemOptions.map((name) => (
+                          <label key={`maintenance-record-item-${name}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={maintenanceRecordItemFilter.includes(name)}
+                              onChange={(e) =>
+                                setMaintenanceRecordItemFilter((prev) =>
+                                  applyMultiFilterSelection(
+                                    prev,
+                                    e.target.checked,
+                                    name,
+                                    maintenanceRecordItemOptions
+                                  )
+                                )
+                              }
+                            />
+                            <span className="filter-menu-item-label">{name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
                   </label>
                 </>
               ) : null}
@@ -25471,6 +25498,36 @@ export default function App() {
                     : "No assets match current filters."}
                 </div>
               </label>
+              <div className="field field-wide">
+                <span>{lang === "km" ? "ជ្រើស Asset ពី Gallery" : "Choose Asset from Gallery"}</span>
+                <div className="maintenance-record-gallery">
+                  {maintenanceRecordFilteredAssets.slice(0, 60).map((asset) => {
+                    const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+                    const selected = String(asset.id) === maintenanceRecordForm.assetId;
+                    return (
+                      <button
+                        key={`maintenance-record-gallery-${asset.id}`}
+                        type="button"
+                        className={`maintenance-record-gallery-card ${selected ? "is-selected" : ""}`}
+                        onClick={() => setMaintenanceRecordForm((f) => ({ ...f, assetId: String(asset.id) }))}
+                      >
+                        <div className="maintenance-record-gallery-thumb">
+                          {isRenderablePhotoSource(asset.photo || "") ? (
+                            <img src={asset.photo || ""} alt={asset.assetId} className="maintenance-record-gallery-thumb-img" />
+                          ) : (
+                            <span className="photo-empty">{t.noPhoto}</span>
+                          )}
+                        </div>
+                        <div className="maintenance-record-gallery-meta">
+                          <strong>{asset.assetId}</strong>
+                          <span>{itemName}</span>
+                          <small>{campusLabel(asset.campus)} • {asset.location || "-"}</small>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="field field-wide">
                 <span>{t.date}</span>
                 <input
@@ -25507,7 +25564,7 @@ export default function App() {
                 >
                     {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
-                        {opt.value === "Done" ? t.alreadyDone : t.notYetDone}
+                        {maintenanceCompletionText(opt.value)}
                       </option>
                     ))}
                 </select>
@@ -25542,11 +25599,11 @@ export default function App() {
                 <input
                   className="input"
                   value={maintenanceRecordForm.by}
-                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
+                  readOnly
                 />
               </label>
               <label className="field field-wide">
-                <span>{t.photo}</span>
+                <span>{t.photo} ({MAX_MAINTENANCE_PHOTOS} max)</span>
                 <input
                   key={maintenanceRecordFileKey}
                   className="file-input"
@@ -25674,7 +25731,7 @@ export default function App() {
                         <div><strong>{t.typeCode}:</strong> {row.assetType || "-"}</div>
                         <div><strong>{t.location}:</strong> {row.location || "-"}</div>
                         <div><strong>Type:</strong> {row.type || "-"}</div>
-                        <div><strong>Work Status:</strong> {row.completion || "-"}</div>
+                        <div><strong>Work Status:</strong> {maintenanceCompletionText(row.completion || "-")}</div>
                         <div><strong>{t.status}:</strong> {assetStatusLabel(row.status)}</div>
                         <div><strong>Cost:</strong> {row.cost || "-"}</div>
                         <div><strong>By:</strong> {row.by || "-"}</div>
@@ -25769,7 +25826,7 @@ export default function App() {
                           <td>{row.location}</td>
                           <td>{formatDate(row.date || "-")}</td>
                           <td>{row.type || "-"}</td>
-                          <td>{row.completion || "-"}</td>
+                          <td>{maintenanceCompletionText(row.completion || "-")}</td>
                           <td>{row.condition || "-"}</td>
                           <td>{row.note || "-"}</td>
                           <td>{renderAssetPhoto(row.photo || "", "maintenance")}</td>
@@ -25895,7 +25952,7 @@ export default function App() {
                                   ))}
                                 </select>
                               ) : (
-                                entry.completion || "-"
+                                maintenanceCompletionText(entry.completion || "-")
                               )}
                             </td>
                             <td>
@@ -27281,7 +27338,7 @@ export default function App() {
                           <div className="report-card-meta">
                             <div><strong>{t.campus}:</strong> {reportCampusName(r.campus)}</div>
                             <div><strong>Type:</strong> {r.type || "-"}</div>
-                            <div><strong>Work Status:</strong> {r.completion || "-"}</div>
+                            <div><strong>Work Status:</strong> {maintenanceCompletionText(r.completion || "-")}</div>
                             <div><strong>Condition:</strong> {r.condition || "-"}</div>
                             <div className="report-card-row-wide"><strong>Maintenance Photo:</strong></div>
                             <div className="report-card-row-wide report-card-photo-row">{renderAssetPhoto(r.photo || "", "maintenance")}</div>
@@ -27319,7 +27376,7 @@ export default function App() {
                               <td>{renderAssetPhoto(r.photo || "", "maintenance")}</td>
                               <td>{reportCampusName(r.campus)}</td>
                               <td>{r.type || "-"}</td>
-                              <td>{r.completion || "-"}</td>
+                              <td>{maintenanceCompletionText(r.completion || "-")}</td>
                               <td>{r.condition || "-"}</td>
                               <td>{r.note || "-"}</td>
                             </tr>
@@ -29611,7 +29668,7 @@ export default function App() {
                             <td>{campusLabel(row.campus)}</td>
                             <td>{row.category}</td>
                             <td>{row.type || "-"}</td>
-                            <td>{row.completion || "-"}</td>
+                            <td>{maintenanceCompletionText(row.completion || "-")}</td>
                             <td>{row.by || "-"}</td>
                           </tr>
                         ))
@@ -29643,7 +29700,7 @@ export default function App() {
                 <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(latestMaintenanceDetailRow.category, latestMaintenanceDetailRow.assetType || "", "")}</div></div>
                 <div className="field"><span>{t.category}</span><div className="detail-value">{latestMaintenanceDetailRow.category}</div></div>
                 <div className="field"><span>{lang === "km" ? "ប្រភេទថែទាំ" : "Maintenance Type"}</span><div className="detail-value">{latestMaintenanceDetailRow.type || "-"}</div></div>
-                <div className="field"><span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span><div className="detail-value">{latestMaintenanceDetailRow.completion || "-"}</div></div>
+                <div className="field"><span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span><div className="detail-value">{maintenanceCompletionText(latestMaintenanceDetailRow.completion || "-")}</div></div>
                 <div className="field"><span>{lang === "km" ? "លក្ខខណ្ឌ" : "Condition"}</span><div className="detail-value">{latestMaintenanceDetailRow.condition || "-"}</div></div>
                 <div className="field"><span>{lang === "km" ? "ចំណាយ" : "Cost"}</span><div className="detail-value">{latestMaintenanceDetailRow.cost || "-"}</div></div>
                 <div className="field"><span>{t.by}</span><div className="detail-value">{latestMaintenanceDetailRow.by || "-"}</div></div>

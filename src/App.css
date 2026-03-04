@@ -3483,6 +3483,20 @@ label.backup-action-btn {
   gap: 10px;
 }
 
+.inventory-daily-panel-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inventory-daily-panel-quick .maintenance-quick-select-panel {
+  order: 1;
+}
+
+.inventory-daily-panel-quick .maintenance-stockout-history-panel {
+  order: 2;
+}
+
 .maintenance-stockout-mobile-card {
   border: 1px solid #c8d6f0;
   border-radius: 14px;
@@ -3515,6 +3529,34 @@ label.backup-action-btn {
   line-height: 1.35;
   color: #1f2b44;
   overflow-wrap: anywhere;
+}
+
+.maintenance-stockout-mobile-item-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.maintenance-stockout-mobile-photo {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid #c8d6f0;
+  object-fit: cover;
+  background: #fff;
+}
+
+.maintenance-stockout-mobile-photo-empty {
+  display: grid;
+  place-items: center;
+  color: #8da3c8;
+}
+
+.maintenance-stockout-mobile-card-compact .maintenance-stockout-mobile-item {
+  font-weight: 700;
 }
 
 .maintenance-stockout-mobile-grid {
@@ -4770,6 +4812,72 @@ table {
   color: #2b3b5f;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.maintenance-record-gallery {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.maintenance-record-gallery-card {
+  border: 1px solid #d8e2f1;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.maintenance-record-gallery-card.is-selected {
+  border-color: #c78b57;
+  background: #fff5e8;
+  box-shadow: 0 6px 16px rgba(176, 106, 42, 0.16);
+}
+
+.maintenance-record-gallery-thumb {
+  width: 58px;
+  height: 58px;
+  border-radius: 10px;
+  border: 1px solid #cfdcf0;
+  background: #f2f7ff;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.maintenance-record-gallery-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.maintenance-record-gallery-meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.maintenance-record-gallery-meta strong,
+.maintenance-record-gallery-meta span,
+.maintenance-record-gallery-meta small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.maintenance-record-gallery-meta small {
+  color: #5f7397;
 }
 
 th,
@@ -7457,6 +7565,11 @@ tr.row-maint-maintenance:hover td {
 
   .inventory-daily-gallery-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .maintenance-record-gallery {
+    grid-template-columns: 1fr;
+    max-height: 280px;
   }
 
   .workspace-main .table-wrap {
