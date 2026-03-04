@@ -3474,6 +3474,81 @@ label.backup-action-btn {
   object-fit: cover;
 }
 
+.maintenance-stockout-summary-grid {
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+}
+
+.maintenance-stockout-mobile-list {
+  display: grid;
+  gap: 10px;
+}
+
+.maintenance-stockout-mobile-card {
+  border: 1px solid #c8d6f0;
+  border-radius: 14px;
+  background: #f7faff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.maintenance-stockout-mobile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.maintenance-stockout-mobile-head strong {
+  font-size: 14px;
+  color: #1f3059;
+}
+
+.maintenance-stockout-mobile-head span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #31548b;
+}
+
+.maintenance-stockout-mobile-item {
+  font-size: 14px;
+  line-height: 1.35;
+  color: #1f2b44;
+  overflow-wrap: anywhere;
+}
+
+.maintenance-stockout-mobile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.maintenance-stockout-mobile-grid small,
+.maintenance-stockout-mobile-reason small {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #607aa7;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.maintenance-stockout-mobile-grid div div,
+.maintenance-stockout-mobile-reason div {
+  font-size: 14px;
+  line-height: 1.35;
+  color: #1f2b44;
+  overflow-wrap: anywhere;
+}
+
+.maintenance-stockout-mobile-reason {
+  border: 1px dashed #bfd0ee;
+  border-radius: 10px;
+  background: #eef4ff;
+  padding: 8px 10px;
+}
+
 .mobile-notify-stock-item-row img {
   width: 58px;
   min-width: 58px;
@@ -7675,6 +7750,14 @@ tr.row-maint-maintenance:hover td {
 
   .maintenance-campus-value {
     white-space: normal;
+  }
+
+  .maintenance-stockout-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .maintenance-stockout-mobile-grid {
+    grid-template-columns: 1fr;
   }
 
   .inventory-supply-compare-head {

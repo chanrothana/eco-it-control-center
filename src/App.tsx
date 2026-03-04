@@ -1138,6 +1138,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
     { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
+    { itemEn: "Walkie Talkie", itemKm: "វិទ្យុទាក់ទង", code: "WTK" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
   ],
@@ -1281,6 +1282,7 @@ function canLinkToParentAsset(category: string, type: string): boolean {
     !DIGITAL_CAMERA_COMPONENT_TYPES.includes(code as (typeof DIGITAL_CAMERA_COMPONENT_TYPES)[number]) &&
     code !== WATER_DISPENSER_MAIN_TYPE &&
     code !== "AC" &&
+    code !== "WTK" &&
     code !== "TBL" &&
     code !== "CHR"
   );
@@ -16083,6 +16085,7 @@ export default function App() {
 
     if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return icon(Snowflake);
     if (code === "WDP" || name.includes("water dispenser")) return icon(Droplets);
+    if (code === "WTK" || name.includes("walkie")) return icon(Wifi);
     if (code === "FPN" || name.includes("front panel")) return icon(Puzzle);
     if (code === "RPN" || name.includes("rear panel")) return icon(Puzzle);
     if (code === "TBL" || name.includes("table")) return icon(Building2);
@@ -23024,10 +23027,7 @@ export default function App() {
                         {lang === "km" ? "ប្រតិបត្តិការ" : "records"}
                       </span>
                     </div>
-                    <div
-                      className="inventory-daily-grid"
-                      style={{ gridTemplateColumns: "minmax(180px, 260px) minmax(0, 1fr)", marginBottom: 8 }}
-                    >
+                    <div className="inventory-daily-grid maintenance-stockout-summary-grid" style={{ marginBottom: 8 }}>
                       <label className="field">
                         <span>{lang === "km" ? "ខែ" : "Month"}</span>
                         <input
@@ -23049,46 +23049,84 @@ export default function App() {
                             : "No data"}
                       </div>
                     </div>
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>{t.date}</th>
-                            <th>Code</th>
-                            <th>Name</th>
-                            <th>{t.campus}</th>
-                            <th>{lang === "km" ? "បរិមាណ" : "Qty"}</th>
-                            <th>{t.by}</th>
-                            <th>{lang === "km" ? "មូលហេតុ" : "Reason"}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {maintenanceMonthlyStockOutRows.length ? (
-                            maintenanceMonthlyStockOutRows.map((row) => (
-                              <tr key={`maintenance-stock-out-row-${row.id}`}>
-                                <td>{formatDate(row.date)}</td>
-                                <td>
-                                  <strong>{row.itemCode}</strong>
-                                </td>
-                                <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                                <td>{inventoryCampusLabel(row.campus)}</td>
-                                <td>{row.qty}</td>
-                                <td>{row.by || row.approvalRequestedBy || "-"}</td>
-                                <td>{row.note || "-"}</td>
-                              </tr>
-                            ))
-                          ) : (
+                    {isPhoneView ? (
+                      <div className="maintenance-stockout-mobile-list">
+                        {maintenanceMonthlyStockOutRows.length ? (
+                          maintenanceMonthlyStockOutRows.map((row) => (
+                            <article key={`maintenance-stock-out-mobile-${row.id}`} className="maintenance-stockout-mobile-card">
+                              <div className="maintenance-stockout-mobile-head">
+                                <strong>{formatDate(row.date)}</strong>
+                                <span>{lang === "km" ? "បរិមាណ" : "Qty"}: {row.qty}</span>
+                              </div>
+                              <div className="maintenance-stockout-mobile-item">
+                                <strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}
+                              </div>
+                              <div className="maintenance-stockout-mobile-grid">
+                                <div>
+                                  <small>{t.campus}</small>
+                                  <div>{inventoryCampusLabel(row.campus)}</div>
+                                </div>
+                                <div>
+                                  <small>{t.by}</small>
+                                  <div>{row.by || row.approvalRequestedBy || "-"}</div>
+                                </div>
+                              </div>
+                              <div className="maintenance-stockout-mobile-reason">
+                                <small>{lang === "km" ? "មូលហេតុ" : "Reason"}</small>
+                                <div>{row.note || "-"}</div>
+                              </div>
+                            </article>
+                          ))
+                        ) : (
+                          <div className="panel-note">
+                            {lang === "km"
+                              ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ខែបច្ចុប្បន្ន។"
+                              : "No stock-out records for current month."}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
                             <tr>
-                              <td colSpan={7}>
-                                {lang === "km"
-                                  ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ខែដែលបានជ្រើស។"
-                                  : "No stock-out records for selected month."}
-                              </td>
+                              <th>{t.date}</th>
+                              <th>Code</th>
+                              <th>Name</th>
+                              <th>{t.campus}</th>
+                              <th>{lang === "km" ? "បរិមាណ" : "Qty"}</th>
+                              <th>{t.by}</th>
+                              <th>{lang === "km" ? "មូលហេតុ" : "Reason"}</th>
                             </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {maintenanceMonthlyStockOutRows.length ? (
+                              maintenanceMonthlyStockOutRows.map((row) => (
+                                <tr key={`maintenance-stock-out-row-${row.id}`}>
+                                  <td>{formatDate(row.date)}</td>
+                                  <td>
+                                    <strong>{row.itemCode}</strong>
+                                  </td>
+                                  <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                                  <td>{inventoryCampusLabel(row.campus)}</td>
+                                  <td>{row.qty}</td>
+                                  <td>{row.by || row.approvalRequestedBy || "-"}</td>
+                                  <td>{row.note || "-"}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={7}>
+                                  {lang === "km"
+                                    ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ខែដែលបានជ្រើស។"
+                                    : "No stock-out records for selected month."}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </article>
                 ) : null}
                 {inventoryDailyForm.type === "OUT" ? (
@@ -23193,17 +23231,17 @@ export default function App() {
                     <div className="inventory-daily-type-switch">
                       <button
                         type="button"
-                        className="tab tab-active"
-                        onClick={() => setInventoryDailyForm((f) => ({ ...f, type: "IN" }))}
-                      >
-                        {lang === "km" ? "ចូលស្តុក (IN)" : "Stock In"}
-                      </button>
-                      <button
-                        type="button"
-                        className="tab"
+                        className={`tab ${String(inventoryDailyForm.type) === "OUT" ? "tab-active" : ""}`}
                         onClick={() => setInventoryDailyForm((f) => ({ ...f, type: "OUT" }))}
                       >
                         {lang === "km" ? "ចេញស្តុក (OUT)" : "Stock Out"}
+                      </button>
+                      <button
+                        type="button"
+                        className={`tab ${String(inventoryDailyForm.type) === "IN" ? "tab-active" : ""}`}
+                        onClick={() => setInventoryDailyForm((f) => ({ ...f, type: "IN" }))}
+                      >
+                        {lang === "km" ? "ចូលស្តុក (IN)" : "Stock In"}
                       </button>
                     </div>
                   </div>
