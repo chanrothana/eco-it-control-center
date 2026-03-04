@@ -11820,6 +11820,119 @@ export default function App() {
     }
   }
 
+  async function editOrCreateLaptopAccessoryChild(type: LaptopAccessoryType) {
+    if (!editingAsset) return;
+    const existing = editingLaptopAccessoryChildren[type];
+    if (existing) {
+      startEditAsset(existing);
+      return;
+    }
+    if (!requireAdminAction()) return;
+    if (!(editingAsset.category === "IT" && editingAsset.type === LAPTOP_TYPE)) return;
+
+    const payload = {
+      campus: editingAsset.campus,
+      category: "IT",
+      type,
+      location: editingAsset.location,
+      setCode: "",
+      parentAssetId: editingAsset.assetId,
+      assignedTo: "",
+      custodyStatus: "IN_STOCK",
+      brand: "",
+      model: "",
+      serialNumber: "",
+      specs: "",
+      purchaseDate: "",
+      warrantyUntil: "",
+      vendor: "",
+      notes: `Linked laptop accessory to ${editingAsset.assetId}`,
+      nextMaintenanceDate: "",
+      scheduleNote: "",
+      photo: "",
+      photos: [],
+      status: editingAsset.status || "Active",
+    };
+
+    setBusy(true);
+    setError("");
+    try {
+      let childAsset: Asset | null = null;
+      try {
+        const created = await requestJson<{ asset: Asset }>("/api/assets", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        childAsset = created.asset;
+      } catch (err) {
+        if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+        const allLocal = readAssetFallback();
+        const seq = calcNextSeq(allLocal, payload.campus, payload.category, payload.type);
+        childAsset = {
+          id: Date.now(),
+          campus: payload.campus,
+          category: payload.category,
+          type: payload.type,
+          pcType: "",
+          seq,
+          assetId: `${CAMPUS_CODE[payload.campus] || "CX"}-${categoryCode(payload.category)}-${payload.type}-${pad4(seq)}`,
+          name: assetItemName(payload.category, payload.type),
+          location: payload.location,
+          setCode: payload.setCode,
+          parentAssetId: payload.parentAssetId,
+          assignedTo: payload.assignedTo,
+          custodyStatus: "IN_STOCK",
+          brand: payload.brand,
+          model: payload.model,
+          serialNumber: payload.serialNumber,
+          specs: payload.specs,
+          purchaseDate: payload.purchaseDate,
+          warrantyUntil: payload.warrantyUntil,
+          vendor: payload.vendor,
+          notes: payload.notes,
+          nextMaintenanceDate: payload.nextMaintenanceDate,
+          nextVerificationDate: "",
+          verificationFrequency: "NONE",
+          scheduleNote: payload.scheduleNote,
+          repeatMode: "NONE",
+          repeatWeekOfMonth: 0,
+          repeatWeekday: 0,
+          maintenanceHistory: [],
+          verificationHistory: [],
+          transferHistory: [],
+          custodyHistory: [],
+          statusHistory: [
+            {
+              id: Date.now(),
+              date: new Date().toISOString(),
+              fromStatus: "New",
+              toStatus: payload.status,
+              reason: "Asset created as laptop accessory in edit",
+            },
+          ],
+          photo: "",
+          photos: [],
+          status: payload.status,
+          created: new Date().toISOString(),
+        };
+        const nextLocal = [childAsset, ...allLocal];
+        writeAssetFallback(nextLocal);
+        setAssets(nextLocal);
+        setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      }
+
+      if (childAsset) {
+        appendUiAudit("CREATE", "asset", childAsset.assetId, `${childAsset.campus} | ${childAsset.location}`);
+        startEditAsset(childAsset);
+      }
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create laptop accessory");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onEditAssetPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -13653,6 +13766,27 @@ export default function App() {
     if (mouse) map.MSE = mouse;
     if (usbWifi) map.UWF = usbWifi;
     if (webcam) map.WBC = webcam;
+    return map;
+  }, [assets, editingAsset]);
+  const editingLaptopAccessoryChildren = useMemo<Partial<Record<LaptopAccessoryType, Asset>>>(() => {
+    if (!editingAsset) return {};
+    const isLaptopParent = editingAsset.category === "IT" && editingAsset.type === LAPTOP_TYPE;
+    if (!isLaptopParent) return {};
+    const map: Partial<Record<LaptopAccessoryType, Asset>> = {};
+    const childrenByScope = assets
+      .filter(
+        (a) =>
+          a.assetId !== editingAsset.assetId &&
+          a.campus === editingAsset.campus &&
+          a.parentAssetId === editingAsset.assetId
+      )
+      .sort((a, b) => (Number(a.seq) || 0) - (Number(b.seq) || 0) || a.assetId.localeCompare(b.assetId));
+    for (const child of childrenByScope) {
+      if (child.type === "ADP" && !map.ADP) map.ADP = child;
+      if (child.type === "MSE" && !map.MSE) map.MSE = child;
+      if (child.type === "KBD" && !map.KBD) map.KBD = child;
+      if (child.type === "MON" && !map.MON) map.MON = child;
+    }
     return map;
   }, [assets, editingAsset]);
   const editSetPackChildMeta = useMemo(
@@ -21351,6 +21485,43 @@ export default function App() {
                           </div>
                         ) : null}
                       </>
+                    ) : null}
+                    {editingAsset.category === "IT" && editingAsset.type === LAPTOP_TYPE ? (
+                      <div className="field field-wide">
+                        <span>{t.laptopAccessories}</span>
+                        <div className="setpack-toggle-row">
+                          <span className="tiny">{t.laptopAccessoryHint}</span>
+                        </div>
+                        <div className="setpack-card-grid">
+                          {laptopAccessoryMeta.map((item) => {
+                            const child = editingLaptopAccessoryChildren[item.type];
+                            return (
+                              <div key={`edit-laptop-accessory-${item.type}`} className="setpack-item-card">
+                                <div className="setpack-item-head">
+                                  <div>
+                                    <strong>{item.label}</strong>
+                                    <div className="tiny">
+                                      {child
+                                        ? `${t.assetId}: ${child.assetId} | ${t.status}: ${assetStatusLabel(child.status || "-")}`
+                                        : "Not created yet for this laptop"}
+                                    </div>
+                                  </div>
+                                  <button
+                                    className="setpack-detail-btn"
+                                    type="button"
+                                    disabled={!isAdmin || busy}
+                                    onClick={() => {
+                                      void editOrCreateLaptopAccessoryChild(item.type);
+                                    }}
+                                  >
+                                    {child ? "Edit Details" : "Add + Edit"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     ) : null}
                     {editingStatusActive ? (
                       <label className="field field-wide">
