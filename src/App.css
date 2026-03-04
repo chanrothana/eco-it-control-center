@@ -245,23 +245,16 @@ body {
   }
 
   .app-top-controls-wrap {
-    position: fixed;
-    top: calc(8px + env(safe-area-inset-top, 0px));
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(var(--container-w), calc(100% - 36px));
-    margin: 0;
-    z-index: 80;
-    pointer-events: none;
+    position: relative;
+    width: min(var(--container-w), 100%);
+    margin: 0 auto 10px;
   }
 
   .app-top-controls-grid {
     margin-left: auto;
-    pointer-events: auto;
   }
 
   .app-card.app-card-layout {
-    margin-top: 92px;
     padding-top: 8px;
   }
 

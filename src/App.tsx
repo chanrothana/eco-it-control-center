@@ -15006,6 +15006,25 @@ export default function App() {
     scheduleAssets,
     allMaintenanceRows,
   ]);
+  const hasModalOpen = Boolean(
+    detailAsset ||
+    editingAsset ||
+    historyAsset ||
+    quickRecordAsset ||
+    transferQuickAsset ||
+    maintenanceDetailAsset ||
+    inventoryQuickOutModal ||
+    scheduleScopeModal ||
+    scheduleQuickCreateOpen ||
+    scheduleAlertModal ||
+    overviewModal ||
+    maintenanceDashboardModal ||
+    latestMaintenanceDetailRow ||
+    quickCountModal ||
+    updateNotesOpen ||
+    pendingStatusChange ||
+    previewImage
+  );
 
   function toggleMaintenanceSort(key: MaintenanceSortKey) {
     setMaintenanceSort((prev) => {
@@ -17695,7 +17714,7 @@ export default function App() {
       <div className="bg-orb bg-orb-a" aria-hidden={true} />
       <div className="bg-orb bg-orb-b" aria-hidden={true} />
 
-      {!isPhoneView ? (
+      {!isPhoneView && !hasModalOpen ? (
         <section className="app-top-controls-wrap">
           <div className="top-controls top-controls-grid app-top-controls-grid">
             <label className="field campus-field">
