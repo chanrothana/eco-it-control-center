@@ -2562,12 +2562,13 @@ label.backup-action-btn {
 }
 
 .inventory-quickout-photo-preview {
-  width: 100%;
-  max-height: 220px;
+  width: 150px;
+  height: 108px;
   object-fit: cover;
   border-radius: 10px;
   border: 1px solid #d7e3f2;
   margin-top: 8px;
+  display: block;
 }
 
 .inventory-daily-head {
@@ -2664,17 +2665,15 @@ label.backup-action-btn {
 }
 
 .quickout-eco-inline-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 55;
+  position: relative;
+  margin-top: 8px;
+  z-index: 2;
   border: 1px solid #d7e3f2;
   border-radius: 12px;
   padding: 8px;
   background: #f8fbff;
   box-shadow: 0 12px 28px rgba(23, 52, 94, 0.2);
-  max-height: 70vh;
+  max-height: min(62vh, 420px);
   overflow: auto;
 }
 
@@ -2733,35 +2732,110 @@ label.backup-action-btn {
 
 @media (min-width: 1101px) {
   .inventory-quickout-modal {
-    width: min(980px, calc(100vw - 44px));
-    max-width: 980px;
-    max-height: min(96vh, 980px);
-    padding: 14px 16px;
+    width: min(960px, calc(100vw - 24px));
+    max-width: 960px;
+    max-height: calc(100vh - 16px);
+    padding: 10px 12px;
   }
 
   .inventory-quickout-modal h2 {
-    font-size: clamp(32px, 2.3vw, 46px);
+    font-size: clamp(26px, 1.9vw, 34px);
   }
 
   .inventory-quickout-modal .panel-row {
-    margin-bottom: 8px;
-  }
-
-  .inventory-quickout-hero-icon-wrap {
-    margin: 0 0 6px;
-  }
-
-  .inventory-quickout-modal .form-grid {
-    margin-top: 8px !important;
-    gap: 8px 12px;
-  }
-
-  .inventory-quickout-modal .field > span {
     margin-bottom: 4px;
   }
 
+  .inventory-quickout-hero-icon-wrap {
+    margin: 0 0 4px;
+  }
+
+  .inventory-quickout-hero-icon,
+  .inventory-quickout-hero-photo {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+  }
+
+  .inventory-quickout-modal .form-grid {
+    margin-top: 6px !important;
+    gap: 6px 10px;
+  }
+
+  .inventory-quickout-form-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+    align-items: start;
+  }
+
+  .inventory-quickout-form-grid .quickout-date-field {
+    grid-column: 1;
+  }
+
+  .inventory-quickout-form-grid .field:not(.quickout-date-field):not(.field-wide) {
+    grid-column: 2;
+  }
+
+  .inventory-quickout-form-grid .field-wide {
+    grid-column: 1 / -1;
+  }
+
+  .inventory-quickout-modal .field > span {
+    margin-bottom: 2px;
+    font-size: 11px;
+  }
+
   .inventory-quickout-photo-preview {
-    max-height: 160px;
+    width: 138px;
+    height: 98px;
+    margin-top: 4px;
+  }
+
+  .inventory-quickout-stock-value {
+    font-size: 26px;
+  }
+
+  .quickout-note-head {
+    gap: 6px;
+  }
+
+  .quickout-eco-inline-panel {
+    padding: 6px;
+    max-height: min(46vh, 320px);
+  }
+
+  .quickout-eco-head {
+    margin-bottom: 4px;
+  }
+
+  .quickout-eco-grid .calendar-day {
+    min-height: 36px;
+    padding: 2px 4px;
+    border-radius: 8px;
+  }
+}
+
+@media (min-width: 1101px) and (max-height: 860px) {
+  .inventory-quickout-modal {
+    padding: 8px 10px;
+  }
+
+  .inventory-quickout-modal h2 {
+    font-size: clamp(22px, 1.55vw, 30px);
+  }
+
+  .inventory-quickout-hero-icon,
+  .inventory-quickout-hero-photo {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+  }
+
+  .inventory-quickout-stock-value {
+    font-size: 22px;
+  }
+
+  .quickout-eco-inline-panel {
+    max-height: min(40vh, 260px);
   }
 }
 

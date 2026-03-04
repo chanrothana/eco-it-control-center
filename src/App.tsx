@@ -4871,6 +4871,7 @@ export default function App() {
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [maintenanceStockOutMonth, setMaintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const todayYmd = toYmd(new Date());
   const calendarPrevLabel = isPhoneView ? "<" : "Prev";
   const calendarNextLabel = isPhoneView ? ">" : "Next";
@@ -6631,10 +6632,11 @@ export default function App() {
     [quickOutEcoMonth, lang]
   );
   const quickOutEcoCanGoPrevMonth = useMemo(() => {
+    if (isSuperAdmin) return true;
     const now = new Date();
     const minMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     return quickOutEcoMonth.getTime() > minMonth.getTime();
-  }, [quickOutEcoMonth]);
+  }, [quickOutEcoMonth, isSuperAdmin]);
   const quickOutEcoGridDays = useMemo(() => {
     const year = quickOutEcoMonth.getFullYear();
     const month = quickOutEcoMonth.getMonth();
@@ -6886,6 +6888,40 @@ export default function App() {
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
   }, [inventoryVisibleTxns, inventoryFullDateFrom, inventoryFullDateTo]);
+  const maintenanceMonthlyStockOutRows = useMemo(() => {
+    const month = String(maintenanceStockOutMonth || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) return [] as InventoryTxn[];
+    return [...inventoryVisibleTxns]
+      .filter((tx) => {
+        if (!isInventoryTxnUsageOut(tx.type)) return false;
+        if (String(tx.approvalStatus || "").toUpperCase() === "REJECTED") return false;
+        const date = normalizeYmdInput(tx.date);
+        return Boolean(date && date.startsWith(`${month}-`));
+      })
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  }, [inventoryVisibleTxns, maintenanceStockOutMonth]);
+  const maintenanceMonthlyStockOutCampusTotals = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const tx of maintenanceMonthlyStockOutRows) {
+      const campus = String(tx.campus || "").trim();
+      if (!campus) continue;
+      out.set(campus, (out.get(campus) || 0) + Number(tx.qty || 0));
+    }
+    return Array.from(out.entries())
+      .map(([campus, qty]) => ({ campus, qty }))
+      .sort((a, b) => inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
+  }, [maintenanceMonthlyStockOutRows, inventoryCampusLabel]);
+  const maintenanceMonthlyStockOutQtyTotal = useMemo(
+    () => maintenanceMonthlyStockOutRows.reduce((sum, row) => sum + Number(row.qty || 0), 0),
+    [maintenanceMonthlyStockOutRows]
+  );
+  const maintenanceMonthlyStockOutLabel = useMemo(() => {
+    const month = String(maintenanceStockOutMonth || "").trim();
+    if (!/^\d{4}-\d{2}$/.test(month)) return "-";
+    const date = new Date(`${month}-01T00:00:00`);
+    if (Number.isNaN(date.getTime())) return month;
+    return date.toLocaleString(undefined, { month: "long", year: "numeric" });
+  }, [maintenanceStockOutMonth]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -11098,7 +11134,7 @@ export default function App() {
     const recorder = authUser?.displayName || authUser?.username || "";
     const today = toYmd(new Date());
     const pickedDate = normalizeYmdInput(inventoryDailyForm.date || today) || today;
-    const baseDate = pickedDate < today ? today : pickedDate;
+    const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
     const base = new Date(`${baseDate}T00:00:00`);
     setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", itemId: String(item.id) }));
     setInventoryQuickOutModal({
@@ -11118,7 +11154,7 @@ export default function App() {
   function openQuickOutEcoPicker() {
     const today = toYmd(new Date());
     const pickedDate = normalizeYmdInput(inventoryQuickOutModal?.date || today) || today;
-    const baseDate = pickedDate < today ? today : pickedDate;
+    const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
     const base = new Date(`${baseDate}T00:00:00`);
     setQuickOutEcoPickerOpen((prev) => {
       const nextOpen = !prev;
@@ -11147,7 +11183,7 @@ export default function App() {
     if (!inventoryQuickOutModal) return;
     const modal = inventoryQuickOutModal;
     const txDate = normalizeYmdInput(modal.date);
-    if (txDate && txDate < todayYmd) {
+    if (!isSuperAdmin && txDate && txDate < todayYmd) {
       setError(lang === "km" ? "មិនអាចជ្រើសថ្ងៃមុនថ្ងៃនេះបានទេ។" : "Cannot select a date before today.");
       return;
     }
@@ -15987,6 +16023,18 @@ export default function App() {
     }),
     [quickCountStatusAssets]
   );
+  const quickCountModalCampusTotals = useMemo(() => {
+    if (!quickCountModal?.assets?.length) return [] as Array<{ campus: string; count: number }>;
+    const byCampus = new Map<string, number>();
+    for (const asset of quickCountModal.assets) {
+      const campus = String(asset.campus || "").trim();
+      if (!campus) continue;
+      byCampus.set(campus, (byCampus.get(campus) || 0) + 1);
+    }
+    return Array.from(byCampus.entries())
+      .map(([campus, count]) => ({ campus, count }))
+      .sort((a, b) => campusLabel(a.campus).localeCompare(campusLabel(b.campus)));
+  }, [quickCountModal, campusLabel]);
   const openInventoryBalanceView = useCallback(
     (mode: "all" | "low") => {
       setInventoryBalanceMode(mode);
@@ -22965,6 +23013,84 @@ export default function App() {
                     )}
                   </article>
                 ) : null}
+                {maintenanceQuickMode ? (
+                  <article className="panel" style={{ marginBottom: 10 }}>
+                    <div className="panel-row">
+                      <h3 className="section-title">
+                        {lang === "km" ? "របាយការណ៍ចេញស្តុកប្រចាំខែ (មើលតែប៉ុណ្ណោះ)" : "Monthly Stock-Out Information (View Only)"}
+                      </h3>
+                      <span className="tiny">
+                        {maintenanceMonthlyStockOutLabel} | {maintenanceMonthlyStockOutRows.length}{" "}
+                        {lang === "km" ? "ប្រតិបត្តិការ" : "records"}
+                      </span>
+                    </div>
+                    <div
+                      className="inventory-daily-grid"
+                      style={{ gridTemplateColumns: "minmax(180px, 260px) minmax(0, 1fr)", marginBottom: 8 }}
+                    >
+                      <label className="field">
+                        <span>{lang === "km" ? "ខែ" : "Month"}</span>
+                        <input
+                          className="input"
+                          type="month"
+                          value={maintenanceStockOutMonth}
+                          onChange={(e) => setMaintenanceStockOutMonth(e.target.value)}
+                        />
+                      </label>
+                      <div className="inventory-daily-stock-note" style={{ margin: 0 }}>
+                        <strong>{lang === "km" ? "សរុបចេញ" : "Total Stock Out"}:</strong> {maintenanceMonthlyStockOutQtyTotal} pcs
+                        {" | "}
+                        {maintenanceMonthlyStockOutCampusTotals.length
+                          ? maintenanceMonthlyStockOutCampusTotals
+                              .map((row) => `${inventoryCampusLabel(row.campus)}: ${row.qty}`)
+                              .join(" | ")
+                          : lang === "km"
+                            ? "មិនមានទិន្នន័យ"
+                            : "No data"}
+                      </div>
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{t.date}</th>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>{t.campus}</th>
+                            <th>{lang === "km" ? "បរិមាណ" : "Qty"}</th>
+                            <th>{t.by}</th>
+                            <th>{lang === "km" ? "មូលហេតុ" : "Reason"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {maintenanceMonthlyStockOutRows.length ? (
+                            maintenanceMonthlyStockOutRows.map((row) => (
+                              <tr key={`maintenance-stock-out-row-${row.id}`}>
+                                <td>{formatDate(row.date)}</td>
+                                <td>
+                                  <strong>{row.itemCode}</strong>
+                                </td>
+                                <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                                <td>{inventoryCampusLabel(row.campus)}</td>
+                                <td>{row.qty}</td>
+                                <td>{row.by || row.approvalRequestedBy || "-"}</td>
+                                <td>{row.note || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7}>
+                                {lang === "km"
+                                  ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ខែដែលបានជ្រើស។"
+                                  : "No stock-out records for selected month."}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                ) : null}
                 {inventoryDailyForm.type === "OUT" ? (
                   <article className="panel inventory-daily-gallery-panel">
                     <div className="panel-row">
@@ -28757,7 +28883,7 @@ export default function App() {
                       </div>
                     );
                   })()}
-                  <div className="form-grid" style={{ marginTop: 10 }}>
+                  <div className="form-grid inventory-quickout-form-grid" style={{ marginTop: 10 }}>
                     <label className="field quickout-date-field" ref={quickOutEcoWrapRef}>
                       <span>{t.date}</span>
                       <div className="quickout-date-input-wrap">
@@ -28792,12 +28918,7 @@ export default function App() {
                                 aria-label="Previous month"
                                 disabled={!quickOutEcoCanGoPrevMonth}
                                 onClick={() =>
-                                  setQuickOutEcoMonth((prev) => {
-                                    const candidate = new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
-                                    const now = new Date();
-                                    const minMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                                    return candidate < minMonth ? minMonth : candidate;
-                                  })
+                                  setQuickOutEcoMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
                                 }
                               >
                                 {"<"}
@@ -28817,8 +28938,8 @@ export default function App() {
                               <button
                                 key={`quickout-eco-day-${d.ymd}`}
                                 type="button"
-                                className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${d.ymd < todayYmd ? "calendar-day-locked" : ""} ${quickOutEcoSelectedDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""}`}
-                                disabled={!d.inMonth || d.ymd < todayYmd}
+                                className={`calendar-day ${d.inMonth ? "" : "calendar-out"} ${!isSuperAdmin && d.ymd < todayYmd ? "calendar-day-locked" : ""} ${quickOutEcoSelectedDate === d.ymd ? "calendar-selected" : ""} ${d.ymd === todayYmd ? "calendar-today" : ""} ${d.weekday === 0 || d.weekday === 6 ? "calendar-weekend" : ""} ${d.holidayName ? "calendar-holiday" : ""} ${d.holidayType ? `calendar-holiday-${d.holidayType}` : ""}`}
+                                disabled={!d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
                                 onClick={() => {
                                   setQuickOutEcoSelectedDate(d.ymd);
                                   setInventoryQuickOutModal((prev) => (prev ? { ...prev, date: d.ymd } : prev));
@@ -29496,6 +29617,15 @@ export default function App() {
                 <h2>{quickCountModal.title}</h2>
                 <button className="tab" onClick={() => setQuickCountModal(null)}>{t.close}</button>
               </div>
+              {quickCountModalCampusTotals.length ? (
+                <div className="tiny" style={{ marginBottom: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {quickCountModalCampusTotals.map((row) => (
+                    <span key={`quick-count-campus-total-${row.campus}`}>
+                      <strong>{campusLabel(row.campus)}</strong>: {row.count}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               {isPhoneView ? (
                 <div className="quick-count-mobile-list">
                   {quickCountModal.assets.length ? (
