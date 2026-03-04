@@ -4213,6 +4213,7 @@ export default function App() {
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
+  const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
   const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
@@ -4877,6 +4878,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [maintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [maintenanceStockOutViewDate, setMaintenanceStockOutViewDate] = useState(() => toYmd(new Date()));
   const todayYmd = toYmd(new Date());
   const calendarPrevLabel = isPhoneView ? "<" : "Prev";
   const calendarNextLabel = isPhoneView ? ">" : "Next";
@@ -5224,6 +5226,12 @@ export default function App() {
     photo: "",
     photos: [] as string[],
   });
+  const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
+  const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [maintenanceRecordSelectedDate, setMaintenanceRecordSelectedDate] = useState(() => toYmd(new Date()));
   const [verificationRecordForm, setVerificationRecordForm] = useState({
     assetId: "",
     date: toYmd(new Date()),
@@ -5652,10 +5660,26 @@ export default function App() {
     };
   }, [quickOutEcoPickerOpen]);
   useEffect(() => {
+    if (!maintenanceRecordDatePickerOpen) return;
+    const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (maintenanceRecordDateWrapRef.current?.contains(target)) return;
+      setMaintenanceRecordDatePickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideTap);
+    document.addEventListener("touchstart", handleOutsideTap);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTap);
+      document.removeEventListener("touchstart", handleOutsideTap);
+    };
+  }, [maintenanceRecordDatePickerOpen]);
+  useEffect(() => {
     if (!maintenanceQuickMode) return;
     setTab("inventory");
     setInventoryView("daily");
     setInventoryDailyForm((prev) => ({ ...prev, type: "OUT" }));
+    setMaintenanceStockOutViewDate(toYmd(new Date()));
   }, [maintenanceQuickMode]);
 
   useEffect(() => {
@@ -6586,6 +6610,59 @@ export default function App() {
     const type = matches[0]?.type || classifyHolidayEvent(names[0] || "");
     return { name, type: normalizeCalendarEventType(type) };
   }, [holidayLookup]);
+  const maintenanceRecordDisplayDate = useMemo(() => {
+    const ymd = normalizeYmdInput(maintenanceRecordForm.date || "");
+    if (!ymd) return "";
+    if (lang === "km") return formatKhmerDateYmd(ymd);
+    const date = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return maintenanceRecordForm.date;
+    return date.toLocaleDateString("en-US", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }, [maintenanceRecordForm.date, lang]);
+  const maintenanceRecordDateMonthLabel = useMemo(
+    () =>
+      lang === "km"
+        ? formatKhmerMonthYear(maintenanceRecordDateMonth)
+        : maintenanceRecordDateMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          }),
+    [maintenanceRecordDateMonth, lang]
+  );
+  const maintenanceRecordDateCanGoPrevMonth = useMemo(() => {
+    if (isSuperAdmin) return true;
+    const now = new Date();
+    const minMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return maintenanceRecordDateMonth.getTime() > minMonth.getTime();
+  }, [maintenanceRecordDateMonth, isSuperAdmin]);
+  const maintenanceRecordDateGridDays = useMemo(() => {
+    const year = maintenanceRecordDateMonth.getFullYear();
+    const month = maintenanceRecordDateMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay();
+    const endOffset = 6 - lastDay.getDay();
+    const totalCells = startOffset + lastDay.getDate() + endOffset;
+    const startDate = new Date(year, month, 1 - startOffset);
+    return Array.from({ length: totalCells }, (_, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const ymd = toYmd(d);
+      const holiday = getHolidayEvent(ymd);
+      return {
+        ymd,
+        day: d.getDate(),
+        weekday: d.getDay(),
+        inMonth: d.getMonth() === month,
+        hasItems: false,
+        holidayName: holiday.name,
+        holidayType: holiday.type,
+      };
+    });
+  }, [maintenanceRecordDateMonth, getHolidayEvent]);
   const quickOutDateBadge = useMemo(() => {
     if (!inventoryQuickOutModal?.date) return "";
     const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
@@ -6893,23 +6970,24 @@ export default function App() {
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
   }, [inventoryVisibleTxns, inventoryFullDateFrom, inventoryFullDateTo]);
-  const maintenanceMonthlyStockOutRows = useMemo(() => {
-    const month = maintenanceQuickMode
-      ? String(todayYmd || "").slice(0, 7)
-      : String(maintenanceStockOutMonth || "").trim();
-    if (!/^\d{4}-\d{2}$/.test(month)) return [] as InventoryTxn[];
+  const maintenanceStockOutRows = useMemo(() => {
+    const targetDate = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
+    const month = String(maintenanceStockOutMonth || "").trim();
     return [...inventoryVisibleTxns]
       .filter((tx) => {
         if (!isInventoryTxnUsageOut(tx.type)) return false;
         if (String(tx.approvalStatus || "").toUpperCase() === "REJECTED") return false;
         const date = normalizeYmdInput(tx.date);
-        return Boolean(date && date.startsWith(`${month}-`));
+        if (!date) return false;
+        if (maintenanceQuickMode) return date === targetDate;
+        if (!/^\d{4}-\d{2}$/.test(month)) return false;
+        return date.startsWith(`${month}-`);
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
-  }, [inventoryVisibleTxns, maintenanceStockOutMonth, maintenanceQuickMode, todayYmd]);
-  const maintenanceMonthlyStockOutCampusTotals = useMemo(() => {
+  }, [inventoryVisibleTxns, maintenanceQuickMode, maintenanceStockOutMonth, maintenanceStockOutViewDate, todayYmd]);
+  const maintenanceStockOutCampusTotals = useMemo(() => {
     const out = new Map<string, number>();
-    for (const tx of maintenanceMonthlyStockOutRows) {
+    for (const tx of maintenanceStockOutRows) {
       const campus = String(tx.campus || "").trim();
       if (!campus) continue;
       out.set(campus, (out.get(campus) || 0) + Number(tx.qty || 0));
@@ -6917,20 +6995,26 @@ export default function App() {
     return Array.from(out.entries())
       .map(([campus, qty]) => ({ campus, qty }))
       .sort((a, b) => inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
-  }, [maintenanceMonthlyStockOutRows, inventoryCampusLabel]);
-  const maintenanceMonthlyStockOutQtyTotal = useMemo(
-    () => maintenanceMonthlyStockOutRows.reduce((sum, row) => sum + Number(row.qty || 0), 0),
-    [maintenanceMonthlyStockOutRows]
+  }, [maintenanceStockOutRows, inventoryCampusLabel]);
+  const maintenanceStockOutQtyTotal = useMemo(
+    () => maintenanceStockOutRows.reduce((sum, row) => sum + Number(row.qty || 0), 0),
+    [maintenanceStockOutRows]
   );
-  const maintenanceMonthlyStockOutLabel = useMemo(() => {
-    const month = maintenanceQuickMode
-      ? String(todayYmd || "").slice(0, 7)
-      : String(maintenanceStockOutMonth || "").trim();
+  const maintenanceStockOutLabel = useMemo(() => {
+    if (maintenanceQuickMode) {
+      const ymd = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
+      return formatDate(ymd);
+    }
+    const month = String(maintenanceStockOutMonth || "").trim();
     if (!/^\d{4}-\d{2}$/.test(month)) return "-";
     const date = new Date(`${month}-01T00:00:00`);
     if (Number.isNaN(date.getTime())) return month;
     return date.toLocaleString(undefined, { month: "long", year: "numeric" });
-  }, [maintenanceStockOutMonth, maintenanceQuickMode, todayYmd]);
+  }, [maintenanceQuickMode, maintenanceStockOutMonth, maintenanceStockOutViewDate, todayYmd]);
+  const maintenanceStockOutCanGoNext = useMemo(() => {
+    const ymd = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
+    return ymd < todayYmd;
+  }, [maintenanceStockOutViewDate, todayYmd]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -11138,6 +11222,20 @@ export default function App() {
       // fallback below
     }
     window.prompt(lang === "km" ? "ចម្លងតំណភ្ជាប់បុគ្គលិក" : "Copy maintenance quick link", maintenanceQuickLink);
+  }
+  function openMaintenanceRecordDatePicker() {
+    const today = toYmd(new Date());
+    const pickedDate = normalizeYmdInput(maintenanceRecordForm.date || today) || today;
+    const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
+    const base = new Date(`${baseDate}T00:00:00`);
+    setMaintenanceRecordDatePickerOpen((prev) => {
+      const nextOpen = !prev;
+      if (nextOpen) {
+        setMaintenanceRecordDateMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+        setMaintenanceRecordSelectedDate(baseDate);
+      }
+      return nextOpen;
+    });
   }
   function openInventoryQuickOut(item: InventoryItem) {
     const recorder = authUser?.displayName || authUser?.username || "";
@@ -23036,18 +23134,37 @@ export default function App() {
                   <article className="panel maintenance-stockout-history-panel" style={{ marginBottom: 10 }}>
                     <div className="panel-row">
                       <h3 className="section-title">
-                        {lang === "km" ? "របាយការណ៍ចេញស្តុកប្រចាំខែ (មើលតែប៉ុណ្ណោះ)" : "Monthly Stock-Out Information (View Only)"}
+                        {lang === "km" ? "របាយការណ៍ចេញស្តុកប្រចាំថ្ងៃ (មើលតែប៉ុណ្ណោះ)" : "Daily Stock-Out Information (View Only)"}
                       </h3>
-                      <span className="tiny">
-                        {maintenanceMonthlyStockOutLabel} | {maintenanceMonthlyStockOutRows.length}{" "}
-                        {lang === "km" ? "ប្រតិបត្តិការ" : "records"}
-                      </span>
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="tab btn-small"
+                          aria-label="Previous day"
+                          onClick={() => setMaintenanceStockOutViewDate((prev) => shiftYmd(normalizeYmdInput(prev) || todayYmd, -1))}
+                        >
+                          {"<"}
+                        </button>
+                        <span className="tiny">
+                          {maintenanceStockOutLabel} | {maintenanceStockOutRows.length}{" "}
+                          {lang === "km" ? "ប្រតិបត្តិការ" : "records"}
+                        </span>
+                        <button
+                          type="button"
+                          className="tab btn-small"
+                          aria-label="Next day"
+                          disabled={!maintenanceStockOutCanGoNext}
+                          onClick={() => setMaintenanceStockOutViewDate((prev) => shiftYmd(normalizeYmdInput(prev) || todayYmd, 1))}
+                        >
+                          {">"}
+                        </button>
+                      </div>
                     </div>
                     <div className="inventory-daily-stock-note" style={{ margin: "0 0 8px" }}>
-                        <strong>{lang === "km" ? "សរុបចេញ" : "Total Stock Out"}:</strong> {maintenanceMonthlyStockOutQtyTotal} pcs
+                        <strong>{lang === "km" ? "សរុបចេញ" : "Total Stock Out"}:</strong> {maintenanceStockOutQtyTotal} pcs
                         {" | "}
-                        {maintenanceMonthlyStockOutCampusTotals.length
-                          ? maintenanceMonthlyStockOutCampusTotals
+                        {maintenanceStockOutCampusTotals.length
+                          ? maintenanceStockOutCampusTotals
                               .map((row) => `${inventoryCampusLabel(row.campus)}: ${row.qty}`)
                               .join(" | ")
                           : lang === "km"
@@ -23056,8 +23173,8 @@ export default function App() {
                     </div>
                     {isPhoneView ? (
                       <div className="maintenance-stockout-mobile-list">
-                        {maintenanceMonthlyStockOutRows.length ? (
-                          maintenanceMonthlyStockOutRows.map((row) => {
+                        {maintenanceStockOutRows.length ? (
+                          maintenanceStockOutRows.map((row) => {
                             const item = inventoryVisibleItemById.get(Number(row.itemId));
                             const itemPhoto = item?.photo || row.photo || "";
                             return (
@@ -23086,8 +23203,8 @@ export default function App() {
                         ) : (
                           <div className="panel-note">
                             {lang === "km"
-                              ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ខែបច្ចុប្បន្ន។"
-                              : "No stock-out records for current month."}
+                              ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ថ្ងៃនេះ។"
+                              : "No stock-out records for this day."}
                           </div>
                         )}
                       </div>
@@ -23106,8 +23223,8 @@ export default function App() {
                             </tr>
                           </thead>
                           <tbody>
-                            {maintenanceMonthlyStockOutRows.length ? (
-                              maintenanceMonthlyStockOutRows.map((row) => (
+                            {maintenanceStockOutRows.length ? (
+                              maintenanceStockOutRows.map((row) => (
                                 <tr key={`maintenance-stock-out-row-${row.id}`}>
                                   <td>{formatDate(row.date)}</td>
                                   <td>
@@ -23124,8 +23241,8 @@ export default function App() {
                               <tr>
                                 <td colSpan={7}>
                                   {lang === "km"
-                                    ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ខែដែលបានជ្រើស។"
-                                    : "No stock-out records for selected month."}
+                                    ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់ថ្ងៃដែលបានជ្រើស។"
+                                    : "No stock-out records for selected day."}
                                 </td>
                               </tr>
                             )}
@@ -25528,15 +25645,77 @@ export default function App() {
                   })}
                 </div>
               </div>
-              <label className="field field-wide">
+              <label className="field field-wide quickout-date-field" ref={maintenanceRecordDateWrapRef}>
                 <span>{t.date}</span>
-                <input
-                  type="date"
-                  className="input"
-                  min={todayYmd}
-                  value={maintenanceRecordForm.date}
-                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, date: e.target.value }))}
-                />
+                <div className="quickout-date-input-wrap">
+                  <input
+                    className="input"
+                    type="text"
+                    readOnly
+                    value={maintenanceRecordDisplayDate}
+                    placeholder="dd/mm/yyyy"
+                  />
+                  <button
+                    type="button"
+                    className="quickout-date-icon-btn"
+                    onClick={openMaintenanceRecordDatePicker}
+                    aria-label="Open Maintenance Calendar"
+                  >
+                    <Calendar size={18} />
+                  </button>
+                </div>
+                {maintenanceRecordDatePickerOpen ? (
+                  <div className="quickout-eco-inline-panel">
+                    <div className="quickout-eco-head">
+                      <strong className="quickout-eco-title">{maintenanceRecordDateMonthLabel}</strong>
+                      <div className="quickout-eco-nav">
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Previous month"
+                          disabled={!maintenanceRecordDateCanGoPrevMonth}
+                          onClick={() =>
+                            setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                          }
+                        >
+                          {"<"}
+                        </button>
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Next month"
+                          onClick={() =>
+                            setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                          }
+                        >
+                          {">"}
+                        </button>
+                      </div>
+                    </div>
+                    <CalendarGridTemplate
+                      weekdayLabels={calendarWeekdayLabels}
+                      days={maintenanceRecordDateGridDays}
+                      selectedDate={maintenanceRecordSelectedDate}
+                      todayYmd={todayYmd}
+                      onSelectDate={(ymd) => {
+                        setMaintenanceRecordSelectedDate(ymd);
+                        setMaintenanceRecordForm((f) => ({ ...f, date: ymd }));
+                        setMaintenanceRecordDatePickerOpen(false);
+                      }}
+                      isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
+                      gridClassName="quickout-eco-grid"
+                      renderHolidayTag={(d) =>
+                        d.holidayName ? (
+                          <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                            {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                          </em>
+                        ) : null
+                      }
+                      headKeyPrefix="maintenance-record-date-head"
+                      dayKeyPrefix="maintenance-record-date-day"
+                    />
+                  </div>
+                ) : null}
               </label>
               <label className="field">
                 <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>

@@ -19,6 +19,8 @@ type CalendarGridTemplateProps = {
   isPhoneView?: boolean;
   onSelectDate: (ymd: string) => void;
   renderHolidayTag?: (day: CalendarGridDay) => React.ReactNode;
+  isDayDisabled?: (day: CalendarGridDay) => boolean;
+  gridClassName?: string;
   headKeyPrefix?: string;
   dayKeyPrefix?: string;
 };
@@ -31,11 +33,15 @@ export default function CalendarGridTemplate({
   isPhoneView = false,
   onSelectDate,
   renderHolidayTag,
+  isDayDisabled,
+  gridClassName = "",
   headKeyPrefix = "calendar-head",
   dayKeyPrefix = "calendar-day",
 }: CalendarGridTemplateProps) {
+  const baseGridClass = `calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`.trim();
+  const mergedGridClass = `${baseGridClass} ${gridClassName}`.trim();
   return (
-    <div className={`calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`}>
+    <div className={mergedGridClass}>
       {weekdayLabels.map((label, idx) => (
         <div
           key={`${headKeyPrefix}-${label}-${idx}`}
@@ -44,18 +50,23 @@ export default function CalendarGridTemplate({
           {label}
         </div>
       ))}
-      {days.map((day) => (
-        <button
-          key={`${dayKeyPrefix}-${day.ymd}`}
-          className={`calendar-day ${day.inMonth ? "" : "calendar-out"} ${day.hasItems ? "calendar-has" : ""} ${selectedDate === day.ymd ? "calendar-selected" : ""} ${day.ymd === todayYmd ? "calendar-today" : ""} ${day.weekday === 0 || day.weekday === 6 ? "calendar-weekend" : ""} ${day.holidayName ? "calendar-holiday" : ""} ${day.holidayType ? `calendar-holiday-${day.holidayType}` : ""} ${day.weekday <= 1 ? "calendar-popup-left" : day.weekday >= 5 ? "calendar-popup-right" : ""}`}
-          onClick={() => onSelectDate(day.ymd)}
-        >
-          <span>{day.day}</span>
-          {renderHolidayTag ? renderHolidayTag(day) : null}
-          {day.hasItems ? <small>{Number(day.itemCount || 0)}</small> : null}
-          {day.holidayName ? <div className="calendar-hover-popup">{day.holidayName}</div> : null}
-        </button>
-      ))}
+      {days.map((day) => {
+        const disabled = Boolean(isDayDisabled?.(day));
+        return (
+          <button
+            key={`${dayKeyPrefix}-${day.ymd}`}
+            type="button"
+            disabled={disabled}
+            className={`calendar-day ${day.inMonth ? "" : "calendar-out"} ${day.hasItems ? "calendar-has" : ""} ${selectedDate === day.ymd ? "calendar-selected" : ""} ${day.ymd === todayYmd ? "calendar-today" : ""} ${day.weekday === 0 || day.weekday === 6 ? "calendar-weekend" : ""} ${day.holidayName ? "calendar-holiday" : ""} ${day.holidayType ? `calendar-holiday-${day.holidayType}` : ""} ${day.weekday <= 1 ? "calendar-popup-left" : day.weekday >= 5 ? "calendar-popup-right" : ""} ${disabled ? "calendar-day-locked" : ""}`}
+            onClick={() => onSelectDate(day.ymd)}
+          >
+            <span>{day.day}</span>
+            {renderHolidayTag ? renderHolidayTag(day) : null}
+            {day.hasItems ? <small>{Number(day.itemCount || 0)}</small> : null}
+            {day.holidayName ? <div className="calendar-hover-popup">{day.holidayName}</div> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }
