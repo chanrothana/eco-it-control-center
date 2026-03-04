@@ -1117,6 +1117,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Memory Card", itemKm: "កាតមេម៉ូរី", code: "MCD" },
     { itemEn: "Camera Bag", itemKm: "កាបូបកាមេរ៉ា", code: "BAG" },
     { itemEn: "Slide Projector", itemKm: "ម៉ាស៊ីនបញ្ចាំងស្លាយ", code: "SLP" },
+    { itemEn: "Projector Bag", itemKm: "កាបូបម៉ាស៊ីនបញ្ចាំង", code: "PBG" },
     { itemEn: "USB WiFi Adapter", itemKm: "USB វ៉ាយហ្វាយ", code: "UWF" },
     { itemEn: "Webcam", itemKm: "កាមេរ៉ាវិប", code: "WBC" },
     { itemEn: "TV", itemKm: "ទូរទស្សន៍", code: "TV" },
@@ -1162,6 +1163,8 @@ const WATER_DISPENSER_MAIN_TYPE = "WDP";
 const LAPTOP_TYPE = "LAP";
 const DIGITAL_CAMERA_TYPE = "DCM";
 const PROJECTOR_TYPE = "SLP";
+const PROJECTOR_COMPONENT_TYPES = ["PBG"] as const;
+const AIO_PC_TYPE = "AIO";
 const NO_PARENT_LINK_TYPES = new Set([
   DESKTOP_PARENT_TYPE,
   LAPTOP_TYPE,
@@ -1193,7 +1196,7 @@ const PC_TYPE_OPTIONS = [
 type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE" | "UWF" | "WBC";
 type LaptopAccessoryType = "ADP" | "MSE" | "KBD" | "MON";
 type CameraComponentType = "BAT" | "CHB" | "MCD" | "BAG";
-type ProjectorComponentType = "BAG" | "RMT" | "ADP" | "HDC";
+type ProjectorComponentType = "PBG" | "RMT" | "ADP" | "HDC";
 type SetPackChildDraft = {
   enabled: boolean;
   status: string;
@@ -1257,7 +1260,7 @@ function defaultCameraComponentDraft(): Record<CameraComponentType, SetPackChild
 
 function defaultProjectorComponentDraft(): Record<ProjectorComponentType, SetPackChildDraft> {
   return {
-    BAG: defaultSetPackChildDraft(),
+    PBG: defaultSetPackChildDraft(),
     RMT: defaultSetPackChildDraft(),
     ADP: defaultSetPackChildDraft(),
     HDC: defaultSetPackChildDraft(),
@@ -1353,6 +1356,7 @@ const TEXT = {
     includeBatteryCharger: "Include Charger Battery",
     includeMemoryCard: "Include Memory Card",
     includeCameraBag: "Include Bag",
+    includeProjectorBag: "Include Projector Bag",
     cameraComponentHint: "Digital Camera can include components without linking to an existing parent asset.",
     projectorComponents: "Projector Components",
     tvRemoteCount: "TV Remote Quantity",
@@ -1580,6 +1584,7 @@ const TEXT = {
     includeBatteryCharger: "រួមបញ្ចូលឆ្នាំងសាកថ្ម",
     includeMemoryCard: "រួមបញ្ចូលកាតមេម៉ូរី",
     includeCameraBag: "រួមបញ្ចូលកាបូប",
+    includeProjectorBag: "រួមបញ្ចូលកាបូបម៉ាស៊ីនបញ្ចាំង",
     cameraComponentHint: "កាមេរ៉ាឌីជីថល អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
     projectorComponents: "គ្រឿងបន្ថែមម៉ាស៊ីនបញ្ចាំង",
     tvRemoteCount: "ចំនួនរីម៉ូត TV",
@@ -5093,7 +5098,7 @@ export default function App() {
     BAG: false,
   });
   const [projectorComponentEnabled, setProjectorComponentEnabled] = useState<Record<ProjectorComponentType, boolean>>({
-    BAG: true,
+    PBG: true,
     RMT: true,
     ADP: true,
     HDC: true,
@@ -5102,19 +5107,19 @@ export default function App() {
     () => defaultProjectorComponentDraft()
   );
   const [projectorComponentFileKey, setProjectorComponentFileKey] = useState<Record<ProjectorComponentType, number>>({
-    BAG: 0,
+    PBG: 0,
     RMT: 0,
     ADP: 0,
     HDC: 0,
   });
   const projectorComponentPhotoInputRefs = useRef<Record<ProjectorComponentType, HTMLInputElement | null>>({
-    BAG: null,
+    PBG: null,
     RMT: null,
     ADP: null,
     HDC: null,
   });
   const [projectorComponentDetailOpen, setProjectorComponentDetailOpen] = useState<Record<ProjectorComponentType, boolean>>({
-    BAG: false,
+    PBG: false,
     RMT: false,
     ADP: false,
     HDC: false,
@@ -5911,7 +5916,11 @@ export default function App() {
     () => {
       const base = allTypeOptions[assetForm.category] || allTypeOptions.IT || TYPE_OPTIONS.IT;
       if (assetForm.category !== "IT") return base;
-      return base.filter((opt) => !DIGITAL_CAMERA_COMPONENT_TYPES.includes(opt.code as (typeof DIGITAL_CAMERA_COMPONENT_TYPES)[number]));
+      return base.filter(
+        (opt) =>
+          !DIGITAL_CAMERA_COMPONENT_TYPES.includes(opt.code as (typeof DIGITAL_CAMERA_COMPONENT_TYPES)[number]) &&
+          !PROJECTOR_COMPONENT_TYPES.includes(opt.code as (typeof PROJECTOR_COMPONENT_TYPES)[number])
+      );
     },
     [assetForm.category, allTypeOptions]
   );
@@ -6155,12 +6164,12 @@ export default function App() {
   }, [assets, assetForm.campus]);
   const projectorComponentSuggestedAssetId = useMemo<Record<ProjectorComponentType, string>>(() => {
     const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
-    const baseBag = calcNextSeq(assets, assetForm.campus, "IT", "BAG");
+    const baseProjectorBag = calcNextSeq(assets, assetForm.campus, "IT", "PBG");
     const baseRmt = calcNextSeq(assets, assetForm.campus, "IT", "RMT");
     const baseAdp = calcNextSeq(assets, assetForm.campus, "IT", "ADP");
     const baseHdc = calcNextSeq(assets, assetForm.campus, "IT", "HDC");
     return {
-      BAG: `${campusCode}-${categoryCode("IT")}-BAG-${pad4(baseBag)}`,
+      PBG: `${campusCode}-${categoryCode("IT")}-PBG-${pad4(baseProjectorBag)}`,
       RMT: `${campusCode}-${categoryCode("IT")}-RMT-${pad4(baseRmt)}`,
       ADP: `${campusCode}-${categoryCode("IT")}-ADP-${pad4(baseAdp)}`,
       HDC: `${campusCode}-${categoryCode("IT")}-HDC-${pad4(baseHdc)}`,
@@ -7037,6 +7046,10 @@ export default function App() {
     () => assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE,
     [assetForm.category, assetForm.type]
   );
+  const isAioDesktopForCreate = useMemo(
+    () => isPcAssetForCreate && String(assetForm.pcType || "").trim().toUpperCase() === AIO_PC_TYPE,
+    [isPcAssetForCreate, assetForm.pcType]
+  );
   const isLaptopAssetForCreate = useMemo(
     () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === LAPTOP_TYPE,
     [assetForm.category, assetForm.type]
@@ -7306,6 +7319,25 @@ export default function App() {
     }));
   }, [assetForm.category, assetForm.type]);
   useEffect(() => {
+    if (!isAioDesktopForCreate) return;
+    setSetPackDraft((prev) => {
+      if (!prev.MON.enabled && !prev.MON2.enabled) return prev;
+      return {
+        ...prev,
+        MON: { ...prev.MON, enabled: false },
+        MON2: { ...prev.MON2, enabled: false },
+      };
+    });
+    setSetPackDetailOpen((prev) => {
+      if (!prev.MON && !prev.MON2) return prev;
+      return {
+        ...prev,
+        MON: false,
+        MON2: false,
+      };
+    });
+  }, [isAioDesktopForCreate]);
+  useEffect(() => {
     const isLaptop = assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === LAPTOP_TYPE;
     if (isLaptop) return;
     setLaptopAccessoryEnabled({
@@ -7355,20 +7387,20 @@ export default function App() {
     const isProjector = assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === PROJECTOR_TYPE;
     if (isProjector) return;
     setProjectorComponentEnabled({
-      BAG: true,
+      PBG: true,
       RMT: true,
       ADP: true,
       HDC: true,
     });
     setProjectorComponentDraft(defaultProjectorComponentDraft());
     setProjectorComponentDetailOpen({
-      BAG: false,
+      PBG: false,
       RMT: false,
       ADP: false,
       HDC: false,
     });
     setProjectorComponentFileKey((prev) => ({
-      BAG: prev.BAG + 1,
+      PBG: prev.PBG + 1,
       RMT: prev.RMT + 1,
       ADP: prev.ADP + 1,
       HDC: prev.HDC + 1,
@@ -7406,6 +7438,13 @@ export default function App() {
     ],
     [t.includeMonitor, t.includeKeyboard, t.includeMouse, t.includeUsbWifi, t.includeWebcam]
   );
+  const createSetPackChildMeta = useMemo(
+    () =>
+      isAioDesktopForCreate
+        ? setPackChildMeta.filter((item) => item.type !== "MON" && item.type !== "MON2")
+        : setPackChildMeta,
+    [isAioDesktopForCreate, setPackChildMeta]
+  );
   const laptopAccessoryMeta = useMemo<Array<{ type: LaptopAccessoryType; label: string }>>(
     () => [
       { type: "ADP", label: t.includeAdapter },
@@ -7426,12 +7465,12 @@ export default function App() {
   );
   const projectorComponentMeta = useMemo<Array<{ type: ProjectorComponentType; label: string }>>(
     () => [
-      { type: "BAG", label: t.includeCameraBag },
+      { type: "PBG", label: t.includeProjectorBag },
       { type: "RMT", label: t.includeRemoteControl },
       { type: "ADP", label: t.includeAdapter },
       { type: "HDC", label: t.includeHdmiCable },
     ],
-    [t.includeCameraBag, t.includeRemoteControl, t.includeAdapter, t.includeHdmiCable]
+    [t.includeProjectorBag, t.includeRemoteControl, t.includeAdapter, t.includeHdmiCable]
   );
 
   useEffect(() => {
@@ -8018,7 +8057,7 @@ export default function App() {
       : [];
     const createTvRemoteCount = isTvAsset ? Math.max(1, Math.min(2, Number(assetForm.tvRemoteCount || 1))) : 0;
     const packItems = (Object.entries(setPackDraft) as Array<[SetPackChildType, SetPackChildDraft]>)
-      .filter(([, draft]) => draft.enabled);
+      .filter(([type, draft]) => draft.enabled && (!isAioDesktopForCreate || (type !== "MON" && type !== "MON2")));
     const createSetCode = isDesktopAsset
       ? suggestedDesktopSetCode
       : (shouldLinkToParent ? assetForm.setCode.trim() : "");
@@ -8422,20 +8461,20 @@ export default function App() {
         BAG: prev.BAG + 1,
       }));
       setProjectorComponentEnabled({
-        BAG: true,
+        PBG: true,
         RMT: true,
         ADP: true,
         HDC: true,
       });
       setProjectorComponentDraft(defaultProjectorComponentDraft());
       setProjectorComponentDetailOpen({
-        BAG: false,
+        PBG: false,
         RMT: false,
         ADP: false,
         HDC: false,
       });
       setProjectorComponentFileKey((prev) => ({
-        BAG: prev.BAG + 1,
+        PBG: prev.PBG + 1,
         RMT: prev.RMT + 1,
         ADP: prev.ADP + 1,
         HDC: prev.HDC + 1,
@@ -8893,20 +8932,20 @@ export default function App() {
           BAG: prev.BAG + 1,
         }));
         setProjectorComponentEnabled({
-          BAG: true,
+          PBG: true,
           RMT: true,
           ADP: true,
           HDC: true,
         });
         setProjectorComponentDraft(defaultProjectorComponentDraft());
         setProjectorComponentDetailOpen({
-          BAG: false,
+          PBG: false,
           RMT: false,
           ADP: false,
           HDC: false,
         });
         setProjectorComponentFileKey((prev) => ({
-          BAG: prev.BAG + 1,
+          PBG: prev.PBG + 1,
           RMT: prev.RMT + 1,
           ADP: prev.ADP + 1,
           HDC: prev.HDC + 1,
@@ -13554,6 +13593,14 @@ export default function App() {
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
   );
+  const editingIsDesktopAio = useMemo(
+    () =>
+      !!editingAsset &&
+      editingAsset.category === "IT" &&
+      editingAsset.type === DESKTOP_PARENT_TYPE &&
+      String(assetEditForm.pcType || "").trim().toUpperCase() === AIO_PC_TYPE,
+    [editingAsset, assetEditForm.pcType]
+  );
   const editingIsLinkableAsset = useMemo(
     () => (editingAsset ? canLinkToParentAsset(editingAsset.category, editingAsset.type) : false),
     [editingAsset]
@@ -13608,6 +13655,13 @@ export default function App() {
     if (webcam) map.WBC = webcam;
     return map;
   }, [assets, editingAsset]);
+  const editSetPackChildMeta = useMemo(
+    () =>
+      editingIsDesktopAio
+        ? setPackChildMeta.filter((item) => item.type !== "MON" && item.type !== "MON2")
+        : setPackChildMeta,
+    [editingIsDesktopAio, setPackChildMeta]
+  );
 
   useEffect(() => {
     if (!editingAsset) {
@@ -13621,23 +13675,31 @@ export default function App() {
       setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false, UWF: false, WBC: false });
       return;
     }
-    const hasAnyChild =
-      Boolean(editingSetPackChildren.MON) ||
-      Boolean(editingSetPackChildren.MON2) ||
-      Boolean(editingSetPackChildren.KBD) ||
-      Boolean(editingSetPackChildren.MSE) ||
-      Boolean(editingSetPackChildren.UWF) ||
-      Boolean(editingSetPackChildren.WBC);
+    const hasAnyChild = editingIsDesktopAio
+      ? (
+        Boolean(editingSetPackChildren.KBD) ||
+        Boolean(editingSetPackChildren.MSE) ||
+        Boolean(editingSetPackChildren.UWF) ||
+        Boolean(editingSetPackChildren.WBC)
+      )
+      : (
+        Boolean(editingSetPackChildren.MON) ||
+        Boolean(editingSetPackChildren.MON2) ||
+        Boolean(editingSetPackChildren.KBD) ||
+        Boolean(editingSetPackChildren.MSE) ||
+        Boolean(editingSetPackChildren.UWF) ||
+        Boolean(editingSetPackChildren.WBC)
+      );
     setEditCreateSetPack(hasAnyChild);
     setEditSetPackEnabled({
-      MON: Boolean(editingSetPackChildren.MON),
-      MON2: Boolean(editingSetPackChildren.MON2),
+      MON: editingIsDesktopAio ? false : Boolean(editingSetPackChildren.MON),
+      MON2: editingIsDesktopAio ? false : Boolean(editingSetPackChildren.MON2),
       KBD: Boolean(editingSetPackChildren.KBD),
       MSE: Boolean(editingSetPackChildren.MSE),
       UWF: Boolean(editingSetPackChildren.UWF),
       WBC: Boolean(editingSetPackChildren.WBC),
     });
-  }, [editingAsset, editingSetPackChildren]);
+  }, [editingAsset, editingSetPackChildren, editingIsDesktopAio]);
   useEffect(() => {
     if (editingStatusActive) return;
     setAssetEditForm((prev) => (prev.assignedTo ? { ...prev, assignedTo: "" } : prev));
@@ -18429,7 +18491,7 @@ export default function App() {
                         <div className="field field-wide">
                           <span>{t.setPackItems}</span>
                           <div className="setpack-include-grid">
-                            {setPackChildMeta.map((item) => (
+                            {createSetPackChildMeta.map((item) => (
                               <label key={`pack-toggle-${item.type}`} className="tab setpack-include-item">
                                 <input
                                   type="checkbox"
@@ -18464,7 +18526,7 @@ export default function App() {
                         ? (
                           <div className="field field-wide">
                             <div className="setpack-card-grid">
-                              {setPackChildMeta.map((item) => (
+                              {createSetPackChildMeta.map((item) => (
                                 setPackDraft[item.type].enabled ? (
                                   <div
                                     key={`pack-fields-${item.type}`}
@@ -21230,7 +21292,7 @@ export default function App() {
                           <div className="field field-wide">
                             <span>{t.setPackItems}</span>
                             <div className="setpack-include-grid">
-                              {setPackChildMeta.map((item) => (
+                              {editSetPackChildMeta.map((item) => (
                                 <label key={`edit-setpack-include-${item.type}`} className="tab setpack-include-item">
                                   <input
                                     type="checkbox"
@@ -21255,7 +21317,7 @@ export default function App() {
                               ))}
                             </div>
                             <div className="setpack-card-grid">
-                              {setPackChildMeta.map((item) => {
+                              {editSetPackChildMeta.map((item) => {
                                 if (!editSetPackEnabled[item.type]) {
                                   return <div key={`edit-setpack-empty-${item.type}`} className="setpack-item-slot" />;
                                 }

@@ -3,7 +3,8 @@
 const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 
-const PORTS = [3000, 4000];
+const WEB_PORT = 3000;
+const API_PORT = 4000;
 const isPhoneMode = process.argv.includes("--phone");
 // Local mode should stay loopback-only; phone mode exposes to LAN.
 const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
@@ -28,7 +29,7 @@ function inspectPort(port) {
 }
 
 function printBusyPorts(busyPorts) {
-  console.error("\n[preflight] Cannot start app because required ports are already in use.\n");
+  console.error("\n[preflight] Cannot start app because web port is already in use.\n");
 
   for (const { port, processes } of busyPorts) {
     const detail = processes.map((p) => `${p.command}(pid:${p.pid})`).join(", ");
@@ -54,33 +55,52 @@ function killChildrenAndExit(code = 0) {
   setTimeout(() => process.exit(code), 120);
 }
 
-function attachChildLifecycle(child, label) {
+function attachChildLifecycle(child, label, { fatalOnExit = true } = {}) {
   children.push(child);
   child.on("error", (err) => {
-    console.error(`[runner] ${label} failed: ${err.message}`);
-    killChildrenAndExit(1);
+    if (fatalOnExit) {
+      console.error(`[runner] ${label} failed: ${err.message}`);
+      killChildrenAndExit(1);
+      return;
+    }
+    console.warn(`[runner] ${label} failed: ${err.message}`);
   });
   child.on("exit", (code, signal) => {
     if (shuttingDown) return;
-    if (code === 0 || signal === "SIGTERM" || signal === "SIGINT") {
+    const isClean = code === 0 || signal === "SIGTERM" || signal === "SIGINT";
+    if (isClean) {
+      if (!fatalOnExit) return;
       killChildrenAndExit(code || 0);
       return;
     }
-    console.error(`[runner] ${label} exited unexpectedly (code=${code ?? "?"}, signal=${signal ?? "none"}).`);
-    killChildrenAndExit(1);
+    if (fatalOnExit) {
+      console.error(`[runner] ${label} exited unexpectedly (code=${code ?? "?"}, signal=${signal ?? "none"}).`);
+      killChildrenAndExit(1);
+      return;
+    }
+    console.warn(
+      `[runner] ${label} exited unexpectedly (code=${code ?? "?"}, signal=${signal ?? "none"}).`
+    );
+    console.warn("[runner] Web server will continue running, but API requests may fail.");
   });
 }
 
-function runStartRunner() {
-  console.log("[preflight] Ports 3000 and 4000 are free.");
+function runStartRunner(isApiPortBusy) {
+  if (isApiPortBusy) {
+    console.warn(
+      `[preflight] Port ${API_PORT} is already in use. Skipping API startup and continuing with web server.`
+    );
+  }
   console.log(`[preflight] Starting app (${isPhoneMode ? "phone/network" : "local"})...\n`);
 
-  const apiChild = spawn("node", [path.join("server", "server.js")], {
-    stdio: "inherit",
-    env: { ...process.env, ...(apiHost ? { API_HOST: apiHost } : {}) },
-    shell: process.platform === "win32",
-  });
-  attachChildLifecycle(apiChild, "API server");
+  if (!isApiPortBusy) {
+    const apiChild = spawn("node", [path.join("server", "server.js")], {
+      stdio: "inherit",
+      env: { ...process.env, ...(apiHost ? { API_HOST: apiHost } : {}) },
+      shell: process.platform === "win32",
+    });
+    attachChildLifecycle(apiChild, "API server", { fatalOnExit: false });
+  }
 
   const webCmd = process.platform === "win32"
     ? path.join("node_modules", ".bin", "react-scripts.cmd")
@@ -90,19 +110,19 @@ function runStartRunner() {
     env: { ...process.env, ...(webHost ? { HOST: webHost } : {}) },
     shell: process.platform === "win32",
   });
-  attachChildLifecycle(webChild, "Web server");
+  attachChildLifecycle(webChild, "Web server", { fatalOnExit: true });
 }
 
 process.on("SIGINT", () => killChildrenAndExit(0));
 process.on("SIGTERM", () => killChildrenAndExit(0));
 
-const busyPorts = PORTS.map((port) => ({ port, processes: inspectPort(port) })).filter(
-  (entry) => entry.processes.length > 0
-);
-
-if (busyPorts.length) {
-  printBusyPorts(busyPorts);
+const webPortProcesses = inspectPort(WEB_PORT);
+if (webPortProcesses.length) {
+  printBusyPorts([{ port: WEB_PORT, processes: webPortProcesses }]);
   process.exit(1);
 }
 
-runStartRunner();
+const apiPortProcesses = inspectPort(API_PORT);
+const isApiPortBusy = apiPortProcesses.length > 0;
+
+runStartRunner(isApiPortBusy);

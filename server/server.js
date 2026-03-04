@@ -81,7 +81,33 @@ const CAMPUS_MAP = {
 };
 const CAMPUS_NAMES = Object.values(CAMPUS_MAP);
 const TYPE_CODES = {
-  IT: ["PC", "LAP", "TAB", "MON", "KBD", "MSE", "DCM", "SLP", "ADP", "RMT", "UWF", "WBC", "TV", "SPK", "PRN", "SW", "AP", "CAM", "FGP"],
+  IT: [
+    "PC",
+    "LAP",
+    "TAB",
+    "MON",
+    "KBD",
+    "MSE",
+    "DCM",
+    "BAT",
+    "CHB",
+    "MCD",
+    "BAG",
+    "SLP",
+    "PBG",
+    "ADP",
+    "RMT",
+    "HDC",
+    "UWF",
+    "WBC",
+    "TV",
+    "SPK",
+    "PRN",
+    "SW",
+    "AP",
+    "CAM",
+    "FGP",
+  ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
   FACILITY: ["AC", "WDP", "FPN", "RPN", "TBL", "CHR"],
 };
@@ -93,9 +119,15 @@ const TYPE_LABELS = {
   KBD: "Keyboard",
   MSE: "Mouse",
   DCM: "Digital Camera",
+  BAT: "Camera Battery",
+  CHB: "Battery Charger",
+  MCD: "Memory Card",
+  BAG: "Camera Bag",
   SLP: "Slide Projector",
+  PBG: "Projector Bag",
   ADP: "Power Adapter",
   RMT: "Remote Control",
+  HDC: "HDMI Cable",
   UWF: "USB WiFi Adapter",
   WBC: "Webcam",
   TV: "TV",
@@ -964,6 +996,99 @@ function normalizeVaultCctvRecords(input) {
     }));
 }
 
+function normalizePoolCleaningSchedules(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: toText(row.pool) || "Main Pool",
+      date: toText(row.date),
+      shift: toText(row.shift),
+      task: toText(row.task),
+      assignedTo: toText(row.assignedTo),
+      status: toUpper(row.status) === "DONE" ? "Done" : "Pending",
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizePoolEquipmentChecks(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: toText(row.pool) || "Main Pool",
+      date: toText(row.date),
+      category: toText(row.category) || "Cleaning",
+      item: toText(row.item),
+      condition: toText(row.condition) || "Good",
+      qty: Number(row.qty || 0) || 0,
+      unit: toText(row.unit),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizePoolChemicalRecords(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: toText(row.pool) || "Main Pool",
+      datetime: toText(row.datetime),
+      chlorineFree: Number(row.chlorineFree || 0) || 0,
+      chlorineTotal: Number(row.chlorineTotal || 0) || 0,
+      ph: Number(row.ph || 0) || 0,
+      alkalinity: Number(row.alkalinity || 0) || 0,
+      calciumHardness: Number(row.calciumHardness || 0) || 0,
+      cyanuricAcid: Number(row.cyanuricAcid || 0) || 0,
+      temperature: Number(row.temperature || 0) || 0,
+      operator: toText(row.operator),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizePoolOperationRecords(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: toText(row.pool) || "Main Pool",
+      datetime: toText(row.datetime),
+      pumpStatus: toUpper(row.pumpStatus) === "OFF" ? "Off" : "On",
+      timerMode: toText(row.timerMode),
+      filterPressure: Number(row.filterPressure || 0) || 0,
+      backwashDone: Boolean(row.backwashDone),
+      operator: toText(row.operator),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
+function normalizePoolComplaints(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      pool: toText(row.pool) || "Main Pool",
+      date: toText(row.date),
+      teacher: toText(row.teacher),
+      entryType: toUpper(row.entryType) === "COMMENT" ? "Comment" : "Complaint",
+      condition: toText(row.condition),
+      severity: toText(row.severity) || "Medium",
+      status: toText(row.status) || "Open",
+      photo: toText(row.photo),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }));
+}
+
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
   const settings =
@@ -985,6 +1110,11 @@ function normalizeImportedDb(input) {
   const vaultDesignLinks = normalizeVaultDesignLinks(settings.vaultDesignLinks);
   const vaultNetworkDocs = normalizeVaultNetworkDocs(settings.vaultNetworkDocs);
   const vaultCctvRecords = normalizeVaultCctvRecords(settings.vaultCctvRecords);
+  const poolCleaningSchedules = normalizePoolCleaningSchedules(settings.poolCleaningSchedules);
+  const poolEquipmentChecks = normalizePoolEquipmentChecks(settings.poolEquipmentChecks);
+  const poolChemicalRecords = normalizePoolChemicalRecords(settings.poolChemicalRecords);
+  const poolOperationRecords = normalizePoolOperationRecords(settings.poolOperationRecords);
+  const poolComplaints = normalizePoolComplaints(settings.poolComplaints);
   const normalizedAssets = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
@@ -1012,6 +1142,11 @@ function normalizeImportedDb(input) {
       inventoryApprovalRouting,
       inventoryItems,
       inventoryTxns,
+      poolCleaningSchedules,
+      poolEquipmentChecks,
+      poolChemicalRecords,
+      poolOperationRecords,
+      poolComplaints,
       vaultAccounts,
       vaultCredentials,
       vaultDesignLinks,
@@ -2302,6 +2437,11 @@ const server = http.createServer(async (req, res) => {
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
           inventoryItems: normalizeInventoryItems(settings.inventoryItems),
           inventoryTxns: normalizeInventoryTxns(settings.inventoryTxns),
+          poolCleaningSchedules: normalizePoolCleaningSchedules(settings.poolCleaningSchedules),
+          poolEquipmentChecks: normalizePoolEquipmentChecks(settings.poolEquipmentChecks),
+          poolChemicalRecords: normalizePoolChemicalRecords(settings.poolChemicalRecords),
+          poolOperationRecords: normalizePoolOperationRecords(settings.poolOperationRecords),
+          poolComplaints: normalizePoolComplaints(settings.poolComplaints),
           vaultAccounts: normalizeVaultAccounts(settings.vaultAccounts),
           vaultCredentials: normalizeVaultCredentials(settings.vaultCredentials),
           vaultDesignLinks: normalizeVaultDesignLinks(settings.vaultDesignLinks),
@@ -2352,6 +2492,26 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryTxns")
           ? normalizeInventoryTxns(incoming.inventoryTxns)
           : normalizeInventoryTxns(current.inventoryTxns);
+      const nextPoolCleaningSchedules =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "poolCleaningSchedules")
+          ? normalizePoolCleaningSchedules(incoming.poolCleaningSchedules)
+          : normalizePoolCleaningSchedules(current.poolCleaningSchedules);
+      const nextPoolEquipmentChecks =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "poolEquipmentChecks")
+          ? normalizePoolEquipmentChecks(incoming.poolEquipmentChecks)
+          : normalizePoolEquipmentChecks(current.poolEquipmentChecks);
+      const nextPoolChemicalRecords =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "poolChemicalRecords")
+          ? normalizePoolChemicalRecords(incoming.poolChemicalRecords)
+          : normalizePoolChemicalRecords(current.poolChemicalRecords);
+      const nextPoolOperationRecords =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "poolOperationRecords")
+          ? normalizePoolOperationRecords(incoming.poolOperationRecords)
+          : normalizePoolOperationRecords(current.poolOperationRecords);
+      const nextPoolComplaints =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "poolComplaints")
+          ? normalizePoolComplaints(incoming.poolComplaints)
+          : normalizePoolComplaints(current.poolComplaints);
       const nextVaultAccounts =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultAccounts")
           ? normalizeVaultAccounts(incoming.vaultAccounts)
@@ -2381,6 +2541,11 @@ const server = http.createServer(async (req, res) => {
         inventoryApprovalRouting: nextInventoryApprovalRouting,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
+        poolCleaningSchedules: nextPoolCleaningSchedules,
+        poolEquipmentChecks: nextPoolEquipmentChecks,
+        poolChemicalRecords: nextPoolChemicalRecords,
+        poolOperationRecords: nextPoolOperationRecords,
+        poolComplaints: nextPoolComplaints,
         vaultAccounts: nextVaultAccounts,
         vaultCredentials: nextVaultCredentials,
         vaultDesignLinks: nextVaultDesignLinks,
@@ -3214,6 +3379,12 @@ const server = http.createServer(async (req, res) => {
       };
       if (approvalStatus === "PENDING") {
         const approverTargets = resolveInventoryApprovalApprovers(db, txn.approvalRequestedUser, txn.campus);
+        const requesterTarget = toText(txn.approvalRequestedUser).toLowerCase();
+        const notifyTargets = Array.from(
+          new Set(
+            [...approverTargets, requesterTarget].filter(Boolean)
+          )
+        );
         upsertNotification(db, {
           id: Date.now() + Math.floor(Math.random() * 1000),
           key: `inventory-out-approval:${txn.id}`,
@@ -3226,7 +3397,7 @@ const server = http.createServer(async (req, res) => {
           scheduleDate: txn.date,
           createdAt: new Date().toISOString(),
           readBy: [],
-          targetUsernames: approverTargets,
+          targetUsernames: notifyTargets,
           generatedBy: "inventory-out-approval",
         });
       }
