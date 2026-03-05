@@ -3713,7 +3713,7 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
       >
         {selected ? (
           <span className="asset-picker-selected">
-            {selected.photo ? <img src={selected.photo} alt={selected.assetId} className="asset-picker-thumb" /> : <span className="asset-picker-thumb-empty">-</span>}
+            {selected.photo ? <img loading="lazy" decoding="async" src={selected.photo} alt={selected.assetId} className="asset-picker-thumb" /> : <span className="asset-picker-thumb-empty">-</span>}
             <span>{getLabel(selected)}</span>
           </span>
         ) : (
@@ -3743,7 +3743,7 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
                   }}
                   onClick={() => selectAsset(String(asset.id))}
                 >
-                  {asset.photo ? <img src={asset.photo} alt={asset.assetId} className="asset-picker-thumb" /> : <span className="asset-picker-thumb-empty">-</span>}
+                  {asset.photo ? <img loading="lazy" decoding="async" src={asset.photo} alt={asset.assetId} className="asset-picker-thumb" /> : <span className="asset-picker-thumb-empty">-</span>}
                   <span>{getLabel(asset)}</span>
                 </button>
               ))
@@ -3978,7 +3978,7 @@ function ParentAssetPicker({
         {selected ? (
           <span className="asset-picker-selected">
             {selected.photo ? (
-              <img src={selected.photo} alt={selected.assetId} className="asset-picker-thumb" />
+              <img loading="lazy" decoding="async" src={selected.photo} alt={selected.assetId} className="asset-picker-thumb" />
             ) : (
               <span className="asset-picker-thumb-empty">-</span>
             )}
@@ -4015,7 +4015,7 @@ function ParentAssetPicker({
                   onClick={() => selectAsset(asset.assetId)}
                 >
                   {asset.photo ? (
-                    <img src={asset.photo} alt={asset.assetId} className="asset-picker-thumb" />
+                    <img loading="lazy" decoding="async" src={asset.photo} alt={asset.assetId} className="asset-picker-thumb" />
                   ) : (
                     <span className="asset-picker-thumb-empty">-</span>
                   )}
@@ -4107,7 +4107,7 @@ function InventoryItemPicker({
         {selected ? (
           <span className="asset-picker-selected">
             {selected.photo ? (
-              <img src={selected.photo} alt={selected.itemCode} className="asset-picker-thumb" />
+              <img loading="lazy" decoding="async" src={selected.photo} alt={selected.itemCode} className="asset-picker-thumb" />
             ) : (
               <span className="asset-picker-thumb-empty">-</span>
             )}
@@ -4141,7 +4141,7 @@ function InventoryItemPicker({
                   onClick={() => selectItem(String(item.id))}
                 >
                   {item.photo ? (
-                    <img src={item.photo} alt={item.itemCode} className="asset-picker-thumb" />
+                    <img loading="lazy" decoding="async" src={item.photo} alt={item.itemCode} className="asset-picker-thumb" />
                   ) : (
                     <span className="asset-picker-thumb-empty">-</span>
                   )}
@@ -15011,7 +15011,7 @@ export default function App() {
         onClick={() => setPreviewImage(src)}
         title="Open photo"
       >
-        <img src={src} alt={alt} className="table-photo" />
+        <img loading="lazy" decoding="async" src={src} alt={alt} className="table-photo" />
       </button>
     );
   }
@@ -17102,7 +17102,7 @@ export default function App() {
               .map((item) => {
                 const photo = toPrintablePhotoUrl(item.photo || "");
                 const thumb = photo
-                  ? `<img src="${photo}" alt="${escapeHtml(item.assetId)}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" />`
+                  ? `<img loading="lazy" decoding="async" src="${photo}" alt="${escapeHtml(item.assetId)}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" />`
                   : `<span style="display:inline-grid;place-items:center;width:28px;height:28px;border:1px dashed #cfded0;border-radius:6px;color:#6f7286;font-size:11px;">-</span>`;
                 return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">${thumb}<span>${escapeHtml(item.assetId)} (${escapeHtml(item.itemName)})</span></div>`;
               })
@@ -17235,7 +17235,7 @@ export default function App() {
                 .map((cell) => {
                   const text = String(cell || "");
                   if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
-                    return `<td><img src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
+                    return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
                   }
                   if (text.startsWith("<div")) {
                     return `<td>${text}</td>`;
@@ -17296,7 +17296,7 @@ export default function App() {
                 return `<div class="qr-sticker-wrap">
                   <div class="qr-sticker-sn">SN: ${escapeHtml(serial)}</div>
                   <div class="qr-sticker">
-                    <div class="qr-sticker-qr">${qr ? `<img src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
+                    <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
                     <div class="qr-sticker-divider"></div>
                     <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
                   </div>
@@ -17341,7 +17341,7 @@ export default function App() {
             <h1>Eco International School</h1>
             <h2>${escapeHtml(title)}</h2>
           </div>
-          <img class="report-head-logo" src="/eco-logo.png" alt="Eco International School logo" />
+          <img loading="lazy" decoding="async" class="report-head-logo" src="/eco-logo.png" alt="Eco International School logo" />
         </div>
         ${printMetaHtml}
         ${summaryHtml}
@@ -17762,7 +17762,7 @@ export default function App() {
                           onChange={onPublicQrRecordPhotoFile}
                         />
                         {publicQrRecordForm.photo ? (
-                          <img src={publicQrRecordForm.photo} alt="maintenance" className="photo-preview" />
+                          <img loading="lazy" decoding="async" src={publicQrRecordForm.photo} alt="maintenance" className="photo-preview" />
                         ) : null}
                       </label>
                       <div className="field field-wide">
@@ -17802,7 +17802,7 @@ export default function App() {
                       </div>
                       <div className="public-asset-mobile-photo">
                         {photos[0] ? (
-                          <img src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
+                          <img loading="lazy" decoding="async" src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
                         ) : (
                           <div className="photo-placeholder">{t.noPhoto}</div>
                         )}
@@ -17839,8 +17839,7 @@ export default function App() {
                     <div className="row-actions public-asset-photo-row">
                       {photos.length ? (
                         photos.slice(0, MAX_ASSET_PHOTOS).map((photo, idx) => (
-                          <img
-                            key={`public-qr-photo-${asset.assetId}-${idx}`}
+                          <img loading="lazy" decoding="async" key={`public-qr-photo-${asset.assetId}-${idx}`}
                             src={photo}
                             alt={`${asset.assetId} ${idx + 1}`}
                             className="photo-preview"
@@ -17984,8 +17983,7 @@ export default function App() {
       <main className="app-shell login-shell-sunset">
         <section className="app-card login-page login-page-sunset">
           <section className="panel login-panel login-panel-sunset">
-            <img
-              className="login-logo-sunset"
+            <img loading="eager" fetchPriority="high" decoding="async" className="login-logo-sunset"
               src="/eco-logo.png"
               alt="ECO International School"
               onError={(e) => {
@@ -18178,8 +18176,7 @@ export default function App() {
                 aria-label="Go to dashboard"
                 title="Dashboard"
               >
-                <img
-                  src="/eco-logo.png"
+                <img loading="eager" fetchPriority="high" decoding="async" src="/eco-logo.png"
                   alt="Eco International School"
                   className="mobile-brand-logo"
                   onError={(e) => {
@@ -18204,8 +18201,7 @@ export default function App() {
           </div>
 
           <div className="top-right">
-            <img
-              className="eco-header-logo"
+            <img loading="eager" fetchPriority="high" decoding="async" className="eco-header-logo"
               src="/eco-logo.png"
               alt="ECO International School"
               onError={(e) => {
@@ -18485,7 +18481,7 @@ export default function App() {
                               </div>
                               <div className="mobile-notify-stock-item-row">
                                 {meta.itemPhoto ? (
-                                  <img src={meta.itemPhoto} alt={meta.itemName} className="mobile-notify-stock-photo" />
+                                  <img loading="lazy" decoding="async" src={meta.itemPhoto} alt={meta.itemName} className="mobile-notify-stock-photo" />
                                 ) : (
                                   <div className="mobile-notify-stock-photo mobile-notify-stock-photo-empty" aria-hidden={true}>-</div>
                                 )}
@@ -19415,8 +19411,7 @@ export default function App() {
                                       />
                                       <div className="photo-preview-wrap">
                                         {normalizeAssetPhotos(setPackDraft[item.type]).length ? (
-                                          <img
-                                            src={normalizeAssetPhotos(setPackDraft[item.type])[0]}
+                                          <img loading="lazy" decoding="async" src={normalizeAssetPhotos(setPackDraft[item.type])[0]}
                                             alt={`${item.label} preview`}
                                             className="photo-preview"
                                           />
@@ -19461,7 +19456,7 @@ export default function App() {
                                       <div className="asset-photo-gallery">
                                         {normalizeAssetPhotos(setPackDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                           <div key={`setpack-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                            <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                            <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                             <div className="asset-photo-chip-actions">
                                               <button
                                                 className="tab asset-photo-main-btn"
@@ -19743,8 +19738,7 @@ export default function App() {
                                       />
                                       <div className="photo-preview-wrap">
                                         {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length ? (
-                                          <img
-                                            src={normalizeAssetPhotos(laptopAccessoryDraft[item.type])[0]}
+                                          <img loading="lazy" decoding="async" src={normalizeAssetPhotos(laptopAccessoryDraft[item.type])[0]}
                                             alt={`${item.label} preview`}
                                             className="photo-preview"
                                           />
@@ -19789,7 +19783,7 @@ export default function App() {
                                       <div className="asset-photo-gallery">
                                         {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                           <div key={`laptop-accessory-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                            <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                            <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                             <div className="asset-photo-chip-actions">
                                               <button
                                                 className="tab asset-photo-main-btn"
@@ -20063,8 +20057,7 @@ export default function App() {
                                     />
                                     <div className="photo-preview-wrap">
                                       {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
-                                        <img
-                                          src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
+                                        <img loading="lazy" decoding="async" src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
                                           alt={`${item.label} preview`}
                                           className="photo-preview"
                                         />
@@ -20109,7 +20102,7 @@ export default function App() {
                                     <div className="asset-photo-gallery">
                                       {normalizeAssetPhotos(cameraComponentDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                         <div key={`camera-component-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                          <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                          <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                           <div className="asset-photo-chip-actions">
                                             <button
                                               className="tab asset-photo-main-btn"
@@ -20380,8 +20373,7 @@ export default function App() {
                                     />
                                     <div className="photo-preview-wrap">
                                       {normalizeAssetPhotos(projectorComponentDraft[item.type]).length ? (
-                                        <img
-                                          src={normalizeAssetPhotos(projectorComponentDraft[item.type])[0]}
+                                        <img loading="lazy" decoding="async" src={normalizeAssetPhotos(projectorComponentDraft[item.type])[0]}
                                           alt={`${item.label} preview`}
                                           className="photo-preview"
                                         />
@@ -20426,7 +20418,7 @@ export default function App() {
                                     <div className="asset-photo-gallery">
                                       {normalizeAssetPhotos(projectorComponentDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
                                         <div key={`projector-component-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                          <img src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
+                                          <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
                                           <div className="asset-photo-chip-actions">
                                             <button
                                               className="tab asset-photo-main-btn"
@@ -20752,7 +20744,7 @@ export default function App() {
                 <div className="asset-actions">
                   <div className="photo-preview-wrap">
                     {normalizeAssetPhotos(assetForm).length ? (
-                      <img src={normalizeAssetPhotos(assetForm)[0]} alt="preview" className="photo-preview" />
+                      <img loading="lazy" decoding="async" src={normalizeAssetPhotos(assetForm)[0]} alt="preview" className="photo-preview" />
                     ) : (
                       <div className="photo-placeholder">{t.noPhoto}</div>
                     )}
@@ -20785,7 +20777,7 @@ export default function App() {
                   <div className="asset-photo-gallery">
                     {normalizeAssetPhotos(assetForm).slice(1, MAX_ASSET_PHOTOS).map((url, index) => (
                       <div key={`create-photo-${index}`} className="asset-photo-chip">
-                        <img src={url} alt={`asset-${index + 1}`} className="asset-photo-chip-img" />
+                        <img loading="lazy" decoding="async" src={url} alt={`asset-${index + 1}`} className="asset-photo-chip-img" />
                         <div className="asset-photo-chip-actions">
                           <button
                             className="tab asset-photo-main-btn"
@@ -21525,7 +21517,7 @@ export default function App() {
                         >
                           <div className="asset-gallery-photo-wrap">
                             {displayPhoto ? (
-                              <img src={displayPhoto} alt={asset.assetId} className="asset-gallery-photo" />
+                              <img loading="lazy" decoding="async" src={displayPhoto} alt={asset.assetId} className="asset-gallery-photo" />
                             ) : (
                               <div className="asset-gallery-photo-empty">{t.noPhoto}</div>
                             )}
@@ -22275,7 +22267,7 @@ export default function App() {
                   <div className="asset-actions">
                     <div className="photo-preview-wrap">
                       {normalizeAssetPhotos(assetEditForm).length ? (
-                        <img src={normalizeAssetPhotos(assetEditForm)[0]} alt="edit preview" className="photo-preview" />
+                        <img loading="lazy" decoding="async" src={normalizeAssetPhotos(assetEditForm)[0]} alt="edit preview" className="photo-preview" />
                       ) : (
                         <div className="photo-placeholder">{t.noPhoto}</div>
                       )}
@@ -22308,7 +22300,7 @@ export default function App() {
                     <div className="asset-photo-gallery">
                       {normalizeAssetPhotos(assetEditForm).slice(1, MAX_ASSET_PHOTOS).map((url, index) => (
                         <div key={`edit-photo-${index}`} className="asset-photo-chip">
-                          <img src={url} alt={`asset-edit-${index + 1}`} className="asset-photo-chip-img" />
+                          <img loading="lazy" decoding="async" src={url} alt={`asset-edit-${index + 1}`} className="asset-photo-chip-img" />
                           <div className="asset-photo-chip-actions">
                             <button
                               className="tab asset-photo-main-btn"
@@ -22516,7 +22508,7 @@ export default function App() {
                       <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
                         {maintenanceRecordForm.photos.map((url, index) => (
                           <div key={`maintenance-record-photo-${index}`} className="asset-photo-chip">
-                            <img src={url} alt={`maintenance-${index + 1}`} className="asset-photo-chip-img" />
+                            <img loading="lazy" decoding="async" src={url} alt={`maintenance-${index + 1}`} className="asset-photo-chip-img" />
                             <div className="asset-photo-chip-actions">
                               <button
                                 type="button"
@@ -23259,7 +23251,7 @@ export default function App() {
                               </div>
                               <div className="inventory-pending-mobile-item-row">
                                 {itemPhoto ? (
-                                  <img src={itemPhoto} alt={itemName} className="inventory-pending-mobile-photo" />
+                                  <img loading="lazy" decoding="async" src={itemPhoto} alt={itemName} className="inventory-pending-mobile-photo" />
                                 ) : (
                                   <div className="inventory-pending-mobile-photo inventory-pending-mobile-photo-empty" aria-hidden={true}>-</div>
                                 )}
@@ -23417,7 +23409,7 @@ export default function App() {
                               </div>
                               <div className="maintenance-stockout-mobile-item-row">
                                 {itemPhoto ? (
-                                  <img src={itemPhoto} alt={inventoryDisplayName(row.itemName, lang)} className="maintenance-stockout-mobile-photo" />
+                                  <img loading="lazy" decoding="async" src={itemPhoto} alt={inventoryDisplayName(row.itemName, lang)} className="maintenance-stockout-mobile-photo" />
                                 ) : (
                                   <div className="maintenance-stockout-mobile-photo maintenance-stockout-mobile-photo-empty" aria-hidden={true}>-</div>
                                 )}
@@ -23509,8 +23501,7 @@ export default function App() {
                                     onClick={() => openInventoryQuickOut(item)}
                                   >
                                     {item.photo ? (
-                                      <img
-                                        src={item.photo}
+                                      <img loading="lazy" decoding="async" src={item.photo}
                                         alt={inventoryDisplayName(item.itemName, lang)}
                                         className="inventory-daily-gallery-photo"
                                       />
@@ -24882,7 +24873,7 @@ export default function App() {
                   <div className="detail-value transfer-selected-value">
                     <span className="asset-picker-selected">
                       {transferAsset.photo ? (
-                        <img src={transferAsset.photo} alt={transferAsset.assetId} className="asset-picker-thumb" />
+                        <img loading="lazy" decoding="async" src={transferAsset.photo} alt={transferAsset.assetId} className="asset-picker-thumb" />
                       ) : (
                         <span className="asset-picker-thumb-empty">-</span>
                       )}
@@ -24911,7 +24902,7 @@ export default function App() {
                 <div className="transfer-preview">
                   <div className="transfer-preview-photo">
                     {transferAsset?.photo ? (
-                      <img src={transferAsset.photo} alt={transferAsset.assetId} className="asset-picker-thumb" />
+                      <img loading="lazy" decoding="async" src={transferAsset.photo} alt={transferAsset.assetId} className="asset-picker-thumb" />
                     ) : (
                       <span className="asset-picker-thumb-empty">-</span>
                     )}
@@ -25392,7 +25383,7 @@ export default function App() {
                                 <strong>{row.condition}</strong>
                                 <span>{formatDate(row.date)} | {row.teacher} | {row.severity} | {row.status}</span>
                               </div>
-                              {row.photo ? <img src={row.photo} alt="pool incident" className="pool-remark-photo" /> : null}
+                              {row.photo ? <img loading="lazy" decoding="async" src={row.photo} alt="pool incident" className="pool-remark-photo" /> : null}
                             </article>
                           ))
                         ) : (
@@ -25482,7 +25473,7 @@ export default function App() {
                       <span>Photo Preview</span>
                       <div className="photo-preview-wrap">
                         {poolComplaintForm.photo ? (
-                          <img src={poolComplaintForm.photo} alt="incident preview" className="photo-preview" />
+                          <img loading="lazy" decoding="async" src={poolComplaintForm.photo} alt="incident preview" className="photo-preview" />
                         ) : (
                           <div className="photo-placeholder">{t.noPhoto}</div>
                         )}
@@ -25520,7 +25511,7 @@ export default function App() {
                               <td>{row.condition}</td>
                               <td>{row.severity}</td>
                               <td>{row.status}</td>
-                              <td>{row.photo ? <img src={row.photo} alt="incident" className="table-photo" /> : "-"}</td>
+                              <td>{row.photo ? <img loading="lazy" decoding="async" src={row.photo} alt="incident" className="table-photo" /> : "-"}</td>
                               <td>{row.note || "-"}</td>
                             </tr>
                           ))
@@ -25933,7 +25924,7 @@ export default function App() {
                       >
                         <div className="maintenance-record-gallery-thumb">
                           {isRenderablePhotoSource(asset.photo || "") ? (
-                            <img src={asset.photo || ""} alt={asset.assetId} className="maintenance-record-gallery-thumb-img" />
+                            <img loading="lazy" decoding="async" src={asset.photo || ""} alt={asset.assetId} className="maintenance-record-gallery-thumb-img" />
                           ) : (
                             <span className="photo-empty">{t.noPhoto}</span>
                           )}
@@ -26100,7 +26091,7 @@ export default function App() {
                   <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
                     {maintenanceRecordForm.photos.map((url, index) => (
                       <div key={`maintenance-record-main-photo-${index}`} className="asset-photo-chip">
-                        <img src={url} alt={`maintenance-main-${index + 1}`} className="asset-photo-chip-img" />
+                        <img loading="lazy" decoding="async" src={url} alt={`maintenance-main-${index + 1}`} className="asset-photo-chip-img" />
                         <div className="asset-photo-chip-actions">
                           <button
                             type="button"
@@ -26472,7 +26463,7 @@ export default function App() {
                                     onChange={onMaintenanceEditPhotoFile}
                                   />
                                   {maintenanceEditForm.photo ? (
-                                    <img src={maintenanceEditForm.photo} alt="maintenance" className="table-photo" />
+                                    <img loading="lazy" decoding="async" src={maintenanceEditForm.photo} alt="maintenance" className="table-photo" />
                                   ) : (
                                     "-"
                                   )}
@@ -26859,7 +26850,7 @@ export default function App() {
                                     onChange={onVerificationEditPhotoFile}
                                   />
                                   {verificationEditForm.photo ? (
-                                    <img src={verificationEditForm.photo} alt="verification" className="table-photo" />
+                                    <img loading="lazy" decoding="async" src={verificationEditForm.photo} alt="verification" className="table-photo" />
                                   ) : (
                                     "-"
                                   )}
@@ -27786,7 +27777,7 @@ export default function App() {
                     <article className="qr-label-card" key={`qr-label-${row.assetDbId}`}>
                       <div className="qr-label-image-wrap">
                         {qrCodeMap[row.assetId] ? (
-                          <img src={qrCodeMap[row.assetId]} alt={`QR ${row.assetId}`} className="qr-label-image" />
+                          <img loading="lazy" decoding="async" src={qrCodeMap[row.assetId]} alt={`QR ${row.assetId}`} className="qr-label-image" />
                         ) : (
                           <div className="qr-label-image qr-label-placeholder">Generating QR...</div>
                         )}
@@ -29481,8 +29472,7 @@ export default function App() {
                 <>
                   <div className="inventory-quickout-hero-icon-wrap" aria-hidden={true}>
                     {inventoryQuickOutSelectedItem.photo ? (
-                      <img
-                        src={inventoryQuickOutSelectedItem.photo}
+                      <img loading="lazy" decoding="async" src={inventoryQuickOutSelectedItem.photo}
                         alt={inventoryDisplayName(inventoryQuickOutSelectedItem.itemName, lang)}
                         className="inventory-quickout-hero-photo"
                       />
@@ -29612,7 +29602,7 @@ export default function App() {
                         onChange={onInventoryQuickOutPhotoFile}
                       />
                       {inventoryQuickOutModal.photo ? (
-                        <img src={inventoryQuickOutModal.photo} alt="stock out proof" className="inventory-quickout-photo-preview" />
+                        <img loading="lazy" decoding="async" src={inventoryQuickOutModal.photo} alt="stock out proof" className="inventory-quickout-photo-preview" />
                       ) : (
                         <small className="tiny">{lang === "km" ? "ត្រូវភ្ជាប់រូបថតមុនពេល Save" : "Photo is required before saving."}</small>
                       )}
@@ -29820,7 +29810,7 @@ export default function App() {
                   <div className="transfer-preview">
                     <div className="transfer-preview-photo">
                       {scheduleQuickSelectedAsset?.photo ? (
-                        <img src={scheduleQuickSelectedAsset.photo} alt={scheduleQuickSelectedAsset.assetId} className="asset-picker-thumb" />
+                        <img loading="lazy" decoding="async" src={scheduleQuickSelectedAsset.photo} alt={scheduleQuickSelectedAsset.assetId} className="asset-picker-thumb" />
                       ) : (
                         <span className="asset-picker-thumb-empty">-</span>
                       )}
@@ -30436,7 +30426,7 @@ export default function App() {
                 <button className="tab" onClick={() => setPreviewImage(null)}>{t.close}</button>
               </div>
               <div className="image-preview-wrap">
-                <img src={previewImage} alt="asset preview" className="image-preview" />
+                <img loading="lazy" decoding="async" src={previewImage} alt="asset preview" className="image-preview" />
               </div>
             </section>
           </div>

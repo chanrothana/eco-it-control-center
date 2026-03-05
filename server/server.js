@@ -569,9 +569,12 @@ async function fileExists(filePath) {
   }
 }
 
-async function sendStaticFile(req, res, filePath) {
+async function sendStaticFile(req, res, filePath, cacheableOverride = null) {
   const raw = await fs.readFile(filePath);
-  const isCacheableAsset = filePath.includes(`${path.sep}static${path.sep}`);
+  const isCacheableAsset =
+    typeof cacheableOverride === "boolean"
+      ? cacheableOverride
+      : filePath.includes(`${path.sep}static${path.sep}`);
   res.writeHead(200, {
     "Content-Type": contentTypeFor(filePath),
     "Cache-Control": isCacheableAsset ? "public, max-age=31536000, immutable" : "no-cache",
@@ -598,7 +601,7 @@ async function maybeServeFrontend(req, res, pathname) {
     if (!uploadResolved.startsWith(uploadRoot) || !(await fileExists(uploadResolved))) {
       return false;
     }
-    return sendStaticFile(req, res, uploadResolved);
+    return sendStaticFile(req, res, uploadResolved, true);
   }
 
   const normalized = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, "");
