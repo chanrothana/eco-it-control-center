@@ -1172,7 +1172,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   ],
 };
 
-const USER_REQUIRED_TYPES = ["PC", "TAB", "SPK", "DCM"];
+const USER_REQUIRED_TYPES = ["PC", "LAP", "TAB", "SPK", "DCM"];
 const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
@@ -1443,7 +1443,7 @@ const TEXT = {
     deleteLocationConfirm: "Delete this location?",
     photoLimit: "Photo is too large. Please use file under 15MB.",
     user: "User",
-    userRequired: "User is required for Computer, iPad/Tablet, Speaker, and Digital Camera.",
+    userRequired: "User is required for Computer, Laptop, iPad/Tablet, Speaker, and Digital Camera.",
     selectLocation: "Select location",
     locationRequired: "Please select location.",
     noLocationsConfigured: "No locations configured for this campus. Please add in Setup tab.",
@@ -1676,7 +1676,7 @@ const TEXT = {
     deleteLocationConfirm: "តើលុបទីតាំងនេះមែនទេ?",
     photoLimit: "រូបភាពធំពេក។ សូមប្រើឯកសារតិចជាង 15MB។",
     user: "អ្នកប្រើប្រាស់",
-    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើសម្រាប់ Computer, iPad/Tablet, Speaker និង Digital Camera។",
+    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើសម្រាប់ Computer, Laptop, iPad/Tablet, Speaker និង Digital Camera។",
     selectLocation: "ជ្រើសទីតាំង",
     locationRequired: "សូមជ្រើសរើសទីតាំង។",
     noLocationsConfigured: "Campus នេះមិនទាន់កំណត់ទីតាំងទេ។ សូមបន្ថែមនៅផ្ទាំង Setup។",
@@ -4532,6 +4532,7 @@ export default function App() {
   const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
   const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const transferDateWrapRef = useRef<HTMLLabelElement | null>(null);
+  const scheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
   const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
@@ -5815,6 +5816,10 @@ export default function App() {
   const [maintenanceDashboardModal, setMaintenanceDashboardModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "done">(null);
   const [latestMaintenanceDetailRowId, setLatestMaintenanceDetailRowId] = useState<string | null>(null);
   const [quickCountModal, setQuickCountModal] = useState<null | { title: string; assets: Asset[] }>(null);
+  const [inventoryAdminMonth, setInventoryAdminMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [inventoryAdminCampusFilter, setInventoryAdminCampusFilter] = useState("ALL");
+  const [inventoryAdminItemQuery, setInventoryAdminItemQuery] = useState("");
+  const [inventoryAdminDetailModal, setInventoryAdminDetailModal] = useState<null | { title: string; rows: InventoryTxn[] }>(null);
   const [updateNotesOpen, setUpdateNotesOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     assetId: "",
@@ -5824,6 +5829,12 @@ export default function App() {
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
   });
+  const [scheduleDatePickerOpen, setScheduleDatePickerOpen] = useState(false);
+  const [scheduleDateMonth, setScheduleDateMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [scheduleSelectedDate, setScheduleSelectedDate] = useState(() => toYmd(new Date()));
   const [scheduleQuickCreateOpen, setScheduleQuickCreateOpen] = useState(false);
   const [scheduleQuickForm, setScheduleQuickForm] = useState({
     assetId: "",
@@ -6022,6 +6033,21 @@ export default function App() {
       document.removeEventListener("touchstart", handleOutsideTap);
     };
   }, [transferDatePickerOpen]);
+  useEffect(() => {
+    if (!scheduleDatePickerOpen) return;
+    const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (scheduleDateWrapRef.current?.contains(target)) return;
+      setScheduleDatePickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideTap);
+    document.addEventListener("touchstart", handleOutsideTap);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTap);
+      document.removeEventListener("touchstart", handleOutsideTap);
+    };
+  }, [scheduleDatePickerOpen]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
     setTab("inventory");
@@ -6842,6 +6868,140 @@ export default function App() {
         .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0)),
     [inventoryVisibleTxns]
   );
+  const inventoryAdminMonthOptions = useMemo(() => {
+    const set = new Set<string>();
+    set.add(toYmd(new Date()).slice(0, 7));
+    for (const tx of inventoryVisibleTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      const month = String(tx.date || "").slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(month)) set.add(month);
+    }
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [inventoryVisibleTxns]);
+  const inventoryAdminCampusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const tx of inventoryVisibleTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim();
+      if (campus) set.add(campus);
+    }
+    return Array.from(set).sort((a, b) => inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b)));
+  }, [inventoryVisibleTxns, inventoryCampusLabel]);
+  const inventoryAdminScopedOutTxns = useMemo(() => {
+    const itemQuery = String(inventoryAdminItemQuery || "").trim().toLowerCase();
+    return inventoryVisibleTxns.filter((tx) => {
+      if (!isInventoryTxnUsageOut(tx.type)) return false;
+      if (inventoryAdminCampusFilter !== "ALL") {
+        const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim();
+        if (campus !== inventoryAdminCampusFilter) return false;
+      }
+      if (itemQuery) {
+        const text = `${tx.itemCode || ""} ${tx.itemName || ""}`.toLowerCase();
+        if (!text.includes(itemQuery)) return false;
+      }
+      return true;
+    });
+  }, [inventoryVisibleTxns, inventoryAdminCampusFilter, inventoryAdminItemQuery]);
+  const inventoryAdminFilteredOutTxns = useMemo(
+    () =>
+      inventoryAdminScopedOutTxns
+        .filter((tx) => String(tx.date || "").slice(0, 7) === inventoryAdminMonth)
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0)),
+    [inventoryAdminScopedOutTxns, inventoryAdminMonth]
+  );
+  useEffect(() => {
+    if (!inventoryAdminMonthOptions.length) return;
+    if (!inventoryAdminMonthOptions.includes(inventoryAdminMonth)) {
+      setInventoryAdminMonth(inventoryAdminMonthOptions[0]);
+    }
+  }, [inventoryAdminMonthOptions, inventoryAdminMonth]);
+  useEffect(() => {
+    if (inventoryAdminCampusFilter === "ALL") return;
+    if (!inventoryAdminCampusOptions.includes(inventoryAdminCampusFilter)) {
+      setInventoryAdminCampusFilter("ALL");
+    }
+  }, [inventoryAdminCampusFilter, inventoryAdminCampusOptions]);
+  const inventoryAdminControlSummary = useMemo(() => {
+    const today = toYmd(new Date());
+    const yesterday = shiftYmd(today, -1);
+    let todayOut = 0;
+    let yesterdayOut = 0;
+    let monthOut = 0;
+    let pendingOutRequests = 0;
+    const monthCampusMap = new Map<string, number>();
+    const monthItemMap = new Map<string, { itemCode: string; itemName: string; qty: number }>();
+
+    for (const tx of inventoryAdminScopedOutTxns) {
+      const date = String(tx.date || "");
+      if (date === today && isInventoryTxnStockEffective(tx)) todayOut += Number(tx.qty || 0);
+      if (date === yesterday && isInventoryTxnStockEffective(tx)) yesterdayOut += Number(tx.qty || 0);
+    }
+
+    for (const tx of inventoryAdminFilteredOutTxns) {
+      if (tx.approvalStatus === "PENDING") pendingOutRequests += 1;
+      if (!isInventoryTxnStockEffective(tx)) continue;
+      const qty = Number(tx.qty || 0);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      monthOut += qty;
+
+      const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "-");
+      monthCampusMap.set(campus, (monthCampusMap.get(campus) || 0) + qty);
+
+      const itemCode = String(tx.itemCode || "-");
+      const itemName = String(tx.itemName || "-");
+      const itemKey = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
+      const row = monthItemMap.get(itemKey) || { itemCode, itemName, qty: 0 };
+      row.qty += qty;
+      monthItemMap.set(itemKey, row);
+    }
+
+    const monthCampusRows = Array.from(monthCampusMap.entries())
+      .map(([campus, qty]) => ({ campus, qty }))
+      .sort((a, b) => b.qty - a.qty || a.campus.localeCompare(b.campus));
+    const topMonthItems = Array.from(monthItemMap.values())
+      .sort((a, b) => b.qty - a.qty || a.itemCode.localeCompare(b.itemCode))
+      .slice(0, 6);
+
+    return {
+      month: inventoryAdminMonth,
+      todayOut,
+      yesterdayOut,
+      monthOut,
+      pendingOutRequests,
+      monthCampusRows,
+      topMonthItems,
+    };
+  }, [inventoryAdminScopedOutTxns, inventoryAdminFilteredOutTxns, inventoryAdminMonth]);
+  const inventoryAdminOutDayMatrix = useMemo(() => {
+    const baseDate = new Date(`${inventoryAdminMonth}-01T00:00:00`);
+    if (Number.isNaN(baseDate.getTime())) {
+      return { days: [] as number[], rows: [] as Array<{ itemCode: string; itemName: string; dayQty: Record<number, number>; total: number }> };
+    }
+    const daysInMonth = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const itemMap = new Map<string, { itemCode: string; itemName: string; dayQty: Record<number, number>; total: number }>();
+
+    for (const tx of inventoryAdminFilteredOutTxns) {
+      if (!isInventoryTxnStockEffective(tx)) continue;
+      const date = String(tx.date || "");
+      const day = Number(date.slice(8, 10));
+      if (!Number.isFinite(day) || day < 1 || day > daysInMonth) continue;
+      const qty = Number(tx.qty || 0);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      const itemCode = String(tx.itemCode || "-");
+      const itemName = String(tx.itemName || "-");
+      const key = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
+      if (!itemMap.has(key)) {
+        itemMap.set(key, { itemCode, itemName, dayQty: {}, total: 0 });
+      }
+      const row = itemMap.get(key)!;
+      row.dayQty[day] = (row.dayQty[day] || 0) + qty;
+      row.total += qty;
+    }
+
+    const rows = Array.from(itemMap.values()).sort((a, b) => b.total - a.total || a.itemCode.localeCompare(b.itemCode));
+    return { days, rows };
+  }, [inventoryAdminFilteredOutTxns, inventoryAdminMonth]);
   const inventoryVisibleItemById = useMemo(() => {
     const map = new Map<number, InventoryItem>();
     for (const row of inventoryVisibleItems) map.set(Number(row.id), row);
@@ -7007,6 +7167,59 @@ export default function App() {
       };
     });
   }, [maintenanceRecordDateMonth, getHolidayEvent]);
+  const scheduleDisplayDate = useMemo(() => {
+    const ymd = normalizeYmdInput(scheduleForm.date || "");
+    if (!ymd) return "";
+    if (lang === "km") return formatKhmerDateYmd(ymd);
+    const date = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return scheduleForm.date;
+    return date.toLocaleDateString("en-US", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }, [scheduleForm.date, lang]);
+  const scheduleDateMonthLabel = useMemo(
+    () =>
+      lang === "km"
+        ? formatKhmerMonthYear(scheduleDateMonth)
+        : scheduleDateMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          }),
+    [scheduleDateMonth, lang]
+  );
+  const scheduleDateCanGoPrevMonth = useMemo(() => {
+    if (isSuperAdmin) return true;
+    const now = new Date();
+    const minMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return scheduleDateMonth.getTime() > minMonth.getTime();
+  }, [scheduleDateMonth, isSuperAdmin]);
+  const scheduleDateGridDays = useMemo(() => {
+    const year = scheduleDateMonth.getFullYear();
+    const month = scheduleDateMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay();
+    const endOffset = 6 - lastDay.getDay();
+    const totalCells = startOffset + lastDay.getDate() + endOffset;
+    const startDate = new Date(year, month, 1 - startOffset);
+    return Array.from({ length: totalCells }, (_, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const ymd = toYmd(d);
+      const holiday = getHolidayEvent(ymd);
+      return {
+        ymd,
+        day: d.getDate(),
+        weekday: d.getDay(),
+        inMonth: d.getMonth() === month,
+        hasItems: false,
+        holidayName: holiday.name,
+        holidayType: holiday.type,
+      };
+    });
+  }, [scheduleDateMonth, getHolidayEvent]);
   const transferDisplayDate = useMemo(() => {
     const ymd = normalizeYmdInput(transferForm.date || "");
     if (!ymd) return "";
@@ -11666,6 +11879,21 @@ export default function App() {
       return nextOpen;
     });
   }
+  function openScheduleDatePicker() {
+    if (scheduleForm.repeatMode === "MONTHLY_WEEKDAY") return;
+    const today = toYmd(new Date());
+    const pickedDate = normalizeYmdInput(scheduleForm.date || today) || today;
+    const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
+    const base = new Date(`${baseDate}T00:00:00`);
+    setScheduleDatePickerOpen((prev) => {
+      const nextOpen = !prev;
+      if (nextOpen) {
+        setScheduleDateMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+        setScheduleSelectedDate(baseDate);
+      }
+      return nextOpen;
+    });
+  }
   function openInventoryQuickOut(item: InventoryItem) {
     const recorder = authUser?.displayName || authUser?.username || "";
     const today = toYmd(new Date());
@@ -11891,6 +12119,73 @@ export default function App() {
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) {
+      alert(lang === "km" ? "សូមអនុញ្ញាត pop-up សិន" : "Unable to open print window. Please allow pop-ups.");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  function printInventoryCampusDailyMatrix() {
+    const rows = inventoryMonthlyCampusOutDiagrams.rows || [];
+    const days = inventoryCampusDailyMatrix.days || [];
+    if (!rows.length || !days.length) {
+      alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់បោះពុម្ព" : "No campus daily stock-out data to print.");
+      return;
+    }
+    const title =
+      lang === "km"
+        ? "របាយការណ៍ចេញស្តុកប្រចាំថ្ងៃតាមសាខា (ថ្ងៃទី 1 ដល់ចុងខែ)"
+        : "Daily Stock Out by Campus (Day 1 to Month End)";
+    const generatedAt = formatDate(new Date().toISOString());
+    const headHtml = days.map((day) => `<th>${day}</th>`).join("");
+    const bodyHtml = rows
+      .map((campusRow) => {
+        const cells = campusRow.dayRows
+          .map((dayRow) => `<td>${Number(dayRow.total || 0) || ""}</td>`)
+          .join("");
+        return `<tr>
+          <td><strong>${escapeHtml(inventoryCampusLabel(campusRow.campus))}</strong></td>
+          ${cells}
+        </tr>`;
+      })
+      .join("");
+    const html = `
+      <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 14px; color: #1c2e4f; }
+          h1 { margin: 0 0 8px; font-size: 22px; }
+          p.meta { margin: 0 0 10px; color: #4e6287; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          th, td { border: 1px solid #c9d8ed; padding: 5px 4px; font-size: 11px; text-align: center; }
+          th { background: #edf4ff; font-weight: 700; }
+          td:first-child, th:first-child { text-align: left; width: 220px; }
+          @page { size: A4 landscape; margin: 7mm; }
+          @media print { body { margin: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="meta">Generated: ${escapeHtml(generatedAt)} | Month: ${escapeHtml(inventoryMonthlyCampusOutDiagrams.monthLabel)}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>${escapeHtml(lang === "km" ? "សាខា" : "Campus")}</th>
+              ${headHtml}
+            </tr>
+          </thead>
+          <tbody>${bodyHtml}</tbody>
         </table>
       </body>
       </html>
@@ -15454,6 +15749,10 @@ export default function App() {
     if (!scheduleQuickForm.assetId || hasSelectedAsset) return;
     setScheduleQuickForm((f) => ({ ...f, assetId: "" }));
   }, [scheduleQuickForm.assetId, scheduleQuickFilteredAssets]);
+  useEffect(() => {
+    if (scheduleForm.repeatMode !== "MONTHLY_WEEKDAY") return;
+    setScheduleDatePickerOpen(false);
+  }, [scheduleForm.repeatMode]);
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     // Prefer current in-memory/server assets, use fallback only to fill missing fields.
@@ -16730,6 +17029,10 @@ export default function App() {
   function openQuickCountAssetsModal(title: string, rows: Asset[]) {
     const sorted = [...rows].sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")));
     setQuickCountModal({ title, assets: sorted });
+  }
+  function openInventoryAdminDetailModal(title: string, rows: InventoryTxn[]) {
+    const sorted = [...rows].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0));
+    setInventoryAdminDetailModal({ title, rows: sorted });
   }
   function itemTypeIcon(category: string, typeCode: string, labelOrName = "") {
     const code = String(typeCode || "").trim().toUpperCase();
@@ -23560,6 +23863,219 @@ export default function App() {
                       : "Phone-friendly daily Stock-Out record for maintenance staff."}
                   </p>
                 </div>
+                {!maintenanceQuickMode && isAdmin ? (
+                  <article className="panel inventory-admin-control-panel">
+                    <div className="panel-row">
+                      <h3 className="section-title">{lang === "km" ? "ផ្ទាំងគ្រប់គ្រងរហ័ស (Admin)" : "Admin Control Snapshot"}</h3>
+                      <span className="tiny">
+                        {new Date(`${inventoryAdminControlSummary.month}-01T00:00:00`).toLocaleString(undefined, {
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                    <div className="form-grid inventory-admin-control-filters">
+                      <label className="field">
+                        <span>{lang === "km" ? "ខែ" : "Month"}</span>
+                        <select
+                          className="input"
+                          value={inventoryAdminMonth}
+                          onChange={(e) => setInventoryAdminMonth(e.target.value)}
+                        >
+                          {inventoryAdminMonthOptions.map((month) => (
+                            <option key={`inventory-admin-month-${month}`} value={month}>
+                              {new Date(`${month}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" })}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>{t.campus}</span>
+                        <select
+                          className="input"
+                          value={inventoryAdminCampusFilter}
+                          onChange={(e) => setInventoryAdminCampusFilter(e.target.value)}
+                        >
+                          <option value="ALL">{t.allCampuses}</option>
+                          {inventoryAdminCampusOptions.map((campus) => (
+                            <option key={`inventory-admin-campus-${campus}`} value={campus}>
+                              {inventoryCampusLabel(campus)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>{lang === "km" ? "ស្វែងរក Item" : "Search Item"}</span>
+                        <input
+                          className="input"
+                          value={inventoryAdminItemQuery}
+                          onChange={(e) => setInventoryAdminItemQuery(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកកូដ ឬឈ្មោះ" : "Search code or item name"}
+                        />
+                      </label>
+                    </div>
+                    <div className="stats-grid inventory-admin-control-stats">
+                      <button
+                        type="button"
+                        className="stat-card stat-card-button"
+                        onClick={() =>
+                          openInventoryAdminDetailModal(
+                            lang === "km" ? "ចេញស្តុក ថ្ងៃនេះ" : "Today Out Transactions",
+                            inventoryAdminScopedOutTxns.filter((tx) => String(tx.date || "") === toYmd(new Date()) && isInventoryTxnStockEffective(tx))
+                          )
+                        }
+                      >
+                        <div className="stat-label">{lang === "km" ? "ចេញស្តុក ថ្ងៃនេះ" : "Today Out"}</div>
+                        <div className="stat-value">{inventoryAdminControlSummary.todayOut}</div>
+                      </button>
+                      <button
+                        type="button"
+                        className="stat-card stat-card-button"
+                        onClick={() =>
+                          openInventoryAdminDetailModal(
+                            lang === "km" ? "ចេញស្តុក ម្សិលមិញ" : "Yesterday Out Transactions",
+                            inventoryAdminScopedOutTxns.filter((tx) => String(tx.date || "") === shiftYmd(toYmd(new Date()), -1) && isInventoryTxnStockEffective(tx))
+                          )
+                        }
+                      >
+                        <div className="stat-label">{lang === "km" ? "ចេញស្តុក ម្សិលមិញ" : "Yesterday Out"}</div>
+                        <div className="stat-value">{inventoryAdminControlSummary.yesterdayOut}</div>
+                      </button>
+                      <button
+                        type="button"
+                        className="stat-card stat-card-button"
+                        onClick={() =>
+                          openInventoryAdminDetailModal(
+                            lang === "km" ? "ចេញស្តុក ខែនេះ" : "Selected Month Out Transactions",
+                            inventoryAdminFilteredOutTxns.filter((tx) => isInventoryTxnStockEffective(tx))
+                          )
+                        }
+                      >
+                        <div className="stat-label">{lang === "km" ? "ចេញស្តុក ខែនេះ" : "This Month Out"}</div>
+                        <div className="stat-value">{inventoryAdminControlSummary.monthOut}</div>
+                      </button>
+                      <button
+                        type="button"
+                        className="stat-card stat-card-button stat-card-overdue"
+                        onClick={() =>
+                          openInventoryAdminDetailModal(
+                            lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approval Requests",
+                            inventoryAdminFilteredOutTxns.filter((tx) => tx.approvalStatus === "PENDING")
+                          )
+                        }
+                      >
+                        <div className="stat-label">{lang === "km" ? "រង់ចាំអនុម័ត" : "Pending Approvals"}</div>
+                        <div className="stat-value">{inventoryAdminControlSummary.pendingOutRequests}</div>
+                      </button>
+                    </div>
+                    <div className="inventory-admin-control-grid">
+                      <div className="inventory-admin-control-card">
+                        <strong>{lang === "km" ? "ចេញស្តុកតាម Campus (ខែនេះ)" : "Monthly Out by Campus"}</strong>
+                        {inventoryAdminControlSummary.monthCampusRows.length ? (
+                          <div className="inventory-admin-control-list">
+                            {inventoryAdminControlSummary.monthCampusRows.slice(0, 6).map((row) => (
+                              <button
+                                key={`inventory-admin-campus-${row.campus}`}
+                                type="button"
+                                className="inventory-admin-control-row inventory-admin-control-row-btn"
+                                onClick={() =>
+                                  openInventoryAdminDetailModal(
+                                    `${inventoryCampusLabel(row.campus)} - ${lang === "km" ? "ចេញស្តុក" : "Out Transactions"}`,
+                                    inventoryAdminFilteredOutTxns.filter(
+                                      (tx) =>
+                                        isInventoryTxnStockEffective(tx) &&
+                                        (inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim()) === row.campus
+                                    )
+                                  )
+                                }
+                              >
+                                <span>{inventoryCampusLabel(row.campus)}</span>
+                                <strong>{row.qty}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យ" : "No data"}</div>
+                        )}
+                      </div>
+                      <div className="inventory-admin-control-card">
+                        <strong>{lang === "km" ? "Top Item ចេញស្តុក (ខែនេះ)" : "Top Out Items This Month"}</strong>
+                        {inventoryAdminControlSummary.topMonthItems.length ? (
+                          <div className="inventory-admin-control-list">
+                            {inventoryAdminControlSummary.topMonthItems.map((row) => (
+                              <button
+                                key={`inventory-admin-item-${row.itemCode}-${row.itemName}`}
+                                type="button"
+                                className="inventory-admin-control-row inventory-admin-control-row-btn"
+                                onClick={() =>
+                                  openInventoryAdminDetailModal(
+                                    `${row.itemCode} - ${inventoryDisplayName(row.itemName, lang)}`,
+                                    inventoryAdminFilteredOutTxns.filter(
+                                      (tx) =>
+                                        isInventoryTxnStockEffective(tx) &&
+                                        String(tx.itemCode || "").trim().toUpperCase() === row.itemCode.toUpperCase() &&
+                                        String(tx.itemName || "").trim().toLowerCase() === row.itemName.toLowerCase()
+                                    )
+                                  )
+                                }
+                              >
+                                <span>{row.itemCode} - {inventoryDisplayName(row.itemName, lang)}</span>
+                                <strong>{row.qty}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យ" : "No data"}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="inventory-admin-matrix-wrap">
+                      <div className="panel-row">
+                        <strong>{lang === "km" ? "តារាងចេញស្តុកប្រចាំខែ (Item x Day)" : "Monthly OUT Matrix (Item x Day)"}</strong>
+                        <span className="tiny">
+                          {lang === "km" ? "ជួរដេក=Item | ជួរឈរ=ថ្ងៃ 1-31" : "Rows = Item | Columns = Day 1-31"}
+                        </span>
+                      </div>
+                      <div className="table-wrap inventory-admin-matrix-scroll">
+                        <table className="inventory-admin-matrix">
+                          <thead>
+                            <tr>
+                              <th>{lang === "km" ? "Item" : "Item"}</th>
+                              {inventoryAdminOutDayMatrix.days.map((day) => (
+                                <th key={`inventory-admin-matrix-head-${day}`}>{day}</th>
+                              ))}
+                              <th>{lang === "km" ? "សរុប" : "Total"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {inventoryAdminOutDayMatrix.rows.length ? (
+                              inventoryAdminOutDayMatrix.rows.map((row) => (
+                                <tr key={`inventory-admin-matrix-row-${row.itemCode}-${row.itemName}`}>
+                                  <th className="inventory-admin-matrix-item-cell">
+                                    <div className="inventory-admin-matrix-item">
+                                      <strong>{row.itemCode}</strong>
+                                      <span>{inventoryDisplayName(row.itemName, lang)}</span>
+                                    </div>
+                                  </th>
+                                  {inventoryAdminOutDayMatrix.days.map((day) => (
+                                    <td key={`inventory-admin-matrix-cell-${row.itemCode}-${day}`}>{row.dayQty[day] || ""}</td>
+                                  ))}
+                                  <td><strong>{row.total}</strong></td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={Math.max(3, inventoryAdminOutDayMatrix.days.length + 2)}>
+                                  {lang === "km" ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់តម្រងបច្ចុប្បន្ន" : "No stock-out data for current filters."}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </article>
+                ) : null}
                 {inventoryPendingApprovalRows.length ? (
                   <article className="panel" id="inventory-pending-approval-board" style={{ marginBottom: 8 }}>
                     <div className="panel-row">
@@ -23976,7 +24492,12 @@ export default function App() {
                   <div className="inventory-campus-monthly-compare-wrap">
                     <div className="panel-row">
                       <h4 className="section-title">{lang === "km" ? "ដ្យាក្រាមចេញស្តុកប្រចាំថ្ងៃតាមសាខា (ថ្ងៃទី 1 ដល់ចុងខែ)" : "Daily Stock Out by Campus (Day 1 to Month End)"}</h4>
-                      <span className="tiny">{inventoryMonthlyCampusOutDiagrams.monthLabel}</span>
+                      <div className="row-actions">
+                        <span className="tiny">{inventoryMonthlyCampusOutDiagrams.monthLabel}</span>
+                        <button type="button" className="btn-primary btn-small" onClick={printInventoryCampusDailyMatrix}>
+                          {lang === "km" ? "បោះពុម្ព/PDF" : "Print / PDF"}
+                        </button>
+                      </div>
                     </div>
                     <div className="inventory-campus-row-matrix-wrap">
                       <div className="inventory-campus-row-matrix-scroll">
@@ -24707,16 +25228,74 @@ export default function App() {
                   }}
                 />
               </label>
-              <label className="field">
+              <label className="field quickout-date-field" ref={scheduleDateWrapRef}>
                 <span>Next Maintenance Date</span>
-                <input
-                  type="date"
-                  className="input"
-                  min={todayYmd}
-                  value={scheduleForm.date}
-                  onChange={(e) => setScheduleForm((f) => ({ ...f, date: e.target.value }))}
-                  disabled={scheduleForm.repeatMode === "MONTHLY_WEEKDAY"}
-                />
+                <div className="quickout-date-input-wrap">
+                  <input
+                    className="input"
+                    type="text"
+                    readOnly
+                    value={scheduleDisplayDate}
+                    placeholder="dd/mm/yyyy"
+                  />
+                  <button
+                    type="button"
+                    className="quickout-date-icon-btn"
+                    onClick={openScheduleDatePicker}
+                    disabled={scheduleForm.repeatMode === "MONTHLY_WEEKDAY"}
+                    aria-label="Open Schedule Calendar"
+                  >
+                    <Calendar size={18} />
+                  </button>
+                </div>
+                {scheduleDatePickerOpen ? (
+                  <div className="quickout-eco-inline-panel">
+                    <div className="quickout-eco-head">
+                      <strong className="quickout-eco-title">{scheduleDateMonthLabel}</strong>
+                      <div className="quickout-eco-nav">
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Previous month"
+                          onClick={() => setScheduleDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                          disabled={!scheduleDateCanGoPrevMonth}
+                        >
+                          {"<"}
+                        </button>
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Next month"
+                          onClick={() => setScheduleDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                        >
+                          {">"}
+                        </button>
+                      </div>
+                    </div>
+                    <CalendarGridTemplate
+                      weekdayLabels={calendarWeekdayLabels}
+                      days={scheduleDateGridDays}
+                      selectedDate={scheduleSelectedDate}
+                      todayYmd={todayYmd}
+                      onSelectDate={(ymd) => {
+                        setScheduleSelectedDate(ymd);
+                        setScheduleForm((f) => ({ ...f, date: ymd }));
+                        setScheduleDatePickerOpen(false);
+                      }}
+                      isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
+                      gridClassName="quickout-eco-grid"
+                      renderHolidayTag={(d) =>
+                        d.holidayName ? (
+                          <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                            {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                          </em>
+                        ) : null
+                      }
+                      headKeyPrefix="schedule-date-head"
+                      dayKeyPrefix="schedule-date-day"
+                    />
+                  </div>
+                ) : null}
               </label>
               <label className="field">
                 <span>Repeat</span>
@@ -30537,6 +31116,56 @@ export default function App() {
             </section>
           </div>
         )}
+
+        {inventoryAdminDetailModal ? (
+          <div className="modal-backdrop" onClick={() => setInventoryAdminDetailModal(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{inventoryAdminDetailModal.title}</h2>
+                <button className="tab" onClick={() => setInventoryAdminDetailModal(null)}>{t.close}</button>
+              </div>
+              <div className="tiny" style={{ marginBottom: 8 }}>
+                {inventoryAdminDetailModal.rows.length} {lang === "km" ? "កំណត់ត្រា" : "records"}
+              </div>
+              <div className="table-wrap modal-sticky-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.date}</th>
+                      <th>Code</th>
+                      <th>{t.name}</th>
+                      <th>{t.campus}</th>
+                      <th>Qty</th>
+                      <th>{t.by}</th>
+                      <th>{lang === "km" ? "ស្ថានភាព" : "Approval"}</th>
+                      <th>{lang === "km" ? "មូលហេតុ" : "Reason"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryAdminDetailModal.rows.length ? (
+                      inventoryAdminDetailModal.rows.map((row) => (
+                        <tr key={`inventory-admin-detail-row-${row.id}`}>
+                          <td>{formatDate(row.date || "-")}</td>
+                          <td><strong>{row.itemCode || "-"}</strong></td>
+                          <td>{inventoryDisplayName(row.itemName || "-", lang)}</td>
+                          <td>{inventoryCampusLabel(inventoryRecordCampusCode(row.campus) || row.campus)}</td>
+                          <td>{Number(row.qty || 0)}</td>
+                          <td>{row.by || row.approvalRequestedBy || "-"}</td>
+                          <td>{inventoryTxnApprovalLabel(row, lang) || (lang === "km" ? "បានអនុម័ត" : "Approved")}</td>
+                          <td>{row.note || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No records found."}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {latestMaintenanceDetailRow ? (
           <div className="modal-backdrop" onClick={() => setLatestMaintenanceDetailRowId(null)}>

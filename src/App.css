@@ -3375,6 +3375,121 @@ label.backup-action-btn {
   overflow-wrap: anywhere;
 }
 
+.inventory-admin-control-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.inventory-admin-control-filters {
+  align-items: end;
+}
+
+.inventory-admin-control-stats {
+  margin-bottom: 0;
+}
+
+.inventory-admin-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.inventory-admin-control-card {
+  border: 1px solid #dbe6f6;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-admin-control-list {
+  display: grid;
+  gap: 6px;
+}
+
+.inventory-admin-control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  border-bottom: 1px dashed #dbe6f6;
+  padding-bottom: 4px;
+}
+
+.inventory-admin-control-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.inventory-admin-control-row-btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.inventory-admin-control-row-btn:hover {
+  background: #f8fbff;
+}
+
+.inventory-admin-matrix-wrap {
+  border: 1px solid #dbe6f6;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-admin-matrix-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.inventory-admin-matrix {
+  border-collapse: separate;
+  border-spacing: 4px;
+  min-width: 980px;
+}
+
+.inventory-admin-matrix th,
+.inventory-admin-matrix td {
+  border-radius: 8px;
+  text-align: center;
+  background: #f8fbff;
+  padding: 6px 6px;
+  min-width: 28px;
+}
+
+.inventory-admin-matrix thead th {
+  background: #ecf3ff;
+  color: #3a5687;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-admin-matrix th.inventory-admin-matrix-item-cell {
+  text-align: left;
+  min-width: 200px;
+  max-width: 280px;
+  background: #f6f9ff;
+}
+
+.inventory-admin-matrix-item {
+  display: grid;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.inventory-admin-matrix-item span {
+  color: #47608f;
+  font-size: 12px;
+}
+
 .inventory-pending-mobile-list {
   display: grid;
   gap: 10px;
