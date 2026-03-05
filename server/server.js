@@ -151,9 +151,9 @@ const TYPE_LABELS = {
   CHR: "Chair",
 };
 const CATEGORY_CODE = {
-  IT: "IT",
-  SAFETY: "SF",
-  FACILITY: "FC",
+  IT: "COM",
+  SAFETY: "EE",
+  FACILITY: "FFE",
 };
 const SHARED_LOCATION_KEYWORDS = [
   "teacher office",
@@ -459,6 +459,15 @@ function initStorageSync() {
     if (!fsSync.existsSync(DB_PATH)) {
       const initial = normalizeImportedDb({});
       fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
+    } else {
+      try {
+        const raw = fsSync.readFileSync(DB_PATH, "utf8");
+        const normalized = normalizeImportedDb(JSON.parse(raw));
+        fsSync.writeFileSync(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
+      } catch {
+        const initial = normalizeImportedDb({});
+        fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
+      }
     }
     return;
   }
@@ -495,6 +504,9 @@ function initStorageSync() {
     sqliteCurrent = normalizeImportedDb(best.db);
     console.log(`Recovered SQLite data from ${best.label}`);
   }
+
+  // Persist normalized/migrated data shape (including Asset ID format migration).
+  replaceSqliteDataSync(sqliteCurrent);
 
   // Keep JSON in sync with SQLite as emergency mirror/fallback.
   try {
@@ -1090,6 +1102,162 @@ function normalizePoolComplaints(input) {
     }));
 }
 
+function assetCategoryCode(category) {
+  const normalized = normalizeCategoryInput(category);
+  if (normalized === "IT") return "COM";
+  if (normalized === "SAFETY") return "EE";
+  if (normalized === "FACILITY") return "FFE";
+  return "OTA";
+}
+
+function assetIdCampusCodeFromCampus(campusName) {
+  const normalizedCampus = normalizeCampusInput(campusName);
+  const code = toUpper(campusCode(normalizedCampus));
+  const majorMatch = code.match(/^C(\d+)(?:\.\d+)?$/);
+  if (majorMatch) return `ECO${majorMatch[1]}`;
+  return "ECOX";
+}
+
+function buildAssetIdValue(campus, category, type, seq) {
+  const campusPart = assetIdCampusCodeFromCampus(campus);
+  const categoryPart = assetCategoryCode(category);
+  const typePart = toUpper(type) || "UNK";
+  const seqPart = pad(seq, 3);
+  return `${campusPart}-${categoryPart}-${typePart}-${seqPart}`;
+}
+
+function parseAssetSeqFromId(assetId) {
+  const match = toText(assetId).match(/-(\d{1,6})$/);
+  return Number((match && match[1]) || 0);
+}
+function convertLegacyAssetIdToCurrent(rawAssetId) {
+  const raw = toUpper(rawAssetId);
+  const match = raw.match(/^C(\d+)(?:\.\d+)?-(IT|SF|FC|COM|EE|FFE|OTA)-([A-Z0-9]+)-(\d{1,6})$/);
+  if (!match) return "";
+  const campusMajor = Number(match[1] || 0);
+  if (!campusMajor) return "";
+  const legacyCategory = match[2];
+  const type = match[3];
+  const seq = Number(match[4] || 0);
+  const categoryCode =
+    legacyCategory === "IT"
+      ? "COM"
+      : legacyCategory === "SF"
+        ? "EE"
+        : legacyCategory === "FC"
+          ? "FFE"
+          : legacyCategory;
+  return `ECO${campusMajor}-${categoryCode}-${type}-${pad(seq, 3)}`;
+}
+
+function legacyAssetCategoryCode(category) {
+  const normalized = normalizeCategoryInput(category);
+  if (normalized === "SAFETY") return "SF";
+  if (normalized === "FACILITY") return "FC";
+  return "IT";
+}
+
+function migrateAssetIdsAndLinkedReferences(assetsInput, ticketsInput, notificationsInput) {
+  const assets = Array.isArray(assetsInput)
+    ? assetsInput
+        .filter((asset) => asset && typeof asset === "object")
+        .map((asset) => ({ ...asset }))
+    : [];
+  const tickets = Array.isArray(ticketsInput)
+    ? ticketsInput
+        .filter((ticket) => ticket && typeof ticket === "object")
+        .map((ticket) => ({ ...ticket }))
+    : [];
+  const notifications = Array.isArray(notificationsInput)
+    ? notificationsInput
+        .filter((row) => row && typeof row === "object")
+        .map((row) => ({ ...row }))
+    : [];
+
+  const groups = new Map();
+  for (const asset of assets) {
+    const groupKey = `${assetIdCampusCodeFromCampus(asset.campus)}::${assetCategoryCode(asset.category)}::${toUpper(asset.type)}`;
+    if (!groups.has(groupKey)) groups.set(groupKey, []);
+    groups.get(groupKey).push(asset);
+  }
+
+  const oldToNew = new Map();
+  for (const rows of groups.values()) {
+    rows.sort((a, b) => {
+      const aSeq = Math.max(Number(a.seq) || 0, parseAssetSeqFromId(a.assetId));
+      const bSeq = Math.max(Number(b.seq) || 0, parseAssetSeqFromId(b.assetId));
+      if (aSeq !== bSeq) return aSeq - bSeq;
+      const aCreated = Date.parse(toText(a.created) || "") || 0;
+      const bCreated = Date.parse(toText(b.created) || "") || 0;
+      if (aCreated !== bCreated) return aCreated - bCreated;
+      const aId = Number(a.id) || 0;
+      const bId = Number(b.id) || 0;
+      if (aId !== bId) return aId - bId;
+      return toText(a.assetId).localeCompare(toText(b.assetId));
+    });
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const asset = rows[i];
+      const nextSeq = i + 1;
+      const nextAssetId = buildAssetIdValue(asset.campus, asset.category, asset.type, nextSeq);
+      const oldAssetId = toText(asset.assetId);
+      const oldSeq = Math.max(Number(asset.seq) || 0, parseAssetSeqFromId(oldAssetId) || 0, 1);
+      const legacyAlias = `${campusCode(asset.campus)}-${legacyAssetCategoryCode(asset.category)}-${toUpper(asset.type)}-${pad(oldSeq, 4)}`;
+      const aliases = [oldAssetId, legacyAlias];
+      for (const alias of aliases) {
+        if (!alias || alias === nextAssetId) continue;
+        oldToNew.set(toUpper(alias), nextAssetId);
+      }
+      asset.seq = nextSeq;
+      asset.assetId = nextAssetId;
+    }
+  }
+
+  const knownAssetIds = new Set(assets.map((asset) => toUpper(asset.assetId)).filter(Boolean));
+
+  for (const asset of assets) {
+    const parent = toUpper(asset.parentAssetId);
+    if (parent && oldToNew.has(parent)) {
+      asset.parentAssetId = oldToNew.get(parent);
+      continue;
+    }
+    if (parent) {
+      const converted = convertLegacyAssetIdToCurrent(parent);
+      if (converted && knownAssetIds.has(toUpper(converted))) {
+        asset.parentAssetId = converted;
+      }
+    }
+  }
+  for (const ticket of tickets) {
+    const assetId = toUpper(ticket.assetId);
+    if (assetId && oldToNew.has(assetId)) {
+      ticket.assetId = oldToNew.get(assetId);
+      continue;
+    }
+    if (assetId) {
+      const converted = convertLegacyAssetIdToCurrent(assetId);
+      if (converted && knownAssetIds.has(toUpper(converted))) {
+        ticket.assetId = converted;
+      }
+    }
+  }
+  for (const row of notifications) {
+    const assetId = toUpper(row.assetId);
+    if (assetId && oldToNew.has(assetId)) {
+      row.assetId = oldToNew.get(assetId);
+      continue;
+    }
+    if (assetId) {
+      const converted = convertLegacyAssetIdToCurrent(assetId);
+      if (converted && knownAssetIds.has(toUpper(converted))) {
+        row.assetId = converted;
+      }
+    }
+  }
+
+  return { assets, tickets, notifications };
+}
+
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
   const settings =
@@ -1116,7 +1284,7 @@ function normalizeImportedDb(input) {
   const poolChemicalRecords = normalizePoolChemicalRecords(settings.poolChemicalRecords);
   const poolOperationRecords = normalizePoolOperationRecords(settings.poolOperationRecords);
   const poolComplaints = normalizePoolComplaints(settings.poolComplaints);
-  const normalizedAssets = Array.isArray(parsed.assets)
+  const normalizedAssetsRaw = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
         const cloned = { ...asset };
@@ -1127,14 +1295,19 @@ function normalizeImportedDb(input) {
         return cloned;
       })
     : [];
+  const migrated = migrateAssetIdsAndLinkedReferences(
+    normalizedAssetsRaw,
+    Array.isArray(parsed.tickets) ? parsed.tickets : [],
+    normalizeNotificationEntries(parsed.notifications)
+  );
   return {
-    assets: normalizedAssets,
-    tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
+    assets: migrated.assets,
+    tickets: migrated.tickets,
     locations: Array.isArray(parsed.locations) ? parsed.locations : [],
     users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
     auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
     authSessions: Array.isArray(parsed.authSessions) ? parsed.authSessions : [],
-    notifications: normalizeNotificationEntries(parsed.notifications),
+    notifications: migrated.notifications,
     settings: {
       campusNames,
       staffUsers,
@@ -1725,6 +1898,14 @@ function campusCode(name) {
   const hit = Object.entries(CAMPUS_MAP).find(([, full]) => full === name);
   return hit ? hit[0] : "CX";
 }
+function assetIdCampusCode(name) {
+  const code = toUpper(campusCode(name));
+  if (/^C\d+(\.\d+)?$/.test(code)) {
+    const major = Number((code.match(/^C(\d+)/) || [])[1] || 0);
+    if (major > 0) return `ECO${major}`;
+  }
+  return "ECOX";
+}
 
 function normalizeSerialKey(value) {
   return toUpper(value);
@@ -2094,11 +2275,24 @@ async function restoreSessionsFromDb() {
 }
 
 function nextAssetSeq(assets, campus, category, type) {
+  const campusGroup = assetIdCampusCode(campus);
+  const normalizedType = toUpper(type);
   const same = assets.filter(
-    (a) => a.campus === campus && a.category === category && a.type === type
+    (a) =>
+      assetIdCampusCode(a.campus) === campusGroup &&
+      toText(a.category) === toText(category) &&
+      toUpper(a.type) === normalizedType
   );
   if (!same.length) return 1;
-  return Math.max(...same.map((a) => Number(a.seq) || 0)) + 1;
+  const maxSeq = Math.max(
+    ...same.map((a) => {
+      const seq = Number(a.seq) || 0;
+      const idMatch = toText(a.assetId).match(/-(\d{1,6})$/);
+      const idSeq = Number((idMatch && idMatch[1]) || 0);
+      return Math.max(seq, idSeq);
+    })
+  );
+  return maxSeq + 1;
 }
 
 function nextTicketCode(tickets, campus) {
@@ -3740,7 +3934,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
       const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
-      const assetId = `${campusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || cleaned.category}-${cleaned.type}-${pad(seq, 4)}`;
+      const assetId = `${assetIdCampusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || "OTA"}-${cleaned.type}-${pad(seq, 3)}`;
       const custodyStatus = normalizeCustodyStatus(cleaned.custodyStatus || (cleaned.assignedTo ? "ASSIGNED" : "IN_STOCK"));
       const finalCustodyHistory =
         initialCustodyHistory.length || !cleaned.assignedTo

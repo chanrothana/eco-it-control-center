@@ -1055,6 +1055,28 @@ const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "BORROW_IN", label: "Borrow Return (In)" },
   { value: "BORROW_CONSUME", label: "Borrow Consume" },
 ] as const;
+const ITEM_SETUP_ASSET_CATEGORY_OPTIONS = [
+  { value: "COM", label: "Computer, Server & Related Equipment" },
+  { value: "EE", label: "Equipment, Electrical Device & Tools" },
+  { value: "FFE", label: "Furniture, Fixture and Equipment" },
+  { value: "OTA", label: "Other Fixed Assets" },
+] as const;
+const ITEM_SETUP_DEFAULT_ASSET_CATEGORY_BY_TYPE_CATEGORY: Record<string, string> = {
+  IT: "COM",
+  SAFETY: "EE",
+  FACILITY: "FFE",
+};
+function defaultItemSetupAssetCategory(category: string) {
+  return ITEM_SETUP_DEFAULT_ASSET_CATEGORY_BY_TYPE_CATEGORY[String(category || "").trim().toUpperCase()] || "OTA";
+}
+function itemSetupAssetCategoryLabel(code: string) {
+  const normalized = String(code || "").trim().toUpperCase();
+  return (
+    ITEM_SETUP_ASSET_CATEGORY_OPTIONS.find((opt) => opt.value === normalized)?.label ||
+    ITEM_SETUP_ASSET_CATEGORY_OPTIONS.find((opt) => opt.value === "OTA")?.label ||
+    "Other Fixed Assets (OTA)"
+  );
+}
 const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
 const INVENTORY_MASTER_ITEMS = [
@@ -1328,6 +1350,8 @@ const TEXT = {
     assetGallery: "Gallery Asset",
     category: "Category",
     typeCode: "Type Code",
+    assetCategory: "Asset Category",
+    assetTypeCode: "Asset Type Code",
     pcType: "PC Type",
     selectPcType: "Select PC Type",
     pcTypeRequired: "Please select PC Type.",
@@ -1556,6 +1580,8 @@ const TEXT = {
     assetGallery: "វិចិត្រសាលទ្រព្យសម្បត្តិ",
     category: "ប្រភេទ",
     typeCode: "កូដប្រភេទ",
+    assetCategory: "ប្រភេទទ្រព្យសម្បត្តិ",
+    assetTypeCode: "កូដប្រភេទទ្រព្យ",
     pcType: "ប្រភេទកុំព្យូទ័រ",
     selectPcType: "ជ្រើសប្រភេទកុំព្យូទ័រ",
     pcTypeRequired: "សូមជ្រើសប្រភេទកុំព្យូទ័រ។",
@@ -2704,9 +2730,17 @@ function getTermRange(year: number, term: "Term 1" | "Term 2" | "Term 3") {
 }
 
 function categoryCode(category: string) {
-  if (category === "SAFETY") return "SF";
-  if (category === "FACILITY") return "FC";
-  return "IT";
+  if (category === "IT") return "COM";
+  if (category === "SAFETY") return "EE";
+  if (category === "FACILITY") return "FFE";
+  return "OTA";
+}
+function assetIdCampusCode(campus: string) {
+  const raw = String(CAMPUS_CODE[campus] || campus || "").trim().toUpperCase();
+  if (/^ECO\d+$/.test(raw)) return raw;
+  const match = raw.match(/^C(\d+)(?:\.\d+)?$/);
+  if (match) return `ECO${match[1]}`;
+  return "ECOX";
 }
 function inventoryCategoryCode(category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL") {
   if (category === "CLEAN_TOOL") return "CT";
@@ -2926,6 +2960,13 @@ function isSharedLocation(location: string) {
 
 function pad4(n: number) {
   return String(n).padStart(4, "0");
+}
+function padAssetSeq(n: number) {
+  return String(Math.max(0, Number(n) || 0)).padStart(3, "0");
+}
+function buildAssetId(campus: string, category: string, type: string, seq: number) {
+  const normalizedType = String(type || "").trim().toUpperCase() || "UNK";
+  return `${assetIdCampusCode(campus)}-${categoryCode(category)}-${normalizedType}-${padAssetSeq(seq)}`;
 }
 
 function toYmd(value: Date) {
@@ -3186,11 +3227,24 @@ function escapeHtml(input: string) {
 }
 
 function calcNextSeq(list: Asset[], campus: string, category: string, type: string) {
+  const campusGroup = assetIdCampusCode(campus);
+  const normalizedType = String(type || "").trim().toUpperCase();
   const same = list.filter(
-    (a) => a.campus === campus && a.category === category && a.type === type
+    (a) =>
+      assetIdCampusCode(a.campus) === campusGroup &&
+      a.category === category &&
+      String(a.type || "").trim().toUpperCase() === normalizedType
   );
   if (!same.length) return 1;
-  return Math.max(...same.map((a) => Number(a.seq) || 0)) + 1;
+  const maxSeq = Math.max(
+    ...same.map((a) => {
+      const seq = Number(a.seq) || 0;
+      const idMatch = String(a.assetId || "").match(/-(\d{1,6})$/);
+      const idSeq = Number(idMatch?.[1] || 0);
+      return Math.max(seq, idSeq);
+    })
+  );
+  return maxSeq + 1;
 }
 
 function filterAssets(
@@ -4968,6 +5022,13 @@ export default function App() {
     }
     return defaults;
   });
+  const [itemAssetCategories, setItemAssetCategories] = useState<Record<string, string>>(() => {
+    const defaults: Record<string, string> = {};
+    for (const [category, items] of Object.entries(TYPE_OPTIONS)) {
+      for (const item of items) defaults[`${category}:${item.code}`] = defaultItemSetupAssetCategory(category);
+    }
+    return defaults;
+  });
   const [stats, setStats] = useState<DashboardStats>({
     totalAssets: 0,
     itAssets: 0,
@@ -5437,6 +5498,7 @@ export default function App() {
   const [newItemTypeForm, setNewItemTypeForm] = useState({
     category: "IT",
     code: "",
+    assetCategory: "COM",
     name: "",
   });
   const [itemTemplates, setItemTemplates] = useState<ItemTemplate[]>(() => readItemTemplateFallback());
@@ -6165,61 +6227,57 @@ export default function App() {
   const suggestedAssetId = useMemo(() => {
     const type = assetForm.type.toUpperCase();
     const seq = calcNextSeq(assets, assetForm.campus, assetForm.category, type);
-    return `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode(assetForm.category)}-${type}-${pad4(seq)}`;
+    return buildAssetId(assetForm.campus, assetForm.category, type, seq);
   }, [assets, assetForm.campus, assetForm.category, assetForm.type]);
   const setPackSuggestedAssetId = useMemo<Record<SetPackChildType, string>>(() => {
-    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
     const baseMon = calcNextSeq(assets, assetForm.campus, "IT", "MON");
     const baseKbd = calcNextSeq(assets, assetForm.campus, "IT", "KBD");
     const baseMse = calcNextSeq(assets, assetForm.campus, "IT", "MSE");
     const baseUwf = calcNextSeq(assets, assetForm.campus, "IT", "UWF");
     const baseWbc = calcNextSeq(assets, assetForm.campus, "IT", "WBC");
     return {
-      MON: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon)}`,
-      MON2: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon + 1)}`,
-      KBD: `${campusCode}-${categoryCode("IT")}-KBD-${pad4(baseKbd)}`,
-      MSE: `${campusCode}-${categoryCode("IT")}-MSE-${pad4(baseMse)}`,
-      UWF: `${campusCode}-${categoryCode("IT")}-UWF-${pad4(baseUwf)}`,
-      WBC: `${campusCode}-${categoryCode("IT")}-WBC-${pad4(baseWbc)}`,
+      MON: buildAssetId(assetForm.campus, "IT", "MON", baseMon),
+      MON2: buildAssetId(assetForm.campus, "IT", "MON", baseMon + 1),
+      KBD: buildAssetId(assetForm.campus, "IT", "KBD", baseKbd),
+      MSE: buildAssetId(assetForm.campus, "IT", "MSE", baseMse),
+      UWF: buildAssetId(assetForm.campus, "IT", "UWF", baseUwf),
+      WBC: buildAssetId(assetForm.campus, "IT", "WBC", baseWbc),
     };
   }, [assets, assetForm.campus]);
   const laptopAccessorySuggestedAssetId = useMemo<Record<LaptopAccessoryType, string>>(() => {
-    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
     const baseAdp = calcNextSeq(assets, assetForm.campus, "IT", "ADP");
     const baseMse = calcNextSeq(assets, assetForm.campus, "IT", "MSE");
     const baseKbd = calcNextSeq(assets, assetForm.campus, "IT", "KBD");
     const baseMon = calcNextSeq(assets, assetForm.campus, "IT", "MON");
     return {
-      ADP: `${campusCode}-${categoryCode("IT")}-ADP-${pad4(baseAdp)}`,
-      MSE: `${campusCode}-${categoryCode("IT")}-MSE-${pad4(baseMse)}`,
-      KBD: `${campusCode}-${categoryCode("IT")}-KBD-${pad4(baseKbd)}`,
-      MON: `${campusCode}-${categoryCode("IT")}-MON-${pad4(baseMon)}`,
+      ADP: buildAssetId(assetForm.campus, "IT", "ADP", baseAdp),
+      MSE: buildAssetId(assetForm.campus, "IT", "MSE", baseMse),
+      KBD: buildAssetId(assetForm.campus, "IT", "KBD", baseKbd),
+      MON: buildAssetId(assetForm.campus, "IT", "MON", baseMon),
     };
   }, [assets, assetForm.campus]);
   const cameraComponentSuggestedAssetId = useMemo<Record<CameraComponentType, string>>(() => {
-    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
     const baseBat = calcNextSeq(assets, assetForm.campus, "IT", "BAT");
     const baseChb = calcNextSeq(assets, assetForm.campus, "IT", "CHB");
     const baseMcd = calcNextSeq(assets, assetForm.campus, "IT", "MCD");
     const baseBag = calcNextSeq(assets, assetForm.campus, "IT", "BAG");
     return {
-      BAT: `${campusCode}-${categoryCode("IT")}-BAT-${pad4(baseBat)}`,
-      CHB: `${campusCode}-${categoryCode("IT")}-CHB-${pad4(baseChb)}`,
-      MCD: `${campusCode}-${categoryCode("IT")}-MCD-${pad4(baseMcd)}`,
-      BAG: `${campusCode}-${categoryCode("IT")}-BAG-${pad4(baseBag)}`,
+      BAT: buildAssetId(assetForm.campus, "IT", "BAT", baseBat),
+      CHB: buildAssetId(assetForm.campus, "IT", "CHB", baseChb),
+      MCD: buildAssetId(assetForm.campus, "IT", "MCD", baseMcd),
+      BAG: buildAssetId(assetForm.campus, "IT", "BAG", baseBag),
     };
   }, [assets, assetForm.campus]);
   const projectorComponentSuggestedAssetId = useMemo<Record<ProjectorComponentType, string>>(() => {
-    const campusCode = CAMPUS_CODE[assetForm.campus] || "CX";
     const baseProjectorBag = calcNextSeq(assets, assetForm.campus, "IT", "PBG");
     const baseRmt = calcNextSeq(assets, assetForm.campus, "IT", "RMT");
     const baseAdp = calcNextSeq(assets, assetForm.campus, "IT", "ADP");
     const baseHdc = calcNextSeq(assets, assetForm.campus, "IT", "HDC");
     return {
-      PBG: `${campusCode}-${categoryCode("IT")}-PBG-${pad4(baseProjectorBag)}`,
-      RMT: `${campusCode}-${categoryCode("IT")}-RMT-${pad4(baseRmt)}`,
-      ADP: `${campusCode}-${categoryCode("IT")}-ADP-${pad4(baseAdp)}`,
-      HDC: `${campusCode}-${categoryCode("IT")}-HDC-${pad4(baseHdc)}`,
+      PBG: buildAssetId(assetForm.campus, "IT", "PBG", baseProjectorBag),
+      RMT: buildAssetId(assetForm.campus, "IT", "RMT", baseRmt),
+      ADP: buildAssetId(assetForm.campus, "IT", "ADP", baseAdp),
+      HDC: buildAssetId(assetForm.campus, "IT", "HDC", baseHdc),
     };
   }, [assets, assetForm.campus]);
   const parentAssetsForEdit = useMemo(() => {
@@ -7640,15 +7698,23 @@ export default function App() {
   }, [assetForm.category, assetForm.type]);
 
   const itemSetupRows = useMemo(() => {
-    const rows: Array<{ category: string; code: string; key: string }> = [];
+    const rows: Array<{ category: string; code: string; key: string; assetCategory: string }> = [];
     for (const [category, items] of Object.entries(allTypeOptions)) {
-      for (const item of items) rows.push({ category, code: item.code, key: `${category}:${item.code}` });
+      for (const item of items) {
+        const key = `${category}:${item.code}`;
+        rows.push({
+          category,
+          code: item.code,
+          key,
+          assetCategory: String(itemAssetCategories[key] || defaultItemSetupAssetCategory(category)).trim().toUpperCase(),
+        });
+      }
     }
     return rows.sort((a, b) => {
       if (a.category !== b.category) return a.category.localeCompare(b.category);
       return a.code.localeCompare(b.code);
     });
-  }, [allTypeOptions]);
+  }, [allTypeOptions, itemAssetCategories]);
   const setPackChildMeta = useMemo<Array<{ type: SetPackChildType; label: string }>>(
     () => [
       { type: "MON", label: t.includeMonitor },
@@ -8727,7 +8793,7 @@ export default function App() {
           type: assetForm.type.toUpperCase(),
           pcType: isDesktopAsset ? assetForm.pcType.trim() : "",
           seq,
-          assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode(assetForm.category)}-${assetForm.type.toUpperCase()}-${pad4(seq)}`,
+          assetId: buildAssetId(assetForm.campus, assetForm.category, assetForm.type.toUpperCase(), seq),
           name: assetItemName(assetForm.category, assetForm.type.toUpperCase()),
           location: assetForm.location,
           setCode: createSetCode,
@@ -8799,7 +8865,7 @@ export default function App() {
               type: assetType,
               pcType: "",
               seq: childSeq,
-              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${assetType}-${pad4(childSeq)}`,
+              assetId: buildAssetId(assetForm.campus, "IT", assetType, childSeq),
               name: assetItemName("IT", assetType),
               location: assetForm.location,
               setCode: createSetCode,
@@ -8853,7 +8919,7 @@ export default function App() {
               type,
               pcType: "",
               seq: childSeq,
-              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${type}-${pad4(childSeq)}`,
+              assetId: buildAssetId(assetForm.campus, "IT", type, childSeq),
               name: assetItemName("IT", type),
               location: assetForm.location,
               setCode: "",
@@ -8907,7 +8973,7 @@ export default function App() {
               type,
               pcType: "",
               seq: childSeq,
-              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${type}-${pad4(childSeq)}`,
+              assetId: buildAssetId(assetForm.campus, "IT", type, childSeq),
               name: assetItemName("IT", type),
               location: assetForm.location,
               setCode: "",
@@ -8961,7 +9027,7 @@ export default function App() {
               type,
               pcType: "",
               seq: childSeq,
-              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${type}-${pad4(childSeq)}`,
+              assetId: buildAssetId(assetForm.campus, "IT", type, childSeq),
               name: assetItemName("IT", type),
               location: assetForm.location,
               setCode: "",
@@ -9014,7 +9080,7 @@ export default function App() {
               type: REMOTE_TYPE_CODE,
               pcType: "",
               seq: childSeq,
-              assetId: `${CAMPUS_CODE[assetForm.campus] || "CX"}-${categoryCode("IT")}-${REMOTE_TYPE_CODE}-${pad4(childSeq)}`,
+              assetId: buildAssetId(assetForm.campus, "IT", REMOTE_TYPE_CODE, childSeq),
               name: assetItemName("IT", REMOTE_TYPE_CODE),
               location: assetForm.location,
               setCode: "",
@@ -10598,9 +10664,10 @@ export default function App() {
     if (!requireAdminAction()) return;
     const category = newItemTypeForm.category;
     const code = newItemTypeForm.code.trim().toUpperCase();
+    const assetCategory = newItemTypeForm.assetCategory.trim().toUpperCase();
     const name = newItemTypeForm.name.trim();
-    if (!category || !code || !name) {
-      setError("Category, type code, and item name are required.");
+    if (!category || !code || !assetCategory || !name) {
+      setError("Category, type code, asset category, and item name are required.");
       return;
     }
     const exists = (allTypeOptions[category] || []).some((item) => item.code === code);
@@ -10613,7 +10680,8 @@ export default function App() {
       [category]: [...(prev[category] || []), { itemEn: name, itemKm: name, code }],
     }));
     setItemNames((prev) => ({ ...prev, [`${category}:${code}`]: name }));
-    setNewItemTypeForm({ category, code: "", name: "" });
+    setItemAssetCategories((prev) => ({ ...prev, [`${category}:${code}`]: assetCategory }));
+    setNewItemTypeForm({ category, code: "", assetCategory, name: "" });
     setSetupMessage(`Added ${category} type ${code}.`);
     setError("");
   }
@@ -11570,6 +11638,74 @@ export default function App() {
     win.print();
   }
 
+  function printItemNameSetup() {
+    if (!itemSetupRows.length) {
+      alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់បោះពុម្ព" : "No item setup rows to print.");
+      return;
+    }
+    const title = lang === "km" ? "កំណត់ឈ្មោះទំនិញ" : "Item Name Setup";
+    const generatedAt = formatDate(new Date().toISOString());
+    const rowsHtml = itemSetupRows
+      .map((row) => {
+        const assetCategory = String(itemAssetCategories[row.key] || row.assetCategory || "").trim().toUpperCase();
+        const assetCategoryLabel = itemSetupAssetCategoryLabel(assetCategory);
+        const itemName = String(itemNames[row.key] || "").trim();
+        return `<tr>
+          <td>${escapeHtml(row.category)}</td>
+          <td>${escapeHtml(row.code)}</td>
+          <td>${escapeHtml(assetCategoryLabel)}</td>
+          <td>${escapeHtml(assetCategory || "-")}</td>
+          <td>${escapeHtml(itemName || "-")}</td>
+        </tr>`;
+      })
+      .join("");
+    const html = `
+      <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 18px; color: #1c2e4f; }
+          h1 { margin: 0 0 8px; font-size: 24px; }
+          p.meta { margin: 0 0 12px; color: #4e6287; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th, td { border: 1px solid #c9d8ed; padding: 7px 8px; font-size: 12px; text-align: left; }
+          th { background: #edf4ff; text-transform: uppercase; letter-spacing: 0.03em; }
+          .summary { margin: 8px 0 0; color: #3f557e; }
+          @page { size: A4 portrait; margin: 10mm; }
+          @media print { body { margin: 10mm; } }
+        </style>
+      </head>
+      <body>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="meta">Generated: ${escapeHtml(generatedAt)}</p>
+        <p class="summary"><strong>Total Items:</strong> ${itemSetupRows.length}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>${escapeHtml(t.category)}</th>
+              <th>${escapeHtml(t.typeCode)}</th>
+              <th>${escapeHtml(t.assetCategory)}</th>
+              <th>${escapeHtml(t.assetTypeCode)}</th>
+              <th>${escapeHtml(t.itemName)}</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    const win = window.open("", "_blank", "width=1000,height=800");
+    if (!win) {
+      alert(lang === "km" ? "សូមអនុញ្ញាត pop-up សិន" : "Unable to open print window. Please allow pop-ups.");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
   function startInventoryTxnEdit(row: InventoryTxn) {
     if (row.type === "SET" && !isSuperAdmin) {
       setError("Only Super Admin can edit Set Current Stock transactions.");
@@ -12003,7 +12139,7 @@ export default function App() {
           type: payload.type,
           pcType: "",
           seq,
-          assetId: `${CAMPUS_CODE[payload.campus] || "CX"}-${categoryCode(payload.category)}-${payload.type}-${pad4(seq)}`,
+          assetId: buildAssetId(payload.campus, payload.category, payload.type, seq),
           name: assetItemName(payload.category, payload.type),
           location: payload.location,
           setCode: payload.setCode,
@@ -12116,7 +12252,7 @@ export default function App() {
           type: payload.type,
           pcType: "",
           seq,
-          assetId: `${CAMPUS_CODE[payload.campus] || "CX"}-${categoryCode(payload.category)}-${payload.type}-${pad4(seq)}`,
+          assetId: buildAssetId(payload.campus, payload.category, payload.type, seq),
           name: assetItemName(payload.category, payload.type),
           location: payload.location,
           setCode: payload.setCode,
@@ -12229,7 +12365,7 @@ export default function App() {
           type: payload.type,
           pcType: "",
           seq,
-          assetId: `${CAMPUS_CODE[payload.campus] || "CX"}-${categoryCode(payload.category)}-${payload.type}-${pad4(seq)}`,
+          assetId: buildAssetId(payload.campus, payload.category, payload.type, seq),
           name: assetItemName(payload.category, payload.type),
           location: payload.location,
           setCode: payload.setCode,
@@ -22578,7 +22714,7 @@ export default function App() {
                 </label>
                 <label className="field">
                   <span>{t.relatedAsset}</span>
-                  <input className="input" value={ticketForm.assetId} onChange={(e) => setTicketForm((f) => ({ ...f, assetId: e.target.value.toUpperCase() }))} placeholder="C1-IT-PC-0001" />
+                  <input className="input" value={ticketForm.assetId} onChange={(e) => setTicketForm((f) => ({ ...f, assetId: e.target.value.toUpperCase() }))} placeholder="ECO1-COM-PC-001" />
                 </label>
                 <label className="field field-wide">
                   <span>{t.titleLabel}</span>
@@ -28819,7 +28955,11 @@ export default function App() {
                   value={newItemTypeForm.category}
                   disabled={!isAdmin}
                   onChange={(e) =>
-                    setNewItemTypeForm((f) => ({ ...f, category: e.target.value }))
+                    setNewItemTypeForm((f) => ({
+                      ...f,
+                      category: e.target.value,
+                      assetCategory: defaultItemSetupAssetCategory(e.target.value),
+                    }))
                   }
                 >
                   {CATEGORY_OPTIONS.map((cat) => (
@@ -28845,6 +28985,23 @@ export default function App() {
                 />
               </label>
               <label className="field">
+                <span>{t.assetCategory}</span>
+                <select
+                  className="input"
+                  value={newItemTypeForm.assetCategory}
+                  disabled={!isAdmin}
+                  onChange={(e) =>
+                    setNewItemTypeForm((f) => ({ ...f, assetCategory: e.target.value }))
+                  }
+                >
+                  {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
+                    <option key={`asset-category-${opt.value}`} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
                 <span>{t.itemName}</span>
                 <input
                   className="input"
@@ -28859,9 +29016,14 @@ export default function App() {
             </div>
             <div className="asset-actions">
               <div className="tiny">{t.addNewTypeHelp}</div>
-              <button className="btn-primary" disabled={!isAdmin} onClick={addItemType}>
-                {t.addItemType}
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="tab btn-small" onClick={printItemNameSetup}>
+                  {lang === "km" ? "បោះពុម្ព/PDF" : "Print / PDF"}
+                </button>
+                <button className="btn-primary" disabled={!isAdmin} onClick={addItemType}>
+                  {t.addItemType}
+                </button>
+              </div>
             </div>
             <div className="table-wrap">
               <table>
@@ -28869,6 +29031,8 @@ export default function App() {
                   <tr>
                     <th>{t.category}</th>
                     <th>{t.typeCode}</th>
+                    <th>{t.assetCategory}</th>
+                    <th>{t.assetTypeCode}</th>
                     <th>Icon</th>
                     <th>{t.itemName}</th>
                   </tr>
@@ -28878,6 +29042,23 @@ export default function App() {
                     <tr key={row.key}>
                       <td>{row.category}</td>
                       <td><strong>{row.code}</strong></td>
+                      <td>
+                        <select
+                          className="input"
+                          value={(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
+                          onChange={(e) =>
+                            setItemAssetCategories((prev) => ({ ...prev, [row.key]: e.target.value }))
+                          }
+                          disabled={!isAdmin}
+                        >
+                          {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
+                            <option key={`row-asset-category-${row.key}-${opt.value}`} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td><strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong></td>
                       <td>
                         <span className="item-setup-icon" aria-hidden={true}>
                           {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
