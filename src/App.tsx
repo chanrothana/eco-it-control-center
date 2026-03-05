@@ -1143,6 +1143,9 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Camera Bag", itemKm: "កាបូបកាមេរ៉ា", code: "BAG" },
     { itemEn: "Slide Projector", itemKm: "ម៉ាស៊ីនបញ្ចាំងស្លាយ", code: "SLP" },
     { itemEn: "Projector Bag", itemKm: "កាបូបម៉ាស៊ីនបញ្ចាំង", code: "PBG" },
+    { itemEn: "Remote Control", itemKm: "រីម៉ូតបញ្ជា", code: "RMT" },
+    { itemEn: "Adapter", itemKm: "អាដាប់ទ័រ", code: "ADP" },
+    { itemEn: "HDMI Cable", itemKm: "ខ្សែ HDMI", code: "HDC" },
     { itemEn: "USB WiFi Adapter", itemKm: "USB វ៉ាយហ្វាយ", code: "UWF" },
     { itemEn: "Webcam", itemKm: "កាមេរ៉ាវិប", code: "WBC" },
     { itemEn: "TV", itemKm: "ទូរទស្សន៍", code: "TV" },
@@ -1190,6 +1193,7 @@ const LAPTOP_TYPE = "LAP";
 const DIGITAL_CAMERA_TYPE = "DCM";
 const PROJECTOR_TYPE = "SLP";
 const PROJECTOR_COMPONENT_TYPES = ["PBG"] as const;
+const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set(["ADP", "RMT", "HDC"]);
 const AIO_PC_TYPE = "AIO";
 const NO_PARENT_LINK_TYPES = new Set([
   DESKTOP_PARENT_TYPE,
@@ -16584,6 +16588,7 @@ export default function App() {
   }, [quickCountLocationFilter, quickCountLocationOptions]);
   const quickCountBaseAssets = useMemo(() => {
     let list = [...assets];
+    list = list.filter((asset) => !DASHBOARD_HIDDEN_COMPONENT_TYPES.has(String(asset.type || "").trim().toUpperCase()));
     if (!quickCountCampusFilter.includes("ALL")) {
       list = list.filter((asset) => quickCountCampusFilter.includes(asset.campus));
     }
