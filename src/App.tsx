@@ -23229,27 +23229,27 @@ export default function App() {
                         <button
                           type="button"
                           className="tab btn-small"
-                          aria-label="Previous day"
+                          aria-label={lang === "km" ? "ថ្ងៃមុន" : "Previous day"}
                           disabled={!maintenanceStockOutPrevDate}
                           onClick={() => {
                             if (!maintenanceStockOutPrevDate) return;
                             setMaintenanceStockOutViewDate(maintenanceStockOutPrevDate);
                           }}
                         >
-                          {lang === "km" ? "ថ្ងៃមុន" : "Previous Day"}
+                          {"<"}
                         </button>
                         <span className="tiny maintenance-quick-date-label">{maintenanceStockOutLabel}</span>
                         <button
                           type="button"
                           className="tab btn-small"
-                          aria-label="Next day"
+                          aria-label={lang === "km" ? "ថ្ងៃបន្ទាប់" : "Next day"}
                           disabled={!maintenanceStockOutCanGoNext}
                           onClick={() => {
                             if (!maintenanceStockOutNextDate) return;
                             setMaintenanceStockOutViewDate(maintenanceStockOutNextDate);
                           }}
                         >
-                          {lang === "km" ? "ថ្ងៃបន្ទាប់" : "Next Day"}
+                          {">"}
                         </button>
                       </div>
                     </div>

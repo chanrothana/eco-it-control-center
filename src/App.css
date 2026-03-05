@@ -1791,6 +1791,10 @@ h2 {
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
+  padding: 6px 10px;
+  border: 1px solid #d7e2f3;
+  border-radius: 999px;
+  background: #f8fbff;
 }
 
 .maintenance-quick-date-label {
@@ -3530,12 +3534,14 @@ label.backup-action-btn {
 
 .inventory-daily-panel-quick .maintenance-stockout-history-panel {
   order: 2;
+  border-color: #d8e3f4;
+  background: #fbfdff;
 }
 
 .maintenance-stockout-mobile-card {
   border: 1px solid #c8d6f0;
   border-radius: 14px;
-  background: #f7faff;
+  background: #ffffff;
   padding: 10px;
   display: grid;
   gap: 8px;
@@ -6568,22 +6574,23 @@ tr.row-maint-maintenance:hover td {
     flex-wrap: nowrap !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 12px;
-    margin: 4px 0 2px;
+    gap: 10px;
+    margin: 6px 0 4px;
   }
 
   .maintenance-quick-date-nav .tab {
-    min-width: 72px;
+    min-width: 44px;
     min-height: 44px;
-    padding-left: 12px;
-    padding-right: 12px;
-    font-size: 14px;
-    line-height: 1.1;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 22px;
+    line-height: 1;
+    border-radius: 12px;
   }
 
   .maintenance-quick-date-nav .maintenance-quick-date-label {
     white-space: nowrap;
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 800;
     line-height: 1.1;
   }
