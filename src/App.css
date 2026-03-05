@@ -2082,6 +2082,11 @@ label.backup-action-btn {
   box-shadow: 0 8px 18px rgba(223, 95, 42, 0.3);
 }
 
+.setpack-bulk-btn {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
 .setpack-component-list {
   display: grid;
   gap: 8px;

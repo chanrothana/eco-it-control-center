@@ -1393,6 +1393,9 @@ const TEXT = {
     includeRemoteControl: "Include Remote",
     includeHdmiCable: "Include HDMI Cable",
     projectorComponentHint: "Slide Projector can include accessories without linking to an existing parent asset.",
+    addMissingComponents: "Add Missing Components",
+    noMissingComponents: "All projector components are already created.",
+    addedComponents: "Added components",
     linkToParentAsset: "Link to parent asset",
     selectParentAsset: "Select Parent Asset",
     componentRole: "Component Role",
@@ -1623,6 +1626,9 @@ const TEXT = {
     includeRemoteControl: "រួមបញ្ចូលរីម៉ូត",
     includeHdmiCable: "រួមបញ្ចូលខ្សែ HDMI",
     projectorComponentHint: "ម៉ាស៊ីនបញ្ចាំង អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
+    addMissingComponents: "បន្ថែមគ្រឿងបន្ថែមដែលខ្វះ",
+    noMissingComponents: "គ្រឿងបន្ថែមម៉ាស៊ីនបញ្ចាំងត្រូវបានបង្កើតគ្រប់ហើយ។",
+    addedComponents: "បានបន្ថែមគ្រឿងបន្ថែម",
     linkToParentAsset: "ភ្ជាប់ទៅ Asset មេ",
     selectParentAsset: "ជ្រើស Asset មេ",
     componentRole: "តួនាទីគ្រឿងបន្ថែម",
@@ -12569,11 +12575,17 @@ export default function App() {
     }
   }
 
-  async function editOrCreateProjectorComponentChild(type: ProjectorComponentType) {
+  async function editOrCreateProjectorComponentChild(
+    type: ProjectorComponentType,
+    options?: { openEditor?: boolean; reloadData?: boolean; manageBusy?: boolean }
+  ) {
+    const openEditor = options?.openEditor ?? true;
+    const reloadData = options?.reloadData ?? true;
+    const manageBusy = options?.manageBusy ?? true;
     if (!editingAsset) return;
     const existing = editingProjectorComponentChildren[type];
     if (existing) {
-      startEditAsset(existing);
+      if (openEditor) startEditAsset(existing);
       return;
     }
     if (!requireAdminAction()) return;
@@ -12603,8 +12615,10 @@ export default function App() {
       status: editingAsset.status || "Active",
     };
 
-    setBusy(true);
-    setError("");
+    if (manageBusy) {
+      setBusy(true);
+      setError("");
+    }
     try {
       let childAsset: Asset | null = null;
       try {
@@ -12672,11 +12686,52 @@ export default function App() {
 
       if (childAsset) {
         appendUiAudit("CREATE", "asset", childAsset.assetId, `${childAsset.campus} | ${childAsset.location}`);
-        startEditAsset(childAsset);
+        if (openEditor) startEditAsset(childAsset);
+      }
+      if (reloadData) await loadData();
+    } catch (err) {
+      if (manageBusy) {
+        setError(err instanceof Error ? err.message : "Failed to create projector component");
+      } else {
+        throw err;
+      }
+    } finally {
+      if (manageBusy) {
+        setBusy(false);
+      }
+    }
+  }
+
+  async function addMissingProjectorComponents() {
+    if (!editingAsset) return;
+    if (!requireAdminAction()) return;
+    if (!(editingAsset.category === "IT" && editingAsset.type === PROJECTOR_TYPE)) return;
+
+    const missingTypes = projectorComponentMeta
+      .map((item) => item.type)
+      .filter((type) => !editingProjectorComponentChildren[type]);
+
+    if (!missingTypes.length) {
+      alert(t.noMissingComponents);
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      let createdCount = 0;
+      for (const type of missingTypes) {
+        await editOrCreateProjectorComponentChild(type, {
+          openEditor: false,
+          reloadData: false,
+          manageBusy: false,
+        });
+        createdCount += 1;
       }
       await loadData();
+      alert(`${t.addedComponents}: ${createdCount}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create projector component");
+      setError(err instanceof Error ? err.message : "Failed to add missing projector components");
     } finally {
       setBusy(false);
     }
@@ -22341,6 +22396,16 @@ export default function App() {
                         <span>{t.projectorComponents}</span>
                         <div className="setpack-toggle-row">
                           <span className="tiny">{t.projectorComponentHint}</span>
+                          <button
+                            className="tab setpack-bulk-btn"
+                            type="button"
+                            disabled={!isAdmin || busy}
+                            onClick={() => {
+                              void addMissingProjectorComponents();
+                            }}
+                          >
+                            {t.addMissingComponents}
+                          </button>
                         </div>
                         <div className="setpack-card-grid">
                           {projectorComponentMeta.map((item) => {
