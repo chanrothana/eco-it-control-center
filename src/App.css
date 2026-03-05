@@ -7741,6 +7741,22 @@ tr.row-maint-maintenance:hover td {
     grid-column: 1 / -1 !important;
   }
 
+  .modal-panel .asset-detail-grid .field-wide .detail-value {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+
+  .modal-panel .asset-detail-grid .field-wide .detail-value .table-photo,
+  .modal-panel .asset-detail-grid .field-wide .detail-value .photo-placeholder {
+    width: min(82vw, 300px);
+    height: min(52vw, 190px);
+    margin: 6px auto 0;
+    border-radius: 12px;
+    object-fit: cover;
+  }
+
   .workspace-main .form-grid.maintenance-record-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -7906,14 +7922,15 @@ tr.row-maint-maintenance:hover td {
   .modal-panel .asset-detail-history-wrap tr {
     display: grid;
     gap: 6px;
-    padding: 10px;
+    padding: 12px;
     border: 1px solid #d9e4f5;
     border-radius: 10px;
     background: #f8fbff;
+    grid-auto-rows: minmax(46px, auto);
   }
 
   .modal-panel .asset-detail-history-wrap tr.asset-detail-empty-row {
-    display: table-row;
+    display: block;
     padding: 0;
     border: 0;
     border-radius: 0;
@@ -7921,35 +7938,52 @@ tr.row-maint-maintenance:hover td {
   }
 
   .modal-panel .asset-detail-history-wrap tr.asset-detail-empty-row td {
-    display: table-cell !important;
-    white-space: normal !important;
-    text-align: center;
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+    text-align: center !important;
+    height: 62px;
     padding: 10px 8px;
   }
 
   .modal-panel .asset-detail-history-wrap td {
-    display: block;
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
     white-space: normal !important;
     word-break: normal !important;
     overflow-wrap: break-word;
-    padding: 2px 0 !important;
+    text-align: center;
+    min-height: 44px;
+    padding: 4px 2px !important;
     border: 0;
     background: transparent;
     font-size: 12px;
-    line-height: 1.35;
+    line-height: 1.3;
+    gap: 4px;
+  }
+
+  .modal-panel .asset-detail-history-wrap tbody tr:not(.asset-detail-empty-row) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 10px;
   }
 
   .modal-panel .asset-detail-history-wrap td::before {
     content: attr(data-label);
     display: block;
-    margin-bottom: 2px;
+    margin-bottom: 0;
     font-size: 11px;
     line-height: 1.25;
     color: #5a7096;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    text-align: left;
   }
 
   .maintenance-history-modal-table th:nth-child(5),
@@ -7997,7 +8031,7 @@ tr.row-maint-maintenance:hover td {
   }
 
   .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Photo"]::before {
-    text-align: left;
+    text-align: center;
   }
 
   .modal-panel .maintenance-history-modal-table tbody tr:not(.asset-detail-empty-row) td[data-label="Photo"] .photo-preview,
@@ -8007,6 +8041,12 @@ tr.row-maint-maintenance:hover td {
     margin: 6px auto 0;
     border-radius: 10px;
     object-fit: cover;
+  }
+
+  .modal-panel .asset-detail-transfer-table tbody tr:not(.asset-detail-empty-row) td[data-label="Reason"],
+  .modal-panel .asset-detail-custody-table tbody tr:not(.asset-detail-empty-row) td[data-label="Note"],
+  .modal-panel .asset-detail-status-table tbody tr:not(.asset-detail-empty-row) td[data-label="Reason"] {
+    grid-column: 1 / -1;
   }
 
   .report-quick-count-result {

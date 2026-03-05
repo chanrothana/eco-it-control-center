@@ -4648,7 +4648,7 @@ export default function App() {
   const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
-  const [inventoryView, setInventoryView] = useState<"items" | "stock" | "balance" | "daily">("items");
+  const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
@@ -4730,6 +4730,16 @@ export default function App() {
           ];
         case "inventory":
           return [
+            {
+              key: "inventory.dashboard",
+              label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
+              active: inventoryView === "dashboard",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setInventoryView("dashboard");
+                  setTab("inventory");
+                }),
+            },
             {
               key: "inventory.items",
               label: lang === "km" ? "កំណត់ទំនិញ" : "Item Setup",
@@ -6972,6 +6982,50 @@ export default function App() {
       topMonthItems,
     };
   }, [inventoryAdminScopedOutTxns, inventoryAdminFilteredOutTxns, inventoryAdminMonth]);
+  const inventoryDashboardSnapshot = useMemo(() => {
+    let totalOnHand = 0;
+    let zeroStockItems = 0;
+    let belowMinUnits = 0;
+    const atRiskRows: Array<{
+      itemCode: string;
+      itemName: string;
+      campus: string;
+      currentStock: number;
+      minStock: number;
+      deficit: number;
+    }> = [];
+
+    for (const row of inventoryBalanceRows) {
+      const current = Number(row.currentStock || 0);
+      const min = Number(row.minStock || 0);
+      totalOnHand += current;
+      if (current <= 0) zeroStockItems += 1;
+      if (current < min) {
+        const deficit = min - current;
+        belowMinUnits += deficit;
+        atRiskRows.push({
+          itemCode: String(row.itemCode || "-"),
+          itemName: String(row.itemName || "-"),
+          campus: String(row.campus || "-"),
+          currentStock: current,
+          minStock: min,
+          deficit,
+        });
+      }
+    }
+
+    atRiskRows.sort((a, b) => b.deficit - a.deficit || a.itemCode.localeCompare(b.itemCode));
+
+    return {
+      totalItems: inventoryBalanceRows.length,
+      lowStockItems: inventoryLowStockRows.length,
+      totalOnHand,
+      zeroStockItems,
+      belowMinUnits,
+      pendingApprovals: inventoryPendingApprovalRows.length,
+      atRiskRows: atRiskRows.slice(0, 6),
+    };
+  }, [inventoryBalanceRows, inventoryLowStockRows, inventoryPendingApprovalRows]);
   const inventoryAdminOutDayMatrix = useMemo(() => {
     const baseDate = new Date(`${inventoryAdminMonth}-01T00:00:00`);
     if (Number.isNaN(baseDate.getTime())) {
@@ -22201,7 +22255,7 @@ export default function App() {
                     {detailAsset.category === "IT" ? (
                       <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
                     ) : null}
-                    {detailAsset.category === "IT" ? (
+                    {detailAsset.category === "IT" && String(detailAsset.parentAssetId || "").trim() ? (
                       <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{detailAsset.parentAssetId || "-"}</div></div>
                     ) : null}
                     {detailAsset.parentAssetId ? (
@@ -22287,7 +22341,7 @@ export default function App() {
                   </div>
 
                   <div className="panel-row" style={{ marginTop: 8 }}>
-                    <h3 className="section-title" style={{ margin: 0 }}>Transfer History</h3>
+                    <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
                     {detailTransferEntries.length > 1 ? (
                       <button
                         type="button"
@@ -22345,14 +22399,14 @@ export default function App() {
                           })
                         ) : (
                           <tr className="asset-detail-empty-row">
-                            <td colSpan={10}>No transfer history yet.</td>
+                            <td colSpan={10}>No transfer location history yet.</td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
 
-                  <h3 className="section-title">Custody History</h3>
+                  <h3 className="section-title">Assigned to History</h3>
                   <div className="table-wrap asset-detail-history-wrap">
                     <table className="asset-detail-custody-table">
                       <thead>
@@ -22381,7 +22435,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr className="asset-detail-empty-row">
-                            <td colSpan={7}>No custody history yet.</td>
+                            <td colSpan={7}>No assigned history yet.</td>
                           </tr>
                         )}
                       </tbody>
@@ -23427,6 +23481,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="tabs">
+                  <button className={`tab ${inventoryView === "dashboard" ? "tab-active" : ""}`} onClick={() => setInventoryView("dashboard")}>Dashboard</button>
                   <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
                   <button className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
                     {lang === "km" ? "កត់ត្រាចេញស្តុកប្រចាំថ្ងៃ" : "Daily Stock Out"}
@@ -23853,26 +23908,60 @@ export default function App() {
               </section>
             )}
 
-            {inventoryView === "daily" && (
+            {(inventoryView === "daily" || inventoryView === "dashboard") && (
               <section className={`panel inventory-daily-panel ${maintenanceQuickMode ? "inventory-daily-panel-quick" : ""}`}>
                 <div className="inventory-daily-head">
-                  <h2>{lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)"}</h2>
+                  <h2>
+                    {inventoryView === "dashboard"
+                      ? (lang === "km" ? "ផ្ទាំងសង្ខេបស្តុក" : "Inventory Dashboard")
+                      : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)")}
+                  </h2>
                   <p className="tiny">
-                    {lang === "km"
-                      ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
-                      : "Phone-friendly daily Stock-Out record for maintenance staff."}
+                    {inventoryView === "dashboard"
+                      ? (lang === "km"
+                        ? "មើលស្ថានភាពស្តុក សំណើរ និងនិន្នាការប្រើប្រាស់សម្រាប់គ្រប់គ្រង។"
+                        : "Main inventory snapshot for stock health, approvals, and usage trends.")
+                      : (lang === "km"
+                        ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
+                        : "Phone-friendly daily Stock-Out record for maintenance staff.")}
                   </p>
                 </div>
-                {!maintenanceQuickMode && isAdmin ? (
+                {inventoryView === "dashboard" && !maintenanceQuickMode && isAdmin ? (
                   <article className="panel inventory-admin-control-panel">
                     <div className="panel-row">
-                      <h3 className="section-title">{lang === "km" ? "ផ្ទាំងគ្រប់គ្រងរហ័ស (Admin)" : "Admin Control Snapshot"}</h3>
+                      <h3 className="section-title">{lang === "km" ? "ផ្ទាំងសង្ខេបស្តុក (Admin)" : "Inventory Dashboard Snapshot"}</h3>
                       <span className="tiny">
                         {new Date(`${inventoryAdminControlSummary.month}-01T00:00:00`).toLocaleString(undefined, {
                           month: "long",
                           year: "numeric",
                         })}
                       </span>
+                    </div>
+                    <div className="stats-grid inventory-admin-control-stats">
+                      <article className="stat-card">
+                        <div className="stat-label">{lang === "km" ? "មុខទំនិញសរុប" : "Total Items"}</div>
+                        <div className="stat-value">{inventoryDashboardSnapshot.totalItems}</div>
+                      </article>
+                      <article className="stat-card">
+                        <div className="stat-label">{lang === "km" ? "ស្តុកសរុប (On Hand)" : "Total On Hand"}</div>
+                        <div className="stat-value">{inventoryDashboardSnapshot.totalOnHand}</div>
+                      </article>
+                      <article className="stat-card stat-card-overdue">
+                        <div className="stat-label">{lang === "km" ? "ទាបជាង Min" : "Low Stock Items"}</div>
+                        <div className="stat-value">{inventoryDashboardSnapshot.lowStockItems}</div>
+                      </article>
+                      <article className="stat-card stat-card-overdue">
+                        <div className="stat-label">{lang === "km" ? "អស់ស្តុក" : "Out of Stock Items"}</div>
+                        <div className="stat-value">{inventoryDashboardSnapshot.zeroStockItems}</div>
+                      </article>
+                      <article className="stat-card stat-card-overdue">
+                        <div className="stat-label">{lang === "km" ? "ខ្វះពីកម្រិត Min" : "Units Below Min"}</div>
+                        <div className="stat-value">{inventoryDashboardSnapshot.belowMinUnits}</div>
+                      </article>
+                      <article className="stat-card stat-card-overdue">
+                        <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approvals"}</div>
+                        <div className="stat-value">{inventoryDashboardSnapshot.pendingApprovals}</div>
+                      </article>
                     </div>
                     <div className="form-grid inventory-admin-control-filters">
                       <label className="field">
@@ -23969,6 +24058,25 @@ export default function App() {
                       </button>
                     </div>
                     <div className="inventory-admin-control-grid">
+                      <div className="inventory-admin-control-card">
+                        <strong>{lang === "km" ? "Low Stock Risk (Top)" : "Top Low Stock Risks"}</strong>
+                        {inventoryDashboardSnapshot.atRiskRows.length ? (
+                          <div className="inventory-admin-control-list">
+                            {inventoryDashboardSnapshot.atRiskRows.map((row) => (
+                              <div key={`inventory-admin-risk-${row.itemCode}-${row.campus}`} className="inventory-admin-control-row">
+                                <span>
+                                  <strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}
+                                  <br />
+                                  <small className="tiny">{inventoryCampusLabel(row.campus)}</small>
+                                </span>
+                                <strong>{row.currentStock}/{row.minStock}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="tiny">{lang === "km" ? "គ្មានហានិភ័យស្តុកទាប" : "No low stock risk right now"}</div>
+                        )}
+                      </div>
                       <div className="inventory-admin-control-card">
                         <strong>{lang === "km" ? "ចេញស្តុកតាម Campus (ខែនេះ)" : "Monthly Out by Campus"}</strong>
                         {inventoryAdminControlSummary.monthCampusRows.length ? (
@@ -24076,6 +24184,8 @@ export default function App() {
                     </div>
                   </article>
                 ) : null}
+                {inventoryView === "daily" ? (
+                  <>
                 {inventoryPendingApprovalRows.length ? (
                   <article className="panel" id="inventory-pending-approval-board" style={{ marginBottom: 8 }}>
                     <div className="panel-row">
@@ -24818,6 +24928,8 @@ export default function App() {
                     </table>
                   </div>
                 </article>
+                ) : null}
+                  </>
                 ) : null}
               </section>
             )}

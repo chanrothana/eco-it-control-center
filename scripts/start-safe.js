@@ -105,9 +105,15 @@ function runStartRunner(isApiPortBusy) {
   const webCmd = process.platform === "win32"
     ? path.join("node_modules", ".bin", "react-scripts.cmd")
     : path.join("node_modules", ".bin", "react-scripts");
+  const webEnv = { ...process.env, PORT: String(WEB_PORT) };
+  if (webHost) {
+    webEnv.HOST = webHost;
+  } else {
+    delete webEnv.HOST;
+  }
   const webChild = spawn(webCmd, ["start"], {
     stdio: "inherit",
-    env: { ...process.env, ...(webHost ? { HOST: webHost } : {}) },
+    env: webEnv,
     shell: process.platform === "win32",
   });
   attachChildLifecycle(webChild, "Web server", { fatalOnExit: true });
