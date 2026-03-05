@@ -7049,6 +7049,31 @@ export default function App() {
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
   }, [inventoryVisibleTxns, maintenanceQuickMode, maintenanceStockOutMonth, maintenanceStockOutViewDate, todayYmd]);
+  const maintenanceStockOutRecordDates = useMemo(() => {
+    if (!maintenanceQuickMode) return [] as string[];
+    const set = new Set<string>();
+    for (const tx of inventoryVisibleTxns) {
+      if (!isInventoryTxnUsageOut(tx.type)) continue;
+      if (String(tx.approvalStatus || "").toUpperCase() === "REJECTED") continue;
+      const date = normalizeYmdInput(tx.date);
+      if (!date) continue;
+      if (date > todayYmd) continue;
+      set.add(date);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [inventoryVisibleTxns, maintenanceQuickMode, todayYmd]);
+  const maintenanceStockOutPrevDate = useMemo(() => {
+    if (!maintenanceQuickMode) return "";
+    const current = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
+    const previous = maintenanceStockOutRecordDates.filter((d) => d < current);
+    return previous.length ? previous[previous.length - 1] : "";
+  }, [maintenanceQuickMode, maintenanceStockOutViewDate, maintenanceStockOutRecordDates, todayYmd]);
+  const maintenanceStockOutNextDate = useMemo(() => {
+    if (!maintenanceQuickMode) return "";
+    const current = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
+    const next = maintenanceStockOutRecordDates.find((d) => d > current);
+    return next || "";
+  }, [maintenanceQuickMode, maintenanceStockOutViewDate, maintenanceStockOutRecordDates, todayYmd]);
   const maintenanceStockOutCampusTotals = useMemo(() => {
     const out = new Map<string, number>();
     for (const tx of maintenanceStockOutRows) {
@@ -7076,9 +7101,12 @@ export default function App() {
     return date.toLocaleString(undefined, { month: "long", year: "numeric" });
   }, [maintenanceQuickMode, maintenanceStockOutMonth, maintenanceStockOutViewDate, todayYmd]);
   const maintenanceStockOutCanGoNext = useMemo(() => {
-    const ymd = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
-    return ymd < todayYmd;
-  }, [maintenanceStockOutViewDate, todayYmd]);
+    if (!maintenanceQuickMode) {
+      const ymd = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
+      return ymd < todayYmd;
+    }
+    return Boolean(maintenanceStockOutNextDate);
+  }, [maintenanceQuickMode, maintenanceStockOutNextDate, maintenanceStockOutViewDate, todayYmd]);
   const inventoryPurchaseWindow = useMemo(() => {
     const now = new Date();
     const cutoffDay = 27;
@@ -23202,9 +23230,13 @@ export default function App() {
                           type="button"
                           className="tab btn-small"
                           aria-label="Previous day"
-                          onClick={() => setMaintenanceStockOutViewDate((prev) => shiftYmd(normalizeYmdInput(prev) || todayYmd, -1))}
+                          disabled={!maintenanceStockOutPrevDate}
+                          onClick={() => {
+                            if (!maintenanceStockOutPrevDate) return;
+                            setMaintenanceStockOutViewDate(maintenanceStockOutPrevDate);
+                          }}
                         >
-                          {"<"}
+                          {lang === "km" ? "ថ្ងៃមុន" : "Previous Day"}
                         </button>
                         <span className="tiny maintenance-quick-date-label">{maintenanceStockOutLabel}</span>
                         <button
@@ -23212,9 +23244,12 @@ export default function App() {
                           className="tab btn-small"
                           aria-label="Next day"
                           disabled={!maintenanceStockOutCanGoNext}
-                          onClick={() => setMaintenanceStockOutViewDate((prev) => shiftYmd(normalizeYmdInput(prev) || todayYmd, 1))}
+                          onClick={() => {
+                            if (!maintenanceStockOutNextDate) return;
+                            setMaintenanceStockOutViewDate(maintenanceStockOutNextDate);
+                          }}
                         >
-                          {">"}
+                          {lang === "km" ? "ថ្ងៃបន្ទាប់" : "Next Day"}
                         </button>
                       </div>
                     </div>

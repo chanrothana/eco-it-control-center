@@ -6573,12 +6573,12 @@ tr.row-maint-maintenance:hover td {
   }
 
   .maintenance-quick-date-nav .tab {
-    min-width: 44px;
+    min-width: 72px;
     min-height: 44px;
     padding-left: 12px;
     padding-right: 12px;
-    font-size: 20px;
-    line-height: 1;
+    font-size: 14px;
+    line-height: 1.1;
   }
 
   .maintenance-quick-date-nav .maintenance-quick-date-label {
