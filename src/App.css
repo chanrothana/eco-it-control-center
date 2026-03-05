@@ -6563,7 +6563,22 @@ tr.row-maint-maintenance:hover td {
 @media (max-width: 768px) {
   .maintenance-quick-date-nav {
     width: 100%;
-    justify-content: flex-start;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 8px;
+  }
+
+  .maintenance-quick-date-nav .tab {
+    min-width: 34px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .maintenance-quick-date-nav .maintenance-quick-date-label {
+    white-space: nowrap;
   }
 }
 
