@@ -5673,7 +5673,7 @@ export default function App() {
     if (!maintenanceQuickMode) return;
     setTab("inventory");
     setInventoryView("daily");
-    setInventoryDailyForm((prev) => ({ ...prev, type: "OUT" }));
+    setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", date: toYmd(new Date()) }));
     setMaintenanceStockOutViewDate(toYmd(new Date()));
   }, [maintenanceQuickMode]);
 
@@ -11223,7 +11223,9 @@ export default function App() {
     const recorder = authUser?.displayName || authUser?.username || "";
     const today = toYmd(new Date());
     const pickedDate = normalizeYmdInput(inventoryDailyForm.date || today) || today;
-    const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
+    const baseDate = maintenanceQuickMode
+      ? today
+      : (!isSuperAdmin && pickedDate < today ? today : pickedDate);
     const base = new Date(`${baseDate}T00:00:00`);
     setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", itemId: String(item.id) }));
     setInventoryQuickOutModal({
@@ -11241,6 +11243,7 @@ export default function App() {
     setInventoryQuickOutFileKey((k) => k + 1);
   }
   function openQuickOutEcoPicker() {
+    if (maintenanceQuickMode) return;
     const today = toYmd(new Date());
     const pickedDate = normalizeYmdInput(inventoryQuickOutModal?.date || today) || today;
     const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
@@ -11271,7 +11274,10 @@ export default function App() {
   async function saveInventoryQuickOut() {
     if (!inventoryQuickOutModal) return;
     const modal = inventoryQuickOutModal;
-    const txDate = normalizeYmdInput(modal.date);
+    const forcedToday = toYmd(new Date());
+    const txDate = maintenanceQuickMode
+      ? forcedToday
+      : (normalizeYmdInput(modal.date) || modal.date);
     if (!isSuperAdmin && txDate && txDate < todayYmd) {
       setError(lang === "km" ? "មិនអាចជ្រើសថ្ងៃមុនថ្ងៃនេះបានទេ។" : "Cannot select a date before today.");
       return;
@@ -11284,7 +11290,7 @@ export default function App() {
     }
     const saved = await saveInventoryTxnEntry({
       itemId: modal.itemId,
-      date: modal.date,
+      date: txDate,
       type: "OUT",
       qty: modal.qty,
       by: recorder,
@@ -11297,7 +11303,7 @@ export default function App() {
       ...prev,
       type: "OUT",
       itemId: modal.itemId,
-      date: modal.date,
+      date: txDate,
       by: recorder || prev.by,
       qty: "",
       note: "",
@@ -29164,11 +29170,15 @@ export default function App() {
                           type="button"
                           className="quickout-date-icon-btn"
                           onClick={openQuickOutEcoPicker}
+                          disabled={maintenanceQuickMode}
                           aria-label="Open Eco Calendar"
                         >
                           <Calendar size={18} />
                         </button>
                       </div>
+                      {maintenanceQuickMode ? (
+                        <small className="tiny">{lang === "km" ? "កត់ត្រាបានតែថ្ងៃនេះប៉ុណ្ណោះ" : "Record is today only in maintenance mode."}</small>
+                      ) : null}
                       {quickOutDateBadge ? (
                         <small className="tiny inventory-quickout-date-badge">{quickOutDateBadge}</small>
                       ) : null}
