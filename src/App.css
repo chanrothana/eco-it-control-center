@@ -7981,7 +7981,7 @@ tr.row-maint-maintenance:hover td {
     padding: 1px 6px !important;
     border: 0;
     background: transparent;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.3;
     gap: 2px;
   }
@@ -8002,7 +8002,7 @@ tr.row-maint-maintenance:hover td {
     flex: 0 0 auto;
     min-width: 0;
     margin-bottom: 0;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.3;
     color: #5a7096;
     font-weight: 800;
@@ -8010,6 +8010,12 @@ tr.row-maint-maintenance:hover td {
     letter-spacing: 0.04em;
     text-align: left;
     white-space: nowrap;
+  }
+
+  .modal-panel .asset-detail-grid .field > span,
+  .modal-panel .asset-detail-grid .detail-value {
+    font-size: 15px;
+    line-height: 1.3;
   }
 
   .maintenance-history-modal-table th:nth-child(5),
