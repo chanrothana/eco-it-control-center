@@ -4208,6 +4208,7 @@ export default function App() {
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
   const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
+  const transferDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
   const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
@@ -5275,6 +5276,12 @@ export default function App() {
     by: "",
     note: "",
   });
+  const [transferDatePickerOpen, setTransferDatePickerOpen] = useState(false);
+  const [transferDateMonth, setTransferDateMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [transferSelectedDate, setTransferSelectedDate] = useState(() => toYmd(new Date()));
   const [showTransferAssetPicker, setShowTransferAssetPicker] = useState(false);
   const [poolInfo, setPoolInfo] = useState({
     campus: "Campus 2.2",
@@ -5669,6 +5676,21 @@ export default function App() {
       document.removeEventListener("touchstart", handleOutsideTap);
     };
   }, [maintenanceRecordDatePickerOpen]);
+  useEffect(() => {
+    if (!transferDatePickerOpen) return;
+    const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (transferDateWrapRef.current?.contains(target)) return;
+      setTransferDatePickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideTap);
+    document.addEventListener("touchstart", handleOutsideTap);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTap);
+      document.removeEventListener("touchstart", handleOutsideTap);
+    };
+  }, [transferDatePickerOpen]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
     setTab("inventory");
@@ -6658,6 +6680,53 @@ export default function App() {
       };
     });
   }, [maintenanceRecordDateMonth, getHolidayEvent]);
+  const transferDisplayDate = useMemo(() => {
+    const ymd = normalizeYmdInput(transferForm.date || "");
+    if (!ymd) return "";
+    if (lang === "km") return formatKhmerDateYmd(ymd);
+    const date = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return transferForm.date;
+    return date.toLocaleDateString("en-US", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }, [transferForm.date, lang]);
+  const transferDateMonthLabel = useMemo(
+    () =>
+      lang === "km"
+        ? formatKhmerMonthYear(transferDateMonth)
+        : transferDateMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          }),
+    [transferDateMonth, lang]
+  );
+  const transferDateGridDays = useMemo(() => {
+    const year = transferDateMonth.getFullYear();
+    const month = transferDateMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay();
+    const endOffset = 6 - lastDay.getDay();
+    const totalCells = startOffset + lastDay.getDate() + endOffset;
+    const startDate = new Date(year, month, 1 - startOffset);
+    return Array.from({ length: totalCells }, (_, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const ymd = toYmd(d);
+      const holiday = getHolidayEvent(ymd);
+      return {
+        ymd,
+        day: d.getDate(),
+        weekday: d.getDay(),
+        inMonth: d.getMonth() === month,
+        hasItems: false,
+        holidayName: holiday.name,
+        holidayType: holiday.type,
+      };
+    });
+  }, [transferDateMonth, getHolidayEvent]);
   const quickOutDateBadge = useMemo(() => {
     if (!inventoryQuickOutModal?.date) return "";
     const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
@@ -11215,6 +11284,19 @@ export default function App() {
       if (nextOpen) {
         setMaintenanceRecordDateMonth(new Date(base.getFullYear(), base.getMonth(), 1));
         setMaintenanceRecordSelectedDate(baseDate);
+      }
+      return nextOpen;
+    });
+  }
+  function openTransferDatePicker() {
+    const today = toYmd(new Date());
+    const pickedDate = normalizeYmdInput(transferForm.date || today) || today;
+    const base = new Date(`${pickedDate}T00:00:00`);
+    setTransferDatePickerOpen((prev) => {
+      const nextOpen = !prev;
+      if (nextOpen) {
+        setTransferDateMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+        setTransferSelectedDate(pickedDate);
       }
       return nextOpen;
     });
@@ -24678,14 +24760,72 @@ export default function App() {
                   </div>
                 </div>
               </label>
-              <label className="field">
+              <label className="field quickout-date-field" ref={transferDateWrapRef}>
                 <span>Transfer Date</span>
-                <input
-                  type="date"
-                  className="input"
-                  value={transferForm.date}
-                  onChange={(e) => setTransferForm((f) => ({ ...f, date: e.target.value }))}
-                />
+                <div className="quickout-date-input-wrap">
+                  <input
+                    className="input"
+                    type="text"
+                    readOnly
+                    value={transferDisplayDate}
+                    placeholder="dd/mm/yyyy"
+                  />
+                  <button
+                    type="button"
+                    className="quickout-date-icon-btn"
+                    onClick={openTransferDatePicker}
+                    aria-label="Open Transfer Calendar"
+                  >
+                    <Calendar size={18} />
+                  </button>
+                </div>
+                {transferDatePickerOpen ? (
+                  <div className="quickout-eco-inline-panel">
+                    <div className="quickout-eco-head">
+                      <strong className="quickout-eco-title">{transferDateMonthLabel}</strong>
+                      <div className="quickout-eco-nav">
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Previous month"
+                          onClick={() => setTransferDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                        >
+                          {"<"}
+                        </button>
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Next month"
+                          onClick={() => setTransferDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                        >
+                          {">"}
+                        </button>
+                      </div>
+                    </div>
+                    <CalendarGridTemplate
+                      weekdayLabels={calendarWeekdayLabels}
+                      days={transferDateGridDays}
+                      selectedDate={transferSelectedDate}
+                      todayYmd={todayYmd}
+                      onSelectDate={(ymd) => {
+                        setTransferSelectedDate(ymd);
+                        setTransferForm((f) => ({ ...f, date: ymd }));
+                        setTransferDatePickerOpen(false);
+                      }}
+                      isDayDisabled={(d) => !d.inMonth}
+                      gridClassName="quickout-eco-grid"
+                      renderHolidayTag={(d) =>
+                        d.holidayName ? (
+                          <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                            {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                          </em>
+                        ) : null
+                      }
+                      headKeyPrefix="transfer-date-head"
+                      dayKeyPrefix="transfer-date-day"
+                    />
+                  </div>
+                ) : null}
               </label>
               <label className="field">
                 <span>From Campus</span>
