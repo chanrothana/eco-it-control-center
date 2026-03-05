@@ -22244,18 +22244,29 @@ export default function App() {
                   {assetDetailSections.showDetails ? (
                   <div className="form-grid asset-detail-grid">
                     <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(detailAsset.campus)}</div></div>
+                    <div className="field"><span>{t.location}</span><div className="detail-value">{detailAsset.location || "-"}</div></div>
+                    <div className="field"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(detailAsset.status)}</div></div>
                     <div className="field"><span>{t.category}</span><div className="detail-value">{detailAsset.category}</div></div>
                     <div className="field"><span>{t.typeCode}</span><div className="detail-value">{detailAsset.type}</div></div>
-                    {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
-                      <div className="field"><span>{t.pcType}</span><div className="detail-value">{detailAsset.pcType || "-"}</div></div>
-                    ) : null}
-                    <div className="field"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(detailAsset.status)}</div></div>
                     <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</div></div>
-                    <div className="field"><span>{t.location}</span><div className="detail-value">{detailAsset.location || "-"}</div></div>
+                    {detailAsset.category === "IT" ? (
+                      <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
+                    ) : null}
                     {detailAsset.category === "IT" ? (
                       <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
                     ) : null}
-                    {detailAsset.category === "IT" && String(detailAsset.parentAssetId || "").trim() ? (
+                    <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
+                    <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
+                    <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
+                    <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
+                    <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
+                    <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
+                    {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
+                      <div className="field"><span>{t.pcType}</span><div className="detail-value">{detailAsset.pcType || "-"}</div></div>
+                    ) : null}
+                    {detailAsset.category === "IT" &&
+                    detailAsset.type !== "TAB" &&
+                    String(detailAsset.parentAssetId || "").trim() ? (
                       <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{detailAsset.parentAssetId || "-"}</div></div>
                     ) : null}
                     {detailAsset.parentAssetId ? (
@@ -22264,15 +22275,6 @@ export default function App() {
                     {detailAsset.parentAssetId ? (
                       <div className="field"><span>{t.componentRequired}</span><div className="detail-value">{detailAsset.componentRequired ? "Yes" : "No"}</div></div>
                     ) : null}
-                    {detailAsset.category === "IT" ? (
-                      <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
-                    ) : null}
-                    <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
-                    <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
-                    <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
-                    <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
-                    <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
-                    <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
                     <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailAsset.specs || "-"}</div></div>
                     <div className="field field-wide"><span>Notes</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
                     <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
