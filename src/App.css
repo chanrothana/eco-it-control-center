@@ -3473,57 +3473,378 @@ label.backup-action-btn {
 }
 
 .inventory-admin-matrix-wrap {
-  border: 1px solid #dbe6f6;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 10px;
+  border: 1px solid #d5e0f2;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+  padding: 12px;
   display: grid;
+  gap: 10px;
+}
+
+.inventory-admin-matrix-head-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+
+.inventory-admin-matrix-title-block {
+  display: grid;
+  gap: 4px;
+}
+
+.inventory-admin-matrix-title-block > strong {
+  font-size: 19px;
+  color: #1f2e4d;
+}
+
+.inventory-admin-matrix-title-block .tiny {
+  color: #5a6b8f;
+  font-weight: 700;
+}
+
+.inventory-admin-matrix-campus-field {
+  min-width: 260px;
+  width: 260px;
+}
+
+.inventory-admin-matrix-date-field {
+  min-width: 260px;
+  width: 260px;
+  position: relative;
+}
+
+.inventory-admin-matrix-date-field .quickout-eco-inline-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  margin-top: 0;
+  width: min(360px, calc(100vw - 32px));
+  z-index: 60;
+}
+
+.inventory-admin-matrix-date-field-end .quickout-eco-inline-panel {
+  left: auto;
+  right: 0;
+}
+
+.inventory-admin-matrix-print-btn {
+  align-self: end;
+  height: 46px;
+  min-width: 200px;
+  white-space: nowrap;
+}
+
+.inventory-admin-matrix-date-panel-title {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
+
+.inventory-admin-matrix-date-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.inventory-admin-matrix-date-chip-start {
+  color: #255ca5;
+  background: #e9f2ff;
+  border-color: #b9cff0;
+}
+
+.inventory-admin-matrix-date-chip-end {
+  color: #8c5b1f;
+  background: #fff2df;
+  border-color: #e7c89e;
+}
+
 
 .inventory-admin-matrix-scroll {
   width: 100%;
   overflow-x: auto;
+  scrollbar-gutter: stable both-edges;
 }
 
 .inventory-admin-matrix {
   border-collapse: separate;
-  border-spacing: 4px;
-  min-width: 980px;
+  border-spacing: 6px;
+  min-width: 1080px;
 }
 
 .inventory-admin-matrix th,
 .inventory-admin-matrix td {
-  border-radius: 8px;
+  border-radius: 10px;
+  border: 1px solid #d9e4f5;
   text-align: center;
-  background: #f8fbff;
-  padding: 6px 6px;
-  min-width: 28px;
+  background: #f7fbff;
+  padding: 6px 7px;
+  min-width: 34px;
+  height: 42px;
 }
 
 .inventory-admin-matrix thead th {
-  background: #ecf3ff;
-  color: #3a5687;
+  background: #eaf2ff;
+  color: #324d7d;
   font-size: 12px;
   font-weight: 700;
 }
 
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head {
+  background: #dfe9f8;
+  color: #2d4a77;
+  box-shadow: inset 0 -2px 0 #c2d4ef;
+}
+
+.inventory-admin-matrix-day-head-main,
+.inventory-admin-matrix-day-head-sub {
+  display: block;
+  line-height: 1.1;
+}
+
+.inventory-admin-matrix-day-head-main {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-admin-matrix-day-head-sub {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-event-public {
+  background: #fde9ee;
+  color: #b52841;
+  box-shadow: inset 0 -2px 0 #f3b1c0;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-event-ptc {
+  background: #fff0dd;
+  color: #a85b12;
+  box-shadow: inset 0 -2px 0 #efc79a;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-event-term_end {
+  background: #e8f1ff;
+  color: #1f5ea4;
+  box-shadow: inset 0 -2px 0 #bcd2f5;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-event-term_start {
+  background: #eaf7e5;
+  color: #2f7b2e;
+  box-shadow: inset 0 -2px 0 #bde0b6;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-event-camp {
+  background: #fff8d9;
+  color: #8a6f07;
+  box-shadow: inset 0 -2px 0 #eadc99;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-event-celebration {
+  background: #e5f8fd;
+  color: #157289;
+  box-shadow: inset 0 -2px 0 #acddec;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-event-break {
+  background: #fde9ee;
+  color: #b52841;
+  box-shadow: inset 0 -2px 0 #f3b1c0;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-day-head.inventory-admin-matrix-day-sunday {
+  background: #fde9ee;
+  color: #b52841;
+  box-shadow: inset 0 -2px 0 #f3b1c0;
+}
+
+.inventory-admin-matrix thead .inventory-admin-matrix-item-head,
+.inventory-admin-matrix thead .inventory-admin-matrix-total-head {
+  background: #d7e4f8;
+}
+
 .inventory-admin-matrix th.inventory-admin-matrix-item-cell {
   text-align: left;
-  min-width: 200px;
-  max-width: 280px;
-  background: #f6f9ff;
+  min-width: 240px;
+  max-width: 290px;
+  background: #edf3ff;
+  position: sticky;
+  left: 0;
+  z-index: 3;
 }
 
 .inventory-admin-matrix-item {
   display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  line-height: 1.18;
+}
+
+.inventory-admin-matrix-item-photo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #c2d3ee;
+  background: #eef5ff;
+}
+
+.inventory-admin-matrix-item-photo-empty {
+  display: inline-grid;
+  place-items: center;
+  color: #5f739c;
+  font-weight: 700;
+}
+
+.inventory-admin-matrix-item-text {
+  display: grid;
   gap: 2px;
-  line-height: 1.2;
+  min-width: 0;
+}
+
+.inventory-admin-matrix-item-text strong {
+  color: #2d4a79;
+  font-size: 14px;
 }
 
 .inventory-admin-matrix-item span {
-  color: #47608f;
+  color: #4d638d;
   font-size: 12px;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.25;
+}
+
+.inventory-admin-matrix-row {
+  --matrix-row-bg: #f8fbff;
+  --matrix-row-item-bg: #edf4ff;
+}
+
+.inventory-admin-matrix-row td {
+  background: var(--matrix-row-bg);
+}
+
+.inventory-admin-matrix tbody tr:nth-child(even) td {
+  background: #f3f8ff;
+}
+
+.inventory-admin-matrix-row th.inventory-admin-matrix-item-cell {
+  background: var(--matrix-row-item-bg);
+}
+
+.inventory-admin-matrix tbody tr:nth-child(even) th.inventory-admin-matrix-item-cell {
+  background: #e8f0ff;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-head,
+.inventory-admin-matrix .inventory-admin-matrix-campus-cell {
+  position: relative;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-day-start {
+  border-left: 2px solid #c4d4ee;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-day-end {
+  border-right: 2px solid #c4d4ee;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-c1 {
+  color: #2e5fa8;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-c2 {
+  color: #2f7a59;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-c3 {
+  color: #99622f;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-c4 {
+  color: #675099;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-head {
+  font-weight: 800;
+  background: #eef3fb;
+  border-color: #d4e0f3;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-campus-cell {
+  color: #2d3a55;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-day-event-cell.inventory-admin-matrix-day-event-public,
+.inventory-admin-matrix .inventory-admin-matrix-day-event-cell.inventory-admin-matrix-day-event-break {
+  background: #fff6f8;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-day-event-cell.inventory-admin-matrix-day-event-ptc {
+  background: #fff9f2;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-day-event-cell.inventory-admin-matrix-day-event-term_end {
+  background: #f3f8ff;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-day-event-cell.inventory-admin-matrix-day-event-term_start {
+  background: #f4fcf2;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-day-event-cell.inventory-admin-matrix-day-event-camp {
+  background: #fffdf2;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-day-event-cell.inventory-admin-matrix-day-event-celebration {
+  background: #f3fbff;
+}
+
+.inventory-admin-matrix .inventory-admin-matrix-day-sunday-cell {
+  background: #fff6f8;
+}
+
+.inventory-admin-matrix-row-0 {
+  --matrix-row-bg: #f8fbff;
+  --matrix-row-item-bg: #edf4ff;
+}
+
+.inventory-admin-matrix-row-1 {
+  --matrix-row-bg: #f8fbff;
+  --matrix-row-item-bg: #edf4ff;
+}
+
+.inventory-admin-matrix-row-2 {
+  --matrix-row-bg: #f8fbff;
+  --matrix-row-item-bg: #edf4ff;
+}
+
+.inventory-admin-matrix-row-3 {
+  --matrix-row-bg: #f8fbff;
+  --matrix-row-item-bg: #edf4ff;
+}
+
+.inventory-admin-matrix-row-4 {
+  --matrix-row-bg: #f8fbff;
+  --matrix-row-item-bg: #edf4ff;
+}
+
+.inventory-admin-matrix-row-5 {
+  --matrix-row-bg: #f8fbff;
+  --matrix-row-item-bg: #edf4ff;
 }
 
 .inventory-pending-mobile-list {

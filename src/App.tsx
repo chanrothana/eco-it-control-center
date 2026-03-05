@@ -4649,6 +4649,7 @@ export default function App() {
   const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const transferDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const scheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
+  const inventoryAdminMatrixDateWrapRef = useRef<HTMLDivElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
   const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
@@ -5946,6 +5947,18 @@ export default function App() {
   const [quickCountModal, setQuickCountModal] = useState<null | { title: string; assets: Asset[] }>(null);
   const [inventoryAdminMonth, setInventoryAdminMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [inventoryAdminCampusFilter, setInventoryAdminCampusFilter] = useState("ALL");
+  const [inventoryAdminMatrixCampusFilter, setInventoryAdminMatrixCampusFilter] = useState("ALL");
+  const [inventoryAdminMatrixDateFrom, setInventoryAdminMatrixDateFrom] = useState(() => `${toYmd(new Date()).slice(0, 7)}-01`);
+  const [inventoryAdminMatrixDateTo, setInventoryAdminMatrixDateTo] = useState(() => {
+    const now = new Date();
+    return toYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  });
+  const [inventoryAdminMatrixDatePickerOpen, setInventoryAdminMatrixDatePickerOpen] = useState<null | "from" | "to">(null);
+  const [inventoryAdminMatrixDateMonth, setInventoryAdminMatrixDateMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [inventoryAdminMatrixSelectedDate, setInventoryAdminMatrixSelectedDate] = useState(() => toYmd(new Date()));
   const [inventoryAdminItemQuery, setInventoryAdminItemQuery] = useState("");
   const [inventoryAdminDetailModal, setInventoryAdminDetailModal] = useState<null | { title: string; rows: InventoryTxn[] }>(null);
   const [updateNotesOpen, setUpdateNotesOpen] = useState(false);
@@ -6176,6 +6189,21 @@ export default function App() {
       document.removeEventListener("touchstart", handleOutsideTap);
     };
   }, [scheduleDatePickerOpen]);
+  useEffect(() => {
+    if (!inventoryAdminMatrixDatePickerOpen) return;
+    const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (inventoryAdminMatrixDateWrapRef.current?.contains(target)) return;
+      setInventoryAdminMatrixDatePickerOpen(null);
+    };
+    document.addEventListener("mousedown", handleOutsideTap);
+    document.addEventListener("touchstart", handleOutsideTap);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTap);
+      document.removeEventListener("touchstart", handleOutsideTap);
+    };
+  }, [inventoryAdminMatrixDatePickerOpen]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
     setTab("inventory");
@@ -7037,12 +7065,164 @@ export default function App() {
         .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0)),
     [inventoryAdminScopedOutTxns, inventoryAdminMonth]
   );
+  const inventoryAdminMatrixCampusOptions = useMemo(() => ["ALL", "C1", "C2", "C3", "C4"], []);
+  const inventoryAdminMatrixMonthBounds = useMemo(() => {
+    if (isSuperAdmin) {
+      return {
+        start: "2000-01-01",
+        end: "2100-12-31",
+      };
+    }
+    const baseDate = new Date(`${inventoryAdminMonth}-01T00:00:00`);
+    if (Number.isNaN(baseDate.getTime())) {
+      const today = toYmd(new Date());
+      return { start: today, end: today };
+    }
+    return {
+      start: `${inventoryAdminMonth}-01`,
+      end: toYmd(new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0)),
+    };
+  }, [inventoryAdminMonth, isSuperAdmin]);
+  const inventoryAdminMatrixDisplayDateFrom = useMemo(() => {
+    const ymd = normalizeYmdInput(inventoryAdminMatrixDateFrom || "");
+    if (!ymd) return "";
+    if (lang === "km") return formatKhmerDateYmd(ymd);
+    const date = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return inventoryAdminMatrixDateFrom;
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).replace(/ /g, "/");
+  }, [inventoryAdminMatrixDateFrom, lang]);
+  const inventoryAdminMatrixDisplayDateTo = useMemo(() => {
+    const ymd = normalizeYmdInput(inventoryAdminMatrixDateTo || "");
+    if (!ymd) return "";
+    if (lang === "km") return formatKhmerDateYmd(ymd);
+    const date = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return inventoryAdminMatrixDateTo;
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).replace(/ /g, "/");
+  }, [inventoryAdminMatrixDateTo, lang]);
+  const inventoryAdminMatrixDateMonthLabel = useMemo(
+    () =>
+      lang === "km"
+        ? formatKhmerMonthYear(inventoryAdminMatrixDateMonth)
+        : inventoryAdminMatrixDateMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          }),
+    [inventoryAdminMatrixDateMonth, lang]
+  );
+  const inventoryAdminMatrixDateGridDays = useMemo(() => {
+    const year = inventoryAdminMatrixDateMonth.getFullYear();
+    const month = inventoryAdminMatrixDateMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay();
+    const endOffset = 6 - lastDay.getDay();
+    const totalCells = startOffset + lastDay.getDate() + endOffset;
+    const startDate = new Date(year, month, 1 - startOffset);
+    const eventByDate = new Map<string, { name: string; type: CalendarEventType | "" }>();
+    for (const event of calendarEvents) {
+      const ymd = normalizeYmdInput(event.date);
+      if (!ymd) continue;
+      const name = String(event.name || "").trim();
+      const type = normalizeCalendarEventType(event.type);
+      if (!eventByDate.has(ymd)) {
+        eventByDate.set(ymd, { name, type });
+        continue;
+      }
+      const existing = eventByDate.get(ymd)!;
+      if (name && !existing.name.split(" | ").includes(name)) {
+        existing.name = existing.name ? `${existing.name} | ${name}` : name;
+      }
+    }
+    return Array.from({ length: totalCells }, (_, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const ymd = toYmd(d);
+      const holiday = eventByDate.get(ymd);
+      return {
+        ymd,
+        day: d.getDate(),
+        weekday: d.getDay(),
+        inMonth: d.getMonth() === month,
+        hasItems: false,
+        holidayName: holiday?.name || "",
+        holidayType: holiday?.type || "",
+      };
+    });
+  }, [inventoryAdminMatrixDateMonth, calendarEvents]);
+  const openInventoryAdminMatrixDatePicker = useCallback(
+    (target: "from" | "to") => {
+      const current = target === "from" ? inventoryAdminMatrixDateFrom : inventoryAdminMatrixDateTo;
+      const normalized = normalizeYmdInput(current) || inventoryAdminMatrixMonthBounds.start;
+      const base = new Date(`${normalized}T00:00:00`);
+      setInventoryAdminMatrixDatePickerOpen((prev) => {
+        const nextOpen = prev === target ? null : target;
+        if (nextOpen) {
+          setInventoryAdminMatrixDateMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+          setInventoryAdminMatrixSelectedDate(normalized);
+        }
+        return nextOpen;
+      });
+    },
+    [inventoryAdminMatrixDateFrom, inventoryAdminMatrixDateTo, inventoryAdminMatrixMonthBounds.start]
+  );
+  const inventoryAdminMatrixScopedOutTxns = useMemo(() => {
+    const itemQuery = String(inventoryAdminItemQuery || "").trim().toLowerCase();
+    return inventoryVisibleTxns
+      .filter((tx) => {
+        if (!isInventoryTxnUsageOut(tx.type)) return false;
+        if (!isSuperAdmin && String(tx.date || "").slice(0, 7) !== inventoryAdminMonth) return false;
+        if (itemQuery) {
+          const text = `${tx.itemCode || ""} ${tx.itemName || ""}`.toLowerCase();
+          if (!text.includes(itemQuery)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0));
+  }, [inventoryVisibleTxns, inventoryAdminMonth, inventoryAdminItemQuery, isSuperAdmin]);
+  useEffect(() => {
+    if (!inventoryAdminMatrixCampusOptions.includes(inventoryAdminMatrixCampusFilter)) {
+      setInventoryAdminMatrixCampusFilter("ALL");
+    }
+  }, [inventoryAdminMatrixCampusFilter, inventoryAdminMatrixCampusOptions]);
   useEffect(() => {
     if (!inventoryAdminMonthOptions.length) return;
     if (!inventoryAdminMonthOptions.includes(inventoryAdminMonth)) {
       setInventoryAdminMonth(inventoryAdminMonthOptions[0]);
     }
   }, [inventoryAdminMonthOptions, inventoryAdminMonth]);
+  useEffect(() => {
+    if (isSuperAdmin) {
+      setInventoryAdminMatrixDateFrom((prev) => normalizeYmdInput(prev) || `${toYmd(new Date()).slice(0, 7)}-01`);
+      setInventoryAdminMatrixDateTo((prev) => normalizeYmdInput(prev) || toYmd(new Date()));
+      return;
+    }
+    const monthStart = `${inventoryAdminMonth}-01`;
+    const baseDate = new Date(`${inventoryAdminMonth}-01T00:00:00`);
+    if (Number.isNaN(baseDate.getTime())) return;
+    const monthEnd = toYmd(new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0));
+    setInventoryAdminMatrixDateFrom((prev) => {
+      const value = normalizeYmdInput(prev) || monthStart;
+      if (String(value).slice(0, 7) !== inventoryAdminMonth) return monthStart;
+      if (value < monthStart) return monthStart;
+      if (value > monthEnd) return monthEnd;
+      return value;
+    });
+    setInventoryAdminMatrixDateTo((prev) => {
+      const value = normalizeYmdInput(prev) || monthEnd;
+      if (String(value).slice(0, 7) !== inventoryAdminMonth) return monthEnd;
+      if (value < monthStart) return monthStart;
+      if (value > monthEnd) return monthEnd;
+      return value;
+    });
+  }, [inventoryAdminMonth, isSuperAdmin]);
   useEffect(() => {
     if (inventoryAdminCampusFilter === "ALL") return;
     if (!inventoryAdminCampusOptions.includes(inventoryAdminCampusFilter)) {
@@ -7145,35 +7325,120 @@ export default function App() {
     };
   }, [inventoryBalanceRows, inventoryLowStockRows, inventoryPendingApprovalRows]);
   const inventoryAdminOutDayMatrix = useMemo(() => {
-    const baseDate = new Date(`${inventoryAdminMonth}-01T00:00:00`);
-    if (Number.isNaN(baseDate.getTime())) {
-      return { days: [] as number[], rows: [] as Array<{ itemCode: string; itemName: string; dayQty: Record<number, number>; total: number }> };
+    const rawFrom = normalizeYmdInput(inventoryAdminMatrixDateFrom) || inventoryAdminMatrixMonthBounds.start;
+    const rawTo = normalizeYmdInput(inventoryAdminMatrixDateTo) || inventoryAdminMatrixMonthBounds.end;
+    const rangeStart = rawFrom <= rawTo ? rawFrom : rawTo;
+    const rangeEnd = rawFrom <= rawTo ? rawTo : rawFrom;
+    const eventByDate = new Map<string, { name: string; type: CalendarEventType | "" }>();
+    for (const event of calendarEvents) {
+      const ymd = normalizeYmdInput(event.date);
+      if (!ymd) continue;
+      const name = String(event.name || "").trim();
+      const type = normalizeCalendarEventType(event.type);
+      if (!eventByDate.has(ymd)) {
+        eventByDate.set(ymd, { name, type });
+        continue;
+      }
+      const existing = eventByDate.get(ymd)!;
+      if (name && !existing.name.split(" | ").includes(name)) {
+        existing.name = existing.name ? `${existing.name} | ${name}` : name;
+      }
     }
-    const daysInMonth = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0).getDate();
-    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const itemMap = new Map<string, { itemCode: string; itemName: string; dayQty: Record<number, number>; total: number }>();
+    const days: Array<{
+      ymd: string;
+      dayLabel: string;
+      weekdayLabel: string;
+      holidayName: string;
+      holidayType: CalendarEventType | "";
+      weekday: number;
+    }> = [];
+    const startDate = new Date(`${rangeStart}T00:00:00`);
+    const endDate = new Date(`${rangeEnd}T00:00:00`);
+    if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+      const cursor = new Date(startDate);
+      while (cursor.getTime() <= endDate.getTime()) {
+        const ymd = toYmd(cursor);
+        const dayLabel = isSuperAdmin
+          ? cursor
+              .toLocaleDateString("en-GB", { day: "2-digit", month: "long" })
+              .replace(" ", "/")
+          : String(cursor.getDate());
+        const weekdayLabel = cursor.toLocaleDateString("en-US", { weekday: "long" });
+        const holiday = eventByDate.get(ymd);
+        days.push({
+          ymd,
+          dayLabel,
+          weekdayLabel,
+          holidayName: holiday?.name || "",
+          holidayType: holiday?.type || "",
+          weekday: cursor.getDay(),
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    const splitByCampus = inventoryAdminMatrixCampusFilter === "ALL";
+    const campuses = splitByCampus ? ["C1", "C2", "C3", "C4"] : [inventoryAdminMatrixCampusFilter];
+    const photoByKey = new Map<string, string>();
+    for (const item of inventoryVisibleItems) {
+      const itemCode = String(item.itemCode || "-");
+      const itemName = String(item.itemName || "-");
+      const key = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
+      if (!photoByKey.has(key) && String(item.photo || "").trim()) {
+        photoByKey.set(key, String(item.photo || "").trim());
+      }
+    }
+    const itemMap = new Map<
+      string,
+      {
+        itemCode: string;
+        itemName: string;
+        photo: string;
+        dayQty: Record<string, number>;
+        dayCampusQty: Record<string, number>;
+        total: number;
+      }
+    >();
 
-    for (const tx of inventoryAdminFilteredOutTxns) {
+    for (const tx of inventoryAdminMatrixScopedOutTxns) {
       if (!isInventoryTxnStockEffective(tx)) continue;
-      const date = String(tx.date || "");
-      const day = Number(date.slice(8, 10));
-      if (!Number.isFinite(day) || day < 1 || day > daysInMonth) continue;
+      const date = normalizeYmdInput(tx.date) || String(tx.date || "");
+      if (!date || date < rangeStart || date > rangeEnd) continue;
       const qty = Number(tx.qty || 0);
       if (!Number.isFinite(qty) || qty <= 0) continue;
+      const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim();
+      if (!campuses.includes(campus)) continue;
       const itemCode = String(tx.itemCode || "-");
       const itemName = String(tx.itemName || "-");
       const key = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
       if (!itemMap.has(key)) {
-        itemMap.set(key, { itemCode, itemName, dayQty: {}, total: 0 });
+        itemMap.set(key, {
+          itemCode,
+          itemName,
+          photo: photoByKey.get(key) || String(tx.photo || "").trim(),
+          dayQty: {},
+          dayCampusQty: {},
+          total: 0,
+        });
       }
       const row = itemMap.get(key)!;
-      row.dayQty[day] = (row.dayQty[day] || 0) + qty;
+      row.dayQty[date] = (row.dayQty[date] || 0) + qty;
+      row.dayCampusQty[`${date}::${campus}`] = (row.dayCampusQty[`${date}::${campus}`] || 0) + qty;
       row.total += qty;
     }
 
     const rows = Array.from(itemMap.values()).sort((a, b) => b.total - a.total || a.itemCode.localeCompare(b.itemCode));
-    return { days, rows };
-  }, [inventoryAdminFilteredOutTxns, inventoryAdminMonth]);
+    return { days, campuses, splitByCampus, rows };
+  }, [
+    inventoryAdminMatrixScopedOutTxns,
+    inventoryAdminMatrixCampusFilter,
+    inventoryAdminMatrixDateFrom,
+    inventoryAdminMatrixDateTo,
+    inventoryAdminMatrixMonthBounds.start,
+    inventoryAdminMatrixMonthBounds.end,
+    isSuperAdmin,
+    calendarEvents,
+    inventoryVisibleItems,
+  ]);
   const inventoryVisibleItemById = useMemo(() => {
     const map = new Map<number, InventoryItem>();
     for (const row of inventoryVisibleItems) map.set(Number(row.id), row);
@@ -12356,6 +12621,135 @@ export default function App() {
               <th>${escapeHtml(lang === "km" ? "សាខា" : "Campus")}</th>
               ${headHtml}
             </tr>
+          </thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) {
+      alert(lang === "km" ? "សូមអនុញ្ញាត pop-up សិន" : "Unable to open print window. Please allow pop-ups.");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
+  function printMonthlyOutMatrix() {
+    const rows = inventoryAdminOutDayMatrix.rows || [];
+    const days = inventoryAdminOutDayMatrix.days || [];
+    if (!rows.length || !days.length) {
+      alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់បោះពុម្ព" : "No Monthly OUT matrix data to print.");
+      return;
+    }
+    const title = lang === "km" ? "របាយការណ៍តារាងចេញស្តុកប្រចាំខែ" : "Monthly OUT Matrix Report";
+    const generatedAt = formatDate(new Date().toISOString());
+    const campusText =
+      inventoryAdminMatrixCampusFilter === "ALL"
+        ? t.allCampuses
+        : inventoryCampusLabel(inventoryAdminMatrixCampusFilter);
+    const periodText = `${inventoryAdminMatrixDisplayDateFrom || "-"} - ${inventoryAdminMatrixDisplayDateTo || "-"}`;
+    const splitByCampus = inventoryAdminOutDayMatrix.splitByCampus;
+    const campuses = inventoryAdminOutDayMatrix.campuses || [];
+    const dayHeadHtml = days
+      .map((day) => {
+        const date = new Date(`${day.ymd}T00:00:00`);
+        const shortLabel = Number.isNaN(date.getTime())
+          ? day.dayLabel
+          : date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }).replace(" ", "/");
+        const weekdayShort = Number.isNaN(date.getTime())
+          ? ""
+          : date.toLocaleDateString("en-US", { weekday: "short" });
+        const content = `<span class="day-main">${escapeHtml(shortLabel)}</span><span class="day-sub">${escapeHtml(weekdayShort)}</span>`;
+        return splitByCampus
+          ? `<th colspan="${campuses.length}">${content}</th>`
+          : `<th>${content}</th>`;
+      })
+      .join("");
+    const campusHeadHtml = splitByCampus
+      ? `<tr>${days
+          .flatMap(() => campuses.map((campus) => `<th>${escapeHtml(campus)}</th>`))
+          .join("")}</tr>`
+      : "";
+    const bodyHtml = rows
+      .map((row) => {
+        const itemCodeText = String(row.itemCode || "-");
+        const itemNameText = inventoryDisplayName(row.itemName, lang);
+        const itemPhoto = isRenderablePhotoSource(row.photo || "")
+          ? `<img loading="lazy" decoding="async" src="${escapeHtml(String(row.photo || ""))}" alt="${escapeHtml(itemNameText)}" class="item-photo" />`
+          : `<span class="item-photo item-photo-empty">-</span>`;
+        const cells = splitByCampus
+          ? days
+              .flatMap((day) => campuses.map((campus) => `<td>${Number(row.dayCampusQty[`${day.ymd}::${campus}`] || 0) || ""}</td>`))
+              .join("")
+          : days.map((day) => `<td>${Number(row.dayQty[day.ymd] || 0) || ""}</td>`).join("");
+        return `<tr>
+          <td class="item-cell">
+            ${itemPhoto}
+            <div class="item-meta">
+              <div class="item-code">${escapeHtml(itemCodeText)}</div>
+              <div class="item-name">${escapeHtml(itemNameText)}</div>
+            </div>
+          </td>
+          ${cells}
+          <td><strong>${row.total}</strong></td>
+        </tr>`;
+      })
+      .join("");
+    const html = `
+      <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 14px; color: #1c2e4f; }
+          h1 { margin: 0 0 8px; font-size: 22px; }
+          p.meta { margin: 0 0 10px; color: #4e6287; font-size: 12px; }
+          table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          th, td { border: 1px solid #c9d8ed; padding: 3px 2px; font-size: 9px; text-align: center; }
+          th { background: #edf4ff; font-weight: 700; }
+          td:first-child, th:first-child { text-align: left; width: 290px; max-width: 290px; font-size: 8.8px; }
+          td:last-child, th:last-child { width: 46px; font-weight: 800; }
+          thead tr:nth-child(2) th { background: #f5f9ff; font-size: 8.5px; }
+          .day-main, .day-sub { display: block; line-height: 1.05; text-align: center; }
+          .day-main { font-size: 9px; font-weight: 800; }
+          .day-sub { margin-top: 1px; font-size: 7px; color: #4d628a; font-weight: 700; }
+          .item-cell { display: flex; align-items: center; gap: 6px; }
+          .item-meta { min-width: 0; display: grid; gap: 1px; }
+          .item-code, .item-name {
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 250px;
+          }
+          .item-code { font-size: 8px; font-weight: 800; color: #2e4a78; }
+          .item-name { font-size: 8.5px; font-weight: 700; color: #1f2f4d; }
+          .item-photo {
+            width: 16px; height: 16px; border-radius: 4px; object-fit: cover;
+            border: 1px solid #c6d6ef; background: #eef5ff; flex: 0 0 auto;
+          }
+          .item-photo-empty {
+            display: inline-grid; place-items: center; color: #6b7da2; font-weight: 700; font-size: 9px;
+          }
+          @page { size: A3 landscape; margin: 6mm; }
+          @media print { body { margin: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus: ${escapeHtml(campusText)} | Period: ${escapeHtml(periodText)}</p>
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "ទំនិញ" : "Item")}</th>
+              ${dayHeadHtml}
+              <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "សរុប" : "Total")}</th>
+            </tr>
+            ${campusHeadHtml}
           </thead>
           <tbody>${bodyHtml}</tbody>
         </table>
@@ -24308,41 +24702,326 @@ export default function App() {
                     </div>
                     <div className="inventory-admin-matrix-wrap">
                       <div className="panel-row">
-                        <strong>{lang === "km" ? "តារាងចេញស្តុកប្រចាំខែ (Item x Day)" : "Monthly OUT Matrix (Item x Day)"}</strong>
-                        <span className="tiny">
-                          {lang === "km" ? "ជួរដេក=Item | ជួរឈរ=ថ្ងៃ 1-31" : "Rows = Item | Columns = Day 1-31"}
-                        </span>
+                        <div className="inventory-admin-matrix-title-block">
+                          <strong>{lang === "km" ? "តារាងចេញស្តុកប្រចាំខែ (Item x Day)" : "Monthly OUT Matrix (Item x Day)"}</strong>
+                          <span className="tiny">
+                            {inventoryAdminOutDayMatrix.splitByCampus
+                              ? (lang === "km" ? "ជួរដេក=Item | ជួរឈរ=ថ្ងៃ × Campus" : "Rows = Item | Columns = Day x Campus")
+                              : (lang === "km" ? "ជួរដេក=Item | ជួរឈរ=ថ្ងៃ 1-31" : "Rows = Item | Columns = Day 1-31")}
+                          </span>
+                        </div>
+                        <div className="inventory-admin-matrix-head-tools" ref={inventoryAdminMatrixDateWrapRef}>
+                          <label className="field inventory-admin-matrix-campus-field">
+                            <span>{t.campus}</span>
+                            <select
+                              className="input"
+                              value={inventoryAdminMatrixCampusFilter}
+                              onChange={(e) => setInventoryAdminMatrixCampusFilter(e.target.value)}
+                            >
+                              {inventoryAdminMatrixCampusOptions.map((campus) => (
+                                <option key={`inventory-admin-matrix-campus-${campus}`} value={campus}>
+                                  {campus === "ALL" ? t.allCampuses : inventoryCampusLabel(campus)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field quickout-date-field inventory-admin-matrix-date-field inventory-admin-matrix-date-field-start">
+                            <span>{lang === "km" ? "ចាប់ផ្តើម" : "Start"}</span>
+                            <div className="quickout-date-input-wrap">
+                              <input
+                                className="input"
+                                type="text"
+                                readOnly
+                                value={inventoryAdminMatrixDisplayDateFrom}
+                                placeholder="dd/mm/yyyy"
+                              />
+                              <button
+                                type="button"
+                                className="quickout-date-icon-btn"
+                                onClick={() => openInventoryAdminMatrixDatePicker("from")}
+                                aria-label="Open Start Date Calendar"
+                              >
+                                <Calendar size={18} />
+                              </button>
+                            </div>
+                            {inventoryAdminMatrixDatePickerOpen === "from" ? (
+                              <div className="quickout-eco-inline-panel">
+                                <div className="quickout-eco-head">
+                                  <div className="inventory-admin-matrix-date-panel-title">
+                                    <strong className="quickout-eco-title">{inventoryAdminMatrixDateMonthLabel}</strong>
+                                    <span className="inventory-admin-matrix-date-chip inventory-admin-matrix-date-chip-start">
+                                      {lang === "km" ? "ថ្ងៃចាប់ផ្តើម" : "Start"}
+                                    </span>
+                                  </div>
+                                  <div className="quickout-eco-nav">
+                                    <button
+                                      type="button"
+                                      className="quickout-eco-nav-btn"
+                                      aria-label="Previous month"
+                                      onClick={() =>
+                                        setInventoryAdminMatrixDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                                      }
+                                    >
+                                      {"<"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="quickout-eco-nav-btn"
+                                      aria-label="Next month"
+                                      onClick={() =>
+                                        setInventoryAdminMatrixDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                                      }
+                                    >
+                                      {">"}
+                                    </button>
+                                  </div>
+                                </div>
+                                <CalendarGridTemplate
+                                  weekdayLabels={calendarWeekdayLabels}
+                                  days={inventoryAdminMatrixDateGridDays}
+                                  selectedDate={inventoryAdminMatrixSelectedDate}
+                                  todayYmd={todayYmd}
+                                  onSelectDate={(ymd) => {
+                                    if (!isSuperAdmin && (ymd < inventoryAdminMatrixMonthBounds.start || ymd > inventoryAdminMatrixMonthBounds.end)) return;
+                                    setInventoryAdminMatrixSelectedDate(ymd);
+                                    setInventoryAdminMatrixDateFrom(ymd);
+                                    setInventoryAdminMatrixDatePickerOpen(null);
+                                  }}
+                                  isDayDisabled={(d) =>
+                                    !d.inMonth || (!isSuperAdmin && (d.ymd < inventoryAdminMatrixMonthBounds.start || d.ymd > inventoryAdminMatrixMonthBounds.end))
+                                  }
+                                  gridClassName="quickout-eco-grid"
+                                  renderHolidayTag={(d) =>
+                                    d.holidayName ? (
+                                      <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                                        {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                                      </em>
+                                    ) : null
+                                  }
+                                  headKeyPrefix="inventory-admin-matrix-start-head"
+                                  dayKeyPrefix="inventory-admin-matrix-start-day"
+                                />
+                              </div>
+                            ) : null}
+                          </label>
+                          <label className="field quickout-date-field inventory-admin-matrix-date-field inventory-admin-matrix-date-field-end">
+                            <span>{lang === "km" ? "បញ្ចប់" : "End"}</span>
+                            <div className="quickout-date-input-wrap">
+                              <input
+                                className="input"
+                                type="text"
+                                readOnly
+                                value={inventoryAdminMatrixDisplayDateTo}
+                                placeholder="dd/mm/yyyy"
+                              />
+                              <button
+                                type="button"
+                                className="quickout-date-icon-btn"
+                                onClick={() => openInventoryAdminMatrixDatePicker("to")}
+                                aria-label="Open End Date Calendar"
+                              >
+                                <Calendar size={18} />
+                              </button>
+                            </div>
+                            {inventoryAdminMatrixDatePickerOpen === "to" ? (
+                              <div className="quickout-eco-inline-panel">
+                                <div className="quickout-eco-head">
+                                  <div className="inventory-admin-matrix-date-panel-title">
+                                    <strong className="quickout-eco-title">{inventoryAdminMatrixDateMonthLabel}</strong>
+                                    <span className="inventory-admin-matrix-date-chip inventory-admin-matrix-date-chip-end">
+                                      {lang === "km" ? "ថ្ងៃបញ្ចប់" : "End"}
+                                    </span>
+                                  </div>
+                                  <div className="quickout-eco-nav">
+                                    <button
+                                      type="button"
+                                      className="quickout-eco-nav-btn"
+                                      aria-label="Previous month"
+                                      onClick={() =>
+                                        setInventoryAdminMatrixDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                                      }
+                                    >
+                                      {"<"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="quickout-eco-nav-btn"
+                                      aria-label="Next month"
+                                      onClick={() =>
+                                        setInventoryAdminMatrixDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                                      }
+                                    >
+                                      {">"}
+                                    </button>
+                                  </div>
+                                </div>
+                                <CalendarGridTemplate
+                                  weekdayLabels={calendarWeekdayLabels}
+                                  days={inventoryAdminMatrixDateGridDays}
+                                  selectedDate={inventoryAdminMatrixSelectedDate}
+                                  todayYmd={todayYmd}
+                                  onSelectDate={(ymd) => {
+                                    if (!isSuperAdmin && (ymd < inventoryAdminMatrixMonthBounds.start || ymd > inventoryAdminMatrixMonthBounds.end)) return;
+                                    setInventoryAdminMatrixSelectedDate(ymd);
+                                    setInventoryAdminMatrixDateTo(ymd);
+                                    setInventoryAdminMatrixDatePickerOpen(null);
+                                  }}
+                                  isDayDisabled={(d) =>
+                                    !d.inMonth || (!isSuperAdmin && (d.ymd < inventoryAdminMatrixMonthBounds.start || d.ymd > inventoryAdminMatrixMonthBounds.end))
+                                  }
+                                  gridClassName="quickout-eco-grid"
+                                  renderHolidayTag={(d) =>
+                                    d.holidayName ? (
+                                      <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                                        {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                                      </em>
+                                    ) : null
+                                  }
+                                  headKeyPrefix="inventory-admin-matrix-end-head"
+                                  dayKeyPrefix="inventory-admin-matrix-end-day"
+                                />
+                              </div>
+                            ) : null}
+                          </label>
+                          <button
+                            type="button"
+                            className="btn-primary report-print-btn inventory-admin-matrix-print-btn"
+                            onClick={printMonthlyOutMatrix}
+                          >
+                            <Printer size={16} aria-hidden={true} />
+                            <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
+                          </button>
+                        </div>
                       </div>
                       <div className="table-wrap inventory-admin-matrix-scroll">
                         <table className="inventory-admin-matrix">
                           <thead>
                             <tr>
-                              <th>{lang === "km" ? "Item" : "Item"}</th>
+                              <th
+                                className="inventory-admin-matrix-item-head"
+                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                              >
+                                {lang === "km" ? "Item" : "Item"}
+                              </th>
                               {inventoryAdminOutDayMatrix.days.map((day) => (
-                                <th key={`inventory-admin-matrix-head-${day}`}>{day}</th>
+                                inventoryAdminOutDayMatrix.splitByCampus ? (
+                                  <th
+                                    key={`inventory-admin-matrix-head-day-${day.ymd}`}
+                                    className={`inventory-admin-matrix-day-head ${day.holidayType ? `inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday" : ""}`}
+                                    colSpan={inventoryAdminOutDayMatrix.campuses.length}
+                                    title={day.holidayName || undefined}
+                                  >
+                                    <span className="inventory-admin-matrix-day-head-main">{day.dayLabel}</span>
+                                    <span className="inventory-admin-matrix-day-head-sub">{day.weekdayLabel}</span>
+                                  </th>
+                                ) : (
+                                  <th
+                                    key={`inventory-admin-matrix-head-${day.ymd}`}
+                                    className={`inventory-admin-matrix-day-head ${day.holidayType ? `inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday" : ""}`}
+                                    title={day.holidayName || undefined}
+                                  >
+                                    <span className="inventory-admin-matrix-day-head-main">{day.dayLabel}</span>
+                                    <span className="inventory-admin-matrix-day-head-sub">{day.weekdayLabel}</span>
+                                  </th>
+                                )
                               ))}
-                              <th>{lang === "km" ? "សរុប" : "Total"}</th>
+                              <th
+                                className="inventory-admin-matrix-total-head"
+                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                              >
+                                {lang === "km" ? "សរុប" : "Total"}
+                              </th>
                             </tr>
+                            {inventoryAdminOutDayMatrix.splitByCampus ? (
+                              <tr>
+                                {inventoryAdminOutDayMatrix.days.flatMap((day) =>
+                                  inventoryAdminOutDayMatrix.campuses.map((campus) => (
+                                    <th
+                                      key={`inventory-admin-matrix-head-campus-${day.ymd}-${campus}`}
+                                      className={`inventory-admin-matrix-campus-head inventory-admin-matrix-campus-${campus.toLowerCase()} ${
+                                        campus === inventoryAdminOutDayMatrix.campuses[0] ? "inventory-admin-matrix-campus-day-start" : ""
+                                      } ${
+                                        campus === inventoryAdminOutDayMatrix.campuses[inventoryAdminOutDayMatrix.campuses.length - 1]
+                                          ? "inventory-admin-matrix-campus-day-end"
+                                          : ""
+                                      }`}
+                                      title={inventoryCampusLabel(campus)}
+                                    >
+                                      {campus}
+                                    </th>
+                                  ))
+                                )}
+                              </tr>
+                            ) : null}
                           </thead>
                           <tbody>
                             {inventoryAdminOutDayMatrix.rows.length ? (
-                              inventoryAdminOutDayMatrix.rows.map((row) => (
-                                <tr key={`inventory-admin-matrix-row-${row.itemCode}-${row.itemName}`}>
+                              inventoryAdminOutDayMatrix.rows.map((row, index) => (
+                                <tr
+                                  key={`inventory-admin-matrix-row-${row.itemCode}-${row.itemName}`}
+                                  className={`inventory-admin-matrix-row inventory-admin-matrix-row-${index % 6}`}
+                                >
                                   <th className="inventory-admin-matrix-item-cell">
                                     <div className="inventory-admin-matrix-item">
-                                      <strong>{row.itemCode}</strong>
-                                      <span>{inventoryDisplayName(row.itemName, lang)}</span>
+                                      {row.photo ? (
+                                        <img
+                                          loading="lazy"
+                                          decoding="async"
+                                          src={row.photo}
+                                          alt={inventoryDisplayName(row.itemName, lang)}
+                                          className="inventory-admin-matrix-item-photo"
+                                        />
+                                      ) : (
+                                        <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
+                                      )}
+                                      <div className="inventory-admin-matrix-item-text">
+                                        {!inventoryAdminOutDayMatrix.splitByCampus ? <strong>{row.itemCode}</strong> : null}
+                                        <span>{inventoryDisplayName(row.itemName, lang)}</span>
+                                      </div>
                                     </div>
                                   </th>
-                                  {inventoryAdminOutDayMatrix.days.map((day) => (
-                                    <td key={`inventory-admin-matrix-cell-${row.itemCode}-${day}`}>{row.dayQty[day] || ""}</td>
-                                  ))}
+                                  {inventoryAdminOutDayMatrix.days.map((day) =>
+                                    inventoryAdminOutDayMatrix.splitByCampus
+                                      ? inventoryAdminOutDayMatrix.campuses.map((campus) => (
+                                          <td
+                                            key={`inventory-admin-matrix-cell-${row.itemCode}-${day.ymd}-${campus}`}
+                                            className={`inventory-admin-matrix-campus-cell inventory-admin-matrix-campus-${campus.toLowerCase()} ${
+                                              campus === inventoryAdminOutDayMatrix.campuses[0]
+                                                ? "inventory-admin-matrix-campus-day-start"
+                                                : ""
+                                            } ${
+                                              campus === inventoryAdminOutDayMatrix.campuses[inventoryAdminOutDayMatrix.campuses.length - 1]
+                                                ? "inventory-admin-matrix-campus-day-end"
+                                                : ""
+                                            } ${day.holidayType ? `inventory-admin-matrix-day-event-cell inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday-cell" : ""}`}
+                                          >
+                                            {row.dayCampusQty[`${day.ymd}::${campus}`] || ""}
+                                          </td>
+                                        ))
+                                      : (
+                                          <td
+                                            key={`inventory-admin-matrix-cell-${row.itemCode}-${day.ymd}`}
+                                            className={`${day.holidayType ? `inventory-admin-matrix-day-event-cell inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday-cell" : ""}`}
+                                          >
+                                            {row.dayQty[day.ymd] || ""}
+                                          </td>
+                                        )
+                                  )}
                                   <td><strong>{row.total}</strong></td>
                                 </tr>
                               ))
                             ) : (
                               <tr>
-                                <td colSpan={Math.max(3, inventoryAdminOutDayMatrix.days.length + 2)}>
+                                <td
+                                  colSpan={Math.max(
+                                    3,
+                                    2 +
+                                      inventoryAdminOutDayMatrix.days.length *
+                                        (inventoryAdminOutDayMatrix.splitByCampus
+                                          ? Math.max(1, inventoryAdminOutDayMatrix.campuses.length)
+                                          : 1)
+                                  )}
+                                >
                                   {lang === "km" ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់តម្រងបច្ចុប្បន្ន" : "No stock-out data for current filters."}
                                 </td>
                               </tr>
