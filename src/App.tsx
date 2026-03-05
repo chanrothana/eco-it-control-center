@@ -3791,6 +3791,29 @@ type AssetTypePickerProps = {
   getIcon?: (opt: AssetTypePickerOption) => React.ReactNode;
 };
 
+type LocationPickerOption = {
+  value: string;
+  label: string;
+};
+type LocationPickerProps = {
+  value: string;
+  options: LocationPickerOption[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  searchPlaceholder?: string;
+  emptyText?: string;
+};
+type UserPickerProps = {
+  value: string;
+  users: StaffUser[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  searchPlaceholder?: string;
+  emptyText?: string;
+};
+
 function AssetTypePicker({
   value,
   options,
@@ -3893,6 +3916,242 @@ function AssetTypePicker({
                 >
                   <span className="type-code-picker-icon">{getIcon ? getIcon(opt) : <Package size={16} aria-hidden={true} />}</span>
                   <span>{opt.label} ({opt.code})</span>
+                </button>
+              ))
+            ) : (
+              <div className="asset-picker-empty">{emptyText}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LocationPicker({
+  value,
+  options,
+  onChange,
+  placeholder = "Select location",
+  disabled,
+  searchPlaceholder = "Search location...",
+  emptyText = "No location found.",
+}: LocationPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const prevValueRef = useRef(value);
+  const selected = options.find((opt) => String(opt.value) === value) || null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setOpen(false);
+      setSearch("");
+    }
+  }, [value]);
+
+  const filtered = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((opt) => `${opt.label} ${opt.value}`.toLowerCase().includes(q));
+  }, [options, deferredSearch]);
+
+  const selectLocation = useCallback(
+    (nextValue: string) => {
+      onChange(nextValue);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange]
+  );
+
+  return (
+    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="asset-picker-trigger input"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen(true)}
+      >
+        {selected ? (
+          <span className="asset-picker-selected">
+            <span>{selected.label}</span>
+          </span>
+        ) : (
+          <span className="asset-picker-placeholder">{placeholder}</span>
+        )}
+        <span className="asset-picker-caret">▾</span>
+      </button>
+      {open ? (
+        <div className="asset-picker-menu">
+          <div className="type-code-picker-search-wrap">
+            <Search size={15} aria-hidden={true} className="type-code-picker-search-icon" />
+            <input
+              className="input asset-picker-search type-code-picker-search"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="asset-picker-list">
+            {filtered.length ? (
+              filtered.map((opt) => (
+                <button
+                  type="button"
+                  key={`location-picker-${opt.value}`}
+                  className={`asset-picker-option ${opt.value === value ? "asset-picker-option-active" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectLocation(opt.value);
+                  }}
+                  onClick={() => selectLocation(opt.value)}
+                >
+                  <span>{opt.label}</span>
+                </button>
+              ))
+            ) : (
+              <div className="asset-picker-empty">{emptyText}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function UserPicker({
+  value,
+  users,
+  onChange,
+  placeholder = "Select user",
+  disabled,
+  searchPlaceholder = "Search user...",
+  emptyText = "No user found.",
+}: UserPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const prevValueRef = useRef(value);
+  const selected = users.find((u) => String(u.fullName) === value) || null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setOpen(false);
+      setSearch("");
+    }
+  }, [value]);
+
+  const filtered = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => `${u.fullName} ${u.position} ${u.email || ""}`.toLowerCase().includes(q));
+  }, [users, deferredSearch]);
+
+  const selectUser = useCallback(
+    (nextValue: string) => {
+      onChange(nextValue);
+      setOpen(false);
+      setSearch("");
+    },
+    [onChange]
+  );
+
+  return (
+    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="asset-picker-trigger input"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen(true)}
+      >
+        {selected ? (
+          <span className="asset-picker-selected">
+            <span>{selected.fullName} - {selected.position}</span>
+          </span>
+        ) : (
+          <span className="asset-picker-placeholder">{placeholder}</span>
+        )}
+        <span className="asset-picker-caret">▾</span>
+      </button>
+      {open ? (
+        <div className="asset-picker-menu">
+          <div className="type-code-picker-search-wrap">
+            <Search size={15} aria-hidden={true} className="type-code-picker-search-icon" />
+            <input
+              className="input asset-picker-search type-code-picker-search"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="asset-picker-list">
+            <button
+              type="button"
+              className={`asset-picker-option ${!value ? "asset-picker-option-active" : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                selectUser("");
+              }}
+              onClick={() => selectUser("")}
+            >
+              <span>{placeholder}</span>
+            </button>
+            {filtered.length ? (
+              filtered.map((u) => (
+                <button
+                  type="button"
+                  key={`user-picker-${u.id}`}
+                  className={`asset-picker-option ${u.fullName === value ? "asset-picker-option-active" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectUser(u.fullName);
+                  }}
+                  onClick={() => selectUser(u.fullName)}
+                >
+                  <span>{u.fullName} - {u.position}</span>
                 </button>
               ))
             ) : (
@@ -19116,20 +19375,23 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>{t.location}</span>
-                    <select
-                      className="input"
-                      value={assetForm.location}
-                      disabled={isInactiveTabletCreate}
-                      onChange={(e) => setAssetForm((f) => ({ ...f, location: e.target.value }))}
-                    >
-                      {isInactiveTabletCreate && !campusLocations.some((loc) => loc.name === INACTIVE_TABLET_HOLDING_LOCATION) ? (
-                        <option value={INACTIVE_TABLET_HOLDING_LOCATION}>{INACTIVE_TABLET_HOLDING_LOCATION}</option>
-                      ) : null}
-                      {campusLocations.length ? null : <option value="">{t.selectLocation}</option>}
-                      {campusLocations.map((loc) => (
-                        <option key={loc.id} value={loc.name}>{loc.name}</option>
-                      ))}
-                    </select>
+                    {isInactiveTabletCreate ? (
+                      <input
+                        className="input"
+                        value={assetForm.location}
+                        readOnly
+                        disabled
+                      />
+                    ) : (
+                      <LocationPicker
+                        value={assetForm.location}
+                        options={campusLocations.map((loc) => ({ value: loc.name, label: loc.name }))}
+                        placeholder={t.selectLocation}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                        emptyText={lang === "km" ? "រកមិនឃើញទីតាំង។" : "No location found."}
+                        onChange={(value) => setAssetForm((f) => ({ ...f, location: value }))}
+                      />
+                    )}
                     {isInactiveTabletCreate ? (
                       <div className="tiny">Inactive iPad/Tablet is stored at {INACTIVE_TABLET_HOLDING_LOCATION}.</div>
                     ) : null}
@@ -20581,12 +20843,14 @@ export default function App() {
                   {userRequired && (
                     <label className="field field-wide">
                       <span>{t.user}</span>
-                      <select className="input" value={assetForm.assignedTo} onChange={(e) => setAssetForm((f) => ({ ...f, assignedTo: e.target.value }))}>
-                        <option value="">{t.selectUser}</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.fullName}>{u.fullName} - {u.position}</option>
-                        ))}
-                      </select>
+                      <UserPicker
+                        value={assetForm.assignedTo}
+                        users={users}
+                        placeholder={t.selectUser}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
+                        emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
+                        onChange={(value) => setAssetForm((f) => ({ ...f, assignedTo: value }))}
+                      />
                     </label>
                   )}
                   <label className="field">
@@ -22112,18 +22376,14 @@ export default function App() {
                     {editingStatusActive ? (
                       <label className="field field-wide">
                         <span>{t.user}</span>
-                        <select
-                          className="input"
+                        <UserPicker
                           value={assetEditForm.assignedTo}
-                          onChange={(e) => setAssetEditForm((f) => ({ ...f, assignedTo: e.target.value }))}
-                        >
-                          <option value="">-</option>
-                          {users.map((u) => (
-                            <option key={u.id} value={u.fullName}>
-                              {u.fullName} - {u.position}
-                            </option>
-                          ))}
-                        </select>
+                          users={users}
+                          placeholder={t.selectUser}
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
+                          emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
+                          onChange={(value) => setAssetEditForm((f) => ({ ...f, assignedTo: value }))}
+                        />
                         {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
                       </label>
                     ) : (
