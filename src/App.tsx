@@ -1324,7 +1324,7 @@ function needsComponentRole(type: string): boolean {
 const TEXT = {
   en: {
     school: "ECO INTERNATIONAL SCHOOL",
-    title: "IT and Safety Control Center",
+    title: "IT and Facility Control Center",
     subhead: "Centralized operations for assets, maintenance, and campus incidents.",
     view: "View",
     language: "Language",
@@ -1557,7 +1557,7 @@ const TEXT = {
   },
   km: {
     school: "សាលា អេកូ អន្តរជាតិ",
-    title: "ប្រព័ន្ធគ្រប់គ្រង IT និងសុវត្ថិភាព",
+    title: "ប្រព័ន្ធគ្រប់គ្រង IT និងបរិក្ខារ",
     subhead: "គ្រប់គ្រងទ្រព្យសម្បត្តិ ការថែទាំ និងបញ្ហាតាមគ្រប់ Campus ជាកណ្តាល។",
     view: "មើល",
     language: "ភាសា",
@@ -5300,6 +5300,8 @@ export default function App() {
   const [qrLocationFilter, setQrLocationFilter] = useState("ALL");
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
+  const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
+  const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
   const [quickCountCampusFilter, setQuickCountCampusFilter] = useState<string[]>(["ALL"]);
   const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState<string[]>(["ALL"]);
   const [quickCountLocationFilter, setQuickCountLocationFilter] = useState<string[]>(["ALL"]);
@@ -16470,6 +16472,35 @@ export default function App() {
           a.location.localeCompare(b.location)
       );
   }, [assets, assetItemName, campusLabel]);
+  const assetByLocationCampusFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(locationAssetSummaryRows.map((row) => row.campus).filter(Boolean)));
+    return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
+  }, [locationAssetSummaryRows, campusLabel]);
+  const assetByLocationLocationFilterOptions = useMemo(() => {
+    const source =
+      assetByLocationCampusFilter === "ALL"
+        ? locationAssetSummaryRows
+        : locationAssetSummaryRows.filter((row) => row.campus === assetByLocationCampusFilter);
+    const options = Array.from(new Set(source.map((row) => String(row.location || "").trim()).filter(Boolean)));
+    return options.sort((a, b) => a.localeCompare(b));
+  }, [locationAssetSummaryRows, assetByLocationCampusFilter]);
+  useEffect(() => {
+    if (assetByLocationLocationFilter === "ALL") return;
+    if (!assetByLocationLocationFilterOptions.includes(assetByLocationLocationFilter)) {
+      setAssetByLocationLocationFilter("ALL");
+    }
+  }, [assetByLocationLocationFilter, assetByLocationLocationFilterOptions]);
+  const filteredLocationAssetSummaryRows = useMemo(() => {
+    return locationAssetSummaryRows.filter((row) => {
+      if (assetByLocationCampusFilter !== "ALL" && row.campus !== assetByLocationCampusFilter) return false;
+      if (assetByLocationLocationFilter !== "ALL" && row.location !== assetByLocationLocationFilter) return false;
+      return true;
+    });
+  }, [locationAssetSummaryRows, assetByLocationCampusFilter, assetByLocationLocationFilter]);
+  const filteredLocationAssetTotal = useMemo(
+    () => filteredLocationAssetSummaryRows.reduce((sum, row) => sum + row.total, 0),
+    [filteredLocationAssetSummaryRows]
+  );
   const assetMasterSetRows = useMemo(() => {
     const toItemDescription = (asset: Asset) => {
       const chunks = [
@@ -16886,6 +16917,7 @@ export default function App() {
   const hasReportFilters = useMemo(
     () =>
       reportType === "asset_master" ||
+      reportType === "asset_by_location" ||
       reportType === "maintenance_completion" ||
       reportType === "verification_summary" ||
       reportType === "qr_labels",
@@ -16935,6 +16967,11 @@ export default function App() {
       setQrLocationFilter("ALL");
       setQrCategoryFilter("ALL");
       setQrItemFilter(["ALL"]);
+      return;
+    }
+    if (reportType === "asset_by_location") {
+      setAssetByLocationCampusFilter("ALL");
+      setAssetByLocationLocationFilter("ALL");
     }
   }, [reportType, resetAssetMasterReportFilters]);
 
@@ -16947,6 +16984,8 @@ export default function App() {
     setQrLocationFilter("ALL");
     setQrCategoryFilter("ALL");
     setQrItemFilter(["ALL"]);
+    setAssetByLocationCampusFilter("ALL");
+    setAssetByLocationLocationFilter("ALL");
     setReportPeriodMode("month");
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
@@ -17904,7 +17943,7 @@ export default function App() {
     } else if (reportType === "asset_by_location") {
       title = "Asset by Campus and Location Report";
       columns = ["Campus", "Location", "Total Units", "IT Units", "Safety Units", "Item Breakdown"];
-      rows = locationAssetSummaryRows.map((r) => [
+      rows = filteredLocationAssetSummaryRows.map((r) => [
         reportCampusName(r.campus),
         r.location,
         String(r.total),
@@ -18045,7 +18084,7 @@ export default function App() {
         : reportType === "verification_summary"
         ? `<p><strong>Total:</strong> ${verificationSummary.total} | <strong>Verified:</strong> ${verificationSummary.verified} | <strong>Issue Found:</strong> ${verificationSummary.issue} | <strong>Missing:</strong> ${verificationSummary.missing}</p>`
         : reportType === "asset_by_location"
-        ? `<p><strong>Locations:</strong> ${locationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${assets.length}</p>`
+        ? `<p><strong>Locations:</strong> ${filteredLocationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${filteredLocationAssetTotal}</p>`
         : reportType === "staff_borrowing"
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
         : reportType === "asset_master"
@@ -28087,17 +28126,16 @@ export default function App() {
           <section className="panel">
             <div className="report-title-row">
               <h2>{t.reports}</h2>
-              {isPhoneView || !hasReportFilters ? (
-                <button
-                  className="btn-primary report-print-btn report-title-print-btn"
-                  onClick={() => {
-                    setReportMobileFiltersOpen(false);
-                    printCurrentReport();
-                  }}
-                >
-                  {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
-                </button>
-              ) : null}
+              <button
+                className="btn-primary report-print-btn report-title-print-btn"
+                onClick={() => {
+                  setReportMobileFiltersOpen(false);
+                  printCurrentReport();
+                }}
+              >
+                <Printer size={16} aria-hidden={true} />
+                <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
+              </button>
             </div>
             {reportType === "maintenance_completion" && (
               <div className="stats-grid" style={{ marginBottom: 10 }}>
@@ -28312,6 +28350,35 @@ export default function App() {
                   </details>
                 </>
               ) : null}
+              {reportType === "asset_by_location" ? (
+                <>
+                  <LocationPicker
+                    value={assetByLocationCampusFilter}
+                    onChange={setAssetByLocationCampusFilter}
+                    options={[
+                      { value: "ALL", label: t.allCampuses },
+                      ...assetByLocationCampusFilterOptions.map((campus) => ({
+                        value: campus,
+                        label: reportCampusName(campus),
+                      })),
+                    ]}
+                    placeholder={t.allCampuses}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <LocationPicker
+                    value={assetByLocationLocationFilter}
+                    onChange={setAssetByLocationLocationFilter}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
+                      ...assetByLocationLocationFilterOptions.map((location) => ({ value: location, label: location })),
+                    ]}
+                    placeholder={lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                  />
+                </>
+              ) : null}
               {reportType === "asset_master" ? (
                 <>
                   <LocationPicker
@@ -28414,16 +28481,6 @@ export default function App() {
                             onClick={resetReportFilters}
                           >
                             {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-primary report-print-btn report-filter-print-btn"
-                            onClick={() => {
-                              setReportMobileFiltersOpen(false);
-                              printCurrentReport();
-                            }}
-                          >
-                            {lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
                           </button>
                         </>
                       ) : null}
@@ -28700,7 +28757,7 @@ export default function App() {
 
             {reportType === "asset_by_location" && (
               <div className="table-wrap report-table-wrap">
-                <table>
+                <table className="report-asset-by-location-table">
                   <thead>
                     <tr>
                       <th>{t.campus}</th>
@@ -28708,19 +28765,19 @@ export default function App() {
                       <th>Total Units</th>
                       <th>IT Units</th>
                       <th>Safety Units</th>
-                      <th>Item Breakdown</th>
+                      <th className="report-item-breakdown-head">Item Breakdown</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {locationAssetSummaryRows.length ? (
-                      locationAssetSummaryRows.map((row) => (
+                    {filteredLocationAssetSummaryRows.length ? (
+                      filteredLocationAssetSummaryRows.map((row) => (
                         <tr key={`report-loc-${row.campus}-${row.location}`}>
                           <td>{reportCampusName(row.campus)}</td>
                           <td>{row.location}</td>
                           <td><strong>{row.total}</strong></td>
                           <td>{row.it}</td>
                           <td>{row.safety}</td>
-                          <td>{row.itemSummary || "-"}</td>
+                          <td className="report-item-breakdown-cell">{row.itemSummary || "-"}</td>
                         </tr>
                       ))
                     ) : (

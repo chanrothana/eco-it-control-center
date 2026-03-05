@@ -1347,13 +1347,14 @@ h2 {
 }
 
 .report-filter-reset-btn {
-  grid-column: -3 / -2;
+  grid-column: auto;
+  width: 100%;
 }
 
 .report-filter-print-btn {
-  grid-column: -2 / -1;
-  justify-self: end;
-  width: auto;
+  grid-column: auto;
+  justify-self: stretch;
+  width: 100%;
   min-width: max-content;
 }
 
@@ -3996,9 +3997,19 @@ label.backup-action-btn {
 }
 
 .report-print-btn {
-  min-width: 122px;
+  min-width: max-content;
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   white-space: nowrap;
   flex-shrink: 0;
+  padding: 0 24px;
+}
+
+.report-print-btn span {
+  white-space: nowrap;
 }
 
 .set-code-connected-list {
@@ -5431,6 +5442,58 @@ tr.row-maint-maintenance:hover td {
   word-break: normal;
   text-align: left;
   margin: 0 auto;
+}
+
+.report-table-wrap .report-item-breakdown-head {
+  text-align: left;
+}
+
+.report-table-wrap .report-item-breakdown-cell {
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+.report-table-wrap .report-asset-by-location-table {
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.report-table-wrap .report-asset-by-location-table th,
+.report-table-wrap .report-asset-by-location-table td {
+  white-space: normal;
+}
+
+.report-table-wrap .report-asset-by-location-table th:nth-child(1),
+.report-table-wrap .report-asset-by-location-table td:nth-child(1) {
+  width: 15%;
+}
+
+.report-table-wrap .report-asset-by-location-table th:nth-child(2),
+.report-table-wrap .report-asset-by-location-table td:nth-child(2) {
+  width: 15%;
+}
+
+.report-table-wrap .report-asset-by-location-table td:nth-child(1),
+.report-table-wrap .report-asset-by-location-table td:nth-child(2) {
+  text-align: left;
+}
+
+.report-table-wrap .report-asset-by-location-table th:nth-child(3),
+.report-table-wrap .report-asset-by-location-table td:nth-child(3),
+.report-table-wrap .report-asset-by-location-table th:nth-child(4),
+.report-table-wrap .report-asset-by-location-table td:nth-child(4),
+.report-table-wrap .report-asset-by-location-table th:nth-child(5),
+.report-table-wrap .report-asset-by-location-table td:nth-child(5) {
+  width: 8%;
+}
+
+.report-table-wrap .report-asset-by-location-table th:nth-child(6),
+.report-table-wrap .report-asset-by-location-table td:nth-child(6) {
+  width: 46%;
 }
 
 .report-service-link {
