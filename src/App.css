@@ -1571,6 +1571,7 @@ h2 {
   padding: 10px 12px;
   cursor: pointer;
   user-select: none;
+  text-align: left;
 }
 
 .asset-list-filters .filter-menu > summary {
@@ -1610,6 +1611,22 @@ h2 {
   padding: 8px;
 }
 
+.report-filters .filter-menu > summary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 26px;
+}
+
+.report-filters .filter-menu-list {
+  width: max-content;
+  min-width: 100%;
+  max-width: min(92vw, 640px);
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .asset-list-filters .filter-menu-list {
   width: max(100%, 320px);
   max-width: min(460px, calc(100vw - 56px));
@@ -1625,6 +1642,15 @@ h2 {
   min-height: 32px;
   padding: 4px 2px;
   color: #24345a;
+  text-align: left;
+}
+
+.filter-menu-item > span {
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .filter-menu-item input {
@@ -4103,15 +4129,21 @@ label.backup-action-btn {
   position: relative;
 }
 
+/* Canonical style hook for all searchable dropdown controls. */
+.searchable-dropdown {
+  position: relative;
+}
+
 .asset-picker-trigger {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   text-align: left;
   cursor: pointer;
   min-height: 44px;
+  overflow: hidden;
 }
 
 .asset-picker-selected {
@@ -4119,6 +4151,16 @@ label.backup-action-btn {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.asset-picker-selected > span:last-child {
+  min-width: 0;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .parent-asset-picker-selected-content,
@@ -4143,18 +4185,25 @@ label.backup-action-btn {
 
 .asset-picker-placeholder {
   color: #8b7760;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .asset-picker-caret {
   margin-left: auto;
   color: #7f6a52;
+  flex: 0 0 auto;
 }
 
 .asset-picker-menu {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  right: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(92vw, 640px);
   z-index: 30;
   background: #ffffff;
   border: 1px solid #c9d6eb;
@@ -4217,6 +4266,13 @@ label.backup-action-btn {
   text-align: left;
   color: #223253;
   cursor: pointer;
+}
+
+.asset-picker-option > span:last-child {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .asset-picker-option:hover {

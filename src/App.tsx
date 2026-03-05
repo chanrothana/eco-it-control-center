@@ -3710,7 +3710,7 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
   );
 
   return (
-    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -3824,6 +3824,24 @@ type UserPickerProps = {
   emptyText?: string;
 };
 
+type SearchableMultiSelectOption = {
+  value: string;
+  label: string;
+};
+type SearchableMultiSelectPickerProps = {
+  summary: string;
+  options: SearchableMultiSelectOption[];
+  selectedValues: string[];
+  onToggleValue: (value: string, checked: boolean) => void;
+  allOptionLabel?: string;
+  allOptionChecked?: boolean;
+  onToggleAllOption?: (checked: boolean) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  searchPlaceholder?: string;
+  emptyText?: string;
+};
+
 function AssetTypePicker({
   value,
   options,
@@ -3882,7 +3900,7 @@ function AssetTypePicker({
   );
 
   return (
-    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -3995,7 +4013,7 @@ function LocationPicker({
   );
 
   return (
-    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -4039,6 +4057,104 @@ function LocationPicker({
                 >
                   <span>{opt.label}</span>
                 </button>
+              ))
+            ) : (
+              <div className="asset-picker-empty">{emptyText}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchableMultiSelectPicker({
+  summary,
+  options,
+  selectedValues,
+  onToggleValue,
+  allOptionLabel,
+  allOptionChecked = false,
+  onToggleAllOption,
+  placeholder = "Select options",
+  disabled,
+  searchPlaceholder = "Search...",
+  emptyText = "No option found.",
+}: SearchableMultiSelectPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const filteredOptions = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((opt) => `${opt.label} ${opt.value}`.toLowerCase().includes(q));
+  }, [options, deferredSearch]);
+
+  return (
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="asset-picker-trigger input"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="asset-picker-selected">
+          <span>{summary || placeholder}</span>
+        </span>
+        <span className="asset-picker-caret">▾</span>
+      </button>
+      {open ? (
+        <div className="asset-picker-menu">
+          <div className="type-code-picker-search-wrap">
+            <Search size={15} aria-hidden={true} className="type-code-picker-search-icon" />
+            <input
+              className="input asset-picker-search type-code-picker-search"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="asset-picker-list">
+            {onToggleAllOption ? (
+              <label className="asset-picker-option searchable-multi-option">
+                <input
+                  type="checkbox"
+                  checked={allOptionChecked}
+                  onChange={(e) => onToggleAllOption(e.target.checked)}
+                />
+                <span>{allOptionLabel || "All"}</span>
+              </label>
+            ) : null}
+            {filteredOptions.length ? (
+              filteredOptions.map((opt) => (
+                <label key={`searchable-multi-${opt.value}`} className="asset-picker-option searchable-multi-option">
+                  <input
+                    type="checkbox"
+                    checked={selectedValues.includes(opt.value)}
+                    onChange={(e) => onToggleValue(opt.value, e.target.checked)}
+                  />
+                  <span>{opt.label}</span>
+                </label>
               ))
             ) : (
               <div className="asset-picker-empty">{emptyText}</div>
@@ -4107,7 +4223,7 @@ function UserPicker({
   );
 
   return (
-    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -4236,7 +4352,7 @@ function ParentAssetPicker({
   );
 
   return (
-    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -4365,7 +4481,7 @@ function InventoryItemPicker({
   );
 
   return (
-    <div className={`asset-picker ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -18810,26 +18926,34 @@ export default function App() {
               {maintenanceQuickMode ? (
                 <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
               ) : (
-                <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} className="input">
-                  {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                  {allowedCampusOptions.map((campus) => (
-                    <option key={campus} value={campus}>{campusLabel(campus)}</option>
-                  ))}
-                </select>
+                <LocationPicker
+                  value={campusFilter}
+                  options={[
+                    ...(isAdmin ? [{ value: "ALL", label: t.allCampuses }] : []),
+                    ...allowedCampusOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
+                  ]}
+                  onChange={setCampusFilter}
+                  placeholder={t.allCampuses}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                />
               )}
             </label>
 
             <label className="field campus-field">
               <span>{t.language}</span>
-              <select
+              <LocationPicker
                 value={lang}
-                onChange={(e) => setLang(e.target.value as Lang)}
-                className="input"
+                onChange={(value) => setLang(value as Lang)}
+                options={[
+                  ...(!maintenanceQuickMode ? [{ value: "en", label: t.english }] : []),
+                  { value: "km", label: t.khmer },
+                ]}
+                placeholder={t.language}
+                searchPlaceholder={lang === "km" ? "ស្វែងរកភាសា..." : "Search language..."}
+                emptyText={lang === "km" ? "មិនមានភាសា" : "No language found."}
                 disabled={maintenanceQuickMode}
-              >
-                {!maintenanceQuickMode ? <option value="en">{t.english}</option> : null}
-                <option value="km">{t.khmer}</option>
-              </select>
+              />
             </label>
 
             <label className="field campus-field">
@@ -19024,35 +19148,39 @@ export default function App() {
                   {maintenanceQuickMode ? (
                     <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
                   ) : (
-                    <select
+                    <LocationPicker
                       value={campusFilter}
-                      onChange={(e) => {
-                        setCampusFilter(e.target.value);
+                      onChange={(value) => {
+                        setCampusFilter(value);
                         setMobileMenuOpen(false);
                       }}
-                      className="input"
-                    >
-                      {isAdmin ? <option value="ALL">{t.allCampuses}</option> : null}
-                      {allowedCampusOptions.map((campus) => (
-                        <option key={`mobile-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                      ))}
-                    </select>
+                      options={[
+                        ...(isAdmin ? [{ value: "ALL", label: t.allCampuses }] : []),
+                        ...allowedCampusOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
+                      ]}
+                      placeholder={t.allCampuses}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   )}
                 </label>
 
                 <label className="field">
                   <span>{t.language}</span>
-                  <select
+                  <LocationPicker
                     value={lang}
-                    onChange={(e) => {
-                      setLang(e.target.value as Lang);
+                    onChange={(value) => {
+                      setLang(value as Lang);
                     }}
-                    className="input"
+                    options={[
+                      ...(!maintenanceQuickMode ? [{ value: "en", label: t.english }] : []),
+                      { value: "km", label: t.khmer },
+                    ]}
+                    placeholder={t.language}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកភាសា..." : "Search language..."}
+                    emptyText={lang === "km" ? "មិនមានភាសា" : "No language found."}
                     disabled={maintenanceQuickMode}
-                  >
-                    {!maintenanceQuickMode ? <option value="en">{t.english}</option> : null}
-                    <option value="km">{t.khmer}</option>
-                  </select>
+                  />
                 </label>
 
                 <label className="field">
@@ -27991,17 +28119,14 @@ export default function App() {
               <div className="report-builder-top">
                 <label className="field report-type-field">
                   <span>{lang === "km" ? "ជំហានទី 1៖ ជ្រើសប្រភេទរបាយការណ៍" : "Step 1: Choose Report Type"}</span>
-                  <select
-                    className="input report-type-input"
+                  <LocationPicker
                     value={reportType}
-                    onChange={(e) => setReportType(e.target.value as ReportType)}
-                  >
-                    {reportTypeOptions.map((option) => (
-                      <option key={`report-type-${option.value}`} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setReportType(value as ReportType)}
+                    options={reportTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    placeholder={lang === "km" ? "ជ្រើសប្រភេទរបាយការណ៍" : "Choose report type"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទរបាយការណ៍..." : "Search report type..."}
+                    emptyText={lang === "km" ? "មិនមានប្រភេទរបាយការណ៍" : "No report type found."}
+                  />
                 </label>
                 <div className="report-builder-actions">
                   <button
@@ -28071,14 +28196,17 @@ export default function App() {
               ) : null}
               {reportType === "verification_summary" ? (
                 <>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={reportPeriodMode}
-                    onChange={(e) => setReportPeriodMode(e.target.value as "month" | "term")}
-                  >
-                    <option value="month">Month</option>
-                    <option value="term">Term</option>
-                  </select>
+                    onChange={(value) => setReportPeriodMode(value as "month" | "term")}
+                    options={[
+                      { value: "month", label: "Month" },
+                      { value: "term", label: "Term" },
+                    ]}
+                    placeholder="Period"
+                    searchPlaceholder="Search period..."
+                    emptyText="No period found."
+                  />
                   {reportPeriodMode === "term" ? (
                     <>
                       <input
@@ -28089,61 +28217,68 @@ export default function App() {
                         value={reportYear}
                         onChange={(e) => setReportYear(e.target.value)}
                       />
-                      <select
-                        className="input"
+                      <LocationPicker
                         value={reportTerm}
-                        onChange={(e) => setReportTerm(e.target.value as "Term 1" | "Term 2" | "Term 3")}
-                      >
-                        <option value="Term 1">Term 1</option>
-                        <option value="Term 2">Term 2</option>
-                        <option value="Term 3">Term 3</option>
-                      </select>
+                        onChange={(value) => setReportTerm(value as "Term 1" | "Term 2" | "Term 3")}
+                        options={[
+                          { value: "Term 1", label: "Term 1" },
+                          { value: "Term 2", label: "Term 2" },
+                          { value: "Term 3", label: "Term 3" },
+                        ]}
+                        placeholder="Term"
+                        searchPlaceholder="Search term..."
+                        emptyText="No term found."
+                      />
                     </>
                   ) : null}
                 </>
               ) : null}
               {reportType === "qr_labels" ? (
                 <>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={qrCampusFilter}
-                    onChange={(e) => setQrCampusFilter(e.target.value)}
-                  >
-                    <option value="ALL">{t.allCampuses}</option>
-                    {campusOptions.map((campus) => (
-                      <option key={`qr-campus-${campus}`} value={campus}>
-                        {reportCampusName(campus)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="input"
+                    onChange={setQrCampusFilter}
+                    options={[
+                      { value: "ALL", label: t.allCampuses },
+                      ...campusOptions.map((campus) => ({
+                        value: campus,
+                        label: reportCampusName(campus),
+                      })),
+                    ]}
+                    placeholder={t.allCampuses}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <LocationPicker
                     value={qrLocationFilter}
-                    onChange={(e) => setQrLocationFilter(e.target.value)}
-                  >
-                    <option value="ALL">{lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}</option>
-                    {qrLocationFilterOptions.map((location) => (
-                      <option key={`qr-location-${location}`} value={location}>
-                        {location}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="input"
+                    onChange={setQrLocationFilter}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
+                      ...qrLocationFilterOptions.map((location) => ({ value: location, label: location })),
+                    ]}
+                    placeholder={lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                  />
+                  <LocationPicker
                     value={qrCategoryFilter}
-                    onChange={(e) => setQrCategoryFilter(e.target.value)}
-                  >
-                    <option value="ALL">{t.allCategories}</option>
-                    {qrCategoryFilterOptions.map((category) => (
-                      <option key={`qr-category-${category}`} value={category}>
-                        {category === "SAFETY"
-                          ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
-                          : category === "FACILITY"
-                            ? (lang === "km" ? "បរិក្ខារ" : "Facility")
-                            : category}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setQrCategoryFilter}
+                    options={[
+                      { value: "ALL", label: t.allCategories },
+                      ...qrCategoryFilterOptions.map((category) => ({
+                        value: category,
+                        label:
+                          category === "SAFETY"
+                            ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                            : category === "FACILITY"
+                              ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                              : category,
+                      })),
+                    ]}
+                    placeholder={t.allCategories}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                    emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+                  />
                   <details className="filter-menu">
                     <summary>{summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}</summary>
                     <div className="filter-menu-list">
@@ -28179,131 +28314,96 @@ export default function App() {
               ) : null}
               {reportType === "asset_master" ? (
                 <>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={edAssetTemplate}
-                    onChange={(e) => setEdAssetTemplate(e.target.value as EdAssetTemplate)}
-                  >
-                    {edTemplateOptions.map((option) => (
-                      <option key={`ed-template-${option.value}`} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{campusFilterSummary}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetMasterCampusFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetMasterCampusFilter((prev) =>
-                              applyMultiFilterSelection(prev, e.target.checked, "ALL", assetMasterCampusFilterOptions)
-                            )
-                          }
-                        />
-                        <span>{t.allCampuses}</span>
-                      </label>
-                      {assetMasterCampusFilterOptions.map((campus) => (
-                        <label key={`master-campus-${campus}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetMasterCampusFilter.includes(campus)}
-                            onChange={(e) =>
-                              setAssetMasterCampusFilter((prev) =>
-                                applyMultiFilterSelection(prev, e.target.checked, campus, assetMasterCampusFilterOptions)
-                              )
-                            }
-                          />
-                          <span>{reportCampusName(campus)}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{categoryFilterSummary}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetMasterCategoryFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetMasterCategoryFilter((prev) =>
-                              applyMultiFilterSelection(prev, e.target.checked, "ALL", assetMasterCategoryFilterOptions)
-                            )
-                          }
-                        />
-                        <span>{t.allCategories}</span>
-                      </label>
-                      {assetMasterCategoryFilterOptions.map((category) => (
-                        <label key={`master-category-${category}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetMasterCategoryFilter.includes(category)}
-                            onChange={(e) =>
-                              setAssetMasterCategoryFilter((prev) =>
-                                applyMultiFilterSelection(prev, e.target.checked, category, assetMasterCategoryFilterOptions)
-                              )
-                            }
-                          />
-                          <span>
-                            {category === "SAFETY"
-                              ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
-                              : category === "FACILITY"
-                                ? (lang === "km" ? "បរិក្ខារ" : "Facility")
-                                : category}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{itemFilterSummary}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetMasterItemFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetMasterItemFilter((prev) =>
-                              applyMultiFilterSelection(prev, e.target.checked, "ALL", assetMasterItemFilterOptions)
-                            )
-                          }
-                        />
-                        <span>{lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}</span>
-                      </label>
-                      {assetMasterItemFilterOptions.map((itemName) => (
-                        <label key={`master-item-${itemName}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetMasterItemFilter.includes(itemName)}
-                            onChange={(e) =>
-                              setAssetMasterItemFilter((prev) =>
-                                applyMultiFilterSelection(prev, e.target.checked, itemName, assetMasterItemFilterOptions)
-                              )
-                            }
-                          />
-                          <span>{itemName}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </details>
-                  <details className="filter-menu filter-menu-columns" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{columnFilterSummary}</summary>
-                    <div className="filter-menu-list">
-                      {assetMasterColumnDefs.map((column) => (
-                        <label key={`master-col-${column.key}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={isAssetMasterColumnVisible(column.key)}
-                            onChange={() => updateAssetMasterColumnSelection(column.key)}
-                          />
-                          <span>{column.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </details>
+                    onChange={(value) => setEdAssetTemplate(value as EdAssetTemplate)}
+                    options={edTemplateOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    placeholder={lang === "km" ? "ជ្រើស ED Template" : "Select ED Template"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរក ED Template..." : "Search ED Template..."}
+                    emptyText={lang === "km" ? "មិនមាន ED Template" : "No ED Template found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={campusFilterSummary}
+                    options={assetMasterCampusFilterOptions.map((campus) => ({
+                      value: campus,
+                      label: campusLabel(campus),
+                    }))}
+                    selectedValues={assetMasterCampusFilter}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={assetMasterCampusFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetMasterCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetMasterCampusFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetMasterCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetMasterCampusFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={categoryFilterSummary}
+                    options={assetMasterCategoryFilterOptions.map((category) => ({
+                      value: category,
+                      label:
+                        category === "SAFETY"
+                          ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                          : category === "FACILITY"
+                            ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                            : category,
+                    }))}
+                    selectedValues={assetMasterCategoryFilter}
+                    allOptionLabel={t.allCategories}
+                    allOptionChecked={assetMasterCategoryFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetMasterCategoryFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetMasterCategoryFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetMasterCategoryFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetMasterCategoryFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                    emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={itemFilterSummary}
+                    options={assetMasterItemFilterOptions.map((itemName) => ({
+                      value: itemName,
+                      label: itemName,
+                    }))}
+                    selectedValues={assetMasterItemFilter}
+                    allOptionLabel={lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}
+                    allOptionChecked={assetMasterItemFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetMasterItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetMasterItemFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetMasterItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetMasterItemFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search item name..."}
+                    emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No item found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={columnFilterSummary}
+                    options={assetMasterColumnDefs.map((column) => ({
+                      value: column.key,
+                      label: column.label,
+                    }))}
+                    selectedValues={assetMasterVisibleColumns}
+                    onToggleValue={(value) => updateAssetMasterColumnSelection(value as AssetMasterColumnKey)}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search column..."}
+                    emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No column found."}
+                  />
                 </>
               ) : null}
                       {!isPhoneView ? (
