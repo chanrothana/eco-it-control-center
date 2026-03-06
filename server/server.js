@@ -1768,6 +1768,32 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = []) 
   return sendTelegramMessage(lines.join("\n"));
 }
 
+async function sendTelegramInventoryOutRecordedAlert(txn) {
+  if (!txn || typeof txn !== "object") return false;
+  if (normalizeInventoryTxnType(txn.type) !== "OUT") return false;
+  const itemCode = toText(txn.itemCode) || "-";
+  const itemName = toText(txn.itemName) || "Item";
+  const qty = Number(txn.qty || 0);
+  const campus = toText(txn.campus) || "-";
+  const date = toText(txn.date) || "-";
+  const recordedBy = toText(txn.by) || toText(txn.approvalRequestedBy) || "staff";
+  const status = toUpper(txn.approvalStatus) || "APPROVED";
+  const reason = toText(txn.note);
+  const lines = [
+    "ជូនដំណឹង ECO IT - ស្តុក",
+    "បានកត់ត្រាចេញស្តុក",
+    `មុខទំនិញ: ${itemCode} - ${itemName}`,
+    `បរិមាណ: ${qty} | សាខា: ${campus}`,
+    `កាលបរិច្ឆេទ: ${date}`,
+    `កត់ត្រាដោយ: ${recordedBy}`,
+    `ស្ថានភាព: ${status}`,
+  ];
+  if (reason) {
+    lines.push(`មូលហេតុ: ${reason}`);
+  }
+  return sendTelegramMessage(lines.join("\n"));
+}
+
 initStorageSync();
 
 function appendAuditLog(db, user, action, entity, entityId, summary = "") {
@@ -3695,8 +3721,12 @@ const server = http.createServer(async (req, res) => {
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(db, user, "CREATE", "inventory_txn", `${txn.itemCode}-${txn.id}`, `${type} ${qty} ${item.unit}`);
       await writeDb(db);
-      if (approvalStatus === "PENDING") {
-        void sendTelegramInventoryOutApprovalAlert(txn, approverTargets);
+      if (normalizeInventoryTxnType(txn.type) === "OUT") {
+        if (approvalStatus === "PENDING") {
+          void sendTelegramInventoryOutApprovalAlert(txn, approverTargets);
+        } else {
+          void sendTelegramInventoryOutRecordedAlert(txn);
+        }
       }
       sendJson(res, 201, { txn });
       return;
