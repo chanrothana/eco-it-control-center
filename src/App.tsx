@@ -1421,7 +1421,7 @@ const TEXT = {
     createAsset: "Create Asset",
     assetRegistry: "List Asset",
     allCategories: "All Categories",
-    searchAsset: "Search ID, name, location",
+    searchAsset: "Search ID, serial, name, location",
     assetId: "Asset ID",
     name: "Name",
     created: "Created",
@@ -1655,7 +1655,7 @@ const TEXT = {
     createAsset: "បង្កើតទ្រព្យសម្បត្តិ",
     assetRegistry: "បញ្ជីទ្រព្យសម្បត្តិ",
     allCategories: "គ្រប់ប្រភេទ",
-    searchAsset: "ស្វែងរក ID ឈ្មោះ ឬទីតាំង",
+    searchAsset: "ស្វែងរក ID, Serial, ឈ្មោះ ឬទីតាំង",
     assetId: "លេខសម្គាល់ទ្រព្យ",
     name: "ឈ្មោះ",
     created: "ថ្ងៃបង្កើត",
@@ -16638,7 +16638,7 @@ export default function App() {
     if (q) {
       list = list.filter((asset) => {
         const itemLabel = assetItemName(asset.category, asset.type, asset.pcType || "");
-        return `${asset.assetId} ${itemLabel} ${asset.name || ""} ${asset.location || ""} ${campusLabel(asset.campus)} ${asset.category || ""} ${asset.assignedTo || ""}`
+        return `${asset.assetId} ${asset.serialNumber || ""} ${itemLabel} ${asset.name || ""} ${asset.location || ""} ${campusLabel(asset.campus)} ${asset.category || ""} ${asset.assignedTo || ""}`
           .toLowerCase()
           .includes(q);
       });
