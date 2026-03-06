@@ -2116,6 +2116,29 @@ function normalizeCalendarEventType(value) {
   return "public";
 }
 
+function isNonWorkingCalendarEventType(type) {
+  return type === "public" || type === "break";
+}
+
+function isSundayDateYmd(value) {
+  const date = toText(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  return new Date(`${date}T00:00:00`).getDay() === 0;
+}
+
+function hasNonWorkingHolidayOnDate(settings, date) {
+  const ymd = toText(date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  const events = normalizeCalendarEvents(settings && settings.calendarEvents);
+  return events.some((row) => row.date === ymd && isNonWorkingCalendarEventType(row.type));
+}
+
+function requiresInventoryOutApproval(user, settings, date, type) {
+  if (type !== "OUT") return false;
+  if (!user || !canRecordMaintenance(user) || isAdminRole(user.role)) return false;
+  return isSundayDateYmd(date) || hasNonWorkingHolidayOnDate(settings, date);
+}
+
 function normalizeCalendarEvents(input) {
   if (!Array.isArray(input)) return [];
   const out = [];
@@ -3572,11 +3595,8 @@ const server = http.createServer(async (req, res) => {
       const requestedBy = toText(body.requestedBy);
       const approvedBy = toText(body.approvedBy);
       const receivedBy = toText(body.receivedBy);
-      const approvalStatusRaw = toUpper(body.approvalStatus);
-      const approvalStatus =
-        type === "OUT"
-          ? (approvalStatusRaw === "PENDING" || approvalStatusRaw === "REJECTED" ? approvalStatusRaw : "APPROVED")
-          : "";
+      const requiresApproval = requiresInventoryOutApproval(user, settings, date, type);
+      const approvalStatus = type === "OUT" ? (requiresApproval ? "PENDING" : "APPROVED") : "";
       const approvalRequestedBy = toText(body.approvalRequestedBy) || toText(user.displayName) || toText(user.username);
       const approvalRequestedAt = toText(body.approvalRequestedAt) || new Date().toISOString();
       const approvalDecisionBy = toText(body.approvalDecisionBy);

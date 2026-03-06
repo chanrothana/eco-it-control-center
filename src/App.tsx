@@ -12268,17 +12268,17 @@ export default function App() {
     const holiday = txDate ? getHolidayEvent(txDate) : { name: "", type: "" as CalendarEventType | "" };
     const isRedHoliday = Boolean(holiday.name) && isNonWorkingHolidayType(holiday.type);
     const day = txDate ? new Date(`${txDate}T00:00:00`).getDay() : -1;
-    const isWeekend = day === 0 || day === 6;
+    const isSunday = day === 0;
+    const needsApprovalDay = Boolean(txDate) && (isSunday || isRedHoliday);
     const needsManagerApproval =
       isInventoryTxnUsageOut(values.type) &&
       item.category === "SUPPLY" &&
-      Boolean(txDate) &&
-      (isWeekend || isRedHoliday);
+      !isAdmin &&
+      needsApprovalDay;
     const needsNonWorkingCheck =
       isInventoryTxnUsageOut(values.type) &&
       item.category === "SUPPLY" &&
-      Boolean(txDate) &&
-      (isWeekend || isRedHoliday);
+      needsApprovalDay;
     if (needsNonWorkingCheck) {
       if (!String(values.note || "").trim()) {
         setError(lang === "km" ? "ចុងសប្តាហ៍/ថ្ងៃឈប់សម្រាក ត្រូវបញ្ចូលមូលហេតុចេញស្តុក។" : "Weekend/Holiday stock out requires note.");
