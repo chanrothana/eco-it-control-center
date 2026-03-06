@@ -1395,6 +1395,7 @@ const TEXT = {
     projectorComponents: "Projector Components",
     tvRemoteCount: "TV Remote Quantity",
     tvRemoteHint: "TV is a main asset. Set how many remotes come with this TV (1 or 2).",
+    selectRemote: "Select Remote",
     includeRemoteControl: "Include Remote",
     includeHdmiCable: "Include HDMI Cable",
     projectorComponentHint: "Slide Projector can include accessories without linking to an existing parent asset.",
@@ -1628,6 +1629,7 @@ const TEXT = {
     projectorComponents: "គ្រឿងបន្ថែមម៉ាស៊ីនបញ្ចាំង",
     tvRemoteCount: "ចំនួនរីម៉ូត TV",
     tvRemoteHint: "TV ជា Asset មេ។ កំណត់ចំនួនរីម៉ូតដែលភ្ជាប់មកជាមួយ TV (1 ឬ 2)।",
+    selectRemote: "ជ្រើសរើសរីម៉ូត",
     includeRemoteControl: "រួមបញ្ចូលរីម៉ូត",
     includeHdmiCable: "រួមបញ្ចូលខ្សែ HDMI",
     projectorComponentHint: "ម៉ាស៊ីនបញ្ចាំង អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
@@ -5512,6 +5514,7 @@ export default function App() {
     walkieHasCharger: false,
     walkieChargerDetail: "",
     tvRemoteCount: "1",
+    tvRemotePhotos: [] as string[],
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -8497,8 +8500,14 @@ export default function App() {
       if (!prev.useExistingSet && (prev.setCode || prev.parentAssetId || prev.componentRole || prev.componentRequired)) {
         return { ...prev, setCode: "", parentAssetId: "", componentRole: "", componentRequired: false };
       }
-      if (String(prev.type || "").trim().toUpperCase() !== TV_TYPE_CODE && prev.tvRemoteCount !== "1") {
-        return { ...prev, tvRemoteCount: "1" };
+      if (String(prev.type || "").trim().toUpperCase() !== TV_TYPE_CODE) {
+        if (prev.tvRemoteCount !== "1" || (prev.tvRemotePhotos || []).length) {
+          return { ...prev, tvRemoteCount: "1", tvRemotePhotos: [] };
+        }
+        return prev;
+      }
+      if (prev.tvRemoteCount === "1" && (prev.tvRemotePhotos || []).length > 1) {
+        return { ...prev, tvRemotePhotos: prev.tvRemotePhotos.slice(0, 1) };
       }
       return prev;
     });
@@ -9639,6 +9648,7 @@ export default function App() {
       }
       if (createTvRemoteCount && created.asset?.assetId) {
         for (let index = 1; index <= createTvRemoteCount; index += 1) {
+          const remotePhoto = String((assetForm.tvRemotePhotos || [])[index - 1] || "").trim();
           await requestJson<{ asset: Asset }>("/api/assets", {
             method: "POST",
             body: JSON.stringify({
@@ -9660,8 +9670,8 @@ export default function App() {
               notes: `Auto-created TV remote ${index}/${createTvRemoteCount} for ${created.asset.assetId}`,
               nextMaintenanceDate: "",
               scheduleNote: "",
-              photo: "",
-              photos: [],
+              photo: remotePhoto || "",
+              photos: remotePhoto ? [remotePhoto] : [],
               status: assetForm.status,
             }),
           });
@@ -9691,6 +9701,7 @@ export default function App() {
         walkieHasCharger: false,
         walkieChargerDetail: "",
         tvRemoteCount: "1",
+        tvRemotePhotos: [],
         specs: "",
         purchaseDate: "",
         warrantyUntil: "",
@@ -10085,6 +10096,7 @@ export default function App() {
         if (createTvRemoteCount) {
           for (let index = 1; index <= createTvRemoteCount; index += 1) {
             const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", REMOTE_TYPE_CODE);
+            const remotePhoto = String((assetForm.tvRemotePhotos || [])[index - 1] || "").trim();
             const child: Asset = {
               id: Date.now() + Math.floor(Math.random() * 10000),
               campus: assetForm.campus,
@@ -10127,8 +10139,8 @@ export default function App() {
                   reason: "Asset created as TV remote",
                 },
               ],
-              photo: "",
-              photos: [],
+              photo: remotePhoto || "",
+              photos: remotePhoto ? [remotePhoto] : [],
               status: assetForm.status,
               created: new Date().toISOString(),
             };
@@ -10165,6 +10177,7 @@ export default function App() {
           walkieHasCharger: false,
           walkieChargerDetail: "",
           tvRemoteCount: "1",
+          tvRemotePhotos: [],
           specs: "",
           purchaseDate: "",
           warrantyUntil: "",
@@ -15141,6 +15154,29 @@ export default function App() {
           photos: [...(f.photos || []), ...optimized],
         });
         return { ...f, photo: merged[0] || "", photos: merged };
+      });
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onTvRemotePhotoFileAt(index: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetForm((f) => {
+        const next = [...(f.tvRemotePhotos || [])];
+        while (next.length <= index) next.push("");
+        next[index] = optimized;
+        return { ...f, tvRemotePhotos: next.slice(0, 2) };
       });
     } catch {
       alert(t.photoProcessError);
@@ -20537,21 +20573,85 @@ export default function App() {
                       <div className="tiny">Inactive iPad/Tablet is stored at {INACTIVE_TABLET_HOLDING_LOCATION}.</div>
                     ) : null}
                   </label>
-                  <label className="field">
-                    <span>Item Template</span>
-                    <select
-                      className="input"
-                      value={selectedCreateTemplateId}
-                      onChange={(e) => setSelectedCreateTemplateId(e.target.value)}
-                    >
-                      <option value="">No template</option>
-                      {createTemplateOptions.map((tpl) => (
-                        <option key={`create-template-${tpl.id}`} value={String(tpl.id)}>
-                          {tpl.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {isTvAssetForCreate ? (
+                    <div className="field field-wide">
+                      <div className="row-actions" style={{ gap: 10, alignItems: "flex-end", flexWrap: "nowrap" }}>
+                        <div className="field" style={{ flex: 1, minWidth: 0 }}>
+                          <span>Item Template</span>
+                          <select
+                            className="input"
+                            value={selectedCreateTemplateId}
+                            onChange={(e) => setSelectedCreateTemplateId(e.target.value)}
+                          >
+                            <option value="">No template</option>
+                            {createTemplateOptions.map((tpl) => (
+                              <option key={`create-template-${tpl.id}`} value={String(tpl.id)}>
+                                {tpl.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="field" style={{ flex: 1, minWidth: 0 }}>
+                          <span>{`${t.tvRemoteCount}: ${t.selectRemote}`}</span>
+                          <select
+                            className="input"
+                            value={assetForm.tvRemoteCount}
+                            onChange={(e) =>
+                              setAssetForm((f) => ({
+                                ...f,
+                                tvRemoteCount: e.target.value === "2" ? "2" : "1",
+                              }))
+                            }
+                          >
+                            <option value="1">1 {t.includeRemoteControl}</option>
+                            <option value="2">2 {t.includeRemoteControl}</option>
+                          </select>
+                        </div>
+                        <div className="field" style={{ flex: 1, minWidth: 0 }}>
+                          <span>Remote 1 Photo</span>
+                          <input
+                            className="file-input"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => {
+                              void onTvRemotePhotoFileAt(0, e);
+                            }}
+                          />
+                        </div>
+                        {String(assetForm.tvRemoteCount || "1") === "2" ? (
+                          <div className="field" style={{ flex: 1, minWidth: 0 }}>
+                            <span>Remote 2 Photo</span>
+                            <input
+                              className="file-input"
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              onChange={(e) => {
+                                void onTvRemotePhotoFileAt(1, e);
+                              }}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="field">
+                      <span>Item Template</span>
+                      <select
+                        className="input"
+                        value={selectedCreateTemplateId}
+                        onChange={(e) => setSelectedCreateTemplateId(e.target.value)}
+                      >
+                        <option value="">No template</option>
+                        {createTemplateOptions.map((tpl) => (
+                          <option key={`create-template-${tpl.id}`} value={String(tpl.id)}>
+                            {tpl.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE ? (
                     <>
                       <label className="field">
@@ -21875,26 +21975,6 @@ export default function App() {
                         ))}
                       </div>
                     </div>
-                  ) : isTvAssetForCreate ? (
-                    <label className="field field-wide">
-                      <span>{t.tvRemoteCount}</span>
-                      <div className="setpack-toggle-row">
-                        <span className="tiny">{t.tvRemoteHint}</span>
-                      </div>
-                      <select
-                        className="input"
-                        value={assetForm.tvRemoteCount}
-                        onChange={(e) =>
-                          setAssetForm((f) => ({
-                            ...f,
-                            tvRemoteCount: e.target.value === "2" ? "2" : "1",
-                          }))
-                        }
-                      >
-                        <option value="1">1 {t.includeRemoteControl}</option>
-                        <option value="2">2 {t.includeRemoteControl}</option>
-                      </select>
-                    </label>
                   ) : (!isSafetyCategoryForCreate && isLinkableForCreate) ? (
                     <>
                       <label className="field">
