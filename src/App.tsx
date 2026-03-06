@@ -1172,7 +1172,8 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   ],
 };
 
-const USER_REQUIRED_TYPES = ["PC", "LAP", "TAB", "SPK", "DCM"];
+const WALKIE_TALKIE_TYPE_CODE = "WTK";
+const USER_REQUIRED_TYPES = ["PC", "LAP", "TAB", "SPK", "DCM", WALKIE_TALKIE_TYPE_CODE];
 const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
@@ -1443,7 +1444,7 @@ const TEXT = {
     deleteLocationConfirm: "Delete this location?",
     photoLimit: "Photo is too large. Please use file under 15MB.",
     user: "User",
-    userRequired: "User is required for Computer, Laptop, iPad/Tablet, Speaker, and Digital Camera.",
+    userRequired: "User is required for Computer, Laptop, iPad/Tablet, Speaker, Digital Camera, and Walkie Talkie.",
     selectLocation: "Select location",
     locationRequired: "Please select location.",
     noLocationsConfigured: "No locations configured for this campus. Please add in Setup tab.",
@@ -1676,7 +1677,7 @@ const TEXT = {
     deleteLocationConfirm: "តើលុបទីតាំងនេះមែនទេ?",
     photoLimit: "រូបភាពធំពេក។ សូមប្រើឯកសារតិចជាង 15MB។",
     user: "អ្នកប្រើប្រាស់",
-    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើសម្រាប់ Computer, Laptop, iPad/Tablet, Speaker និង Digital Camera។",
+    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើសម្រាប់ Computer, Laptop, iPad/Tablet, Speaker, Digital Camera និង Walkie Talkie។",
     selectLocation: "ជ្រើសទីតាំង",
     locationRequired: "សូមជ្រើសរើសទីតាំង។",
     noLocationsConfigured: "Campus នេះមិនទាន់កំណត់ទីតាំងទេ។ សូមបន្ថែមនៅផ្ទាំង Setup។",
@@ -3587,6 +3588,44 @@ function buildAirconSpecs(
   return out.join("\n").trim();
 }
 
+function parseWalkieTalkieSpecs(specsRaw: string) {
+  const specs = String(specsRaw || "").trim();
+  if (!specs) {
+    return {
+      hasCharger: false,
+      chargerDetail: "",
+      specs: "",
+    };
+  }
+  const includedMatch = specs.match(/Included:\s*([^|\n;]+)/i);
+  const includedText = includedMatch?.[1] ? String(includedMatch[1]).toLowerCase() : "";
+  const hasCharger = includedText.includes("charger");
+  const chargerDetailMatch = specs.match(/Charger\s*(?:Detail|Note):\s*([^\n|;]+)/i);
+  const chargerDetail = chargerDetailMatch?.[1] ? String(chargerDetailMatch[1]).trim() : "";
+  const cleanedSpecs = specs
+    .replace(/Included:\s*([^|\n;]+)/gi, "")
+    .replace(/Charger\s*(?:Detail|Note):\s*([^\n|;]+)/gi, "")
+    .replace(/[|;]+/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return {
+    hasCharger,
+    chargerDetail,
+    specs: cleanedSpecs,
+  };
+}
+
+function buildWalkieTalkieSpecs(baseSpecs: string, hasCharger: boolean, chargerDetail?: string) {
+  const normalized = parseWalkieTalkieSpecs(baseSpecs);
+  const out: string[] = [];
+  const detail = String(chargerDetail || "").trim();
+  if (hasCharger) out.push("Included: Charger");
+  if (hasCharger && detail) out.push(`Charger Detail: ${detail}`);
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
+}
+
 function normalizeAssetForUi(asset: Asset): Asset {
   const photos = normalizeAssetPhotos(asset);
   const normalizeUrl = (raw: string) => {
@@ -5468,6 +5507,8 @@ export default function App() {
     acHasFrontPanel: false,
     acHasOutdoor: false,
     acComponentNote: "",
+    walkieHasCharger: false,
+    walkieChargerDetail: "",
     tvRemoteCount: "1",
     specs: "",
     purchaseDate: "",
@@ -5588,6 +5629,8 @@ export default function App() {
     ADP: false,
     HDC: false,
   });
+  const [walkieChargerDetailOpen, setWalkieChargerDetailOpen] = useState(false);
+  const [editWalkieChargerDetailOpen, setEditWalkieChargerDetailOpen] = useState(false);
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
     MON2: false,
@@ -5655,6 +5698,8 @@ export default function App() {
     acHasFrontPanel: false,
     acHasOutdoor: false,
     acComponentNote: "",
+    walkieHasCharger: false,
+    walkieChargerDetail: "",
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -8340,6 +8385,9 @@ export default function App() {
 
   const applyItemTemplateToCreate = useCallback((template: ItemTemplate) => {
     const isAc = isAirconAsset(template.category, template.type);
+    const parsedWalkie = String(template.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+      ? parseWalkieTalkieSpecs(String(template.specs || ""))
+      : { hasCharger: false, chargerDetail: "", specs: String(template.specs || "") };
     setAssetForm((prev) => ({
       ...prev,
       category: template.category || prev.category,
@@ -8347,13 +8395,15 @@ export default function App() {
       brand: template.brand || "",
       model: template.model || "",
       vendor: template.vendor || "",
-      specs: template.specs || "",
+      specs: parsedWalkie.specs,
       acType: isAc ? String(template.acType || "") : "",
       acHp: isAc ? String(template.acHp || "") : "",
       acHasRemote: isAc ? Boolean(template.acHasRemote) : false,
       acHasFrontPanel: isAc ? Boolean(template.acHasFrontPanel) : false,
       acHasOutdoor: isAc ? Boolean(template.acHasOutdoor) : false,
       acComponentNote: isAc ? String(template.acComponentNote || "") : "",
+      walkieHasCharger: parsedWalkie.hasCharger,
+      walkieChargerDetail: parsedWalkie.chargerDetail,
     }));
   }, []);
   const applyModelTemplate = useCallback((rawModel: string) => {
@@ -8466,6 +8516,16 @@ export default function App() {
       return prev;
     });
   }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    setAssetForm((prev) => {
+      if (String(prev.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE) return prev;
+      if (!prev.walkieHasCharger && !prev.walkieChargerDetail) return prev;
+      return { ...prev, walkieHasCharger: false, walkieChargerDetail: "" };
+    });
+    if (String(assetForm.type || "").trim().toUpperCase() !== WALKIE_TALKIE_TYPE_CODE) {
+      setWalkieChargerDetailOpen(false);
+    }
+  }, [assetForm.type]);
   useEffect(() => {
     if (!assetForm.useExistingSet || !assetForm.parentAssetId) return;
     if (parentAssetsForCreate.some((asset) => asset.assetId === assetForm.parentAssetId)) return;
@@ -9303,7 +9363,13 @@ export default function App() {
           hasOutdoor: assetForm.acHasOutdoor,
           componentNote: assetForm.acComponentNote,
         })
-      : assetForm.specs;
+      : (String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+          ? buildWalkieTalkieSpecs(
+              assetForm.specs,
+              Boolean(assetForm.walkieHasCharger),
+              assetForm.walkieChargerDetail
+            )
+          : assetForm.specs);
     const mainSerial = assetForm.serialNumber.trim();
     const duplicateMain = findDuplicateAssetSerial(assets, mainSerial);
     if (duplicateMain) {
@@ -9598,6 +9664,8 @@ export default function App() {
         acHasFrontPanel: false,
         acHasOutdoor: false,
         acComponentNote: "",
+        walkieHasCharger: false,
+        walkieChargerDetail: "",
         tvRemoteCount: "1",
         specs: "",
         purchaseDate: "",
@@ -9610,6 +9678,7 @@ export default function App() {
         photos: [],
         status: "Active",
       }));
+      setWalkieChargerDetailOpen(false);
       setSelectedCreateTemplateId("");
       setSetPackDraft(defaultSetPackDraft());
       setSetPackDetailOpen({
@@ -10069,6 +10138,8 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          walkieHasCharger: false,
+          walkieChargerDetail: "",
           tvRemoteCount: "1",
           specs: "",
           purchaseDate: "",
@@ -10081,6 +10152,7 @@ export default function App() {
           photos: [],
           status: "Active",
         }));
+        setWalkieChargerDetailOpen(false);
         setSelectedCreateTemplateId("");
         setSetPackDraft(defaultSetPackDraft());
         setSetPackDetailOpen({
@@ -13178,6 +13250,9 @@ export default function App() {
           acComponentNote: "",
           specs: asset.specs || "",
         };
+    const parsedWalkie = String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+      ? parseWalkieTalkieSpecs(asset.specs || "")
+      : { hasCharger: false, chargerDetail: "", specs: parsedAircon.specs || String(asset.specs || "") };
     setAssetEditForm({
       location: asset.location || "",
       pcType: asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
@@ -13198,7 +13273,9 @@ export default function App() {
       acHasFrontPanel: parsedAircon.acHasFrontPanel,
       acHasOutdoor: parsedAircon.acHasOutdoor,
       acComponentNote: parsedAircon.acComponentNote,
-      specs: parsedAircon.specs || String(asset.specs || ""),
+      walkieHasCharger: parsedWalkie.hasCharger,
+      walkieChargerDetail: parsedWalkie.chargerDetail,
+      specs: parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
@@ -13207,11 +13284,13 @@ export default function App() {
       photos,
       status: asset.status || "Active",
     });
+    setEditWalkieChargerDetailOpen(Boolean(parsedWalkie.chargerDetail));
     setEditAssetFileKey((k) => k + 1);
   }
 
   function cancelEditAsset() {
     setEditingAssetId(null);
+    setEditWalkieChargerDetailOpen(false);
   }
 
   async function editOrCreateSetPackChild(type: SetPackChildType) {
@@ -13713,7 +13792,13 @@ export default function App() {
             hasOutdoor: assetEditForm.acHasOutdoor,
             componentNote: assetEditForm.acComponentNote,
           })
-        : assetEditForm.specs.trim(),
+        : (String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+            ? buildWalkieTalkieSpecs(
+                assetEditForm.specs.trim(),
+                Boolean(assetEditForm.walkieHasCharger),
+                assetEditForm.walkieChargerDetail
+              )
+            : assetEditForm.specs.trim()),
       purchaseDate: assetEditForm.purchaseDate.trim(),
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
@@ -15016,6 +15101,30 @@ export default function App() {
     }
   }
 
+  async function onWalkieChargerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setAssetForm((f) => {
+        const merged = normalizeAssetPhotos({
+          photo: f.photo,
+          photos: [...(f.photos || []), ...optimized],
+        });
+        return { ...f, photo: merged[0] || "", photos: merged };
+      });
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   async function onSetPackPhotoFile(type: SetPackChildType, e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -15129,6 +15238,30 @@ export default function App() {
             photos: merged,
           },
         };
+      });
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onEditWalkieChargerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setAssetEditForm((f) => {
+        const merged = normalizeAssetPhotos({
+          photo: f.photo,
+          photos: [...(f.photos || []), ...optimized],
+        });
+        return { ...f, photo: merged[0] || "", photos: merged };
       });
     } catch {
       alert(t.photoProcessError);
@@ -21819,7 +21952,7 @@ export default function App() {
                     </>
                   ) : null}
                   {userRequired && (
-                    <label className="field field-wide">
+                    <label className="field">
                       <span>{t.user}</span>
                       <UserPicker
                         value={assetForm.assignedTo}
@@ -21942,6 +22075,60 @@ export default function App() {
                         />
                       </label>
                     </>
+                  ) : null}
+                  {String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
+                    <label className="field">
+                      <span>Included Components</span>
+                      <div className="setpack-include-grid">
+                        <label className="tab setpack-include-item">
+                          <input
+                            type="checkbox"
+                            checked={assetForm.walkieHasCharger}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setAssetForm((f) => ({
+                                ...f,
+                                walkieHasCharger: checked,
+                                walkieChargerDetail: checked ? f.walkieChargerDetail : "",
+                              }));
+                              if (!checked) setWalkieChargerDetailOpen(false);
+                            }}
+                            style={{ marginRight: 8 }}
+                          />
+                          Charger
+                        </label>
+                      </div>
+                      {assetForm.walkieHasCharger ? (
+                        <>
+                          <button
+                            type="button"
+                            className="tab setpack-detail-btn"
+                            onClick={() => setWalkieChargerDetailOpen((prev) => !prev)}
+                          >
+                            {walkieChargerDetailOpen ? t.hideDetails : t.addDetails}
+                          </button>
+                          {walkieChargerDetailOpen ? (
+                            <div className="setpack-component-detail-wrap">
+                              <div className="form-grid">
+                                <input
+                                  className="input"
+                                  value={assetForm.walkieChargerDetail}
+                                  onChange={(e) => setAssetForm((f) => ({ ...f, walkieChargerDetail: e.target.value }))}
+                                  placeholder="Charger model, serial number, or note..."
+                                />
+                                <input
+                                  className="file-input"
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  onChange={onWalkieChargerPhotoFile}
+                                />
+                              </div>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </label>
                   ) : null}
                   <label className="field">
                     <span>{t.purchaseDate}</span>
@@ -23479,6 +23666,60 @@ export default function App() {
                           />
                         </label>
                       </>
+                    ) : null}
+                    {String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
+                      <label className="field">
+                        <span>Included Components</span>
+                        <div className="setpack-include-grid">
+                          <label className="tab setpack-include-item">
+                            <input
+                              type="checkbox"
+                              checked={assetEditForm.walkieHasCharger}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setAssetEditForm((f) => ({
+                                  ...f,
+                                  walkieHasCharger: checked,
+                                  walkieChargerDetail: checked ? f.walkieChargerDetail : "",
+                                }));
+                                if (!checked) setEditWalkieChargerDetailOpen(false);
+                              }}
+                              style={{ marginRight: 8 }}
+                            />
+                            Charger
+                          </label>
+                        </div>
+                        {assetEditForm.walkieHasCharger ? (
+                          <>
+                            <button
+                              type="button"
+                              className="tab setpack-detail-btn"
+                              onClick={() => setEditWalkieChargerDetailOpen((prev) => !prev)}
+                            >
+                              {editWalkieChargerDetailOpen ? t.hideDetails : t.addDetails}
+                            </button>
+                            {editWalkieChargerDetailOpen ? (
+                              <div className="setpack-component-detail-wrap">
+                                <div className="form-grid">
+                                  <input
+                                    className="input"
+                                    value={assetEditForm.walkieChargerDetail}
+                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, walkieChargerDetail: e.target.value }))}
+                                    placeholder="Charger model, serial number, or note..."
+                                  />
+                                  <input
+                                    className="file-input"
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={onEditWalkieChargerPhotoFile}
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
+                      </label>
                     ) : null}
                     <label className="field">
                       <span>Purchase Date</span>
