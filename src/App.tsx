@@ -16696,7 +16696,7 @@ export default function App() {
     );
   }
   function renderMaintenancePhotoStack(input: { photo?: string; photos?: string[] }, altPrefix = "maintenance") {
-    const photos = normalizeAssetPhotos(input).slice(0, 3);
+    const photos = normalizeAssetPhotos(input).slice(0, 4);
     if (!photos.length) return <span className="photo-empty">{t.noPhoto}</span>;
     return (
       <div className="maintenance-photo-stack">
@@ -23368,54 +23368,89 @@ export default function App() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="table-wrap asset-detail-history-wrap">
-                    <table className="asset-detail-transfer-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>From Campus</th>
-                          <th>From Location</th>
-                          <th>To Campus</th>
-                          <th>To Location</th>
-                          <th>From Staff</th>
-                          <th>To Staff</th>
-                          <th>Ack</th>
-                          <th>Reason</th>
-                          <th>By</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailTransferVisibleEntries.length ? (
-                          detailTransferVisibleEntries.map((h) => {
-                            const custody = detailCustodyEntries.find(
-                              (entry) =>
-                                String(entry.date || "").slice(0, 10) === String(h.date || "").slice(0, 10) &&
-                                String(entry.toCampus || "") === String(h.toCampus || "") &&
-                                String(entry.toLocation || "") === String(h.toLocation || "")
-                            );
-                            return (
-                            <tr key={`detail-transfer-${h.id}`}>
-                              <td data-label="Date">{formatDate(h.date)}</td>
-                              <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
-                              <td data-label="From Location">{h.fromLocation || "-"}</td>
-                              <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
-                              <td data-label="To Location">{h.toLocation || "-"}</td>
-                              <td data-label="From Staff">{custody?.fromUser || "-"}</td>
-                              <td data-label="To Staff">{custody?.toUser || "-"}</td>
-                              <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
-                              <td data-label="Reason">{h.reason || "-"}</td>
-                              <td data-label="By">{h.by || "-"}</td>
-                            </tr>
+                  {useMobileCardLayout ? (
+                    <div className="asset-detail-transfer-soft-list">
+                      {detailTransferVisibleEntries.length ? (
+                        detailTransferVisibleEntries.map((h) => {
+                          const custody = detailCustodyEntries.find(
+                            (entry) =>
+                              String(entry.date || "").slice(0, 10) === String(h.date || "").slice(0, 10) &&
+                              String(entry.toCampus || "") === String(h.toCampus || "") &&
+                              String(entry.toLocation || "") === String(h.toLocation || "")
                           );
-                          })
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={10}>No transfer location history yet.</td>
+                          return (
+                            <article key={`detail-transfer-soft-${h.id}`} className="asset-detail-transfer-soft-card">
+                              <div className="asset-detail-transfer-soft-top">
+                                <strong className="asset-detail-transfer-soft-id">{detailAsset.assetId}</strong>
+                                <span className="asset-detail-transfer-soft-date">{formatDate(h.date || "-")}</span>
+                              </div>
+                              <div className="asset-detail-transfer-soft-meta">
+                                <span><strong>From:</strong> {campusLabel(h.fromCampus)} | {h.fromLocation || "-"}</span>
+                                <span><strong>To:</strong> {campusLabel(h.toCampus)} | {h.toLocation || "-"}</span>
+                                <span><strong>Staff:</strong> {custody?.fromUser || "-"} {"->"} {custody?.toUser || "-"}</span>
+                                <span><strong>Ack:</strong> {custody?.responsibilityAck ? "Yes" : "No"}</span>
+                                <span><strong>By:</strong> {h.by || "-"}</span>
+                              </div>
+                              <p className="asset-detail-transfer-soft-note">
+                                <strong>Reason:</strong> {h.reason || "-"}
+                              </p>
+                            </article>
+                          );
+                        })
+                      ) : (
+                        <div className="panel-note">No transfer location history yet.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-wrap asset-detail-history-wrap">
+                      <table className="asset-detail-transfer-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>From Campus</th>
+                            <th>From Location</th>
+                            <th>To Campus</th>
+                            <th>To Location</th>
+                            <th>From Staff</th>
+                            <th>To Staff</th>
+                            <th>Ack</th>
+                            <th>Reason</th>
+                            <th>By</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {detailTransferVisibleEntries.length ? (
+                            detailTransferVisibleEntries.map((h) => {
+                              const custody = detailCustodyEntries.find(
+                                (entry) =>
+                                  String(entry.date || "").slice(0, 10) === String(h.date || "").slice(0, 10) &&
+                                  String(entry.toCampus || "") === String(h.toCampus || "") &&
+                                  String(entry.toLocation || "") === String(h.toLocation || "")
+                              );
+                              return (
+                              <tr key={`detail-transfer-${h.id}`}>
+                                <td data-label="Date">{formatDate(h.date)}</td>
+                                <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
+                                <td data-label="From Location">{h.fromLocation || "-"}</td>
+                                <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
+                                <td data-label="To Location">{h.toLocation || "-"}</td>
+                                <td data-label="From Staff">{custody?.fromUser || "-"}</td>
+                                <td data-label="To Staff">{custody?.toUser || "-"}</td>
+                                <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
+                                <td data-label="Reason">{h.reason || "-"}</td>
+                                <td data-label="By">{h.by || "-"}</td>
+                              </tr>
+                            );
+                            })
+                          ) : (
+                            <tr className="asset-detail-empty-row">
+                              <td colSpan={10}>No transfer location history yet.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
                   <h3 className="section-title">Assigned to History</h3>
                   <div className="table-wrap asset-detail-history-wrap">
@@ -27524,18 +27559,18 @@ export default function App() {
                   allTransferRows.map((row) => (
                     <article key={`transfer-history-mobile-${row.rowId}`} className="transfer-mobile-history-card">
                       <div className="transfer-mobile-history-head">
-                        <strong>{row.assetId}</strong>
-                        <span>{formatDate(row.date || "-")}</span>
+                        <strong className="transfer-mobile-history-id">{row.assetId}</strong>
+                        <span className="transfer-mobile-history-date">{formatDate(row.date || "-")}</span>
                       </div>
                       <div className="transfer-mobile-history-meta">
-                        <div>From: {campusLabel(row.fromCampus)} | {row.fromLocation || "-"}</div>
-                        <div>To: {campusLabel(row.toCampus)} | {row.toLocation || "-"}</div>
-                        <div>Staff: {row.fromUser || "-"} {"->"} {row.toUser || "-"}</div>
-                        <div>Ack: {row.responsibilityAck}</div>
-                        <div>By: {row.by || "-"}</div>
-                        <div>Reason: {row.reason || "-"}</div>
-                        <div>{t.notes}: {row.note || "-"}</div>
+                        <span><strong>From:</strong> {campusLabel(row.fromCampus)} | {row.fromLocation || "-"}</span>
+                        <span><strong>To:</strong> {campusLabel(row.toCampus)} | {row.toLocation || "-"}</span>
+                        <span><strong>Staff:</strong> {row.fromUser || "-"} {"->"} {row.toUser || "-"}</span>
+                        <span><strong>Ack:</strong> {row.responsibilityAck}</span>
+                        <span><strong>By:</strong> {row.by || "-"}</span>
+                        <span><strong>Reason:</strong> {row.reason || "-"}</span>
                       </div>
+                      <p className="transfer-mobile-history-note"><strong>{t.notes}:</strong> {row.note || "-"}</p>
                     </article>
                   ))
                 ) : (
