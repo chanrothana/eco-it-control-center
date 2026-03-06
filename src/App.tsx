@@ -22778,120 +22778,61 @@ export default function App() {
                   <h2 className="asset-list-title">{t.assetRegistry}</h2>
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}
-                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) }))}
-                    selectedValues={assetCampusMultiFilter}
-                    allOptionLabel={t.allCampuses}
-                    allOptionChecked={assetCampusMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetCampusMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetCampusFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetCampusMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetCampusFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetCampusMultiFilter.includes("ALL") ? "ALL" : (assetCampusMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetCampusMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: t.allCampuses },
+                      ...assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
+                    ]}
+                    placeholder={t.allCampuses}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}
-                    options={assetLocationFilterOptions.map((location) => ({ value: location, label: location }))}
-                    selectedValues={assetLocationMultiFilter}
-                    allOptionLabel="All Locations"
-                    allOptionChecked={assetLocationMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetLocationMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetLocationFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetLocationMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetLocationFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetLocationMultiFilter.includes("ALL") ? "ALL" : (assetLocationMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetLocationMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: "All Locations" },
+                      ...assetLocationFilterOptions.map((location) => ({ value: location, label: location })),
+                    ]}
+                    placeholder="All Locations"
                     searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
-                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
-                      return row ? (lang === "km" ? row.km : row.en) : value;
-                    })}
-                    options={assetCategoryFilterOptions.map((value) => {
-                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
-                      return { value, label: row ? (lang === "km" ? row.km : row.en) : value };
-                    })}
-                    selectedValues={assetCategoryMultiFilter}
-                    allOptionLabel={t.allCategories}
-                    allOptionChecked={assetCategoryMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetCategoryMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetCategoryFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetCategoryMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetCategoryFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetCategoryMultiFilter.includes("ALL") ? "ALL" : (assetCategoryMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetCategoryMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: t.allCategories },
+                      ...assetCategoryFilterOptions.map((value) => {
+                        const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                        return { value, label: row ? (lang === "km" ? row.km : row.en) : value };
+                      }),
+                    ]}
+                    placeholder={t.allCategories}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
-                      const row = assetNameFilterOptions.find((option) => option.value === value);
-                      return row ? row.label : value;
-                    })}
-                    options={assetNameFilterOptions.map((option) => ({ value: option.value, label: option.label }))}
-                    selectedValues={assetNameMultiFilter}
-                    allOptionLabel={`All ${t.name}s`}
-                    allOptionChecked={assetNameMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetNameMultiFilter((prev) =>
-                        applyMultiFilterSelection(
-                          prev,
-                          checked,
-                          "ALL",
-                          assetNameFilterOptions.map((option) => option.value)
-                        )
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetNameMultiFilter((prev) =>
-                        applyMultiFilterSelection(
-                          prev,
-                          checked,
-                          value,
-                          assetNameFilterOptions.map((item) => item.value)
-                        )
-                      )
-                    }
+                  <LocationPicker
+                    value={assetNameMultiFilter.includes("ALL") ? "ALL" : (assetNameMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetNameMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: `All ${t.name}s` },
+                      ...assetNameFilterOptions.map((option) => ({ value: option.value, label: option.label })),
+                    ]}
+                    placeholder={`All ${t.name}s`}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(
-                      assetAssignedToMultiFilter,
-                      lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
-                    )}
-                    options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
-                    selectedValues={assetAssignedToMultiFilter}
-                    allOptionLabel={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
-                    allOptionChecked={assetAssignedToMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetAssignedToMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetAssignedToFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetAssignedToMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetAssignedToFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetAssignedToMultiFilter.includes("ALL") ? "ALL" : (assetAssignedToMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetAssignedToMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff" },
+                      ...assetAssignedToFilterOptions.map((name) => ({ value: name, label: name })),
+                    ]}
+                    placeholder={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
@@ -23114,120 +23055,61 @@ export default function App() {
                   <h2 className="asset-list-title">{t.assetGallery}</h2>
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}
-                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) }))}
-                    selectedValues={assetCampusMultiFilter}
-                    allOptionLabel={t.allCampuses}
-                    allOptionChecked={assetCampusMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetCampusMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetCampusFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetCampusMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetCampusFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetCampusMultiFilter.includes("ALL") ? "ALL" : (assetCampusMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetCampusMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: t.allCampuses },
+                      ...assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
+                    ]}
+                    placeholder={t.allCampuses}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}
-                    options={assetLocationFilterOptions.map((location) => ({ value: location, label: location }))}
-                    selectedValues={assetLocationMultiFilter}
-                    allOptionLabel="All Locations"
-                    allOptionChecked={assetLocationMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetLocationMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetLocationFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetLocationMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetLocationFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetLocationMultiFilter.includes("ALL") ? "ALL" : (assetLocationMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetLocationMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: "All Locations" },
+                      ...assetLocationFilterOptions.map((location) => ({ value: location, label: location })),
+                    ]}
+                    placeholder="All Locations"
                     searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
-                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
-                      return row ? (lang === "km" ? row.km : row.en) : value;
-                    })}
-                    options={assetCategoryFilterOptions.map((value) => {
-                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
-                      return { value, label: row ? (lang === "km" ? row.km : row.en) : value };
-                    })}
-                    selectedValues={assetCategoryMultiFilter}
-                    allOptionLabel={t.allCategories}
-                    allOptionChecked={assetCategoryMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetCategoryMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetCategoryFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetCategoryMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetCategoryFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetCategoryMultiFilter.includes("ALL") ? "ALL" : (assetCategoryMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetCategoryMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: t.allCategories },
+                      ...assetCategoryFilterOptions.map((value) => {
+                        const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                        return { value, label: row ? (lang === "km" ? row.km : row.en) : value };
+                      }),
+                    ]}
+                    placeholder={t.allCategories}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
-                      const row = assetNameFilterOptions.find((option) => option.value === value);
-                      return row ? row.label : value;
-                    })}
-                    options={assetNameFilterOptions.map((option) => ({ value: option.value, label: option.label }))}
-                    selectedValues={assetNameMultiFilter}
-                    allOptionLabel={`All ${t.name}s`}
-                    allOptionChecked={assetNameMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetNameMultiFilter((prev) =>
-                        applyMultiFilterSelection(
-                          prev,
-                          checked,
-                          "ALL",
-                          assetNameFilterOptions.map((option) => option.value)
-                        )
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetNameMultiFilter((prev) =>
-                        applyMultiFilterSelection(
-                          prev,
-                          checked,
-                          value,
-                          assetNameFilterOptions.map((item) => item.value)
-                        )
-                      )
-                    }
+                  <LocationPicker
+                    value={assetNameMultiFilter.includes("ALL") ? "ALL" : (assetNameMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetNameMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: `All ${t.name}s` },
+                      ...assetNameFilterOptions.map((option) => ({ value: option.value, label: option.label })),
+                    ]}
+                    placeholder={`All ${t.name}s`}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(
-                      assetAssignedToMultiFilter,
-                      lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
-                    )}
-                    options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
-                    selectedValues={assetAssignedToMultiFilter}
-                    allOptionLabel={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
-                    allOptionChecked={assetAssignedToMultiFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setAssetAssignedToMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", assetAssignedToFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setAssetAssignedToMultiFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, assetAssignedToFilterOptions)
-                      )
-                    }
+                  <LocationPicker
+                    value={assetAssignedToMultiFilter.includes("ALL") ? "ALL" : (assetAssignedToMultiFilter[0] || "ALL")}
+                    onChange={(value) => setAssetAssignedToMultiFilter(value === "ALL" ? ["ALL"] : [value])}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff" },
+                      ...assetAssignedToFilterOptions.map((name) => ({ value: name, label: name })),
+                    ]}
+                    placeholder={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
