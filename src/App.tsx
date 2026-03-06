@@ -1178,6 +1178,7 @@ const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
 const REMOTE_TYPE_CODE = "RMT";
+const WALKIE_CHARGER_TYPE_CODE = "ADP";
 const INACTIVE_TABLET_HOLDING_CAMPUS = "Chaktomuk Campus (C2.2)";
 const INACTIVE_TABLET_HOLDING_LOCATION = "Admin Office 2.2";
 const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
@@ -6588,9 +6589,31 @@ export default function App() {
     },
     [itemNames, lang, allTypeOptions]
   );
+  const assetNameFilterSourceAssets = useMemo(() => {
+    let list = [...assets];
+    if (!assetCampusMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
+    }
+    if (!assetCategoryMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetCategoryMultiFilter.includes(asset.category));
+    }
+    if (!assetLocationMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetLocationMultiFilter.includes(String(asset.location || "").trim()));
+    }
+    if (!assetAssignedToMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetAssignedToMultiFilter.includes(String(asset.assignedTo || "").trim()));
+    }
+    return list;
+  }, [
+    assets,
+    assetCampusMultiFilter,
+    assetCategoryMultiFilter,
+    assetLocationMultiFilter,
+    assetAssignedToMultiFilter,
+  ]);
   const assetNameFilterOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const asset of assets) {
+    for (const asset of assetNameFilterSourceAssets) {
       const pcPart =
         asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
           ? String(asset.pcType || "").trim().toUpperCase()
@@ -6602,7 +6625,7 @@ export default function App() {
     return Array.from(map.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [assets, assetItemName]);
+  }, [assetNameFilterSourceAssets, assetItemName]);
   const assetCampusFilterOptions = useMemo(
     () => [...allowedCampuses].sort(compareCampusByCode),
     [allowedCampuses]
@@ -9335,6 +9358,7 @@ export default function App() {
     const isDigitalCameraAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DIGITAL_CAMERA_TYPE;
     const isProjectorAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === PROJECTOR_TYPE;
     const isTvAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === TV_TYPE_CODE;
+    const isWalkieAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === WALKIE_TALKIE_TYPE_CODE;
     const shouldLinkToParent = !isDesktopAsset && (isLinkableForCreate && assetForm.useExistingSet);
     const createPack = isDesktopAsset && assetForm.createSetPack;
     const createLaptopAccessories = isLaptopAsset
@@ -9353,6 +9377,16 @@ export default function App() {
           .map(([type]) => ({ type, draft: projectorComponentDraft[type] }))
       : [];
     const createTvRemoteCount = isTvAsset ? Math.max(1, Math.min(2, Number(assetForm.tvRemoteCount || 1))) : 0;
+    const createWalkieCharger = isWalkieAsset && Boolean(assetForm.walkieHasCharger);
+    const createWalkieChargerPhotos = createWalkieCharger
+      ? Array.from(
+          new Set(
+            (assetForm.walkieChargerPhotos || [])
+              .map((entry) => String(entry || "").trim())
+              .filter(Boolean)
+          )
+        ).slice(0, 4)
+      : [];
     const packItems = (Object.entries(setPackDraft) as Array<[SetPackChildType, SetPackChildDraft]>)
       .filter(([type, draft]) => draft.enabled && (!isAioDesktopForCreate || (type !== "MON" && type !== "MON2")));
     const createSetCode = isDesktopAsset
@@ -9674,6 +9708,36 @@ export default function App() {
             }),
           });
         }
+      }
+      if (createWalkieCharger && created.asset?.assetId) {
+        await requestJson<{ asset: Asset }>("/api/assets", {
+          method: "POST",
+          body: JSON.stringify({
+            campus: assetForm.campus,
+            category: "IT",
+            type: WALKIE_CHARGER_TYPE_CODE,
+            location: assetForm.location,
+            setCode: "",
+            parentAssetId: created.asset.assetId,
+            assignedTo: "",
+            custodyStatus: "IN_STOCK",
+            brand: assetForm.brand,
+            model: "",
+            serialNumber: "",
+            specs: "",
+            purchaseDate: assetForm.purchaseDate,
+            warrantyUntil: assetForm.warrantyUntil,
+            vendor: assetForm.vendor,
+            notes:
+              String(assetForm.walkieChargerDetail || "").trim() ||
+              `Auto-created walkie charger for ${created.asset.assetId}`,
+            nextMaintenanceDate: "",
+            scheduleNote: "",
+            photo: createWalkieChargerPhotos[0] || "",
+            photos: createWalkieChargerPhotos,
+            status: assetForm.status,
+          }),
+        });
       }
 
       setAssetForm((f) => ({
@@ -10144,6 +10208,59 @@ export default function App() {
             };
             nextLocal = [child, ...nextLocal];
           }
+        }
+        if (createWalkieCharger) {
+          const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", WALKIE_CHARGER_TYPE_CODE);
+          const child: Asset = {
+            id: Date.now() + Math.floor(Math.random() * 10000),
+            campus: assetForm.campus,
+            category: "IT",
+            type: WALKIE_CHARGER_TYPE_CODE,
+            pcType: "",
+            seq: childSeq,
+            assetId: buildAssetId(assetForm.campus, "IT", WALKIE_CHARGER_TYPE_CODE, childSeq),
+            name: assetItemName("IT", WALKIE_CHARGER_TYPE_CODE),
+            location: assetForm.location,
+            setCode: "",
+            parentAssetId: newAsset.assetId,
+            assignedTo: "",
+            custodyStatus: "IN_STOCK",
+            brand: assetForm.brand,
+            model: "",
+            serialNumber: "",
+            specs: "",
+            purchaseDate: assetForm.purchaseDate,
+            warrantyUntil: assetForm.warrantyUntil,
+            vendor: assetForm.vendor,
+            notes:
+              String(assetForm.walkieChargerDetail || "").trim() ||
+              `Auto-created walkie charger for ${newAsset.assetId}`,
+            nextMaintenanceDate: "",
+            nextVerificationDate: "",
+            verificationFrequency: "NONE",
+            scheduleNote: "",
+            repeatMode: "NONE",
+            repeatWeekOfMonth: 0,
+            repeatWeekday: 0,
+            maintenanceHistory: [],
+            verificationHistory: [],
+            transferHistory: [],
+            custodyHistory: [],
+            statusHistory: [
+              {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                fromStatus: "New",
+                toStatus: assetForm.status,
+                reason: "Asset created as walkie charger",
+              },
+            ],
+            photo: createWalkieChargerPhotos[0] || "",
+            photos: createWalkieChargerPhotos,
+            status: assetForm.status,
+            created: new Date().toISOString(),
+          };
+          nextLocal = [child, ...nextLocal];
         }
         writeAssetFallback(nextLocal);
         setAssets(
@@ -12818,23 +12935,33 @@ export default function App() {
           table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: fixed; }
           th, td { border: 1px solid #c9d8ed; padding: 3px 2px; font-size: 9px; text-align: center; }
           th { background: #edf4ff; font-weight: 700; }
-          td:first-child, th:first-child { text-align: left; width: 290px; max-width: 290px; font-size: 8.8px; }
+          td:first-child, th:first-child { text-align: left; width: 190px; max-width: 190px; font-size: 8.8px; }
           td:last-child, th:last-child { width: 46px; font-weight: 800; }
           thead tr:nth-child(2) th { background: #f5f9ff; font-size: 8.5px; }
           .day-main, .day-sub { display: block; line-height: 1.05; text-align: center; }
           .day-main { font-size: 9px; font-weight: 800; }
           .day-sub { margin-top: 1px; font-size: 7px; color: #4d628a; font-weight: 700; }
-          .item-cell { display: flex; align-items: center; gap: 6px; }
+          .item-cell { display: flex; align-items: center; gap: 5px; }
           .item-meta { min-width: 0; display: grid; gap: 1px; }
           .item-code, .item-name {
             line-height: 1.1;
-            white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 250px;
+            max-width: 160px;
           }
+          .item-code { white-space: nowrap; text-overflow: ellipsis; }
           .item-code { font-size: 8px; font-weight: 800; color: #2e4a78; }
-          .item-name { font-size: 8.5px; font-weight: 700; color: #1f2f4d; }
+          .item-name {
+            font-size: 8.5px;
+            font-weight: 700;
+            color: #1f2f4d;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            text-overflow: clip;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            max-height: 2.2em;
+          }
           .item-photo {
             width: 16px; height: 16px; border-radius: 4px; object-fit: cover;
             border: 1px solid #c6d6ef; background: #eef5ff; flex: 0 0 auto;
@@ -13274,6 +13401,21 @@ export default function App() {
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
     const photos = normalizeAssetPhotos(asset);
+    const walkieChargerChild =
+      String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+        ? assets
+            .filter(
+              (entry) =>
+                entry.assetId !== asset.assetId &&
+                String(entry.type || "").trim().toUpperCase() === WALKIE_CHARGER_TYPE_CODE &&
+                String(entry.parentAssetId || "").trim() === String(asset.assetId || "").trim()
+            )
+            .sort(
+              (a, b) =>
+                (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+                String(a.assetId || "").localeCompare(String(b.assetId || ""))
+            )[0] || null
+        : null;
     const parsedAircon = isAirconAsset(asset.category, asset.type)
       ? parseAirconSpecs(asset.specs || "")
       : {
@@ -13308,11 +13450,11 @@ export default function App() {
       acHasFrontPanel: parsedAircon.acHasFrontPanel,
       acHasOutdoor: parsedAircon.acHasOutdoor,
       acComponentNote: parsedAircon.acComponentNote,
-      walkieHasCharger: parsedWalkie.hasCharger,
+      walkieHasCharger: parsedWalkie.hasCharger || Boolean(walkieChargerChild),
       walkieChargerDetail: parsedWalkie.chargerDetail,
       walkieChargerPhotos:
         String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
-          ? normalizeAssetPhotos(asset).slice(0, 4)
+          ? normalizeAssetPhotos(walkieChargerChild || {}).slice(0, 4)
           : [],
       specs: parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
@@ -13764,6 +13906,10 @@ export default function App() {
       !!editingAsset && canLinkToParentAsset(editingAsset.category, editingAsset.type);
     const editingShouldLinkToParent =
       !!editingAsset && !editingIsDesktop && (editingIsLinkable && assetEditForm.useExistingSet);
+    const editingIsWalkieAsset =
+      !!editingAsset &&
+      editingAsset.category === "IT" &&
+      String(editingAsset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE;
     const needsUser =
       !!editingAsset &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
@@ -13913,6 +14059,172 @@ export default function App() {
         });
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+      }
+      if (editingIsWalkieAsset && editingAsset?.assetId) {
+        const walkieChargerPhotos = Array.from(
+          new Set(
+            (assetEditForm.walkieChargerPhotos || [])
+              .map((entry) => String(entry || "").trim())
+              .filter(Boolean)
+          )
+        ).slice(0, 4);
+        const chargerChildren = nextLocal
+          .filter(
+            (asset) =>
+              asset.assetId !== editingAsset.assetId &&
+              String(asset.type || "").trim().toUpperCase() === WALKIE_CHARGER_TYPE_CODE &&
+              String(asset.parentAssetId || "").trim() === String(editingAsset.assetId || "").trim()
+          )
+          .sort(
+            (a, b) =>
+              (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+              String(a.assetId || "").localeCompare(String(b.assetId || ""))
+          );
+        const activeCharger = chargerChildren[0] || null;
+        const extraChargers = chargerChildren.slice(1);
+        if (assetEditForm.walkieHasCharger) {
+          const chargerNotes =
+            String(assetEditForm.walkieChargerDetail || "").trim() ||
+            `Auto-created walkie charger for ${editingAsset.assetId}`;
+          if (activeCharger) {
+            const updatedCharger: Asset = {
+              ...activeCharger,
+              campus: editingAsset.campus,
+              category: "IT",
+              type: WALKIE_CHARGER_TYPE_CODE,
+              location: payload.location,
+              setCode: "",
+              parentAssetId: editingAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: payload.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: payload.purchaseDate,
+              warrantyUntil: payload.warrantyUntil,
+              vendor: payload.vendor,
+              notes: chargerNotes,
+              photo: walkieChargerPhotos[0] || "",
+              photos: walkieChargerPhotos,
+              status: payload.status,
+            };
+            nextLocal = nextLocal.map((asset) => (asset.id === activeCharger.id ? updatedCharger : asset));
+            try {
+              await requestJson<{ asset: Asset }>(`/api/assets/${activeCharger.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  location: payload.location,
+                  parentAssetId: editingAsset.assetId,
+                  brand: payload.brand,
+                  model: "",
+                  serialNumber: "",
+                  specs: "",
+                  purchaseDate: payload.purchaseDate,
+                  warrantyUntil: payload.warrantyUntil,
+                  vendor: payload.vendor,
+                  notes: chargerNotes,
+                  photo: walkieChargerPhotos[0] || "",
+                  photos: walkieChargerPhotos,
+                  status: payload.status,
+                }),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+          } else {
+            try {
+              await requestJson<{ asset: Asset }>("/api/assets", {
+                method: "POST",
+                body: JSON.stringify({
+                  campus: editingAsset.campus,
+                  category: "IT",
+                  type: WALKIE_CHARGER_TYPE_CODE,
+                  location: payload.location,
+                  setCode: "",
+                  parentAssetId: editingAsset.assetId,
+                  assignedTo: "",
+                  custodyStatus: "IN_STOCK",
+                  brand: payload.brand,
+                  model: "",
+                  serialNumber: "",
+                  specs: "",
+                  purchaseDate: payload.purchaseDate,
+                  warrantyUntil: payload.warrantyUntil,
+                  vendor: payload.vendor,
+                  notes: chargerNotes,
+                  nextMaintenanceDate: "",
+                  scheduleNote: "",
+                  photo: walkieChargerPhotos[0] || "",
+                  photos: walkieChargerPhotos,
+                  status: payload.status,
+                }),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, "IT", WALKIE_CHARGER_TYPE_CODE);
+            const newCharger: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: editingAsset.campus,
+              category: "IT",
+              type: WALKIE_CHARGER_TYPE_CODE,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(editingAsset.campus, "IT", WALKIE_CHARGER_TYPE_CODE, childSeq),
+              name: assetItemName("IT", WALKIE_CHARGER_TYPE_CODE),
+              location: payload.location,
+              setCode: "",
+              parentAssetId: editingAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: payload.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: payload.purchaseDate,
+              warrantyUntil: payload.warrantyUntil,
+              vendor: payload.vendor,
+              notes: chargerNotes,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: payload.status,
+                  reason: "Asset created as walkie charger",
+                },
+              ],
+              photo: walkieChargerPhotos[0] || "",
+              photos: walkieChargerPhotos,
+              status: payload.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [newCharger, ...nextLocal];
+          }
+        } else {
+          nextLocal = nextLocal.filter((asset) => !chargerChildren.some((child) => child.id === asset.id));
+        }
+        const chargerDeleteTargets = assetEditForm.walkieHasCharger ? extraChargers : chargerChildren;
+        for (const charger of chargerDeleteTargets) {
+          try {
+            await requestJson<{ ok: boolean }>(`/api/assets/${charger.id}`, { method: "DELETE" });
+          } catch (err) {
+            if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+          }
+          nextLocal = nextLocal.filter((asset) => asset.id !== charger.id);
+        }
       }
 
       writeAssetFallback(nextLocal);
@@ -15149,12 +15461,8 @@ export default function App() {
     try {
       const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
       setAssetForm((f) => {
-        const merged = normalizeAssetPhotos({
-          photo: f.photo,
-          photos: [...(f.photos || []), ...optimized],
-        });
         const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
-        return { ...f, photo: merged[0] || "", photos: merged, walkieChargerPhotos: chargerPhotos };
+        return { ...f, walkieChargerPhotos: chargerPhotos };
       });
     } catch {
       alert(t.photoProcessError);
@@ -15318,12 +15626,8 @@ export default function App() {
     try {
       const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
       setAssetEditForm((f) => {
-        const merged = normalizeAssetPhotos({
-          photo: f.photo,
-          photos: [...(f.photos || []), ...optimized],
-        });
         const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
-        return { ...f, photo: merged[0] || "", photos: merged, walkieChargerPhotos: chargerPhotos };
+        return { ...f, walkieChargerPhotos: chargerPhotos };
       });
     } catch {
       alert(t.photoProcessError);
@@ -15549,6 +15853,26 @@ export default function App() {
           )
         : [],
     [detailAsset, sortByNewestDate]
+  );
+  const detailTvRemoteChildren = useMemo(
+    () =>
+      detailAsset &&
+      detailAsset.category === "IT" &&
+      detailAsset.type === "TV"
+        ? assets
+            .filter(
+              (asset) =>
+                asset.assetId !== detailAsset.assetId &&
+                asset.type === REMOTE_TYPE_CODE &&
+                String(asset.parentAssetId || "").trim() === detailAsset.assetId
+            )
+            .sort(
+              (a, b) =>
+                (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+                String(a.assetId || "").localeCompare(String(b.assetId || ""))
+            )
+        : [],
+    [assets, detailAsset]
   );
   const detailMaintenanceVisibleEntries = useMemo(
     () =>
@@ -22334,12 +22658,9 @@ export default function App() {
                                     onClick={() =>
                                       setAssetForm((f) => {
                                         const nextCharger = (f.walkieChargerPhotos || []).filter((_, i) => i !== index);
-                                        const nextAll = normalizeAssetPhotos(f).filter((entry) => entry !== url);
                                         return {
                                           ...f,
                                           walkieChargerPhotos: nextCharger,
-                                          photo: nextAll[0] || "",
-                                          photos: nextAll,
                                         };
                                       })
                                     }
@@ -23344,6 +23665,18 @@ export default function App() {
                     {detailAsset.category === "IT" ? (
                       <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
                     ) : null}
+                    {detailAsset.category === "IT" && detailAsset.type === "TV" ? (
+                      <div className="field field-wide">
+                        <span>Included Remotes</span>
+                        <div className="detail-value">
+                          {detailTvRemoteChildren.length
+                            ? `${detailTvRemoteChildren.length} remote${detailTvRemoteChildren.length > 1 ? "s" : ""}: ${detailTvRemoteChildren
+                                .map((asset) => asset.assetId)
+                                .join(", ")}`
+                            : "No remote linked"}
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
                     <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
                     <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
@@ -24076,12 +24409,9 @@ export default function App() {
                                         onClick={() =>
                                           setAssetEditForm((f) => {
                                             const nextCharger = (f.walkieChargerPhotos || []).filter((_, i) => i !== index);
-                                            const nextAll = normalizeAssetPhotos(f).filter((entry) => entry !== url);
                                             return {
                                               ...f,
                                               walkieChargerPhotos: nextCharger,
-                                              photo: nextAll[0] || "",
-                                              photos: nextAll,
                                             };
                                           })
                                         }
