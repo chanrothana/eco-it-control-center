@@ -1942,7 +1942,9 @@ function validateAsset(body) {
   const photo = toText(body.photo);
   const photos = Array.isArray(body.photos) ? body.photos : [];
   const status = toText(body.status) || "Active";
-  const requiresUser = ["PC", "TAB", "SPK", "DCM"].includes(type);
+  const statusIsActive = status.toLowerCase() === "active";
+  const requiresUser =
+    ["PC", "LAP", "TAB", "SPK", "DCM", "WTK"].includes(type) && statusIsActive;
   const sharedLocation = SHARED_LOCATION_KEYWORDS.some((k) =>
     location.toLowerCase().includes(k)
   );

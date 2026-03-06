@@ -28508,28 +28508,46 @@ export default function App() {
               <div className="report-mobile-only report-card-list">
                 {sortedMaintenanceRows.length ? (
                   sortedMaintenanceRows.map((row) => (
-                    <article key={`maint-history-mobile-${row.rowId}`} className="report-card">
-                      <div className="report-card-head">
-                        <div className="report-card-photo">{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</div>
-                        <div className="report-card-title">
-                          <strong className="report-card-id">{row.assetId}</strong>
-                          <div className="tiny report-card-sub">{formatDate(row.date || "-")}</div>
-                        </div>
+                    <article key={`maint-history-mobile-${row.rowId}`} className="report-card maintenance-mobile-asset-card">
+                      <div className="maintenance-mobile-asset-head">
+                        <strong className="report-card-id">{row.assetId}</strong>
+                        <span className="tiny report-card-sub">
+                          {campusLabel(row.campus)} • {row.location || "-"}
+                        </span>
                       </div>
-                      <div className="report-card-meta">
-                        <div><strong>{t.campus}:</strong> {campusLabel(row.campus)}</div>
-                        <div><strong>{t.category}:</strong> {row.category || "-"}</div>
-                        <div><strong>{t.typeCode}:</strong> {row.assetType || "-"}</div>
-                        <div><strong>{t.location}:</strong> {row.location || "-"}</div>
-                        <div><strong>Type:</strong> {row.type || "-"}</div>
-                        <div><strong>Work Status:</strong> {maintenanceCompletionText(row.completion || "-")}</div>
-                        <div><strong>{t.status}:</strong> {assetStatusLabel(row.status)}</div>
-                        <div><strong>Cost:</strong> {row.cost || "-"}</div>
-                        <div><strong>By:</strong> {row.by || "-"}</div>
-                        <div><strong>Condition:</strong> {row.condition || "-"}</div>
-                        <div className="report-card-row-wide"><strong>Note:</strong> {row.note || "-"}</div>
-                        <div className="report-card-row-wide"><strong>Maintenance Photo:</strong></div>
-                        <div className="report-card-row-wide report-card-photo-row">{renderAssetPhoto(row.photo || "", "maintenance")}</div>
+                      <div className="maintenance-mobile-asset-grid">
+                        <div className="maintenance-mobile-asset-field">
+                          <span>DATE</span>
+                          <strong>{formatDate(row.date || "-")}</strong>
+                        </div>
+                        <div className="maintenance-mobile-asset-field">
+                          <span>TYPE</span>
+                          <strong>{row.type || "-"}</strong>
+                        </div>
+                        <div className="maintenance-mobile-asset-field">
+                          <span>WORK STATUS</span>
+                          <strong>{maintenanceCompletionText(row.completion || "-")}</strong>
+                        </div>
+                        <div className="maintenance-mobile-asset-field">
+                          <span>CONDITION</span>
+                          <strong>{row.condition || "-"}</strong>
+                        </div>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
+                          <span>NOTED</span>
+                          <strong>{row.note || "-"}</strong>
+                        </div>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
+                          <span>PHOTO</span>
+                          <div className="maintenance-mobile-asset-photo">{renderAssetPhoto(row.photo || "", "maintenance")}</div>
+                        </div>
+                        <div className="maintenance-mobile-asset-field">
+                          <span>COST</span>
+                          <strong>{row.cost || "-"}</strong>
+                        </div>
+                        <div className="maintenance-mobile-asset-field">
+                          <span>BY</span>
+                          <strong>{row.by || "-"}</strong>
+                        </div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">
                         <button
