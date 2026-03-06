@@ -5268,10 +5268,12 @@ export default function App() {
   const [assetCategoryMultiFilter, setAssetCategoryMultiFilter] = useState<string[]>(["ALL"]);
   const [assetNameMultiFilter, setAssetNameMultiFilter] = useState<string[]>(["ALL"]);
   const [assetLocationMultiFilter, setAssetLocationMultiFilter] = useState<string[]>(["ALL"]);
+  const [assetAssignedToMultiFilter, setAssetAssignedToMultiFilter] = useState<string[]>(["ALL"]);
   const [assetCampusFilterSearch, setAssetCampusFilterSearch] = useState("");
   const [assetLocationFilterSearch, setAssetLocationFilterSearch] = useState("");
   const [assetCategoryFilterSearch, setAssetCategoryFilterSearch] = useState("");
   const [assetNameFilterSearch, setAssetNameFilterSearch] = useState("");
+  const [assetAssignedToFilterSearch, setAssetAssignedToFilterSearch] = useState("");
   const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
   const [maintenanceDateFrom, setMaintenanceDateFrom] = useState("");
@@ -6614,6 +6616,15 @@ export default function App() {
       )
     ).sort((a, b) => a.localeCompare(b));
   }, [assets]);
+  const assetAssignedToFilterOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        assets
+          .map((asset) => String(asset.assignedTo || "").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [assets]);
   const filteredAssetCampusFilterOptions = useMemo(() => {
     const query = assetCampusFilterSearch.trim().toLowerCase();
     if (!query) return assetCampusFilterOptions;
@@ -6627,6 +6638,11 @@ export default function App() {
     if (!query) return assetLocationFilterOptions;
     return assetLocationFilterOptions.filter((location) => location.toLowerCase().includes(query));
   }, [assetLocationFilterOptions, assetLocationFilterSearch]);
+  const filteredAssetAssignedToFilterOptions = useMemo(() => {
+    const query = assetAssignedToFilterSearch.trim().toLowerCase();
+    if (!query) return assetAssignedToFilterOptions;
+    return assetAssignedToFilterOptions.filter((name) => name.toLowerCase().includes(query));
+  }, [assetAssignedToFilterOptions, assetAssignedToFilterSearch]);
   const filteredAssetCategoryFilterOptions = useMemo(() => {
     const query = assetCategoryFilterSearch.trim().toLowerCase();
     if (!query) return CATEGORY_OPTIONS;
@@ -6680,6 +6696,8 @@ export default function App() {
     setAssetCategoryMultiFilter(["ALL"]);
     setAssetNameMultiFilter(["ALL"]);
     setAssetLocationMultiFilter(["ALL"]);
+    setAssetAssignedToMultiFilter(["ALL"]);
+    setAssetAssignedToFilterSearch("");
     setSearch("");
   }, []);
   const toggleCampusAccess = useCallback((current: string[], campus: string, checked: boolean) => {
@@ -8798,6 +8816,12 @@ export default function App() {
       return prev.filter((item) => assetLocationFilterOptions.includes(item));
     });
   }, [assetLocationFilterOptions]);
+  useEffect(() => {
+    setAssetAssignedToMultiFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      return prev.filter((item) => assetAssignedToFilterOptions.includes(item));
+    });
+  }, [assetAssignedToFilterOptions]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -16243,11 +16267,16 @@ export default function App() {
         assetLocationMultiFilter.includes(String(asset.location || "").trim())
       );
     }
+    if (!assetAssignedToMultiFilter.includes("ALL")) {
+      list = list.filter((asset) =>
+        assetAssignedToMultiFilter.includes(String(asset.assignedTo || "").trim())
+      );
+    }
     const q = String(search || "").trim().toLowerCase();
     if (q) {
       list = list.filter((asset) => {
         const itemLabel = assetItemName(asset.category, asset.type, asset.pcType || "");
-        return `${asset.assetId} ${itemLabel} ${asset.name || ""} ${asset.location || ""} ${campusLabel(asset.campus)} ${asset.category || ""}`
+        return `${asset.assetId} ${itemLabel} ${asset.name || ""} ${asset.location || ""} ${campusLabel(asset.campus)} ${asset.category || ""} ${asset.assignedTo || ""}`
           .toLowerCase()
           .includes(q);
       });
@@ -16289,6 +16318,7 @@ export default function App() {
     assetCategoryMultiFilter,
     assetNameMultiFilter,
     assetLocationMultiFilter,
+    assetAssignedToMultiFilter,
     search,
     assetListSort,
     campusLabel,
@@ -22479,6 +22509,63 @@ export default function App() {
                       ) : null}
                     </div>
                   </details>
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                    <summary>
+                      {summarizeMultiFilter(
+                        assetAssignedToMultiFilter,
+                        lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
+                      )}
+                    </summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetAssignedToMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetAssignedToMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetAssignedToFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        <span className="filter-menu-item-label">{lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}</span>
+                      </label>
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetAssignedToFilterSearch}
+                          onChange={(e) => setAssetAssignedToFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
+                        />
+                      </div>
+                      {filteredAssetAssignedToFilterOptions.map((name) => (
+                        <label key={`asset-assigned-filter-${name}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetAssignedToMultiFilter.includes(name)}
+                            onChange={(e) =>
+                              setAssetAssignedToMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  name,
+                                  assetAssignedToFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          <span className="filter-menu-item-label">{name}</span>
+                        </label>
+                      ))}
+                      {!filteredAssetAssignedToFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
+                    </div>
+                  </details>
                   <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
@@ -22504,6 +22591,9 @@ export default function App() {
                                 <div><strong>{t.campus}:</strong> {campusLabel(asset.campus)}</div>
                                 <div><strong>{t.category}:</strong> {asset.category}</div>
                                 <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
+                                {String(asset.assignedTo || "").trim() ? (
+                                  <div><strong>Assigned Staff:</strong> {asset.assignedTo}</div>
+                                ) : null}
                               </div>
                             </div>
                             <div className="asset-mobile-photo">{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
@@ -22904,6 +22994,63 @@ export default function App() {
                         </label>
                       ))}
                       {!filteredAssetNameFilterOptions.length ? (
+                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
+                      ) : null}
+                    </div>
+                  </details>
+                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+                    <summary>
+                      {summarizeMultiFilter(
+                        assetAssignedToMultiFilter,
+                        lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
+                      )}
+                    </summary>
+                    <div className="filter-menu-list">
+                      <label className="filter-menu-item">
+                        <input
+                          type="checkbox"
+                          checked={assetAssignedToMultiFilter.includes("ALL")}
+                          onChange={(e) =>
+                            setAssetAssignedToMultiFilter((prev) =>
+                              applyMultiFilterSelection(
+                                prev,
+                                e.target.checked,
+                                "ALL",
+                                assetAssignedToFilterOptions
+                              )
+                            )
+                          }
+                        />
+                        <span className="filter-menu-item-label">{lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}</span>
+                      </label>
+                      <div className="filter-menu-search-row">
+                        <input
+                          className="input filter-menu-search-input"
+                          value={assetAssignedToFilterSearch}
+                          onChange={(e) => setAssetAssignedToFilterSearch(e.target.value)}
+                          placeholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
+                        />
+                      </div>
+                      {filteredAssetAssignedToFilterOptions.map((name) => (
+                        <label key={`asset-gallery-assigned-filter-${name}`} className="filter-menu-item">
+                          <input
+                            type="checkbox"
+                            checked={assetAssignedToMultiFilter.includes(name)}
+                            onChange={(e) =>
+                              setAssetAssignedToMultiFilter((prev) =>
+                                applyMultiFilterSelection(
+                                  prev,
+                                  e.target.checked,
+                                  name,
+                                  assetAssignedToFilterOptions
+                                )
+                              )
+                            }
+                          />
+                          <span className="filter-menu-item-label">{name}</span>
+                        </label>
+                      ))}
+                      {!filteredAssetAssignedToFilterOptions.length ? (
                         <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
                       ) : null}
                     </div>
