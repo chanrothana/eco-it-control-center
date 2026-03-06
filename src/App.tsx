@@ -1447,7 +1447,7 @@ const TEXT = {
     deleteLocationConfirm: "Delete this location?",
     photoLimit: "Photo is too large. Please use file under 15MB.",
     user: "User",
-    userRequired: "User is required for Computer, Laptop, iPad/Tablet, Speaker, Digital Camera, and Walkie Talkie.",
+    userRequired: "Assigned user is required only when status is Active for Computer, Laptop, iPad/Tablet, Speaker, Digital Camera, and Walkie Talkie.",
     selectLocation: "Select location",
     locationRequired: "Please select location.",
     noLocationsConfigured: "No locations configured for this campus. Please add in Setup tab.",
@@ -1681,7 +1681,7 @@ const TEXT = {
     deleteLocationConfirm: "តើលុបទីតាំងនេះមែនទេ?",
     photoLimit: "រូបភាពធំពេក។ សូមប្រើឯកសារតិចជាង 15MB។",
     user: "អ្នកប្រើប្រាស់",
-    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើសម្រាប់ Computer, Laptop, iPad/Tablet, Speaker, Digital Camera និង Walkie Talkie។",
+    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើ តែពេលស្ថានភាពជា Active សម្រាប់ Computer, Laptop, iPad/Tablet, Speaker, Digital Camera និង Walkie Talkie។",
     selectLocation: "ជ្រើសទីតាំង",
     locationRequired: "សូមជ្រើសរើសទីតាំង។",
     noLocationsConfigured: "Campus នេះមិនទាន់កំណត់ទីតាំងទេ។ សូមបន្ថែមនៅផ្ទាំង Setup។",
@@ -4337,7 +4337,7 @@ function ParentAssetPicker({
   value,
   assets,
   onChange,
-  placeholder = "Select parent asset",
+  placeholder = "Select Parent Asset (Search)",
   disabled,
   getLabel,
 }: ParentAssetPickerProps) {
@@ -5273,11 +5273,6 @@ export default function App() {
   const [assetNameMultiFilter, setAssetNameMultiFilter] = useState<string[]>(["ALL"]);
   const [assetLocationMultiFilter, setAssetLocationMultiFilter] = useState<string[]>(["ALL"]);
   const [assetAssignedToMultiFilter, setAssetAssignedToMultiFilter] = useState<string[]>(["ALL"]);
-  const [assetCampusFilterSearch, setAssetCampusFilterSearch] = useState("");
-  const [assetLocationFilterSearch, setAssetLocationFilterSearch] = useState("");
-  const [assetCategoryFilterSearch, setAssetCategoryFilterSearch] = useState("");
-  const [assetNameFilterSearch, setAssetNameFilterSearch] = useState("");
-  const [assetAssignedToFilterSearch, setAssetAssignedToFilterSearch] = useState("");
   const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
   const [maintenanceDateFrom, setMaintenanceDateFrom] = useState("");
@@ -5288,8 +5283,7 @@ export default function App() {
   const [verificationDateTo, setVerificationDateTo] = useState("");
   const [inventoryBalanceMode, setInventoryBalanceMode] = useState<"all" | "low">("all");
   const [maintenanceRecordCategoryFilter, setMaintenanceRecordCategoryFilter] = useState("ALL");
-  const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState<string[]>(["ALL"]);
-  const [maintenanceRecordItemFilterSearch, setMaintenanceRecordItemFilterSearch] = useState("");
+  const [maintenanceRecordItemFilter, setMaintenanceRecordItemFilter] = useState("ALL");
   const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
   const [maintenanceRecordCampusFilter, setMaintenanceRecordCampusFilter] = useState("ALL");
   const [maintenanceRecordScheduleJumpMode, setMaintenanceRecordScheduleJumpMode] = useState(false);
@@ -6652,39 +6646,6 @@ export default function App() {
       )
     ).sort((a, b) => a.localeCompare(b));
   }, [assets]);
-  const filteredAssetCampusFilterOptions = useMemo(() => {
-    const query = assetCampusFilterSearch.trim().toLowerCase();
-    if (!query) return assetCampusFilterOptions;
-    return assetCampusFilterOptions.filter((campus) => {
-      const label = campusLabel(campus);
-      return campus.toLowerCase().includes(query) || label.toLowerCase().includes(query);
-    });
-  }, [assetCampusFilterOptions, assetCampusFilterSearch, campusLabel]);
-  const filteredAssetLocationFilterOptions = useMemo(() => {
-    const query = assetLocationFilterSearch.trim().toLowerCase();
-    if (!query) return assetLocationFilterOptions;
-    return assetLocationFilterOptions.filter((location) => location.toLowerCase().includes(query));
-  }, [assetLocationFilterOptions, assetLocationFilterSearch]);
-  const filteredAssetAssignedToFilterOptions = useMemo(() => {
-    const query = assetAssignedToFilterSearch.trim().toLowerCase();
-    if (!query) return assetAssignedToFilterOptions;
-    return assetAssignedToFilterOptions.filter((name) => name.toLowerCase().includes(query));
-  }, [assetAssignedToFilterOptions, assetAssignedToFilterSearch]);
-  const filteredAssetCategoryFilterOptions = useMemo(() => {
-    const query = assetCategoryFilterSearch.trim().toLowerCase();
-    if (!query) return CATEGORY_OPTIONS;
-    return CATEGORY_OPTIONS.filter((category) => {
-      const label = lang === "km" ? category.km : category.en;
-      return category.value.toLowerCase().includes(query) || label.toLowerCase().includes(query);
-    });
-  }, [assetCategoryFilterSearch, lang]);
-  const filteredAssetNameFilterOptions = useMemo(() => {
-    const query = assetNameFilterSearch.trim().toLowerCase();
-    if (!query) return assetNameFilterOptions;
-    return assetNameFilterOptions.filter((option) => {
-      return option.value.toLowerCase().includes(query) || option.label.toLowerCase().includes(query);
-    });
-  }, [assetNameFilterOptions, assetNameFilterSearch]);
   const applyMultiFilterSelection = useCallback(
     (
       prev: string[],
@@ -6724,7 +6685,6 @@ export default function App() {
     setAssetNameMultiFilter(["ALL"]);
     setAssetLocationMultiFilter(["ALL"]);
     setAssetAssignedToMultiFilter(["ALL"]);
-    setAssetAssignedToFilterSearch("");
     setSearch("");
   }, []);
   const toggleCampusAccess = useCallback((current: string[], campus: string, checked: boolean) => {
@@ -15358,6 +15318,7 @@ export default function App() {
     setError("");
     try {
       const current = assets.find((a) => a.id === id);
+      const shouldClearAssignedTo = String(status || "").trim().toLowerCase() === "inactive";
       const nextStatusEntry: StatusEntry = {
         id: Date.now(),
         date: new Date().toISOString(),
@@ -15380,9 +15341,27 @@ export default function App() {
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
       }
+      if (shouldClearAssignedTo) {
+        try {
+          await requestJson<{ asset: Asset }>(`/api/assets/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              assignedTo: "",
+            }),
+          });
+        } catch (err) {
+          if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+        }
+      }
       const nextLocal = readAssetFallback().map((asset) =>
           asset.id === id
-            ? { ...asset, status, statusHistory: [nextStatusEntry, ...(asset.statusHistory || [])] }
+            ? {
+                ...asset,
+                status,
+                assignedTo: shouldClearAssignedTo ? "" : asset.assignedTo,
+                custodyStatus: shouldClearAssignedTo ? "IN_STOCK" : asset.custodyStatus,
+                statusHistory: [nextStatusEntry, ...(asset.statusHistory || [])],
+              }
             : asset
         );
       writeAssetFallback(nextLocal);
@@ -16210,11 +16189,6 @@ export default function App() {
       a.localeCompare(b)
     );
   }, [maintenanceRecordAssetPool, maintenanceRecordCampusFilter, maintenanceRecordCategoryFilter, assetItemName]);
-  const maintenanceRecordItemOptionsFiltered = useMemo(() => {
-    const q = String(maintenanceRecordItemFilterSearch || "").trim().toLowerCase();
-    if (!q) return maintenanceRecordItemOptions;
-    return maintenanceRecordItemOptions.filter((name) => String(name || "").toLowerCase().includes(q));
-  }, [maintenanceRecordItemOptions, maintenanceRecordItemFilterSearch]);
   const maintenanceRecordLocationOptions = useMemo(() => {
     let list = maintenanceRecordAssetPool;
     if (maintenanceRecordCampusFilter !== "ALL") {
@@ -16223,9 +16197,9 @@ export default function App() {
     if (maintenanceRecordCategoryFilter !== "ALL") {
       list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
     }
-    if (!maintenanceRecordItemFilter.includes("ALL")) {
+    if (maintenanceRecordItemFilter !== "ALL") {
       list = list.filter(
-        (a) => maintenanceRecordItemFilter.includes(assetItemName(a.category, a.type, a.pcType || ""))
+        (a) => maintenanceRecordItemFilter === assetItemName(a.category, a.type, a.pcType || "")
       );
     }
     return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) =>
@@ -16246,9 +16220,9 @@ export default function App() {
     if (maintenanceRecordCategoryFilter !== "ALL") {
       list = list.filter((a) => a.category === maintenanceRecordCategoryFilter);
     }
-    if (!maintenanceRecordItemFilter.includes("ALL")) {
+    if (maintenanceRecordItemFilter !== "ALL") {
       list = list.filter(
-        (a) => maintenanceRecordItemFilter.includes(assetItemName(a.category, a.type, a.pcType || ""))
+        (a) => maintenanceRecordItemFilter === assetItemName(a.category, a.type, a.pcType || "")
       );
     }
     if (maintenanceRecordLocationFilter !== "ALL") {
@@ -16739,11 +16713,9 @@ export default function App() {
     }
   }, [maintenanceRecordCampusFilter, maintenanceRecordCampusOptions]);
   useEffect(() => {
-    setMaintenanceRecordItemFilter((prev) => {
-      if (prev.includes("ALL")) return ["ALL"];
-      const next = prev.filter((value) => maintenanceRecordItemOptions.includes(value));
-      return next.length ? next : ["ALL"];
-    });
+    setMaintenanceRecordItemFilter((prev) => (
+      prev === "ALL" || maintenanceRecordItemOptions.includes(prev) ? prev : "ALL"
+    ));
   }, [maintenanceRecordItemOptions]);
   useEffect(() => {
     if (maintenanceRecordLocationFilter === "ALL") return;
@@ -22400,11 +22372,11 @@ export default function App() {
                       </label>
                       {assetForm.useExistingSet ? (
                         <label className="field">
-                          <span>{t.selectParentAsset}</span>
+                          <span>{`${t.selectParentAsset} (Search)`}</span>
                           <ParentAssetPicker
                             value={assetForm.parentAssetId}
                             assets={parentAssetsForCreate}
-                            placeholder="-"
+                            placeholder={`${t.selectParentAsset} (Search)`}
                             getLabel={(asset) =>
                               `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.location || "-"})`
                             }
@@ -22806,281 +22778,123 @@ export default function App() {
                   <h2 className="asset-list-title">{t.assetRegistry}</h2>
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetCampusMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetCampusMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetCampusFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{t.allCampuses}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetCampusFilterSearch}
-                          onChange={(e) => setAssetCampusFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                        />
-                      </div>
-                      {filteredAssetCampusFilterOptions.map((campus) => (
-                        <label key={`asset-campus-filter-${campus}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetCampusMultiFilter.includes(campus)}
-                            onChange={(e) =>
-                              setAssetCampusMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  campus,
-                                  assetCampusFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{campusLabel(campus)}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetCampusFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetLocationMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetLocationMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetLocationFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">All Locations</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetLocationFilterSearch}
-                          onChange={(e) => setAssetLocationFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
-                        />
-                      </div>
-                      {filteredAssetLocationFilterOptions.map((location) => (
-                        <label key={`asset-location-filter-${location}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetLocationMultiFilter.includes(location)}
-                            onChange={(e) =>
-                              setAssetLocationMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  location,
-                                  assetLocationFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{location}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetLocationFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>
-                      {summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
-                        const row = CATEGORY_OPTIONS.find((option) => option.value === value);
-                        return row ? (lang === "km" ? row.km : row.en) : value;
-                      })}
-                    </summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetCategoryMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetCategoryMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetCategoryFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{t.allCategories}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetCategoryFilterSearch}
-                          onChange={(e) => setAssetCategoryFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
-                        />
-                      </div>
-                      {filteredAssetCategoryFilterOptions.map((category) => (
-                        <label key={`asset-category-filter-${category.value}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetCategoryMultiFilter.includes(category.value)}
-                            onChange={(e) =>
-                              setAssetCategoryMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  category.value,
-                                  assetCategoryFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{lang === "km" ? category.km : category.en}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetCategoryFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>
-                      {summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
-                        const row = assetNameFilterOptions.find((option) => option.value === value);
-                        return row ? row.label : value;
-                      })}
-                    </summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetNameMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetNameMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetNameFilterOptions.map((option) => option.value)
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{`All ${t.name}s`}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetNameFilterSearch}
-                          onChange={(e) => setAssetNameFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
-                        />
-                      </div>
-                      {filteredAssetNameFilterOptions.map((option) => (
-                        <label key={`asset-name-filter-${option.value}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetNameMultiFilter.includes(option.value)}
-                            onChange={(e) =>
-                              setAssetNameMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  option.value,
-                                  assetNameFilterOptions.map((item) => item.value)
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{option.label}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetNameFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>
-                      {summarizeMultiFilter(
-                        assetAssignedToMultiFilter,
-                        lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
-                      )}
-                    </summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetAssignedToMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetAssignedToMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetAssignedToFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetAssignedToFilterSearch}
-                          onChange={(e) => setAssetAssignedToFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
-                        />
-                      </div>
-                      {filteredAssetAssignedToFilterOptions.map((name) => (
-                        <label key={`asset-assigned-filter-${name}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetAssignedToMultiFilter.includes(name)}
-                            onChange={(e) =>
-                              setAssetAssignedToMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  name,
-                                  assetAssignedToFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{name}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetAssignedToFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}
+                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) }))}
+                    selectedValues={assetCampusMultiFilter}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={assetCampusMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetCampusMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetCampusFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetCampusMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetCampusFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}
+                    options={assetLocationFilterOptions.map((location) => ({ value: location, label: location }))}
+                    selectedValues={assetLocationMultiFilter}
+                    allOptionLabel="All Locations"
+                    allOptionChecked={assetLocationMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetLocationMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetLocationFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetLocationMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetLocationFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
+                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                      return row ? (lang === "km" ? row.km : row.en) : value;
+                    })}
+                    options={assetCategoryFilterOptions.map((value) => {
+                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                      return { value, label: row ? (lang === "km" ? row.km : row.en) : value };
+                    })}
+                    selectedValues={assetCategoryMultiFilter}
+                    allOptionLabel={t.allCategories}
+                    allOptionChecked={assetCategoryMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetCategoryMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetCategoryFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetCategoryMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetCategoryFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
+                      const row = assetNameFilterOptions.find((option) => option.value === value);
+                      return row ? row.label : value;
+                    })}
+                    options={assetNameFilterOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    selectedValues={assetNameMultiFilter}
+                    allOptionLabel={`All ${t.name}s`}
+                    allOptionChecked={assetNameMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetNameMultiFilter((prev) =>
+                        applyMultiFilterSelection(
+                          prev,
+                          checked,
+                          "ALL",
+                          assetNameFilterOptions.map((option) => option.value)
+                        )
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetNameMultiFilter((prev) =>
+                        applyMultiFilterSelection(
+                          prev,
+                          checked,
+                          value,
+                          assetNameFilterOptions.map((item) => item.value)
+                        )
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(
+                      assetAssignedToMultiFilter,
+                      lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
+                    )}
+                    options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
+                    selectedValues={assetAssignedToMultiFilter}
+                    allOptionLabel={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
+                    allOptionChecked={assetAssignedToMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetAssignedToMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetAssignedToFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetAssignedToMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetAssignedToFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
                   <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
@@ -23300,276 +23114,123 @@ export default function App() {
                   <h2 className="asset-list-title">{t.assetGallery}</h2>
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetCampusMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetCampusMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetCampusFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{t.allCampuses}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetCampusFilterSearch}
-                          onChange={(e) => setAssetCampusFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                        />
-                      </div>
-                      {filteredAssetCampusFilterOptions.map((campus) => (
-                        <label key={`asset-gallery-campus-filter-${campus}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetCampusMultiFilter.includes(campus)}
-                            onChange={(e) =>
-                              setAssetCampusMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  campus,
-                                  assetCampusFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{campusLabel(campus)}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetCampusFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetLocationMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetLocationMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetLocationFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">All Locations</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetLocationFilterSearch}
-                          onChange={(e) => setAssetLocationFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
-                        />
-                      </div>
-                      {filteredAssetLocationFilterOptions.map((location) => (
-                        <label key={`asset-gallery-location-filter-${location}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetLocationMultiFilter.includes(location)}
-                            onChange={(e) =>
-                              setAssetLocationMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  location,
-                                  assetLocationFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{location}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetLocationFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>{summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories)}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetCategoryMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetCategoryMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetCategoryFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{t.allCategories}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetCategoryFilterSearch}
-                          onChange={(e) => setAssetCategoryFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
-                        />
-                      </div>
-                      {filteredAssetCategoryFilterOptions.map((category) => (
-                        <label key={`asset-gallery-category-filter-${category.value}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetCategoryMultiFilter.includes(category.value)}
-                            onChange={(e) =>
-                              setAssetCategoryMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  category.value,
-                                  assetCategoryFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{lang === "km" ? category.km : category.en}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetCategoryFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>
-                      {summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
-                        const row = assetNameFilterOptions.find((option) => option.value === value);
-                        return row ? row.label : value;
-                      })}
-                    </summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetNameMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetNameMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetNameFilterOptions.map((option) => option.value)
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{`All ${t.name}s`}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetNameFilterSearch}
-                          onChange={(e) => setAssetNameFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
-                        />
-                      </div>
-                      {filteredAssetNameFilterOptions.map((option) => (
-                        <label key={`asset-gallery-name-filter-${option.value}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetNameMultiFilter.includes(option.value)}
-                            onChange={(e) =>
-                              setAssetNameMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  option.value,
-                                  assetNameFilterOptions.map((item) => item.value)
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{option.label}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetNameFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
-                  <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                    <summary>
-                      {summarizeMultiFilter(
-                        assetAssignedToMultiFilter,
-                        lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
-                      )}
-                    </summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={assetAssignedToMultiFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setAssetAssignedToMultiFilter((prev) =>
-                              applyMultiFilterSelection(
-                                prev,
-                                e.target.checked,
-                                "ALL",
-                                assetAssignedToFilterOptions
-                              )
-                            )
-                          }
-                        />
-                        <span className="filter-menu-item-label">{lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}</span>
-                      </label>
-                      <div className="filter-menu-search-row">
-                        <input
-                          className="input filter-menu-search-input"
-                          value={assetAssignedToFilterSearch}
-                          onChange={(e) => setAssetAssignedToFilterSearch(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
-                        />
-                      </div>
-                      {filteredAssetAssignedToFilterOptions.map((name) => (
-                        <label key={`asset-gallery-assigned-filter-${name}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={assetAssignedToMultiFilter.includes(name)}
-                            onChange={(e) =>
-                              setAssetAssignedToMultiFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  name,
-                                  assetAssignedToFilterOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-label">{name}</span>
-                        </label>
-                      ))}
-                      {!filteredAssetAssignedToFilterOptions.length ? (
-                        <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                      ) : null}
-                    </div>
-                  </details>
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel)}
+                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) }))}
+                    selectedValues={assetCampusMultiFilter}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={assetCampusMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetCampusMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetCampusFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetCampusMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetCampusFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetLocationMultiFilter, "All Locations")}
+                    options={assetLocationFilterOptions.map((location) => ({ value: location, label: location }))}
+                    selectedValues={assetLocationMultiFilter}
+                    allOptionLabel="All Locations"
+                    allOptionChecked={assetLocationMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetLocationMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetLocationFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetLocationMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetLocationFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetCategoryMultiFilter, t.allCategories, (value) => {
+                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                      return row ? (lang === "km" ? row.km : row.en) : value;
+                    })}
+                    options={assetCategoryFilterOptions.map((value) => {
+                      const row = CATEGORY_OPTIONS.find((option) => option.value === value);
+                      return { value, label: row ? (lang === "km" ? row.km : row.en) : value };
+                    })}
+                    selectedValues={assetCategoryMultiFilter}
+                    allOptionLabel={t.allCategories}
+                    allOptionChecked={assetCategoryMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetCategoryMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetCategoryFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetCategoryMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetCategoryFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetNameMultiFilter, `All ${t.name}s`, (value) => {
+                      const row = assetNameFilterOptions.find((option) => option.value === value);
+                      return row ? row.label : value;
+                    })}
+                    options={assetNameFilterOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    selectedValues={assetNameMultiFilter}
+                    allOptionLabel={`All ${t.name}s`}
+                    allOptionChecked={assetNameMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetNameMultiFilter((prev) =>
+                        applyMultiFilterSelection(
+                          prev,
+                          checked,
+                          "ALL",
+                          assetNameFilterOptions.map((option) => option.value)
+                        )
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetNameMultiFilter((prev) =>
+                        applyMultiFilterSelection(
+                          prev,
+                          checked,
+                          value,
+                          assetNameFilterOptions.map((item) => item.value)
+                        )
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(
+                      assetAssignedToMultiFilter,
+                      lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"
+                    )}
+                    options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
+                    selectedValues={assetAssignedToMultiFilter}
+                    allOptionLabel={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
+                    allOptionChecked={assetAssignedToMultiFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetAssignedToMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetAssignedToFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetAssignedToMultiFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetAssignedToFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search staff..."}
+                    emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
+                  />
                   <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
@@ -23994,11 +23655,11 @@ export default function App() {
                         </label>
                         {assetEditForm.useExistingSet ? (
                           <label className="field">
-                            <span>{t.selectParentAsset}</span>
+                            <span>{`${t.selectParentAsset} (Search)`}</span>
                             <ParentAssetPicker
                               value={assetEditForm.parentAssetId}
                               assets={parentAssetsForEdit}
-                              placeholder="-"
+                              placeholder={`${t.selectParentAsset} (Search)`}
                               getLabel={(asset) =>
                                 `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.location || "-"})`
                               }
@@ -28597,110 +28258,68 @@ export default function App() {
                 <>
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={maintenanceRecordCampusFilter}
-                      onChange={(e) => setMaintenanceRecordCampusFilter(e.target.value)}
-                    >
-                      <option value="ALL">{t.allCampuses}</option>
-                      {maintenanceRecordCampusOptions.map((campus) => (
-                        <option key={`maintenance-record-campus-${campus}`} value={campus}>
-                          {campusLabel(campus)}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setMaintenanceRecordCampusFilter}
+                      options={[
+                        { value: "ALL", label: t.allCampuses },
+                        ...maintenanceRecordCampusOptions.map((campus) => ({
+                          value: campus,
+                          label: campusLabel(campus),
+                        })),
+                      ]}
+                      placeholder={t.allCampuses}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{t.location}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={maintenanceRecordLocationFilter}
-                      onChange={(e) => setMaintenanceRecordLocationFilter(e.target.value)}
-                    >
-                      <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
-                      {maintenanceRecordLocationOptions.map((location) => (
-                        <option key={`maintenance-record-location-${location}`} value={location}>
-                          {location}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setMaintenanceRecordLocationFilter}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations" },
+                        ...maintenanceRecordLocationOptions.map((location) => ({
+                          value: location,
+                          label: location,
+                        })),
+                      ]}
+                      placeholder={lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                      emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{t.category}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={maintenanceRecordCategoryFilter}
-                      onChange={(e) => setMaintenanceRecordCategoryFilter(e.target.value)}
-                    >
-                      <option value="ALL">{t.allCategories}</option>
-                      {maintenanceRecordCategoryOptions.map((category) => (
-                        <option key={`maintenance-record-category-${category}`} value={category}>
-                          {category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setMaintenanceRecordCategoryFilter}
+                      options={[
+                        { value: "ALL", label: t.allCategories },
+                        ...maintenanceRecordCategoryOptions.map((category) => ({
+                          value: category,
+                          label: category === "SAFETY" ? "Safety" : category === "FACILITY" ? "Facility" : category,
+                        })),
+                      ]}
+                      placeholder={t.allCategories}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                      emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{lang === "km" ? "ឈ្មោះទំនិញ" : "Item Name"}</span>
-                    <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                      <summary>
-                        {summarizeMultiFilter(
-                          maintenanceRecordItemFilter,
-                          lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"
-                        )}
-                      </summary>
-                      <div className="filter-menu-list">
-                        <div className="filter-menu-search-row">
-                          <input
-                            className="input filter-menu-search-input"
-                            value={maintenanceRecordItemFilterSearch}
-                            onChange={(e) => setMaintenanceRecordItemFilterSearch(e.target.value)}
-                            placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទំនិញ..." : "Search item name..."}
-                          />
-                        </div>
-                        <label className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={maintenanceRecordItemFilter.includes("ALL")}
-                            onChange={(e) =>
-                              setMaintenanceRecordItemFilter((prev) =>
-                                applyMultiFilterSelection(
-                                  prev,
-                                  e.target.checked,
-                                  "ALL",
-                                  maintenanceRecordItemOptions
-                                )
-                              )
-                            }
-                          />
-                          <span className="filter-menu-item-icon" aria-hidden={true}>{quickCountItemIcon("all")}</span>
-                          <span className="filter-menu-item-label">{lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"}</span>
-                        </label>
-                        {maintenanceRecordItemOptionsFiltered.map((name) => (
-                          <label key={`maintenance-record-item-${name}`} className="filter-menu-item">
-                            <input
-                              type="checkbox"
-                              checked={maintenanceRecordItemFilter.includes(name)}
-                              onChange={(e) =>
-                                setMaintenanceRecordItemFilter((prev) =>
-                                  applyMultiFilterSelection(
-                                    prev,
-                                    e.target.checked,
-                                    name,
-                                    maintenanceRecordItemOptions
-                                  )
-                                )
-                              }
-                            />
-                            <span className="filter-menu-item-icon" aria-hidden={true}>{quickCountItemIcon(name)}</span>
-                            <span className="filter-menu-item-label">{name}</span>
-                          </label>
-                        ))}
-                        {!maintenanceRecordItemOptionsFiltered.length ? (
-                          <div className="tiny filter-menu-empty">{lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}</div>
-                        ) : null}
-                      </div>
-                    </details>
+                    <LocationPicker
+                      value={maintenanceRecordItemFilter}
+                      onChange={setMaintenanceRecordItemFilter}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names" },
+                        ...maintenanceRecordItemOptions.map((name) => ({ value: name, label: name })),
+                      ]}
+                      placeholder={lang === "km" ? "ឈ្មោះទំនិញទាំងអស់" : "All Item Names"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះទំនិញ..." : "Search item name..."}
+                      emptyText={lang === "km" ? "មិនមានទំនិញ" : "No item found."}
+                    />
                   </label>
                 </>
               ) : null}

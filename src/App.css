@@ -1636,6 +1636,15 @@ h2 {
   overflow-x: hidden;
 }
 
+.asset-list-filters .filter-menu-item {
+  padding-left: 6px;
+}
+
+.asset-list-filters .filter-menu-item-label {
+  margin-left: 6px;
+  font-size: calc(var(--font-size-md) + 1px);
+}
+
 .filter-menu-item {
   display: flex;
   align-items: center;
