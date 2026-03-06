@@ -16396,6 +16396,7 @@ export default function App() {
       cost: string;
       by: string;
       photo: string;
+      photos: string[];
     }> = [];
     for (const asset of assets) {
       for (const entry of asset.maintenanceHistory || []) {
@@ -16418,6 +16419,7 @@ export default function App() {
           cost: entry.cost || "-",
           by: entry.by || "-",
           photo: entry.photo || "",
+          photos: normalizeAssetPhotos({ photo: entry.photo || "", photos: entry.photos || [] }),
         });
       }
     }
@@ -16691,6 +16693,19 @@ export default function App() {
       >
         <img loading="lazy" decoding="async" src={src} alt={alt} className="table-photo" />
       </button>
+    );
+  }
+  function renderMaintenancePhotoStack(input: { photo?: string; photos?: string[] }, altPrefix = "maintenance") {
+    const photos = normalizeAssetPhotos(input).slice(0, 3);
+    if (!photos.length) return <span className="photo-empty">{t.noPhoto}</span>;
+    return (
+      <div className="maintenance-photo-stack">
+        {photos.map((photo, index) => (
+          <div key={`${altPrefix}-${index}-${photo}`} className="maintenance-photo-stack-item">
+            {renderAssetPhoto(photo, `${altPrefix}-${index + 1}`)}
+          </div>
+        ))}
+      </div>
     );
   }
   const maintenanceCompletionText = useCallback(
@@ -23270,42 +23285,71 @@ export default function App() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="table-wrap maintenance-history-modal-table-wrap asset-detail-history-wrap">
-                    <table className="maintenance-history-modal-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Type</th>
-                          <th>Work Status</th>
-                          <th>Condition</th>
-                          <th>Note</th>
-                          <th>{t.photo}</th>
-                          <th>Cost</th>
-                          <th>By</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailMaintenanceVisibleEntries.length ? (
-                          detailMaintenanceVisibleEntries.map((h) => (
-                            <tr key={`detail-history-${h.id}`}>
-                              <td data-label="Date">{formatDate(h.date)}</td>
-                              <td data-label="Type">{h.type}</td>
-                              <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
-                              <td data-label="Condition">{h.condition || "-"}</td>
-                              <td data-label="Noted">{h.note}</td>
-                              <td data-label="Photo">{renderAssetPhoto(h.photo || "", "maintenance")}</td>
-                              <td data-label="Cost">{h.cost || "-"}</td>
-                              <td data-label="By">{h.by || "-"}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={8}>No maintenance records yet.</td>
+                  {isPhoneView ? (
+                    <div className="asset-detail-maint-soft-list">
+                      {detailMaintenanceVisibleEntries.length ? (
+                        detailMaintenanceVisibleEntries.map((h) => (
+                          <article key={`detail-history-soft-${h.id}`} className="asset-detail-maint-soft-card">
+                            <div className="asset-detail-maint-soft-meta">
+                              <span><strong>Date:</strong> {formatDate(h.date || "-")}</span>
+                              <span><strong>{t.campus}:</strong> {CAMPUS_CODE[detailAsset.campus] || campusLabel(detailAsset.campus)}</span>
+                              <span><strong>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}:</strong> {h.type || "-"}</span>
+                              <span><strong>{lang === "km" ? "ស្ថានភាពការងារ" : "Status"}:</strong> {maintenanceCompletionText(h.completion || "-")}</span>
+                              <span><strong>Cost:</strong> {h.cost || "-"}</span>
+                              <span><strong>By:</strong> {h.by || "-"}</span>
+                            </div>
+                            <p className="asset-detail-maint-soft-note">
+                              <strong>{t.notes}:</strong> {h.note || h.condition || "-"}
+                            </p>
+                            <div className="asset-detail-maint-soft-photo-row">
+                              {renderMaintenancePhotoStack({ photo: h.photo || "", photos: h.photos || [] }, `asset-detail-history-${h.id}`)}
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="panel-note">No maintenance records yet.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-wrap maintenance-history-modal-table-wrap asset-detail-history-wrap">
+                      <table className="maintenance-history-modal-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Work Status</th>
+                            <th>Condition</th>
+                            <th>Note</th>
+                            <th>{t.photo}</th>
+                            <th>Cost</th>
+                            <th>By</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {detailMaintenanceVisibleEntries.length ? (
+                            detailMaintenanceVisibleEntries.map((h) => (
+                              <tr key={`detail-history-${h.id}`}>
+                                <td data-label="Date">{formatDate(h.date)}</td>
+                                <td data-label="Type">{h.type}</td>
+                                <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
+                                <td data-label="Condition">{h.condition || "-"}</td>
+                                <td data-label="Noted">{h.note}</td>
+                                <td data-label="Photo">
+                                  {renderMaintenancePhotoStack({ photo: h.photo || "", photos: h.photos || [] }, `asset-detail-history-${h.id}`)}
+                                </td>
+                                <td data-label="Cost">{h.cost || "-"}</td>
+                                <td data-label="By">{h.by || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="asset-detail-empty-row">
+                              <td colSpan={8}>No maintenance records yet.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
                   <div className="panel-row" style={{ marginTop: 8 }}>
                     <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
@@ -27902,7 +27946,7 @@ export default function App() {
                   className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
                   onClick={() => setMaintenanceView("history")}
                 >
-                  {lang === "km" ? "មើលប្រវត្តិ" : "All Maintenance View"}
+                  {lang === "km" ? "មើលប្រវត្តិ" : "Soft Card Dashboard"}
                 </button>
               ) : null}
               {canAccessMenu("maintenance.record", "maintenance") ? (
@@ -28464,7 +28508,7 @@ export default function App() {
             {maintenanceView === "history" && canAccessMenu("maintenance.history", "maintenance") && (
             <>
             <div className="maintenance-title-row">
-              <h2>{lang === "km" ? t.maintenanceHistory : "All Maintenance View"}</h2>
+              <h2>Soft Card Dashboard</h2>
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <select
@@ -28510,7 +28554,6 @@ export default function App() {
                   sortedMaintenanceRows.map((row) => (
                     <article key={`maint-history-mobile-${row.rowId}`} className="report-card maintenance-mobile-asset-card">
                       <div className="maintenance-mobile-asset-head">
-                        <strong className="report-card-id">{row.assetId}</strong>
                         <span className="tiny report-card-sub">
                           {campusLabel(row.campus)} • {row.location || "-"}
                         </span>
@@ -28537,8 +28580,10 @@ export default function App() {
                           <strong>{row.note || "-"}</strong>
                         </div>
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
-                          <span>PHOTO</span>
-                          <div className="maintenance-mobile-asset-photo">{renderAssetPhoto(row.photo || "", "maintenance")}</div>
+                          <span>PHOTOS</span>
+                          <div className="maintenance-mobile-asset-photo">
+                            {renderMaintenancePhotoStack({ photo: row.photo || "", photos: row.photos || [] }, `maintenance-history-${row.rowId}`)}
+                          </div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
                           <span>COST</span>
@@ -28638,7 +28683,7 @@ export default function App() {
                           <td>{maintenanceCompletionText(row.completion || "-")}</td>
                           <td>{row.condition || "-"}</td>
                           <td>{row.note || "-"}</td>
-                          <td>{renderAssetPhoto(row.photo || "", "maintenance")}</td>
+                          <td>{renderMaintenancePhotoStack({ photo: row.photo || "", photos: row.photos || [] }, `maintenance-table-${row.rowId}`)}</td>
                           <td>{row.cost || "-"}</td>
                           <td>{row.by || "-"}</td>
                           <td>{assetStatusLabel(row.status)}</td>
