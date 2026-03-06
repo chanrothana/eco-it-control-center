@@ -1199,6 +1199,7 @@ const AIO_PC_TYPE = "AIO";
 const NO_PARENT_LINK_TYPES = new Set([
   DESKTOP_PARENT_TYPE,
   LAPTOP_TYPE,
+  "TAB",
   DIGITAL_CAMERA_TYPE,
   PROJECTOR_TYPE,
   USB_WIFI_TYPE_CODE,
@@ -5513,6 +5514,7 @@ export default function App() {
     acComponentNote: "",
     walkieHasCharger: false,
     walkieChargerDetail: "",
+    walkieChargerPhotos: [] as string[],
     tvRemoteCount: "1",
     tvRemotePhotos: [] as string[],
     specs: "",
@@ -5634,8 +5636,6 @@ export default function App() {
     ADP: false,
     HDC: false,
   });
-  const [walkieChargerDetailOpen, setWalkieChargerDetailOpen] = useState(false);
-  const [editWalkieChargerDetailOpen, setEditWalkieChargerDetailOpen] = useState(false);
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
     MON2: false,
@@ -5705,6 +5705,7 @@ export default function App() {
     acComponentNote: "",
     walkieHasCharger: false,
     walkieChargerDetail: "",
+    walkieChargerPhotos: [] as string[],
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -8546,12 +8547,9 @@ export default function App() {
   useEffect(() => {
     setAssetForm((prev) => {
       if (String(prev.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE) return prev;
-      if (!prev.walkieHasCharger && !prev.walkieChargerDetail) return prev;
-      return { ...prev, walkieHasCharger: false, walkieChargerDetail: "" };
+      if (!prev.walkieHasCharger && !prev.walkieChargerDetail && !(prev.walkieChargerPhotos || []).length) return prev;
+      return { ...prev, walkieHasCharger: false, walkieChargerDetail: "", walkieChargerPhotos: [] };
     });
-    if (String(assetForm.type || "").trim().toUpperCase() !== WALKIE_TALKIE_TYPE_CODE) {
-      setWalkieChargerDetailOpen(false);
-    }
   }, [assetForm.type]);
   useEffect(() => {
     if (!assetForm.useExistingSet || !assetForm.parentAssetId) return;
@@ -9700,6 +9698,7 @@ export default function App() {
         acComponentNote: "",
         walkieHasCharger: false,
         walkieChargerDetail: "",
+        walkieChargerPhotos: [],
         tvRemoteCount: "1",
         tvRemotePhotos: [],
         specs: "",
@@ -9713,7 +9712,6 @@ export default function App() {
         photos: [],
         status: "Active",
       }));
-      setWalkieChargerDetailOpen(false);
       setSelectedCreateTemplateId("");
       setSetPackDraft(defaultSetPackDraft());
       setSetPackDetailOpen({
@@ -10176,6 +10174,7 @@ export default function App() {
           acComponentNote: "",
           walkieHasCharger: false,
           walkieChargerDetail: "",
+          walkieChargerPhotos: [],
           tvRemoteCount: "1",
           tvRemotePhotos: [],
           specs: "",
@@ -10189,7 +10188,6 @@ export default function App() {
           photos: [],
           status: "Active",
         }));
-        setWalkieChargerDetailOpen(false);
         setSelectedCreateTemplateId("");
         setSetPackDraft(defaultSetPackDraft());
         setSetPackDetailOpen({
@@ -13312,6 +13310,10 @@ export default function App() {
       acComponentNote: parsedAircon.acComponentNote,
       walkieHasCharger: parsedWalkie.hasCharger,
       walkieChargerDetail: parsedWalkie.chargerDetail,
+      walkieChargerPhotos:
+        String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+          ? normalizeAssetPhotos(asset).slice(0, 4)
+          : [],
       specs: parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
@@ -13321,13 +13323,11 @@ export default function App() {
       photos,
       status: asset.status || "Active",
     });
-    setEditWalkieChargerDetailOpen(Boolean(parsedWalkie.chargerDetail));
     setEditAssetFileKey((k) => k + 1);
   }
 
   function cancelEditAsset() {
     setEditingAssetId(null);
-    setEditWalkieChargerDetailOpen(false);
   }
 
   async function editOrCreateSetPackChild(type: SetPackChildType) {
@@ -15153,7 +15153,8 @@ export default function App() {
           photo: f.photo,
           photos: [...(f.photos || []), ...optimized],
         });
-        return { ...f, photo: merged[0] || "", photos: merged };
+        const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
+        return { ...f, photo: merged[0] || "", photos: merged, walkieChargerPhotos: chargerPhotos };
       });
     } catch {
       alert(t.photoProcessError);
@@ -15321,7 +15322,8 @@ export default function App() {
           photo: f.photo,
           photos: [...(f.photos || []), ...optimized],
         });
-        return { ...f, photo: merged[0] || "", photos: merged };
+        const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
+        return { ...f, photo: merged[0] || "", photos: merged, walkieChargerPhotos: chargerPhotos };
       });
     } catch {
       alert(t.photoProcessError);
@@ -20479,6 +20481,29 @@ export default function App() {
                     </select>
                   </label>
                   <label className="field">
+                    <span>{t.location}</span>
+                    {isInactiveTabletCreate ? (
+                      <input
+                        className="input"
+                        value={assetForm.location}
+                        readOnly
+                        disabled
+                      />
+                    ) : (
+                      <LocationPicker
+                        value={assetForm.location}
+                        options={campusLocations.map((loc) => ({ value: loc.name, label: loc.name }))}
+                        placeholder={t.selectLocation}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                        emptyText={lang === "km" ? "រកមិនឃើញទីតាំង។" : "No location found."}
+                        onChange={(value) => setAssetForm((f) => ({ ...f, location: value }))}
+                      />
+                    )}
+                    {isInactiveTabletCreate ? (
+                      <div className="tiny">Inactive iPad/Tablet is stored at {INACTIVE_TABLET_HOLDING_LOCATION}.</div>
+                    ) : null}
+                  </label>
+                  <label className="field">
                     <span>{t.category}</span>
                     <select
                       className="input"
@@ -20518,6 +20543,22 @@ export default function App() {
                       getIcon={(opt) => itemTypeIcon(assetForm.category, opt.code, opt.label)}
                     />
                   </label>
+                  <label className="field">
+                    <span>{t.assetId}</span>
+                    <input
+                      className="input"
+                      value={suggestedAssetId}
+                      readOnly
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t.status}</span>
+                    <select className="input" value={assetForm.status} onChange={(e) => setAssetForm((f) => ({ ...f, status: e.target.value }))}>
+                      {ASSET_STATUS_OPTIONS.map((status) => (
+                        <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                      ))}
+                    </select>
+                  </label>
                   {isPcAssetForCreate ? (
                     <label className="field">
                       <span>{t.pcType}</span>
@@ -20534,45 +20575,6 @@ export default function App() {
                       </select>
                     </label>
                   ) : null}
-                  <label className="field">
-                    <span>{t.status}</span>
-                    <select className="input" value={assetForm.status} onChange={(e) => setAssetForm((f) => ({ ...f, status: e.target.value }))}>
-                      {ASSET_STATUS_OPTIONS.map((status) => (
-                        <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>{t.assetId}</span>
-                    <input
-                      className="input"
-                      value={suggestedAssetId}
-                      readOnly
-                    />
-                  </label>
-                  <label className="field">
-                    <span>{t.location}</span>
-                    {isInactiveTabletCreate ? (
-                      <input
-                        className="input"
-                        value={assetForm.location}
-                        readOnly
-                        disabled
-                      />
-                    ) : (
-                      <LocationPicker
-                        value={assetForm.location}
-                        options={campusLocations.map((loc) => ({ value: loc.name, label: loc.name }))}
-                        placeholder={t.selectLocation}
-                        searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
-                        emptyText={lang === "km" ? "រកមិនឃើញទីតាំង។" : "No location found."}
-                        onChange={(value) => setAssetForm((f) => ({ ...f, location: value }))}
-                      />
-                    )}
-                    {isInactiveTabletCreate ? (
-                      <div className="tiny">Inactive iPad/Tablet is stored at {INACTIVE_TABLET_HOLDING_LOCATION}.</div>
-                    ) : null}
-                  </label>
                   {isTvAssetForCreate ? (
                     <div className="field field-wide">
                       <div className="row-actions" style={{ gap: 10, alignItems: "flex-end", flexWrap: "nowrap" }}>
@@ -20609,28 +20611,100 @@ export default function App() {
                         </div>
                         <div className="field" style={{ flex: 1, minWidth: 0 }}>
                           <span>Remote 1 Photo</span>
-                          <input
-                            className="file-input"
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            onChange={(e) => {
-                              void onTvRemotePhotoFileAt(0, e);
-                            }}
-                          />
-                        </div>
-                        {String(assetForm.tvRemoteCount || "1") === "2" ? (
-                          <div className="field" style={{ flex: 1, minWidth: 0 }}>
-                            <span>Remote 2 Photo</span>
+                          <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
                             <input
+                              id="tv-remote-photo-1-upload"
                               className="file-input"
                               type="file"
                               accept="image/*"
                               capture="environment"
+                              style={{ display: "none" }}
                               onChange={(e) => {
-                                void onTvRemotePhotoFileAt(1, e);
+                                void onTvRemotePhotoFileAt(0, e);
                               }}
                             />
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              onClick={() => document.getElementById("tv-remote-photo-1-upload")?.click()}
+                            >
+                              Choose Photo
+                            </button>
+                            {String((assetForm.tvRemotePhotos || [])[0] || "").trim() ? (
+                              <>
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={String((assetForm.tvRemotePhotos || [])[0] || "")}
+                                  alt="remote-1"
+                                  className="asset-photo-chip-img"
+                                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                />
+                                <button
+                                  className="tab btn-small"
+                                  type="button"
+                                  onClick={() =>
+                                    setAssetForm((f) => {
+                                      const next = [...(f.tvRemotePhotos || [])];
+                                      next[0] = "";
+                                      return { ...f, tvRemotePhotos: next };
+                                    })
+                                  }
+                                >
+                                  ✕
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                        {String(assetForm.tvRemoteCount || "1") === "2" ? (
+                          <div className="field" style={{ flex: 1, minWidth: 0 }}>
+                            <span>Remote 2 Photo</span>
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                              <input
+                                id="tv-remote-photo-2-upload"
+                                className="file-input"
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                style={{ display: "none" }}
+                                onChange={(e) => {
+                                  void onTvRemotePhotoFileAt(1, e);
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="tab btn-small"
+                                onClick={() => document.getElementById("tv-remote-photo-2-upload")?.click()}
+                              >
+                                Choose Photo
+                              </button>
+                              {String((assetForm.tvRemotePhotos || [])[1] || "").trim() ? (
+                                <>
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={String((assetForm.tvRemotePhotos || [])[1] || "")}
+                                    alt="remote-2"
+                                    className="asset-photo-chip-img"
+                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                  />
+                                  <button
+                                    className="tab btn-small"
+                                    type="button"
+                                    onClick={() =>
+                                      setAssetForm((f) => {
+                                        const next = [...(f.tvRemotePhotos || [])];
+                                        next[1] = "";
+                                        return { ...f, tvRemotePhotos: next };
+                                      })
+                                    }
+                                  >
+                                    ✕
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
                           </div>
                         ) : null}
                       </div>
@@ -22146,7 +22220,10 @@ export default function App() {
                       <label className="field field-wide">
                         <span>Included Components</span>
                         <div className="setpack-include-grid">
-                          <label className="tab setpack-include-item">
+                          <label
+                            className="tab setpack-include-item"
+                            style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap" }}
+                          >
                             <input
                               type="checkbox"
                               checked={assetForm.acHasRemote}
@@ -22155,7 +22232,10 @@ export default function App() {
                             />
                             Remote
                           </label>
-                          <label className="tab setpack-include-item">
+                          <label
+                            className="tab setpack-include-item"
+                            style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap" }}
+                          >
                             <input
                               type="checkbox"
                               checked={assetForm.acHasFrontPanel}
@@ -22189,8 +22269,11 @@ export default function App() {
                   {String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
                     <label className="field">
                       <span>Included Components</span>
-                      <div className="setpack-include-grid">
-                        <label className="tab setpack-include-item">
+                      <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "nowrap" }}>
+                        <label
+                          className="tab setpack-include-item"
+                          style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >
                           <input
                             type="checkbox"
                             checked={assetForm.walkieHasCharger}
@@ -22200,44 +22283,75 @@ export default function App() {
                                 ...f,
                                 walkieHasCharger: checked,
                                 walkieChargerDetail: checked ? f.walkieChargerDetail : "",
+                                walkieChargerPhotos: checked ? f.walkieChargerPhotos : [],
                               }));
-                              if (!checked) setWalkieChargerDetailOpen(false);
                             }}
                             style={{ marginRight: 8 }}
                           />
                           Charger
                         </label>
-                      </div>
-                      {assetForm.walkieHasCharger ? (
-                        <>
-                          <button
-                            type="button"
-                            className="tab setpack-detail-btn"
-                            onClick={() => setWalkieChargerDetailOpen((prev) => !prev)}
-                          >
-                            {walkieChargerDetailOpen ? t.hideDetails : t.addDetails}
-                          </button>
-                          {walkieChargerDetailOpen ? (
-                            <div className="setpack-component-detail-wrap">
-                              <div className="form-grid">
-                                <input
-                                  className="input"
-                                  value={assetForm.walkieChargerDetail}
-                                  onChange={(e) => setAssetForm((f) => ({ ...f, walkieChargerDetail: e.target.value }))}
-                                  placeholder="Charger model, serial number, or note..."
-                                />
-                                <input
-                                  className="file-input"
-                                  type="file"
-                                  accept="image/*"
-                                  capture="environment"
-                                  onChange={onWalkieChargerPhotoFile}
-                                />
-                              </div>
+                        {assetForm.walkieHasCharger ? (
+                          <>
+                        <input
+                          className="input"
+                          style={{ flex: 1, minWidth: 0 }}
+                          disabled={!assetForm.walkieHasCharger}
+                          value={assetForm.walkieChargerDetail}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, walkieChargerDetail: e.target.value }))}
+                          placeholder="Charger model, serial number, or note..."
+                        />
+                            <input
+                              id="walkie-charger-create-upload"
+                              className="file-input"
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              style={{ display: "none" }}
+                              onChange={onWalkieChargerPhotoFile}
+                            />
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                              <button
+                                type="button"
+                                className="tab btn-small"
+                                disabled={!assetForm.walkieHasCharger}
+                                onClick={() => document.getElementById("walkie-charger-create-upload")?.click()}
+                              >
+                                Choose Photo
+                              </button>
+                              {(assetForm.walkieChargerPhotos || []).map((url, index) => (
+                                <div key={`create-walkie-charger-photo-inline-${index}`} className="row-actions" style={{ gap: 6, alignItems: "center" }}>
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={url}
+                                    alt={`walkie-charger-${index + 1}`}
+                                    className="asset-photo-chip-img"
+                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                  />
+                                  <button
+                                    className="tab btn-small"
+                                    type="button"
+                                    onClick={() =>
+                                      setAssetForm((f) => {
+                                        const nextCharger = (f.walkieChargerPhotos || []).filter((_, i) => i !== index);
+                                        const nextAll = normalizeAssetPhotos(f).filter((entry) => entry !== url);
+                                        return {
+                                          ...f,
+                                          walkieChargerPhotos: nextCharger,
+                                          photo: nextAll[0] || "",
+                                          photos: nextAll,
+                                        };
+                                      })
+                                    }
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
                             </div>
-                          ) : null}
-                        </>
-                      ) : null}
+                          </>
+                        ) : null}
+                      </div>
                     </label>
                   ) : null}
                   <label className="field">
@@ -23897,8 +24011,11 @@ export default function App() {
                     {String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
                       <label className="field">
                         <span>Included Components</span>
-                        <div className="setpack-include-grid">
-                          <label className="tab setpack-include-item">
+                        <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "nowrap" }}>
+                          <label
+                            className="tab setpack-include-item"
+                            style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          >
                             <input
                               type="checkbox"
                               checked={assetEditForm.walkieHasCharger}
@@ -23908,44 +24025,75 @@ export default function App() {
                                   ...f,
                                   walkieHasCharger: checked,
                                   walkieChargerDetail: checked ? f.walkieChargerDetail : "",
+                                  walkieChargerPhotos: checked ? f.walkieChargerPhotos : [],
                                 }));
-                                if (!checked) setEditWalkieChargerDetailOpen(false);
                               }}
                               style={{ marginRight: 8 }}
                             />
                             Charger
                           </label>
-                        </div>
-                        {assetEditForm.walkieHasCharger ? (
-                          <>
-                            <button
-                              type="button"
-                              className="tab setpack-detail-btn"
-                              onClick={() => setEditWalkieChargerDetailOpen((prev) => !prev)}
-                            >
-                              {editWalkieChargerDetailOpen ? t.hideDetails : t.addDetails}
-                            </button>
-                            {editWalkieChargerDetailOpen ? (
-                              <div className="setpack-component-detail-wrap">
-                                <div className="form-grid">
-                                  <input
-                                    className="input"
-                                    value={assetEditForm.walkieChargerDetail}
-                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, walkieChargerDetail: e.target.value }))}
-                                    placeholder="Charger model, serial number, or note..."
-                                  />
-                                  <input
-                                    className="file-input"
-                                    type="file"
-                                    accept="image/*"
-                                    capture="environment"
-                                    onChange={onEditWalkieChargerPhotoFile}
-                                  />
-                                </div>
+                          {assetEditForm.walkieHasCharger ? (
+                            <>
+                              <input
+                                className="input"
+                                style={{ flex: 1, minWidth: 0 }}
+                                disabled={!assetEditForm.walkieHasCharger}
+                                value={assetEditForm.walkieChargerDetail}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, walkieChargerDetail: e.target.value }))}
+                                placeholder="Charger model, serial number, or note..."
+                              />
+                                <input
+                                  id="walkie-charger-edit-upload"
+                                  className="file-input"
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  style={{ display: "none" }}
+                                  onChange={onEditWalkieChargerPhotoFile}
+                                />
+                                <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                                <button
+                                  type="button"
+                                  className="tab btn-small"
+                                  disabled={!assetEditForm.walkieHasCharger}
+                                  onClick={() => document.getElementById("walkie-charger-edit-upload")?.click()}
+                                >
+                                  Choose Photo
+                                  </button>
+                                  {(assetEditForm.walkieChargerPhotos || []).map((url, index) => (
+                                    <div key={`edit-walkie-charger-photo-inline-${index}`} className="row-actions" style={{ gap: 6, alignItems: "center" }}>
+                                      <img
+                                        loading="lazy"
+                                        decoding="async"
+                                        src={url}
+                                        alt={`edit-walkie-charger-${index + 1}`}
+                                        className="asset-photo-chip-img"
+                                        style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                      />
+                                      <button
+                                        className="tab btn-small"
+                                        type="button"
+                                        onClick={() =>
+                                          setAssetEditForm((f) => {
+                                            const nextCharger = (f.walkieChargerPhotos || []).filter((_, i) => i !== index);
+                                            const nextAll = normalizeAssetPhotos(f).filter((entry) => entry !== url);
+                                            return {
+                                              ...f,
+                                              walkieChargerPhotos: nextCharger,
+                                              photo: nextAll[0] || "",
+                                              photos: nextAll,
+                                            };
+                                          })
+                                        }
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ))}
                               </div>
-                            ) : null}
-                          </>
-                        ) : null}
+                            </>
+                          ) : null}
+                        </div>
                       </label>
                     ) : null}
                     <label className="field">
