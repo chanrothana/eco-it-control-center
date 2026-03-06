@@ -92,3 +92,33 @@ The server now serves both API and web UI from one URL in production.
 
 - Data is stored in `server/db.json` on the server filesystem. On free tiers, storage may reset on redeploy/restart.
 - For real production use, move data to a managed database (Postgres/MySQL).
+
+## Telegram alert for Inventory OUT approval
+
+When maintenance staff submits Stock OUT with `PENDING` approval, the server can send Telegram alert.
+
+### Local setup
+
+1. Copy env template:
+
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` and set:
+- `TELEGRAM_ALERT_ENABLED=true`
+- `TELEGRAM_BOT_TOKEN=<your bot token>`
+- `TELEGRAM_CHAT_ID=<your chat id>`
+
+3. Restart server:
+
+```bash
+npm run start
+```
+
+### Render setup
+
+`render.yaml` already includes:
+- `TELEGRAM_ALERT_ENABLED=true`
+- `TELEGRAM_BOT_TOKEN` (secret env var)
+- `TELEGRAM_CHAT_ID` (secret env var)

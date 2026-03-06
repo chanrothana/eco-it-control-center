@@ -8537,6 +8537,169 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .inventory-dashboard-panel .stats-grid.inventory-admin-control-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-stats .stat-card {
+    min-height: 102px;
+    padding: 10px 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-stats .stat-label {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-stats .stat-value {
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-filters {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-card {
+    padding: 10px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-row strong {
+    overflow-wrap: anywhere;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap {
+    padding: 10px;
+    border-radius: 12px;
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap .panel-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-head-tools {
+    margin-left: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-campus-field,
+  .inventory-dashboard-panel .inventory-admin-matrix-date-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-print-btn {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-date-field .quickout-eco-inline-panel,
+  .inventory-dashboard-panel .inventory-admin-matrix-date-field-end .quickout-eco-inline-panel {
+    left: 0;
+    right: auto;
+    width: min(92vw, 360px);
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix {
+    min-width: 760px;
+    border-spacing: 4px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix th,
+  .inventory-dashboard-panel .inventory-admin-matrix td {
+    min-width: 28px;
+    height: 34px;
+    padding: 4px 5px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix th.inventory-admin-matrix-item-cell {
+    min-width: 176px;
+    max-width: 210px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-item {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-item-photo {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-day-head-main {
+    font-size: 10px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-day-head-sub {
+    font-size: 9px;
+  }
+
+  .inventory-dashboard-panel .inventory-usage-panel {
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-campus-monthly-compare-wrap {
+    padding: 10px 8px;
+    gap: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-campus-row-matrix-wrap {
+    padding: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-campus-row-matrix {
+    min-width: 620px;
+    border-spacing: 3px;
+  }
+
+  .inventory-dashboard-panel .inventory-campus-row-matrix thead th:first-child,
+  .inventory-dashboard-panel .inventory-campus-row-matrix tbody th {
+    min-width: 112px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-supply-month-field {
+    margin-left: 0;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .inventory-dashboard-panel .inventory-supply-mini-bar {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workspace-main .inventory-dashboard-panel .table-wrap table,
+  .workspace-main .inventory-dashboard-panel .report-table-wrap table {
+    min-width: 640px !important;
+  }
+
   .maintenance-record-gallery {
     grid-template-columns: 1fr;
     max-height: 280px;

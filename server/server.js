@@ -6,6 +6,41 @@ const path = require("path");
 const crypto = require("crypto");
 const { URL } = require("url");
 
+function loadServerEnvFile() {
+  const candidates = [
+    path.join(__dirname, "..", ".env"),
+    path.join(__dirname, ".env"),
+  ];
+  for (const filePath of candidates) {
+    if (!fsSync.existsSync(filePath)) continue;
+    try {
+      const raw = fsSync.readFileSync(filePath, "utf8");
+      const lines = raw.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = String(line || "").trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eqIndex = trimmed.indexOf("=");
+        if (eqIndex <= 0) continue;
+        const key = trimmed.slice(0, eqIndex).trim();
+        if (!key || process.env[key] !== undefined) continue;
+        let value = trimmed.slice(eqIndex + 1).trim();
+        if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
+        }
+        process.env[key] = value;
+      }
+      break;
+    } catch (err) {
+      console.warn(`Could not load env file ${filePath}:`, err instanceof Error ? err.message : err);
+    }
+  }
+}
+
+loadServerEnvFile();
+
 let DatabaseSync;
 try {
   ({ DatabaseSync } = require("node:sqlite"));
@@ -196,6 +231,9 @@ if (IS_PROD && (!DEFAULT_ADMIN_PASSWORD || !DEFAULT_VIEWER_PASSWORD)) {
 }
 if (ALLOW_DEV_AUTH_BYPASS) {
   console.warn("[SECURITY] Dev auth bypass tokens are enabled (ALLOW_DEV_AUTH_BYPASS=true).");
+}
+if (TELEGRAM_ALERT_ENABLED && (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID)) {
+  console.warn("[ALERT] Telegram enabled but TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing.");
 }
 
 function mapDbToSqlRows(db) {
@@ -1697,6 +1735,37 @@ async function sendTelegramMaintenanceBatch(rows) {
   const extra = rows.length > 8 ? `\n+${rows.length - 8} more alert(s)` : "";
   const text = `Eco IT Maintenance Alerts\n${lines.join("\n\n")}${extra}`;
   return sendTelegramMessage(text);
+}
+
+async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = []) {
+  if (!txn || typeof txn !== "object") return false;
+  if (toUpper(txn.approvalStatus) !== "PENDING") return false;
+  const itemCode = toText(txn.itemCode) || "-";
+  const itemName = toText(txn.itemName) || "Item";
+  const qty = Number(txn.qty || 0);
+  const campus = toText(txn.campus) || "-";
+  const date = toText(txn.date) || "-";
+  const requestedBy =
+    toText(txn.approvalRequestedBy) || toText(txn.by) || toText(txn.approvalRequestedUser) || "staff";
+  const reason = toText(txn.note);
+  const approvers = Array.isArray(approverTargets)
+    ? approverTargets.map((row) => toText(row).toLowerCase()).filter(Boolean)
+    : [];
+  const lines = [
+    "ជូនដំណឹង ECO IT - ស្តុក",
+    "សំណើរចេញស្តុក កំពុងរង់ចាំអនុម័ត",
+    `មុខទំនិញ: ${itemCode} - ${itemName}`,
+    `បរិមាណ: ${qty} | សាខា: ${campus}`,
+    `កាលបរិច្ឆេទ: ${date}`,
+    `ស្នើដោយ: ${requestedBy}`,
+  ];
+  if (approvers.length) {
+    lines.push(`អ្នកអនុម័ត: ${approvers.join(", ")}`);
+  }
+  if (reason) {
+    lines.push(`មូលហេតុ: ${reason}`);
+  }
+  return sendTelegramMessage(lines.join("\n"));
 }
 
 initStorageSync();
@@ -3577,8 +3646,9 @@ const server = http.createServer(async (req, res) => {
         approvalDecisionAt: approvalStatus === "APPROVED" ? (approvalDecisionAt || new Date().toISOString()) : "",
         approvalDecisionNote: approvalStatus === "APPROVED" ? approvalDecisionNote : "",
       };
+      let approverTargets = [];
       if (approvalStatus === "PENDING") {
-        const approverTargets = resolveInventoryApprovalApprovers(db, txn.approvalRequestedUser, txn.campus);
+        approverTargets = resolveInventoryApprovalApprovers(db, txn.approvalRequestedUser, txn.campus);
         const requesterTarget = toText(txn.approvalRequestedUser).toLowerCase();
         const notifyTargets = Array.from(
           new Set(
@@ -3605,6 +3675,9 @@ const server = http.createServer(async (req, res) => {
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(db, user, "CREATE", "inventory_txn", `${txn.itemCode}-${txn.id}`, `${type} ${qty} ${item.unit}`);
       await writeDb(db);
+      if (approvalStatus === "PENDING") {
+        void sendTelegramInventoryOutApprovalAlert(txn, approverTargets);
+      }
       sendJson(res, 201, { txn });
       return;
     }

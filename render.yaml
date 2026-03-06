@@ -29,3 +29,9 @@ services:
         value: "24"
       - key: AUTO_BACKUP_RETENTION_DAYS
         value: "30"
+      - key: TELEGRAM_ALERT_ENABLED
+        value: "true"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false

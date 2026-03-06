@@ -25040,7 +25040,9 @@ export default function App() {
             )}
 
             {(inventoryView === "daily" || inventoryView === "dashboard") && (
-              <section className={`panel inventory-daily-panel ${maintenanceQuickMode ? "inventory-daily-panel-quick" : ""}`}>
+              <section
+                className={`panel inventory-daily-panel ${inventoryView === "dashboard" ? "inventory-dashboard-panel" : ""} ${maintenanceQuickMode ? "inventory-daily-panel-quick" : ""}`}
+              >
                 <div className="inventory-daily-head">
                   <h2>
                     {inventoryView === "dashboard"
