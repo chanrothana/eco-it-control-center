@@ -109,6 +109,7 @@ cp .env.example .env
 - `TELEGRAM_ALERT_ENABLED=true`
 - `TELEGRAM_BOT_TOKEN=<your bot token>`
 - `TELEGRAM_CHAT_ID=<your chat id>`
+- optional `TELEGRAM_CHAT_IDS=<comma-separated chat ids>` for multiple groups/chats
 
 3. Restart server:
 
@@ -122,3 +123,15 @@ npm run start
 - `TELEGRAM_ALERT_ENABLED=true`
 - `TELEGRAM_BOT_TOKEN` (secret env var)
 - `TELEGRAM_CHAT_ID` (secret env var)
+- `TELEGRAM_CHAT_IDS` (secret env var, optional)
+
+### Telegram test API
+
+You can verify bot delivery from server with:
+
+```bash
+curl -X POST "$API_BASE/api/alerts/telegram/test" \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"ECO Telegram test"}'
+```

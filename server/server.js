@@ -105,6 +105,17 @@ const DEFAULT_VIEWER_PASSWORD = String(
 const TELEGRAM_ALERT_ENABLED = String(process.env.TELEGRAM_ALERT_ENABLED || "false").toLowerCase() === "true";
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const TELEGRAM_CHAT_IDS = Array.from(
+  new Set(
+    [
+      TELEGRAM_CHAT_ID,
+      ...String(process.env.TELEGRAM_CHAT_IDS || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ].filter(Boolean)
+  )
+);
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const INDEX_FILE = path.join(BUILD_DIR, "index.html");
 const CAMPUS_MAP = {
@@ -232,8 +243,8 @@ if (IS_PROD && (!DEFAULT_ADMIN_PASSWORD || !DEFAULT_VIEWER_PASSWORD)) {
 if (ALLOW_DEV_AUTH_BYPASS) {
   console.warn("[SECURITY] Dev auth bypass tokens are enabled (ALLOW_DEV_AUTH_BYPASS=true).");
 }
-if (TELEGRAM_ALERT_ENABLED && (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID)) {
-  console.warn("[ALERT] Telegram enabled but TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing.");
+if (TELEGRAM_ALERT_ENABLED && (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_IDS.length)) {
+  console.warn("[ALERT] Telegram enabled but TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID(S) is missing.");
 }
 
 function mapDbToSqlRows(db) {
@@ -1686,14 +1697,11 @@ function purgeNotificationsForAsset(db, assetDbId) {
   return db.notifications.length !== before;
 }
 
-function sendTelegramMessage(text) {
+function sendTelegramMessageToChat(chatId, text) {
   return new Promise((resolve) => {
-    if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID || !toText(text)) {
-      resolve(false);
-      return;
-    }
+    if (!toText(chatId) || !toText(text)) return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
     const payload = JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID,
+      chat_id: toText(chatId),
       text: toText(text),
       disable_web_page_preview: true,
     });
@@ -1709,18 +1717,60 @@ function sendTelegramMessage(text) {
         timeout: 5000,
       },
       (res) => {
-        res.on("data", () => {});
-        res.on("end", () => resolve(res.statusCode >= 200 && res.statusCode < 300));
+        let body = "";
+        res.on("data", (chunk) => {
+          body += String(chunk || "");
+        });
+        res.on("end", () =>
+          resolve({
+            ok: Boolean(res.statusCode >= 200 && res.statusCode < 300),
+            chatId: toText(chatId),
+            statusCode: Number(res.statusCode || 0),
+            body: String(body || ""),
+          })
+        );
       }
     );
-    req.on("error", () => resolve(false));
+    req.on("error", (err) =>
+      resolve({
+        ok: false,
+        chatId: toText(chatId),
+        statusCode: 0,
+        body: err instanceof Error ? err.message : String(err || ""),
+      })
+    );
     req.on("timeout", () => {
       req.destroy();
-      resolve(false);
+      resolve({
+        ok: false,
+        chatId: toText(chatId),
+        statusCode: 0,
+        body: "request timeout",
+      });
     });
     req.write(payload);
     req.end();
   });
+}
+
+async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
+  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !toText(text)) {
+    return false;
+  }
+  const targets = Array.from(new Set((Array.isArray(chatIds) ? chatIds : [chatIds]).map((row) => toText(row).trim()).filter(Boolean)));
+  if (!targets.length) return false;
+  const results = [];
+  for (const chatId of targets) {
+    results.push(await sendTelegramMessageToChat(chatId, text));
+  }
+  const successCount = results.filter((row) => row.ok).length;
+  if (!successCount) {
+    console.warn(
+      "[ALERT] Telegram send failed for all targets:",
+      results.map((row) => ({ chatId: row.chatId, statusCode: row.statusCode, body: row.body.slice(0, 160) }))
+    );
+  }
+  return successCount > 0;
 }
 
 async function sendTelegramMaintenanceBatch(rows) {
@@ -2645,6 +2695,22 @@ const server = http.createServer(async (req, res) => {
         version: APP_BUILD_VERSION,
         packageVersion: PACKAGE_VERSION,
         commit: SHORT_DEPLOY_COMMIT || "",
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/alerts/telegram/test") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const text =
+        toText(body && body.text) ||
+        `ECO IT Telegram test\nTime: ${new Date().toISOString()}\nBy: ${toText(admin.displayName) || toText(admin.username) || "admin"}`;
+      const ok = await sendTelegramMessage(text);
+      sendJson(res, 200, {
+        ok,
+        enabled: TELEGRAM_ALERT_ENABLED,
+        chatTargets: TELEGRAM_CHAT_IDS,
       });
       return;
     }
