@@ -12371,7 +12371,7 @@ export default function App() {
     setBusy(true);
     try {
       try {
-        const res = await requestJson<{ txn: InventoryTxn }>("/api/inventory/txns", {
+        const res = await requestJson<{ txn: InventoryTxn; telegramAlertSent?: boolean }>("/api/inventory/txns", {
           method: "POST",
           body: JSON.stringify({
             itemId: item.id,
@@ -12396,6 +12396,9 @@ export default function App() {
           }),
         });
         setInventoryTxns((prev) => [res.txn, ...prev.filter((entry) => entry.id !== res.txn.id)]);
+        if (values.type === "OUT" && res.telegramAlertSent === false) {
+          setError(lang === "km" ? "បានកត់ត្រាចេញស្តុក ប៉ុន្តែ Telegram alert មិនបានផ្ញើ។" : "Stock-out saved, but Telegram alert failed to send.");
+        }
       } catch (err) {
         if (!isMissingRouteError(err)) throw err;
         const nextTxns = [tx, ...inventoryTxns];

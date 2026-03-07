@@ -3939,14 +3939,15 @@ const server = http.createServer(async (req, res) => {
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(db, user, "CREATE", "inventory_txn", `${txn.itemCode}-${txn.id}`, `${type} ${qty} ${item.unit}`);
       await writeDb(db);
+      let telegramAlertSent = false;
       if (normalizeInventoryTxnType(txn.type) === "OUT") {
         if (approvalStatus === "PENDING") {
-          void sendTelegramInventoryOutApprovalAlert(txn, approverTargets);
+          telegramAlertSent = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets);
         } else {
-          void sendTelegramInventoryOutRecordedAlert(txn);
+          telegramAlertSent = await sendTelegramInventoryOutRecordedAlert(txn);
         }
       }
-      sendJson(res, 201, { txn });
+      sendJson(res, 201, { txn, telegramAlertSent });
       return;
     }
 
