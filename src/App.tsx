@@ -17800,6 +17800,16 @@ export default function App() {
     [assetMasterItemBreakdown]
   );
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
+  const reportCampusOptionLabel = useCallback(
+    (campus: string) => {
+      const code = CAMPUS_CODE[campus] || "CX";
+      const label = campusLabel(campus);
+      const withoutPrefixCode = label.replace(/^\s*C\d+(?:\.\d+)?\s+/i, "");
+      const withoutSuffixCode = withoutPrefixCode.replace(/\s*\(C\d+(?:\.\d+)?\)\s*$/i, "");
+      return `${code} - ${(withoutSuffixCode.trim() || label)}`;
+    },
+    [campusLabel]
+  );
   const reportTypeOptions = useMemo(
     () =>
       (
@@ -19035,6 +19045,11 @@ export default function App() {
       ]);
     }
 
+    if (reportType !== "qr_labels") {
+      columns = ["No.", ...columns];
+      rows = rows.map((row, index) => [String(index + 1), ...row]);
+    }
+
     const tableHtml = rows.length
       ? rows
           .map(
@@ -19131,15 +19146,15 @@ export default function App() {
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; }
-          .qr-sticker-grid { display: grid; grid-template-columns: repeat(5, 116px); column-gap: 10px; row-gap: 10px; margin-top: 10px; width: 100%; justify-content: space-between; }
-          .qr-sticker-wrap { width: 116px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
-          .qr-sticker-sn { width: 116px; min-height: 11px; text-align: center; font-size: 7.5px; line-height: 1.1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
-          .qr-sticker { width: 116px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 7px 7px 6px; display: grid; gap: 5px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
-          .qr-sticker-qr { width: 84px; height: 84px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
-          .qr-sticker-qr img { width: 76px; height: 76px; object-fit: contain; display: block; }
-          .qr-sticker-divider { width: 84px; height: 1px; background: #1b2d23; }
-          .qr-sticker-id { width: 84px; min-height: 18px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 4px; font-size: 8.5px; line-height: 1.05; font-weight: 800; letter-spacing: 0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          @page { size: A4 landscape; margin: 8mm; }
+          .qr-sticker-grid { display: grid; grid-template-columns: repeat(6, 96px); column-gap: 6px; row-gap: 6px; margin-top: 6px; width: 100%; justify-content: space-between; }
+          .qr-sticker-wrap { width: 96px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
+          .qr-sticker-sn { width: 96px; min-height: 10px; text-align: center; font-size: 6.8px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
+          .qr-sticker { width: 96px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 4px 4px 4px; display: grid; gap: 3px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
+          .qr-sticker-qr { width: 74px; height: 74px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
+          .qr-sticker-qr img { width: 68px; height: 68px; object-fit: contain; display: block; }
+          .qr-sticker-divider { width: 74px; height: 1px; background: #1b2d23; }
+          .qr-sticker-id { width: 74px; min-height: 14px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 2px; font-size: 7.2px; line-height: 1.02; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          @page { size: A4 landscape; margin: 6mm; }
           @media print { body { margin: 0; } }
         </style>
       </head>
@@ -29587,7 +29602,7 @@ export default function App() {
                       { value: "ALL", label: t.allCampuses },
                       ...campusOptions.map((campus) => ({
                         value: campus,
-                        label: reportCampusName(campus),
+                        label: reportCampusOptionLabel(campus),
                       })),
                     ]}
                     placeholder={t.allCampuses}
@@ -29666,7 +29681,7 @@ export default function App() {
                       { value: "ALL", label: t.allCampuses },
                       ...assetByLocationCampusFilterOptions.map((campus) => ({
                         value: campus,
-                        label: reportCampusName(campus),
+                        label: reportCampusOptionLabel(campus),
                       })),
                     ]}
                     placeholder={t.allCampuses}
@@ -29700,7 +29715,7 @@ export default function App() {
                     summary={campusFilterSummary}
                     options={assetMasterCampusFilterOptions.map((campus) => ({
                       value: campus,
-                      label: campusLabel(campus),
+                      label: reportCampusOptionLabel(campus),
                     }))}
                     selectedValues={assetMasterCampusFilter}
                     allOptionLabel={t.allCampuses}
