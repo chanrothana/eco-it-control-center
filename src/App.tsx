@@ -19572,17 +19572,20 @@ export default function App() {
       rows = rows.map((row, index) => [String(index + 1), ...row]);
     }
 
-    const initialColumnWidths =
-      reportType === "asset_master"
-        ? visibleAssetMasterColumnWidths.map((column) => column.width)
-        : reportType === "set_code"
-          ? [...setCodeReportColumnWidths]
-          : (() => {
-              const widths = readVisibleReportColumnWidths();
-              if (widths.length === columns.length) return widths;
-              if (!columns.length) return [] as number[];
-              return columns.map(() => 100 / columns.length);
-            })();
+    const initialColumnWidths = (() => {
+      if (reportType === "asset_master") {
+        const base = visibleAssetMasterColumnWidths.map((column) => column.width);
+        return [5, ...base];
+      }
+      if (reportType === "set_code") {
+        const base = [...setCodeReportColumnWidths];
+        return [5, ...base];
+      }
+      const widths = readVisibleReportColumnWidths();
+      if (widths.length === columns.length) return widths;
+      if (!columns.length) return [] as number[];
+      return columns.map(() => 100 / columns.length);
+    })();
 
     const tableHtml = rows.length
       ? rows
