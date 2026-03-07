@@ -217,12 +217,25 @@ type Ticket = {
   campus: string;
   category: string;
   assetId: string;
+  assetDbId?: number;
+  assetName?: string;
+  assetLocation?: string;
   title: string;
   description: string;
   requestedBy: string;
+  requesterContact?: string;
   priority: string;
   status: string;
+  assignedTo?: string;
+  photo?: string;
   created: string;
+  updatedAt?: string;
+  completedAt?: string;
+  completedBy?: string;
+  maintenanceEntryId?: number;
+  maintenanceAssetId?: number;
+  maintenanceSummary?: string;
+  requestSource?: string;
 };
 
 type LocationEntry = {
@@ -1197,8 +1210,11 @@ const VERIFICATION_RESULT_OPTIONS: Array<VerificationEntry["result"]> = [
 
 const TICKET_STATUS_OPTIONS = [
   { value: "Open", en: "Open", km: "បើក" },
+  { value: "Assigned", en: "Assigned", km: "បានចាត់ចែង" },
   { value: "In Progress", en: "In Progress", km: "កំពុងដំណើរការ" },
-  { value: "Resolved", en: "Resolved", km: "បានដោះស្រាយ" },
+  { value: "Waiting Parts", en: "Waiting Parts", km: "រង់ចាំគ្រឿងបន្លាស់" },
+  { value: "Done", en: "Done", km: "បានបញ្ចប់" },
+  { value: "Cancelled", en: "Cancelled", km: "បានបោះបង់" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -5770,6 +5786,15 @@ export default function App() {
     by: "",
     photo: "",
   });
+  const [publicQrRequestFileKey, setPublicQrRequestFileKey] = useState(0);
+  const [publicQrRequestForm, setPublicQrRequestForm] = useState({
+    title: "",
+    description: "",
+    requestedBy: "",
+    requesterContact: "",
+    priority: "Normal",
+    photo: "",
+  });
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [editAssetFileKey, setEditAssetFileKey] = useState(0);
   const [assetEditForm, setAssetEditForm] = useState({
@@ -5947,8 +5972,25 @@ export default function App() {
     title: "",
     description: "",
     requestedBy: "",
+    requesterContact: "",
     priority: "Normal",
     status: "Open",
+    assignedTo: "",
+    photo: "",
+  });
+  const [ticketFileKey, setTicketFileKey] = useState(0);
+  const [ticketMaintenanceModal, setTicketMaintenanceModal] = useState<null | Ticket>(null);
+  const [ticketMaintenanceFileKey, setTicketMaintenanceFileKey] = useState(0);
+  const [ticketMaintenanceForm, setTicketMaintenanceForm] = useState({
+    date: toYmd(new Date()),
+    type: "Corrective",
+    completion: "Done" as "Done" | "Not Yet",
+    condition: "",
+    note: "",
+    cost: "",
+    by: "",
+    photo: "",
+    ticketStatus: "Done",
   });
 
   const [locationCampus, setLocationCampus] = useState(CAMPUS_LIST[0]);
@@ -12161,12 +12203,129 @@ export default function App() {
         title: "",
         description: "",
         requestedBy: "",
+        requesterContact: "",
         priority: "Normal",
         status: "Open",
+        assignedTo: "",
+        photo: "",
       }));
+      setTicketFileKey((k) => k + 1);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create ticket");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onTicketPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setTicketForm((f) => ({ ...f, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    }
+  }
+
+  async function onTicketMaintenancePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setTicketMaintenanceForm((f) => ({ ...f, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    }
+  }
+
+  async function updateTicketRow(ticket: Ticket, patch: Partial<Ticket>) {
+    if (!requireAdminAction()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await requestJson<{ ticket: Ticket }>(`/api/tickets/${ticket.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update work order");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openTicketMaintenanceModal(ticket: Ticket) {
+    setTicketMaintenanceModal(ticket);
+    setTicketMaintenanceForm({
+      date: toYmd(new Date()),
+      type: "Corrective",
+      completion: "Done",
+      condition: "",
+      note: ticket.description || ticket.title || "",
+      cost: "",
+      by: authUser?.displayName || authUser?.username || "",
+      photo: "",
+      ticketStatus: "Done",
+    });
+    setTicketMaintenanceFileKey((k) => k + 1);
+  }
+
+  function closeTicketMaintenanceModal() {
+    setTicketMaintenanceModal(null);
+    setTicketMaintenanceForm({
+      date: toYmd(new Date()),
+      type: "Corrective",
+      completion: "Done",
+      condition: "",
+      note: "",
+      cost: "",
+      by: authUser?.displayName || authUser?.username || "",
+      photo: "",
+      ticketStatus: "Done",
+    });
+  }
+
+  async function completeTicketWithMaintenance() {
+    if (!ticketMaintenanceModal) return;
+    if (!ticketMaintenanceForm.date || !ticketMaintenanceForm.type.trim() || !ticketMaintenanceForm.note.trim()) {
+      setError("Date, type, and note are required.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await requestJson<{ ticket: Ticket; asset: Asset; entry: MaintenanceEntry }>(
+        `/api/tickets/${ticketMaintenanceModal.id}/complete-maintenance`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            date: ticketMaintenanceForm.date,
+            type: ticketMaintenanceForm.type.trim(),
+            completion: ticketMaintenanceForm.completion,
+            condition: ticketMaintenanceForm.condition.trim(),
+            note: ticketMaintenanceForm.note.trim(),
+            cost: ticketMaintenanceForm.cost.trim(),
+            by: ticketMaintenanceForm.by.trim(),
+            photo: ticketMaintenanceForm.photo || "",
+            ticketStatus: ticketMaintenanceForm.ticketStatus,
+          }),
+        }
+      );
+      closeTicketMaintenanceModal();
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to complete work order");
     } finally {
       setBusy(false);
     }
@@ -17321,7 +17480,7 @@ export default function App() {
     assetItemName,
   ]);
   const overviewModalData = useMemo(() => {
-    const openTickets = tickets.filter((t) => t.status !== "Resolved");
+    const openTickets = tickets.filter((t) => !["Done", "Cancelled", "Resolved"].includes(String(t.status || "")));
     if (overviewModal === "total") {
       return {
         title: "Total Assets",
@@ -19880,6 +20039,66 @@ export default function App() {
     }
   }
 
+  async function onPublicQrRequestPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setPublicQrRequestForm((f) => ({ ...f, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    }
+  }
+
+  async function submitPublicQrRepairRequest(asset: PublicQrAsset) {
+    if (!asset?.assetId) {
+      setPublicQrRecordError("Asset is invalid.");
+      return;
+    }
+    if (!publicQrRequestForm.requestedBy.trim()) {
+      setPublicQrRecordError("Requester name is required.");
+      return;
+    }
+    setPublicQrRecordBusy(true);
+    setPublicQrRecordError("");
+    setPublicQrRecordMessage("");
+    try {
+      const title = publicQrRequestForm.title.trim() || `Repair request for ${asset.assetId}`;
+      await requestJson<{ ticket: Ticket }>("/api/public/tickets", {
+        method: "POST",
+        body: JSON.stringify({
+          assetId: asset.assetId,
+          campus: asset.campus,
+          category: asset.category,
+          title,
+          description: publicQrRequestForm.description.trim(),
+          requestedBy: publicQrRequestForm.requestedBy.trim(),
+          requesterContact: publicQrRequestForm.requesterContact.trim(),
+          priority: publicQrRequestForm.priority,
+          photo: publicQrRequestForm.photo || "",
+        }),
+      });
+      setPublicQrRequestForm({
+        title: "",
+        description: "",
+        requestedBy: "",
+        requesterContact: "",
+        priority: "Normal",
+        photo: "",
+      });
+      setPublicQrRequestFileKey((k) => k + 1);
+      setPublicQrRecordMessage("Work order created. The maintenance team can now follow up this asset.");
+    } catch (err) {
+      setPublicQrRecordError(err instanceof Error ? err.message : "Failed to create work order");
+    } finally {
+      setPublicQrRecordBusy(false);
+    }
+  }
+
   async function addMaintenanceRecordFromPublicQr(asset: PublicQrAsset) {
     if (!asset?.id) {
       setPublicQrRecordError("Asset ID is invalid.");
@@ -20055,7 +20274,85 @@ export default function App() {
             ) : asset ? (
               <>
                 <div className="panel public-asset-action-panel">
-                  <h3 className="section-title" style={{ marginTop: 0 }}>Maintenance Record</h3>
+                  <h3 className="section-title" style={{ marginTop: 0 }}>Request Repair</h3>
+                  <div className="form-grid">
+                    <label className="field field-wide">
+                      <span>Issue Title</span>
+                      <input
+                        className="input"
+                        value={publicQrRequestForm.title}
+                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, title: e.target.value }))}
+                        placeholder={`Repair request for ${asset.assetId}`}
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Description</span>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        value={publicQrRequestForm.description}
+                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, description: e.target.value }))}
+                        placeholder="Describe the problem with this asset."
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Requested By</span>
+                      <input
+                        className="input"
+                        value={publicQrRequestForm.requestedBy}
+                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, requestedBy: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Contact / Room</span>
+                      <input
+                        className="input"
+                        value={publicQrRequestForm.requesterContact}
+                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, requesterContact: e.target.value }))}
+                        placeholder="Phone, Telegram, room..."
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Priority</span>
+                      <select
+                        className="input"
+                        value={publicQrRequestForm.priority}
+                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, priority: e.target.value }))}
+                      >
+                        {PRIORITY_OPTIONS.map((p) => (
+                          <option key={`public-qr-priority-${p.value}`} value={p.value}>
+                            {(lang === "km" ? p.km : p.en) || p.value}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field field-wide">
+                      <span>{t.photo}</span>
+                      <input
+                        key={publicQrRequestFileKey}
+                        type="file"
+                        accept="image/*"
+                        onChange={onPublicQrRequestPhotoFile}
+                      />
+                      {publicQrRequestForm.photo ? (
+                        <img loading="lazy" decoding="async" src={publicQrRequestForm.photo} alt="request" className="photo-preview" />
+                      ) : null}
+                    </label>
+                    <div className="field field-wide">
+                      <button
+                        className="btn-primary"
+                        type="button"
+                        disabled={publicQrRecordBusy || !publicQrRequestForm.requestedBy.trim()}
+                        onClick={() => void submitPublicQrRepairRequest(asset)}
+                      >
+                        {publicQrRecordBusy ? "Submitting..." : "Request Fix / Create Work Order"}
+                      </button>
+                      <div className="tiny" style={{ marginTop: 8 }}>
+                        This creates a work order first. The technician can later convert it to maintenance history after fixing.
+                      </div>
+                    </div>
+                  </div>
+                  <h3 className="section-title">Maintenance Record</h3>
                   {!authUser ? (
                     <div className="form-grid">
                       <label className="field">
@@ -25270,6 +25567,24 @@ export default function App() {
                   <span>{t.requestedBy}</span>
                   <input className="input" value={ticketForm.requestedBy} onChange={(e) => setTicketForm((f) => ({ ...f, requestedBy: e.target.value }))} />
                 </label>
+                <label className="field">
+                  <span>Contact / Room</span>
+                  <input className="input" value={ticketForm.requesterContact} onChange={(e) => setTicketForm((f) => ({ ...f, requesterContact: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Assign To</span>
+                  <select className="input" value={ticketForm.assignedTo} onChange={(e) => setTicketForm((f) => ({ ...f, assignedTo: e.target.value }))}>
+                    <option value="">Unassigned</option>
+                    {users.map((user) => (
+                      <option key={`ticket-assign-${user.id}`} value={user.fullName}>{user.fullName}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field field-wide">
+                  <span>{t.photo}</span>
+                  <input key={ticketFileKey} type="file" accept="image/*" onChange={onTicketPhotoFile} />
+                  {ticketForm.photo ? <img loading="lazy" decoding="async" src={ticketForm.photo} alt="ticket" className="photo-preview" /> : null}
+                </label>
               </div>
               <div className="asset-actions">
                 <div className="photo-placeholder">{t.ticketQueue}: {tickets.length}</div>
@@ -25288,9 +25603,12 @@ export default function App() {
                       <th>{t.category}</th>
                       <th>{t.titleLabel}</th>
                       <th>{t.priority}</th>
+                      <th>Assign To</th>
                       <th>{t.status}</th>
                       <th>{t.requestedBy}</th>
+                      <th>Contact</th>
                       <th>{t.created}</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -25306,6 +25624,21 @@ export default function App() {
                           </td>
                           <td>{(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}</td>
                           <td>
+                            <select
+                              className="status-select"
+                              disabled={!isAdmin || busy}
+                              value={ticket.assignedTo || ""}
+                              onChange={(e) => void updateTicketRow(ticket, { assignedTo: e.target.value, status: e.target.value ? "Assigned" : ticket.status })}
+                            >
+                              <option value="">Unassigned</option>
+                              {users.map((user) => (
+                                <option key={`ticket-row-assign-${ticket.id}-${user.id}`} value={user.fullName}>
+                                  {user.fullName}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
                             <select className="status-select" disabled={!isAdmin} value={ticket.status || "Open"} onChange={(e) => changeTicketStatus(ticket.id, e.target.value)}>
                               {TICKET_STATUS_OPTIONS.map((status) => (
                                 <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
@@ -25313,12 +25646,40 @@ export default function App() {
                             </select>
                           </td>
                           <td>{ticket.requestedBy}</td>
+                          <td>{ticket.requesterContact || "-"}</td>
                           <td>{formatDate(ticket.created)}</td>
+                          <td>
+                            <div className="asset-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+                              {ticket.assetId ? (
+                                <button className="tab btn-small" type="button" onClick={() => {
+                                  setAssetCampusMultiFilter(["ALL"]);
+                                  setAssetNameMultiFilter(["ALL"]);
+                                  setAssetLocationMultiFilter(["ALL"]);
+                                  setAssetAssignedToMultiFilter(["ALL"]);
+                                  setAssetsView("list");
+                                  setTab("assets");
+                                  setSearch(ticket.assetId);
+                                }}>
+                                  Open Asset
+                                </button>
+                              ) : null}
+                              {ticket.assetDbId ? (
+                                <button
+                                  className="btn-primary btn-small"
+                                  type="button"
+                                  disabled={busy || ticket.status === "Done" || ticket.status === "Cancelled"}
+                                  onClick={() => openTicketMaintenanceModal(ticket)}
+                                >
+                                  Complete & Record
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={8}>{t.noWorkOrders}</td>
+                        <td colSpan={11}>{t.noWorkOrders}</td>
                       </tr>
                     )}
                   </tbody>
@@ -25327,6 +25688,107 @@ export default function App() {
             </section>
           </>
         )}
+
+        {ticketMaintenanceModal ? (
+          <div className="modal-backdrop" onClick={closeTicketMaintenanceModal}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>Complete Work Order - {ticketMaintenanceModal.ticketNo}</h2>
+                <button className="tab" onClick={closeTicketMaintenanceModal}>Close</button>
+              </div>
+              <div className="tiny" style={{ marginBottom: 12 }}>
+                Asset: <strong>{ticketMaintenanceModal.assetId || "-"}</strong> | Request: {ticketMaintenanceModal.title}
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Date</span>
+                  <input
+                    className="input"
+                    type="date"
+                    value={ticketMaintenanceForm.date}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, date: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Type</span>
+                  <input
+                    className="input"
+                    value={ticketMaintenanceForm.type}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, type: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Work Status</span>
+                  <select
+                    className="input"
+                    value={ticketMaintenanceForm.completion}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, completion: e.target.value as "Done" | "Not Yet" }))}
+                  >
+                    <option value="Done">Done</option>
+                    <option value="Not Yet">Not Yet</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Work Order Status</span>
+                  <select
+                    className="input"
+                    value={ticketMaintenanceForm.ticketStatus}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, ticketStatus: e.target.value }))}
+                  >
+                    <option value="Done">Done</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Waiting Parts">Waiting Parts</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Condition</span>
+                  <input
+                    className="input"
+                    value={ticketMaintenanceForm.condition}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, condition: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>By</span>
+                  <input
+                    className="input"
+                    value={ticketMaintenanceForm.by}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, by: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Cost</span>
+                  <input
+                    className="input"
+                    value={ticketMaintenanceForm.cost}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, cost: e.target.value }))}
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span>Maintenance Note</span>
+                  <textarea
+                    className="textarea"
+                    rows={4}
+                    value={ticketMaintenanceForm.note}
+                    onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, note: e.target.value }))}
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span>{t.photo}</span>
+                  <input key={ticketMaintenanceFileKey} type="file" accept="image/*" onChange={onTicketMaintenancePhotoFile} />
+                  {ticketMaintenanceForm.photo ? (
+                    <img loading="lazy" decoding="async" src={ticketMaintenanceForm.photo} alt="maintenance proof" className="photo-preview" />
+                  ) : null}
+                </label>
+              </div>
+              <div className="asset-actions">
+                <button className="btn-primary" disabled={busy} onClick={() => void completeTicketWithMaintenance()}>
+                  {busy ? "Saving..." : "Save Maintenance & Close Work Order"}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {tab === "inventory" && (
           <div className="inventory-shell">

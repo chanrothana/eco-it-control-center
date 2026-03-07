@@ -865,6 +865,38 @@ function normalizeInventoryTxns(input) {
     }));
 }
 
+function normalizeTickets(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now(),
+      ticketNo: toText(row.ticketNo),
+      campus: toText(row.campus),
+      category: toText(row.category),
+      assetId: toText(row.assetId),
+      assetDbId: Number(row.assetDbId) || 0,
+      assetName: toText(row.assetName),
+      assetLocation: toText(row.assetLocation),
+      title: toText(row.title),
+      description: toText(row.description),
+      requestedBy: toText(row.requestedBy),
+      requesterContact: toText(row.requesterContact),
+      priority: toText(row.priority) || "Normal",
+      status: toText(row.status) || "Open",
+      assignedTo: toText(row.assignedTo),
+      photo: toText(row.photo),
+      created: toText(row.created) || new Date().toISOString(),
+      updatedAt: toText(row.updatedAt) || toText(row.created) || new Date().toISOString(),
+      completedAt: toText(row.completedAt),
+      completedBy: toText(row.completedBy),
+      maintenanceEntryId: Number(row.maintenanceEntryId) || 0,
+      maintenanceAssetId: Number(row.maintenanceAssetId) || 0,
+      maintenanceSummary: toText(row.maintenanceSummary),
+      requestSource: toText(row.requestSource) || "manual",
+    }));
+}
+
 function normalizeInventoryApprovalRoutingMap(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
   const out = {};
@@ -1359,12 +1391,12 @@ function normalizeImportedDb(input) {
     : [];
   const migrated = migrateAssetIdsAndLinkedReferences(
     normalizedAssetsRaw,
-    Array.isArray(parsed.tickets) ? parsed.tickets : [],
+    normalizeTickets(parsed.tickets),
     normalizeNotificationEntries(parsed.notifications)
   );
   return {
     assets: migrated.assets,
-    tickets: migrated.tickets,
+    tickets: normalizeTickets(migrated.tickets),
     locations: Array.isArray(parsed.locations) ? parsed.locations : [],
     users: Array.isArray(parsed.users) ? parsed.users : DEFAULT_USERS,
     auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
@@ -2472,11 +2504,17 @@ function validateTicket(body) {
   const campus = normalizeCampusInput(body.campus);
   const category = normalizeCategoryInput(body.category);
   const assetId = toText(body.assetId);
+  const assetDbId = Number(body.assetDbId) || 0;
+  const assetName = toText(body.assetName);
+  const assetLocation = toText(body.assetLocation);
   const title = toText(body.title);
   const description = toText(body.description);
   const requestedBy = toText(body.requestedBy);
+  const requesterContact = toText(body.requesterContact);
   const priority = toText(body.priority) || "Normal";
   const status = toText(body.status) || "Open";
+  const assignedTo = toText(body.assignedTo);
+  const requestSource = toText(body.requestSource) || "manual";
 
   if (!campus) return "Campus is required";
   if (!category) return "Category is required";
@@ -2487,11 +2525,17 @@ function validateTicket(body) {
     campus,
     category,
     assetId,
+    assetDbId,
+    assetName,
+    assetLocation,
     title,
     description,
     requestedBy,
+    requesterContact,
     priority,
     status,
+    assignedTo,
+    requestSource,
   };
 }
 
@@ -2756,13 +2800,13 @@ function dashboard(db, campus) {
   const totalAssets = campusAssets.length;
   const itAssets = campusAssets.filter((a) => a.category === "IT").length;
   const safetyAssets = campusAssets.filter((a) => a.category === "SAFETY").length;
-  const openTickets = campusTickets.filter((t) => t.status !== "Resolved").length;
+  const openTickets = campusTickets.filter((t) => !["Done", "Cancelled", "Resolved"].includes(toText(t.status))).length;
 
   const byCampus = CAMPUS_NAMES
     .map((name) => {
       const assets = db.assets.filter((a) => a.campus === name).length;
       const tickets = db.tickets.filter(
-        (t) => t.campus === name && t.status !== "Resolved"
+        (t) => t.campus === name && !["Done", "Cancelled", "Resolved"].includes(toText(t.status))
       ).length;
       return { campus: name, assets, openTickets: tickets };
     })
@@ -5189,10 +5233,13 @@ const server = http.createServer(async (req, res) => {
       }
 
       const db = await readDb();
+      const photo = await normalizePhotoValue(body.photo, "maintenance");
       const ticket = {
         id: Date.now(),
         ticketNo: nextTicketCode(db.tickets, cleaned.campus),
         created: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        photo,
         ...cleaned,
       };
 
@@ -5200,6 +5247,87 @@ const server = http.createServer(async (req, res) => {
       appendAuditLog(db, admin, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title}`);
       await writeDb(db);
       sendJson(res, 201, { ticket });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/public/tickets") {
+      const body = await parseBody(req);
+      const db = await readDb();
+      const assets = Array.isArray(db.assets) ? db.assets : [];
+      const assetId = toText(body.assetId);
+      const asset = assetId ? selectBestAssetByAssetId(assets, assetId) : null;
+      if (!asset) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      const cleaned = validateTicket({
+        ...body,
+        campus: toText(body.campus) || toText(asset.campus),
+        category: toText(body.category) || toText(asset.category),
+        assetId: toText(asset.assetId),
+        assetDbId: Number(asset.id) || 0,
+        assetName: toText(asset.name) || toText(asset.assetId),
+        assetLocation: toText(asset.location),
+        title: toText(body.title) || `Repair request for ${toText(asset.assetId)}`,
+        requestSource: "qr_scan",
+        status: "Open",
+      });
+      if (typeof cleaned === "string") {
+        sendJson(res, 400, { error: cleaned });
+        return;
+      }
+      const photo = await normalizePhotoValue(body.photo, "maintenance");
+      const ticket = {
+        id: Date.now(),
+        ticketNo: nextTicketCode(db.tickets, cleaned.campus),
+        created: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        photo,
+        ...cleaned,
+      };
+      db.tickets.unshift(ticket);
+      appendAuditLog(db, null, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title} | QR request`);
+      await writeDb(db);
+      sendJson(res, 201, { ticket });
+      return;
+    }
+
+    if (req.method === "PATCH" && /^\/api\/tickets\/\d+$/.test(url.pathname)) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const id = Number(url.pathname.replace("/api/tickets/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const body = await parseBody(req);
+      const db = await readDb();
+      const idx = db.tickets.findIndex((t) => Number(t.id) === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Ticket not found" });
+        return;
+      }
+      const current = normalizeTickets([db.tickets[idx]])[0];
+      const photo =
+        body.photo === undefined
+          ? current.photo
+          : await normalizePhotoValue(body.photo, "maintenance");
+      const next = {
+        ...current,
+        title: toText(body.title ?? current.title),
+        description: toText(body.description ?? current.description),
+        requestedBy: toText(body.requestedBy ?? current.requestedBy),
+        requesterContact: toText(body.requesterContact ?? current.requesterContact),
+        priority: toText(body.priority ?? current.priority) || current.priority,
+        status: toText(body.status ?? current.status) || current.status,
+        assignedTo: toText(body.assignedTo ?? current.assignedTo),
+        photo,
+        updatedAt: new Date().toISOString(),
+      };
+      db.tickets[idx] = next;
+      appendAuditLog(db, admin, "UPDATE", "ticket", next.ticketNo || String(id), `${next.status} | ${next.assignedTo || "-"}`);
+      await writeDb(db);
+      sendJson(res, 200, { ticket: next });
       return;
     }
 
@@ -5227,9 +5355,119 @@ const server = http.createServer(async (req, res) => {
       }
 
       db.tickets[idx].status = status;
+      db.tickets[idx].updatedAt = new Date().toISOString();
       appendAuditLog(db, admin, "UPDATE_STATUS", "ticket", db.tickets[idx].ticketNo || String(id), status);
       await writeDb(db);
       sendJson(res, 200, { ticket: db.tickets[idx] });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname.startsWith("/api/tickets/") && url.pathname.endsWith("/complete-maintenance")) {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!canRecordMaintenance(user)) {
+        sendJson(res, 403, { error: "Maintenance record permission required" });
+        return;
+      }
+      const id = Number(url.pathname.replace("/api/tickets/", "").replace("/complete-maintenance", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const body = await parseBody(req);
+      const date = toText(body.date);
+      const type = toText(body.type);
+      const note = toText(body.note);
+      const cost = toText(body.cost);
+      const by = toText(body.by) || toText(user.displayName) || toText(user.username);
+      const condition = toText(body.condition);
+      const completion = normalizeCompletion(body.completion);
+      const status = toText(body.ticketStatus) || "Done";
+      const photo = await normalizePhotoValue(body.photo, "maintenance");
+      const photos = await normalizePhotoList(body.photos, "maintenance", 5);
+      if (photo && !photos.includes(photo)) photos.unshift(photo);
+      if (!date || !type || !note) {
+        sendJson(res, 400, { error: "date, type, note are required" });
+        return;
+      }
+      const db = await readDb();
+      const ticketIdx = db.tickets.findIndex((t) => Number(t.id) === id);
+      if (ticketIdx === -1) {
+        sendJson(res, 404, { error: "Ticket not found" });
+        return;
+      }
+      const ticket = normalizeTickets([db.tickets[ticketIdx]])[0];
+      if (!ticket.assetDbId) {
+        sendJson(res, 400, { error: "This work order is not linked to an asset" });
+        return;
+      }
+      const assetIdx = db.assets.findIndex((a) => Number(a.id) === Number(ticket.assetDbId));
+      if (assetIdx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      if (!userCanAccessCampus(user, toText(db.assets[assetIdx].campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+      const entry = {
+        id: Date.now(),
+        date,
+        type,
+        completion,
+        condition,
+        note,
+        cost,
+        by,
+        photo: photos[0] || photo,
+        photos: photos.slice(0, 5),
+      };
+      db.assets[assetIdx].maintenanceHistory = Array.isArray(db.assets[assetIdx].maintenanceHistory)
+        ? [entry, ...db.assets[assetIdx].maintenanceHistory]
+        : [entry];
+      if (syncAssetStatusFromMaintenance(db.assets[assetIdx])) {
+        appendAuditLog(
+          db,
+          user,
+          "UPDATE_STATUS",
+          "asset",
+          db.assets[assetIdx].assetId || String(ticket.assetDbId),
+          "Defective (auto from replacement)"
+        );
+      }
+      db.tickets[ticketIdx] = {
+        ...ticket,
+        status,
+        completedAt: new Date().toISOString(),
+        completedBy: by,
+        maintenanceEntryId: entry.id,
+        maintenanceAssetId: Number(db.assets[assetIdx].id) || 0,
+        maintenanceSummary: `${entry.type} | ${entry.completion || "Not Yet"}`,
+        updatedAt: new Date().toISOString(),
+      };
+      appendAuditLog(
+        db,
+        user,
+        "COMPLETE_WORK_ORDER",
+        "ticket",
+        ticket.ticketNo || String(id),
+        `${db.tickets[ticketIdx].status} | ${db.assets[assetIdx].assetId || ticket.assetId}`
+      );
+      appendAuditLog(
+        db,
+        user,
+        "CREATE",
+        "maintenance_record",
+        `${db.assets[assetIdx].assetId || ticket.assetId}#${entry.id}`,
+        `${entry.type} | ${entry.completion || "Not Yet"}`
+      );
+      addMaintenanceDoneNotification(db, db.assets[assetIdx], entry);
+      ensureMaintenanceScheduleNotifications(db);
+      await writeDb(db);
+      sendJson(res, 200, { ticket: db.tickets[ticketIdx], asset: db.assets[assetIdx], entry });
       return;
     }
 
