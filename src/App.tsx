@@ -17492,6 +17492,13 @@ export default function App() {
   }, [assets, assetItemName, campusLabel, assetStatusLabel]);
 
   const setCodeReportRows = useMemo(() => {
+    const assetsById = new Map<string, Asset>();
+    for (const asset of assets) {
+      const id = String(asset.assetId || "").trim();
+      if (!id) continue;
+      assetsById.set(id, asset);
+    }
+
     const groupedBySet = new Map<string, Asset[]>();
     for (const asset of assets) {
       const setCode = String(asset.setCode || "").trim();
@@ -17500,11 +17507,54 @@ export default function App() {
       list.push(asset);
       groupedBySet.set(setCode, list);
     }
-    return Array.from(groupedBySet.entries())
-      .map(([setCode, list]) => {
+
+    const groupedByLinkedParent = new Map<string, Asset[]>();
+    const findRootAssetId = (asset: Asset) => {
+      let current = asset;
+      const visited = new Set<string>();
+      for (let depth = 0; depth < 8; depth += 1) {
+        const currentId = String(current.assetId || "").trim();
+        if (!currentId) break;
+        if (visited.has(currentId)) break;
+        visited.add(currentId);
+        const parentId = String(current.parentAssetId || "").trim();
+        if (!parentId) return currentId;
+        const parent = assetsById.get(parentId);
+        if (!parent) return parentId;
+        current = parent;
+      }
+      return String(current.assetId || "").trim();
+    };
+    for (const asset of assets) {
+      const setCode = String(asset.setCode || "").trim();
+      if (setCode) continue;
+      const rootAssetId = findRootAssetId(asset);
+      if (!rootAssetId) continue;
+      const rootAsset = assetsById.get(rootAssetId);
+      if (!rootAsset) continue;
+      const list = groupedByLinkedParent.get(rootAssetId) || [];
+      list.push(asset);
+      groupedByLinkedParent.set(rootAssetId, list);
+    }
+    const linkedGroups = Array.from(groupedByLinkedParent.entries())
+      .map(([rootAssetId, list]) => {
+        const unique = Array.from(new Map(list.map((asset) => [String(asset.assetId || ""), asset])).values());
+        return { rootAssetId, list: unique };
+      })
+      .filter((group) => group.list.length > 1);
+
+    const setCodeGroups = Array.from(groupedBySet.entries()).map(([setCode, list]) => ({ setCode, list }));
+    const linkedAsSetGroups = linkedGroups.map((group) => ({
+      setCode: `LINK-${group.rootAssetId}`,
+      list: group.list,
+    }));
+
+    return [...setCodeGroups, ...linkedAsSetGroups]
+      .map(({ setCode, list }) => {
         const sorted = [...list].sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")));
         const main =
           sorted.find((a) => a.category === "IT" && a.type === DESKTOP_PARENT_TYPE) ||
+          sorted.find((a) => a.category === "IT" && a.type === LAPTOP_TYPE) ||
           sorted.find((a) => !String(a.parentAssetId || "").trim()) ||
           sorted[0];
         const mainAssetId = String(main?.assetId || "-");
