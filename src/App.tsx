@@ -4607,6 +4607,7 @@ export default function App() {
     | "category"
     | "name"
     | "location"
+    | "assignedTo"
     | "status";
   type StaffBorrowingSortKey =
     | "assetId"
@@ -16632,10 +16633,12 @@ export default function App() {
             ? campusLabel(a.campus)
             : key === "category"
               ? String(a.category || "")
-              : key === "name"
+                : key === "name"
                 ? assetItemName(a.category, a.type, a.pcType || "")
                 : key === "location"
                   ? String(a.location || "")
+                  : key === "assignedTo"
+                    ? String(a.assignedTo || "")
                   : String(a.status || "");
       const bValue =
         key === "assetId"
@@ -16644,10 +16647,12 @@ export default function App() {
             ? campusLabel(b.campus)
             : key === "category"
               ? String(b.category || "")
-              : key === "name"
+                : key === "name"
                 ? assetItemName(b.category, b.type, b.pcType || "")
                 : key === "location"
                   ? String(b.location || "")
+                  : key === "assignedTo"
+                    ? String(b.assignedTo || "")
                   : String(b.status || "");
       const compared = aValue.localeCompare(bValue, undefined, { sensitivity: "base" });
       if (compared !== 0) return compared * sign;
@@ -22985,6 +22990,15 @@ export default function App() {
                               {t.location}
                             </button>
                           </th>
+                          <th aria-sort={assetListSort.key === "assignedTo" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${assetListSort.key === "assignedTo" ? "is-active" : ""}`}
+                              onClick={() => toggleAssetListSort("assignedTo")}
+                            >
+                              {lang === "km" ? "អ្នកប្រើ" : "Assigned Staff"}
+                            </button>
+                          </th>
                           <th>{t.actions}</th>
                           <th aria-sort={assetListSort.key === "status" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
@@ -23017,6 +23031,7 @@ export default function App() {
                                   {asset.location || "-"}
                                 </span>
                               </td>
+                              <td>{asset.assignedTo || "-"}</td>
                               <td>
                                 {isAdmin ? (
                                   <div className="row-actions">
@@ -23057,7 +23072,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={8}>{t.noAssets}</td>
+                            <td colSpan={9}>{t.noAssets}</td>
                           </tr>
                         )}
                       </tbody>
