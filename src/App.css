@@ -4700,12 +4700,28 @@ label.backup-action-btn {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1 1 auto;
 }
 
-.asset-picker-option-check {
-  margin-left: auto;
-  color: #355284;
-  font-weight: 700;
+.asset-picker-option-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #9db5dc;
+  border-radius: 4px;
+  background: #fff;
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  flex: 0 0 16px;
+}
+
+.asset-picker-option-checkbox-checked {
+  background: #355284;
+  border-color: #355284;
+  color: #fff;
 }
 
 .asset-picker-option > span:last-child {

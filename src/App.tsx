@@ -4098,8 +4098,13 @@ function LocationPicker({
                   }}
                   onClick={() => selectLocation(opt.value)}
                 >
+                  <span
+                    className={`asset-picker-option-checkbox ${opt.value === value ? "asset-picker-option-checkbox-checked" : ""}`}
+                    aria-hidden={true}
+                  >
+                    {opt.value === value ? "✓" : ""}
+                  </span>
                   <span className="asset-picker-option-label">{opt.label}</span>
-                  {opt.value === value ? <span className="asset-picker-option-check" aria-hidden={true}>✓</span> : null}
                 </button>
               ))
             ) : (
@@ -19675,9 +19680,9 @@ export default function App() {
                     </div>
                   </div>
                   <div className="field field-wide">
-                  <span>Maintenance History</span>
-                  <div className="table-wrap public-asset-table-wrap">
-                    <table>
+                  <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
+                  <div className="table-wrap maintenance-history-modal-table-wrap asset-detail-history-wrap">
+                    <table className="maintenance-history-modal-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -19692,16 +19697,16 @@ export default function App() {
                         {publicMaintenanceHistory.length ? (
                           publicMaintenanceHistory.map((entry) => (
                             <tr key={`public-maint-${entry.id}`}>
-                              <td>{formatDate(entry.date || "-")}</td>
-                              <td>{entry.type || "-"}</td>
-                              <td>{maintenanceCompletionText(entry.completion || "-")}</td>
-                              <td>{entry.condition || "-"}</td>
-                              <td>{entry.note || "-"}</td>
-                              <td>{entry.by || "-"}</td>
+                              <td data-label="Date">{formatDate(entry.date || "-")}</td>
+                              <td data-label="Type">{entry.type || "-"}</td>
+                              <td data-label="Work Status">{maintenanceCompletionText(entry.completion || "-")}</td>
+                              <td data-label="Condition">{entry.condition || "-"}</td>
+                              <td data-label="Noted">{entry.note || "-"}</td>
+                              <td data-label="By">{entry.by || "-"}</td>
                             </tr>
                           ))
                         ) : (
-                          <tr>
+                          <tr className="asset-detail-empty-row">
                             <td colSpan={6}>No maintenance history yet.</td>
                           </tr>
                         )}
@@ -19710,9 +19715,9 @@ export default function App() {
                   </div>
                 </div>
                   <div className="field field-wide">
-                  <span>Transfer History</span>
-                  <div className="table-wrap public-asset-table-wrap">
-                    <table>
+                  <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
+                  <div className="table-wrap asset-detail-history-wrap">
+                    <table className="asset-detail-transfer-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -19720,24 +19725,40 @@ export default function App() {
                           <th>From Location</th>
                           <th>To Campus</th>
                           <th>To Location</th>
+                          <th>From Staff</th>
+                          <th>To Staff</th>
+                          <th>Ack</th>
+                          <th>Reason</th>
                           <th>By</th>
                         </tr>
                       </thead>
                       <tbody>
                         {publicTransferHistory.length ? (
-                          publicTransferHistory.map((entry) => (
-                            <tr key={`public-transfer-${entry.id}`}>
-                              <td>{formatDate(entry.date || "-")}</td>
-                              <td>{campusLabel(entry.fromCampus || "-")}</td>
-                              <td>{entry.fromLocation || "-"}</td>
-                              <td>{campusLabel(entry.toCampus || "-")}</td>
-                              <td>{entry.toLocation || "-"}</td>
-                              <td>{entry.by || "-"}</td>
-                            </tr>
-                          ))
+                          publicTransferHistory.map((entry) => {
+                            const custody = publicCustodyHistory.find(
+                              (row) =>
+                                String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
+                                String(row.toCampus || "") === String(entry.toCampus || "") &&
+                                String(row.toLocation || "") === String(entry.toLocation || "")
+                            );
+                            return (
+                              <tr key={`public-transfer-${entry.id}`}>
+                                <td data-label="Date">{formatDate(entry.date || "-")}</td>
+                                <td data-label="From Campus">{campusLabel(entry.fromCampus || "-")}</td>
+                                <td data-label="From Location">{entry.fromLocation || "-"}</td>
+                                <td data-label="To Campus">{campusLabel(entry.toCampus || "-")}</td>
+                                <td data-label="To Location">{entry.toLocation || "-"}</td>
+                                <td data-label="From Staff">{custody?.fromUser || "-"}</td>
+                                <td data-label="To Staff">{custody?.toUser || "-"}</td>
+                                <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
+                                <td data-label="Reason">{entry.reason || "-"}</td>
+                                <td data-label="By">{entry.by || "-"}</td>
+                              </tr>
+                            );
+                          })
                         ) : (
-                          <tr>
-                            <td colSpan={6}>No transfer history yet.</td>
+                          <tr className="asset-detail-empty-row">
+                            <td colSpan={10}>No transfer location history yet.</td>
                           </tr>
                         )}
                       </tbody>
@@ -19745,9 +19766,9 @@ export default function App() {
                   </div>
                 </div>
                   <div className="field field-wide">
-                  <span>Assigned to History</span>
-                  <div className="table-wrap public-asset-table-wrap">
-                    <table>
+                  <h3 className="section-title" style={{ margin: 0 }}>Assigned to History</h3>
+                  <div className="table-wrap asset-detail-history-wrap">
+                    <table className="asset-detail-custody-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -19763,17 +19784,17 @@ export default function App() {
                         {publicCustodyHistory.length ? (
                           publicCustodyHistory.map((entry) => (
                             <tr key={`public-custody-${entry.id}`}>
-                              <td>{formatDate(entry.date || "-")}</td>
-                              <td>{entry.action || "-"}</td>
-                              <td>{entry.fromUser || "-"}</td>
-                              <td>{entry.toUser || "-"}</td>
-                              <td>{entry.responsibilityAck ? "Yes" : "No"}</td>
-                              <td>{entry.by || "-"}</td>
-                              <td>{entry.note || "-"}</td>
+                              <td data-label="Date">{formatDate(entry.date || "-")}</td>
+                              <td data-label="Action">{entry.action || "-"}</td>
+                              <td data-label="From User">{entry.fromUser || "-"}</td>
+                              <td data-label="To User">{entry.toUser || "-"}</td>
+                              <td data-label="Ack">{entry.responsibilityAck ? "Yes" : "No"}</td>
+                              <td data-label="By">{entry.by || "-"}</td>
+                              <td data-label="Note">{entry.note || "-"}</td>
                             </tr>
                           ))
                         ) : (
-                          <tr>
+                          <tr className="asset-detail-empty-row">
                             <td colSpan={7}>No assigned history yet.</td>
                           </tr>
                         )}
@@ -19782,9 +19803,9 @@ export default function App() {
                   </div>
                 </div>
                   <div className="field field-wide">
-                  <span>Status Timeline</span>
-                  <div className="table-wrap public-asset-table-wrap">
-                    <table>
+                  <h3 className="section-title" style={{ margin: 0 }}>Status Timeline</h3>
+                  <div className="table-wrap asset-detail-history-wrap">
+                    <table className="asset-detail-status-table">
                       <thead>
                         <tr>
                           <th>Date</th>
@@ -19798,16 +19819,15 @@ export default function App() {
                         {publicStatusHistory.length ? (
                           publicStatusHistory.map((entry) => (
                             <tr key={`public-status-${entry.id}`}>
-                              <td>{formatDate(entry.date || "-")}</td>
-                              <td>{assetStatusLabel(entry.fromStatus || "-")}</td>
-                              <td>{assetStatusLabel(entry.toStatus || "-")}</td>
-                              <td>{entry.reason || "-"}</td>
-                              <td>{entry.by || "-"}</td>
+                              <td data-label="Date">{formatDate(entry.date || "-")}</td>
+                              <td data-label="From">{assetStatusLabel(entry.fromStatus || "-")}</td>
+                              <td data-label="To">{assetStatusLabel(entry.toStatus || "-")}</td>
+                              <td data-label="Reason">{entry.reason || "-"}</td>
                             </tr>
                           ))
                         ) : (
-                          <tr>
-                            <td colSpan={5}>No status timeline yet.</td>
+                          <tr className="asset-detail-empty-row">
+                            <td colSpan={4}>No status timeline yet.</td>
                           </tr>
                         )}
                       </tbody>
