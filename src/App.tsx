@@ -402,6 +402,24 @@ type AuditLog = {
     role?: string;
   };
 };
+type AuthSessionLog = {
+  id: number;
+  username: string;
+  displayName: string;
+  role: string;
+  ipAddress: string;
+  userAgent: string;
+  loginAt: string;
+  lastSeenAt: string;
+  logoutAt: string;
+  status: string;
+  user?: {
+    id?: number;
+    username?: string;
+    displayName?: string;
+    role?: string;
+  };
+};
 type InventoryApprovalRouteEntry = {
   campus: string;
   approvers: string[];
@@ -6008,6 +6026,7 @@ export default function App() {
   });
   const [editingCalendarEventId, setEditingCalendarEventId] = useState<number | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [authSessionLogs, setAuthSessionLogs] = useState<AuthSessionLog[]>([]);
   const [backupImportKey, setBackupImportKey] = useState(0);
   const [userForm, setUserForm] = useState({
     fullName: "",
@@ -9323,6 +9342,7 @@ export default function App() {
       void loadStaffUsers();
       void loadAuthAccounts();
       void loadAuditLogs();
+      void loadAuthSessionLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, isAdmin]);
@@ -9331,6 +9351,13 @@ export default function App() {
     if (tab !== "setup" || !isAdmin || setupView !== "users") return;
     void loadStaffUsers();
   }, [tab, isAdmin, setupView, loadStaffUsers]);
+
+  useEffect(() => {
+    if (tab !== "setup" || !isAdmin || setupView !== "backup") return;
+    void loadAuditLogs();
+    void loadAuthSessionLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, isAdmin, setupView]);
 
   async function enablePhoneAlerts() {
     if (typeof window === "undefined" || !("Notification" in window)) return;
@@ -11305,6 +11332,27 @@ export default function App() {
         return;
       }
       setError(err instanceof Error ? err.message : "Cannot load audit logs");
+    }
+  }
+
+  async function loadAuthSessionLogs() {
+    if (!isAdmin) return;
+    try {
+      const res = await requestJson<{ authSessions: AuthSessionLog[] }>("/api/auth/sessions");
+      const rows = Array.isArray(res.authSessions) ? res.authSessions : [];
+      setAuthSessionLogs(
+        rows
+          .slice()
+          .sort((a, b) => Date.parse(b.lastSeenAt || b.loginAt || "") - Date.parse(a.lastSeenAt || a.loginAt || ""))
+      );
+      setError("");
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) {
+        setAuthSessionLogs([]);
+        setError("");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Cannot load auth sessions");
     }
   }
 
@@ -31847,6 +31895,50 @@ export default function App() {
               </div>
             </div>
             {setupMessage ? <p className="tiny" style={{ marginTop: 8 }}>{setupMessage}</p> : null}
+
+            <div className="table-wrap" style={{ marginTop: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Login At</th>
+                    <th>User</th>
+                    <th>Role</th>
+                    <th>IP Address</th>
+                    <th>Device</th>
+                    <th>Last Seen</th>
+                    <th>Logout At</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {authSessionLogs.length ? (
+                    authSessionLogs.map((session) => (
+                      <tr key={`auth-session-${session.id}`}>
+                        <td>{formatDateTime(session.loginAt || "-")}</td>
+                        <td>
+                          <strong>{session.displayName || session.username || "-"}</strong>
+                          <div className="tiny">{session.username || "-"}</div>
+                        </td>
+                        <td>{session.role || session.user?.role || "-"}</td>
+                        <td>{session.ipAddress || "-"}</td>
+                        <td title={session.userAgent || "-"}>
+                          {session.userAgent
+                            ? (session.userAgent.length > 80 ? `${session.userAgent.slice(0, 80)}...` : session.userAgent)
+                            : "-"}
+                        </td>
+                        <td>{formatDateTime(session.lastSeenAt || session.loginAt || "-")}</td>
+                        <td>{session.logoutAt ? formatDateTime(session.logoutAt) : "-"}</td>
+                        <td>{session.status === "active" ? "Active" : "Logged Out"}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8}>No login session records yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             <div className="table-wrap" style={{ marginTop: 12 }}>
               <table>

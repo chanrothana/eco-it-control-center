@@ -1999,6 +1999,97 @@ function appendAuditLog(db, user, action, entity, entityId, summary = "") {
   if (db.auditLogs.length > 3000) db.auditLogs = db.auditLogs.slice(0, 3000);
 }
 
+function getClientIp(req) {
+  const forwarded = toText(req.headers["x-forwarded-for"]);
+  if (forwarded) {
+    const first = forwarded.split(",")[0].trim();
+    if (first) return first;
+  }
+  return toText(req.socket && req.socket.remoteAddress) || "";
+}
+
+function getRequestUserAgent(req) {
+  return toText(req.headers["user-agent"]);
+}
+
+function createAuthSessionEntry(user, req, token = "") {
+  const safeUser = sanitizeUser(user);
+  const now = new Date().toISOString();
+  return {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    token: toText(token),
+    user: safeUser,
+    username: toText(safeUser.username),
+    displayName: toText(safeUser.displayName) || toText(safeUser.username),
+    role: toText(safeUser.role),
+    ipAddress: getClientIp(req),
+    userAgent: getRequestUserAgent(req),
+    loginAt: now,
+    lastSeenAt: now,
+    logoutAt: "",
+    status: "active",
+  };
+}
+
+function sanitizeAuthSessionEntry(entry) {
+  const source = entry && typeof entry === "object" ? entry : {};
+  const safeUser = sanitizeUser(source.user || source);
+  return {
+    id: Number(source.id) || Date.now() + Math.floor(Math.random() * 1000),
+    token: toText(source.token),
+    user: safeUser,
+    username: toText(source.username) || toText(safeUser.username),
+    displayName: toText(source.displayName) || toText(safeUser.displayName) || toText(safeUser.username),
+    role: toText(source.role) || toText(safeUser.role),
+    ipAddress: toText(source.ipAddress),
+    userAgent: toText(source.userAgent),
+    loginAt: toText(source.loginAt),
+    lastSeenAt: toText(source.lastSeenAt) || toText(source.loginAt),
+    logoutAt: toText(source.logoutAt),
+    status: toText(source.status) || "active",
+  };
+}
+
+function touchSessionActivity(token) {
+  const key = toText(token);
+  if (!key) return null;
+  const session = sessions.get(key);
+  if (!session) return null;
+  session.lastSeenAt = new Date().toISOString();
+  sessions.set(key, session);
+  return session;
+}
+
+function markSessionLoggedOut(token) {
+  const key = toText(token);
+  if (!key) return null;
+  const session = sessions.get(key);
+  if (!session) return null;
+  const now = new Date().toISOString();
+  session.lastSeenAt = now;
+  session.logoutAt = now;
+  session.status = "logged_out";
+  sessions.delete(key);
+  return session;
+}
+
+function upsertAuthSessionHistory(db, entry) {
+  const session = sanitizeAuthSessionEntry(entry);
+  db.authSessions = Array.isArray(db.authSessions) ? db.authSessions : [];
+  const idx = db.authSessions.findIndex(
+    (row) => Number(row && row.id) === session.id || (session.token && toText(row && row.token) === session.token)
+  );
+  if (idx >= 0) {
+    db.authSessions[idx] = { ...db.authSessions[idx], ...session };
+  } else {
+    db.authSessions.unshift(session);
+  }
+  db.authSessions = db.authSessions
+    .map((row) => sanitizeAuthSessionEntry(row))
+    .sort((a, b) => Date.parse(b.loginAt || "") - Date.parse(a.loginAt || ""))
+    .slice(0, 3000);
+}
+
 async function ensureUploadsDir() {
   await fs.mkdir(UPLOADS_DIR, { recursive: true });
 }
@@ -2497,7 +2588,8 @@ function getAuthUser(req) {
   if (ALLOW_DEV_AUTH_BYPASS && token === "local-viewer-token") {
     return sanitizeUser(DEFAULT_USERS[1]);
   }
-  return sessions.get(token) || null;
+  const session = touchSessionActivity(token);
+  return session ? sanitizeUser(session.user) : null;
 }
 
 function requireAdmin(req, res) {
@@ -2591,16 +2683,23 @@ function sanitizeUser(user) {
 
 function sessionRowsFromMap() {
   return Array.from(sessions.entries())
-    .map(([token, user]) => ({
-      token: toText(token),
-      user: sanitizeUser(user),
-    }))
-    .filter((row) => row.token && row.user && row.user.id);
+    .map(([token, session]) => sanitizeAuthSessionEntry({ ...session, token: toText(token) }))
+    .filter((row) => row.token && row.user && row.user.id && row.status === "active");
 }
 
 async function persistSessionsToDb() {
   const db = await readDb();
-  db.authSessions = sessionRowsFromMap();
+  const activeRows = sessionRowsFromMap();
+  db.authSessions = Array.isArray(db.authSessions) ? db.authSessions.map((row) => sanitizeAuthSessionEntry(row)) : [];
+  const activeTokens = new Set(activeRows.map((row) => row.token).filter(Boolean));
+  db.authSessions = db.authSessions.map((row) => {
+    if (!row.token || !activeTokens.has(row.token) || row.status !== "active") return row;
+    const active = activeRows.find((item) => item.token === row.token);
+    return active ? { ...row, ...active } : row;
+  });
+  for (const row of activeRows) {
+    upsertAuthSessionHistory(db, row);
+  }
   await writeDb(db);
 }
 
@@ -2609,10 +2708,9 @@ async function restoreSessionsFromDb() {
   const rows = Array.isArray(db.authSessions) ? db.authSessions : [];
   sessions.clear();
   for (const row of rows) {
-    const token = toText(row && row.token);
-    const user = sanitizeUser((row && row.user) || {});
-    if (!token || !user || !user.id) continue;
-    sessions.set(token, user);
+    const session = sanitizeAuthSessionEntry(row);
+    if (!session.token || !session.user || !session.user.id || session.status !== "active") continue;
+    sessions.set(session.token, session);
   }
 }
 
@@ -3035,6 +3133,44 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/auth/sessions") {
+      if (!requireAdmin(req, res)) return;
+      const db = await readDb();
+      const rows = Array.isArray(db.authSessions) ? db.authSessions : [];
+      const merged = new Map();
+      for (const row of rows) {
+        const session = sanitizeAuthSessionEntry(row);
+        const key = session.token || String(session.id);
+        merged.set(key, session);
+      }
+      for (const [token, session] of sessions.entries()) {
+        const normalized = sanitizeAuthSessionEntry({ ...session, token });
+        merged.set(token, normalized);
+      }
+      const authSessions = Array.from(merged.values())
+        .sort((a, b) => {
+          const bTime = Date.parse(b.lastSeenAt || b.loginAt || "") || 0;
+          const aTime = Date.parse(a.lastSeenAt || a.loginAt || "") || 0;
+          return bTime - aTime;
+        })
+        .slice(0, 300)
+        .map((row) => ({
+          id: row.id,
+          username: row.username,
+          displayName: row.displayName,
+          role: row.role,
+          ipAddress: row.ipAddress,
+          userAgent: row.userAgent,
+          loginAt: row.loginAt,
+          lastSeenAt: row.lastSeenAt,
+          logoutAt: row.logoutAt,
+          status: row.status,
+          user: row.user,
+        }));
+      sendJson(res, 200, { authSessions });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/settings") {
       const user = getAuthUser(req);
       if (!user) {
@@ -3333,6 +3469,7 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const username = toText(body.username);
       const password = toText(body.password);
+      const clientIp = getClientIp(req);
       if (!username || !password) {
         sendJson(res, 400, { error: "Username and password are required" });
         return;
@@ -3341,21 +3478,28 @@ const server = http.createServer(async (req, res) => {
       const users = Array.isArray(db.users) ? db.users : [];
       const user = users.find((u) => toText(u.username).toLowerCase() === username.toLowerCase());
       if (!user) {
+        appendAuditLog(db, null, "LOGIN_FAILED", "auth_session", username || "unknown", `ip=${clientIp} | user not found`);
+        await writeDb(db);
         sendJson(res, 401, { error: "Invalid username or password" });
         return;
       }
       if (!verifyPassword(user.password, password)) {
+        appendAuditLog(db, sanitizeUser(user), "LOGIN_FAILED", "auth_session", username || "unknown", `ip=${clientIp} | invalid password`);
+        await writeDb(db);
         sendJson(res, 401, { error: "Invalid username or password" });
         return;
       }
       if (!isHashedPassword(user.password)) {
         user.password = hashPassword(password);
         db.users = users;
-        await writeDb(db);
       }
       const token = crypto.randomBytes(24).toString("hex");
       const safeUser = sanitizeUser(user);
-      sessions.set(token, safeUser);
+      const sessionEntry = createAuthSessionEntry(safeUser, req, token);
+      sessions.set(token, sessionEntry);
+      upsertAuthSessionHistory(db, sessionEntry);
+      appendAuditLog(db, safeUser, "LOGIN_SUCCESS", "auth_session", String(sessionEntry.id), `ip=${sessionEntry.ipAddress}`);
+      await writeDb(db);
       await persistSessionsToDb();
       sendJson(res, 200, { token, user: safeUser });
       return;
@@ -3375,7 +3519,20 @@ const server = http.createServer(async (req, res) => {
       const authHeader = String(req.headers.authorization || "");
       if (authHeader.startsWith("Bearer ")) {
         const token = authHeader.slice(7).trim();
-        sessions.delete(token);
+        const endedSession = markSessionLoggedOut(token);
+        if (endedSession) {
+          const db = await readDb();
+          upsertAuthSessionHistory(db, endedSession);
+          appendAuditLog(
+            db,
+            endedSession.user,
+            "LOGOUT",
+            "auth_session",
+            String(endedSession.id),
+            `ip=${endedSession.ipAddress}`
+          );
+          await writeDb(db);
+        }
         await persistSessionsToDb();
       }
       sendJson(res, 200, { ok: true });
