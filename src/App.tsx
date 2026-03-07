@@ -1173,7 +1173,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 };
 
 const WALKIE_TALKIE_TYPE_CODE = "WTK";
-const USER_REQUIRED_TYPES = ["PC", "LAP", "TAB", "SPK", "DCM", WALKIE_TALKIE_TYPE_CODE];
+const USER_REQUIRED_TYPES = ["PC", "LAP", "TAB", "MON", "SPK", "DCM", WALKIE_TALKIE_TYPE_CODE];
 const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
@@ -1447,7 +1447,7 @@ const TEXT = {
     deleteLocationConfirm: "Delete this location?",
     photoLimit: "Photo is too large. Please use file under 15MB.",
     user: "User",
-    userRequired: "Assigned user is required only when status is Active for Computer, Laptop, iPad/Tablet, Speaker, Digital Camera, and Walkie Talkie.",
+    userRequired: "Assigned user is required only when status is Active for Computer, Laptop, iPad/Tablet, Monitor, Speaker, Digital Camera, and Walkie Talkie.",
     selectLocation: "Select location",
     locationRequired: "Please select location.",
     noLocationsConfigured: "No locations configured for this campus. Please add in Setup tab.",
@@ -1681,7 +1681,7 @@ const TEXT = {
     deleteLocationConfirm: "តើលុបទីតាំងនេះមែនទេ?",
     photoLimit: "រូបភាពធំពេក។ សូមប្រើឯកសារតិចជាង 15MB។",
     user: "អ្នកប្រើប្រាស់",
-    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើ តែពេលស្ថានភាពជា Active សម្រាប់ Computer, Laptop, iPad/Tablet, Speaker, Digital Camera និង Walkie Talkie។",
+    userRequired: "ត្រូវបញ្ចូលអ្នកប្រើ តែពេលស្ថានភាពជា Active សម្រាប់ Computer, Laptop, iPad/Tablet, Monitor, Speaker, Digital Camera និង Walkie Talkie។",
     selectLocation: "ជ្រើសទីតាំង",
     locationRequired: "សូមជ្រើសរើសទីតាំង។",
     noLocationsConfigured: "Campus នេះមិនទាន់កំណត់ទីតាំងទេ។ សូមបន្ថែមនៅផ្ទាំង Setup។",

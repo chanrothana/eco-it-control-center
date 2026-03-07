@@ -2214,7 +2214,7 @@ function validateAsset(body) {
   const status = toText(body.status) || "Active";
   const statusIsActive = status.toLowerCase() === "active";
   const requiresUser =
-    ["PC", "LAP", "TAB", "SPK", "DCM", "WTK"].includes(type) && statusIsActive;
+    ["PC", "LAP", "TAB", "MON", "SPK", "DCM", "WTK"].includes(type) && statusIsActive;
   const sharedLocation = SHARED_LOCATION_KEYWORDS.some((k) =>
     location.toLowerCase().includes(k)
   );
