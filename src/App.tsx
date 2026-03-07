@@ -1019,6 +1019,18 @@ const ASSET_STATUS_OPTIONS = [
   { value: "Inactive", en: "Inactive", km: "មិនប្រើ" },
   { value: "Retired", en: "Defective", km: "ខូច" },
 ];
+const ASSET_LIST_COLUMN_KEYS = [
+  "assetId",
+  "campus",
+  "category",
+  "photo",
+  "name",
+  "location",
+  "assignedTo",
+  "actions",
+  "status",
+] as const;
+const DEFAULT_ASSET_LIST_COLUMN_WIDTHS = [14, 18, 8, 6, 15, 11, 10, 8, 10];
 const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: string }> = [
   { value: "public", label: "Public Holiday" },
   { value: "ptc", label: "PTC" },
@@ -5336,6 +5348,7 @@ export default function App() {
     key: "assetId",
     direction: "asc",
   });
+  const [assetListColumnWidths, setAssetListColumnWidths] = useState<number[]>(DEFAULT_ASSET_LIST_COLUMN_WIDTHS);
   const [staffBorrowingSort, setStaffBorrowingSort] = useState<{
     key: StaffBorrowingSortKey;
     direction: "asc" | "desc";
@@ -16708,6 +16721,50 @@ export default function App() {
     campusLabel,
     assetItemName,
   ]);
+  const assetListTableWrapRef = useRef<HTMLDivElement | null>(null);
+  const assetListResizeStateRef = useRef<{
+    index: number;
+    startX: number;
+    startWidths: number[];
+    containerWidth: number;
+  } | null>(null);
+  const startAssetListColumnResize = useCallback((index: number, clientX: number) => {
+    const containerWidth = assetListTableWrapRef.current?.getBoundingClientRect().width || 0;
+    if (!containerWidth || index < 0 || index >= assetListColumnWidths.length - 1) return;
+    assetListResizeStateRef.current = {
+      index,
+      startX: clientX,
+      startWidths: [...assetListColumnWidths],
+      containerWidth,
+    };
+  }, [assetListColumnWidths]);
+  useEffect(() => {
+    function onPointerMove(event: MouseEvent) {
+      const state = assetListResizeStateRef.current;
+      if (!state) return;
+      const deltaPercent = ((event.clientX - state.startX) / state.containerWidth) * 100;
+      const next = [...state.startWidths];
+      const minWidth = 5;
+      next[state.index] = Math.max(minWidth, state.startWidths[state.index] + deltaPercent);
+      next[state.index + 1] = Math.max(minWidth, state.startWidths[state.index + 1] - deltaPercent);
+      const overflow =
+        next[state.index] + next[state.index + 1] -
+        (state.startWidths[state.index] + state.startWidths[state.index + 1]);
+      if (overflow !== 0) {
+        next[state.index + 1] = Math.max(minWidth, next[state.index + 1] - overflow);
+      }
+      setAssetListColumnWidths(next);
+    }
+    function onPointerUp() {
+      assetListResizeStateRef.current = null;
+    }
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("mouseup", onPointerUp);
+    return () => {
+      window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("mouseup", onPointerUp);
+    };
+  }, []);
   const topCampusByAssets = useMemo(() => {
     if (!stats.byCampus.length) return null;
     return [...stats.byCampus].sort((a, b) => b.assets - a.assets)[0] || null;
@@ -23182,8 +23239,13 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  <div className="table-wrap asset-list-scroll">
+                  <div className="table-wrap asset-list-scroll" ref={assetListTableWrapRef}>
                     <table className="table-compact asset-list-table">
+                      <colgroup>
+                        {ASSET_LIST_COLUMN_KEYS.map((key, index) => (
+                          <col key={`asset-col-${key}`} style={{ width: `${assetListColumnWidths[index]}%` }} />
+                        ))}
+                      </colgroup>
                       <thead>
                         <tr>
                           <th aria-sort={assetListSort.key === "assetId" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
@@ -23194,6 +23256,7 @@ export default function App() {
                             >
                               {t.assetId}
                             </button>
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(0, e.clientX)} />
                           </th>
                           <th aria-sort={assetListSort.key === "campus" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
@@ -23203,6 +23266,7 @@ export default function App() {
                             >
                               {t.campus}
                             </button>
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(1, e.clientX)} />
                           </th>
                           <th aria-sort={assetListSort.key === "category" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
@@ -23212,8 +23276,9 @@ export default function App() {
                             >
                               {t.category}
                             </button>
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(2, e.clientX)} />
                           </th>
-                          <th>{t.photo}</th>
+                          <th>{t.photo}<span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(3, e.clientX)} /></th>
                           <th aria-sort={assetListSort.key === "name" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
                               type="button"
@@ -23222,6 +23287,7 @@ export default function App() {
                             >
                               {t.name}
                             </button>
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(4, e.clientX)} />
                           </th>
                           <th aria-sort={assetListSort.key === "location" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
@@ -23231,6 +23297,7 @@ export default function App() {
                             >
                               {t.location}
                             </button>
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(5, e.clientX)} />
                           </th>
                           <th aria-sort={assetListSort.key === "assignedTo" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
@@ -23240,8 +23307,9 @@ export default function App() {
                             >
                               {lang === "km" ? "អ្នកប្រើ" : "Assigned Staff"}
                             </button>
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(6, e.clientX)} />
                           </th>
-                          <th>{t.actions}</th>
+                          <th>{t.actions}<span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(7, e.clientX)} /></th>
                           <th aria-sort={assetListSort.key === "status" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
                               type="button"

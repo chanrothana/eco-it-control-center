@@ -5173,6 +5173,10 @@ table {
   min-width: 100%;
 }
 
+.asset-list-table th {
+  position: relative;
+}
+
 .asset-list-table th:nth-child(1),
 .asset-list-table td:nth-child(1) {
   width: 14%;
@@ -5180,7 +5184,7 @@ table {
 
 .asset-list-table th:nth-child(2),
 .asset-list-table td:nth-child(2) {
-  width: 20%;
+  width: 18%;
 }
 
 .asset-list-table th:nth-child(3),
@@ -5191,6 +5195,7 @@ table {
 .asset-list-table th:nth-child(4),
 .asset-list-table td:nth-child(4) {
   width: 6%;
+  text-align: center;
 }
 
 .asset-list-table th:nth-child(5),
@@ -5200,71 +5205,115 @@ table {
 
 .asset-list-table th:nth-child(6),
 .asset-list-table td:nth-child(6) {
-  width: 12%;
+  width: 11%;
 }
 
 .asset-list-table th:nth-child(7),
 .asset-list-table td:nth-child(7) {
-  width: 9%;
+  width: 10%;
   padding-left: 8px;
   padding-right: 12px;
 }
 
 .asset-list-table th:nth-child(8),
 .asset-list-table td:nth-child(8) {
-  width: 10%;
+  width: 8%;
   padding-left: 12px;
 }
 
-.asset-list-table td:nth-child(2),
-.asset-list-table td:nth-child(5) {
-  white-space: normal;
+.asset-list-table th:nth-child(9),
+.asset-list-table td:nth-child(9) {
+  width: 10%;
 }
 
-.asset-list-table th:nth-child(6) {
-  white-space: nowrap;
+.asset-list-table td:nth-child(1),
+.asset-list-table td:nth-child(2),
+.asset-list-table td:nth-child(5),
+.asset-list-table td:nth-child(7) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .asset-list-table td:nth-child(6) {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .asset-list-location-text {
   display: block;
   width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   font-size: 14px;
   line-height: 1.2;
 }
 
-.asset-list-table td:nth-child(8) .status-select {
+.asset-list-table td:nth-child(9) .status-select {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  font-size: 14px;
+  padding-left: 10px;
+  padding-right: 36px;
+}
+
+.asset-list-table td:nth-child(4) .photo-thumb-btn {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+}
+
+.asset-list-table td:nth-child(4) .table-photo {
+  width: 44px;
+  height: 44px;
 }
 
 .asset-list-table .row-actions {
   flex-wrap: nowrap;
-  gap: 8px;
-  justify-content: flex-start;
-  margin-left: -4px;
+  gap: 6px;
+  justify-content: center;
+  margin-left: 0;
 }
 
 .asset-list-table .row-actions .btn-icon-transfer,
 .asset-list-table .row-actions .btn-icon-edit,
 .asset-list-table .row-actions .btn-danger {
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
   padding: 0;
   border-radius: 8px;
   display: inline-grid;
   place-items: center;
   line-height: 1;
   box-sizing: border-box;
+}
+
+.column-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.column-resizer::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  bottom: 18%;
+  left: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(117, 80, 36, 0.18);
+}
+
+.asset-list-table th:hover .column-resizer::after {
+  background: rgba(117, 80, 36, 0.36);
 }
 
 .asset-mobile-list {
