@@ -19210,6 +19210,21 @@ export default function App() {
       }
       return text;
     };
+    const readVisibleReportColumnWidths = () => {
+      if (typeof document === "undefined") return [] as number[];
+      const table = Array.from(document.querySelectorAll<HTMLTableElement>(".report-table-wrap table")).find(
+        (node) => node.offsetParent !== null
+      );
+      if (!table?.tHead?.rows?.[0]) return [] as number[];
+      const headers = Array.from(table.tHead.rows[0].cells).filter(
+        (cell): cell is HTMLTableCellElement => cell.tagName === "TH"
+      );
+      if (!headers.length) return [] as number[];
+      const widths = headers.map((header) => header.getBoundingClientRect().width || 0);
+      const total = widths.reduce((sum, width) => sum + width, 0);
+      if (!total) return [] as number[];
+      return widths.map((width) => (width / total) * 100);
+    };
 
     if (reportType === "asset_master") {
       const campusTitle = assetMasterCampusFilter.includes("ALL")
@@ -19398,6 +19413,18 @@ export default function App() {
       rows = rows.map((row, index) => [String(index + 1), ...row]);
     }
 
+    const initialColumnWidths =
+      reportType === "asset_master"
+        ? visibleAssetMasterColumnWidths.map((column) => column.width)
+        : reportType === "set_code"
+          ? [...setCodeReportColumnWidths]
+          : (() => {
+              const widths = readVisibleReportColumnWidths();
+              if (widths.length === columns.length) return widths;
+              if (!columns.length) return [] as number[];
+              return columns.map(() => 100 / columns.length);
+            })();
+
     const tableHtml = rows.length
       ? rows
           .map(
@@ -19475,25 +19502,59 @@ export default function App() {
               })
               .join("")}</div>`
           : `<p>No data.</p>`
-        : `<table>
-          <thead><tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+        : `<div class="preview-table-wrap">
+          <table class="preview-report-table">
+          <colgroup>${initialColumnWidths.map((width) => `<col style="width:${width}%;" />`).join("")}</colgroup>
+          <thead><tr>${columns
+            .map(
+              (c, index) =>
+                `<th>${escapeHtml(c)}${
+                  index < columns.length - 1 ? '<span class="preview-column-resizer" aria-hidden="true"></span>' : ""
+                }</th>`
+            )
+            .join("")}</tr></thead>
           <tbody>${tableHtml}</tbody>
-        </table>`;
+        </table></div>`;
 
     const html = `
       <html>
       <head>
         <title>${escapeHtml(title)}</title>
         <style>
-          body { font-family: "Segoe UI", Arial, sans-serif; margin: 20px; color: #1b2d23; }
+          :root { color-scheme: light; }
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f5f1e7; }
+          .preview-toolbar {
+            position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 14px 18px; background: rgba(250,247,240,0.96); border-bottom: 1px solid #d9c39f; backdrop-filter: blur(10px);
+          }
+          .preview-toolbar-note { font-size: 13px; color: #6b5a40; }
+          .preview-toolbar-actions { display: flex; align-items: center; gap: 10px; }
+          .preview-btn {
+            appearance: none; border: 1px solid #caa468; background: #fffaf1; color: #6c4824; border-radius: 999px;
+            padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer;
+          }
+          .preview-btn-primary { background: #f26f21; color: #fff; border-color: #f26f21; }
+          .preview-shell { padding: 20px; }
           h1 { margin: 0 0 8px; font-size: 24px; }
+          h2 { margin: 0; font-size: 18px; }
           .report-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
           .report-head-left { min-width: 0; flex: 1 1 auto; }
           .report-head-logo { width: 210px; max-width: 36vw; height: auto; object-fit: contain; }
           p.meta { margin: 0 0 12px; color: #41584c; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          .preview-table-wrap { width: 100%; overflow-x: auto; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; background: #fff; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
-          th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; }
+          th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
+          .preview-report-table td { word-break: break-word; overflow-wrap: anywhere; }
+          .preview-column-resizer {
+            position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; user-select: none; z-index: 2;
+          }
+          .preview-column-resizer::after {
+            content: ""; position: absolute; top: 10%; bottom: 10%; left: 50%; width: 2px; transform: translateX(-50%);
+            background: rgba(117, 80, 36, 0.16); border-radius: 999px;
+          }
+          th:hover .preview-column-resizer::after { background: rgba(117, 80, 36, 0.4); }
+          .is-preview-resizing, .is-preview-resizing * { cursor: col-resize !important; user-select: none !important; }
           .qr-sticker-grid { display: grid; grid-template-columns: repeat(6, 96px); column-gap: 6px; row-gap: 6px; margin-top: 6px; width: 100%; justify-content: space-between; }
           .qr-sticker-wrap { width: 96px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
           .qr-sticker-sn { width: 96px; min-height: 10px; text-align: center; font-size: 6.8px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
@@ -19503,20 +19564,101 @@ export default function App() {
           .qr-sticker-divider { width: 74px; height: 1px; background: #1b2d23; }
           .qr-sticker-id { width: 74px; min-height: 14px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 2px; font-size: 7.2px; line-height: 1.02; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           @page { size: A4 landscape; margin: 6mm; }
-          @media print { body { margin: 0; } }
+          @media print {
+            body { margin: 0; background: #fff; }
+            .preview-toolbar { display: none !important; }
+            .preview-shell { padding: 0; }
+          }
         </style>
       </head>
       <body>
-        <div class="report-head">
-          <div class="report-head-left">
-            <h1>Eco International School</h1>
-            <h2>${escapeHtml(title)}</h2>
+        <div class="preview-toolbar">
+          <div>
+            <div><strong>Print Preview</strong></div>
+            <div class="preview-toolbar-note">${
+              reportType === "qr_labels"
+                ? "Review this layout, then click Print Now."
+                : "Drag table header edges to adjust column widths before printing."
+            }</div>
           </div>
-          <img loading="lazy" decoding="async" class="report-head-logo" src="/eco-logo.png" alt="Eco International School logo" />
+          <div class="preview-toolbar-actions">
+            ${
+              reportType === "qr_labels"
+                ? ""
+                : '<button type="button" class="preview-btn" id="reset-widths-btn">Reset Widths</button>'
+            }
+            <button type="button" class="preview-btn" id="close-preview-btn">Close</button>
+            <button type="button" class="preview-btn preview-btn-primary" id="print-now-btn">Print Now</button>
+          </div>
         </div>
-        ${printMetaHtml}
-        ${summaryHtml}
-        ${reportContentHtml}
+        <div class="preview-shell">
+          <div class="report-head">
+            <div class="report-head-left">
+              <h1>Eco International School</h1>
+              <h2>${escapeHtml(title)}</h2>
+            </div>
+            <img loading="lazy" decoding="async" class="report-head-logo" src="/eco-logo.png" alt="Eco International School logo" />
+          </div>
+          ${printMetaHtml}
+          ${summaryHtml}
+          ${reportContentHtml}
+        </div>
+        <script>
+          (function () {
+            const printBtn = document.getElementById("print-now-btn");
+            const closeBtn = document.getElementById("close-preview-btn");
+            const resetBtn = document.getElementById("reset-widths-btn");
+            if (printBtn) printBtn.addEventListener("click", () => window.print());
+            if (closeBtn) closeBtn.addEventListener("click", () => window.close());
+
+            const table = document.querySelector(".preview-report-table");
+            if (!table) return;
+            const colgroup = table.querySelector("colgroup");
+            const cols = colgroup ? Array.from(colgroup.children) : [];
+            const headers = table.tHead && table.tHead.rows[0] ? Array.from(table.tHead.rows[0].cells) : [];
+            if (!cols.length || headers.length < 2) return;
+            const startWidths = cols.map((col) => parseFloat(col.style.width || "0"));
+            if (resetBtn) {
+              resetBtn.addEventListener("click", () => {
+                cols.forEach((col, index) => {
+                  col.style.width = (startWidths[index] || 0) + "%";
+                });
+              });
+            }
+            let state = null;
+            headers.forEach((header, index) => {
+              const handle = header.querySelector(".preview-column-resizer");
+              if (!handle || index >= cols.length - 1) return;
+              handle.addEventListener("mousedown", (event) => {
+                event.preventDefault();
+                const wrap = table.closest(".preview-table-wrap");
+                const containerWidth = (wrap && wrap.getBoundingClientRect().width) || table.getBoundingClientRect().width || 1;
+                state = {
+                  index,
+                  startX: event.clientX,
+                  startWidths: cols.map((col) => parseFloat(col.style.width || "0")),
+                  containerWidth
+                };
+                document.body.classList.add("is-preview-resizing");
+              });
+            });
+            window.addEventListener("mousemove", (event) => {
+              if (!state) return;
+              const deltaPercent = ((event.clientX - state.startX) / state.containerWidth) * 100;
+              const next = state.startWidths.slice();
+              const minWidth = Math.max(5, (72 / state.containerWidth) * 100);
+              next[state.index] = Math.max(minWidth, state.startWidths[state.index] + deltaPercent);
+              next[state.index + 1] = Math.max(minWidth, state.startWidths[state.index + 1] - deltaPercent);
+              cols.forEach((col, index) => {
+                col.style.width = next[index] + "%";
+              });
+            });
+            window.addEventListener("mouseup", () => {
+              state = null;
+              document.body.classList.remove("is-preview-resizing");
+            });
+          })();
+        </script>
       </body>
       </html>
     `;
@@ -19530,7 +19672,6 @@ export default function App() {
     win.document.write(html);
     win.document.close();
     win.focus();
-    win.print();
   }
 
   async function handleLogin() {
