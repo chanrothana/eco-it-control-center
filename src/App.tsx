@@ -19491,6 +19491,10 @@ export default function App() {
     return action || "-";
   }
 
+  function normalizePublicActivityText(value?: string) {
+    return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
     const showPublicQrSetFields = asset?.category === "IT";
@@ -19521,6 +19525,63 @@ export default function App() {
     const publicComponents = [...(asset?.components || [])].sort((a, b) =>
       String(a.assetId || "").localeCompare(String(b.assetId || ""))
     );
+    const publicActivityHistory = (() => {
+      type PublicActivityEvent = {
+        id: string;
+        date: string;
+        by: string;
+        note: string;
+        custody?: CustodyEntry;
+        status?: StatusEntry;
+      };
+      const events: PublicActivityEvent[] = [];
+      const consumedStatus = new Set<number>();
+
+      for (const custody of publicCustodyHistory) {
+        const custodyDate = String(custody.date || "").slice(0, 10);
+        const custodyBy = normalizePublicActivityText(custody.by);
+        const custodyNote = normalizePublicActivityText(custody.note);
+        const statusMatch = publicStatusHistory.find((status) => {
+          if (consumedStatus.has(status.id)) return false;
+          const statusDate = String(status.date || "").slice(0, 10);
+          const statusBy = normalizePublicActivityText(status.by);
+          const statusReason = normalizePublicActivityText(status.reason);
+          const sameDay = statusDate === custodyDate;
+          const sameBy = custodyBy && statusBy ? custodyBy === statusBy : true;
+          const matchingText =
+            (custodyNote && statusReason && custodyNote === statusReason) ||
+            statusReason.includes("asset edit") ||
+            custodyNote.includes("asset edit");
+          return sameDay && sameBy && matchingText;
+        });
+
+        if (statusMatch) {
+          consumedStatus.add(statusMatch.id);
+        }
+
+        events.push({
+          id: `public-activity-custody-${custody.id}${statusMatch ? `-status-${statusMatch.id}` : ""}`,
+          date: custody.date || statusMatch?.date || "",
+          by: custody.by || statusMatch?.by || "-",
+          note: custody.note || statusMatch?.reason || "-",
+          custody,
+          status: statusMatch,
+        });
+      }
+
+      for (const status of publicStatusHistory) {
+        if (consumedStatus.has(status.id)) continue;
+        events.push({
+          id: `public-activity-status-${status.id}`,
+          date: status.date || "",
+          by: status.by || "-",
+          note: status.reason || "-",
+          status,
+        });
+      }
+
+      return events.sort((a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || "")));
+    })();
     return (
       <main className="app-shell public-asset-shell">
         <section className="app-card app-card-public-asset">
@@ -19843,59 +19904,39 @@ export default function App() {
                   </div>
                 </div>
                   <div className="field field-wide">
-                  <h3 className="section-title" style={{ margin: 0 }}>Assigned to History</h3>
+                  <h3 className="section-title" style={{ margin: 0 }}>Activity History</h3>
                   <div className="public-asset-history-section">
-                    {publicCustodyHistory.length ? (
+                    {publicActivityHistory.length ? (
                       <div className="public-asset-history-list">
-                        {publicCustodyHistory.map((entry) => (
-                          <article className="public-asset-history-card" key={`public-custody-${entry.id}`}>
+                        {publicActivityHistory.map((entry) => (
+                          <article className="public-asset-history-card public-asset-history-card-status" key={entry.id}>
                             <div className="public-asset-history-head">
-                              <div className="public-asset-history-title">{formatPublicHistoryAction(entry.action || "Assignment")}</div>
+                              <div className="public-asset-history-title">
+                                {entry.custody && entry.status
+                                  ? "Assignment + Status"
+                                  : entry.custody
+                                  ? formatPublicHistoryAction(entry.custody.action || "Assignment")
+                                  : "Status Update"}
+                              </div>
                               <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
                             </div>
-                            <div className="public-asset-history-grid public-asset-history-grid-paired">
-                              {renderPublicHistoryMeta("From User", entry.fromUser || "-")}
-                              {renderPublicHistoryMeta("To User", entry.toUser || "-")}
-                              {renderPublicHistoryMeta("Ack", entry.responsibilityAck ? "Yes" : "No")}
+                            <div className="public-asset-history-grid">
+                              {entry.custody ? renderPublicHistoryMeta("From User", entry.custody.fromUser || "-") : null}
+                              {entry.custody ? renderPublicHistoryMeta("To User", entry.custody.toUser || "-") : null}
+                              {entry.status ? renderPublicHistoryMeta("From Status", assetStatusLabel(entry.status.fromStatus || "-")) : null}
+                              {entry.status ? renderPublicHistoryMeta("To Status", assetStatusLabel(entry.status.toStatus || "-")) : null}
+                              {entry.custody ? renderPublicHistoryMeta("Ack", entry.custody.responsibilityAck ? "Yes" : "No") : null}
                               {renderPublicHistoryMeta("By", entry.by || "-")}
                             </div>
                             <div className="public-asset-history-note">
-                              <span className="public-asset-history-label">Note</span>
+                              <span className="public-asset-history-label">{entry.status ? "Reason" : "Note"}</span>
                               <p>{entry.note || "-"}</p>
                             </div>
                           </article>
                         ))}
                       </div>
                     ) : (
-                      renderPublicHistoryEmpty("No assigned history yet.")
-                    )}
-                  </div>
-                </div>
-                  <div className="field field-wide">
-                  <h3 className="section-title" style={{ margin: 0 }}>Status Timeline</h3>
-                  <div className="public-asset-history-section">
-                    {publicStatusHistory.length ? (
-                      <div className="public-asset-history-list">
-                        {publicStatusHistory.map((entry) => (
-                          <article className="public-asset-history-card public-asset-history-card-status" key={`public-status-${entry.id}`}>
-                            <div className="public-asset-history-head">
-                              <div className="public-asset-history-title">Status Update</div>
-                              <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
-                            </div>
-                            <div className="public-asset-history-grid">
-                              {renderPublicHistoryMeta("From", assetStatusLabel(entry.fromStatus || "-"))}
-                              {renderPublicHistoryMeta("To", assetStatusLabel(entry.toStatus || "-"))}
-                              {renderPublicHistoryMeta("By", entry.by || "-")}
-                            </div>
-                            <div className="public-asset-history-note">
-                              <span className="public-asset-history-label">Reason</span>
-                              <p>{entry.reason || "-"}</p>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No status timeline yet.")
+                      renderPublicHistoryEmpty("No activity history yet.")
                     )}
                   </div>
                 </div>
