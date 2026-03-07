@@ -2673,9 +2673,37 @@ function dashboard(db, campus) {
   return { totalAssets, itAssets, safetyAssets, openTickets, byCampus };
 }
 
-function toPublicAssetView(asset) {
+function toPublicAssetComponentView(asset) {
   const source = asset && typeof asset === "object" ? asset : {};
-      const maintenanceHistory = Array.isArray(source.maintenanceHistory)
+  return {
+    id: Number(source.id || 0),
+    assetId: toText(source.assetId),
+    campus: toText(source.campus),
+    category: toText(source.category),
+    type: toText(source.type),
+    pcType: toText(source.pcType),
+    name: toText(source.name),
+    location: toText(source.location),
+    setCode: toText(source.setCode),
+    parentAssetId: toText(source.parentAssetId),
+    componentRole: toText(source.componentRole),
+    componentRequired: Boolean(source.componentRequired),
+    assignedTo: toText(source.assignedTo),
+    custodyStatus: normalizeCustodyStatus(source.custodyStatus || (toText(source.assignedTo) ? "ASSIGNED" : "IN_STOCK")),
+    brand: toText(source.brand),
+    model: toText(source.model),
+    serialNumber: toText(source.serialNumber),
+    specs: toText(source.specs),
+    notes: toText(source.notes),
+    status: toText(source.status) || "Active",
+    photo: toText(source.photo),
+    photos: Array.isArray(source.photos) ? source.photos.map((p) => toText(p)).filter(Boolean) : [],
+  };
+}
+
+function toPublicAssetView(asset, allAssets = []) {
+  const source = asset && typeof asset === "object" ? asset : {};
+  const maintenanceHistory = Array.isArray(source.maintenanceHistory)
     ? source.maintenanceHistory.map((entry) => ({
         id: Number(entry?.id || 0),
         date: toText(entry?.date),
@@ -2728,6 +2756,15 @@ function toPublicAssetView(asset) {
         note: toText(entry?.note),
       }))
     : [];
+  const components = Array.isArray(allAssets)
+    ? allAssets
+        .filter((row) => toText(row?.parentAssetId) === toText(source.assetId) && toText(row?.assetId) !== toText(source.assetId))
+        .sort((a, b) =>
+          (Number(a?.seq) || 0) - (Number(b?.seq) || 0) ||
+          toText(a?.assetId).localeCompare(toText(b?.assetId))
+        )
+        .map((row) => toPublicAssetComponentView(row))
+    : [];
   return {
     id: Number(source.id || 0),
     assetId: toText(source.assetId),
@@ -2758,6 +2795,7 @@ function toPublicAssetView(asset) {
     transferHistory,
     statusHistory,
     custodyHistory,
+    components,
     created: toText(source.created),
   };
 }
@@ -2927,7 +2965,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
-      sendJson(res, 200, { asset: toPublicAssetView(found) });
+      sendJson(res, 200, { asset: toPublicAssetView(found, assets) });
       return;
     }
 
