@@ -17492,6 +17492,9 @@ export default function App() {
   }, [assets, assetItemName, campusLabel, assetStatusLabel]);
 
   const setCodeReportRows = useMemo(() => {
+    const isComputerParentAsset = (asset: Asset | undefined) =>
+      Boolean(asset && asset.category === "IT" && (asset.type === DESKTOP_PARENT_TYPE || asset.type === LAPTOP_TYPE));
+
     const assetsById = new Map<string, Asset>();
     for (const asset of assets) {
       const id = String(asset.assetId || "").trim();
@@ -17541,7 +17544,11 @@ export default function App() {
         const unique = Array.from(new Map(list.map((asset) => [String(asset.assetId || ""), asset])).values());
         return { rootAssetId, list: unique };
       })
-      .filter((group) => group.list.length > 1);
+      .filter((group) => {
+        if (group.list.length <= 1) return false;
+        const root = assetsById.get(group.rootAssetId);
+        return isComputerParentAsset(root);
+      });
 
     const setCodeGroups = Array.from(groupedBySet.entries()).map(([setCode, list]) => ({ setCode, list }));
     const linkedAsSetGroups = linkedGroups.map((group) => ({
@@ -17557,9 +17564,11 @@ export default function App() {
           sorted.find((a) => a.category === "IT" && a.type === LAPTOP_TYPE) ||
           sorted.find((a) => !String(a.parentAssetId || "").trim()) ||
           sorted[0];
+        if (!isComputerParentAsset(main)) return null;
         const mainAssetId = String(main?.assetId || "-");
         const mainItem = main ? assetItemName(main.category, main.type, main.pcType || "") : "-";
         const mainPhoto = String(main?.photo || "");
+        const mainAssignedTo = String(main?.assignedTo || "").trim() || "-";
         const campus = String(main?.campus || sorted[0]?.campus || "-");
         const connectedItems = sorted
           .filter((asset) => String(asset.assetId || "") !== mainAssetId)
@@ -17567,6 +17576,7 @@ export default function App() {
             assetId: String(asset.assetId || "-"),
             itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
             photo: String(asset.photo || ""),
+            assignedTo: String(asset.assignedTo || "").trim() || "-",
           }));
         return {
           key: `set-code-${setCode}`,
@@ -17574,11 +17584,13 @@ export default function App() {
           mainAssetId,
           mainItem,
           mainPhoto,
+          mainAssignedTo,
           campus,
           totalItems: sorted.length,
           connectedItems,
         };
       })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
       .sort((a, b) => a.setCode.localeCompare(b.setCode));
   }, [assets, assetItemName]);
 
@@ -18884,12 +18896,13 @@ export default function App() {
       );
     } else if (reportType === "set_code") {
       title = "Computer Set Detail Report";
-      columns = ["Set Code", "Main Set Photo", "Main Set Asset", "Main Item", "Campus", "Total Items", "Connected Items"];
+      columns = ["Set Code", "Main Set Photo", "Main Set Asset", "Main Item", "Main Assigned Staff", "Campus", "Total Items", "Connected Items"];
       rows = setCodeReportRows.map((row) => [
         row.setCode,
         toPrintablePhotoUrl(row.mainPhoto || ""),
         row.mainAssetId,
         row.mainItem,
+        row.mainAssignedTo || "-",
         reportCampusName(row.campus),
         String(row.totalItems),
         row.connectedItems.length
@@ -18899,7 +18912,7 @@ export default function App() {
                 const thumb = photo
                   ? `<img loading="lazy" decoding="async" src="${photo}" alt="${escapeHtml(item.assetId)}" style="width:28px;height:28px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" />`
                   : `<span style="display:inline-grid;place-items:center;width:28px;height:28px;border:1px dashed #cfded0;border-radius:6px;color:#6f7286;font-size:11px;">-</span>`;
-                return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">${thumb}<span>${escapeHtml(item.assetId)} (${escapeHtml(item.itemName)})</span></div>`;
+                return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">${thumb}<span>${escapeHtml(item.assetId)} (${escapeHtml(item.itemName)}) - ${escapeHtml(item.assignedTo || "-")}</span></div>`;
               })
               .join("")}</div>`
           : "-",
@@ -29975,6 +29988,7 @@ export default function App() {
                       <th>{t.photo}</th>
                       <th>Main Set ({t.assetId})</th>
                       <th>Main Item</th>
+                      <th>{lang === "km" ? "អ្នកប្រើមេ" : "Main Assigned Staff"}</th>
                       <th>{t.campus}</th>
                       <th>Total Items</th>
                       <th>Connected Items</th>
@@ -29988,6 +30002,7 @@ export default function App() {
                           <td>{renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}</td>
                           <td>{row.mainAssetId}</td>
                           <td>{row.mainItem}</td>
+                          <td>{row.mainAssignedTo || "-"}</td>
                           <td>{reportCampusName(row.campus)}</td>
                           <td>{row.totalItems}</td>
                           <td>
@@ -29996,7 +30011,7 @@ export default function App() {
                                 {row.connectedItems.map((item) => (
                                   <div key={`${row.key}-${item.assetId}`} className="set-code-connected-item">
                                     {renderAssetPhoto(item.photo || "", item.assetId)}
-                                    <span>{item.assetId} ({item.itemName})</span>
+                                    <span>{item.assetId} ({item.itemName}) - {item.assignedTo || "-"}</span>
                                   </div>
                                 ))}
                               </div>
@@ -30008,7 +30023,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7}>No set code records found.</td>
+                        <td colSpan={8}>No set code records found.</td>
                       </tr>
                     )}
                   </tbody>
