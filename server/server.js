@@ -105,6 +105,8 @@ const DEFAULT_VIEWER_PASSWORD = String(
 const TELEGRAM_ALERT_ENABLED = String(process.env.TELEGRAM_ALERT_ENABLED || "false").toLowerCase() === "true";
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const TELEGRAM_DISCOVER_CHAT_IDS =
+  String(process.env.TELEGRAM_DISCOVER_CHAT_IDS || "true").toLowerCase() !== "false";
 const TELEGRAM_CHAT_IDS = Array.from(
   new Set(
     [
@@ -1757,7 +1759,11 @@ async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
   if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !toText(text)) {
     return false;
   }
-  const targets = Array.from(new Set((Array.isArray(chatIds) ? chatIds : [chatIds]).map((row) => toText(row).trim()).filter(Boolean)));
+  const configuredTargets = Array.from(
+    new Set((Array.isArray(chatIds) ? chatIds : [chatIds]).map((row) => toText(row).trim()).filter(Boolean))
+  );
+  const discoveredTargets = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+  const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
   if (!targets.length) return false;
   const results = [];
   for (const chatId of targets) {
@@ -1771,6 +1777,56 @@ async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
     );
   }
   return successCount > 0;
+}
+
+function discoverTelegramChatIds() {
+  return new Promise((resolve) => {
+    if (!TELEGRAM_BOT_TOKEN) return resolve([]);
+    const req = https.request(
+      {
+        hostname: "api.telegram.org",
+        path: `/bot${encodeURIComponent(TELEGRAM_BOT_TOKEN)}/getUpdates?limit=100`,
+        method: "GET",
+        timeout: 5000,
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => {
+          body += String(chunk || "");
+        });
+        res.on("end", () => {
+          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+            resolve([]);
+            return;
+          }
+          try {
+            const parsed = JSON.parse(body);
+            const rows = Array.isArray(parsed && parsed.result) ? parsed.result : [];
+            const ids = Array.from(
+              new Set(
+                rows
+                  .map((row) => {
+                    const message = row && typeof row === "object" ? (row.message || row.edited_message || row.channel_post) : null;
+                    const chat = message && typeof message === "object" ? message.chat : null;
+                    return chat && typeof chat === "object" ? toText(chat.id) : "";
+                  })
+                  .filter(Boolean)
+              )
+            );
+            resolve(ids);
+          } catch {
+            resolve([]);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve([]));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve([]);
+    });
+    req.end();
+  });
 }
 
 async function sendTelegramMaintenanceBatch(rows) {

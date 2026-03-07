@@ -110,6 +110,7 @@ cp .env.example .env
 - `TELEGRAM_BOT_TOKEN=<your bot token>`
 - `TELEGRAM_CHAT_ID=<your chat id>`
 - optional `TELEGRAM_CHAT_IDS=<comma-separated chat ids>` for multiple groups/chats
+- optional `TELEGRAM_DISCOVER_CHAT_IDS=true` to auto-detect chat IDs from bot updates
 
 3. Restart server:
 
@@ -124,6 +125,7 @@ npm run start
 - `TELEGRAM_BOT_TOKEN` (secret env var)
 - `TELEGRAM_CHAT_ID` (secret env var)
 - `TELEGRAM_CHAT_IDS` (secret env var, optional)
+- `TELEGRAM_DISCOVER_CHAT_IDS=true` (optional, auto-detect targets from bot updates)
 
 ### Telegram test API
 
