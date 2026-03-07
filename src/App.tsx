@@ -19668,7 +19668,11 @@ export default function App() {
             .map(
               (c, index) =>
                 `<th>${escapeHtml(c)}${
-                  index < columns.length - 1 ? '<span class="preview-column-resizer" aria-hidden="true"></span>' : ""
+                  columns.length > 1 && (index < columns.length - 1 || index === columns.length - 1)
+                    ? `<span class="preview-column-resizer${
+                        index === columns.length - 1 ? " is-left" : ""
+                      }" data-resize-index="${index === columns.length - 1 ? index - 1 : index}" aria-hidden="true"></span>`
+                    : ""
                 }</th>`
             )
             .join("")}</tr></thead>
@@ -19704,10 +19708,12 @@ export default function App() {
           table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; background: #fff; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
-          .preview-report-table td { word-break: break-word; overflow-wrap: anywhere; }
+          .preview-report-table th,
+          .preview-report-table td { word-break: normal; overflow-wrap: break-word; hyphens: auto; }
           .preview-column-resizer {
             position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; user-select: none; z-index: 2;
           }
+          .preview-column-resizer.is-left { left: -4px; right: auto; }
           .preview-column-resizer::after {
             content: ""; position: absolute; top: 10%; bottom: 10%; left: 50%; width: 2px; transform: translateX(-50%);
             background: rgba(117, 80, 36, 0.16); border-radius: 999px;
@@ -19787,16 +19793,23 @@ export default function App() {
             let state = null;
             headers.forEach((header, index) => {
               const handle = header.querySelector(".preview-column-resizer");
-              if (!handle || index >= cols.length - 1) return;
+              const resizeIndex = handle ? parseInt(handle.getAttribute("data-resize-index") || "", 10) : -1;
+              if (!handle || !Number.isFinite(resizeIndex) || resizeIndex < 0 || resizeIndex >= cols.length - 1) return;
               handle.addEventListener("mousedown", (event) => {
                 event.preventDefault();
                 const wrap = table.closest(".preview-table-wrap");
                 const containerWidth = (wrap && wrap.getBoundingClientRect().width) || table.getBoundingClientRect().width || 1;
+                const minPercents = headers.map((cell) => {
+                  const label = (cell.textContent || "").trim();
+                  const px = Math.min(Math.max(label.length * 8 + 36, 72), 220);
+                  return Math.max((px / containerWidth) * 100, 5);
+                });
                 state = {
-                  index,
+                  index: resizeIndex,
                   startX: event.clientX,
                   startWidths: cols.map((col) => parseFloat(col.style.width || "0")),
-                  containerWidth
+                  containerWidth,
+                  minPercents
                 };
                 document.body.classList.add("is-preview-resizing");
               });
@@ -19805,9 +19818,10 @@ export default function App() {
               if (!state) return;
               const deltaPercent = ((event.clientX - state.startX) / state.containerWidth) * 100;
               const next = state.startWidths.slice();
-              const minWidth = Math.max(5, (72 / state.containerWidth) * 100);
-              next[state.index] = Math.max(minWidth, state.startWidths[state.index] + deltaPercent);
-              next[state.index + 1] = Math.max(minWidth, state.startWidths[state.index + 1] - deltaPercent);
+              const currentMin = state.minPercents[state.index] || Math.max(5, (72 / state.containerWidth) * 100);
+              const nextMin = state.minPercents[state.index + 1] || Math.max(5, (72 / state.containerWidth) * 100);
+              next[state.index] = Math.max(currentMin, state.startWidths[state.index] + deltaPercent);
+              next[state.index + 1] = Math.max(nextMin, state.startWidths[state.index + 1] - deltaPercent);
               cols.forEach((col, index) => {
                 col.style.width = next[index] + "%";
               });
