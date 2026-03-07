@@ -7836,51 +7836,74 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-history-card {
   display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid #d9e5f4;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1.5px solid #b8cdea;
   border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(247, 251, 255, 0.98), rgba(240, 247, 255, 0.94));
-  box-shadow: 0 8px 18px rgba(65, 99, 146, 0.08);
-  color: #294160;
+  background: #eef4fd;
+  box-shadow: none;
+  color: #2f4a78;
 }
 
 .public-asset-history-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 14px;
 }
 
 .public-asset-history-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 18px;
+  border: 2px solid #d7b178;
+  border-radius: 20px;
+  background: #fff6e9;
   font-family: var(--font-head);
-  font-size: 17px;
+  font-size: 18px;
+  font-weight: 700;
   line-height: 1.2;
-  color: #233758;
+  color: #6a4320;
 }
 
 .public-asset-history-date {
   flex: 0 0 auto;
-  padding: 7px 11px;
-  border-radius: 999px;
-  background: #fff6e6;
-  border: 1px solid #e6c99c;
-  color: #755024;
-  font-size: 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: #5a74a3;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .public-asset-history-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 10px 28px;
 }
 
 .public-asset-history-item {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.public-asset-history-key {
+  flex: 0 0 auto;
+  color: #324d7f;
+  font-weight: 700;
+}
+
+.public-asset-history-value {
+  min-width: 0;
+  font-size: 17px;
+  line-height: 1.35;
+  color: #355182;
+  overflow-wrap: anywhere;
 }
 
 .public-asset-history-label {
@@ -7891,92 +7914,18 @@ tr.row-maint-maintenance:hover td {
   font-weight: 700;
 }
 
-.public-asset-history-value {
-  font-size: 14px;
-  line-height: 1.35;
-  color: #2a4264;
-  overflow-wrap: anywhere;
-}
-
 .public-asset-history-note {
   display: grid;
   gap: 6px;
-  padding-top: 10px;
-  border-top: 1px dashed #c9d9ed;
+  padding-top: 12px;
+  border-top: 2px dashed #c5d5ea;
 }
 
 .public-asset-history-note p {
   margin: 0;
-  font-size: 14px;
+  font-size: 17px;
   line-height: 1.45;
-  color: #27405f;
-  overflow-wrap: anywhere;
-}
-
-.public-asset-history-route {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-  padding: 12px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid #d6e2f1;
-}
-
-.public-asset-history-route > div:not(.public-asset-history-route-arrow) {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.public-asset-history-route strong,
-.public-asset-history-route small {
-  overflow-wrap: anywhere;
-}
-
-.public-asset-history-route strong {
-  font-size: 14px;
-  color: #243b5a;
-}
-
-.public-asset-history-route small {
-  font-size: 13px;
-  color: #5c7393;
-}
-
-.public-asset-history-route-arrow {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: #edf4ff;
-  color: #49698f;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.public-asset-history-status {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.public-asset-history-status-badge {
-  display: grid;
-  gap: 5px;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid #d7e4f2;
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.public-asset-history-status-badge strong {
-  font-size: 14px;
-  line-height: 1.35;
-  color: #294160;
+  color: #355182;
   overflow-wrap: anywhere;
 }
 
@@ -9469,28 +9418,30 @@ tr.row-maint-maintenance:hover td {
   }
 
   .public-asset-history-card {
-    padding: 14px;
+    padding: 16px;
     border-radius: 18px;
   }
 
   .public-asset-history-head {
-    flex-direction: column;
     align-items: flex-start;
   }
 
   .public-asset-history-grid {
     grid-template-columns: 1fr;
-    gap: 9px;
+    gap: 10px;
   }
 
-  .public-asset-history-route,
-  .public-asset-history-status {
-    grid-template-columns: 1fr;
+  .public-asset-history-title {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 15px;
   }
 
-  .public-asset-history-route-arrow {
-    justify-self: start;
-    transform: rotate(90deg);
+  .public-asset-history-date,
+  .public-asset-history-item,
+  .public-asset-history-value,
+  .public-asset-history-note p {
+    font-size: 14px;
   }
 
   .table-wrap,

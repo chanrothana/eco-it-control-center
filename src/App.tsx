@@ -19451,8 +19451,8 @@ export default function App() {
   function renderPublicHistoryMeta(label: string, value?: React.ReactNode) {
     return (
       <div className="public-asset-history-item">
-        <span className="public-asset-history-label">{label}</span>
-        <strong className="public-asset-history-value">{value || "-"}</strong>
+        <strong className="public-asset-history-key">{label}:</strong>
+        <span className="public-asset-history-value">{value || "-"}</span>
       </div>
     );
   }
@@ -19739,20 +19739,11 @@ export default function App() {
                                 <div className="public-asset-history-title">Location Transfer</div>
                                 <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
                               </div>
-                              <div className="public-asset-history-route">
-                                <div>
-                                  <span className="public-asset-history-label">From</span>
-                                  <strong>{campusLabel(entry.fromCampus || "-")}</strong>
-                                  <small>{entry.fromLocation || "-"}</small>
-                                </div>
-                                <div className="public-asset-history-route-arrow">→</div>
-                                <div>
-                                  <span className="public-asset-history-label">To</span>
-                                  <strong>{campusLabel(entry.toCampus || "-")}</strong>
-                                  <small>{entry.toLocation || "-"}</small>
-                                </div>
-                              </div>
                               <div className="public-asset-history-grid">
+                                {renderPublicHistoryMeta("From Campus", campusLabel(entry.fromCampus || "-"))}
+                                {renderPublicHistoryMeta("To Campus", campusLabel(entry.toCampus || "-"))}
+                                {renderPublicHistoryMeta("From Location", entry.fromLocation || "-")}
+                                {renderPublicHistoryMeta("To Location", entry.toLocation || "-")}
                                 {renderPublicHistoryMeta("From Staff", custody?.fromUser || "-")}
                                 {renderPublicHistoryMeta("To Staff", custody?.toUser || "-")}
                                 {renderPublicHistoryMeta("Ack", custody?.responsibilityAck ? "Yes" : "No")}
@@ -19811,18 +19802,9 @@ export default function App() {
                               <div className="public-asset-history-title">Status Update</div>
                               <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
                             </div>
-                            <div className="public-asset-history-status">
-                              <div className="public-asset-history-status-badge">
-                                <span className="public-asset-history-label">From</span>
-                                <strong>{assetStatusLabel(entry.fromStatus || "-")}</strong>
-                              </div>
-                              <div className="public-asset-history-route-arrow">→</div>
-                              <div className="public-asset-history-status-badge">
-                                <span className="public-asset-history-label">To</span>
-                                <strong>{assetStatusLabel(entry.toStatus || "-")}</strong>
-                              </div>
-                            </div>
                             <div className="public-asset-history-grid">
+                              {renderPublicHistoryMeta("From", assetStatusLabel(entry.fromStatus || "-"))}
+                              {renderPublicHistoryMeta("To", assetStatusLabel(entry.toStatus || "-"))}
                               {renderPublicHistoryMeta("By", entry.by || "-")}
                             </div>
                             <div className="public-asset-history-note">
