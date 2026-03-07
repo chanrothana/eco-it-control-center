@@ -118,6 +118,14 @@ const TELEGRAM_CHAT_IDS = Array.from(
     ].filter(Boolean)
   )
 );
+let telegramLastSendReport = {
+  at: "",
+  ok: false,
+  successCount: 0,
+  targetCount: 0,
+  targets: [],
+  errors: [],
+};
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const INDEX_FILE = path.join(BUILD_DIR, "index.html");
 const CAMPUS_MAP = {
@@ -1757,6 +1765,14 @@ function sendTelegramMessageToChat(chatId, text) {
 
 async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
   if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !toText(text)) {
+    telegramLastSendReport = {
+      at: new Date().toISOString(),
+      ok: false,
+      successCount: 0,
+      targetCount: 0,
+      targets: [],
+      errors: ["telegram disabled, token missing, or empty text"],
+    };
     return false;
   }
   const configuredTargets = Array.from(
@@ -1770,6 +1786,16 @@ async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
     results.push(await sendTelegramMessageToChat(chatId, text));
   }
   const successCount = results.filter((row) => row.ok).length;
+  telegramLastSendReport = {
+    at: new Date().toISOString(),
+    ok: successCount > 0,
+    successCount,
+    targetCount: targets.length,
+    targets,
+    errors: results
+      .filter((row) => !row.ok)
+      .map((row) => `chat ${row.chatId}: ${row.statusCode || 0} ${toText(row.body).slice(0, 160)}`),
+  };
   if (!successCount) {
     console.warn(
       "[ALERT] Telegram send failed for all targets:",
@@ -2755,13 +2781,39 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/alerts/telegram/status") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const discoveredTargets = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+      sendJson(res, 200, {
+        ok: true,
+        enabled: TELEGRAM_ALERT_ENABLED,
+        hasBotToken: Boolean(TELEGRAM_BOT_TOKEN),
+        configuredTargets: TELEGRAM_CHAT_IDS,
+        discoverEnabled: TELEGRAM_DISCOVER_CHAT_IDS,
+        discoveredTargets,
+        lastSend: telegramLastSendReport,
+      });
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/alerts/telegram/test") {
-      const admin = requireAdmin(req, res);
-      if (!admin) return;
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!(isAdminRole(user.role) || canRecordMaintenance(user))) {
+        sendJson(res, 403, { error: "Maintenance record permission required" });
+        return;
+      }
       const body = await parseBody(req);
       const text =
         toText(body && body.text) ||
-        `ECO IT Telegram test\nTime: ${new Date().toISOString()}\nBy: ${toText(admin.displayName) || toText(admin.username) || "admin"}`;
+        `ECO IT Telegram test\nTime: ${new Date().toISOString()}\nBy: ${toText(user.displayName) || toText(user.username) || "staff"}`;
       const ok = await sendTelegramMessage(text);
       sendJson(res, 200, {
         ok,
