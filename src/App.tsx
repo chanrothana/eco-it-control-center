@@ -6011,6 +6011,7 @@ export default function App() {
   const [vaultNetworkDocs, setVaultNetworkDocs] = useState<VaultNetworkDoc[]>(() => readVaultNetworkDocsFallback());
   const [vaultCctvRecords, setVaultCctvRecords] = useState<VaultCctvRecord[]>(() => readVaultCctvFallback());
   const [vaultVisiblePasswordId, setVaultVisiblePasswordId] = useState<number | null>(null);
+  const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
   const [vaultAccountForm, setVaultAccountForm] = useState({
     systemName: "",
     accountName: "",
@@ -10968,6 +10969,7 @@ export default function App() {
         lastUpdated: "",
         note: "",
       });
+      setVaultCredentialFormPasswordVisible(false);
       setSetupMessage("Vault credential record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault credential record");
@@ -32994,21 +32996,39 @@ export default function App() {
 
             {vaultTab === "credentials" && canAccessMenu("vault.credentials", "vault") && (
               <>
+                <div className="tiny" style={{ marginBottom: 10 }}>
+                  Example record: <strong>System</strong> = School Main Email, <strong>Email / Username</strong> = `info@eis-edu.com`,
+                  <strong> Password</strong> = stored credential, <strong>Password Updated Date</strong> = `25-Dec-2024`.
+                </div>
                 <div className="form-grid">
-                  <label className="field"><span>System</span><input className="input" value={vaultCredentialForm.systemName} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, systemName: e.target.value }))} /></label>
-                  <label className="field"><span>Login URL / Google Drive SOP</span><input className="input" value={vaultCredentialForm.loginUrl} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://... or https://drive.google.com/..." /></label>
-                  <label className="field"><span>Username</span><input className="input" value={vaultCredentialForm.username} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, username: e.target.value }))} /></label>
-                  <label className="field"><span>Password / Secret</span><input className="input" type="text" value={vaultCredentialForm.password} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, password: e.target.value }))} placeholder="Website/iCloud password or secret" /></label>
-                  <label className="field"><span>Password Hint (Optional)</span><input className="input" value={vaultCredentialForm.secretHint} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, secretHint: e.target.value }))} placeholder="Example: stored in sealed envelope A1" /></label>
-                  <label className="field"><span>2FA</span><input className="input" value={vaultCredentialForm.twoFa} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, twoFa: e.target.value }))} /></label>
-                  <label className="field"><span>Recovery</span><input className="input" value={vaultCredentialForm.recovery} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, recovery: e.target.value }))} /></label>
-                  <label className="field"><span>Last Updated</span><input type="date" className="input" value={vaultCredentialForm.lastUpdated} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, lastUpdated: e.target.value }))} /></label>
-                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCredentialForm.note} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                  <label className="field"><span>System / Account Name</span><input className="input" value={vaultCredentialForm.systemName} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="School Main Email / Telegram Bot / Hosting Panel" /></label>
+                  <label className="field"><span>Login URL</span><input className="input" value={vaultCredentialForm.loginUrl} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://mail.google.com/ or other login page" /></label>
+                  <label className="field"><span>Email / Username</span><input className="input" value={vaultCredentialForm.username} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, username: e.target.value }))} placeholder="info@eis-edu.com" /></label>
+                  <label className="field">
+                    <span>Password</span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        className="input"
+                        type={vaultCredentialFormPasswordVisible ? "text" : "password"}
+                        value={vaultCredentialForm.password}
+                        onChange={(e) => setVaultCredentialForm((f) => ({ ...f, password: e.target.value }))}
+                        placeholder="Website / email password"
+                      />
+                      <button type="button" className="tab btn-small" onClick={() => setVaultCredentialFormPasswordVisible((v) => !v)}>
+                        {vaultCredentialFormPasswordVisible ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </label>
+                  <label className="field"><span>Password Hint / Storage Note</span><input className="input" value={vaultCredentialForm.secretHint} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, secretHint: e.target.value }))} placeholder="Optional: where backup code or sealed note is stored" /></label>
+                  <label className="field"><span>2FA / OTP</span><input className="input" value={vaultCredentialForm.twoFa} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, twoFa: e.target.value }))} placeholder="App, phone number, authenticator..." /></label>
+                  <label className="field"><span>Recovery Email / Phone</span><input className="input" value={vaultCredentialForm.recovery} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, recovery: e.target.value }))} /></label>
+                  <label className="field"><span>Password Updated Date</span><input type="date" className="input" value={vaultCredentialForm.lastUpdated} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, lastUpdated: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCredentialForm.note} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, note: e.target.value }))} placeholder="Example: Password updated on 25-Dec-2024 by Admin." /></label>
                 </div>
                 <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCredential}>Add Website Login</button></div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
-                    <thead><tr><th>System</th><th>Login URL</th><th>Username</th><th>Password</th><th>Hint</th><th>2FA</th><th>Recovery</th><th>Updated</th><th>{t.delete}</th></tr></thead>
+                    <thead><tr><th>System / Account</th><th>Login URL</th><th>Email / Username</th><th>Password</th><th>Password Hint / Storage Note</th><th>2FA / OTP</th><th>Recovery</th><th>Password Updated</th><th>{t.delete}</th></tr></thead>
                     <tbody>
                       {vaultCredentials.length ? vaultCredentials.map((row) => (
                         <tr key={`vault-credential-${row.id}`}>
