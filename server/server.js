@@ -1763,6 +1763,30 @@ function sendTelegramMessageToChat(chatId, text) {
   });
 }
 
+function shouldRetryTelegramResult(result) {
+  if (!result || result.ok) return false;
+  const code = Number(result.statusCode || 0);
+  if (code === 0 || code === 429) return true;
+  return code >= 500;
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+async function sendTelegramMessageToChatWithRetry(chatId, text, attempts = 3) {
+  let last = { ok: false, chatId: toText(chatId), statusCode: 0, body: "" };
+  for (let i = 0; i < attempts; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    last = await sendTelegramMessageToChat(chatId, text);
+    if (last.ok) return last;
+    if (!shouldRetryTelegramResult(last) || i === attempts - 1) return last;
+    // eslint-disable-next-line no-await-in-loop
+    await waitMs(300 * (i + 1));
+  }
+  return last;
+}
+
 async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
   if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !toText(text)) {
     telegramLastSendReport = {
@@ -1783,9 +1807,28 @@ async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
   if (!targets.length) return false;
   const results = [];
   for (const chatId of targets) {
-    results.push(await sendTelegramMessageToChat(chatId, text));
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await sendTelegramMessageToChatWithRetry(chatId, text));
   }
-  const successCount = results.filter((row) => row.ok).length;
+  let successCount = results.filter((row) => row.ok).length;
+  if (!successCount && TELEGRAM_DISCOVER_CHAT_IDS) {
+    const retryTargets = Array.from(
+      new Set(
+        [
+          ...targets,
+          ...(await discoverTelegramChatIds()),
+        ]
+          .map((row) => toText(row).trim())
+          .filter(Boolean)
+      )
+    );
+    for (const chatId of retryTargets) {
+      if (results.some((row) => row.ok && row.chatId === chatId)) continue;
+      // eslint-disable-next-line no-await-in-loop
+      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, 2));
+    }
+    successCount = results.filter((row) => row.ok).length;
+  }
   telegramLastSendReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
