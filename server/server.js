@@ -2399,6 +2399,50 @@ function syncAssetStatusFromMaintenance(asset) {
   return true;
 }
 
+function cascadeChildAssetAssignment(db, parentAsset, nextAssignedTo, options = {}) {
+  const assets = Array.isArray(db && db.assets) ? db.assets : [];
+  const parentAssetId = toText(parentAsset && parentAsset.assetId);
+  if (!parentAssetId) return 0;
+  const toUser = toText(nextAssignedTo);
+  const changedBy = toText(options.changedBy);
+  const actionDate = toText(options.date) || new Date().toISOString();
+  const note = toText(options.note) || "Assignment synced from parent asset";
+  let changedCount = 0;
+  let idSeed = Date.now();
+
+  for (let i = 0; i < assets.length; i += 1) {
+    const row = assets[i];
+    if (!row || typeof row !== "object") continue;
+    if (toText(row.parentAssetId) !== parentAssetId) continue;
+    const fromUser = toText(row.assignedTo);
+    if (fromUser === toUser) continue;
+    const custodyEntry = {
+      id: idSeed += 1,
+      date: actionDate,
+      action: toUser ? "ASSIGN" : "UNASSIGN",
+      fromCampus: toText(row.campus),
+      fromLocation: toText(row.location),
+      toCampus: toText(row.campus),
+      toLocation: toText(row.location),
+      fromUser,
+      toUser,
+      responsibilityAck: false,
+      by: changedBy,
+      note,
+    };
+    const currentHistory = Array.isArray(row.custodyHistory) ? row.custodyHistory : [];
+    assets[i] = {
+      ...row,
+      assignedTo: toUser,
+      custodyStatus: toUser ? "ASSIGNED" : "IN_STOCK",
+      custodyHistory: [custodyEntry, ...currentHistory],
+    };
+    changedCount += 1;
+  }
+
+  return changedCount;
+}
+
 function getAuthUser(req) {
   const authHeader = String(req.headers.authorization || "");
   if (!authHeader.startsWith("Bearer ")) return null;
@@ -4736,13 +4780,20 @@ const server = http.createServer(async (req, res) => {
         custodyStatus: nextCustodyStatus,
         name: current.assetId,
       };
+      const cascadedChildren = assignmentChanged
+        ? cascadeChildAssetAssignment(db, db.assets[idx], incomingAssignedTo, {
+            changedBy: statusChangeBy || toText(admin.displayName) || toText(admin.username),
+            date: new Date().toISOString(),
+            note: `Assignment synced from parent asset ${toText(db.assets[idx].assetId)}`,
+          })
+        : 0;
       appendAuditLog(
         db,
         admin,
         "UPDATE",
         "asset",
         db.assets[idx].assetId || String(id),
-        `${db.assets[idx].campus} | ${db.assets[idx].location}${photoChanged ? " | photo updated" : ""}`
+        `${db.assets[idx].campus} | ${db.assets[idx].location}${photoChanged ? " | photo updated" : ""}${cascadedChildren ? ` | child assignment synced: ${cascadedChildren}` : ""}`
       );
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
