@@ -19461,6 +19461,11 @@ export default function App() {
     return <div className="public-asset-history-empty">{message}</div>;
   }
 
+  function formatPublicHistoryAction(action?: string) {
+    if (String(action || "").trim().toUpperCase() === "ASSIGN") return "ASSIGNED";
+    return action || "-";
+  }
+
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
     const showPublicQrSetFields = asset?.category === "IT";
@@ -19770,10 +19775,10 @@ export default function App() {
                         {publicCustodyHistory.map((entry) => (
                           <article className="public-asset-history-card" key={`public-custody-${entry.id}`}>
                             <div className="public-asset-history-head">
-                              <div className="public-asset-history-title">{entry.action || "Assignment"}</div>
+                              <div className="public-asset-history-title">{formatPublicHistoryAction(entry.action || "Assignment")}</div>
                               <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
                             </div>
-                            <div className="public-asset-history-grid">
+                            <div className="public-asset-history-grid public-asset-history-grid-paired">
                               {renderPublicHistoryMeta("From User", entry.fromUser || "-")}
                               {renderPublicHistoryMeta("To User", entry.toUser || "-")}
                               {renderPublicHistoryMeta("Ack", entry.responsibilityAck ? "Yes" : "No")}
