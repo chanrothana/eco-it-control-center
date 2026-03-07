@@ -4098,7 +4098,8 @@ function LocationPicker({
                   }}
                   onClick={() => selectLocation(opt.value)}
                 >
-                  <span>{opt.label}</span>
+                  <span className="asset-picker-option-label">{opt.label}</span>
+                  {opt.value === value ? <span className="asset-picker-option-check" aria-hidden={true}>✓</span> : null}
                 </button>
               ))
             ) : (
@@ -13957,6 +13958,29 @@ export default function App() {
       statusChangeBy,
       fromStatus: fromStatusForEdit,
     };
+    const fromUser = String(editingAsset?.assignedTo || "").trim();
+    const toUser = String(editAssignedTo || "").trim();
+    const assignmentChangedInEdit = fromUser !== toUser;
+    const custodyEntryFromEdit: CustodyEntry | null = assignmentChangedInEdit
+      ? {
+          id: Date.now() + 1,
+          date: new Date().toISOString(),
+          action: toUser ? "ASSIGN" : "UNASSIGN",
+          fromCampus: editingAsset?.campus || "",
+          fromLocation: editingAsset?.location || "-",
+          toCampus: editingAsset?.campus || "",
+          toLocation: payload.location,
+          fromUser,
+          toUser,
+          responsibilityAck: false,
+          by: authUser?.displayName || "",
+          note: "Assignment changed from asset edit",
+        }
+      : null;
+    const nextCustodyHistoryForEdit = custodyEntryFromEdit
+      ? [custodyEntryFromEdit, ...(editingAsset?.custodyHistory || [])]
+      : (editingAsset?.custodyHistory || []);
+    const nextCustodyStatusForEdit: Asset["custodyStatus"] = toUser ? "ASSIGNED" : "IN_STOCK";
     const duplicateSerial = findDuplicateAssetSerial(assets, payload.serialNumber, editingAssetId);
     if (duplicateSerial) {
       setError(`Serial number already exists: ${duplicateSerial.assetId}`);
@@ -13969,9 +13993,6 @@ export default function App() {
       let nextLocal = readAssetFallback().map((a) => {
         if (a.id !== editingAssetId) return a;
         const statusChanged = (a.status || "Active") !== payload.status;
-        const fromUser = String(a.assignedTo || "").trim();
-        const toUser = String(payload.assignedTo || "").trim();
-        const assignmentChanged = fromUser !== toUser;
         const statusHistory = statusChanged
           ? [
               {
@@ -13985,31 +14006,14 @@ export default function App() {
               ...(a.statusHistory || []),
             ]
           : a.statusHistory || [];
-        const custodyHistory = assignmentChanged
-          ? [
-              {
-                id: Date.now() + 1,
-                date: new Date().toISOString(),
-                action: toUser ? "ASSIGN" : "UNASSIGN",
-                fromCampus: a.campus,
-                fromLocation: a.location,
-                toCampus: a.campus,
-                toLocation: payload.location,
-                fromUser,
-                toUser,
-                responsibilityAck: false,
-                by: authUser?.displayName || "",
-                note: "Assignment changed from asset edit",
-              },
-              ...(a.custodyHistory || []),
-            ]
+        const custodyHistory = custodyEntryFromEdit
+          ? [custodyEntryFromEdit, ...(a.custodyHistory || [])]
           : (a.custodyHistory || []);
-        const custodyStatus: Asset["custodyStatus"] = toUser ? "ASSIGNED" : "IN_STOCK";
         const normalizedPhotos = normalizeAssetPhotos(payload);
         return {
           ...a,
           ...payload,
-          custodyStatus,
+          custodyStatus: nextCustodyStatusForEdit,
           custodyHistory,
           photo: normalizedPhotos[0] || "",
           photos: normalizedPhotos,
@@ -14019,7 +14023,11 @@ export default function App() {
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${editingAssetId}`, {
           method: "PATCH",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            custodyStatus: nextCustodyStatusForEdit,
+            custodyHistory: nextCustodyHistoryForEdit,
+          }),
         });
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
@@ -17800,16 +17808,6 @@ export default function App() {
     [assetMasterItemBreakdown]
   );
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
-  const reportCampusOptionLabel = useCallback(
-    (campus: string) => {
-      const code = CAMPUS_CODE[campus] || "CX";
-      const label = campusLabel(campus);
-      const withoutPrefixCode = label.replace(/^\s*C\d+(?:\.\d+)?\s+/i, "");
-      const withoutSuffixCode = withoutPrefixCode.replace(/\s*\(C\d+(?:\.\d+)?\)\s*$/i, "");
-      return `${code} - ${(withoutSuffixCode.trim() || label)}`;
-    },
-    [campusLabel]
-  );
   const reportTypeOptions = useMemo(
     () =>
       (
@@ -19466,6 +19464,9 @@ export default function App() {
     const publicTransferHistory = [...(asset?.transferHistory || [])].sort(
       (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
     );
+    const publicCustodyHistory = [...(asset?.custodyHistory || [])].sort(
+      (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
+    );
     const publicStatusHistory = [...(asset?.statusHistory || [])].sort(
       (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
     );
@@ -19737,6 +19738,43 @@ export default function App() {
                         ) : (
                           <tr>
                             <td colSpan={6}>No transfer history yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                  <div className="field field-wide">
+                  <span>Assigned to History</span>
+                  <div className="table-wrap public-asset-table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Action</th>
+                          <th>From User</th>
+                          <th>To User</th>
+                          <th>Ack</th>
+                          <th>By</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {publicCustodyHistory.length ? (
+                          publicCustodyHistory.map((entry) => (
+                            <tr key={`public-custody-${entry.id}`}>
+                              <td>{formatDate(entry.date || "-")}</td>
+                              <td>{entry.action || "-"}</td>
+                              <td>{entry.fromUser || "-"}</td>
+                              <td>{entry.toUser || "-"}</td>
+                              <td>{entry.responsibilityAck ? "Yes" : "No"}</td>
+                              <td>{entry.by || "-"}</td>
+                              <td>{entry.note || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7}>No assigned history yet.</td>
                           </tr>
                         )}
                       </tbody>
@@ -29602,7 +29640,7 @@ export default function App() {
                       { value: "ALL", label: t.allCampuses },
                       ...campusOptions.map((campus) => ({
                         value: campus,
-                        label: reportCampusOptionLabel(campus),
+                        label: reportCampusName(campus),
                       })),
                     ]}
                     placeholder={t.allCampuses}
@@ -29639,37 +29677,25 @@ export default function App() {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
                     emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
                   />
-                  <details className="filter-menu">
-                    <summary>{summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}</summary>
-                    <div className="filter-menu-list">
-                      <label className="filter-menu-item">
-                        <input
-                          type="checkbox"
-                          checked={qrItemFilter.includes("ALL")}
-                          onChange={(e) =>
-                            setQrItemFilter((prev) =>
-                              applyMultiFilterSelection(prev, e.target.checked, "ALL", qrItemFilterOptions)
-                            )
-                          }
-                        />
-                        <span>{lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}</span>
-                      </label>
-                      {qrItemFilterOptions.map((itemName) => (
-                        <label key={`qr-item-${itemName}`} className="filter-menu-item">
-                          <input
-                            type="checkbox"
-                            checked={qrItemFilter.includes(itemName)}
-                            onChange={(e) =>
-                              setQrItemFilter((prev) =>
-                                applyMultiFilterSelection(prev, e.target.checked, itemName, qrItemFilterOptions)
-                              )
-                            }
-                          />
-                          <span>{itemName}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </details>
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}
+                    options={qrItemFilterOptions.map((itemName) => ({ value: itemName, label: itemName }))}
+                    selectedValues={qrItemFilter}
+                    allOptionLabel={lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}
+                    allOptionChecked={qrItemFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setQrItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", qrItemFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setQrItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, qrItemFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search item name..."}
+                    emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No item found."}
+                  />
                 </>
               ) : null}
               {reportType === "asset_by_location" ? (
@@ -29681,7 +29707,7 @@ export default function App() {
                       { value: "ALL", label: t.allCampuses },
                       ...assetByLocationCampusFilterOptions.map((campus) => ({
                         value: campus,
-                        label: reportCampusOptionLabel(campus),
+                        label: reportCampusName(campus),
                       })),
                     ]}
                     placeholder={t.allCampuses}
@@ -29715,7 +29741,7 @@ export default function App() {
                     summary={campusFilterSummary}
                     options={assetMasterCampusFilterOptions.map((campus) => ({
                       value: campus,
-                      label: reportCampusOptionLabel(campus),
+                      label: reportCampusName(campus),
                     }))}
                     selectedValues={assetMasterCampusFilter}
                     allOptionLabel={t.allCampuses}

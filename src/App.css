@@ -4695,6 +4695,19 @@ label.backup-action-btn {
   cursor: pointer;
 }
 
+.asset-picker-option-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.asset-picker-option-check {
+  margin-left: auto;
+  color: #355284;
+  font-weight: 700;
+}
+
 .asset-picker-option > span:last-child {
   min-width: 0;
   white-space: nowrap;
