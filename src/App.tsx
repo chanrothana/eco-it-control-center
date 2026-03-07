@@ -19457,10 +19457,6 @@ export default function App() {
     );
   }
 
-  function renderPublicHistoryEmpty(message: string) {
-    return <div className="public-asset-history-empty">{message}</div>;
-  }
-
   function formatPublicHistoryAction(action?: string) {
     if (String(action || "").trim().toUpperCase() === "ASSIGN") return "ASSIGNED";
     return action || "-";
@@ -19492,6 +19488,23 @@ export default function App() {
     );
     const publicStatusHistory = [...(asset?.statusHistory || [])].sort(
       (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
+    );
+    const latestPublicCustody = publicCustodyHistory[0];
+    const latestPublicStatus = publicStatusHistory[0];
+    const currentAssignedTo = String(asset?.assignedTo || "").trim();
+    const currentStatus = String(asset?.status || "").trim();
+    const showPublicMaintenanceHistory = publicMaintenanceHistory.length > 0;
+    const showPublicTransferHistory = publicTransferHistory.length > 0;
+    const showPublicCustodyHistory = publicCustodyHistory.length > 1 || (
+      publicCustodyHistory.length === 1 &&
+      (
+        String(latestPublicCustody?.toUser || "").trim() !== currentAssignedTo ||
+        String(latestPublicCustody?.action || "").trim().toUpperCase() !== (currentAssignedTo ? "ASSIGN" : "")
+      )
+    );
+    const showPublicStatusHistory = publicStatusHistory.length > 1 || (
+      publicStatusHistory.length === 1 &&
+      String(latestPublicStatus?.toStatus || "").trim() !== currentStatus
     );
     return (
       <main className="app-shell public-asset-shell">
@@ -19697,10 +19710,10 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                  {showPublicMaintenanceHistory ? (
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
                   <div className="public-asset-history-section">
-                    {publicMaintenanceHistory.length ? (
                       <div className="public-asset-history-list">
                         {publicMaintenanceHistory.map((entry) => (
                           <article className="public-asset-history-card" key={`public-maint-${entry.id}`}>
@@ -19721,15 +19734,13 @@ export default function App() {
                           </article>
                         ))}
                       </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No maintenance history yet.")
-                    )}
                   </div>
                 </div>
+                  ) : null}
+                  {showPublicTransferHistory ? (
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
                   <div className="public-asset-history-section">
-                    {publicTransferHistory.length ? (
                       <div className="public-asset-history-list">
                         {publicTransferHistory.map((entry) => {
                           const custody = publicCustodyHistory.find(
@@ -19762,15 +19773,13 @@ export default function App() {
                           );
                         })}
                       </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No transfer location history yet.")
-                    )}
                   </div>
                 </div>
+                  ) : null}
+                  {showPublicCustodyHistory ? (
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Assigned to History</h3>
                   <div className="public-asset-history-section">
-                    {publicCustodyHistory.length ? (
                       <div className="public-asset-history-list">
                         {publicCustodyHistory.map((entry) => (
                           <article className="public-asset-history-card" key={`public-custody-${entry.id}`}>
@@ -19791,15 +19800,13 @@ export default function App() {
                           </article>
                         ))}
                       </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No assigned history yet.")
-                    )}
                   </div>
                 </div>
+                  ) : null}
+                  {showPublicStatusHistory ? (
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Status Timeline</h3>
                   <div className="public-asset-history-section">
-                    {publicStatusHistory.length ? (
                       <div className="public-asset-history-list">
                         {publicStatusHistory.map((entry) => (
                           <article className="public-asset-history-card public-asset-history-card-status" key={`public-status-${entry.id}`}>
@@ -19819,11 +19826,9 @@ export default function App() {
                           </article>
                         ))}
                       </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No status timeline yet.")
-                    )}
                   </div>
                 </div>
+                  ) : null}
                 </div>
               </>
             ) : (
