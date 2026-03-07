@@ -19448,6 +19448,19 @@ export default function App() {
     }
   }
 
+  function renderPublicHistoryMeta(label: string, value?: React.ReactNode) {
+    return (
+      <div className="public-asset-history-item">
+        <span className="public-asset-history-label">{label}</span>
+        <strong className="public-asset-history-value">{value || "-"}</strong>
+      </div>
+    );
+  }
+
+  function renderPublicHistoryEmpty(message: string) {
+    return <div className="public-asset-history-empty">{message}</div>;
+  }
+
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
     const showPublicQrSetFields = asset?.category === "IT";
@@ -19681,157 +19694,147 @@ export default function App() {
                   </div>
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
-                  <div className="table-wrap maintenance-history-modal-table-wrap asset-detail-history-wrap">
-                    <table className="maintenance-history-modal-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Type</th>
-                          <th>Work Status</th>
-                          <th>Condition</th>
-                          <th>Note</th>
-                          <th>By</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {publicMaintenanceHistory.length ? (
-                          publicMaintenanceHistory.map((entry) => (
-                            <tr key={`public-maint-${entry.id}`}>
-                              <td data-label="Date">{formatDate(entry.date || "-")}</td>
-                              <td data-label="Type">{entry.type || "-"}</td>
-                              <td data-label="Work Status">{maintenanceCompletionText(entry.completion || "-")}</td>
-                              <td data-label="Condition">{entry.condition || "-"}</td>
-                              <td data-label="Noted">{entry.note || "-"}</td>
-                              <td data-label="By">{entry.by || "-"}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={6}>No maintenance history yet.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="public-asset-history-section">
+                    {publicMaintenanceHistory.length ? (
+                      <div className="public-asset-history-list">
+                        {publicMaintenanceHistory.map((entry) => (
+                          <article className="public-asset-history-card" key={`public-maint-${entry.id}`}>
+                            <div className="public-asset-history-head">
+                              <div className="public-asset-history-title">{entry.type || "Maintenance"}</div>
+                              <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                            </div>
+                            <div className="public-asset-history-grid">
+                              {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(entry.completion || "-"))}
+                              {renderPublicHistoryMeta("Condition", entry.condition || "-")}
+                              {renderPublicHistoryMeta("By", entry.by || "-")}
+                              {renderPublicHistoryMeta("Cost", entry.cost || "-")}
+                            </div>
+                            <div className="public-asset-history-note">
+                              <span className="public-asset-history-label">Note</span>
+                              <p>{entry.note || "-"}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      renderPublicHistoryEmpty("No maintenance history yet.")
+                    )}
                   </div>
                 </div>
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
-                  <div className="table-wrap asset-detail-history-wrap">
-                    <table className="asset-detail-transfer-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>From Campus</th>
-                          <th>From Location</th>
-                          <th>To Campus</th>
-                          <th>To Location</th>
-                          <th>From Staff</th>
-                          <th>To Staff</th>
-                          <th>Ack</th>
-                          <th>Reason</th>
-                          <th>By</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {publicTransferHistory.length ? (
-                          publicTransferHistory.map((entry) => {
-                            const custody = publicCustodyHistory.find(
-                              (row) =>
-                                String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
-                                String(row.toCampus || "") === String(entry.toCampus || "") &&
-                                String(row.toLocation || "") === String(entry.toLocation || "")
-                            );
-                            return (
-                              <tr key={`public-transfer-${entry.id}`}>
-                                <td data-label="Date">{formatDate(entry.date || "-")}</td>
-                                <td data-label="From Campus">{campusLabel(entry.fromCampus || "-")}</td>
-                                <td data-label="From Location">{entry.fromLocation || "-"}</td>
-                                <td data-label="To Campus">{campusLabel(entry.toCampus || "-")}</td>
-                                <td data-label="To Location">{entry.toLocation || "-"}</td>
-                                <td data-label="From Staff">{custody?.fromUser || "-"}</td>
-                                <td data-label="To Staff">{custody?.toUser || "-"}</td>
-                                <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
-                                <td data-label="Reason">{entry.reason || "-"}</td>
-                                <td data-label="By">{entry.by || "-"}</td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={10}>No transfer location history yet.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="public-asset-history-section">
+                    {publicTransferHistory.length ? (
+                      <div className="public-asset-history-list">
+                        {publicTransferHistory.map((entry) => {
+                          const custody = publicCustodyHistory.find(
+                            (row) =>
+                              String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
+                              String(row.toCampus || "") === String(entry.toCampus || "") &&
+                              String(row.toLocation || "") === String(entry.toLocation || "")
+                          );
+                          return (
+                            <article className="public-asset-history-card" key={`public-transfer-${entry.id}`}>
+                              <div className="public-asset-history-head">
+                                <div className="public-asset-history-title">Location Transfer</div>
+                                <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                              </div>
+                              <div className="public-asset-history-route">
+                                <div>
+                                  <span className="public-asset-history-label">From</span>
+                                  <strong>{campusLabel(entry.fromCampus || "-")}</strong>
+                                  <small>{entry.fromLocation || "-"}</small>
+                                </div>
+                                <div className="public-asset-history-route-arrow">→</div>
+                                <div>
+                                  <span className="public-asset-history-label">To</span>
+                                  <strong>{campusLabel(entry.toCampus || "-")}</strong>
+                                  <small>{entry.toLocation || "-"}</small>
+                                </div>
+                              </div>
+                              <div className="public-asset-history-grid">
+                                {renderPublicHistoryMeta("From Staff", custody?.fromUser || "-")}
+                                {renderPublicHistoryMeta("To Staff", custody?.toUser || "-")}
+                                {renderPublicHistoryMeta("Ack", custody?.responsibilityAck ? "Yes" : "No")}
+                                {renderPublicHistoryMeta("By", entry.by || "-")}
+                              </div>
+                              <div className="public-asset-history-note">
+                                <span className="public-asset-history-label">Reason</span>
+                                <p>{entry.reason || "-"}</p>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      renderPublicHistoryEmpty("No transfer location history yet.")
+                    )}
                   </div>
                 </div>
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Assigned to History</h3>
-                  <div className="table-wrap asset-detail-history-wrap">
-                    <table className="asset-detail-custody-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Action</th>
-                          <th>From User</th>
-                          <th>To User</th>
-                          <th>Ack</th>
-                          <th>By</th>
-                          <th>Note</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {publicCustodyHistory.length ? (
-                          publicCustodyHistory.map((entry) => (
-                            <tr key={`public-custody-${entry.id}`}>
-                              <td data-label="Date">{formatDate(entry.date || "-")}</td>
-                              <td data-label="Action">{entry.action || "-"}</td>
-                              <td data-label="From User">{entry.fromUser || "-"}</td>
-                              <td data-label="To User">{entry.toUser || "-"}</td>
-                              <td data-label="Ack">{entry.responsibilityAck ? "Yes" : "No"}</td>
-                              <td data-label="By">{entry.by || "-"}</td>
-                              <td data-label="Note">{entry.note || "-"}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={7}>No assigned history yet.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="public-asset-history-section">
+                    {publicCustodyHistory.length ? (
+                      <div className="public-asset-history-list">
+                        {publicCustodyHistory.map((entry) => (
+                          <article className="public-asset-history-card" key={`public-custody-${entry.id}`}>
+                            <div className="public-asset-history-head">
+                              <div className="public-asset-history-title">{entry.action || "Assignment"}</div>
+                              <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                            </div>
+                            <div className="public-asset-history-grid">
+                              {renderPublicHistoryMeta("From User", entry.fromUser || "-")}
+                              {renderPublicHistoryMeta("To User", entry.toUser || "-")}
+                              {renderPublicHistoryMeta("Ack", entry.responsibilityAck ? "Yes" : "No")}
+                              {renderPublicHistoryMeta("By", entry.by || "-")}
+                            </div>
+                            <div className="public-asset-history-note">
+                              <span className="public-asset-history-label">Note</span>
+                              <p>{entry.note || "-"}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      renderPublicHistoryEmpty("No assigned history yet.")
+                    )}
                   </div>
                 </div>
                   <div className="field field-wide">
                   <h3 className="section-title" style={{ margin: 0 }}>Status Timeline</h3>
-                  <div className="table-wrap asset-detail-history-wrap">
-                    <table className="asset-detail-status-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>From</th>
-                          <th>To</th>
-                          <th>Reason</th>
-                          <th>By</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {publicStatusHistory.length ? (
-                          publicStatusHistory.map((entry) => (
-                            <tr key={`public-status-${entry.id}`}>
-                              <td data-label="Date">{formatDate(entry.date || "-")}</td>
-                              <td data-label="From">{assetStatusLabel(entry.fromStatus || "-")}</td>
-                              <td data-label="To">{assetStatusLabel(entry.toStatus || "-")}</td>
-                              <td data-label="Reason">{entry.reason || "-"}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={4}>No status timeline yet.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  <div className="public-asset-history-section">
+                    {publicStatusHistory.length ? (
+                      <div className="public-asset-history-list">
+                        {publicStatusHistory.map((entry) => (
+                          <article className="public-asset-history-card public-asset-history-card-status" key={`public-status-${entry.id}`}>
+                            <div className="public-asset-history-head">
+                              <div className="public-asset-history-title">Status Update</div>
+                              <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                            </div>
+                            <div className="public-asset-history-status">
+                              <div className="public-asset-history-status-badge">
+                                <span className="public-asset-history-label">From</span>
+                                <strong>{assetStatusLabel(entry.fromStatus || "-")}</strong>
+                              </div>
+                              <div className="public-asset-history-route-arrow">→</div>
+                              <div className="public-asset-history-status-badge">
+                                <span className="public-asset-history-label">To</span>
+                                <strong>{assetStatusLabel(entry.toStatus || "-")}</strong>
+                              </div>
+                            </div>
+                            <div className="public-asset-history-grid">
+                              {renderPublicHistoryMeta("By", entry.by || "-")}
+                            </div>
+                            <div className="public-asset-history-note">
+                              <span className="public-asset-history-label">Reason</span>
+                              <p>{entry.reason || "-"}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      renderPublicHistoryEmpty("No status timeline yet.")
+                    )}
                   </div>
                 </div>
                 </div>
