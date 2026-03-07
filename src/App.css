@@ -6124,6 +6124,7 @@ tr.row-maint-maintenance:hover td {
 
 .report-table-wrap th {
   font-size: 13px;
+  position: relative;
 }
 
 .report-table-wrap table {

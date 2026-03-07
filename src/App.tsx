@@ -1031,6 +1031,20 @@ const ASSET_LIST_COLUMN_KEYS = [
   "status",
 ] as const;
 const DEFAULT_ASSET_LIST_COLUMN_WIDTHS = [14, 18, 8, 6, 15, 11, 10, 8, 10];
+const DEFAULT_ASSET_MASTER_COLUMN_WIDTHS = {
+  photo: 6,
+  assetId: 13,
+  linkedTo: 14,
+  itemName: 12,
+  category: 8,
+  campus: 14,
+  itemDescription: 24,
+  location: 12,
+  purchaseDate: 9,
+  lastServiceDate: 9,
+  assignedTo: 11,
+  status: 8,
+};
 const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: string }> = [
   { value: "public", label: "Public Holiday" },
   { value: "ptc", label: "PTC" },
@@ -5374,6 +5388,9 @@ export default function App() {
     "assignedTo",
     "status",
   ]);
+  const [assetMasterColumnWidths, setAssetMasterColumnWidths] = useState<Record<AssetMasterColumnKey, number>>(
+    DEFAULT_ASSET_MASTER_COLUMN_WIDTHS
+  );
   const [assetMasterSort, setAssetMasterSort] = useState<{
     key: AssetMasterSortKey;
     direction: "asc" | "desc";
@@ -17784,6 +17801,66 @@ export default function App() {
     ],
     [t.photo, t.assetId, t.category, t.campus, t.location, t.status]
   );
+  const visibleAssetMasterColumns = useMemo(
+    () => assetMasterColumnDefs.filter((column) => assetMasterVisibleColumns.includes(column.key)),
+    [assetMasterColumnDefs, assetMasterVisibleColumns]
+  );
+  const visibleAssetMasterColumnWidths = useMemo(() => {
+    const total = visibleAssetMasterColumns.reduce(
+      (sum, column) => sum + (assetMasterColumnWidths[column.key] || 1),
+      0
+    ) || 1;
+    return visibleAssetMasterColumns.map((column) => ({
+      ...column,
+      width: ((assetMasterColumnWidths[column.key] || 1) / total) * 100,
+    }));
+  }, [visibleAssetMasterColumns, assetMasterColumnWidths]);
+  const assetMasterTableWrapRef = useRef<HTMLDivElement | null>(null);
+  const assetMasterResizeStateRef = useRef<{
+    index: number;
+    startX: number;
+    startWidths: number[];
+    visibleKeys: AssetMasterColumnKey[];
+    containerWidth: number;
+  } | null>(null);
+  const startAssetMasterColumnResize = useCallback((index: number, clientX: number) => {
+    const containerWidth = assetMasterTableWrapRef.current?.getBoundingClientRect().width || 0;
+    if (!containerWidth || index < 0 || index >= visibleAssetMasterColumnWidths.length - 1) return;
+    assetMasterResizeStateRef.current = {
+      index,
+      startX: clientX,
+      startWidths: visibleAssetMasterColumnWidths.map((column) => column.width),
+      visibleKeys: visibleAssetMasterColumnWidths.map((column) => column.key),
+      containerWidth,
+    };
+  }, [visibleAssetMasterColumnWidths]);
+  useEffect(() => {
+    function onPointerMove(event: MouseEvent) {
+      const state = assetMasterResizeStateRef.current;
+      if (!state) return;
+      const deltaPercent = ((event.clientX - state.startX) / state.containerWidth) * 100;
+      const nextWidths = [...state.startWidths];
+      const minWidth = 6;
+      nextWidths[state.index] = Math.max(minWidth, state.startWidths[state.index] + deltaPercent);
+      nextWidths[state.index + 1] = Math.max(minWidth, state.startWidths[state.index + 1] - deltaPercent);
+      setAssetMasterColumnWidths((prev) => {
+        const next = { ...prev };
+        state.visibleKeys.forEach((key, idx) => {
+          next[key] = nextWidths[idx];
+        });
+        return next;
+      });
+    }
+    function onPointerUp() {
+      assetMasterResizeStateRef.current = null;
+    }
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("mouseup", onPointerUp);
+    return () => {
+      window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("mouseup", onPointerUp);
+    };
+  }, []);
 
   const isAssetMasterColumnVisible = useCallback(
     (key: AssetMasterColumnKey) => assetMasterVisibleColumns.includes(key),
@@ -30111,13 +30188,16 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  <div className="table-wrap report-table-wrap report-desktop-only">
+                  <div className="table-wrap report-table-wrap report-desktop-only" ref={assetMasterTableWrapRef}>
                     <table>
+                      <colgroup>
+                        {visibleAssetMasterColumnWidths.map((column) => (
+                          <col key={`report-master-col-width-${column.key}`} style={{ width: `${column.width}%` }} />
+                        ))}
+                      </colgroup>
                       <thead>
                         <tr>
-                          {assetMasterColumnDefs
-                            .filter((column) => isAssetMasterColumnVisible(column.key))
-                            .map((column) => (
+                          {visibleAssetMasterColumnWidths.map((column, index) => (
                               <th key={`report-master-col-${column.key}`}>
                                 {column.sortable ? (
                                   <button
@@ -30131,6 +30211,9 @@ export default function App() {
                                 ) : (
                                   column.label
                                 )}
+                                {index < visibleAssetMasterColumnWidths.length - 1 ? (
+                                  <span className="column-resizer" onMouseDown={(e) => startAssetMasterColumnResize(index, e.clientX)} />
+                                ) : null}
                               </th>
                             ))}
                         </tr>
@@ -30139,9 +30222,7 @@ export default function App() {
                         {assetMasterReportRows.length ? (
                           assetMasterReportRows.map((row) => (
                             <tr key={`report-asset-master-${row.key}`}>
-                              {assetMasterColumnDefs
-                                .filter((column) => isAssetMasterColumnVisible(column.key))
-                                .map((column) => {
+                              {visibleAssetMasterColumns.map((column) => {
                                   if (column.key === "photo") {
                                     return <td key={`${row.key}-photo`}>{renderAssetPhoto(row.photo || "", row.assetId)}</td>;
                                   }
