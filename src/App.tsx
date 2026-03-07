@@ -1045,6 +1045,17 @@ const DEFAULT_ASSET_MASTER_COLUMN_WIDTHS = {
   assignedTo: 11,
   status: 8,
 };
+const SET_CODE_REPORT_COLUMN_KEYS = [
+  "setCode",
+  "photo",
+  "mainAssetId",
+  "mainItem",
+  "mainAssignedTo",
+  "campus",
+  "totalItems",
+  "connectedItems",
+] as const;
+const DEFAULT_SET_CODE_REPORT_COLUMN_WIDTHS = [14, 7, 15, 11, 13, 14, 8, 18];
 const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: string }> = [
   { value: "public", label: "Public Holiday" },
   { value: "ptc", label: "PTC" },
@@ -5398,6 +5409,7 @@ export default function App() {
     key: "assetId",
     direction: "asc",
   });
+  const [setCodeReportColumnWidths, setSetCodeReportColumnWidths] = useState<number[]>(DEFAULT_SET_CODE_REPORT_COLUMN_WIDTHS);
   const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
   const [qrLocationFilter, setQrLocationFilter] = useState("ALL");
   const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
@@ -16755,6 +16767,30 @@ export default function App() {
       containerWidth,
     };
   }, [assetListColumnWidths]);
+  const genericTableResizeStateRef = useRef<{
+    colgroup: HTMLTableColElement[];
+    index: number;
+    startX: number;
+    startWidths: number[];
+    containerWidth: number;
+  } | null>(null);
+  const setCodeReportTableWrapRef = useRef<HTMLDivElement | null>(null);
+  const setCodeReportResizeStateRef = useRef<{
+    index: number;
+    startX: number;
+    startWidths: number[];
+    containerWidth: number;
+  } | null>(null);
+  const startSetCodeReportColumnResize = useCallback((index: number, clientX: number) => {
+    const containerWidth = setCodeReportTableWrapRef.current?.getBoundingClientRect().width || 0;
+    if (!containerWidth || index < 0 || index >= setCodeReportColumnWidths.length - 1) return;
+    setCodeReportResizeStateRef.current = {
+      index,
+      startX: clientX,
+      startWidths: [...setCodeReportColumnWidths],
+      containerWidth,
+    };
+  }, [setCodeReportColumnWidths]);
   useEffect(() => {
     function onPointerMove(event: MouseEvent) {
       const state = assetListResizeStateRef.current;
@@ -16772,16 +16808,118 @@ export default function App() {
       }
       setAssetListColumnWidths(next);
     }
+    function onGenericTablePointerMove(event: MouseEvent) {
+      const state = genericTableResizeStateRef.current;
+      if (!state) return;
+      const deltaPercent = ((event.clientX - state.startX) / state.containerWidth) * 100;
+      const next = [...state.startWidths];
+      const minWidth = Math.max(5, (72 / state.containerWidth) * 100);
+      next[state.index] = Math.max(minWidth, state.startWidths[state.index] + deltaPercent);
+      next[state.index + 1] = Math.max(minWidth, state.startWidths[state.index + 1] - deltaPercent);
+      state.colgroup.forEach((col, idx) => {
+        col.style.width = `${next[idx]}%`;
+      });
+    }
+    function onSetCodePointerMove(event: MouseEvent) {
+      const state = setCodeReportResizeStateRef.current;
+      if (!state) return;
+      const deltaPercent = ((event.clientX - state.startX) / state.containerWidth) * 100;
+      const next = [...state.startWidths];
+      const minWidth = 6;
+      next[state.index] = Math.max(minWidth, state.startWidths[state.index] + deltaPercent);
+      next[state.index + 1] = Math.max(minWidth, state.startWidths[state.index + 1] - deltaPercent);
+      setSetCodeReportColumnWidths(next);
+    }
     function onPointerUp() {
       assetListResizeStateRef.current = null;
+      genericTableResizeStateRef.current = null;
+      setCodeReportResizeStateRef.current = null;
+      document.body.classList.remove("is-col-resizing");
     }
     window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("mousemove", onGenericTablePointerMove);
+    window.addEventListener("mousemove", onSetCodePointerMove);
     window.addEventListener("mouseup", onPointerUp);
     return () => {
       window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("mousemove", onGenericTablePointerMove);
+      window.removeEventListener("mousemove", onSetCodePointerMove);
       window.removeEventListener("mouseup", onPointerUp);
     };
   }, []);
+  useEffect(() => {
+    if (isPhoneView) return;
+    const raf = window.requestAnimationFrame(() => {
+      const tables = Array.from(
+        document.querySelectorAll<HTMLTableElement>(".workspace-main .table-wrap table")
+      );
+      tables.forEach((table) => {
+        if (!table.tHead || !table.tHead.rows.length) return;
+        if (table.closest(".modal-panel")) return;
+        if (table.classList.contains("asset-list-table")) return;
+        const headRow = table.tHead.rows[0];
+        const headers = Array.from(headRow.cells).filter(
+          (cell): cell is HTMLTableCellElement => cell.tagName === "TH"
+        );
+        if (headers.length < 2) return;
+        if (headers.some((header) => header.querySelector(".column-resizer"))) return;
+        const wrap = table.closest(".table-wrap") as HTMLDivElement | null;
+        const containerWidth = wrap?.getBoundingClientRect().width || table.getBoundingClientRect().width;
+        if (!containerWidth) return;
+
+        let colgroup = table.querySelector(":scope > colgroup");
+        if (!colgroup) {
+          colgroup = document.createElement("colgroup");
+          table.insertBefore(colgroup, table.firstChild);
+        }
+        while (colgroup.children.length < headers.length) {
+          colgroup.appendChild(document.createElement("col"));
+        }
+        while (colgroup.children.length > headers.length) {
+          colgroup.removeChild(colgroup.lastChild as ChildNode);
+        }
+
+        const headerWidths = headers.map((header) => header.getBoundingClientRect().width || containerWidth / headers.length);
+        const totalWidth = headerWidths.reduce((sum, width) => sum + width, 0) || 1;
+        const colEls = Array.from(colgroup.children) as HTMLTableColElement[];
+        colEls.forEach((col, index) => {
+          col.style.width = `${(headerWidths[index] / totalWidth) * 100}%`;
+        });
+
+        table.classList.add("resizable-columns");
+        headers.forEach((header, index) => {
+          if (index >= headers.length - 1) return;
+          const handle = document.createElement("span");
+          handle.className = "column-resizer";
+          handle.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            genericTableResizeStateRef.current = {
+              colgroup: colEls,
+              index,
+              startX: event.clientX,
+              startWidths: colEls.map((col) => Number.parseFloat(col.style.width || "0")),
+              containerWidth,
+            };
+            document.body.classList.add("is-col-resizing");
+          });
+          header.appendChild(handle);
+        });
+      });
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [
+    isPhoneView,
+    tab,
+    reportType,
+    maintenanceView,
+    verificationView,
+    transferView,
+    inventoryView,
+    poolView,
+    scheduleView,
+    setupView,
+  ]);
   const topCampusByAssets = useMemo(() => {
     if (!stats.byCampus.length) return null;
     return [...stats.byCampus].sort((a, b) => b.assets - a.assets)[0] || null;
@@ -30296,17 +30434,22 @@ export default function App() {
             )}
 
             {reportType === "set_code" && (
-              <div className="table-wrap report-table-wrap">
+              <div className="table-wrap report-table-wrap" ref={setCodeReportTableWrapRef}>
                 <table>
+                  <colgroup>
+                    {SET_CODE_REPORT_COLUMN_KEYS.map((key, index) => (
+                      <col key={`set-code-col-${key}`} style={{ width: `${setCodeReportColumnWidths[index]}%` }} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th>{t.setCode}</th>
-                      <th>{t.photo}</th>
-                      <th>Main Set ({t.assetId})</th>
-                      <th>Main Item</th>
-                      <th>{lang === "km" ? "អ្នកប្រើមេ" : "Main Assigned Staff"}</th>
-                      <th>{t.campus}</th>
-                      <th>Total Items</th>
+                      <th>{t.setCode}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(0, e.clientX)} /></th>
+                      <th>{t.photo}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(1, e.clientX)} /></th>
+                      <th>Main Set ({t.assetId})<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(2, e.clientX)} /></th>
+                      <th>Main Item<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(3, e.clientX)} /></th>
+                      <th>{lang === "km" ? "អ្នកប្រើមេ" : "Main Assigned Staff"}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(4, e.clientX)} /></th>
+                      <th>{t.campus}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(5, e.clientX)} /></th>
+                      <th>Total Items<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(6, e.clientX)} /></th>
                       <th>Connected Items</th>
                     </tr>
                   </thead>

@@ -5312,6 +5312,20 @@ table {
   background: rgba(117, 80, 36, 0.18);
 }
 
+.resizable-columns th {
+  position: relative;
+}
+
+.resizable-columns th:hover .column-resizer::after {
+  background: rgba(117, 80, 36, 0.36);
+}
+
+.is-col-resizing,
+.is-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .asset-list-table th:hover .column-resizer::after {
   background: rgba(117, 80, 36, 0.36);
 }
