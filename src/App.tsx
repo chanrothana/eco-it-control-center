@@ -6026,6 +6026,11 @@ export default function App() {
   const [vaultVisibleAccountPasswordId, setVaultVisibleAccountPasswordId] = useState<number | null>(null);
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
   const [vaultAccountFormPasswordVisible, setVaultAccountFormPasswordVisible] = useState(false);
+  const [editingVaultAccountId, setEditingVaultAccountId] = useState<number | null>(null);
+  const [editingVaultCredentialId, setEditingVaultCredentialId] = useState<number | null>(null);
+  const [editingVaultDesignId, setEditingVaultDesignId] = useState<number | null>(null);
+  const [editingVaultNetworkId, setEditingVaultNetworkId] = useState<number | null>(null);
+  const [editingVaultCctvId, setEditingVaultCctvId] = useState<number | null>(null);
   const [vaultAccountForm, setVaultAccountForm] = useState({
     systemName: "",
     model: "",
@@ -6078,6 +6083,80 @@ export default function App() {
     lastAngleReview: "",
     note: "",
   });
+
+  function resetVaultAccountForm() {
+    setVaultAccountForm({
+      systemName: "",
+      model: "",
+      host: "",
+      loginUrl: "",
+      accountName: "",
+      username: "",
+      password: "",
+      owner: "",
+      role: "",
+      status: "Active",
+      reviewDate: "",
+      lastUpdated: "",
+      note: "",
+    });
+    setVaultAccountFormPasswordVisible(false);
+    setEditingVaultAccountId(null);
+  }
+
+  function resetVaultCredentialForm() {
+    setVaultCredentialForm({
+      systemName: "",
+      loginUrl: "",
+      username: "",
+      password: "",
+      secretHint: "",
+      twoFa: "",
+      recovery: "",
+      lastUpdated: "",
+      note: "",
+    });
+    setVaultCredentialFormPasswordVisible(false);
+    setEditingVaultCredentialId(null);
+  }
+
+  function resetVaultDesignForm() {
+    setVaultDesignForm({
+      title: "",
+      folderUrl: "",
+      owner: "",
+      lastReview: "",
+      note: "",
+    });
+    setEditingVaultDesignId(null);
+  }
+
+  function resetVaultNetworkDocForm() {
+    setVaultNetworkDocForm({
+      title: "",
+      docType: "Network Diagram",
+      fileUrl: "",
+      version: "",
+      lastReview: "",
+      owner: "",
+      note: "",
+    });
+    setEditingVaultNetworkId(null);
+  }
+
+  function resetVaultCctvForm() {
+    setVaultCctvForm({
+      site: "",
+      nvrName: "",
+      loginUrl: "",
+      username: "",
+      cameraGroup: "",
+      retentionDays: "30",
+      lastAngleReview: "",
+      note: "",
+    });
+    setEditingVaultCctvId(null);
+  }
   const defaultCalendarEvents = useMemo(() => buildDefaultCalendarEvents(), []);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
     readCalendarEventFallback(buildDefaultCalendarEvents())
@@ -10926,7 +11005,7 @@ export default function App() {
       return;
     }
     const row: VaultAccount = {
-      id: Date.now(),
+      id: editingVaultAccountId || Date.now(),
       systemName: vaultAccountForm.systemName.trim(),
       model: vaultAccountForm.model.trim(),
       host: vaultAccountForm.host.trim(),
@@ -10940,29 +11019,17 @@ export default function App() {
       reviewDate: vaultAccountForm.reviewDate,
       lastUpdated: vaultAccountForm.lastUpdated,
       note: vaultAccountForm.note.trim(),
-      created: new Date().toISOString(),
+      created: editingVaultAccountId
+        ? vaultAccounts.find((item) => item.id === editingVaultAccountId)?.created || new Date().toISOString()
+        : new Date().toISOString(),
     };
-    const nextRows = [row, ...vaultAccounts];
+    const baseRows = editingVaultAccountId ? vaultAccounts.filter((item) => item.id !== editingVaultAccountId) : vaultAccounts;
+    const nextRows = [row, ...baseRows];
     setVaultAccounts(nextRows);
     try {
       await saveVaultSettingsToServer({ vaultAccounts: nextRows });
-      setVaultAccountForm({
-        systemName: "",
-        model: "",
-        host: "",
-        loginUrl: "",
-        accountName: "",
-        username: "",
-        password: "",
-        owner: "",
-        role: "",
-        status: "Active",
-        reviewDate: "",
-        lastUpdated: "",
-        note: "",
-      });
-      setVaultAccountFormPasswordVisible(false);
-      setSetupMessage("Vault account record added.");
+      resetVaultAccountForm();
+      setSetupMessage(editingVaultAccountId ? "Vault account record updated." : "Vault account record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault account record");
     }
@@ -10975,7 +11042,7 @@ export default function App() {
       return;
     }
     const row: VaultCredential = {
-      id: Date.now(),
+      id: editingVaultCredentialId || Date.now(),
       systemName: vaultCredentialForm.systemName.trim(),
       loginUrl: vaultCredentialForm.loginUrl.trim(),
       username: vaultCredentialForm.username.trim(),
@@ -10985,25 +11052,17 @@ export default function App() {
       recovery: vaultCredentialForm.recovery.trim(),
       lastUpdated: vaultCredentialForm.lastUpdated,
       note: vaultCredentialForm.note.trim(),
-      created: new Date().toISOString(),
+      created: editingVaultCredentialId
+        ? vaultCredentials.find((item) => item.id === editingVaultCredentialId)?.created || new Date().toISOString()
+        : new Date().toISOString(),
     };
-    const nextRows = [row, ...vaultCredentials];
+    const baseRows = editingVaultCredentialId ? vaultCredentials.filter((item) => item.id !== editingVaultCredentialId) : vaultCredentials;
+    const nextRows = [row, ...baseRows];
     setVaultCredentials(nextRows);
     try {
       await saveVaultSettingsToServer({ vaultCredentials: nextRows });
-      setVaultCredentialForm({
-        systemName: "",
-        loginUrl: "",
-        username: "",
-        password: "",
-        secretHint: "",
-        twoFa: "",
-        recovery: "",
-        lastUpdated: "",
-        note: "",
-      });
-      setVaultCredentialFormPasswordVisible(false);
-      setSetupMessage("Vault credential record added.");
+      resetVaultCredentialForm();
+      setSetupMessage(editingVaultCredentialId ? "Vault credential record updated." : "Vault credential record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault credential record");
     }
@@ -11016,26 +11075,23 @@ export default function App() {
       return;
     }
     const row: VaultDesignLink = {
-      id: Date.now(),
+      id: editingVaultDesignId || Date.now(),
       title: vaultDesignForm.title.trim(),
       folderUrl: vaultDesignForm.folderUrl.trim(),
       owner: vaultDesignForm.owner.trim(),
       note: vaultDesignForm.note.trim(),
       lastReview: vaultDesignForm.lastReview,
-      created: new Date().toISOString(),
+      created: editingVaultDesignId
+        ? vaultDesignLinks.find((item) => item.id === editingVaultDesignId)?.created || new Date().toISOString()
+        : new Date().toISOString(),
     };
-    const nextRows = [row, ...vaultDesignLinks];
+    const baseRows = editingVaultDesignId ? vaultDesignLinks.filter((item) => item.id !== editingVaultDesignId) : vaultDesignLinks;
+    const nextRows = [row, ...baseRows];
     setVaultDesignLinks(nextRows);
     try {
       await saveVaultSettingsToServer({ vaultDesignLinks: nextRows });
-      setVaultDesignForm({
-        title: "",
-        folderUrl: "",
-        owner: "",
-        lastReview: "",
-        note: "",
-      });
-      setSetupMessage("Vault design folder record added.");
+      resetVaultDesignForm();
+      setSetupMessage(editingVaultDesignId ? "Vault design folder record updated." : "Vault design folder record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault design link");
     }
@@ -11048,7 +11104,7 @@ export default function App() {
       return;
     }
     const row: VaultNetworkDoc = {
-      id: Date.now(),
+      id: editingVaultNetworkId || Date.now(),
       title: vaultNetworkDocForm.title.trim(),
       docType: vaultNetworkDocForm.docType.trim(),
       fileUrl: vaultNetworkDocForm.fileUrl.trim(),
@@ -11056,22 +11112,17 @@ export default function App() {
       lastReview: vaultNetworkDocForm.lastReview,
       owner: vaultNetworkDocForm.owner.trim(),
       note: vaultNetworkDocForm.note.trim(),
-      created: new Date().toISOString(),
+      created: editingVaultNetworkId
+        ? vaultNetworkDocs.find((item) => item.id === editingVaultNetworkId)?.created || new Date().toISOString()
+        : new Date().toISOString(),
     };
-    const nextRows = [row, ...vaultNetworkDocs];
+    const baseRows = editingVaultNetworkId ? vaultNetworkDocs.filter((item) => item.id !== editingVaultNetworkId) : vaultNetworkDocs;
+    const nextRows = [row, ...baseRows];
     setVaultNetworkDocs(nextRows);
     try {
       await saveVaultSettingsToServer({ vaultNetworkDocs: nextRows });
-      setVaultNetworkDocForm({
-        title: "",
-        docType: "Network Diagram",
-        fileUrl: "",
-        version: "",
-        lastReview: "",
-        owner: "",
-        note: "",
-      });
-      setSetupMessage("Vault network doc record added.");
+      resetVaultNetworkDocForm();
+      setSetupMessage(editingVaultNetworkId ? "Vault network doc record updated." : "Vault network doc record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault network doc");
     }
@@ -11084,7 +11135,7 @@ export default function App() {
       return;
     }
     const row: VaultCctvRecord = {
-      id: Date.now(),
+      id: editingVaultCctvId || Date.now(),
       site: vaultCctvForm.site.trim(),
       nvrName: vaultCctvForm.nvrName.trim(),
       loginUrl: vaultCctvForm.loginUrl.trim(),
@@ -11093,23 +11144,17 @@ export default function App() {
       retentionDays: Number(vaultCctvForm.retentionDays || 0),
       lastAngleReview: vaultCctvForm.lastAngleReview,
       note: vaultCctvForm.note.trim(),
-      created: new Date().toISOString(),
+      created: editingVaultCctvId
+        ? vaultCctvRecords.find((item) => item.id === editingVaultCctvId)?.created || new Date().toISOString()
+        : new Date().toISOString(),
     };
-    const nextRows = [row, ...vaultCctvRecords];
+    const baseRows = editingVaultCctvId ? vaultCctvRecords.filter((item) => item.id !== editingVaultCctvId) : vaultCctvRecords;
+    const nextRows = [row, ...baseRows];
     setVaultCctvRecords(nextRows);
     try {
       await saveVaultSettingsToServer({ vaultCctvRecords: nextRows });
-      setVaultCctvForm({
-        site: "",
-        nvrName: "",
-        loginUrl: "",
-        username: "",
-        cameraGroup: "",
-        retentionDays: "30",
-        lastAngleReview: "",
-        note: "",
-      });
-      setSetupMessage("Vault CCTV record added.");
+      resetVaultCctvForm();
+      setSetupMessage(editingVaultCctvId ? "Vault CCTV record updated." : "Vault CCTV record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault CCTV record");
     }
@@ -11144,6 +11189,78 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete vault record");
     }
+  }
+
+  function startEditVaultAccount(row: VaultAccount) {
+    setEditingVaultAccountId(row.id);
+    setVaultAccountForm({
+      systemName: row.systemName || "",
+      model: row.model || "",
+      host: row.host || "",
+      loginUrl: row.loginUrl || "",
+      accountName: row.accountName || "",
+      username: row.username || "",
+      password: row.password || "",
+      owner: row.owner || "",
+      role: row.role || "",
+      status: row.status || "Active",
+      reviewDate: row.reviewDate || "",
+      lastUpdated: row.lastUpdated || "",
+      note: row.note || "",
+    });
+  }
+
+  function startEditVaultCredential(row: VaultCredential) {
+    setEditingVaultCredentialId(row.id);
+    setVaultCredentialForm({
+      systemName: row.systemName || "",
+      loginUrl: row.loginUrl || "",
+      username: row.username || "",
+      password: row.password || "",
+      secretHint: row.secretHint || "",
+      twoFa: row.twoFa || "",
+      recovery: row.recovery || "",
+      lastUpdated: row.lastUpdated || "",
+      note: row.note || "",
+    });
+  }
+
+  function startEditVaultDesign(row: VaultDesignLink) {
+    setEditingVaultDesignId(row.id);
+    setVaultDesignForm({
+      title: row.title || "",
+      folderUrl: row.folderUrl || "",
+      owner: row.owner || "",
+      lastReview: row.lastReview || "",
+      note: row.note || "",
+    });
+  }
+
+  function startEditVaultNetwork(row: VaultNetworkDoc) {
+    setEditingVaultNetworkId(row.id);
+    setVaultNetworkDocForm({
+      title: row.title || "",
+      docType: row.docType || "Network Diagram",
+      fileUrl: row.fileUrl || "",
+      version: row.version || "",
+      lastReview: row.lastReview || "",
+      owner: row.owner || "",
+      note: row.note || "",
+    });
+  }
+
+  function startEditVaultCctv(row: VaultCctvRecord) {
+    setEditingVaultCctvId(row.id);
+    setVaultCctvForm({
+      site: row.site || "",
+      nvrName: row.nvrName || "",
+      loginUrl: row.loginUrl || "",
+      username: row.username || "",
+      cameraGroup: row.cameraGroup || "",
+      retentionDays: String(row.retentionDays || 0),
+      lastAngleReview: row.lastAngleReview || "",
+      note: row.note || "",
+    });
   }
 
   async function toggleMaintenanceReminderOffset(dayOffset: number) {
@@ -32967,39 +33084,6 @@ export default function App() {
               <article className="report-quick-status-pill"><span>Network & WiFi Docs</span><strong>{vaultNetworkDocs.length}</strong></article>
               <article className="report-quick-status-pill"><span>CCTV Systems</span><strong>{vaultCctvRecords.length}</strong></article>
             </div>
-            <div className="row-actions setup-tabs-row vault-subtabs" style={{ marginBottom: 10 }}>
-              {canAccessMenu("vault.dashboard", "vault") ? (
-              <button className={`tab ${vaultTab === "dashboard" ? "tab-active" : ""}`} onClick={() => setVaultTab("dashboard")}>
-                Overview
-              </button>
-              ) : null}
-              {canAccessMenu("vault.accounts", "vault") ? (
-              <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>
-                Access Systems
-              </button>
-              ) : null}
-              {canAccessMenu("vault.credentials", "vault") ? (
-              <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>
-                Web Services
-              </button>
-              ) : null}
-              {canAccessMenu("vault.design", "vault") ? (
-              <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>
-                Design Folders
-              </button>
-              ) : null}
-              {canAccessMenu("vault.network", "vault") ? (
-              <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>
-                Network & WiFi Docs
-              </button>
-              ) : null}
-              {canAccessMenu("vault.cctv", "vault") ? (
-              <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>
-                CCTV Systems
-              </button>
-              ) : null}
-            </div>
-
             {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
               <div className="panel" style={{ padding: 12, marginBottom: 12 }}>
                 <h3 className="section-title" style={{ marginTop: 0 }}>Vault Overview</h3>
@@ -33081,10 +33165,13 @@ export default function App() {
                   <label className="field"><span>Review Date</span><input type="date" className="input" value={vaultAccountForm.reviewDate} onChange={(e) => setVaultAccountForm((f) => ({ ...f, reviewDate: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultAccountForm.note} onChange={(e) => setVaultAccountForm((f) => ({ ...f, note: e.target.value }))} /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultAccount}>Add System Account</button></div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultAccount}>{editingVaultAccountId ? "Update System Account" : "Add System Account"}</button>
+                  {editingVaultAccountId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultAccountForm}>Cancel Edit</button> : null}
+                </div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
-                    <thead><tr><th>System</th><th>Model</th><th>IP / Host</th><th>Login URL</th><th>Account</th><th>Username</th><th>Password</th><th>Owner</th><th>Role</th><th>Status</th><th>Updated</th><th>Review</th><th>Note</th><th>{t.delete}</th></tr></thead>
+                    <thead><tr><th>System</th><th>Model</th><th>IP / Host</th><th>Login URL</th><th>Account</th><th>Username</th><th>Password</th><th>Owner</th><th>Role</th><th>Status</th><th>Updated</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
                     <tbody>
                       {vaultAccounts.length ? vaultAccounts.map((row) => (
                         <tr key={`vault-account-${row.id}`}>
@@ -33101,9 +33188,10 @@ export default function App() {
                           <td>{formatDate(row.lastUpdated || "-")}</td>
                           <td>{formatDate(row.reviewDate || "-")}</td>
                           <td>{row.note || "-"}</td>
+                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultAccount(row)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={14}>No system account records yet.</td></tr>}
+                      )) : <tr><td colSpan={15}>No system account records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -33149,19 +33237,23 @@ export default function App() {
                   <label className="field"><span>Password Updated Date</span><input type="date" className="input" value={vaultCredentialForm.lastUpdated} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, lastUpdated: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCredentialForm.note} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, note: e.target.value }))} placeholder="Example: Password updated on 25-Dec-2024 by Admin." /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCredential}>Add Website Login</button></div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCredential}>{editingVaultCredentialId ? "Update Website Login" : "Add Website Login"}</button>
+                  {editingVaultCredentialId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultCredentialForm}>Cancel Edit</button> : null}
+                </div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
-                    <thead><tr><th>System / Account</th><th>Login URL</th><th>Email / Username</th><th>Password</th><th>Password Hint / Storage Note</th><th>2FA / OTP</th><th>Recovery</th><th>Password Updated</th><th>{t.delete}</th></tr></thead>
+                    <thead><tr><th>System / Account</th><th>Login URL</th><th>Email / Username</th><th>Password</th><th>Password Hint / Storage Note</th><th>2FA / OTP</th><th>Recovery</th><th>Password Updated</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
                     <tbody>
                       {vaultCredentials.length ? vaultCredentials.map((row) => (
                         <tr key={`vault-credential-${row.id}`}>
                           <td>{row.systemName || "-"}</td><td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td><strong>{row.username || "-"}</strong></td>
                           <td>{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"} <button className="tab btn-small" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide" : "View"}</button></td>
                           <td>{row.secretHint || "-"}</td><td>{row.twoFa || "-"}</td><td>{row.recovery || "-"}</td><td>{formatDate(row.lastUpdated || "-")}</td>
+                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={9}>No website login records yet.</td></tr>}
+                      )) : <tr><td colSpan={10}>No website login records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -33184,10 +33276,13 @@ export default function App() {
                   <label className="field"><span>Last Review</span><input type="date" className="input" value={vaultDesignForm.lastReview} onChange={(e) => setVaultDesignForm((f) => ({ ...f, lastReview: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultDesignForm.note} onChange={(e) => setVaultDesignForm((f) => ({ ...f, note: e.target.value }))} /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultDesignLink}>Add Design Folder</button></div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultDesignLink}>{editingVaultDesignId ? "Update Design Folder" : "Add Design Folder"}</button>
+                  {editingVaultDesignId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultDesignForm}>Cancel Edit</button> : null}
+                </div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
-                    <thead><tr><th>Design</th><th>Folder</th><th>Owner</th><th>Review</th><th>Note</th><th>{t.delete}</th></tr></thead>
+                    <thead><tr><th>Design</th><th>Folder</th><th>Owner</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
                     <tbody>
                       {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
                         <tr key={`vault-design-${row.id}`}>
@@ -33196,9 +33291,10 @@ export default function App() {
                           <td>{row.owner || "-"}</td>
                           <td>{formatDate(row.lastReview || "-")}</td>
                           <td>{row.note || "-"}</td>
+                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultDesign(row)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("design", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={6}>No design folder links yet.</td></tr>}
+                      )) : <tr><td colSpan={7}>No design folder links yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -33226,17 +33322,21 @@ export default function App() {
                   <label className="field"><span>Owner</span><input className="input" value={vaultNetworkDocForm.owner} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, owner: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultNetworkDocForm.note} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, note: e.target.value }))} /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultNetworkDoc}>Add Network / WiFi Doc</button></div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultNetworkDoc}>{editingVaultNetworkId ? "Update Network / WiFi Doc" : "Add Network / WiFi Doc"}</button>
+                  {editingVaultNetworkId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultNetworkDocForm}>Cancel Edit</button> : null}
+                </div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
-                    <thead><tr><th>Title</th><th>Type</th><th>File/Link</th><th>Version</th><th>Review</th><th>Owner</th><th>Note</th><th>{t.delete}</th></tr></thead>
+                    <thead><tr><th>Title</th><th>Type</th><th>File/Link</th><th>Version</th><th>Review</th><th>Owner</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
                     <tbody>
                       {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
                         <tr key={`vault-network-${row.id}`}>
                           <td><strong>{row.title || "-"}</strong></td><td>{row.docType || "-"}</td><td>{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.version || "-"}</td><td>{formatDate(row.lastReview || "-")}</td><td>{row.owner || "-"}</td><td>{row.note || "-"}</td>
+                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultNetwork(row)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={8}>No network or WiFi documents yet.</td></tr>}
+                      )) : <tr><td colSpan={9}>No network or WiFi documents yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -33265,17 +33365,21 @@ export default function App() {
                   <label className="field"><span>Last Angle Review</span><input type="date" className="input" value={vaultCctvForm.lastAngleReview} onChange={(e) => setVaultCctvForm((f) => ({ ...f, lastAngleReview: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCctvForm.note} onChange={(e) => setVaultCctvForm((f) => ({ ...f, note: e.target.value }))} /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>Add CCTV System Record</button></div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>{editingVaultCctvId ? "Update CCTV System Record" : "Add CCTV System Record"}</button>
+                  {editingVaultCctvId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultCctvForm}>Cancel Edit</button> : null}
+                </div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
-                    <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>Username</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.delete}</th></tr></thead>
+                    <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>Username</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
                     <tbody>
                       {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
                         <tr key={`vault-cctv-${row.id}`}>
                           <td>{row.site || "-"}</td><td><strong>{row.nvrName || "-"}</strong></td><td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.username || "-"}</td><td>{row.cameraGroup || "-"}</td><td>{row.retentionDays || 0} days</td><td>{formatDate(row.lastAngleReview || "-")}</td>
+                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={8}>No CCTV system records yet.</td></tr>}
+                      )) : <tr><td colSpan={9}>No CCTV system records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
