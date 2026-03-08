@@ -4930,6 +4930,7 @@ export default function App() {
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
+      if (nextTab === "vault") setVaultTab("dashboard");
       setTab(nextTab);
     });
   }, []);
@@ -4954,6 +4955,7 @@ export default function App() {
         if (nextTab === "assets" && canAccessMenu("assets.list", "assets")) {
           setAssetsView("list");
         }
+        if (nextTab === "vault") setVaultTab("dashboard");
         setTab(nextTab);
       });
     },
@@ -33055,41 +33057,34 @@ export default function App() {
           <section className="panel">
             <h2>IT Operations Vault</h2>
             <p className="tiny">Central place for school IT operations records with linked documentation (Google Drive / external links).</p>
-            <div className="vault-guide-grid" style={{ marginBottom: 12 }}>
-              <button className={`vault-guide-card ${vaultTab === "accounts" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("accounts")}>
-                <strong>Access Systems</strong>
-                <span>Printers, MikroTik, UniFi, WiFi admin, CCTV admin</span>
-              </button>
-              <button className={`vault-guide-card ${vaultTab === "credentials" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("credentials")}>
-                <strong>Web Services</strong>
-                <span>Twinkl, Gmail, HostGator, WordPress, Telegram</span>
-              </button>
-              <button className={`vault-guide-card ${vaultTab === "network" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("network")}>
-                <strong>Network & WiFi Docs</strong>
-                <span>Topology, VLAN, AP map, ISP details, config backups</span>
-              </button>
-              <button className={`vault-guide-card ${vaultTab === "cctv" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("cctv")}>
-                <strong>CCTV Systems</strong>
-                <span>Recorder links, site map, camera area, retention, reviews</span>
-              </button>
-              <button className={`vault-guide-card ${vaultTab === "design" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("design")}>
-                <strong>Design Folders</strong>
-                <span>Drive folders, ownership, review dates, design references</span>
-              </button>
-            </div>
-            <div className="report-quick-status-grid vault-status-grid" style={{ marginBottom: 10 }}>
-              <article className="report-quick-status-pill"><span>System Accounts</span><strong>{vaultAccounts.length}</strong></article>
-              <article className="report-quick-status-pill"><span>Website Logins</span><strong>{vaultCredentials.length}</strong></article>
-              <article className="report-quick-status-pill"><span>Design Folders</span><strong>{vaultDesignLinks.length}</strong></article>
-              <article className="report-quick-status-pill"><span>Network & WiFi Docs</span><strong>{vaultNetworkDocs.length}</strong></article>
-              <article className="report-quick-status-pill"><span>CCTV Systems</span><strong>{vaultCctvRecords.length}</strong></article>
-            </div>
             {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
               <div className="panel" style={{ padding: 12, marginBottom: 12 }}>
                 <h3 className="section-title" style={{ marginTop: 0 }}>Vault Overview</h3>
                 <p className="tiny" style={{ marginBottom: 10 }}>
                   Use this page as a filing guide first: device and controller access goes to <strong>Access Systems</strong>, SaaS and online services go to <strong>Web Services</strong>, infrastructure reference goes to <strong>Network & WiFi Docs</strong>, and recorder/site mapping goes to <strong>CCTV Systems</strong>.
                 </p>
+                <div className="vault-guide-grid" style={{ marginBottom: 12 }}>
+                  <button className="vault-guide-card" onClick={() => setVaultTab("accounts")}>
+                    <strong>Access Systems</strong>
+                    <span>Printers, MikroTik, UniFi, WiFi admin, CCTV admin</span>
+                  </button>
+                  <button className="vault-guide-card" onClick={() => setVaultTab("credentials")}>
+                    <strong>Web Services</strong>
+                    <span>Twinkl, Gmail, HostGator, WordPress, Telegram</span>
+                  </button>
+                  <button className="vault-guide-card" onClick={() => setVaultTab("network")}>
+                    <strong>Network & WiFi Docs</strong>
+                    <span>Topology, VLAN, AP map, ISP details, config backups</span>
+                  </button>
+                  <button className="vault-guide-card" onClick={() => setVaultTab("cctv")}>
+                    <strong>CCTV Systems</strong>
+                    <span>Recorder links, site map, camera area, retention, reviews</span>
+                  </button>
+                  <button className="vault-guide-card" onClick={() => setVaultTab("design")}>
+                    <strong>Design Folders</strong>
+                    <span>Drive folders, ownership, review dates, design references</span>
+                  </button>
+                </div>
                 <div className="report-quick-status-grid vault-dashboard-shortcuts">
                   <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("accounts")}><span>Access Systems</span><strong>{vaultAccounts.length}</strong></button>
                   <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("credentials")}><span>Web Services</span><strong>{vaultCredentials.length}</strong></button>
@@ -33117,6 +33112,41 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {vaultTab !== "dashboard" ? (
+              <div className="row-actions setup-tabs-row vault-subtabs" style={{ marginBottom: 10 }}>
+                {canAccessMenu("vault.dashboard", "vault") ? (
+                <button className="tab" onClick={() => setVaultTab("dashboard")}>
+                  Back To Dashboard
+                </button>
+                ) : null}
+                {canAccessMenu("vault.accounts", "vault") ? (
+                <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>
+                  Access Systems
+                </button>
+                ) : null}
+                {canAccessMenu("vault.credentials", "vault") ? (
+                <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>
+                  Web Services
+                </button>
+                ) : null}
+                {canAccessMenu("vault.design", "vault") ? (
+                <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>
+                  Design Folders
+                </button>
+                ) : null}
+                {canAccessMenu("vault.network", "vault") ? (
+                <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>
+                  Network & WiFi Docs
+                </button>
+                ) : null}
+                {canAccessMenu("vault.cctv", "vault") ? (
+                <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>
+                  CCTV Systems
+                </button>
+                ) : null}
+              </div>
+            ) : null}
 
             {vaultTab === "accounts" && canAccessMenu("vault.accounts", "vault") && (
               <>
