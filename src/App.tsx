@@ -842,8 +842,8 @@ const MENU_ACCESS_TREE: Array<{
       { key: "vault.accounts", labelEn: "System Accounts", labelKm: "គណនីប្រព័ន្ធ" },
       { key: "vault.credentials", labelEn: "Website Logins", labelKm: "ចូលប្រព័ន្ធវេបសាយ" },
       { key: "vault.design", labelEn: "Design Folders", labelKm: "ថតឯកសារ Design" },
-      { key: "vault.network", labelEn: "Network Docs", labelKm: "ឯកសារបណ្តាញ" },
-      { key: "vault.cctv", labelEn: "CCTV Control", labelKm: "ការគ្រប់គ្រង CCTV" },
+      { key: "vault.network", labelEn: "Network & WiFi Docs", labelKm: "ឯកសារ Network និង WiFi" },
+      { key: "vault.cctv", labelEn: "CCTV Systems", labelKm: "ប្រព័ន្ធ CCTV" },
     ],
   },
   {
@@ -32909,8 +32909,8 @@ export default function App() {
               <article className="report-quick-status-pill"><span>System Accounts</span><strong>{vaultAccounts.length}</strong></article>
               <article className="report-quick-status-pill"><span>Website Logins</span><strong>{vaultCredentials.length}</strong></article>
               <article className="report-quick-status-pill"><span>Design Folders</span><strong>{vaultDesignLinks.length}</strong></article>
-              <article className="report-quick-status-pill"><span>Network Docs</span><strong>{vaultNetworkDocs.length}</strong></article>
-              <article className="report-quick-status-pill"><span>CCTV Records</span><strong>{vaultCctvRecords.length}</strong></article>
+              <article className="report-quick-status-pill"><span>Network & WiFi Docs</span><strong>{vaultNetworkDocs.length}</strong></article>
+              <article className="report-quick-status-pill"><span>CCTV Systems</span><strong>{vaultCctvRecords.length}</strong></article>
             </div>
             <div className="row-actions setup-tabs-row vault-subtabs" style={{ marginBottom: 10 }}>
               {canAccessMenu("vault.dashboard", "vault") ? (
@@ -32935,12 +32935,12 @@ export default function App() {
               ) : null}
               {canAccessMenu("vault.network", "vault") ? (
               <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>
-                Network Docs
+                Network & WiFi Docs
               </button>
               ) : null}
               {canAccessMenu("vault.cctv", "vault") ? (
               <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>
-                CCTV Control
+                CCTV Systems
               </button>
               ) : null}
             </div>
@@ -32949,21 +32949,24 @@ export default function App() {
               <div className="panel" style={{ padding: 12, marginBottom: 12 }}>
                 <h3 className="section-title" style={{ marginTop: 0 }}>Vault Dashboard</h3>
                 <p className="tiny" style={{ marginBottom: 10 }}>
-                  Track website logins (username/password), iCloud/service access, design folders, network docs, and CCTV records in one place.
+                  Track admin accounts, website logins, design folders, network and WiFi documents, and CCTV system records in one place.
                 </p>
                 <div className="report-quick-status-grid vault-dashboard-shortcuts">
                   <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("credentials")}><span>Website Logins</span><strong>{vaultCredentials.length}</strong></button>
                   <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("design")}><span>Design Folders</span><strong>{vaultDesignLinks.length}</strong></button>
-                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("network")}><span>Network Docs</span><strong>{vaultNetworkDocs.length}</strong></button>
-                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("cctv")}><span>CCTV Control</span><strong>{vaultCctvRecords.length}</strong></button>
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("network")}><span>Network & WiFi Docs</span><strong>{vaultNetworkDocs.length}</strong></button>
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("cctv")}><span>CCTV Systems</span><strong>{vaultCctvRecords.length}</strong></button>
                 </div>
               </div>
             )}
 
             {vaultTab === "accounts" && canAccessMenu("vault.accounts", "vault") && (
               <>
+                <div className="tiny" style={{ marginBottom: 10 }}>
+                  Use <strong>System Accounts</strong> for admin/control credentials such as CCTV admin, Printer admin, MikroTik admin, UniFi Controller admin, WiFi portal admin, and device service accounts.
+                </div>
                 <div className="form-grid">
-                  <label className="field"><span>System</span><input className="input" value={vaultAccountForm.systemName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, systemName: e.target.value }))} /></label>
+                  <label className="field"><span>System</span><input className="input" value={vaultAccountForm.systemName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="CCTV System / MikroTik / UniFi Controller / Printer Admin" /></label>
                   <label className="field"><span>Account Name</span><input className="input" value={vaultAccountForm.accountName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, accountName: e.target.value }))} /></label>
                   <label className="field"><span>Owner</span><input className="input" value={vaultAccountForm.owner} onChange={(e) => setVaultAccountForm((f) => ({ ...f, owner: e.target.value }))} /></label>
                   <label className="field"><span>Role</span><input className="input" value={vaultAccountForm.role} onChange={(e) => setVaultAccountForm((f) => ({ ...f, role: e.target.value }))} /></label>
@@ -32997,6 +33000,7 @@ export default function App() {
             {vaultTab === "credentials" && canAccessMenu("vault.credentials", "vault") && (
               <>
                 <div className="tiny" style={{ marginBottom: 10 }}>
+                  Use <strong>Website Logins</strong> for SaaS and web-based services such as Twinkl, Gmail, Telegram Bot, hosting panel, and domain registrar.<br />
                   Example record: <strong>System</strong> = School Main Email, <strong>Email / Username</strong> = `info@eis-edu.com`,
                   <strong> Password</strong> = stored credential, <strong>Password Updated Date</strong> = `25-Dec-2024`.
                 </div>
@@ -33076,16 +33080,19 @@ export default function App() {
 
             {vaultTab === "network" && canAccessMenu("vault.network", "vault") && (
               <>
+                <div className="tiny" style={{ marginBottom: 10 }}>
+                  Use <strong>Network & WiFi Docs</strong> for topology maps, ISP details, VLAN plans, switch port maps, AP placement, UniFi site notes, MikroTik config exports, and WiFi setup documents.
+                </div>
                 <div className="form-grid">
-                  <label className="field"><span>Title</span><input className="input" value={vaultNetworkDocForm.title} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, title: e.target.value }))} /></label>
-                  <label className="field"><span>Type</span><input className="input" value={vaultNetworkDocForm.docType} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, docType: e.target.value }))} /></label>
+                  <label className="field"><span>Title</span><input className="input" value={vaultNetworkDocForm.title} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, title: e.target.value }))} placeholder="Main Campus WiFi Map / MikroTik Backup / UniFi AP Layout" /></label>
+                  <label className="field"><span>Type</span><input className="input" value={vaultNetworkDocForm.docType} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, docType: e.target.value }))} placeholder="Topology / VLAN / WiFi / Backup / ISP" /></label>
                   <label className="field"><span>Google Drive / File Link</span><input className="input" value={vaultNetworkDocForm.fileUrl} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, fileUrl: e.target.value }))} placeholder="https://drive.google.com/..." /></label>
                   <label className="field"><span>Version</span><input className="input" value={vaultNetworkDocForm.version} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, version: e.target.value }))} /></label>
                   <label className="field"><span>Last Review</span><input type="date" className="input" value={vaultNetworkDocForm.lastReview} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, lastReview: e.target.value }))} /></label>
                   <label className="field"><span>Owner</span><input className="input" value={vaultNetworkDocForm.owner} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, owner: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultNetworkDocForm.note} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, note: e.target.value }))} /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultNetworkDoc}>Add Network Doc</button></div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultNetworkDoc}>Add Network / WiFi Doc</button></div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead><tr><th>Title</th><th>Type</th><th>File/Link</th><th>Version</th><th>Review</th><th>Owner</th><th>Note</th><th>{t.delete}</th></tr></thead>
@@ -33095,7 +33102,7 @@ export default function App() {
                           <td><strong>{row.title || "-"}</strong></td><td>{row.docType || "-"}</td><td>{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.version || "-"}</td><td>{formatDate(row.lastReview || "-")}</td><td>{row.owner || "-"}</td><td>{row.note || "-"}</td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={8}>No network documents yet.</td></tr>}
+                      )) : <tr><td colSpan={8}>No network or WiFi documents yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -33104,6 +33111,9 @@ export default function App() {
 
             {vaultTab === "cctv" && canAccessMenu("vault.cctv", "vault") && (
               <>
+                <div className="tiny" style={{ marginBottom: 10 }}>
+                  Use <strong>CCTV Systems</strong> for recorder details, camera area mapping, CCTV login links, retention setup, and review history by campus or site.
+                </div>
                 <div className="form-grid">
                   <label className="field"><span>Site/Campus</span><input className="input" value={vaultCctvForm.site} onChange={(e) => setVaultCctvForm((f) => ({ ...f, site: e.target.value }))} /></label>
                   <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
@@ -33114,7 +33124,7 @@ export default function App() {
                   <label className="field"><span>Last Angle Review</span><input type="date" className="input" value={vaultCctvForm.lastAngleReview} onChange={(e) => setVaultCctvForm((f) => ({ ...f, lastAngleReview: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCctvForm.note} onChange={(e) => setVaultCctvForm((f) => ({ ...f, note: e.target.value }))} /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>Add CCTV Record</button></div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>Add CCTV System Record</button></div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>Username</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.delete}</th></tr></thead>
@@ -33124,7 +33134,7 @@ export default function App() {
                           <td>{row.site || "-"}</td><td><strong>{row.nvrName || "-"}</strong></td><td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.username || "-"}</td><td>{row.cameraGroup || "-"}</td><td>{row.retentionDays || 0} days</td><td>{formatDate(row.lastAngleReview || "-")}</td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={8}>No CCTV records yet.</td></tr>}
+                      )) : <tr><td colSpan={8}>No CCTV system records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
