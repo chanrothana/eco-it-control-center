@@ -543,6 +543,19 @@ type VaultCctvRecord = {
   note?: string;
   created: string;
 };
+type VaultSearchField = {
+  label: string;
+  value: string;
+  link?: string;
+};
+type VaultSearchEntry = {
+  id: string;
+  section: "Access Systems" | "Web Services" | "Design Folders" | "Network & WiFi Docs" | "CCTV Systems";
+  title: string;
+  subtitle?: string;
+  fields: VaultSearchField[];
+  searchText: string;
+};
 type CalendarEventType =
   | "public"
   | "ptc"
@@ -6036,6 +6049,7 @@ export default function App() {
   const [vaultDesignLinks, setVaultDesignLinks] = useState<VaultDesignLink[]>(() => readVaultDesignLinksFallback());
   const [vaultNetworkDocs, setVaultNetworkDocs] = useState<VaultNetworkDoc[]>(() => readVaultNetworkDocsFallback());
   const [vaultCctvRecords, setVaultCctvRecords] = useState<VaultCctvRecord[]>(() => readVaultCctvFallback());
+  const [vaultSearchQuery, setVaultSearchQuery] = useState("");
   const [vaultVisiblePasswordId, setVaultVisiblePasswordId] = useState<number | null>(null);
   const [vaultVisibleAccountPasswordId, setVaultVisibleAccountPasswordId] = useState<number | null>(null);
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
@@ -6097,6 +6111,136 @@ export default function App() {
     lastAngleReview: "",
     note: "",
   });
+  const deferredVaultSearchQuery = useDeferredValue(vaultSearchQuery.trim().toLowerCase());
+  const vaultSearchEntries = useMemo<VaultSearchEntry[]>(() => {
+    const entries: VaultSearchEntry[] = [];
+
+    if (canAccessMenu("vault.accounts", "vault")) {
+      for (const row of vaultAccounts) {
+        const fields: VaultSearchField[] = [
+          { label: "System", value: row.systemName || "-" },
+          { label: "Model", value: row.model || "-" },
+          { label: "IP / Host", value: row.host || "-" },
+          { label: "Login URL", value: row.loginUrl || "-", link: row.loginUrl || undefined },
+          { label: "Account", value: row.accountName || "-" },
+          { label: "Username", value: row.username || "-" },
+          { label: "Password", value: row.password || "-" },
+          { label: "Owner", value: row.owner || "-" },
+          { label: "Role", value: row.role || "-" },
+          { label: "Status", value: row.status || "-" },
+          { label: "Updated", value: row.lastUpdated || "-" },
+          { label: "Review", value: row.reviewDate || "-" },
+          { label: "Note", value: row.note || "-" },
+        ];
+        entries.push({
+          id: `accounts-${row.id}`,
+          section: "Access Systems",
+          title: row.accountName || row.systemName || "-",
+          subtitle: [row.systemName, row.host].filter(Boolean).join(" | "),
+          fields,
+          searchText: ["Access Systems", ...fields.map((field) => field.value)].join(" ").toLowerCase(),
+        });
+      }
+    }
+
+    if (canAccessMenu("vault.credentials", "vault")) {
+      for (const row of vaultCredentials) {
+        const fields: VaultSearchField[] = [
+          { label: "System / Account", value: row.systemName || "-" },
+          { label: "Login URL", value: row.loginUrl || "-", link: row.loginUrl || undefined },
+          { label: "Email / Username", value: row.username || "-" },
+          { label: "Password", value: row.password || "-" },
+          { label: "Password Hint / Storage Note", value: row.secretHint || "-" },
+          { label: "2FA / OTP", value: row.twoFa || "-" },
+          { label: "Recovery", value: row.recovery || "-" },
+          { label: "Password Updated", value: row.lastUpdated || "-" },
+          { label: "Note", value: row.note || "-" },
+        ];
+        entries.push({
+          id: `credentials-${row.id}`,
+          section: "Web Services",
+          title: row.systemName || "-",
+          subtitle: row.username || "",
+          fields,
+          searchText: ["Web Services", ...fields.map((field) => field.value)].join(" ").toLowerCase(),
+        });
+      }
+    }
+
+    if (canAccessMenu("vault.design", "vault")) {
+      for (const row of vaultDesignLinks) {
+        const fields: VaultSearchField[] = [
+          { label: "Design", value: row.title || "-" },
+          { label: "Folder", value: row.folderUrl || "-", link: row.folderUrl || undefined },
+          { label: "Owner", value: row.owner || "-" },
+          { label: "Review", value: row.lastReview || "-" },
+          { label: "Note", value: row.note || "-" },
+        ];
+        entries.push({
+          id: `design-${row.id}`,
+          section: "Design Folders",
+          title: row.title || "-",
+          subtitle: row.owner || "",
+          fields,
+          searchText: ["Design Folders", ...fields.map((field) => field.value)].join(" ").toLowerCase(),
+        });
+      }
+    }
+
+    if (canAccessMenu("vault.network", "vault")) {
+      for (const row of vaultNetworkDocs) {
+        const fields: VaultSearchField[] = [
+          { label: "Title", value: row.title || "-" },
+          { label: "Type", value: row.docType || "-" },
+          { label: "File / Link", value: row.fileUrl || "-", link: row.fileUrl || undefined },
+          { label: "Version", value: row.version || "-" },
+          { label: "Review", value: row.lastReview || "-" },
+          { label: "Owner", value: row.owner || "-" },
+          { label: "Note", value: row.note || "-" },
+        ];
+        entries.push({
+          id: `network-${row.id}`,
+          section: "Network & WiFi Docs",
+          title: row.title || "-",
+          subtitle: row.docType || "",
+          fields,
+          searchText: ["Network & WiFi Docs", ...fields.map((field) => field.value)].join(" ").toLowerCase(),
+        });
+      }
+    }
+
+    if (canAccessMenu("vault.cctv", "vault")) {
+      for (const row of vaultCctvRecords) {
+        const fields: VaultSearchField[] = [
+          { label: "Site", value: row.site || "-" },
+          { label: "NVR", value: row.nvrName || "-" },
+          { label: "Login URL", value: row.loginUrl || "-", link: row.loginUrl || undefined },
+          { label: "Username", value: row.username || "-" },
+          { label: "Camera / Angle Area", value: row.cameraGroup || "-" },
+          { label: "Retention", value: row.retentionDays != null ? `${row.retentionDays} days` : "-" },
+          { label: "Review", value: row.lastAngleReview || "-" },
+          { label: "Note", value: row.note || "-" },
+        ];
+        entries.push({
+          id: `cctv-${row.id}`,
+          section: "CCTV Systems",
+          title: row.nvrName || row.site || "-",
+          subtitle: row.site || "",
+          fields,
+          searchText: ["CCTV Systems", ...fields.map((field) => field.value)].join(" ").toLowerCase(),
+        });
+      }
+    }
+
+    return entries;
+  }, [canAccessMenu, vaultAccounts, vaultCredentials, vaultDesignLinks, vaultNetworkDocs, vaultCctvRecords]);
+  const vaultSearchResults = useMemo(
+    () =>
+      deferredVaultSearchQuery
+        ? vaultSearchEntries.filter((entry) => entry.searchText.includes(deferredVaultSearchQuery))
+        : vaultSearchEntries,
+    [deferredVaultSearchQuery, vaultSearchEntries]
+  );
 
   function resetVaultAccountForm() {
     setVaultAccountForm({
@@ -26120,8 +26264,8 @@ export default function App() {
                   <button className="btn-primary" disabled={!isAdmin || inventorySupplyMasterLocked} onClick={createInventoryItem}>Add Inventory Item</button>
                 </div>
 
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
+                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
+                  <table className="vault-responsive-table">
                     <thead>
                       <tr>
                         <th>Code</th>
@@ -26273,7 +26417,7 @@ export default function App() {
                   <button className="btn-primary" disabled={!isAdmin} onClick={createInventoryTxn}>Save Transaction</button>
                 </div>
 
-                <div className="table-wrap" style={{ marginTop: 12 }}>
+                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
                       <tr>
@@ -28385,7 +28529,7 @@ export default function App() {
                   )}
                 </div>
               ) : (
-                <div className="table-wrap" style={{ marginTop: 12 }}>
+                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
                       <tr>
@@ -28502,7 +28646,7 @@ export default function App() {
                   )}
                 </div>
               ) : (
-                <div className="table-wrap" style={{ marginTop: 12 }}>
+                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
                       <tr>
@@ -30144,7 +30288,7 @@ export default function App() {
                 <p className="tiny">
                   {campusLabel(maintenanceDetailAsset.campus)} | {maintenanceDetailAsset.category} | {maintenanceDetailAsset.location || "-"}
                 </p>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
+                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
                       <tr>
@@ -33102,23 +33246,59 @@ export default function App() {
                     <span>Drive folders, ownership, review dates, design references</span>
                   </button>
                 </div>
-                <div className="vault-legend-grid">
-                  <article className="vault-legend-card">
-                    <strong>Access Systems</strong>
-                    <p>Printer control, MikroTik, UniFi Controller, WiFi admin, CCTV admin, NVR/DVR admin.</p>
-                  </article>
-                  <article className="vault-legend-card">
-                    <strong>Web Services</strong>
-                    <p>Twinkl, Gmail, Telegram, HostGator, WordPress, domain and hosting services.</p>
-                  </article>
-                  <article className="vault-legend-card">
-                    <strong>Network & WiFi Docs</strong>
-                    <p>Topology maps, VLAN sheets, ISP information, AP layout, backup exports.</p>
-                  </article>
-                  <article className="vault-legend-card">
-                    <strong>CCTV Systems</strong>
-                    <p>Recorder links, campus/site maps, camera zones, retention settings, review dates.</p>
-                  </article>
+                <div className="vault-dashboard-note">
+                  <div>
+                    <strong>Vault Notice</strong>
+                    <p>Keep each record in one correct section only to avoid duplicate entries. Use the search bar below to scan all IT Vault records in one full-detail list by system name, account, IP, URL, owner, note, or site.</p>
+                  </div>
+                </div>
+                <div className="vault-section-head" style={{ marginTop: 16 }}>
+                  <div>
+                    <h3 className="section-title" style={{ margin: 0 }}>Search All IT Vault Data</h3>
+                    <p className="tiny">Everything from Access Systems, Web Services, Design Folders, Network & WiFi Docs, and CCTV Systems is listed here.</p>
+                  </div>
+                  <span className="vault-section-count">{vaultSearchResults.length} records</span>
+                </div>
+                <div className="vault-search-toolbar">
+                  <label className="field vault-search-field">
+                    <span>Search All Records</span>
+                    <div className="vault-search-input-wrap">
+                      <Search size={18} />
+                      <input
+                        className="input"
+                        value={vaultSearchQuery}
+                        onChange={(e) => setVaultSearchQuery(e.target.value)}
+                        placeholder="Search by system, username, IP, URL, owner, note, site..."
+                      />
+                    </div>
+                  </label>
+                </div>
+                <div className="vault-search-list">
+                  {vaultSearchResults.length ? vaultSearchResults.map((entry) => (
+                    <article className="vault-search-card" key={entry.id}>
+                      <div className="vault-search-card-head">
+                        <div>
+                          <span className="vault-search-badge">{entry.section}</span>
+                          <h4>{entry.title}</h4>
+                          {entry.subtitle ? <p>{entry.subtitle}</p> : null}
+                        </div>
+                      </div>
+                      <div className="vault-search-grid">
+                        {entry.fields.map((field) => (
+                          <div className="vault-search-item" key={`${entry.id}-${field.label}`}>
+                            <span>{field.label}</span>
+                            {field.link && field.value !== "-" ? (
+                              <strong><a href={field.link} target="_blank" rel="noreferrer">Open Link</a></strong>
+                            ) : (
+                              <strong>{field.value || "-"}</strong>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  )) : (
+                    <div className="vault-mobile-empty">No IT Vault records matched your search.</div>
+                  )}
                 </div>
               </div>
             )}
@@ -33170,32 +33350,63 @@ export default function App() {
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>System Accounts</strong> for admin/control credentials such as CCTV admin, Printer admin, MikroTik admin, UniFi Controller admin, WiFi portal admin, and device service accounts.
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead><tr><th>System</th><th>Model</th><th>IP / Host</th><th>Login URL</th><th>Account</th><th>Username</th><th>Password</th><th>Owner</th><th>Role</th><th>Status</th><th>Updated</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                    <tbody>
-                      {vaultAccounts.length ? vaultAccounts.map((row) => (
-                        <tr key={`vault-account-${row.id}`}>
-                          <td>{row.systemName || "-"}</td>
-                          <td>{row.model || "-"}</td>
-                          <td>{row.host || "-"}</td>
-                          <td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td>
-                          <td><strong>{row.accountName || "-"}</strong></td>
-                          <td>{row.username || "-"}</td>
-                          <td>{vaultVisibleAccountPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleAccountPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleAccountPasswordId === row.id ? "Hide" : "View"}</button> : null}</td>
-                          <td>{row.owner || "-"}</td>
-                          <td>{row.role || "-"}</td>
-                          <td>{row.status || "-"}</td>
-                          <td>{formatDate(row.lastUpdated || "-")}</td>
-                          <td>{formatDate(row.reviewDate || "-")}</td>
-                          <td>{row.note || "-"}</td>
-                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultAccount(row)}>{t.edit}</button></td>
-                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>X</button></td>
-                        </tr>
-                      )) : <tr><td colSpan={15}>No system account records yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                {isPhoneView ? (
+                  <div className="vault-mobile-list" style={{ marginTop: 12 }}>
+                    {vaultAccounts.length ? vaultAccounts.map((row) => (
+                      <article className="vault-mobile-card" key={`vault-account-mobile-${row.id}`}>
+                        <div className="vault-mobile-card-head">
+                          <strong>{row.accountName || row.systemName || "-"}</strong>
+                          <span>{row.status || "-"}</span>
+                        </div>
+                        <div className="vault-mobile-fields">
+                          <div className="vault-mobile-field"><span>System</span><strong>{row.systemName || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Model</span><strong>{row.model || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>IP / Host</span><strong>{row.host || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Login URL</span><strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Username</span><strong>{row.username || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisibleAccountPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong></div>
+                          <div className="vault-mobile-field"><span>Owner</span><strong>{row.owner || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Role</span><strong>{row.role || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Updated</span><strong>{formatDate(row.lastUpdated || "-")}</strong></div>
+                          <div className="vault-mobile-field"><span>Review</span><strong>{formatDate(row.reviewDate || "-")}</strong></div>
+                          <div className="vault-mobile-field vault-mobile-field-wide"><span>Note</span><strong>{row.note || "-"}</strong></div>
+                        </div>
+                        <div className="vault-mobile-actions">
+                          {row.password ? <button className="tab" onClick={() => setVaultVisibleAccountPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleAccountPasswordId === row.id ? "Hide Password" : "View Password"}</button> : null}
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultAccount(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No system account records yet.</div>}
+                  </div>
+                ) : (
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table>
+                      <thead><tr><th>System</th><th>Model</th><th>IP / Host</th><th>Login URL</th><th>Account</th><th>Username</th><th>Password</th><th>Owner</th><th>Role</th><th>Status</th><th>Updated</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
+                      <tbody>
+                        {vaultAccounts.length ? vaultAccounts.map((row) => (
+                          <tr key={`vault-account-${row.id}`}>
+                            <td>{row.systemName || "-"}</td>
+                            <td>{row.model || "-"}</td>
+                            <td>{row.host || "-"}</td>
+                            <td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td>
+                            <td><strong>{row.accountName || "-"}</strong></td>
+                            <td>{row.username || "-"}</td>
+                            <td>{vaultVisibleAccountPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleAccountPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleAccountPasswordId === row.id ? "Hide" : "View"}</button> : null}</td>
+                            <td>{row.owner || "-"}</td>
+                            <td>{row.role || "-"}</td>
+                            <td>{row.status || "-"}</td>
+                            <td>{formatDate(row.lastUpdated || "-")}</td>
+                            <td>{formatDate(row.reviewDate || "-")}</td>
+                            <td>{row.note || "-"}</td>
+                            <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultAccount(row)}>{t.edit}</button></td>
+                            <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>X</button></td>
+                          </tr>
+                        )) : <tr><td colSpan={15}>No system account records yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>System / Platform</span><input className="input" value={vaultAccountForm.systemName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="Printer Control / MikroTik / UniFi Controller / CCTV System" /></label>
                   <label className="field"><span>Model</span><input className="input" value={vaultAccountForm.model} onChange={(e) => setVaultAccountForm((f) => ({ ...f, model: e.target.value }))} placeholder="Canon C5550 / RB4011 / UDM Pro" /></label>
@@ -33252,22 +33463,49 @@ export default function App() {
                   Example record: <strong>System</strong> = School Main Email, <strong>Email / Username</strong> = `info@eis-edu.com`,
                   <strong> Password</strong> = stored credential, <strong>Password Updated Date</strong> = `25-Dec-2024`.
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead><tr><th>System / Account</th><th>Login URL</th><th>Email / Username</th><th>Password</th><th>Password Hint / Storage Note</th><th>2FA / OTP</th><th>Recovery</th><th>Password Updated</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                    <tbody>
-                      {vaultCredentials.length ? vaultCredentials.map((row) => (
-                        <tr key={`vault-credential-${row.id}`}>
-                          <td>{row.systemName || "-"}</td><td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td><strong>{row.username || "-"}</strong></td>
-                          <td>{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"} <button className="tab btn-small" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide" : "View"}</button></td>
-                          <td>{row.secretHint || "-"}</td><td>{row.twoFa || "-"}</td><td>{row.recovery || "-"}</td><td>{formatDate(row.lastUpdated || "-")}</td>
-                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button></td>
-                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>X</button></td>
-                        </tr>
-                      )) : <tr><td colSpan={10}>No website login records yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                {isPhoneView ? (
+                  <div className="vault-mobile-list" style={{ marginTop: 12 }}>
+                    {vaultCredentials.length ? vaultCredentials.map((row) => (
+                      <article className="vault-mobile-card" key={`vault-credential-mobile-${row.id}`}>
+                        <div className="vault-mobile-card-head">
+                          <strong>{row.systemName || "-"}</strong>
+                          <span>{formatDate(row.lastUpdated || "-")}</span>
+                        </div>
+                        <div className="vault-mobile-fields">
+                          <div className="vault-mobile-field"><span>Login URL</span><strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Email / Username</span><strong>{row.username || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"}</strong></div>
+                          <div className="vault-mobile-field"><span>2FA / OTP</span><strong>{row.twoFa || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Recovery</span><strong>{row.recovery || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Password Updated</span><strong>{formatDate(row.lastUpdated || "-")}</strong></div>
+                          <div className="vault-mobile-field vault-mobile-field-wide"><span>Password Hint / Storage Note</span><strong>{row.secretHint || "-"}</strong></div>
+                        </div>
+                        <div className="vault-mobile-actions">
+                          <button className="tab" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide Password" : "View Password"}</button>
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No website login records yet.</div>}
+                  </div>
+                ) : (
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table className="vault-responsive-table">
+                      <thead><tr><th>System / Account</th><th>Login URL</th><th>Email / Username</th><th>Password</th><th>Password Hint / Storage Note</th><th>2FA / OTP</th><th>Recovery</th><th>Password Updated</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
+                      <tbody>
+                        {vaultCredentials.length ? vaultCredentials.map((row) => (
+                          <tr key={`vault-credential-${row.id}`}>
+                            <td data-label="System / Account">{row.systemName || "-"}</td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="Email / Username"><strong>{row.username || "-"}</strong></td>
+                            <td data-label="Password" className="vault-table-password-cell">{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"} <button className="tab btn-small" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide" : "View"}</button></td>
+                            <td data-label="Password Hint / Storage Note">{row.secretHint || "-"}</td><td data-label="2FA / OTP">{row.twoFa || "-"}</td><td data-label="Recovery">{row.recovery || "-"}</td><td data-label="Password Updated">{formatDate(row.lastUpdated || "-")}</td>
+                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button></td>
+                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>X</button></td>
+                          </tr>
+                        )) : <tr className="vault-table-empty-row"><td colSpan={10}>No website login records yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>System / Account Name</span><input className="input" value={vaultCredentialForm.systemName} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="School Main Email / Telegram Bot / Hosting Panel" /></label>
                   <label className="field"><span>Login URL</span><input className="input" value={vaultCredentialForm.loginUrl} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://mail.google.com/ or other login page" /></label>
@@ -33309,24 +33547,47 @@ export default function App() {
                   </div>
                   <span className="vault-section-count">{vaultDesignLinks.length} records</span>
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead><tr><th>Design</th><th>Folder</th><th>Owner</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                    <tbody>
-                      {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
-                        <tr key={`vault-design-${row.id}`}>
-                          <td><strong>{row.title || "-"}</strong></td>
-                          <td>{row.folderUrl ? <a href={row.folderUrl} target="_blank" rel="noreferrer">Open Folder</a> : "-"}</td>
-                          <td>{row.owner || "-"}</td>
-                          <td>{formatDate(row.lastReview || "-")}</td>
-                          <td>{row.note || "-"}</td>
-                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultDesign(row)}>{t.edit}</button></td>
-                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("design", row.id)}>X</button></td>
-                        </tr>
-                      )) : <tr><td colSpan={7}>No design folder links yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                {isPhoneView ? (
+                  <div className="vault-mobile-list" style={{ marginTop: 12 }}>
+                    {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
+                      <article className="vault-mobile-card" key={`vault-design-mobile-${row.id}`}>
+                        <div className="vault-mobile-card-head">
+                          <strong>{row.title || "-"}</strong>
+                          <span>{formatDate(row.lastReview || "-")}</span>
+                        </div>
+                        <div className="vault-mobile-fields">
+                          <div className="vault-mobile-field"><span>Folder</span><strong>{row.folderUrl ? <a href={row.folderUrl} target="_blank" rel="noreferrer">Open Folder</a> : "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Owner</span><strong>{row.owner || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Review</span><strong>{formatDate(row.lastReview || "-")}</strong></div>
+                          <div className="vault-mobile-field vault-mobile-field-wide"><span>Note</span><strong>{row.note || "-"}</strong></div>
+                        </div>
+                        <div className="vault-mobile-actions">
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultDesign(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("design", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No design folder links yet.</div>}
+                  </div>
+                ) : (
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table className="vault-responsive-table">
+                      <thead><tr><th>Design</th><th>Folder</th><th>Owner</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
+                      <tbody>
+                        {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
+                          <tr key={`vault-design-${row.id}`}>
+                            <td data-label="Design"><strong>{row.title || "-"}</strong></td>
+                            <td data-label="Folder">{row.folderUrl ? <a href={row.folderUrl} target="_blank" rel="noreferrer">Open Folder</a> : "-"}</td>
+                            <td data-label="Owner">{row.owner || "-"}</td>
+                            <td data-label="Review">{formatDate(row.lastReview || "-")}</td>
+                            <td data-label="Note">{row.note || "-"}</td>
+                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultDesign(row)}>{t.edit}</button></td>
+                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("design", row.id)}>X</button></td>
+                          </tr>
+                        )) : <tr className="vault-table-empty-row"><td colSpan={7}>No design folder links yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>Design Name</span><input className="input" value={vaultDesignForm.title} onChange={(e) => setVaultDesignForm((f) => ({ ...f, title: e.target.value }))} /></label>
                   <label className="field"><span>Design Folder Link (Google Drive)</span><input className="input" value={vaultDesignForm.folderUrl} onChange={(e) => setVaultDesignForm((f) => ({ ...f, folderUrl: e.target.value }))} placeholder="https://drive.google.com/..." /></label>
@@ -33353,20 +33614,44 @@ export default function App() {
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>Network & WiFi Docs</strong> for topology maps, ISP details, VLAN plans, switch port maps, AP placement, UniFi site notes, MikroTik config exports, and WiFi setup documents.
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead><tr><th>Title</th><th>Type</th><th>File/Link</th><th>Version</th><th>Review</th><th>Owner</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                    <tbody>
-                      {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
-                        <tr key={`vault-network-${row.id}`}>
-                          <td><strong>{row.title || "-"}</strong></td><td>{row.docType || "-"}</td><td>{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.version || "-"}</td><td>{formatDate(row.lastReview || "-")}</td><td>{row.owner || "-"}</td><td>{row.note || "-"}</td>
-                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultNetwork(row)}>{t.edit}</button></td>
-                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>X</button></td>
-                        </tr>
-                      )) : <tr><td colSpan={9}>No network or WiFi documents yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                {isPhoneView ? (
+                  <div className="vault-mobile-list" style={{ marginTop: 12 }}>
+                    {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
+                      <article className="vault-mobile-card" key={`vault-network-mobile-${row.id}`}>
+                        <div className="vault-mobile-card-head">
+                          <strong>{row.title || "-"}</strong>
+                          <span>{row.docType || "-"}</span>
+                        </div>
+                        <div className="vault-mobile-fields">
+                          <div className="vault-mobile-field"><span>File / Link</span><strong>{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Version</span><strong>{row.version || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Review</span><strong>{formatDate(row.lastReview || "-")}</strong></div>
+                          <div className="vault-mobile-field"><span>Owner</span><strong>{row.owner || "-"}</strong></div>
+                          <div className="vault-mobile-field vault-mobile-field-wide"><span>Note</span><strong>{row.note || "-"}</strong></div>
+                        </div>
+                        <div className="vault-mobile-actions">
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultNetwork(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No network or WiFi documents yet.</div>}
+                  </div>
+                ) : (
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table className="vault-responsive-table">
+                      <thead><tr><th>Title</th><th>Type</th><th>File/Link</th><th>Version</th><th>Review</th><th>Owner</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
+                      <tbody>
+                        {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
+                          <tr key={`vault-network-${row.id}`}>
+                            <td data-label="Title"><strong>{row.title || "-"}</strong></td><td data-label="Type">{row.docType || "-"}</td><td data-label="File / Link">{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="Version">{row.version || "-"}</td><td data-label="Review">{formatDate(row.lastReview || "-")}</td><td data-label="Owner">{row.owner || "-"}</td><td data-label="Note">{row.note || "-"}</td>
+                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultNetwork(row)}>{t.edit}</button></td>
+                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>X</button></td>
+                          </tr>
+                        )) : <tr className="vault-table-empty-row"><td colSpan={9}>No network or WiFi documents yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>Title</span><input className="input" value={vaultNetworkDocForm.title} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, title: e.target.value }))} placeholder="Main Campus WiFi Map / MikroTik Backup / UniFi AP Layout" /></label>
                   <label className="field"><span>Type</span><input className="input" value={vaultNetworkDocForm.docType} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, docType: e.target.value }))} placeholder="Topology / VLAN / WiFi / Backup / ISP" /></label>
@@ -33395,20 +33680,44 @@ export default function App() {
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>CCTV Systems</strong> for recorder details, camera area mapping, CCTV login links, retention setup, and review history by campus or site.
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>Username</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                    <tbody>
-                      {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
-                        <tr key={`vault-cctv-${row.id}`}>
-                          <td>{row.site || "-"}</td><td><strong>{row.nvrName || "-"}</strong></td><td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td>{row.username || "-"}</td><td>{row.cameraGroup || "-"}</td><td>{row.retentionDays || 0} days</td><td>{formatDate(row.lastAngleReview || "-")}</td>
-                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button></td>
-                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
-                        </tr>
-                      )) : <tr><td colSpan={9}>No CCTV system records yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                {isPhoneView ? (
+                  <div className="vault-mobile-list" style={{ marginTop: 12 }}>
+                    {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
+                      <article className="vault-mobile-card" key={`vault-cctv-mobile-${row.id}`}>
+                        <div className="vault-mobile-card-head">
+                          <strong>{row.nvrName || row.site || "-"}</strong>
+                          <span>{row.retentionDays || 0} days</span>
+                        </div>
+                        <div className="vault-mobile-fields">
+                          <div className="vault-mobile-field"><span>Site</span><strong>{row.site || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Login URL</span><strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Username</span><strong>{row.username || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Review</span><strong>{formatDate(row.lastAngleReview || "-")}</strong></div>
+                          <div className="vault-mobile-field vault-mobile-field-wide"><span>Camera / Angle Area</span><strong>{row.cameraGroup || "-"}</strong></div>
+                        </div>
+                        <div className="vault-mobile-actions">
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No CCTV system records yet.</div>}
+                  </div>
+                ) : (
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table className="vault-responsive-table">
+                      <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>Username</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
+                      <tbody>
+                        {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
+                          <tr key={`vault-cctv-${row.id}`}>
+                            <td data-label="Site">{row.site || "-"}</td><td data-label="NVR"><strong>{row.nvrName || "-"}</strong></td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="Username">{row.username || "-"}</td><td data-label="Camera / Angle Area">{row.cameraGroup || "-"}</td><td data-label="Retention">{row.retentionDays || 0} days</td><td data-label="Review">{formatDate(row.lastAngleReview || "-")}</td>
+                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button></td>
+                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
+                          </tr>
+                        )) : <tr className="vault-table-empty-row"><td colSpan={9}>No CCTV system records yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>Site/Campus</span><input className="input" value={vaultCctvForm.site} onChange={(e) => setVaultCctvForm((f) => ({ ...f, site: e.target.value }))} /></label>
                   <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
