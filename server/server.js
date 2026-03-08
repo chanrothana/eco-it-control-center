@@ -1024,11 +1024,17 @@ function normalizeVaultAccounts(input) {
     .map((row) => ({
       id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
       systemName: toText(row.systemName),
+      model: toText(row.model),
+      host: toText(row.host),
+      loginUrl: toText(row.loginUrl),
       accountName: toText(row.accountName),
+      username: toText(row.username),
+      password: toText(row.password),
       owner: toText(row.owner),
       role: toText(row.role),
       status: toText(row.status) || "Active",
       reviewDate: toText(row.reviewDate),
+      lastUpdated: toText(row.lastUpdated),
       note: toText(row.note),
       created: toText(row.created) || new Date().toISOString(),
     }));

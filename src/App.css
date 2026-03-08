@@ -2082,6 +2082,42 @@ label.backup-action-btn {
   overflow: visible;
 }
 
+.vault-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vault-guide-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #d9c4a7;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffaf2 0%, #fff4e3 100%);
+  color: #6f4a22;
+  text-align: left;
+  box-shadow: 0 10px 22px rgba(167, 114, 48, 0.08);
+}
+
+.vault-guide-card strong {
+  font-size: 18px;
+  line-height: 1.15;
+  color: #523116;
+}
+
+.vault-guide-card span {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #7b5b36;
+}
+
+.vault-guide-card-active {
+  border-color: #ef6d2f;
+  background: linear-gradient(180deg, #fff0e7 0%, #ffe0c8 100%);
+  box-shadow: 0 12px 26px rgba(239, 109, 47, 0.14);
+}
+
 .vault-subtabs .tab {
   width: 100%;
   min-height: 40px;
@@ -2095,7 +2131,56 @@ label.backup-action-btn {
 }
 
 .vault-dashboard-shortcuts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.vault-legend-grid {
+  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.vault-legend-card {
+  border: 1px solid #e0d1bb;
+  border-radius: 14px;
+  background: #fffdfa;
+  padding: 12px 14px;
+}
+
+.vault-legend-card strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #523116;
+}
+
+.vault-legend-card p {
+  margin: 0;
+  color: #7a6549;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.vault-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.vault-section-count {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #d9c4a7;
+  background: #fff7ec;
+  color: #7a4d1f;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .setpack-toggle-row {
@@ -7700,6 +7785,11 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .vault-guide-grid,
+  .vault-legend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .vault-subtabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
@@ -7723,6 +7813,11 @@ tr.row-maint-maintenance:hover td {
   .vault-dashboard-shortcuts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
+  }
+
+  .vault-section-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .inventory-daily-grid {
@@ -9291,6 +9386,11 @@ tr.row-maint-maintenance:hover td {
 
   .report-quick-status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vault-guide-grid,
+  .vault-legend-grid {
+    grid-template-columns: 1fr;
   }
 
   .vault-subtabs {

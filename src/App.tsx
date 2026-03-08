@@ -484,11 +484,17 @@ type ItemTemplate = {
 type VaultAccount = {
   id: number;
   systemName: string;
+  model?: string;
+  host?: string;
+  loginUrl?: string;
   accountName: string;
+  username?: string;
+  password?: string;
   owner: string;
   role: string;
   status: string;
   reviewDate: string;
+  lastUpdated?: string;
   note?: string;
   created: string;
 };
@@ -2627,11 +2633,17 @@ function normalizeVaultAccounts(input: unknown): VaultAccount[] {
     .map((row) => ({
       id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
       systemName: String(row.systemName || "").trim(),
+      model: String(row.model || "").trim(),
+      host: String(row.host || "").trim(),
+      loginUrl: String(row.loginUrl || "").trim(),
       accountName: String(row.accountName || "").trim(),
+      username: String(row.username || "").trim(),
+      password: String(row.password || "").trim(),
       owner: String(row.owner || "").trim(),
       role: String(row.role || "").trim(),
       status: String(row.status || "Active").trim() || "Active",
       reviewDate: String(row.reviewDate || "").trim(),
+      lastUpdated: String(row.lastUpdated || "").trim(),
       note: String(row.note || "").trim(),
       created: String(row.created || "").trim() || new Date().toISOString(),
     }));
@@ -6011,14 +6023,22 @@ export default function App() {
   const [vaultNetworkDocs, setVaultNetworkDocs] = useState<VaultNetworkDoc[]>(() => readVaultNetworkDocsFallback());
   const [vaultCctvRecords, setVaultCctvRecords] = useState<VaultCctvRecord[]>(() => readVaultCctvFallback());
   const [vaultVisiblePasswordId, setVaultVisiblePasswordId] = useState<number | null>(null);
+  const [vaultVisibleAccountPasswordId, setVaultVisibleAccountPasswordId] = useState<number | null>(null);
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
+  const [vaultAccountFormPasswordVisible, setVaultAccountFormPasswordVisible] = useState(false);
   const [vaultAccountForm, setVaultAccountForm] = useState({
     systemName: "",
+    model: "",
+    host: "",
+    loginUrl: "",
     accountName: "",
+    username: "",
+    password: "",
     owner: "",
     role: "",
     status: "Active",
     reviewDate: "",
+    lastUpdated: "",
     note: "",
   });
   const [vaultCredentialForm, setVaultCredentialForm] = useState({
@@ -10902,17 +10922,23 @@ export default function App() {
   async function addVaultAccount() {
     if (!requireAdminAction()) return;
     if (!vaultAccountForm.systemName.trim() || !vaultAccountForm.accountName.trim()) {
-      setError("System name and account name are required.");
+      setError("System/platform and account name are required.");
       return;
     }
     const row: VaultAccount = {
       id: Date.now(),
       systemName: vaultAccountForm.systemName.trim(),
+      model: vaultAccountForm.model.trim(),
+      host: vaultAccountForm.host.trim(),
+      loginUrl: vaultAccountForm.loginUrl.trim(),
       accountName: vaultAccountForm.accountName.trim(),
+      username: vaultAccountForm.username.trim(),
+      password: vaultAccountForm.password.trim(),
       owner: vaultAccountForm.owner.trim(),
       role: vaultAccountForm.role.trim(),
       status: vaultAccountForm.status.trim() || "Active",
       reviewDate: vaultAccountForm.reviewDate,
+      lastUpdated: vaultAccountForm.lastUpdated,
       note: vaultAccountForm.note.trim(),
       created: new Date().toISOString(),
     };
@@ -10922,13 +10948,20 @@ export default function App() {
       await saveVaultSettingsToServer({ vaultAccounts: nextRows });
       setVaultAccountForm({
         systemName: "",
+        model: "",
+        host: "",
+        loginUrl: "",
         accountName: "",
+        username: "",
+        password: "",
         owner: "",
         role: "",
         status: "Active",
         reviewDate: "",
+        lastUpdated: "",
         note: "",
       });
+      setVaultAccountFormPasswordVisible(false);
       setSetupMessage("Vault account record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault account record");
@@ -32905,6 +32938,28 @@ export default function App() {
           <section className="panel">
             <h2>IT Operations Vault</h2>
             <p className="tiny">Central place for school IT operations records with linked documentation (Google Drive / external links).</p>
+            <div className="vault-guide-grid" style={{ marginBottom: 12 }}>
+              <button className={`vault-guide-card ${vaultTab === "accounts" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("accounts")}>
+                <strong>Access Systems</strong>
+                <span>Printers, MikroTik, UniFi, WiFi admin, CCTV admin</span>
+              </button>
+              <button className={`vault-guide-card ${vaultTab === "credentials" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("credentials")}>
+                <strong>Web Services</strong>
+                <span>Twinkl, Gmail, HostGator, WordPress, Telegram</span>
+              </button>
+              <button className={`vault-guide-card ${vaultTab === "network" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("network")}>
+                <strong>Network & WiFi Docs</strong>
+                <span>Topology, VLAN, AP map, ISP details, config backups</span>
+              </button>
+              <button className={`vault-guide-card ${vaultTab === "cctv" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("cctv")}>
+                <strong>CCTV Systems</strong>
+                <span>Recorder links, site map, camera area, retention, reviews</span>
+              </button>
+              <button className={`vault-guide-card ${vaultTab === "design" ? "vault-guide-card-active" : ""}`} onClick={() => setVaultTab("design")}>
+                <strong>Design Folders</strong>
+                <span>Drive folders, ownership, review dates, design references</span>
+              </button>
+            </div>
             <div className="report-quick-status-grid vault-status-grid" style={{ marginBottom: 10 }}>
               <article className="report-quick-status-pill"><span>System Accounts</span><strong>{vaultAccounts.length}</strong></article>
               <article className="report-quick-status-pill"><span>Website Logins</span><strong>{vaultCredentials.length}</strong></article>
@@ -32915,17 +32970,17 @@ export default function App() {
             <div className="row-actions setup-tabs-row vault-subtabs" style={{ marginBottom: 10 }}>
               {canAccessMenu("vault.dashboard", "vault") ? (
               <button className={`tab ${vaultTab === "dashboard" ? "tab-active" : ""}`} onClick={() => setVaultTab("dashboard")}>
-                Dashboard
+                Overview
               </button>
               ) : null}
               {canAccessMenu("vault.accounts", "vault") ? (
               <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>
-                System Accounts
+                Access Systems
               </button>
               ) : null}
               {canAccessMenu("vault.credentials", "vault") ? (
               <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>
-                Website Logins
+                Web Services
               </button>
               ) : null}
               {canAccessMenu("vault.design", "vault") ? (
@@ -32947,29 +33002,74 @@ export default function App() {
 
             {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
               <div className="panel" style={{ padding: 12, marginBottom: 12 }}>
-                <h3 className="section-title" style={{ marginTop: 0 }}>Vault Dashboard</h3>
+                <h3 className="section-title" style={{ marginTop: 0 }}>Vault Overview</h3>
                 <p className="tiny" style={{ marginBottom: 10 }}>
-                  Track admin accounts, website logins, design folders, network and WiFi documents, and CCTV system records in one place.
+                  Use this page as a filing guide first: device and controller access goes to <strong>Access Systems</strong>, SaaS and online services go to <strong>Web Services</strong>, infrastructure reference goes to <strong>Network & WiFi Docs</strong>, and recorder/site mapping goes to <strong>CCTV Systems</strong>.
                 </p>
                 <div className="report-quick-status-grid vault-dashboard-shortcuts">
-                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("credentials")}><span>Website Logins</span><strong>{vaultCredentials.length}</strong></button>
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("accounts")}><span>Access Systems</span><strong>{vaultAccounts.length}</strong></button>
+                  <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("credentials")}><span>Web Services</span><strong>{vaultCredentials.length}</strong></button>
                   <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("design")}><span>Design Folders</span><strong>{vaultDesignLinks.length}</strong></button>
                   <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("network")}><span>Network & WiFi Docs</span><strong>{vaultNetworkDocs.length}</strong></button>
                   <button className="report-quick-status-pill report-quick-status-btn" onClick={() => setVaultTab("cctv")}><span>CCTV Systems</span><strong>{vaultCctvRecords.length}</strong></button>
+                </div>
+                <div className="vault-legend-grid">
+                  <article className="vault-legend-card">
+                    <strong>Access Systems</strong>
+                    <p>Printer control, MikroTik, UniFi Controller, WiFi admin, CCTV admin, NVR/DVR admin.</p>
+                  </article>
+                  <article className="vault-legend-card">
+                    <strong>Web Services</strong>
+                    <p>Twinkl, Gmail, Telegram, HostGator, WordPress, domain and hosting services.</p>
+                  </article>
+                  <article className="vault-legend-card">
+                    <strong>Network & WiFi Docs</strong>
+                    <p>Topology maps, VLAN sheets, ISP information, AP layout, backup exports.</p>
+                  </article>
+                  <article className="vault-legend-card">
+                    <strong>CCTV Systems</strong>
+                    <p>Recorder links, campus/site maps, camera zones, retention settings, review dates.</p>
+                  </article>
                 </div>
               </div>
             )}
 
             {vaultTab === "accounts" && canAccessMenu("vault.accounts", "vault") && (
               <>
+                <div className="vault-section-head">
+                  <div>
+                    <h3 className="section-title" style={{ margin: 0 }}>Access Systems</h3>
+                    <p className="tiny">Use this section for device and controller access, not for normal websites.</p>
+                  </div>
+                  <span className="vault-section-count">{vaultAccounts.length} records</span>
+                </div>
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>System Accounts</strong> for admin/control credentials such as CCTV admin, Printer admin, MikroTik admin, UniFi Controller admin, WiFi portal admin, and device service accounts.
                 </div>
                 <div className="form-grid">
-                  <label className="field"><span>System</span><input className="input" value={vaultAccountForm.systemName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="CCTV System / MikroTik / UniFi Controller / Printer Admin" /></label>
-                  <label className="field"><span>Account Name</span><input className="input" value={vaultAccountForm.accountName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, accountName: e.target.value }))} /></label>
-                  <label className="field"><span>Owner</span><input className="input" value={vaultAccountForm.owner} onChange={(e) => setVaultAccountForm((f) => ({ ...f, owner: e.target.value }))} /></label>
-                  <label className="field"><span>Role</span><input className="input" value={vaultAccountForm.role} onChange={(e) => setVaultAccountForm((f) => ({ ...f, role: e.target.value }))} /></label>
+                  <label className="field"><span>System / Platform</span><input className="input" value={vaultAccountForm.systemName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="Printer Control / MikroTik / UniFi Controller / CCTV System" /></label>
+                  <label className="field"><span>Model</span><input className="input" value={vaultAccountForm.model} onChange={(e) => setVaultAccountForm((f) => ({ ...f, model: e.target.value }))} placeholder="Canon C5550 / RB4011 / UDM Pro" /></label>
+                  <label className="field"><span>IP / Host</span><input className="input" value={vaultAccountForm.host} onChange={(e) => setVaultAccountForm((f) => ({ ...f, host: e.target.value }))} placeholder="172.168.1.239 / controller.domain.com" /></label>
+                  <label className="field"><span>Login URL</span><input className="input" value={vaultAccountForm.loginUrl} onChange={(e) => setVaultAccountForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="http://172.168.1.239" /></label>
+                  <label className="field"><span>Account Name</span><input className="input" value={vaultAccountForm.accountName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, accountName: e.target.value }))} placeholder="Campus 2.1 Canon C5550" /></label>
+                  <label className="field"><span>Username</span><input className="input" value={vaultAccountForm.username} onChange={(e) => setVaultAccountForm((f) => ({ ...f, username: e.target.value }))} placeholder="Administrator" /></label>
+                  <label className="field">
+                    <span>Password</span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        className="input"
+                        type={vaultAccountFormPasswordVisible ? "text" : "password"}
+                        value={vaultAccountForm.password}
+                        onChange={(e) => setVaultAccountForm((f) => ({ ...f, password: e.target.value }))}
+                        placeholder="Admin password"
+                      />
+                      <button type="button" className="tab btn-small" onClick={() => setVaultAccountFormPasswordVisible((v) => !v)}>
+                        {vaultAccountFormPasswordVisible ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </label>
+                  <label className="field"><span>Owner / Campus</span><input className="input" value={vaultAccountForm.owner} onChange={(e) => setVaultAccountForm((f) => ({ ...f, owner: e.target.value }))} placeholder="Campus 2.1 / IT Team" /></label>
+                  <label className="field"><span>Role</span><input className="input" value={vaultAccountForm.role} onChange={(e) => setVaultAccountForm((f) => ({ ...f, role: e.target.value }))} placeholder="Printer Admin / Network Admin / CCTV Admin" /></label>
                   <label className="field">
                     <span>Status</span>
                     <select className="input" value={vaultAccountForm.status} onChange={(e) => setVaultAccountForm((f) => ({ ...f, status: e.target.value }))}>
@@ -32977,20 +33077,33 @@ export default function App() {
                       <option value="Inactive">Inactive</option>
                     </select>
                   </label>
+                  <label className="field"><span>Last Updated</span><input type="date" className="input" value={vaultAccountForm.lastUpdated} onChange={(e) => setVaultAccountForm((f) => ({ ...f, lastUpdated: e.target.value }))} /></label>
                   <label className="field"><span>Review Date</span><input type="date" className="input" value={vaultAccountForm.reviewDate} onChange={(e) => setVaultAccountForm((f) => ({ ...f, reviewDate: e.target.value }))} /></label>
                   <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultAccountForm.note} onChange={(e) => setVaultAccountForm((f) => ({ ...f, note: e.target.value }))} /></label>
                 </div>
-                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultAccount}>Add Account Record</button></div>
+                <div className="asset-actions"><button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultAccount}>Add System Account</button></div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
-                    <thead><tr><th>System</th><th>Account</th><th>Owner</th><th>Role</th><th>Status</th><th>Review</th><th>Note</th><th>{t.delete}</th></tr></thead>
+                    <thead><tr><th>System</th><th>Model</th><th>IP / Host</th><th>Login URL</th><th>Account</th><th>Username</th><th>Password</th><th>Owner</th><th>Role</th><th>Status</th><th>Updated</th><th>Review</th><th>Note</th><th>{t.delete}</th></tr></thead>
                     <tbody>
                       {vaultAccounts.length ? vaultAccounts.map((row) => (
                         <tr key={`vault-account-${row.id}`}>
-                          <td>{row.systemName || "-"}</td><td><strong>{row.accountName || "-"}</strong></td><td>{row.owner || "-"}</td><td>{row.role || "-"}</td><td>{row.status || "-"}</td><td>{formatDate(row.reviewDate || "-")}</td><td>{row.note || "-"}</td>
+                          <td>{row.systemName || "-"}</td>
+                          <td>{row.model || "-"}</td>
+                          <td>{row.host || "-"}</td>
+                          <td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td>
+                          <td><strong>{row.accountName || "-"}</strong></td>
+                          <td>{row.username || "-"}</td>
+                          <td>{vaultVisibleAccountPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleAccountPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleAccountPasswordId === row.id ? "Hide" : "View"}</button> : null}</td>
+                          <td>{row.owner || "-"}</td>
+                          <td>{row.role || "-"}</td>
+                          <td>{row.status || "-"}</td>
+                          <td>{formatDate(row.lastUpdated || "-")}</td>
+                          <td>{formatDate(row.reviewDate || "-")}</td>
+                          <td>{row.note || "-"}</td>
                           <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={8}>No account records yet.</td></tr>}
+                      )) : <tr><td colSpan={14}>No system account records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -32999,6 +33112,13 @@ export default function App() {
 
             {vaultTab === "credentials" && canAccessMenu("vault.credentials", "vault") && (
               <>
+                <div className="vault-section-head">
+                  <div>
+                    <h3 className="section-title" style={{ margin: 0 }}>Web Services</h3>
+                    <p className="tiny">Use this section for SaaS, websites, hosting, email, and online service credentials.</p>
+                  </div>
+                  <span className="vault-section-count">{vaultCredentials.length} records</span>
+                </div>
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>Website Logins</strong> for SaaS and web-based services such as Twinkl, Gmail, Telegram Bot, hosting panel, and domain registrar.<br />
                   Example record: <strong>System</strong> = School Main Email, <strong>Email / Username</strong> = `info@eis-edu.com`,
@@ -33050,6 +33170,13 @@ export default function App() {
 
             {vaultTab === "design" && canAccessMenu("vault.design", "vault") && (
               <>
+                <div className="vault-section-head">
+                  <div>
+                    <h3 className="section-title" style={{ margin: 0 }}>Design Folders</h3>
+                    <p className="tiny">Use this section for shared design repositories and reference folders.</p>
+                  </div>
+                  <span className="vault-section-count">{vaultDesignLinks.length} records</span>
+                </div>
                 <div className="form-grid">
                   <label className="field"><span>Design Name</span><input className="input" value={vaultDesignForm.title} onChange={(e) => setVaultDesignForm((f) => ({ ...f, title: e.target.value }))} /></label>
                   <label className="field"><span>Design Folder Link (Google Drive)</span><input className="input" value={vaultDesignForm.folderUrl} onChange={(e) => setVaultDesignForm((f) => ({ ...f, folderUrl: e.target.value }))} placeholder="https://drive.google.com/..." /></label>
@@ -33080,6 +33207,13 @@ export default function App() {
 
             {vaultTab === "network" && canAccessMenu("vault.network", "vault") && (
               <>
+                <div className="vault-section-head">
+                  <div>
+                    <h3 className="section-title" style={{ margin: 0 }}>Network & WiFi Docs</h3>
+                    <p className="tiny">Use this section for documentation and reference files, not for passwords.</p>
+                  </div>
+                  <span className="vault-section-count">{vaultNetworkDocs.length} records</span>
+                </div>
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>Network & WiFi Docs</strong> for topology maps, ISP details, VLAN plans, switch port maps, AP placement, UniFi site notes, MikroTik config exports, and WiFi setup documents.
                 </div>
@@ -33111,6 +33245,13 @@ export default function App() {
 
             {vaultTab === "cctv" && canAccessMenu("vault.cctv", "vault") && (
               <>
+                <div className="vault-section-head">
+                  <div>
+                    <h3 className="section-title" style={{ margin: 0 }}>CCTV Systems</h3>
+                    <p className="tiny">Use this section for recorder links, campus mapping, and camera coverage records.</p>
+                  </div>
+                  <span className="vault-section-count">{vaultCctvRecords.length} records</span>
+                </div>
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>CCTV Systems</strong> for recorder details, camera area mapping, CCTV login links, retention setup, and review history by campus or site.
                 </div>
