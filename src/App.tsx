@@ -968,12 +968,32 @@ let runtimeAuthToken = "";
 
 function getAutoApiBaseForHost() {
   if (typeof window === "undefined") return "";
-  const host = String(window.location.hostname || "").toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1") {
-    // Keep localhost fully local/offline by default (use CRA proxy /api -> :4000).
+  return "";
+}
+
+function getStoredApiBaseOverride() {
+  if (SERVER_ONLY_STORAGE || typeof window === "undefined") return "";
+  try {
+    return String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "").trim().replace(/\/+$/, "");
+  } catch {
     return "";
   }
-  return "";
+}
+
+function getPreferredApiBase() {
+  return getStoredApiBaseOverride() || ENV_API_BASE_URL || getAutoApiBaseForHost().replace(/\/+$/, "");
+}
+
+function resolveApiResourceUrl(raw: string) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  if (/^(?:data:image\/|blob:|https?:\/\/)/i.test(text)) return text;
+  const normalized = text.startsWith("uploads/") ? `/${text}` : text;
+  const apiBase = getPreferredApiBase();
+  if (apiBase && (normalized.startsWith("/uploads/") || normalized.startsWith("/api/"))) {
+    return `${apiBase}${normalized}`;
+  }
+  return normalized;
 }
 const LOCAL_AUTH_ACCOUNTS: AuthAccount[] = [
   {
@@ -1943,15 +1963,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     return { res, data };
   }
 
-  const apiBaseOverride = SERVER_ONLY_STORAGE
-    ? ""
-    : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "")
-        .trim()
-        .replace(/\/+$/, "");
-  const isLocalhostClient =
-    typeof window !== "undefined" &&
-    ["localhost", "127.0.0.1"].includes(String(window.location.hostname || "").toLowerCase());
-  const effectiveApiBaseOverride = isLocalhostClient ? "" : apiBaseOverride;
+  const effectiveApiBaseOverride = getStoredApiBaseOverride();
   const autoApiBase = getAutoApiBaseForHost().replace(/\/+$/, "");
   const candidates: string[] = url.startsWith("/api/") ? [] : [url];
 
@@ -3743,14 +3755,14 @@ function normalizeAssetForUi(asset: Asset): Asset {
   const normalizeUrl = (raw: string) => {
     const text = String(raw || "").trim();
     if (!text) return "";
-    if (text.startsWith("/uploads/")) return text;
     try {
       const parsed = new URL(text);
-      if (parsed.pathname.startsWith("/uploads/")) return parsed.pathname;
+      if (parsed.pathname.startsWith("/uploads/")) return resolveApiResourceUrl(parsed.pathname);
+      return parsed.toString();
     } catch {
       // keep original if not URL
     }
-    return text;
+    return resolveApiResourceUrl(text);
   };
   const normalizedPhotos = photos.map(normalizeUrl).filter(Boolean);
   const isReplacementDone = (typeRaw: string, completionRaw: string) => {
@@ -19426,7 +19438,7 @@ export default function App() {
 
   const qrScanBase = useMemo(() => {
     if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
-    return String(window.location.origin || DEFAULT_CLOUD_API_BASE).replace(/\/+$/, "");
+    return getPreferredApiBase() || String(window.location.origin || DEFAULT_CLOUD_API_BASE).replace(/\/+$/, "");
   }, []);
 
   const buildAssetQrUrl = useCallback((assetId: string) => {
