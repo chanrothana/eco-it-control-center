@@ -2670,6 +2670,34 @@ function cascadeChildAssetAssignment(db, parentAsset, nextAssignedTo, options = 
   return changedCount;
 }
 
+function findParentAssetByAssetId(db, parentAssetId) {
+  const targetId = toText(parentAssetId);
+  if (!targetId) return null;
+  const assets = Array.isArray(db && db.assets) ? db.assets : [];
+  return assets.find((row) => toText(row && row.assetId) === targetId) || null;
+}
+
+function syncAssignedToFromParentAsset(db, assetLike) {
+  if (!assetLike || typeof assetLike !== "object") {
+    return { assignedTo: "", custodyStatus: "IN_STOCK", parent: null };
+  }
+  const parent = findParentAssetByAssetId(db, assetLike.parentAssetId);
+  if (!parent) {
+    const assignedTo = toText(assetLike.assignedTo);
+    return {
+      assignedTo,
+      custodyStatus: normalizeCustodyStatus(assetLike.custodyStatus || (assignedTo ? "ASSIGNED" : "IN_STOCK")),
+      parent: null,
+    };
+  }
+  const assignedTo = toText(parent.assignedTo);
+  return {
+    assignedTo,
+    custodyStatus: normalizeCustodyStatus(assignedTo ? "ASSIGNED" : "IN_STOCK"),
+    parent,
+  };
+}
+
 function getAuthUser(req) {
   const authHeader = String(req.headers.authorization || "");
   if (!authHeader.startsWith("Bearer ")) return null;
@@ -4622,9 +4650,11 @@ const server = http.createServer(async (req, res) => {
       }
       const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
       const assetId = `${assetIdCampusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || "OTA"}-${cleaned.type}-${pad(seq, 3)}`;
-      const custodyStatus = normalizeCustodyStatus(cleaned.custodyStatus || (cleaned.assignedTo ? "ASSIGNED" : "IN_STOCK"));
+      const parentAssignment = syncAssignedToFromParentAsset(db, cleaned);
+      const finalAssignedTo = parentAssignment.assignedTo;
+      const custodyStatus = parentAssignment.custodyStatus;
       const finalCustodyHistory =
-        initialCustodyHistory.length || !cleaned.assignedTo
+        initialCustodyHistory.length || !finalAssignedTo
           ? initialCustodyHistory
           : [
               {
@@ -4636,10 +4666,10 @@ const server = http.createServer(async (req, res) => {
                 toCampus: cleaned.campus,
                 toLocation: cleaned.location,
                 fromUser: "",
-                toUser: cleaned.assignedTo,
+                toUser: finalAssignedTo,
                 responsibilityAck: false,
                 by: "",
-                note: "Initial assignment",
+                note: parentAssignment.parent ? `Initial assignment synced from parent asset ${toText(parentAssignment.parent.assetId)}` : "Initial assignment",
               },
             ];
 
@@ -4653,6 +4683,7 @@ const server = http.createServer(async (req, res) => {
         custodyHistory: finalCustodyHistory,
         created: new Date().toISOString(),
         ...cleaned,
+        assignedTo: finalAssignedTo,
         custodyStatus,
         photo: mainPhoto,
         photos: assetPhotos,
@@ -5053,8 +5084,9 @@ const server = http.createServer(async (req, res) => {
         body.custodyHistory === undefined
           ? current.custodyHistory
           : normalizeCustodyEntries(body.custodyHistory);
+      const parentAssignment = syncAssignedToFromParentAsset(db, cleaned);
       const previousAssignedTo = toText(current.assignedTo);
-      const incomingAssignedTo = toText(cleaned.assignedTo);
+      const incomingAssignedTo = parentAssignment.assignedTo;
       const assignmentChanged = previousAssignedTo !== incomingAssignedTo;
       let finalCustodyHistory = Array.isArray(nextCustodyHistory) ? nextCustodyHistory : [];
       if (assignmentChanged && body.custodyHistory === undefined) {
@@ -5071,14 +5103,14 @@ const server = http.createServer(async (req, res) => {
             toUser: incomingAssignedTo,
             responsibilityAck: false,
             by: "",
-            note: "Assignment changed from asset edit",
+            note: parentAssignment.parent
+              ? `Assignment synced from parent asset ${toText(parentAssignment.parent.assetId)}`
+              : "Assignment changed from asset edit",
           },
           ...finalCustodyHistory,
         ];
       }
-      const nextCustodyStatus = normalizeCustodyStatus(
-        cleaned.custodyStatus || (incomingAssignedTo ? "ASSIGNED" : "IN_STOCK")
-      );
+      const nextCustodyStatus = parentAssignment.custodyStatus;
       const currentStatus = toText(current.status) || "Active";
       const nextStatus = toText(cleaned.status) || "Active";
       const statusChanged = currentStatus !== nextStatus;
@@ -5112,6 +5144,7 @@ const server = http.createServer(async (req, res) => {
       db.assets[idx] = {
         ...current,
         ...cleaned,
+        assignedTo: incomingAssignedTo,
         photo: mainPhoto,
         photos: nextPhotos,
         maintenanceHistory: nextHistory,

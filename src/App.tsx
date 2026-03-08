@@ -14620,7 +14620,10 @@ export default function App() {
       alert(t.userRequired);
       return;
     }
-    const editAssignedTo = needsUser ? assetEditForm.assignedTo.trim() : "";
+    const editAssignedTo =
+      String(assetEditForm.status || "").trim().toLowerCase() === "active"
+        ? assetEditForm.assignedTo.trim()
+        : "";
     if (editingShouldLinkToParent && !assetEditForm.parentAssetId.trim()) {
       alert(t.selectParentAsset);
       return;
