@@ -9,6 +9,7 @@ import {
   Camera,
   CheckCircle2,
   ClipboardList,
+  Copy,
   Eye,
   EyeOff,
   FileText,
@@ -444,12 +445,35 @@ type InventoryApprovalRoutingDraft = {
   campus: string;
   approvers: string[];
 };
+type TelegramDiscoveredChat = {
+  id: string;
+  type?: string;
+  title?: string;
+  username?: string;
+};
+type TelegramStatus = {
+  ok: boolean;
+  enabled: boolean;
+  hasBotToken: boolean;
+  configuredTargets: string[];
+  discoverEnabled: boolean;
+  discoveredTargets: TelegramDiscoveredChat[];
+  lastSend?: {
+    at?: string;
+    ok?: boolean;
+    successCount?: number;
+    targetCount?: number;
+    targets?: string[];
+    errors?: string[];
+  };
+};
 type ServerSettings = {
   campusNames?: Record<string, string>;
   staffUsers?: StaffUser[];
   calendarEvents?: CalendarEvent[];
   maintenanceReminderOffsets?: number[];
   inventoryApprovalRouting?: InventoryApprovalRoutingMap;
+  telegramChatIds?: string[];
   inventoryItems?: InventoryItem[];
   inventoryTxns?: InventoryTxn[];
   poolCleaningSchedules?: PoolCleaningSchedule[];
@@ -555,6 +579,21 @@ type VaultSearchEntry = {
   subtitle?: string;
   fields: VaultSearchField[];
   searchText: string;
+};
+type VaultReportRow = {
+  id: string;
+  section: "Access Systems" | "Web Services";
+  system: string;
+  account: string;
+  username: string;
+  owner: string;
+  role: string;
+  status: string;
+  lastUpdated: string;
+  reviewDate: string;
+  loginUrl: string;
+  password: string;
+  note: string;
 };
 type CalendarEventType =
   | "public"
@@ -6043,13 +6082,19 @@ export default function App() {
     return out;
   });
   const [setupMessage, setSetupMessage] = useState("");
-  const [vaultTab, setVaultTab] = useState<"dashboard" | "accounts" | "credentials" | "design" | "network" | "cctv">("dashboard");
+  const [vaultTab, setVaultTab] = useState<"dashboard" | "report" | "accounts" | "credentials" | "design" | "network" | "cctv">("dashboard");
   const [vaultAccounts, setVaultAccounts] = useState<VaultAccount[]>(() => readVaultAccountsFallback());
   const [vaultCredentials, setVaultCredentials] = useState<VaultCredential[]>(() => readVaultCredentialsFallback());
   const [vaultDesignLinks, setVaultDesignLinks] = useState<VaultDesignLink[]>(() => readVaultDesignLinksFallback());
   const [vaultNetworkDocs, setVaultNetworkDocs] = useState<VaultNetworkDoc[]>(() => readVaultNetworkDocsFallback());
   const [vaultCctvRecords, setVaultCctvRecords] = useState<VaultCctvRecord[]>(() => readVaultCctvFallback());
   const [vaultSearchQuery, setVaultSearchQuery] = useState("");
+  const [vaultCopiedEntryId, setVaultCopiedEntryId] = useState<string | null>(null);
+  const [vaultReportQuery, setVaultReportQuery] = useState("");
+  const [vaultReportSectionFilter, setVaultReportSectionFilter] = useState<"ALL" | "Access Systems" | "Web Services">("ALL");
+  const [vaultReportStatusFilter, setVaultReportStatusFilter] = useState("ALL");
+  const [vaultReportOwnerFilter, setVaultReportOwnerFilter] = useState("ALL");
+  const [vaultReportShowSensitive, setVaultReportShowSensitive] = useState(false);
   const [vaultVisiblePasswordId, setVaultVisiblePasswordId] = useState<number | null>(null);
   const [vaultVisibleAccountPasswordId, setVaultVisibleAccountPasswordId] = useState<number | null>(null);
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
@@ -6241,6 +6286,23 @@ export default function App() {
         : vaultSearchEntries,
     [deferredVaultSearchQuery, vaultSearchEntries]
   );
+  const copyVaultSearchEntry = useCallback(async (entry: VaultSearchEntry) => {
+    const text = [
+      `Section: ${entry.section}`,
+      `Title: ${entry.title}`,
+      ...(entry.subtitle ? [`Subtitle: ${entry.subtitle}`] : []),
+      ...entry.fields.map((field) => `${field.label}: ${field.value || "-"}`),
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setVaultCopiedEntryId(entry.id);
+      window.setTimeout(() => {
+        setVaultCopiedEntryId((current) => (current === entry.id ? null : current));
+      }, 1800);
+    } catch {
+      setVaultCopiedEntryId(null);
+    }
+  }, []);
 
   function resetVaultAccountForm() {
     setVaultAccountForm({
@@ -6362,6 +6424,8 @@ export default function App() {
   const [inventoryApprovalRoutingMap, setInventoryApprovalRoutingMap] = useState<InventoryApprovalRoutingMap>({});
   const [inventoryApprovalRoutingDraft, setInventoryApprovalRoutingDraft] = useState<InventoryApprovalRoutingDraft | null>(null);
   const [inventoryApprovalRoutingEditingRequester, setInventoryApprovalRoutingEditingRequester] = useState<string | null>(null);
+  const [telegramChatIdsText, setTelegramChatIdsText] = useState("");
+  const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [authCreateForm, setAuthCreateForm] = useState({
     staffId: "",
     username: "",
@@ -9468,6 +9532,11 @@ export default function App() {
         setInventoryApprovalRoutingMap(
           normalizeInventoryApprovalRoutingMap(settingsRes.settings?.inventoryApprovalRouting)
         );
+        setTelegramChatIdsText(
+          Array.isArray(settingsRes.settings?.telegramChatIds)
+            ? (settingsRes.settings?.telegramChatIds.filter(Boolean).join(", ") ?? "")
+            : ""
+        );
         const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
         const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
         const serverPoolCleaningSchedules = normalizePoolCleaningSchedules(settingsRes.settings?.poolCleaningSchedules);
@@ -9622,6 +9691,14 @@ export default function App() {
     if (!authUser) return;
     void loadStaffUsers();
   }, [authUser, loadStaffUsers]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setTelegramStatus(null);
+      return;
+    }
+    void loadTelegramStatus();
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!authUser) {
@@ -10806,6 +10883,76 @@ export default function App() {
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
       throw err;
+    }
+  }
+
+  function parseTelegramChatIds(value: string) {
+    return Array.from(
+      new Set(
+        String(value || "")
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+      )
+    );
+  }
+
+  async function saveTelegramChatIdsToServer(nextChatIds: string[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: { telegramChatIds: nextChatIds } }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function loadTelegramStatus() {
+    try {
+      const res = await requestJson<TelegramStatus>("/api/alerts/telegram/status");
+      setTelegramStatus(res);
+    } catch (err) {
+      if (
+        isApiUnavailableError(err) ||
+        isMissingRouteError(err) ||
+        isUnauthorizedError(err)
+      ) {
+        return;
+      }
+      throw err;
+    }
+  }
+
+  async function saveTelegramAlertTargets() {
+    if (!requireAdminAction()) return;
+    const nextChatIds = parseTelegramChatIds(telegramChatIdsText);
+    try {
+      await saveTelegramChatIdsToServer(nextChatIds);
+      setTelegramChatIdsText(nextChatIds.join(", "));
+      await loadTelegramStatus();
+      setSetupMessage(lang === "km" ? "បានអាប់ដេត Telegram chat ID រួចរាល់។" : "Telegram chat IDs updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Telegram chat IDs.");
+    }
+  }
+
+  async function sendTelegramTestAlert() {
+    if (!requireAdminAction()) return;
+    try {
+      const res = await requestJson<{ ok: boolean; enabled: boolean; chatTargets: string[] }>("/api/alerts/telegram/test", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      await loadTelegramStatus();
+      setSetupMessage(
+        res.ok
+          ? (lang === "km" ? "បានផ្ញើ Telegram test រួចរាល់។" : "Telegram test sent.")
+          : (lang === "km" ? "Telegram test មិនបានផ្ញើ។" : "Telegram test failed to send.")
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send Telegram test.");
     }
   }
 
@@ -32785,6 +32932,65 @@ export default function App() {
                 </table>
               </div>
             </article>
+            <article className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-row">
+                <h3 className="section-title">{lang === "km" ? "Telegram Alert Target" : "Telegram Alert Target"}</h3>
+                <span className="tiny">{lang === "km" ? "រក្សាទុក chat ID របស់ group ដើម្បីឱ្យ Stock OUT ផ្ញើ alert បាន" : "Save the group chat ID so Stock OUT requests can alert Telegram."}</span>
+              </div>
+              <label className="field">
+                <span>{lang === "km" ? "Telegram Chat ID(s)" : "Telegram Chat ID(s)"}</span>
+                <input
+                  className="input"
+                  value={telegramChatIdsText}
+                  onChange={(e) => setTelegramChatIdsText(e.target.value)}
+                  placeholder="-1001234567890, -1009876543210"
+                  disabled={!isAdmin || busy}
+                />
+              </label>
+              <div className="tiny" style={{ marginTop: 6 }}>
+                {lang === "km"
+                  ? "ប្រើ comma បំបែក chat ID ច្រើន។ Group usually starts with -100..."
+                  : "Use commas for multiple chat IDs. Group IDs usually start with -100..."}
+              </div>
+              <div className="row-actions" style={{ marginTop: 12 }}>
+                <button className="btn-primary btn-small" disabled={!isAdmin || busy} onClick={() => void saveTelegramAlertTargets()}>
+                  {lang === "km" ? "រក្សាទុក Chat ID" : "Save Chat IDs"}
+                </button>
+                <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void sendTelegramTestAlert()}>
+                  {lang === "km" ? "ផ្ញើ Test" : "Send Test"}
+                </button>
+                <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void loadTelegramStatus()}>
+                  {lang === "km" ? "Refresh Status" : "Refresh Status"}
+                </button>
+              </div>
+              {telegramStatus ? (
+                <div style={{ marginTop: 12 }}>
+                  <div className="tiny">
+                    {lang === "km" ? "Configured targets" : "Configured targets"}: {telegramStatus.configuredTargets.length ? telegramStatus.configuredTargets.join(", ") : "-"}
+                  </div>
+                  <div className="tiny">
+                    {lang === "km" ? "Discovered chats" : "Discovered chats"}: {telegramStatus.discoveredTargets.length ? "" : "-"}
+                  </div>
+                  {telegramStatus.discoveredTargets.length ? (
+                    <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
+                      {telegramStatus.discoveredTargets.map((chat) => (
+                        <div key={`telegram-chat-${chat.id}`} className="tiny" style={{ marginBottom: 6 }}>
+                          <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="tiny" style={{ marginTop: 8 }}>
+                    {lang === "km" ? "Last send" : "Last send"}: {telegramStatus.lastSend?.at || "-"}
+                  </div>
+                  {telegramStatus.lastSend?.errors?.length ? (
+                    <div className="alert" style={{ marginTop: 8 }}>
+                      {telegramStatus.lastSend.errors.join(" | ")}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </article>
           </section>
           )}
 
@@ -33282,6 +33488,15 @@ export default function App() {
                           <h4>{entry.title}</h4>
                           {entry.subtitle ? <p>{entry.subtitle}</p> : null}
                         </div>
+                        <button
+                          type="button"
+                          className={`vault-search-copy-btn ${vaultCopiedEntryId === entry.id ? "is-copied" : ""}`}
+                          onClick={() => void copyVaultSearchEntry(entry)}
+                          aria-label={`Copy ${entry.title}`}
+                          title={vaultCopiedEntryId === entry.id ? "Copied" : "Copy record"}
+                        >
+                          <Copy size={16} />
+                        </button>
                       </div>
                       <div className="vault-search-grid">
                         {entry.fields.map((field) => (

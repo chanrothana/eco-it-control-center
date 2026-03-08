@@ -7,8 +7,8 @@ const WEB_PORT = 3000;
 const API_PORT = 4000;
 const isPhoneMode = process.argv.includes("--phone");
 // Local mode should stay loopback-only; phone mode exposes to LAN.
-const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
-const webHost = isPhoneMode ? "0.0.0.0" : "";
+const apiHost = isPhoneMode ? "0.0.0.0" : "localhost";
+const webHost = isPhoneMode ? "0.0.0.0" : "localhost";
 const children = [];
 let shuttingDown = false;
 
@@ -105,11 +105,9 @@ function runStartRunner(isApiPortBusy) {
   const webCmd = process.platform === "win32"
     ? path.join("node_modules", ".bin", "react-scripts.cmd")
     : path.join("node_modules", ".bin", "react-scripts");
-  const webEnv = { ...process.env, PORT: String(WEB_PORT) };
-  if (webHost) {
-    webEnv.HOST = webHost;
-  } else {
-    delete webEnv.HOST;
+  const webEnv = { ...process.env, PORT: String(WEB_PORT), HOST: webHost };
+  if (!isPhoneMode) {
+    webEnv.DANGEROUSLY_DISABLE_HOST_CHECK = "true";
   }
   const webChild = spawn(webCmd, ["start"], {
     stdio: "inherit",

@@ -126,6 +126,7 @@ let telegramLastSendReport = {
   targets: [],
   errors: [],
 };
+let telegramLastDiscoveredChats = [];
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const INDEX_FILE = path.join(BUILD_DIR, "index.html");
 const CAMPUS_MAP = {
@@ -930,6 +931,21 @@ function normalizeInventoryApprovalRoutingMap(input) {
   return out;
 }
 
+function normalizeTelegramChatIds(input) {
+  const raw = Array.isArray(input)
+    ? input
+    : typeof input === "string"
+      ? input.split(",")
+      : [];
+  return Array.from(
+    new Set(
+      raw
+        .map((value) => toText(value).trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL"]);
 const INVENTORY_TXN_TYPE_SET = new Set(["IN", "OUT", "SET", "BORROW_OUT", "BORROW_IN", "BORROW_CONSUME"]);
 
@@ -1372,6 +1388,7 @@ function normalizeImportedDb(input) {
   const calendarEvents = normalizeCalendarEvents(settings.calendarEvents);
   const maintenanceReminderOffsets = normalizeMaintenanceReminderOffsets(settings.maintenanceReminderOffsets);
   const inventoryApprovalRouting = normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting);
+  const telegramChatIds = normalizeTelegramChatIds(settings.telegramChatIds);
   const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
   const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
   const vaultAccounts = normalizeVaultAccounts(settings.vaultAccounts);
@@ -1414,6 +1431,7 @@ function normalizeImportedDb(input) {
       calendarEvents,
       maintenanceReminderOffsets,
       inventoryApprovalRouting,
+      telegramChatIds,
       inventoryItems,
       inventoryTxns,
       poolCleaningSchedules,
@@ -1801,6 +1819,16 @@ function sendTelegramMessageToChat(chatId, text) {
   });
 }
 
+function resolveTelegramConfiguredChatIds(db, overrideChatIds = []) {
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const settingsTargets = normalizeTelegramChatIds(settings.telegramChatIds);
+  const explicitTargets = normalizeTelegramChatIds(overrideChatIds);
+  return Array.from(new Set([...explicitTargets, ...TELEGRAM_CHAT_IDS, ...settingsTargets]));
+}
+
 function shouldRetryTelegramResult(result) {
   if (!result || result.ok) return false;
   const code = Number(result.statusCode || 0);
@@ -1825,7 +1853,7 @@ async function sendTelegramMessageToChatWithRetry(chatId, text, attempts = 3) {
   return last;
 }
 
-async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
+async function sendTelegramMessage(text, options = {}) {
   if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !toText(text)) {
     telegramLastSendReport = {
       at: new Date().toISOString(),
@@ -1837,10 +1865,15 @@ async function sendTelegramMessage(text, chatIds = TELEGRAM_CHAT_IDS) {
     };
     return false;
   }
-  const configuredTargets = Array.from(
-    new Set((Array.isArray(chatIds) ? chatIds : [chatIds]).map((row) => toText(row).trim()).filter(Boolean))
-  );
-  const discoveredTargets = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+  const db = options && typeof options === "object" ? options.db : null;
+  const explicitChatIds =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
+      ? options.chatIds
+      : [];
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds);
+  const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+  telegramLastDiscoveredChats = discoveredChats;
+  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
   const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
   if (!targets.length) return false;
   const results = [];
@@ -1909,18 +1942,28 @@ function discoverTelegramChatIds() {
           try {
             const parsed = JSON.parse(body);
             const rows = Array.isArray(parsed && parsed.result) ? parsed.result : [];
-            const ids = Array.from(
-              new Set(
+            const chats = Array.from(
+              new Map(
                 rows
                   .map((row) => {
                     const message = row && typeof row === "object" ? (row.message || row.edited_message || row.channel_post) : null;
                     const chat = message && typeof message === "object" ? message.chat : null;
-                    return chat && typeof chat === "object" ? toText(chat.id) : "";
+                    const id = chat && typeof chat === "object" ? toText(chat.id) : "";
+                    if (!id) return null;
+                    return [
+                      id,
+                      {
+                        id,
+                        type: toText(chat.type),
+                        title: toText(chat.title) || toText(chat.username) || toText(chat.first_name),
+                        username: toText(chat.username),
+                      },
+                    ];
                   })
                   .filter(Boolean)
-              )
+              ).values()
             );
-            resolve(ids);
+            resolve(chats);
           } catch {
             resolve([]);
           }
@@ -1936,7 +1979,7 @@ function discoverTelegramChatIds() {
   });
 }
 
-async function sendTelegramMaintenanceBatch(rows) {
+async function sendTelegramMaintenanceBatch(rows, db = null) {
   if (!Array.isArray(rows) || !rows.length) return false;
   const lines = rows.slice(0, 8).map((row, idx) => {
     const dateText = toText(row.scheduleDate) || "-";
@@ -1947,10 +1990,10 @@ async function sendTelegramMaintenanceBatch(rows) {
   });
   const extra = rows.length > 8 ? `\n+${rows.length - 8} more alert(s)` : "";
   const text = `Eco IT Maintenance Alerts\n${lines.join("\n\n")}${extra}`;
-  return sendTelegramMessage(text);
+  return sendTelegramMessage(text, { db });
 }
 
-async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = []) {
+async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], db = null) {
   if (!txn || typeof txn !== "object") return false;
   if (toUpper(txn.approvalStatus) !== "PENDING") return false;
   const itemCode = toText(txn.itemCode) || "-";
@@ -1978,10 +2021,10 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = []) 
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendTelegramMessage(lines.join("\n"));
+  return sendTelegramMessage(lines.join("\n"), { db });
 }
 
-async function sendTelegramInventoryOutRecordedAlert(txn) {
+async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   if (!txn || typeof txn !== "object") return false;
   if (normalizeInventoryTxnType(txn.type) !== "OUT") return false;
   const itemCode = toText(txn.itemCode) || "-";
@@ -2004,7 +2047,7 @@ async function sendTelegramInventoryOutRecordedAlert(txn) {
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendTelegramMessage(lines.join("\n"));
+  return sendTelegramMessage(lines.join("\n"), { db });
 }
 
 initStorageSync();
@@ -3061,11 +3104,13 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const discoveredTargets = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+      telegramLastDiscoveredChats = discoveredTargets;
+      const db = await readDb();
       sendJson(res, 200, {
         ok: true,
         enabled: TELEGRAM_ALERT_ENABLED,
         hasBotToken: Boolean(TELEGRAM_BOT_TOKEN),
-        configuredTargets: TELEGRAM_CHAT_IDS,
+        configuredTargets: resolveTelegramConfiguredChatIds(db),
         discoverEnabled: TELEGRAM_DISCOVER_CHAT_IDS,
         discoveredTargets,
         lastSend: telegramLastSendReport,
@@ -3087,11 +3132,12 @@ const server = http.createServer(async (req, res) => {
       const text =
         toText(body && body.text) ||
         `ECO IT Telegram test\nTime: ${new Date().toISOString()}\nBy: ${toText(user.displayName) || toText(user.username) || "staff"}`;
-      const ok = await sendTelegramMessage(text);
+      const db = await readDb();
+      const ok = await sendTelegramMessage(text, { db });
       sendJson(res, 200, {
         ok,
         enabled: TELEGRAM_ALERT_ENABLED,
-        chatTargets: TELEGRAM_CHAT_IDS,
+        chatTargets: resolveTelegramConfiguredChatIds(db),
       });
       return;
     }
@@ -3236,6 +3282,7 @@ const server = http.createServer(async (req, res) => {
         settings: {
           ...settings,
           inventoryApprovalRouting: normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting),
+          telegramChatIds: normalizeTelegramChatIds(settings.telegramChatIds),
           staffUsers: normalizeStaffUsers(settings.staffUsers),
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
           inventoryItems: normalizeInventoryItems(settings.inventoryItems),
@@ -3287,6 +3334,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryApprovalRouting")
           ? normalizeInventoryApprovalRoutingMap(incoming.inventoryApprovalRouting)
           : normalizeInventoryApprovalRoutingMap(current.inventoryApprovalRouting);
+      const nextTelegramChatIds =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "telegramChatIds")
+          ? normalizeTelegramChatIds(incoming.telegramChatIds)
+          : normalizeTelegramChatIds(current.telegramChatIds);
       const nextInventoryItems =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryItems")
           ? normalizeInventoryItems(incoming.inventoryItems)
@@ -3342,6 +3393,7 @@ const server = http.createServer(async (req, res) => {
         calendarEvents: nextCalendarEvents,
         maintenanceReminderOffsets: nextMaintenanceReminderOffsets,
         inventoryApprovalRouting: nextInventoryApprovalRouting,
+        telegramChatIds: nextTelegramChatIds,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
         poolCleaningSchedules: nextPoolCleaningSchedules,
@@ -3782,7 +3834,7 @@ const server = http.createServer(async (req, res) => {
       const backfilled = backfillInventoryApprovalNotificationTargets(db);
       if (generated || backfilled) {
         await writeDb(db);
-        void sendTelegramMaintenanceBatch(createdNotifications);
+        void sendTelegramMaintenanceBatch(createdNotifications, db);
       }
       const visible = normalizeNotificationEntries(db.notifications)
         .filter((row) => notificationVisibleToUser(row, user))
@@ -4230,9 +4282,9 @@ const server = http.createServer(async (req, res) => {
       let telegramAlertSent = false;
       if (normalizeInventoryTxnType(txn.type) === "OUT") {
         if (approvalStatus === "PENDING") {
-          telegramAlertSent = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets);
+          telegramAlertSent = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets, db);
         } else {
-          telegramAlertSent = await sendTelegramInventoryOutRecordedAlert(txn);
+          telegramAlertSent = await sendTelegramInventoryOutRecordedAlert(txn, db);
         }
       }
       sendJson(res, 201, { txn, telegramAlertSent });
