@@ -244,6 +244,20 @@ type Ticket = {
   requestSource?: string;
 };
 
+type TicketEditForm = {
+  campus: string;
+  category: string;
+  assetId: string;
+  title: string;
+  description: string;
+  requestedBy: string;
+  requesterContact: string;
+  priority: string;
+  status: string;
+  assignedTo: string;
+  photo: string;
+};
+
 type LocationEntry = {
   id: number;
   campus: string;
@@ -5883,7 +5897,7 @@ export default function App() {
     maintenance: boolean;
     details: boolean;
   }>({
-    request: true,
+    request: false,
     maintenance: false,
     details: false,
   });
@@ -6071,6 +6085,21 @@ export default function App() {
     photo: "",
   });
   const [ticketFileKey, setTicketFileKey] = useState(0);
+  const [ticketEditModal, setTicketEditModal] = useState<null | Ticket>(null);
+  const [ticketEditFileKey, setTicketEditFileKey] = useState(0);
+  const [ticketEditForm, setTicketEditForm] = useState<TicketEditForm>({
+    campus: CAMPUS_LIST[0],
+    category: "IT",
+    assetId: "",
+    title: "",
+    description: "",
+    requestedBy: "",
+    requesterContact: "",
+    priority: "Normal",
+    status: "Open",
+    assignedTo: "",
+    photo: "",
+  });
   const [ticketMaintenanceModal, setTicketMaintenanceModal] = useState<null | Ticket>(null);
   const [ticketMaintenanceFileKey, setTicketMaintenanceFileKey] = useState(0);
   const [ticketMaintenanceForm, setTicketMaintenanceForm] = useState({
@@ -12819,6 +12848,21 @@ export default function App() {
     }
   }
 
+  async function onTicketEditPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setTicketEditForm((f) => ({ ...f, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    }
+  }
+
   async function onTicketMaintenancePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -12846,6 +12890,93 @@ export default function App() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update work order");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openTicketEditModal(ticket: Ticket) {
+    setTicketEditModal(ticket);
+    setTicketEditForm({
+      campus: ticket.campus || CAMPUS_LIST[0],
+      category: ticket.category || "IT",
+      assetId: ticket.assetId || "",
+      title: ticket.title || "",
+      description: ticket.description || "",
+      requestedBy: ticket.requestedBy || "",
+      requesterContact: ticket.requesterContact || "",
+      priority: ticket.priority || "Normal",
+      status: ticket.status || "Open",
+      assignedTo: ticket.assignedTo || "",
+      photo: ticket.photo || "",
+    });
+    setTicketEditFileKey((k) => k + 1);
+  }
+
+  function closeTicketEditModal() {
+    setTicketEditModal(null);
+    setTicketEditForm({
+      campus: CAMPUS_LIST[0],
+      category: "IT",
+      assetId: "",
+      title: "",
+      description: "",
+      requestedBy: "",
+      requesterContact: "",
+      priority: "Normal",
+      status: "Open",
+      assignedTo: "",
+      photo: "",
+    });
+  }
+
+  async function saveTicketEdit() {
+    if (!ticketEditModal || !isSuperAdmin) return;
+    if (!ticketEditForm.title.trim() || !ticketEditForm.requestedBy.trim()) {
+      setError("Title and requested by are required.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await requestJson<{ ticket: Ticket }>(`/api/tickets/${ticketEditModal.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          campus: ticketEditForm.campus,
+          category: ticketEditForm.category,
+          assetId: ticketEditForm.assetId.trim().toUpperCase(),
+          title: ticketEditForm.title.trim(),
+          description: ticketEditForm.description.trim(),
+          requestedBy: ticketEditForm.requestedBy.trim(),
+          requesterContact: ticketEditForm.requesterContact.trim(),
+          priority: ticketEditForm.priority,
+          status: ticketEditForm.status,
+          assignedTo: ticketEditForm.assignedTo,
+          photo: ticketEditForm.photo || "",
+        }),
+      });
+      closeTicketEditModal();
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update work order");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteTicketRow(ticket: Ticket) {
+    if (!isSuperAdmin) return;
+    if (!window.confirm(`Delete work order ${ticket.ticketNo}? This cannot be undone.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await requestJson<{ ok: boolean }>(`/api/tickets/${ticket.id}`, { method: "DELETE" });
+      if (ticketEditModal?.id === ticket.id) {
+        closeTicketEditModal();
+      }
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete work order");
     } finally {
       setBusy(false);
     }
@@ -19942,17 +20073,10 @@ export default function App() {
 
   useEffect(() => {
     if (!pendingQrAssetId) return;
-    const canRecordMaintenance = Boolean(
-      authUser &&
-      publicQrAsset &&
-      (((authUser ? isAdminRole(authUser.role) : false) || (publicQrAsset?.campus ? allowedCampuses.includes(publicQrAsset.campus) : true)) &&
-        (isAdminRole(authUser.role) || canAccessMenu("maintenance.record", "maintenance")))
-    );
-    const canViewDetails = authUser?.role === "Super Admin";
     setPublicQrSectionsOpen({
-      request: true,
-      maintenance: canRecordMaintenance,
-      details: !canRecordMaintenance && canViewDetails,
+      request: false,
+      maintenance: false,
+      details: false,
     });
   }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetId, publicQrAsset]);
 
@@ -20815,7 +20939,7 @@ export default function App() {
       publicQrCampusAllowed &&
       (isAdminRole(authUser.role) || canAccessMenu("maintenance.record", "maintenance"))
     );
-    const publicQrCanViewDetails = authUser?.role === "Super Admin";
+    const publicQrCanViewDetails = Boolean(asset);
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
       : asset?.photo
@@ -21324,7 +21448,7 @@ export default function App() {
                             </div>
                           </div>
                         </div>,
-                        "Visible for Super Admin."
+                        "Read-only asset details and history for all users."
                       )
                     : null}
                 </div>
@@ -26294,6 +26418,16 @@ export default function App() {
                                   Open Asset
                                 </button>
                               ) : null}
+                              {isSuperAdmin ? (
+                                <button
+                                  className="tab btn-small"
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => openTicketEditModal(ticket)}
+                                >
+                                  Edit
+                                </button>
+                              ) : null}
                               {ticket.assetDbId ? (
                                 <button
                                   className="btn-primary btn-small"
@@ -26302,6 +26436,16 @@ export default function App() {
                                   onClick={() => openTicketMaintenanceModal(ticket)}
                                 >
                                   Complete & Record
+                                </button>
+                              ) : null}
+                              {isSuperAdmin ? (
+                                <button
+                                  className="btn-danger btn-small"
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => void deleteTicketRow(ticket)}
+                                >
+                                  Delete
                                 </button>
                               ) : null}
                             </div>
@@ -26319,6 +26463,94 @@ export default function App() {
             </section>
           </>
         )}
+
+        {ticketEditModal ? (
+          <div className="modal-backdrop" onClick={closeTicketEditModal}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>Edit Work Order - {ticketEditModal.ticketNo}</h2>
+                <button className="tab" onClick={closeTicketEditModal}>Close</button>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>{t.campus}</span>
+                  <select className="input" value={ticketEditForm.campus} onChange={(e) => setTicketEditForm((f) => ({ ...f, campus: e.target.value }))}>
+                    {campusOptions.map((campus) => <option key={`ticket-edit-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.category}</span>
+                  <select className="input" value={ticketEditForm.category} onChange={(e) => setTicketEditForm((f) => ({ ...f, category: e.target.value }))}>
+                    {CATEGORY_OPTIONS.map((category) => (
+                      <option key={`ticket-edit-category-${category.value}`} value={category.value}>{lang === "km" ? category.km : category.en}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.priority}</span>
+                  <select className="input" value={ticketEditForm.priority} onChange={(e) => setTicketEditForm((f) => ({ ...f, priority: e.target.value }))}>
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <option key={`ticket-edit-priority-${p.value}`} value={p.value}>{lang === "km" ? p.km : p.en}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.relatedAsset}</span>
+                  <input className="input" value={ticketEditForm.assetId} onChange={(e) => setTicketEditForm((f) => ({ ...f, assetId: e.target.value.toUpperCase() }))} />
+                </label>
+                <label className="field field-wide">
+                  <span>{t.titleLabel}</span>
+                  <input className="input" value={ticketEditForm.title} onChange={(e) => setTicketEditForm((f) => ({ ...f, title: e.target.value }))} />
+                </label>
+                <label className="field field-wide">
+                  <span>{t.description}</span>
+                  <textarea className="textarea" value={ticketEditForm.description} onChange={(e) => setTicketEditForm((f) => ({ ...f, description: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>{t.requestedBy}</span>
+                  <input className="input" value={ticketEditForm.requestedBy} onChange={(e) => setTicketEditForm((f) => ({ ...f, requestedBy: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Contact / Room</span>
+                  <input className="input" value={ticketEditForm.requesterContact} onChange={(e) => setTicketEditForm((f) => ({ ...f, requesterContact: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Assign To</span>
+                  <select className="input" value={ticketEditForm.assignedTo} onChange={(e) => setTicketEditForm((f) => ({ ...f, assignedTo: e.target.value }))}>
+                    <option value="">Unassigned</option>
+                    {users.map((user) => (
+                      <option key={`ticket-edit-assign-${ticketEditModal.id}-${user.id}`} value={user.fullName}>{user.fullName}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.status}</span>
+                  <select className="input" value={ticketEditForm.status} onChange={(e) => setTicketEditForm((f) => ({ ...f, status: e.target.value }))}>
+                    {TICKET_STATUS_OPTIONS.map((status) => (
+                      <option key={`ticket-edit-status-${status.value}`} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field field-wide">
+                  <span>{t.photo}</span>
+                  <input key={ticketEditFileKey} type="file" accept="image/*" onChange={onTicketEditPhotoFile} />
+                  {ticketEditForm.photo ? <img loading="lazy" decoding="async" src={ticketEditForm.photo} alt="ticket edit" className="photo-preview" /> : null}
+                </label>
+              </div>
+              <div className="row-actions" style={{ justifyContent: "space-between", marginTop: 16, flexWrap: "wrap", gap: 10 }}>
+                <button className="btn-danger btn-small" type="button" disabled={busy} onClick={() => void deleteTicketRow(ticketEditModal)}>
+                  Delete
+                </button>
+                <div className="row-actions" style={{ gap: 10, flexWrap: "wrap" }}>
+                  <button className="tab btn-small" type="button" onClick={closeTicketEditModal}>Cancel</button>
+                  <button className="btn-primary btn-small" type="button" disabled={busy} onClick={() => void saveTicketEdit()}>
+                    Update
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {ticketMaintenanceModal ? (
           <div className="modal-backdrop" onClick={closeTicketMaintenanceModal}>

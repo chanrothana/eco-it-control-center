@@ -2945,6 +2945,19 @@ function requireAdmin(req, res) {
   return user;
 }
 
+function requireSuperAdmin(req, res) {
+  const user = getAuthUser(req);
+  if (!user) {
+    sendJson(res, 401, { error: "Unauthorized" });
+    return null;
+  }
+  if (toText(user.role) !== "Super Admin") {
+    sendJson(res, 403, { error: "Super Admin role required" });
+    return null;
+  }
+  return user;
+}
+
 function normalizeRole(value) {
   const role = toText(value);
   if (role === "Super Admin") return "Super Admin";
@@ -5637,12 +5650,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const current = normalizeTickets([db.tickets[idx]])[0];
+      const nextAssetId = toText(body.assetId ?? current.assetId).toUpperCase();
+      const linkedAsset = nextAssetId ? selectBestAssetByAssetId(Array.isArray(db.assets) ? db.assets : [], nextAssetId) : null;
       const photo =
         body.photo === undefined
           ? current.photo
           : await normalizePhotoValue(body.photo, "maintenance");
       const next = {
         ...current,
+        campus: normalizeCampusInput(body.campus) || current.campus,
+        category: normalizeCategoryInput(body.category) || current.category,
+        assetId: nextAssetId,
+        assetDbId: linkedAsset ? Number(linkedAsset.id) || 0 : 0,
+        assetName: linkedAsset ? toText(linkedAsset.name) || toText(linkedAsset.assetId) : "",
+        assetLocation: linkedAsset ? toText(linkedAsset.location) : "",
         title: toText(body.title ?? current.title),
         description: toText(body.description ?? current.description),
         requestedBy: toText(body.requestedBy ?? current.requestedBy),
@@ -5688,6 +5709,35 @@ const server = http.createServer(async (req, res) => {
       appendAuditLog(db, admin, "UPDATE_STATUS", "ticket", db.tickets[idx].ticketNo || String(id), status);
       await writeDb(db);
       sendJson(res, 200, { ticket: db.tickets[idx] });
+      return;
+    }
+
+    if (req.method === "DELETE" && /^\/api\/tickets\/\d+$/.test(url.pathname)) {
+      const superAdmin = requireSuperAdmin(req, res);
+      if (!superAdmin) return;
+      const id = Number(url.pathname.replace("/api/tickets/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const db = await readDb();
+      const idx = db.tickets.findIndex((t) => Number(t.id) === id);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Ticket not found" });
+        return;
+      }
+      const current = normalizeTickets([db.tickets[idx]])[0];
+      db.tickets.splice(idx, 1);
+      appendAuditLog(
+        db,
+        superAdmin,
+        "DELETE",
+        "ticket",
+        current.ticketNo || String(id),
+        `${current.campus} | ${current.title}`
+      );
+      await writeDb(db);
+      sendJson(res, 200, { ok: true });
       return;
     }
 
