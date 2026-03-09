@@ -1582,6 +1582,24 @@ h2 {
   align-items: flex-start;
 }
 
+.maintenance-photo-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.maintenance-photo-group {
+  display: grid;
+  gap: 6px;
+}
+
+.maintenance-photo-group > small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6f84a7;
+}
+
 .maintenance-photo-stack-item {
   display: inline-flex;
 }
@@ -1598,6 +1616,25 @@ h2 {
   width: 72px;
   height: 72px;
   border-radius: 12px;
+}
+
+.maintenance-edit-photo-fields {
+  display: grid;
+  gap: 12px;
+  min-width: 240px;
+}
+
+.maintenance-edit-photo-fields > div {
+  display: grid;
+  gap: 6px;
+}
+
+.maintenance-edit-photo-fields > div > small {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6f84a7;
 }
 
 .maintenance-title-row {
@@ -8261,6 +8298,19 @@ tr.row-maint-maintenance:hover td {
     align-items: center;
   }
 
+  .maintenance-edit-photo-fields {
+    min-width: 0;
+  }
+
+  .public-asset-history-photo-groups,
+  .public-asset-history-photo-groups .maintenance-photo-group {
+    justify-items: start;
+  }
+
+  .public-asset-history-photo-groups .maintenance-photo-stack {
+    justify-content: flex-start;
+  }
+
   .dashboard-hero {
     flex-direction: column;
   }
@@ -8916,6 +8966,12 @@ tr.row-maint-maintenance:hover td {
   gap: 14px;
 }
 
+.public-asset-history-head-side {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
 .public-asset-history-title {
   display: inline-flex;
   align-items: center;
@@ -8939,6 +8995,54 @@ tr.row-maint-maintenance:hover td {
   color: #5a74a3;
   font-size: 20px;
   font-weight: 800;
+}
+
+.public-asset-history-photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.public-asset-history-photo-groups {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.public-asset-history-photo-groups .maintenance-photo-group {
+  justify-items: end;
+}
+
+.public-asset-history-photo-groups .maintenance-photo-group > small {
+  color: #6a7f9f;
+}
+
+.public-asset-history-photo-groups .maintenance-photo-stack {
+  justify-content: flex-end;
+}
+
+.public-asset-history-photo-groups .maintenance-photo-stack .table-photo,
+.public-asset-history-photo-groups .maintenance-photo-stack .photo-placeholder {
+  width: 58px;
+  height: 58px;
+  border-radius: 12px;
+}
+
+.public-asset-history-photo-btn {
+  padding: 0;
+  border: 1px solid #cfdcf0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.public-asset-history-photo-thumb {
+  display: block;
+  width: 58px;
+  height: 58px;
+  object-fit: cover;
 }
 
 .public-asset-history-grid {

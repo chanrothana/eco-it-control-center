@@ -2484,8 +2484,15 @@ async function normalizeHistoryEntries(entries, group = "maintenance") {
     if (!entry || typeof entry !== "object") continue;
     const photo = await normalizePhotoValue(entry.photo, group);
     const photos = await normalizePhotoList(entry.photos, group, 5);
-    if (photo && !photos.includes(photo)) photos.unshift(photo);
-    out.push({ ...entry, photo: photos[0] || photo, photos: photos.slice(0, 5) });
+    const beforePhotos = await normalizePhotoList(entry.beforePhotos, group, 5);
+    const afterPhotos = await normalizePhotoList([...(Array.isArray(entry.afterPhotos) ? entry.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], group, 5);
+    out.push({
+      ...entry,
+      photo: afterPhotos[0] || photo,
+      photos: afterPhotos.slice(0, 5),
+      beforePhotos: beforePhotos.slice(0, 5),
+      afterPhotos: afterPhotos.slice(0, 5),
+    });
   }
   return out;
 }
@@ -3183,6 +3190,8 @@ function toPublicAssetView(asset, allAssets = []) {
         by: toText(entry?.by),
         photo: toText(entry?.photo),
         photos: Array.isArray(entry?.photos) ? entry.photos.map((p) => toText(p)).filter(Boolean) : [],
+        beforePhotos: Array.isArray(entry?.beforePhotos) ? entry.beforePhotos.map((p) => toText(p)).filter(Boolean) : [],
+        afterPhotos: Array.isArray(entry?.afterPhotos) ? entry.afterPhotos.map((p) => toText(p)).filter(Boolean) : [],
       }))
     : [];
   const transferHistory = Array.isArray(source.transferHistory)
@@ -5177,6 +5186,10 @@ const server = http.createServer(async (req, res) => {
       const nextPhoto = await normalizePhotoValue(body.photo, "maintenance");
       const hasNextPhotos = Array.isArray(body.photos);
       const nextPhotos = await normalizePhotoList(body.photos, "maintenance", 5);
+      const hasNextBeforePhotos = Array.isArray(body.beforePhotos);
+      const nextBeforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
+      const hasNextAfterPhotos = Array.isArray(body.afterPhotos);
+      const nextAfterPhotos = await normalizePhotoList(body.afterPhotos, "maintenance", 5);
       const nextCompletion = normalizeCompletion(body.completion);
       const nextCondition = toText(body.condition);
 
@@ -5200,9 +5213,17 @@ const server = http.createServer(async (req, res) => {
       const currentPhotos = Array.isArray(current.photos)
         ? current.photos.map((p) => toText(p)).filter(Boolean)
         : (toText(current.photo) ? [toText(current.photo)] : []);
-      let resolvedPhotos = hasNextPhotos ? nextPhotos : [...currentPhotos];
-      if (nextPhoto && !resolvedPhotos.includes(nextPhoto)) resolvedPhotos.unshift(nextPhoto);
-      resolvedPhotos = resolvedPhotos.slice(0, 5);
+      const currentBeforePhotos = Array.isArray(current.beforePhotos)
+        ? current.beforePhotos.map((p) => toText(p)).filter(Boolean)
+        : [];
+      const currentAfterPhotos = Array.isArray(current.afterPhotos)
+        ? current.afterPhotos.map((p) => toText(p)).filter(Boolean)
+        : currentPhotos;
+      let resolvedBeforePhotos = hasNextBeforePhotos ? nextBeforePhotos : [...currentBeforePhotos];
+      let resolvedAfterPhotos = hasNextAfterPhotos ? nextAfterPhotos : (hasNextPhotos ? nextPhotos : [...currentAfterPhotos]);
+      if (nextPhoto && !resolvedAfterPhotos.includes(nextPhoto)) resolvedAfterPhotos.unshift(nextPhoto);
+      resolvedBeforePhotos = resolvedBeforePhotos.slice(0, 5);
+      resolvedAfterPhotos = resolvedAfterPhotos.slice(0, 5);
       const updated = {
         ...current,
         date: nextDate || toText(current.date),
@@ -5212,8 +5233,10 @@ const server = http.createServer(async (req, res) => {
         note: nextNote || toText(current.note),
         cost: nextCost,
         by: nextBy,
-        photo: resolvedPhotos[0] || nextPhoto || toText(current.photo),
-        photos: resolvedPhotos,
+        photo: resolvedAfterPhotos[0] || nextPhoto || toText(current.photo),
+        photos: resolvedAfterPhotos,
+        beforePhotos: resolvedBeforePhotos,
+        afterPhotos: resolvedAfterPhotos,
       };
       if (!updated.date || !updated.type || !updated.note) {
         sendJson(res, 400, { error: "date, type, note are required" });
@@ -5482,7 +5505,8 @@ const server = http.createServer(async (req, res) => {
       const by = toText(body.by);
       const photo = await normalizePhotoValue(body.photo, "maintenance");
       const photos = await normalizePhotoList(body.photos, "maintenance", 5);
-      if (photo && !photos.includes(photo)) photos.unshift(photo);
+      const beforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
+      const afterPhotos = await normalizePhotoList([...(Array.isArray(body.afterPhotos) ? body.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], "maintenance", 5);
       const completion = normalizeCompletion(body.completion);
       const condition = toText(body.condition);
       if (!date || !type || !note) {
@@ -5510,8 +5534,10 @@ const server = http.createServer(async (req, res) => {
         note,
         cost,
         by,
-        photo: photos[0] || photo,
-        photos: photos.slice(0, 5),
+        photo: afterPhotos[0] || photo,
+        photos: afterPhotos.slice(0, 5),
+        beforePhotos: beforePhotos.slice(0, 5),
+        afterPhotos: afterPhotos.slice(0, 5),
         ticketId: 0,
         ticketNo: "",
         requestSource: "manual",
@@ -5804,7 +5830,8 @@ const server = http.createServer(async (req, res) => {
       const status = toText(body.ticketStatus) || "Done";
       const photo = await normalizePhotoValue(body.photo, "maintenance");
       const photos = await normalizePhotoList(body.photos, "maintenance", 5);
-      if (photo && !photos.includes(photo)) photos.unshift(photo);
+      const beforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
+      const afterPhotos = await normalizePhotoList([...(Array.isArray(body.afterPhotos) ? body.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], "maintenance", 5);
       if (!date || !type || !note) {
         sendJson(res, 400, { error: "date, type, note are required" });
         return;
@@ -5838,8 +5865,10 @@ const server = http.createServer(async (req, res) => {
         note,
         cost,
         by,
-        photo: photos[0] || photo,
-        photos: photos.slice(0, 5),
+        photo: afterPhotos[0] || photo,
+        photos: afterPhotos.slice(0, 5),
+        beforePhotos: beforePhotos.slice(0, 5),
+        afterPhotos: afterPhotos.slice(0, 5),
       };
       db.assets[assetIdx].maintenanceHistory = Array.isArray(db.assets[assetIdx].maintenanceHistory)
         ? [entry, ...db.assets[assetIdx].maintenanceHistory]

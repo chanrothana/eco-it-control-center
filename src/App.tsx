@@ -93,6 +93,8 @@ type MaintenanceEntry = {
   by?: string;
   photo?: string;
   photos?: string[];
+  beforePhotos?: string[];
+  afterPhotos?: string[];
   ticketId?: number;
   ticketNo?: string;
   requestSource?: string;
@@ -3674,6 +3676,32 @@ function normalizeAssetPhotos(input: { photo?: string; photos?: string[] }) {
   return out.slice(0, MAX_ASSET_PHOTOS);
 }
 
+function normalizeMaintenancePhotoList(input: unknown, maxCount = MAX_MAINTENANCE_PHOTOS) {
+  const out: string[] = [];
+  const list = Array.isArray(input) ? input : [];
+  for (const item of list) {
+    const url = String(item || "").trim();
+    if (!url) continue;
+    if (!out.includes(url)) out.push(url);
+    if (out.length >= maxCount) break;
+  }
+  return out;
+}
+
+function normalizeMaintenanceEntryPhotos(entry: Partial<MaintenanceEntry>) {
+  const beforePhotos = normalizeMaintenancePhotoList(entry.beforePhotos);
+  const afterBase = normalizeMaintenancePhotoList(entry.afterPhotos);
+  const legacyAfter = normalizeMaintenancePhotoList(entry.photos);
+  const photo = String(entry.photo || "").trim();
+  const afterPhotos = normalizeMaintenancePhotoList([...afterBase, ...legacyAfter, ...(photo ? [photo] : [])]);
+  return {
+    beforePhotos,
+    afterPhotos,
+    photo: afterPhotos[0] || "",
+    photos: afterPhotos,
+  };
+}
+
 function normalizeAssetSerialKey(value: string) {
   return String(value || "").trim().toUpperCase();
 }
@@ -3846,6 +3874,12 @@ function normalizeAssetForUi(asset: Asset): Asset {
   const hasReplacementDone = Array.isArray(asset.maintenanceHistory)
     ? asset.maintenanceHistory.some((entry) => isReplacementDone(entry?.type || "", entry?.completion || ""))
     : false;
+  const normalizedMaintenanceHistory = Array.isArray(asset.maintenanceHistory)
+    ? asset.maintenanceHistory.map((entry) => ({
+        ...entry,
+        ...normalizeMaintenanceEntryPhotos(entry || {}),
+      }))
+    : [];
   const currentStatus = String(asset.status || "Active");
   const shouldAutoRetire = hasReplacementDone && currentStatus !== "Retired";
   const nextStatusHistory = shouldAutoRetire
@@ -3872,6 +3906,7 @@ function normalizeAssetForUi(asset: Asset): Asset {
     componentRequired: Boolean(asset.componentRequired),
     photos: normalizedPhotos,
     photo: normalizeUrl(normalizedPhotos[0] || ""),
+    maintenanceHistory: normalizedMaintenanceHistory,
     status: shouldAutoRetire ? "Retired" : asset.status,
     statusHistory: nextStatusHistory,
     custodyHistory,
@@ -5951,6 +5986,8 @@ export default function App() {
     by: "",
     photo: "",
     photos: [] as string[],
+    beforePhotos: [] as string[],
+    afterPhotos: [] as string[],
   });
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
@@ -5993,6 +6030,9 @@ export default function App() {
     cost: "",
     by: "",
     photo: "",
+    photos: [] as string[],
+    beforePhotos: [] as string[],
+    afterPhotos: [] as string[],
   });
   const [transferForm, setTransferForm] = useState({
     assetId: "",
@@ -6112,6 +6152,9 @@ export default function App() {
     cost: "",
     by: "",
     photo: "",
+    photos: [] as string[],
+    beforePhotos: [] as string[],
+    afterPhotos: [] as string[],
     ticketStatus: "Done",
   });
 
@@ -12974,18 +13017,48 @@ export default function App() {
     }
   }
 
-  async function onTicketMaintenancePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
+  async function onTicketMaintenancePhotoFile(
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "before" | "after" = "after"
+  ) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const oversized = files.find((file) => file.size > 15 * 1024 * 1024);
+    if (oversized) {
       alert(t.photoLimit);
+      e.target.value = "";
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
-      setTicketMaintenanceForm((f) => ({ ...f, photo }));
+      const optimized = Array.from(new Set(await Promise.all(files.map((file) => optimizeUploadPhoto(file)))));
+      let reachedLimit = false;
+      setTicketMaintenanceForm((f) => {
+        const nextBefore =
+          target === "before"
+            ? normalizeMaintenancePhotoList([...(f.beforePhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.beforePhotos || []);
+        const nextAfter =
+          target === "after"
+            ? normalizeMaintenancePhotoList([...(f.afterPhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.afterPhotos || []);
+        reachedLimit =
+          (target === "before" ? nextBefore.length : nextAfter.length) >= MAX_MAINTENANCE_PHOTOS &&
+          optimized.length > 0;
+        return {
+          ...f,
+          beforePhotos: nextBefore.slice(0, MAX_MAINTENANCE_PHOTOS),
+          afterPhotos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+          photo: nextAfter[0] || "",
+          photos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+        };
+      });
+      if (reachedLimit) {
+        alert(lang === "km" ? `អាចបញ្ចូលរូបបានអតិបរមា ${MAX_MAINTENANCE_PHOTOS} ប៉ុណ្ណោះ។` : `Maximum ${MAX_MAINTENANCE_PHOTOS} photos allowed.`);
+      }
     } catch {
       alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -13104,6 +13177,9 @@ export default function App() {
       cost: "",
       by: authUser?.displayName || authUser?.username || "",
       photo: "",
+      photos: [],
+      beforePhotos: [],
+      afterPhotos: [],
       ticketStatus: "Done",
     });
     setTicketMaintenanceFileKey((k) => k + 1);
@@ -13120,6 +13196,9 @@ export default function App() {
       cost: "",
       by: authUser?.displayName || authUser?.username || "",
       photo: "",
+      photos: [],
+      beforePhotos: [],
+      afterPhotos: [],
       ticketStatus: "Done",
     });
   }
@@ -13145,7 +13224,10 @@ export default function App() {
             note: ticketMaintenanceForm.note.trim(),
             cost: ticketMaintenanceForm.cost.trim(),
             by: ticketMaintenanceForm.by.trim(),
-            photo: ticketMaintenanceForm.photo || "",
+            photo: ticketMaintenanceForm.afterPhotos[0] || ticketMaintenanceForm.photo || "",
+            photos: ticketMaintenanceForm.afterPhotos || [],
+            beforePhotos: ticketMaintenanceForm.beforePhotos || [],
+            afterPhotos: ticketMaintenanceForm.afterPhotos || [],
             ticketStatus: ticketMaintenanceForm.ticketStatus,
           }),
         }
@@ -15741,7 +15823,10 @@ export default function App() {
     }
   }
 
-  async function onMaintenanceRecordPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onMaintenanceRecordPhotoFile(
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "before" | "after" = "after"
+  ) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     const oversized = files.find((file) => file.size > 15 * 1024 * 1024);
@@ -15754,13 +15839,24 @@ export default function App() {
       const optimized = Array.from(new Set(await Promise.all(files.map((file) => optimizeUploadPhoto(file)))));
       let reachedLimit = false;
       setMaintenanceRecordForm((f) => {
-        const merged = normalizeAssetPhotos({
-          photo: f.photo,
-          photos: [...(f.photos || []), ...optimized],
-        });
-        const limited = merged.slice(0, MAX_MAINTENANCE_PHOTOS);
-        reachedLimit = merged.length > MAX_MAINTENANCE_PHOTOS;
-        return { ...f, photo: limited[0] || "", photos: limited };
+        const nextBefore =
+          target === "before"
+            ? normalizeMaintenancePhotoList([...(f.beforePhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.beforePhotos || []);
+        const nextAfter =
+          target === "after"
+            ? normalizeMaintenancePhotoList([...(f.afterPhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.afterPhotos || []);
+        reachedLimit =
+          (target === "before" ? nextBefore.length : nextAfter.length) >= MAX_MAINTENANCE_PHOTOS &&
+          optimized.length > 0;
+        return {
+          ...f,
+          beforePhotos: nextBefore.slice(0, MAX_MAINTENANCE_PHOTOS),
+          afterPhotos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+          photo: nextAfter[0] || "",
+          photos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+        };
       });
       if (reachedLimit) {
         alert(lang === "km" ? `អាចបញ្ចូលរូបបានអតិបរមា ${MAX_MAINTENANCE_PHOTOS} ប៉ុណ្ណោះ។` : `Maximum ${MAX_MAINTENANCE_PHOTOS} photos allowed.`);
@@ -15797,8 +15893,10 @@ export default function App() {
       note: maintenanceRecordForm.note.trim(),
       cost: maintenanceRecordForm.cost.trim(),
       by: maintenanceRecordForm.by.trim(),
-      photo: maintenanceRecordForm.photo || "",
-      photos: normalizeAssetPhotos({ photo: maintenanceRecordForm.photo || "", photos: maintenanceRecordForm.photos || [] }),
+      beforePhotos: normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []),
+      afterPhotos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
+      photo: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || [])[0] || "",
+      photos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
     };
     const sourceAsset = assets.find((a) => a.id === assetId) || null;
     const maintenanceType = entry.type.trim().toLowerCase();
@@ -15913,6 +16011,8 @@ export default function App() {
         by: authUser?.displayName || "",
         photo: "",
         photos: [],
+        beforePhotos: [],
+        afterPhotos: [],
       }));
       setMaintenanceRecordFileKey((k) => k + 1);
       setMaintenanceView("history");
@@ -16262,6 +16362,7 @@ export default function App() {
   }
 
   function startMaintenanceEntryEdit(entry: MaintenanceEntry) {
+    const normalizedPhotos = normalizeMaintenanceEntryPhotos(entry);
     setMaintenanceEditingEntryId(entry.id);
     setMaintenanceEditForm({
       date: entry.date || "",
@@ -16271,7 +16372,10 @@ export default function App() {
       note: entry.note || "",
       cost: entry.cost || "",
       by: entry.by || "",
-      photo: entry.photo || "",
+      photo: normalizedPhotos.photo,
+      photos: normalizedPhotos.photos,
+      beforePhotos: normalizedPhotos.beforePhotos,
+      afterPhotos: normalizedPhotos.afterPhotos,
     });
     setMaintenanceEditFileKey((k) => k + 1);
   }
@@ -16287,6 +16391,9 @@ export default function App() {
     cost: string;
     by: string;
     photo: string;
+    photos?: string[];
+    beforePhotos?: string[];
+    afterPhotos?: string[];
   }) {
     setMaintenanceDetailAssetId(row.assetDbId);
     startMaintenanceEntryEdit({
@@ -16299,6 +16406,9 @@ export default function App() {
       cost: row.cost,
       by: row.by,
       photo: row.photo,
+      photos: row.photos || [],
+      beforePhotos: row.beforePhotos || [],
+      afterPhotos: row.afterPhotos || [],
     });
   }
 
@@ -16313,21 +16423,47 @@ export default function App() {
       cost: "",
       by: "",
       photo: "",
+      photos: [],
+      beforePhotos: [],
+      afterPhotos: [],
     });
   }
 
-  async function onMaintenanceEditPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
+  async function onMaintenanceEditPhotoFile(
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "before" | "after" = "after"
+  ) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const oversized = files.find((file) => file.size > 15 * 1024 * 1024);
+    if (oversized) {
       alert(t.photoLimit);
+      e.target.value = "";
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
-      setMaintenanceEditForm((f) => ({ ...f, photo }));
+      const optimized = Array.from(new Set(await Promise.all(files.map((file) => optimizeUploadPhoto(file)))));
+      setMaintenanceEditForm((f) => {
+        const nextBefore =
+          target === "before"
+            ? normalizeMaintenancePhotoList([...(f.beforePhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.beforePhotos || []);
+        const nextAfter =
+          target === "after"
+            ? normalizeMaintenancePhotoList([...(f.afterPhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.afterPhotos || []);
+        return {
+          ...f,
+          beforePhotos: nextBefore.slice(0, MAX_MAINTENANCE_PHOTOS),
+          afterPhotos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+          photo: nextAfter[0] || "",
+          photos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+        };
+      });
     } catch {
       alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -16349,7 +16485,10 @@ export default function App() {
       note: maintenanceEditForm.note.trim(),
       cost: maintenanceEditForm.cost.trim(),
       by: maintenanceEditForm.by.trim(),
-      photo: maintenanceEditForm.photo || "",
+      beforePhotos: normalizeMaintenancePhotoList(maintenanceEditForm.beforePhotos || []),
+      afterPhotos: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || []),
+      photo: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || [])[0] || "",
+      photos: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || []),
     };
 
     setBusy(true);
@@ -16774,6 +16913,8 @@ export default function App() {
       by: "",
       photo: "",
       photos: [],
+      beforePhotos: [],
+      afterPhotos: [],
     });
     setMaintenanceRecordFileKey((k) => k + 1);
     setQuickRecordAssetId(asset.id);
@@ -17544,9 +17685,12 @@ export default function App() {
       by: string;
       photo: string;
       photos: string[];
+      beforePhotos: string[];
+      afterPhotos: string[];
     }> = [];
     for (const asset of assets) {
       for (const entry of asset.maintenanceHistory || []) {
+        const normalizedPhotos = normalizeMaintenanceEntryPhotos(entry || {});
         rows.push({
           rowId: `${asset.id}-${entry.id}`,
           assetDbId: asset.id,
@@ -17565,8 +17709,10 @@ export default function App() {
           note: entry.note || "",
           cost: entry.cost || "-",
           by: entry.by || "-",
-          photo: entry.photo || "",
-          photos: normalizeAssetPhotos({ photo: entry.photo || "", photos: entry.photos || [] }),
+          photo: normalizedPhotos.photo,
+          photos: normalizedPhotos.photos,
+          beforePhotos: normalizedPhotos.beforePhotos,
+          afterPhotos: normalizedPhotos.afterPhotos,
         });
       }
     }
@@ -18069,6 +18215,36 @@ export default function App() {
             {renderAssetPhoto(photo, `${altPrefix}-${index + 1}`)}
           </div>
         ))}
+      </div>
+    );
+  }
+  function renderMaintenancePhotoGroups(
+    entry: {
+      photo?: string;
+      photos?: string[];
+      beforePhotos?: string[];
+      afterPhotos?: string[];
+    },
+    altPrefix = "maintenance-group"
+  ) {
+    const normalized = normalizeMaintenanceEntryPhotos(entry);
+    const hasBefore = normalized.beforePhotos.length > 0;
+    const hasAfter = normalized.afterPhotos.length > 0;
+    if (!hasBefore && !hasAfter) return <span className="photo-empty">{t.noPhoto}</span>;
+    return (
+      <div className="maintenance-photo-groups">
+        {hasBefore ? (
+          <div className="maintenance-photo-group">
+            <small>{lang === "km" ? "មុនថែទាំ" : "Before"}</small>
+            {renderMaintenancePhotoStack({ photos: normalized.beforePhotos }, `${altPrefix}-before`)}
+          </div>
+        ) : null}
+        {hasAfter ? (
+          <div className="maintenance-photo-group">
+            <small>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</small>
+            {renderMaintenancePhotoStack({ photos: normalized.afterPhotos }, `${altPrefix}-after`)}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -19250,10 +19426,7 @@ export default function App() {
     (lang === "km" ? "របាយការណ៍" : "Report");
   const reportCampusName = useCallback(
     (campus: string) => {
-      const label = campusLabel(campus);
-      const withoutPrefixCode = label.replace(/^\s*C\d+(?:\.\d+)?\s+/i, "");
-      const withoutSuffixCode = withoutPrefixCode.replace(/\s*\(C\d+(?:\.\d+)?\)\s*$/i, "");
-      return withoutSuffixCode.trim() || label;
+      return campusLabel(campus);
     },
     [campusLabel]
   );
@@ -21525,7 +21698,12 @@ export default function App() {
                                     <article className="public-asset-history-card" key={`public-maint-${entry.id}`}>
                                       <div className="public-asset-history-head">
                                         <div className="public-asset-history-title">{entry.type || "Maintenance"}</div>
-                                        <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                                        <div className="public-asset-history-head-side">
+                                          <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                                          <div className="public-asset-history-photo-groups">
+                                            {renderMaintenancePhotoGroups(entry, `public-maint-${entry.id}`)}
+                                          </div>
+                                        </div>
                                       </div>
                                       <div className="public-asset-history-grid">
                                         {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(entry.completion || "-"))}
@@ -25345,7 +25523,7 @@ export default function App() {
                               <strong>{t.notes}:</strong> {h.note || h.condition || "-"}
                             </p>
                             <div className="asset-detail-maint-soft-photo-row">
-                              {renderMaintenancePhotoStack({ photo: h.photo || "", photos: h.photos || [] }, `asset-detail-history-${h.id}`)}
+                              {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`)}
                             </div>
                           </article>
                         ))
@@ -25378,7 +25556,7 @@ export default function App() {
                                 <td data-label="Condition">{h.condition || "-"}</td>
                                 <td data-label="Noted">{h.note}</td>
                                 <td data-label="Photo">
-                                  {renderMaintenancePhotoStack({ photo: h.photo || "", photos: h.photos || [] }, `asset-detail-history-${h.id}`)}
+                                  {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`)}
                                 </td>
                                 <td data-label="Cost">{h.cost || "-"}</td>
                                 <td data-label="By">{h.by || "-"}</td>
@@ -26244,9 +26422,7 @@ export default function App() {
                               <td>{maintenanceCompletionText(h.completion || "-")}</td>
                               <td>{h.condition || "-"}</td>
                               <td>{h.note}</td>
-                              <td>
-                                {renderAssetPhoto(h.photo || "", "maintenance")}
-                              </td>
+                              <td>{renderMaintenancePhotoGroups(h, `maintenance-modal-${h.id}`)}</td>
                               <td>{h.cost || "-"}</td>
                               <td>{h.by || "-"}</td>
                             </tr>
@@ -26353,56 +26529,63 @@ export default function App() {
                         readOnly
                       />
                     </label>
-                    <label className="field field-wide">
-                      <span>{t.photo} ({MAX_MAINTENANCE_PHOTOS} max)</span>
-                    <input
-                      key={maintenanceRecordFileKey}
-                      className="file-input"
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={onMaintenanceRecordPhotoFile}
-                    />
-                    {maintenanceRecordForm.photos.length ? (
-                      <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                        {maintenanceRecordForm.photos.map((url, index) => (
-                          <div key={`maintenance-record-photo-${index}`} className="asset-photo-chip">
-                            <img loading="lazy" decoding="async" src={url} alt={`maintenance-${index + 1}`} className="asset-photo-chip-img" />
-                            <div className="asset-photo-chip-actions">
-                              <button
-                                type="button"
-                                className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
-                                onClick={() =>
-                                  setMaintenanceRecordForm((f) => {
-                                    const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
-                                    const [picked] = next.splice(index, 1);
-                                    if (!picked) return f;
-                                    next.unshift(picked);
-                                    return { ...f, photo: next[0] || "", photos: next };
-                                  })
-                                }
-                              >
-                                {index === 0 ? "Main" : "Set Main"}
-                              </button>
-                              <button
-                                type="button"
-                                className="tab"
-                                onClick={() =>
-                                  setMaintenanceRecordForm((f) => {
-                                    const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
-                                    next.splice(index, 1);
-                                    return { ...f, photo: next[0] || "", photos: next };
-                                  })
-                                }
-                              >
-                                Remove
-                              </button>
+                    <label className="field">
+                      <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                      <input
+                        key={`${maintenanceRecordFileKey}-quick-before`}
+                        className="file-input"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
+                      />
+                      {maintenanceRecordForm.beforePhotos.length ? (
+                        <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                          {maintenanceRecordForm.beforePhotos.map((url, index) => (
+                            <div key={`maintenance-quick-before-${index}`} className="asset-photo-chip">
+                              <img loading="lazy" decoding="async" src={url} alt={`maintenance-before-${index + 1}`} className="asset-photo-chip-img" />
+                              <div className="asset-photo-chip-actions">
+                                <button type="button" className="tab" onClick={() => setMaintenanceRecordForm((f) => ({ ...f, beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index) }))}>Remove</button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </label>
+                          ))}
+                        </div>
+                      ) : null}
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                      <input
+                        key={`${maintenanceRecordFileKey}-quick-after`}
+                        className="file-input"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
+                      />
+                      {maintenanceRecordForm.afterPhotos.length ? (
+                        <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                          {maintenanceRecordForm.afterPhotos.map((url, index) => (
+                            <div key={`maintenance-quick-after-${index}`} className="asset-photo-chip">
+                              <img loading="lazy" decoding="async" src={url} alt={`maintenance-after-${index + 1}`} className="asset-photo-chip-img" />
+                              <div className="asset-photo-chip-actions">
+                                <button
+                                  type="button"
+                                  className="tab"
+                                  onClick={() =>
+                                    setMaintenanceRecordForm((f) => {
+                                      const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                      return { ...f, afterPhotos: nextAfter, photo: nextAfter[0] || "", photos: nextAfter };
+                                    })
+                                  }
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </label>
                   </div>
                   <div className="asset-actions">
                     <div className="tiny">Save maintenance directly from List Asset.</div>
@@ -26895,11 +27078,47 @@ export default function App() {
                     onChange={(e) => setTicketMaintenanceForm((f) => ({ ...f, note: e.target.value }))}
                   />
                 </label>
-                <label className="field field-wide">
-                  <span>{t.photo}</span>
-                  <input key={ticketMaintenanceFileKey} type="file" accept="image/*" onChange={onTicketMaintenancePhotoFile} />
-                  {ticketMaintenanceForm.photo ? (
-                    <img loading="lazy" decoding="async" src={ticketMaintenanceForm.photo} alt="maintenance proof" className="photo-preview" />
+                <label className="field">
+                  <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"}</span>
+                  <input key={`${ticketMaintenanceFileKey}-before`} type="file" accept="image/*" multiple onChange={(e) => void onTicketMaintenancePhotoFile(e, "before")} />
+                  {ticketMaintenanceForm.beforePhotos.length ? (
+                    <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                      {ticketMaintenanceForm.beforePhotos.map((url, index) => (
+                        <div key={`ticket-maint-before-${index}`} className="asset-photo-chip">
+                          <img loading="lazy" decoding="async" src={url} alt={`ticket-maint-before-${index + 1}`} className="asset-photo-chip-img" />
+                          <div className="asset-photo-chip-actions">
+                            <button type="button" className="tab" onClick={() => setTicketMaintenanceForm((f) => ({ ...f, beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index) }))}>Remove</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"}</span>
+                  <input key={`${ticketMaintenanceFileKey}-after`} type="file" accept="image/*" multiple onChange={(e) => void onTicketMaintenancePhotoFile(e, "after")} />
+                  {ticketMaintenanceForm.afterPhotos.length ? (
+                    <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                      {ticketMaintenanceForm.afterPhotos.map((url, index) => (
+                        <div key={`ticket-maint-after-${index}`} className="asset-photo-chip">
+                          <img loading="lazy" decoding="async" src={url} alt={`ticket-maint-after-${index + 1}`} className="asset-photo-chip-img" />
+                          <div className="asset-photo-chip-actions">
+                            <button
+                              type="button"
+                              className="tab"
+                              onClick={() =>
+                                setTicketMaintenanceForm((f) => {
+                                  const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                  return { ...f, afterPhotos: nextAfter, photo: nextAfter[0] || "", photos: nextAfter };
+                                })
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : null}
                 </label>
               </div>
@@ -31163,45 +31382,68 @@ export default function App() {
                   readOnly
                 />
               </label>
-              <label className="field field-wide">
-                <span>{t.photo} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+              <label className="field">
+                <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
                 <input
-                  key={maintenanceRecordFileKey}
+                  key={`${maintenanceRecordFileKey}-before`}
                   className="file-input"
                   type="file"
                   accept="image/*"
                   multiple
-                  onChange={onMaintenanceRecordPhotoFile}
+                  onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
                 />
-                {maintenanceRecordForm.photos.length ? (
+                {maintenanceRecordForm.beforePhotos.length ? (
                   <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                    {maintenanceRecordForm.photos.map((url, index) => (
-                      <div key={`maintenance-record-main-photo-${index}`} className="asset-photo-chip">
-                        <img loading="lazy" decoding="async" src={url} alt={`maintenance-main-${index + 1}`} className="asset-photo-chip-img" />
+                    {maintenanceRecordForm.beforePhotos.map((url, index) => (
+                      <div key={`maintenance-record-before-${index}`} className="asset-photo-chip">
+                        <img loading="lazy" decoding="async" src={url} alt={`maintenance-before-${index + 1}`} className="asset-photo-chip-img" />
                         <div className="asset-photo-chip-actions">
                           <button
                             type="button"
-                            className={`tab asset-photo-main-btn ${index === 0 ? "tab-active" : ""}`}
+                            className="tab"
                             onClick={() =>
-                              setMaintenanceRecordForm((f) => {
-                                const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
-                                const [picked] = next.splice(index, 1);
-                                if (!picked) return f;
-                                next.unshift(picked);
-                                return { ...f, photo: next[0] || "", photos: next };
-                              })
+                              setMaintenanceRecordForm((f) => ({
+                                ...f,
+                                beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                              }))
                             }
                           >
-                            {index === 0 ? "Main" : "Set Main"}
+                            Remove
                           </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </label>
+              <label className="field">
+                <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                <input
+                  key={`${maintenanceRecordFileKey}-after`}
+                  className="file-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
+                />
+                {maintenanceRecordForm.afterPhotos.length ? (
+                  <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                    {maintenanceRecordForm.afterPhotos.map((url, index) => (
+                      <div key={`maintenance-record-after-${index}`} className="asset-photo-chip">
+                        <img loading="lazy" decoding="async" src={url} alt={`maintenance-after-${index + 1}`} className="asset-photo-chip-img" />
+                        <div className="asset-photo-chip-actions">
                           <button
                             type="button"
                             className="tab"
                             onClick={() =>
                               setMaintenanceRecordForm((f) => {
-                                const next = [...normalizeAssetPhotos({ photo: f.photo, photos: f.photos })];
-                                next.splice(index, 1);
-                                return { ...f, photo: next[0] || "", photos: next };
+                                const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                return {
+                                  ...f,
+                                  afterPhotos: nextAfter,
+                                  photo: nextAfter[0] || "",
+                                  photos: nextAfter,
+                                };
                               })
                             }
                           >
@@ -31308,7 +31550,7 @@ export default function App() {
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
                           <span>PHOTOS</span>
                           <div className="maintenance-mobile-asset-photo">
-                            {renderMaintenancePhotoStack({ photo: row.photo || "", photos: row.photos || [] }, `maintenance-history-${row.rowId}`)}
+                            {renderMaintenancePhotoGroups(row, `maintenance-history-${row.rowId}`)}
                           </div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
@@ -31409,7 +31651,7 @@ export default function App() {
                           </div>
                           <div className="maintenance-history-simple-photos">
                             <strong>{lang === "km" ? "Maintenance Photos" : "Maintenance Photos"}:</strong>
-                            <div>{renderMaintenancePhotoStack({ photo: row.photo || "", photos: row.photos || [] }, `maintenance-card-${row.rowId}`)}</div>
+                            <div>{renderMaintenancePhotoGroups(row, `maintenance-card-${row.rowId}`)}</div>
                           </div>
                         </div>
                       </div>
@@ -31562,22 +31804,34 @@ export default function App() {
                             </td>
                             <td>
                               {maintenanceEditingEntryId === entry.id ? (
-                                <div className="row-actions">
-                                  <input
-                                    key={`${maintenanceEditFileKey}-${entry.id}`}
-                                    className="file-input"
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={onMaintenanceEditPhotoFile}
-                                  />
-                                  {maintenanceEditForm.photo ? (
-                                    <img loading="lazy" decoding="async" src={maintenanceEditForm.photo} alt="maintenance" className="table-photo" />
-                                  ) : (
-                                    "-"
-                                  )}
+                                <div className="maintenance-edit-photo-fields">
+                                  <div>
+                                    <small>{lang === "km" ? "មុនថែទាំ" : "Before"}</small>
+                                    <input
+                                      key={`${maintenanceEditFileKey}-${entry.id}-before`}
+                                      className="file-input"
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      onChange={(e) => void onMaintenanceEditPhotoFile(e, "before")}
+                                    />
+                                    <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.beforePhotos || [] }, `maintenance-edit-before-${entry.id}`)}</div>
+                                  </div>
+                                  <div>
+                                    <small>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</small>
+                                    <input
+                                      key={`${maintenanceEditFileKey}-${entry.id}-after`}
+                                      className="file-input"
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      onChange={(e) => void onMaintenanceEditPhotoFile(e, "after")}
+                                    />
+                                    <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.afterPhotos || [] }, `maintenance-edit-after-${entry.id}`)}</div>
+                                  </div>
                                 </div>
                               ) : (
-                                renderAssetPhoto(entry.photo || "", "maintenance")
+                                renderMaintenancePhotoGroups(entry, `maintenance-detail-${entry.id}`)
                               )}
                             </td>
                             <td>
