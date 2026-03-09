@@ -29145,52 +29145,115 @@ export default function App() {
                     </div>
                   )}
                 </article>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Code</th>
-                        <th>{t.photo}</th>
-                        <th>Name</th>
-                        <th>Category</th>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
-                        <th>Unit</th>
-                        <th>Stock In</th>
-                        <th>Stock Out</th>
-                        <th>Current</th>
-                        <th>Min</th>
-                        <th>Alert</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventoryBalanceDisplayRows.length ? (
-                        inventoryBalanceDisplayRows.map((row) => (
-                          <tr key={`inv-balance-row-${row.id}`}>
-                            <td><strong>{row.itemCode}</strong></td>
-                            <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                            <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                            <td>{row.category}</td>
-                            <td>{inventoryCampusLabel(row.campus)}</td>
-                            <td>{row.location}</td>
-                            <td>{row.unit}</td>
-                            <td>{row.stockIn}</td>
-                            <td>{row.stockOut}</td>
-                            <td><strong>{row.currentStock}</strong></td>
-                            <td>{row.minStock}</td>
-                            <td>{row.lowStock ? "Low" : "OK"}</td>
-                          </tr>
-                        ))
-                      ) : (
+                {isPhoneView ? (
+                  <div className="inventory-balance-mobile-list">
+                    {inventoryBalanceDisplayRows.length ? (
+                      inventoryBalanceDisplayRows.map((row) => (
+                        <article key={`inv-balance-mobile-${row.id}`} className="inventory-balance-mobile-card">
+                          <div className="inventory-balance-mobile-head">
+                            <div className="inventory-balance-mobile-title">
+                              <span className="inventory-balance-mobile-code">{row.itemCode}</span>
+                              <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                            </div>
+                            <div className={`inventory-balance-mobile-alert ${row.lowStock ? "is-low" : "is-ok"}`}>
+                              {row.lowStock ? "Low" : "OK"}
+                            </div>
+                          </div>
+                          <div className="inventory-balance-mobile-photo">
+                            {renderAssetPhoto(row.photo || "", row.itemCode)}
+                          </div>
+                          <div className="inventory-balance-mobile-meta">
+                            <div>
+                              <small>{t.campus}</small>
+                              <div>{inventoryCampusLabel(row.campus)}</div>
+                            </div>
+                            <div>
+                              <small>{t.location}</small>
+                              <div>{row.location || "-"}</div>
+                            </div>
+                            <div>
+                              <small>{lang === "km" ? "ប្រភេទ" : "Category"}</small>
+                              <div>{row.category}</div>
+                            </div>
+                            <div>
+                              <small>{lang === "km" ? "ឯកតា" : "Unit"}</small>
+                              <div>{row.unit}</div>
+                            </div>
+                          </div>
+                          <div className="inventory-balance-mobile-stats">
+                            <div>
+                              <small>Stock In</small>
+                              <strong>{row.stockIn}</strong>
+                            </div>
+                            <div>
+                              <small>Stock Out</small>
+                              <strong>{row.stockOut}</strong>
+                            </div>
+                            <div>
+                              <small>Current</small>
+                              <strong>{row.currentStock}</strong>
+                            </div>
+                            <div>
+                              <small>Min</small>
+                              <strong>{row.minStock}</strong>
+                            </div>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">
+                        {inventoryBalanceMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
                         <tr>
-                          <td colSpan={12}>
-                            {inventoryBalanceMode === "low" ? "No low stock alerts." : "No stock balance data."}
-                          </td>
+                          <th>Code</th>
+                          <th>{t.photo}</th>
+                          <th>Name</th>
+                          <th>Category</th>
+                          <th>{t.campus}</th>
+                          <th>{t.location}</th>
+                          <th>Unit</th>
+                          <th>Stock In</th>
+                          <th>Stock Out</th>
+                          <th>Current</th>
+                          <th>Min</th>
+                          <th>Alert</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {inventoryBalanceDisplayRows.length ? (
+                          inventoryBalanceDisplayRows.map((row) => (
+                            <tr key={`inv-balance-row-${row.id}`}>
+                              <td><strong>{row.itemCode}</strong></td>
+                              <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
+                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                              <td>{row.category}</td>
+                              <td>{inventoryCampusLabel(row.campus)}</td>
+                              <td>{row.location}</td>
+                              <td>{row.unit}</td>
+                              <td>{row.stockIn}</td>
+                              <td>{row.stockOut}</td>
+                              <td><strong>{row.currentStock}</strong></td>
+                              <td>{row.minStock}</td>
+                              <td>{row.lowStock ? "Low" : "OK"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={12}>
+                              {inventoryBalanceMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </section>
             )}
           </div>
