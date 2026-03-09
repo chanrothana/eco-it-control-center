@@ -6904,6 +6904,32 @@ export default function App() {
     return false;
   }
 
+  async function confirmSuperAdminPasswordAgain() {
+    if (!requireSuperAdminAction()) return false;
+    const username = String(authUser?.username || "").trim();
+    if (!username) {
+      setError("Current Super Admin account not found.");
+      return false;
+    }
+    const passwordInput = window.prompt("Enter Super Admin password to continue:");
+    const password = String(passwordInput || "").trim();
+    if (!password) return false;
+    try {
+      const res = await requestJson<{ token: string; user: AuthUser }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.user?.role !== "Super Admin") {
+        setError("Super Admin password confirmation failed.");
+        return false;
+      }
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Super Admin password confirmation failed.");
+      return false;
+    }
+  }
+
   useEffect(() => {
     writeUserFallback(users);
   }, [users]);
@@ -12097,13 +12123,15 @@ export default function App() {
   }
 
   async function factoryResetSystem() {
-    if (!requireAdminAction()) return;
+    if (!requireSuperAdminAction()) return;
     const confirmed = window.confirm(
       "Factory Reset will delete all assets, records, users, uploads, and backups. Continue?"
     );
     if (!confirmed) return;
     const phrase = window.prompt("Type RESET to confirm full reset:");
     if (String(phrase || "").trim().toUpperCase() !== "RESET") return;
+    const passwordConfirmed = await confirmSuperAdminPasswordAgain();
+    if (!passwordConfirmed) return;
 
     setBusy(true);
     setError("");
@@ -13959,12 +13987,14 @@ export default function App() {
   }
 
   async function deleteInventoryTxn(row: InventoryTxn) {
-    if (!requireAdminAction()) return;
+    if (!requireSuperAdminAction()) return;
     if (row.type === "SET" && !isSuperAdmin) {
       setError("Only Super Admin can delete Set Current Stock transactions.");
       return;
     }
     if (!window.confirm("Delete this transaction?")) return;
+    const confirmed = await confirmSuperAdminPasswordAgain();
+    if (!confirmed) return;
 
     const item = inventoryVisibleItems.find((i) => i.id === row.itemId);
     if (!item) {
@@ -26732,9 +26762,11 @@ export default function App() {
                                     <button className="btn-icon-edit" disabled={!isAdmin || (row.type === "SET" && !isSuperAdmin)} onClick={() => startInventoryTxnEdit(row)} title="Edit">
                                       ✎
                                     </button>
-                                    <button className="btn-danger" disabled={!isAdmin || (row.type === "SET" && !isSuperAdmin)} onClick={() => deleteInventoryTxn(row)} title={t.delete}>
-                                      X
-                                    </button>
+                                    {isSuperAdmin ? (
+                                      <button className="btn-danger" disabled={busy || (row.type === "SET" && !isSuperAdmin)} onClick={() => deleteInventoryTxn(row)} title={t.delete}>
+                                        X
+                                      </button>
+                                    ) : null}
                                   </div>
                                 </td>
                               </>
@@ -33065,14 +33097,16 @@ export default function App() {
                     style={{ display: "none" }}
                   />
                 </label>
-                <button
-                  className="btn-danger backup-action-btn backup-action-btn-danger"
-                  disabled={!isAdmin || busy}
-                  onClick={factoryResetSystem}
-                  title="Delete all records and restart from zero"
-                >
-                  Factory Reset
-                </button>
+                {isSuperAdmin ? (
+                  <button
+                    className="btn-danger backup-action-btn backup-action-btn-danger"
+                    disabled={busy}
+                    onClick={factoryResetSystem}
+                    title="Delete all records and restart from zero"
+                  >
+                    Factory Reset
+                  </button>
+                ) : null}
               </div>
             </div>
             {setupMessage ? <p className="tiny" style={{ marginTop: 8 }}>{setupMessage}</p> : null}
