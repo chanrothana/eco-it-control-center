@@ -310,6 +310,7 @@ type InventoryTxn = {
   approvalDecisionBy?: string;
   approvalDecisionAt?: string;
   approvalDecisionNote?: string;
+  telegramMessageRefs?: Array<{ chatId?: string; messageId?: number }>;
 };
 type PoolCleaningSchedule = {
   id: number;
@@ -6605,6 +6606,8 @@ export default function App() {
   const [inventoryQuickOutFileKey, setInventoryQuickOutFileKey] = useState(0);
   const [inventoryQuickReasonTipsOpen, setInventoryQuickReasonTipsOpen] = useState(false);
   const [quickOutEcoPickerOpen, setQuickOutEcoPickerOpen] = useState(false);
+  const [inventoryTxnSaveBusy, setInventoryTxnSaveBusy] = useState(false);
+  const inventoryTxnSaveLockRef = useRef(false);
   const [quickOutEcoMonth, setQuickOutEcoMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -8038,8 +8041,11 @@ export default function App() {
     return list.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
   }, [inventoryVisibleItems, inventoryDailyForm.search]);
   const inventoryDailyOutGalleryItems = useMemo(
-    () => inventoryDailyItemOptions.filter((item) => isCleaningSupplyItem(item)),
-    [inventoryDailyItemOptions]
+    () =>
+      inventoryDailyItemOptions.filter((item) =>
+        maintenanceQuickMode ? item.category === "SUPPLY" : isCleaningSupplyItem(item)
+      ),
+    [inventoryDailyItemOptions, maintenanceQuickMode]
   );
   const inventoryDailyOutGalleryByCampus = useMemo(() => {
     const CAMPUS_GROUP_ORDER: Record<string, number> = {
@@ -13239,7 +13245,7 @@ export default function App() {
     requestedBy?: string;
     approvedBy?: string;
     receivedBy?: string;
-  }): Promise<{ ok: boolean; pendingApproval?: boolean }> {
+  }): Promise<{ ok: boolean; pendingApproval?: boolean; duplicateSuppressed?: boolean }> {
     const itemId = Number(values.itemId);
     const rawQty = Number(values.qty || 0);
     const qty = Math.max(0, Math.round(rawQty));
@@ -13333,6 +13339,10 @@ export default function App() {
         return { ok: false };
       }
     }
+    if (inventoryTxnSaveLockRef.current) {
+      setError(lang === "km" ? "កំពុងរក្សាទុក សូមរង់ចាំបន្តិច។" : "Save already in progress. Please wait.");
+      return { ok: false };
+    }
     const tx: InventoryTxn = {
       id: Date.now(),
       itemId: item.id,
@@ -13366,10 +13376,12 @@ export default function App() {
       approvalDecisionAt: needsManagerApproval ? "" : new Date().toISOString(),
       approvalDecisionNote: "",
     };
+    inventoryTxnSaveLockRef.current = true;
+    setInventoryTxnSaveBusy(true);
     setBusy(true);
     try {
       try {
-        const res = await requestJson<{ txn: InventoryTxn; telegramAlertSent?: boolean }>("/api/inventory/txns", {
+        const res = await requestJson<{ txn: InventoryTxn; telegramAlertSent?: boolean; duplicateSuppressed?: boolean }>("/api/inventory/txns", {
           method: "POST",
           body: JSON.stringify({
             itemId: item.id,
@@ -13394,24 +13406,38 @@ export default function App() {
           }),
         });
         setInventoryTxns((prev) => [res.txn, ...prev.filter((entry) => entry.id !== res.txn.id)]);
-        if (values.type === "OUT" && res.telegramAlertSent === false) {
+        if (res.duplicateSuppressed) {
+          setError(
+            lang === "km"
+              ? "ប្រតិបត្តិការដូចគ្នាត្រូវបានរក្សាទុករួចហើយ។ ការចុចស្ទួនត្រូវបានមិនអើពើ។"
+              : "This stock-out was already saved. Duplicate tap ignored."
+          );
+        } else if (values.type === "OUT" && res.telegramAlertSent === false) {
           setError(lang === "km" ? "បានកត់ត្រាចេញស្តុក ប៉ុន្តែ Telegram alert មិនបានផ្ញើ។" : "Stock-out saved, but Telegram alert failed to send.");
+        } else {
+          setError("");
         }
+        if (!res.duplicateSuppressed) {
+          appendUiAudit("CREATE", "inventory_txn", `${res.txn.itemCode}-${res.txn.id}`, `${res.txn.type} ${res.txn.qty} ${item.unit}`);
+        }
+        return { ok: true, pendingApproval: needsManagerApproval, duplicateSuppressed: Boolean(res.duplicateSuppressed) };
       } catch (err) {
         if (!isMissingRouteError(err)) throw err;
         const nextTxns = [tx, ...inventoryTxns];
         setInventoryTxns(nextTxns);
         void persistInventorySettings(inventoryItems, nextTxns);
+        setError("");
+        appendUiAudit("CREATE", "inventory_txn", `${item.itemCode}-${tx.id}`, `${tx.type} ${tx.qty} ${item.unit}`);
+        return { ok: true, pendingApproval: needsManagerApproval };
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save inventory transaction");
-      setBusy(false);
       return { ok: false };
+    } finally {
+      inventoryTxnSaveLockRef.current = false;
+      setInventoryTxnSaveBusy(false);
+      setBusy(false);
     }
-    appendUiAudit("CREATE", "inventory_txn", `${item.itemCode}-${tx.id}`, `${tx.type} ${tx.qty} ${item.unit}`);
-    setBusy(false);
-    setError("");
-    return { ok: true, pendingApproval: needsManagerApproval };
   }
 
   async function createInventoryTxn() {
@@ -27081,7 +27107,7 @@ export default function App() {
                 ) : null}
                 <div className="asset-actions">
                   <div className="tiny">Track stock in/out and campus borrow flow in one register.</div>
-                  <button className="btn-primary" disabled={!isAdmin} onClick={createInventoryTxn}>Save Transaction</button>
+                  <button className="btn-primary" disabled={!isAdmin || inventoryTxnSaveBusy} onClick={createInventoryTxn}>Save Transaction</button>
                 </div>
 
                 <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
@@ -28356,7 +28382,7 @@ export default function App() {
                   </div>
                   <button
                     className="btn-primary"
-                    disabled={busy || !inventoryDailyForm.itemId || !inventoryDailyForm.qty || !inventoryDailyForm.date}
+                    disabled={busy || inventoryTxnSaveBusy || !inventoryDailyForm.itemId || !inventoryDailyForm.qty || !inventoryDailyForm.date}
                     onClick={createInventoryDailyTxn}
                   >
                     {lang === "km" ? "រក្សាទុកប្រតិបត្តិការ" : "Save Daily Record"}
@@ -34676,7 +34702,13 @@ export default function App() {
                     <button
                       className="btn-primary"
                       onClick={saveInventoryQuickOut}
-                      disabled={!inventoryQuickOutModal.itemId || !inventoryQuickOutModal.qty || !inventoryQuickOutModal.date || !inventoryQuickOutModal.photo}
+                      disabled={
+                        inventoryTxnSaveBusy ||
+                        !inventoryQuickOutModal.itemId ||
+                        !inventoryQuickOutModal.qty ||
+                        !inventoryQuickOutModal.date ||
+                        !inventoryQuickOutModal.photo
+                      }
                     >
                       {lang === "km" ? "រក្សាទុក ការបើកឥវ៉ាន់" : "Save Stock Out"}
                     </button>

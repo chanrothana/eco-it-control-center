@@ -1116,6 +1116,23 @@ function calcInventoryCurrentStock(item, txns, excludeTxnId = 0) {
   return stock;
 }
 
+const INVENTORY_OUT_DUPLICATE_WINDOW_MS = 15 * 1000;
+
+function isDuplicateInventoryOutTxn(existingRow, incomingRow, nowMs = Date.now()) {
+  const existingId = Number(existingRow && existingRow.id) || 0;
+  if (!existingId) return false;
+  if (Math.abs(nowMs - existingId) > INVENTORY_OUT_DUPLICATE_WINDOW_MS) return false;
+  return (
+    Number(existingRow && existingRow.itemId) === Number(incomingRow && incomingRow.itemId) &&
+    toText(existingRow && existingRow.date) === toText(incomingRow && incomingRow.date) &&
+    normalizeInventoryTxnType(existingRow && existingRow.type) === normalizeInventoryTxnType(incomingRow && incomingRow.type) &&
+    Math.max(0, Number(existingRow && existingRow.qty) || 0) === Math.max(0, Number(incomingRow && incomingRow.qty) || 0) &&
+    toText(existingRow && existingRow.by).trim().toLowerCase() === toText(incomingRow && incomingRow.by).trim().toLowerCase() &&
+    toText(existingRow && existingRow.note).trim() === toText(incomingRow && incomingRow.note).trim() &&
+    toText(existingRow && existingRow.photo).trim() === toText(incomingRow && incomingRow.photo).trim()
+  );
+}
+
 function normalizeVaultAccounts(input) {
   if (!Array.isArray(input)) return [];
   return input
@@ -4476,6 +4493,26 @@ const server = http.createServer(async (req, res) => {
       }
 
       const photo = await normalizePhotoValue(body.photo, "inventory");
+      const duplicateTxnPayload = {
+        itemId: item.id,
+        date,
+        type,
+        qty,
+        by: toText(body.by),
+        note: toText(body.note),
+        photo,
+      };
+      if (type === "OUT") {
+        const duplicateTxn = txns.find((row) => isDuplicateInventoryOutTxn(row, duplicateTxnPayload));
+        if (duplicateTxn) {
+          sendJson(res, 200, {
+            txn: duplicateTxn,
+            telegramAlertSent: Array.isArray(duplicateTxn.telegramMessageRefs) && duplicateTxn.telegramMessageRefs.length > 0,
+            duplicateSuppressed: true,
+          });
+          return;
+        }
+      }
       const txn = {
         id: Date.now() + Math.floor(Math.random() * 1000),
         itemId: item.id,
@@ -4556,7 +4593,7 @@ const server = http.createServer(async (req, res) => {
           await writeDb(db);
         }
       }
-      sendJson(res, 201, { txn, telegramAlertSent });
+      sendJson(res, 201, { txn, telegramAlertSent, duplicateSuppressed: false });
       return;
     }
 
