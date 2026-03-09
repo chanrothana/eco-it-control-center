@@ -3943,6 +3943,163 @@ label.backup-action-btn {
   font-size: 18px;
 }
 
+.maintenance-history-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.maintenance-history-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #d7c4a2;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 249, 238, 0.98) 0%, rgba(255, 242, 221, 0.98) 100%);
+  box-shadow: 0 10px 24px rgba(76, 46, 15, 0.08);
+}
+
+.maintenance-history-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.maintenance-history-card-id {
+  display: grid;
+  gap: 6px;
+}
+
+.maintenance-history-card-id span {
+  color: #7e6242;
+  font-size: 13px;
+}
+
+.maintenance-history-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.maintenance-history-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid #d9bb8d;
+  background: rgba(255, 255, 255, 0.72);
+  color: #8a5f2f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.maintenance-history-card-body {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.maintenance-history-asset-photo,
+.maintenance-history-maint-photos,
+.maintenance-history-note-box {
+  display: grid;
+  gap: 8px;
+}
+
+.maintenance-history-asset-photo small,
+.maintenance-history-maint-photos small,
+.maintenance-history-note-box small,
+.maintenance-history-meta small {
+  color: #8a6a3e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.maintenance-history-main {
+  display: grid;
+  gap: 12px;
+}
+
+.maintenance-history-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.maintenance-history-meta > div {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(214, 188, 151, 0.8);
+  background: rgba(255, 255, 255, 0.78);
+  display: grid;
+  gap: 4px;
+}
+
+.maintenance-history-note-box {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(214, 188, 151, 0.8);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.maintenance-history-card-actions {
+  justify-content: flex-end;
+}
+
+.maintenance-history-card-simple {
+  gap: 12px;
+}
+
+.maintenance-history-simple-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.maintenance-history-simple-id {
+  display: grid;
+  gap: 6px;
+}
+
+.maintenance-history-simple-id span,
+.maintenance-history-simple-status span {
+  color: #7e6242;
+  font-size: 13px;
+}
+
+.maintenance-history-simple-status {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  text-align: right;
+}
+
+.maintenance-history-simple-body {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.maintenance-history-simple-info {
+  display: grid;
+  gap: 10px;
+}
+
+.maintenance-history-simple-line,
+.maintenance-history-simple-note,
+.maintenance-history-simple-photos {
+  color: #4c2e0f;
+  line-height: 1.5;
+}
+
+.maintenance-history-inline-sep {
+  margin: 0 8px;
+  color: #c3a06d;
+}
+
 .inventory-campus-monthly-compare-wrap {
   border: 1px solid #d7e3f2;
   border-radius: 12px;
@@ -8043,6 +8200,29 @@ tr.row-maint-maintenance:hover td {
   .panel-head-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .maintenance-history-card-top,
+  .maintenance-history-card-body {
+    grid-template-columns: 1fr;
+  }
+
+  .maintenance-history-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .maintenance-history-simple-top,
+  .maintenance-history-simple-body {
+    grid-template-columns: 1fr;
+  }
+
+  .maintenance-history-simple-status {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .maintenance-history-inline-sep {
+    display: none;
   }
 
   .main-nav-rail {

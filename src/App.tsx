@@ -15751,7 +15751,7 @@ export default function App() {
       return;
     }
     try {
-      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      const optimized = Array.from(new Set(await Promise.all(files.map((file) => optimizeUploadPhoto(file)))));
       let reachedLimit = false;
       setMaintenanceRecordForm((f) => {
         const merged = normalizeAssetPhotos({
@@ -30672,7 +30672,7 @@ export default function App() {
                   className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
                   onClick={() => setMaintenanceView("history")}
                 >
-                  {lang === "km" ? "មើលប្រវត្តិ" : "Soft Card Dashboard"}
+                  {lang === "km" ? "ផ្ទាំងប្រវត្តិថែទាំ" : "Maintenance History"}
                 </button>
               ) : null}
               {canAccessMenu("maintenance.record", "maintenance") ? (
@@ -31234,7 +31234,7 @@ export default function App() {
             {maintenanceView === "history" && canAccessMenu("maintenance.history", "maintenance") && (
             <>
             <div className="maintenance-title-row">
-              <h2>Soft Card Dashboard</h2>
+              <h2>{lang === "km" ? "ប្រវត្តិថែទាំ" : "Maintenance History"}</h2>
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <select
@@ -31352,94 +31352,97 @@ export default function App() {
                 )}
               </div>
             ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("assetId")}>{t.assetId} {maintenanceSort.key === "assetId" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th>{t.photo}</th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("campus")}>{t.campus} {maintenanceSort.key === "campus" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("category")}>{t.category} {maintenanceSort.key === "category" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("assetType")}>{t.typeCode} {maintenanceSort.key === "assetType" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("location")}>{t.location} {maintenanceSort.key === "location" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("date")}>Date {maintenanceSort.key === "date" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("type")}>Type {maintenanceSort.key === "type" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("completion")}>Work Status {maintenanceSort.key === "completion" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("condition")}>Condition {maintenanceSort.key === "condition" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("note")}>Note {maintenanceSort.key === "note" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th>{t.photo}</th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("cost")}>Cost {maintenanceSort.key === "cost" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("by")}>By {maintenanceSort.key === "by" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th><button className="th-sort-btn" onClick={() => toggleMaintenanceSort("status")}>{t.status} {maintenanceSort.key === "status" ? (maintenanceSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                      <th>{t.edit}</th>
-                      <th>{t.delete}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedMaintenanceRows.length ? (
-                      sortedMaintenanceRows.map((row) => (
-                        <tr
-                          key={row.rowId}
-                          className={maintenanceHistoryRowClass(
-                            row.type || "",
-                            row.completion || "",
-                            row.status || "",
-                            row.condition || "",
-                            row.note || ""
-                          )}
+              <div className="maintenance-history-grid">
+                {sortedMaintenanceRows.length ? (
+                  sortedMaintenanceRows.map((row) => (
+                    <article
+                      key={row.rowId}
+                      className={`maintenance-history-card maintenance-history-card-simple ${maintenanceHistoryRowClass(
+                        row.type || "",
+                        row.completion || "",
+                        row.status || "",
+                        row.condition || "",
+                        row.note || ""
+                      )}`}
+                    >
+                      <div className="maintenance-history-simple-top">
+                        <div className="maintenance-history-simple-id">
+                          <button
+                            className="tab"
+                            onClick={() => {
+                              setMaintenanceDetailAssetId(row.assetDbId);
+                              cancelMaintenanceEntryEdit();
+                            }}
+                          >
+                            <strong>{row.assetId}</strong>
+                          </button>
+                          <span>{campusLabel(row.campus)} | {row.location || "-"}</span>
+                        </div>
+                        <div className="maintenance-history-simple-status">
+                          <strong>{row.type || "-"}</strong>
+                          <span>{maintenanceCompletionText(row.completion || "-")}</span>
+                        </div>
+                      </div>
+                      <div className="maintenance-history-simple-body">
+                        <div className="maintenance-history-simple-asset-photo">
+                          {renderAssetPhoto(row.assetPhoto || "", row.assetId)}
+                        </div>
+                        <div className="maintenance-history-simple-info">
+                          <div className="maintenance-history-simple-line">
+                            <strong>{lang === "km" ? "Category" : "Category"}:</strong> {row.category}
+                            <span className="maintenance-history-inline-sep">|</span>
+                            <strong>{lang === "km" ? "Type" : "Type"}:</strong> {row.assetType || "-"}
+                            <span className="maintenance-history-inline-sep">|</span>
+                            <strong>{lang === "km" ? "Status" : "Status"}:</strong> {assetStatusLabel(row.status)}
+                          </div>
+                          <div className="maintenance-history-simple-line">
+                            <strong>{lang === "km" ? "Date" : "Date"}:</strong> {formatDate(row.date || "-")}
+                            <span className="maintenance-history-inline-sep">|</span>
+                            <strong>{lang === "km" ? "Condition" : "Condition"}:</strong> {row.condition || "-"}
+                            <span className="maintenance-history-inline-sep">|</span>
+                            <strong>{lang === "km" ? "By" : "By"}:</strong> {row.by || "-"}
+                            <span className="maintenance-history-inline-sep">|</span>
+                            <strong>{lang === "km" ? "Cost" : "Cost"}:</strong> {row.cost || "-"}
+                          </div>
+                          <div className="maintenance-history-simple-note">
+                            <strong>{lang === "km" ? "Note" : "Note"}:</strong> {row.note || "-"}
+                          </div>
+                          <div className="maintenance-history-simple-photos">
+                            <strong>{lang === "km" ? "Maintenance Photos" : "Maintenance Photos"}:</strong>
+                            <div>{renderMaintenancePhotoStack({ photo: row.photo || "", photos: row.photos || [] }, `maintenance-card-${row.rowId}`)}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="asset-actions maintenance-history-card-actions">
+                        <button
+                          className="tab"
+                          onClick={() => {
+                            setMaintenanceDetailAssetId(row.assetDbId);
+                            cancelMaintenanceEntryEdit();
+                          }}
                         >
-                          <td>
-                            <button
-                              className="tab"
-                              onClick={() => {
-                                setMaintenanceDetailAssetId(row.assetDbId);
-                                cancelMaintenanceEntryEdit();
-                              }}
-                            >
-                              <strong>{row.assetId}</strong>
-                            </button>
-                          </td>
-                          <td>{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</td>
-                          <td>{campusLabel(row.campus)}</td>
-                          <td>{row.category}</td>
-                          <td>{row.assetType || "-"}</td>
-                          <td>{row.location}</td>
-                          <td>{formatDate(row.date || "-")}</td>
-                          <td>{row.type || "-"}</td>
-                          <td>{maintenanceCompletionText(row.completion || "-")}</td>
-                          <td>{row.condition || "-"}</td>
-                          <td>{row.note || "-"}</td>
-                          <td>{renderMaintenancePhotoStack({ photo: row.photo || "", photos: row.photos || [] }, `maintenance-table-${row.rowId}`)}</td>
-                          <td>{row.cost || "-"}</td>
-                          <td>{row.by || "-"}</td>
-                          <td>{assetStatusLabel(row.status)}</td>
-                          <td>
-                            <button
-                              className="tab"
-                              disabled={!isAdmin}
-                              onClick={() => editMaintenanceEntryFromHistoryRow(row)}
-                            >
-                              {t.edit}
-                            </button>
-                          </td>
-                          <td>
-                            <button
-                              className="btn-danger"
-                              disabled={busy || !isAdmin}
-                              onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
-                            >
-                              X
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={17}>No maintenance records yet.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                          Open Detail
+                        </button>
+                        <button
+                          className="tab"
+                          disabled={!isAdmin}
+                          onClick={() => editMaintenanceEntryFromHistoryRow(row)}
+                        >
+                          {t.edit}
+                        </button>
+                        <button
+                          className="btn-danger"
+                          disabled={busy || !isAdmin}
+                          onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
+                        >
+                          X
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">No maintenance records yet.</div>
+                )}
               </div>
             )}
             </>
