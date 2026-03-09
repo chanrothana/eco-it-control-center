@@ -13566,7 +13566,7 @@ export default function App() {
     setInventoryQuickOutFileKey((k) => k + 1);
   }
   function openQuickOutEcoPicker() {
-    if (maintenanceQuickMode) return;
+    if (maintenanceQuickMode && !isSuperAdmin) return;
     const today = toYmd(new Date());
     const pickedDate = normalizeYmdInput(inventoryQuickOutModal?.date || today) || today;
     const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
@@ -13599,7 +13599,7 @@ export default function App() {
     const modal = inventoryQuickOutModal;
     const forcedToday = toYmd(new Date());
     const txDate = maintenanceQuickMode
-      ? forcedToday
+      ? (isSuperAdmin ? (normalizeYmdInput(modal.date) || modal.date || forcedToday) : forcedToday)
       : (normalizeYmdInput(modal.date) || modal.date);
     if (!isSuperAdmin && txDate && txDate < todayYmd) {
       setError(lang === "km" ? "មិនអាចជ្រើសថ្ងៃមុនថ្ងៃនេះបានទេ។" : "Cannot select a date before today.");
@@ -13631,6 +13631,9 @@ export default function App() {
       qty: "",
       note: "",
     }));
+    if (maintenanceQuickMode) {
+      setMaintenanceStockOutViewDate(txDate);
+    }
     closeInventoryQuickOut();
     if (saved.pendingApproval) {
       setError(lang === "km" ? "បានផ្ញើសំណើរចេញស្តុក ទៅអ្នកគ្រប់គ្រងសម្រាប់អនុម័ត។" : "Stock-out request sent to manager for approval.");
@@ -34565,14 +34568,18 @@ export default function App() {
                           type="button"
                           className="quickout-date-icon-btn"
                           onClick={openQuickOutEcoPicker}
-                          disabled={maintenanceQuickMode}
+                          disabled={maintenanceQuickMode && !isSuperAdmin}
                           aria-label="Open Eco Calendar"
                         >
                           <Calendar size={18} />
                         </button>
                       </div>
                       {maintenanceQuickMode ? (
-                        <small className="tiny">{lang === "km" ? "កត់ត្រាបានតែថ្ងៃនេះប៉ុណ្ណោះ" : "Record is today only in maintenance mode."}</small>
+                        <small className="tiny">
+                          {isSuperAdmin
+                            ? (lang === "km" ? "Super Admin អាចជ្រើសថ្ងៃមុនបាន។" : "Super Admin can choose a previous date.")
+                            : (lang === "km" ? "កត់ត្រាបានតែថ្ងៃនេះប៉ុណ្ណោះ" : "Record is today only in maintenance mode.")}
+                        </small>
                       ) : null}
                       {quickOutDateBadge ? (
                         <small className="tiny inventory-quickout-date-badge">{quickOutDateBadge}</small>
