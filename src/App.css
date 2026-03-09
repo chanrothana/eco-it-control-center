@@ -5517,6 +5517,31 @@ table {
   padding-right: 36px;
 }
 
+.asset-list-table.asset-list-table-hide-assigned th:nth-child(7),
+.asset-list-table.asset-list-table-hide-assigned td:nth-child(7) {
+  width: 8%;
+  padding-left: 12px;
+}
+
+.asset-list-table.asset-list-table-hide-assigned th:nth-child(8),
+.asset-list-table.asset-list-table-hide-assigned td:nth-child(8) {
+  width: 10%;
+}
+
+.asset-list-table.asset-list-table-hide-assigned td:nth-child(7) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.asset-list-table.asset-list-table-hide-assigned td:nth-child(8) .status-select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  padding-left: 10px;
+  padding-right: 36px;
+}
+
 .asset-list-table td:nth-child(4) .photo-thumb-btn {
   display: inline-grid;
   width: 44px;
