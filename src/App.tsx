@@ -6622,6 +6622,11 @@ export default function App() {
     by: "",
     note: "",
   });
+  const [inventoryStockFilterCampus, setInventoryStockFilterCampus] = useState("ALL");
+  const [inventoryStockFilterType, setInventoryStockFilterType] = useState("ALL");
+  const [inventoryStockFilterDateFrom, setInventoryStockFilterDateFrom] = useState("");
+  const [inventoryStockFilterDateTo, setInventoryStockFilterDateTo] = useState("");
+  const [inventoryStockFilterQuery, setInventoryStockFilterQuery] = useState("");
   const [inventoryFullDateFrom, setInventoryFullDateFrom] = useState(() => shiftYmd(toYmd(new Date()), -30));
   const [inventoryFullDateTo, setInventoryFullDateTo] = useState(() => toYmd(new Date()));
 
@@ -7587,15 +7592,39 @@ export default function App() {
       setInventorySupplyMonth(cleaningSupplyMonthlyOptions[0]);
     }
   }, [cleaningSupplyMonthlyOptions, inventorySupplyMonth]);
+  const inventoryStockCampusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const tx of inventoryVisibleTxns) {
+      const campus = String(tx.campus || "").trim();
+      if (campus) set.add(campus);
+    }
+    return Array.from(set).sort((a, b) => inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b)));
+  }, [inventoryVisibleTxns, inventoryCampusLabel]);
   const inventoryTxnsRows = useMemo(() => {
+    const query = inventoryStockFilterQuery.trim().toLowerCase();
+    const from = normalizeYmdInput(inventoryStockFilterDateFrom);
+    const to = normalizeYmdInput(inventoryStockFilterDateTo);
     return [...inventoryVisibleTxns]
-      .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
       .filter((row) => {
-        const q = inventorySearch.trim().toLowerCase();
-        if (!q) return true;
-        return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.by || ""} ${row.note || ""}`.toLowerCase().includes(q);
-      });
-  }, [inventoryVisibleTxns, inventorySearch]);
+        const rowDate = normalizeYmdInput(row.date) || "";
+        if (from && rowDate && rowDate < from) return false;
+        if (to && rowDate && rowDate > to) return false;
+        if (inventoryStockFilterCampus !== "ALL" && String(row.campus || "").trim() !== inventoryStockFilterCampus) return false;
+        if (inventoryStockFilterType !== "ALL" && String(row.type || "").trim() !== inventoryStockFilterType) return false;
+        if (!query) return true;
+        return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.by || ""} ${row.note || ""} ${row.campus || ""}`
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0));
+  }, [
+    inventoryVisibleTxns,
+    inventoryStockFilterCampus,
+    inventoryStockFilterType,
+    inventoryStockFilterDateFrom,
+    inventoryStockFilterDateTo,
+    inventoryStockFilterQuery,
+  ]);
   const inventoryPendingApprovalRows = useMemo(
     () =>
       inventoryVisibleTxns
@@ -22763,7 +22792,6 @@ export default function App() {
                               className="file-input"
                               type="file"
                               accept="image/*"
-                              capture="environment"
                               style={{ display: "none" }}
                               onChange={(e) => {
                                 void onTvRemotePhotoFileAt(0, e);
@@ -22812,7 +22840,6 @@ export default function App() {
                                 className="file-input"
                                 type="file"
                                 accept="image/*"
-                                capture="environment"
                                 style={{ display: "none" }}
                                 onChange={(e) => {
                                   void onTvRemotePhotoFileAt(1, e);
@@ -24451,7 +24478,6 @@ export default function App() {
                               className="file-input"
                               type="file"
                               accept="image/*"
-                              capture="environment"
                               style={{ display: "none" }}
                               onChange={onWalkieChargerPhotoFile}
                             />
@@ -24526,7 +24552,6 @@ export default function App() {
                       type="file"
                       accept="image/*"
                       multiple
-                      capture="environment"
                       onChange={onPhotoFile}
                     />
                   </label>
@@ -25944,7 +25969,6 @@ export default function App() {
                                   className="file-input"
                                   type="file"
                                   accept="image/*"
-                                  capture="environment"
                                   style={{ display: "none" }}
                                   onChange={onEditWalkieChargerPhotoFile}
                                 />
@@ -26019,7 +26043,6 @@ export default function App() {
                         type="file"
                         accept="image/*"
                         multiple
-                        capture="environment"
                         onChange={onEditAssetPhotoFile}
                       />
                     </label>
@@ -27113,7 +27136,82 @@ export default function App() {
                   <button className="btn-primary" disabled={!isAdmin || inventoryTxnSaveBusy} onClick={createInventoryTxn}>Save Transaction</button>
                 </div>
 
-                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
+                <div className="form-grid" style={{ marginTop: 12 }}>
+                  <label className="field">
+                    <span>{t.date} From</span>
+                    <input
+                      className="input"
+                      type="date"
+                      value={inventoryStockFilterDateFrom}
+                      onChange={(e) => setInventoryStockFilterDateFrom(e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t.date} To</span>
+                    <input
+                      className="input"
+                      type="date"
+                      value={inventoryStockFilterDateTo}
+                      onChange={(e) => setInventoryStockFilterDateTo(e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select
+                      className="input"
+                      value={inventoryStockFilterCampus}
+                      onChange={(e) => setInventoryStockFilterCampus(e.target.value)}
+                    >
+                      <option value="ALL">All Campuses</option>
+                      {inventoryStockCampusOptions.map((campus) => (
+                        <option key={`inventory-stock-filter-campus-${campus}`} value={campus}>
+                          {inventoryCampusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Type</span>
+                    <select
+                      className="input"
+                      value={inventoryStockFilterType}
+                      onChange={(e) => setInventoryStockFilterType(e.target.value)}
+                    >
+                      <option value="ALL">All Types</option>
+                      {inventoryTxnTypeOptions.map((typeOption) => (
+                        <option key={`inventory-stock-filter-type-${typeOption.value}`} value={typeOption.value}>
+                          {typeOption.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field field-wide">
+                    <span>Search</span>
+                    <input
+                      className="input"
+                      value={inventoryStockFilterQuery}
+                      onChange={(e) => setInventoryStockFilterQuery(e.target.value)}
+                      placeholder="Item code, item name, by, note..."
+                    />
+                  </label>
+                  <div className="asset-actions" style={{ justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="tab"
+                      onClick={() => {
+                        setInventoryStockFilterDateFrom("");
+                        setInventoryStockFilterDateTo("");
+                        setInventoryStockFilterCampus("ALL");
+                        setInventoryStockFilterType("ALL");
+                        setInventoryStockFilterQuery("");
+                      }}
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+                </div>
+
+                <div className="table-wrap vault-table-wrap inventory-stock-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
                       <tr>
@@ -30126,7 +30224,7 @@ export default function App() {
                     <label className="field"><span>Pool Condition / Complaint</span><input className="input" value={poolComplaintForm.condition} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, condition: e.target.value }))} placeholder="Water cloudy, pump noise, smell..." /></label>
                     <label className="field"><span>Severity</span><select className="input" value={poolComplaintForm.severity} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, severity: e.target.value as PoolComplaint["severity"] }))}><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></label>
                     <label className="field"><span>{t.status}</span><select className="input" value={poolComplaintForm.status} onChange={(e) => setPoolComplaintForm((f) => ({ ...f, status: e.target.value as PoolComplaint["status"] }))}><option>Open</option><option>In Progress</option><option>Resolved</option></select></label>
-                    <label className="field"><span>Incident Photo</span><input type="file" accept="image/*" capture="environment" className="input" onChange={onPoolComplaintPhotoFile} /></label>
+                    <label className="field"><span>Incident Photo</span><input type="file" accept="image/*" className="input" onChange={onPoolComplaintPhotoFile} /></label>
                     <div className="field">
                       <span>Photo Preview</span>
                       <div className="photo-preview-wrap">
@@ -34654,7 +34752,6 @@ export default function App() {
                         className="input"
                         type="file"
                         accept="image/*"
-                        capture="environment"
                         onChange={onInventoryQuickOutPhotoFile}
                       />
                       {inventoryQuickOutModal.photo ? (

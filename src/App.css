@@ -5387,6 +5387,12 @@ label.backup-action-btn {
   overflow-x: auto;
 }
 
+.inventory-stock-table-wrap {
+  max-height: 640px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
 .panel-note {
   margin: 0 0 10px;
   padding: 10px 12px;
@@ -9601,6 +9607,12 @@ tr.row-maint-maintenance:hover td {
   .workspace-main .vault-table-wrap {
     overflow-x: visible !important;
     overflow-y: visible !important;
+  }
+
+  .workspace-main .inventory-stock-table-wrap {
+    max-height: 640px !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
   }
 
   .workspace-main .vault-table-wrap .vault-responsive-table {
