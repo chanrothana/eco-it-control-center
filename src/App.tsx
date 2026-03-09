@@ -5850,7 +5850,6 @@ export default function App() {
   const [publicQrAsset, setPublicQrAsset] = useState<PublicQrAsset | null>(null);
   const [publicQrBusy, setPublicQrBusy] = useState(false);
   const [publicQrError, setPublicQrError] = useState("");
-  const [publicQrLogin, setPublicQrLogin] = useState({ username: "", password: "" });
   const [publicQrRecordBusy, setPublicQrRecordBusy] = useState(false);
   const [publicQrRecordError, setPublicQrRecordError] = useState("");
   const [publicQrRecordMessage, setPublicQrRecordMessage] = useState("");
@@ -5873,6 +5872,15 @@ export default function App() {
     requesterContact: "",
     priority: "Normal",
     photo: "",
+  });
+  const [publicQrSectionsOpen, setPublicQrSectionsOpen] = useState<{
+    request: boolean;
+    maintenance: boolean;
+    details: boolean;
+  }>({
+    request: true,
+    maintenance: false,
+    details: false,
   });
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [editAssetFileKey, setEditAssetFileKey] = useState(0);
@@ -19882,6 +19890,22 @@ export default function App() {
     });
   }, [authUser?.displayName]);
 
+  useEffect(() => {
+    if (!pendingQrAssetId) return;
+    const canRecordMaintenance = Boolean(
+      authUser &&
+      publicQrAsset &&
+      (((authUser ? isAdminRole(authUser.role) : false) || (publicQrAsset?.campus ? allowedCampuses.includes(publicQrAsset.campus) : true)) &&
+        (isAdminRole(authUser.role) || canAccessMenu("maintenance.record", "maintenance")))
+    );
+    const canViewDetails = authUser?.role === "Super Admin";
+    setPublicQrSectionsOpen({
+      request: true,
+      maintenance: canRecordMaintenance,
+      details: !canRecordMaintenance && canViewDetails,
+    });
+  }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetId, publicQrAsset]);
+
   async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
     let title = "";
@@ -20546,35 +20570,6 @@ export default function App() {
     }
   }
 
-  async function handlePublicQrLogin() {
-    if (!publicQrLogin.username.trim() || !publicQrLogin.password.trim()) {
-      setPublicQrRecordError("Username and password are required.");
-      return;
-    }
-    setPublicQrRecordBusy(true);
-    setPublicQrRecordError("");
-    setPublicQrRecordMessage("");
-    try {
-      const res = await requestJson<{ token: string; user: AuthUser }>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({
-          username: publicQrLogin.username.trim(),
-          password: publicQrLogin.password,
-        }),
-      });
-      runtimeAuthToken = res.token;
-      trySetLocalStorage(AUTH_TOKEN_KEY, res.token);
-      trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(res.user));
-      setAuthUser(res.user);
-      setPublicQrLogin({ username: "", password: "" });
-      setPublicQrRecordMessage("Logged in. You can now record maintenance.");
-    } catch (err) {
-      setPublicQrRecordError(err instanceof Error ? err.message : "Login failed");
-    } finally {
-      setPublicQrRecordBusy(false);
-    }
-  }
-
   async function onPublicQrRecordPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -20717,6 +20712,35 @@ export default function App() {
     return <div className="public-asset-history-empty">{message}</div>;
   }
 
+  function renderPublicQrGroup(
+    key: "request" | "maintenance" | "details",
+    title: string,
+    content: React.ReactNode,
+    hint?: string,
+  ) {
+    const isOpen = publicQrSectionsOpen[key];
+    return (
+      <section className={`public-asset-group ${isOpen ? "public-asset-group-open" : ""}`}>
+        <button
+          type="button"
+          className="public-asset-group-toggle"
+          onClick={() =>
+            setPublicQrSectionsOpen((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            }))
+          }
+          aria-expanded={isOpen}
+        >
+          <span>{title}</span>
+          <strong aria-hidden={true}>{isOpen ? "−" : "+"}</strong>
+        </button>
+        {hint ? <div className="public-asset-group-hint">{hint}</div> : null}
+        {isOpen ? <div className="public-asset-group-body">{content}</div> : null}
+      </section>
+    );
+  }
+
   function formatPublicHistoryAction(action?: string) {
     if (String(action || "").trim().toUpperCase() === "ASSIGN") return "ASSIGNED";
     return action || "-";
@@ -20736,6 +20760,7 @@ export default function App() {
       publicQrCampusAllowed &&
       (isAdminRole(authUser.role) || canAccessMenu("maintenance.record", "maintenance"))
     );
+    const publicQrCanViewDetails = authUser?.role === "Super Admin";
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
       : asset?.photo
@@ -20824,431 +20849,426 @@ export default function App() {
               <p className="alert">{publicQrError}</p>
             ) : asset ? (
               <>
-                <div className="panel public-asset-action-panel">
-                  <h3 className="section-title" style={{ marginTop: 0 }}>Request Repair</h3>
-                  <div className="form-grid">
-                    <label className="field field-wide">
-                      <span>Issue Title</span>
-                      <input
-                        className="input"
-                        value={publicQrRequestForm.title}
-                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, title: e.target.value }))}
-                        placeholder={`Repair request for ${asset.assetId}`}
-                      />
-                    </label>
-                    <label className="field field-wide">
-                      <span>Description</span>
-                      <textarea
-                        className="input"
-                        rows={3}
-                        value={publicQrRequestForm.description}
-                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, description: e.target.value }))}
-                        placeholder="Describe the problem with this asset."
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Requested By</span>
-                      <input
-                        className="input"
-                        value={publicQrRequestForm.requestedBy}
-                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, requestedBy: e.target.value }))}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Contact / Room</span>
-                      <input
-                        className="input"
-                        value={publicQrRequestForm.requesterContact}
-                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, requesterContact: e.target.value }))}
-                        placeholder="Phone, Telegram, room..."
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Priority</span>
-                      <select
-                        className="input"
-                        value={publicQrRequestForm.priority}
-                        onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, priority: e.target.value }))}
-                      >
-                        {PRIORITY_OPTIONS.map((p) => (
-                          <option key={`public-qr-priority-${p.value}`} value={p.value}>
-                            {(lang === "km" ? p.km : p.en) || p.value}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="field field-wide">
-                      <span>{t.photo}</span>
-                      <input
-                        key={publicQrRequestFileKey}
-                        type="file"
-                        accept="image/*"
-                        onChange={onPublicQrRequestPhotoFile}
-                      />
-                      {publicQrRequestForm.photo ? (
-                        <img loading="lazy" decoding="async" src={publicQrRequestForm.photo} alt="request" className="photo-preview" />
-                      ) : null}
-                    </label>
-                    <div className="field field-wide">
-                      <button
-                        className="btn-primary"
-                        type="button"
-                        disabled={publicQrRecordBusy || !publicQrRequestForm.requestedBy.trim()}
-                        onClick={() => void submitPublicQrRepairRequest(asset)}
-                      >
-                        {publicQrRecordBusy ? "Submitting..." : "Request Fix / Create Work Order"}
-                      </button>
-                      <div className="tiny" style={{ marginTop: 8 }}>
-                        This creates a work order first. The technician can later convert it to maintenance history after fixing.
+                <div className="public-asset-summary">
+                  <div className="form-grid public-asset-grid public-asset-grid-summary">
+                    <div className="public-asset-mobile-card">
+                      <div className="public-asset-mobile-head">
+                        <div className="detail-value"><strong>{asset.assetId || "-"}</strong></div>
+                      </div>
+                      <div className="public-asset-mobile-body">
+                        <div className="public-asset-mobile-text">
+                          <div className="public-asset-mobile-name">
+                            <strong>{t.name}:</strong> {asset.name || assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}
+                          </div>
+                          <div className="public-asset-mobile-meta">
+                            <div><strong>{t.campus}:</strong> {campusLabel(asset.campus || "-")}</div>
+                            <div><strong>{t.category}:</strong> {asset.category || "-"}</div>
+                            <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
+                            <div><strong>{t.status}:</strong> {assetStatusLabel(asset.status || "-")}</div>
+                          </div>
+                        </div>
+                        <div className="public-asset-mobile-photo">
+                          {photos[0] ? (
+                            <img loading="lazy" decoding="async" src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
+                          ) : (
+                            <div className="photo-placeholder">{t.noPhoto}</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <h3 className="section-title">Maintenance Record</h3>
-                  {!authUser ? (
+                </div>
+
+                <div className="public-asset-action-panel">
+                  {renderPublicQrGroup(
+                    "request",
+                    "Request Repair",
                     <div className="form-grid">
-                      <label className="field">
-                        <span>{t.username}</span>
+                      <label className="field field-wide">
+                        <span>Issue Title</span>
                         <input
                           className="input"
-                          value={publicQrLogin.username}
-                          onChange={(e) => setPublicQrLogin((f) => ({ ...f, username: e.target.value }))}
-                          autoComplete="username"
-                        />
-                      </label>
-                      <label className="field">
-                        <span>{t.password}</span>
-                        <input
-                          className="input"
-                          type="password"
-                          value={publicQrLogin.password}
-                          onChange={(e) => setPublicQrLogin((f) => ({ ...f, password: e.target.value }))}
-                          autoComplete="current-password"
-                        />
-                      </label>
-                      <div className="field field-wide">
-                        <button className="tab" type="button" onClick={handlePublicQrLogin} disabled={publicQrRecordBusy}>
-                          {publicQrRecordBusy ? `${t.login}...` : t.login}
-                        </button>
-                        <div className="tiny" style={{ marginTop: 8 }}>Login required to record maintenance from QR.</div>
-                      </div>
-                    </div>
-                  ) : publicQrCanRecordMaintenance ? (
-                    <div className="form-grid">
-                      <label className="field">
-                        <span>Date</span>
-                        <input
-                          className="input"
-                          type="date"
-                          min={todayYmd}
-                          value={publicQrRecordForm.date}
-                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, date: e.target.value }))}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Type</span>
-                        <input
-                          className="input"
-                          value={publicQrRecordForm.type}
-                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, type: e.target.value }))}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Work Status</span>
-                        <select
-                          className="input"
-                          value={publicQrRecordForm.completion}
-                          onChange={(e) =>
-                            setPublicQrRecordForm((f) => ({ ...f, completion: e.target.value as "Done" | "Not Yet" }))
-                          }
-                        >
-                          <option value="Done">Done</option>
-                          <option value="Not Yet">Not Yet</option>
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Condition</span>
-                        <input
-                          className="input"
-                          value={publicQrRecordForm.condition}
-                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                          value={publicQrRequestForm.title}
+                          onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, title: e.target.value }))}
+                          placeholder={`Repair request for ${asset.assetId}`}
                         />
                       </label>
                       <label className="field field-wide">
-                        <span>Note</span>
+                        <span>Description</span>
                         <textarea
                           className="input"
                           rows={3}
-                          value={publicQrRecordForm.note}
-                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, note: e.target.value }))}
+                          value={publicQrRequestForm.description}
+                          onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, description: e.target.value }))}
+                          placeholder="Describe the problem with this asset."
                         />
                       </label>
                       <label className="field">
-                        <span>Cost</span>
+                        <span>Requested By</span>
                         <input
                           className="input"
-                          value={publicQrRecordForm.cost}
-                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                          value={publicQrRequestForm.requestedBy}
+                          onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, requestedBy: e.target.value }))}
                         />
                       </label>
                       <label className="field">
-                        <span>By</span>
+                        <span>Contact / Room</span>
                         <input
                           className="input"
-                          value={publicQrRecordForm.by}
-                          onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, by: e.target.value }))}
+                          value={publicQrRequestForm.requesterContact}
+                          onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, requesterContact: e.target.value }))}
+                          placeholder="Phone, Telegram, room..."
                         />
+                      </label>
+                      <label className="field">
+                        <span>Priority</span>
+                        <select
+                          className="input"
+                          value={publicQrRequestForm.priority}
+                          onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, priority: e.target.value }))}
+                        >
+                          {PRIORITY_OPTIONS.map((p) => (
+                            <option key={`public-qr-priority-${p.value}`} value={p.value}>
+                              {(lang === "km" ? p.km : p.en) || p.value}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="field field-wide">
                         <span>{t.photo}</span>
                         <input
-                          key={publicQrRecordFileKey}
+                          key={publicQrRequestFileKey}
                           type="file"
                           accept="image/*"
-                          onChange={onPublicQrRecordPhotoFile}
+                          onChange={onPublicQrRequestPhotoFile}
                         />
-                        {publicQrRecordForm.photo ? (
-                          <img loading="lazy" decoding="async" src={publicQrRecordForm.photo} alt="maintenance" className="photo-preview" />
+                        {publicQrRequestForm.photo ? (
+                          <img loading="lazy" decoding="async" src={publicQrRequestForm.photo} alt="request" className="photo-preview" />
                         ) : null}
                       </label>
                       <div className="field field-wide">
                         <button
-                          className="tab"
+                          className="btn-primary"
                           type="button"
-                          disabled={publicQrRecordBusy || !publicQrRecordForm.date || !publicQrRecordForm.note.trim()}
-                          onClick={() => void addMaintenanceRecordFromPublicQr(asset)}
+                          disabled={publicQrRecordBusy || !publicQrRequestForm.requestedBy.trim()}
+                          onClick={() => void submitPublicQrRepairRequest(asset)}
                         >
-                          {publicQrRecordBusy ? "Saving..." : "Save Maintenance Record"}
+                          {publicQrRecordBusy ? "Submitting..." : "Request Fix / Create Work Order"}
                         </button>
+                        <div className="tiny" style={{ marginTop: 8 }}>
+                          This creates a work order first. The technician can later convert it to maintenance history after fixing.
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <p className="tiny">Your account does not have maintenance record permission for this asset.</p>
+                    </div>,
+                    "For staff or users reporting a problem with this asset."
                   )}
-                  {publicQrRecordError ? <p className="alert alert-error">{publicQrRecordError}</p> : null}
-                  {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
-                </div>
 
-                <div className="form-grid public-asset-grid">
-                  <div className="public-asset-mobile-card">
-                    <div className="public-asset-mobile-head">
-                      <div className="detail-value"><strong>{asset.assetId || "-"}</strong></div>
-                    </div>
-                    <div className="public-asset-mobile-body">
-                      <div className="public-asset-mobile-text">
-                        <div className="public-asset-mobile-name">
-                          <strong>{t.name}:</strong> {asset.name || assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}
-                        </div>
-                        <div className="public-asset-mobile-meta">
-                          <div><strong>{t.campus}:</strong> {campusLabel(asset.campus || "-")}</div>
-                          <div><strong>{t.category}:</strong> {asset.category || "-"}</div>
-                          <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
-                          <div><strong>{t.status}:</strong> {assetStatusLabel(asset.status || "-")}</div>
-                        </div>
-                      </div>
-                      <div className="public-asset-mobile-photo">
-                        {photos[0] ? (
-                          <img loading="lazy" decoding="async" src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
-                        ) : (
-                          <div className="photo-placeholder">{t.noPhoto}</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  {publicQrCanRecordMaintenance
+                    ? renderPublicQrGroup(
+                        "maintenance",
+                        "Maintenance Record",
+                        <>
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Date</span>
+                              <input
+                                className="input"
+                                type="date"
+                                min={todayYmd}
+                                value={publicQrRecordForm.date}
+                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, date: e.target.value }))}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Type</span>
+                              <input
+                                className="input"
+                                value={publicQrRecordForm.type}
+                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, type: e.target.value }))}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Work Status</span>
+                              <select
+                                className="input"
+                                value={publicQrRecordForm.completion}
+                                onChange={(e) =>
+                                  setPublicQrRecordForm((f) => ({ ...f, completion: e.target.value as "Done" | "Not Yet" }))
+                                }
+                              >
+                                <option value="Done">Done</option>
+                                <option value="Not Yet">Not Yet</option>
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>Condition</span>
+                              <input
+                                className="input"
+                                value={publicQrRecordForm.condition}
+                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                              />
+                            </label>
+                            <label className="field field-wide">
+                              <span>Note</span>
+                              <textarea
+                                className="input"
+                                rows={3}
+                                value={publicQrRecordForm.note}
+                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, note: e.target.value }))}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>Cost</span>
+                              <input
+                                className="input"
+                                value={publicQrRecordForm.cost}
+                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>By</span>
+                              <input
+                                className="input"
+                                value={publicQrRecordForm.by}
+                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, by: e.target.value }))}
+                              />
+                            </label>
+                            <label className="field field-wide">
+                              <span>{t.photo}</span>
+                              <input
+                                key={publicQrRecordFileKey}
+                                type="file"
+                                accept="image/*"
+                                onChange={onPublicQrRecordPhotoFile}
+                              />
+                              {publicQrRecordForm.photo ? (
+                                <img loading="lazy" decoding="async" src={publicQrRecordForm.photo} alt="maintenance" className="photo-preview" />
+                              ) : null}
+                            </label>
+                            <div className="field field-wide">
+                              <button
+                                className="tab"
+                                type="button"
+                                disabled={publicQrRecordBusy || !publicQrRecordForm.date || !publicQrRecordForm.note.trim()}
+                                onClick={() => void addMaintenanceRecordFromPublicQr(asset)}
+                              >
+                                {publicQrRecordBusy ? "Saving..." : "Save Maintenance Record"}
+                              </button>
+                            </div>
+                          </div>
+                          {publicQrRecordError ? <p className="alert alert-error">{publicQrRecordError}</p> : null}
+                          {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
+                        </>,
+                        "Visible for maintenance staff and admins who can record maintenance."
+                      )
+                    : null}
 
-                  <div className="field public-asset-dup-mobile"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
-                  <div className="field public-asset-dup-mobile"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(asset.status || "-")}</div></div>
-                  <div className="field public-asset-dup-mobile"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
-                  <div className="field public-asset-dup-mobile"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
-                  <div className="field public-asset-dup-mobile"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
-                  <div className="field public-asset-dup-mobile"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
-                  <div className="field public-asset-dup-mobile"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
-                  {showPublicQrSetFields ? (
-                    <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
-                  ) : null}
-                  {showPublicQrSetFields ? (
-                    <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
-                  ) : null}
-                  {asset.category === "IT" ? (
-                    <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
-                  ) : null}
-                  <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
-                  <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
-                  <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
-                  <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
-                  <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
-                  <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
-                  <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
-                  <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
-                  <div className="field field-wide public-asset-dup-mobile">
-                    <span>{t.photo}</span>
-                    <div className="row-actions public-asset-photo-row">
-                      {photos.length ? (
-                        photos.slice(0, MAX_ASSET_PHOTOS).map((photo, idx) => (
-                          <img loading="lazy" decoding="async" key={`public-qr-photo-${asset.assetId}-${idx}`}
-                            src={photo}
-                            alt={`${asset.assetId} ${idx + 1}`}
-                            className="photo-preview"
-                          />
-                        ))
-                      ) : (
-                        <div className="photo-placeholder">{t.noPhoto}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="field field-wide">
-                    <span>Components</span>
-                    <div className="public-asset-component-section">
-                      {publicComponents.length ? (
-                        <div className="public-asset-component-list">
-                          {publicComponents.map((component) => {
-                            const componentPhotos = Array.isArray(component.photos) && component.photos.length
-                              ? component.photos
-                              : component.photo
-                              ? [component.photo]
-                              : [];
-                            return (
-                              <article className="public-asset-component-card" key={`public-component-${component.id}-${component.assetId}`}>
-                                <div className="public-asset-component-photo-wrap">
-                                  {componentPhotos[0] ? (
-                                    <img
-                                      loading="lazy"
-                                      decoding="async"
-                                      src={componentPhotos[0]}
-                                      alt={component.assetId || "component"}
-                                      className="public-asset-component-photo"
-                                    />
-                                  ) : (
-                                    <div className="public-asset-component-photo public-asset-component-photo-placeholder">{t.noPhoto}</div>
-                                  )}
+                  {publicQrCanViewDetails
+                    ? renderPublicQrGroup(
+                        "details",
+                        "Asset Details + History",
+                        <div className="form-grid public-asset-grid">
+                          <div className="field public-asset-dup-mobile"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
+                          <div className="field public-asset-dup-mobile"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(asset.status || "-")}</div></div>
+                          <div className="field public-asset-dup-mobile"><span>{t.campus}</span><div className="detail-value">{campusLabel(asset.campus || "-")}</div></div>
+                          <div className="field public-asset-dup-mobile"><span>{t.location}</span><div className="detail-value">{asset.location || "-"}</div></div>
+                          <div className="field public-asset-dup-mobile"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
+                          <div className="field public-asset-dup-mobile"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
+                          <div className="field public-asset-dup-mobile"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
+                          {showPublicQrSetFields ? (
+                            <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
+                          ) : null}
+                          {showPublicQrSetFields ? (
+                            <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
+                          ) : null}
+                          {asset.category === "IT" ? (
+                            <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
+                          ) : null}
+                          <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
+                          <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
+                          <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
+                          <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
+                          <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
+                          <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
+                          <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
+                          <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
+                          <div className="field field-wide public-asset-dup-mobile">
+                            <span>{t.photo}</span>
+                            <div className="row-actions public-asset-photo-row">
+                              {photos.length ? (
+                                photos.slice(0, MAX_ASSET_PHOTOS).map((photo, idx) => (
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    key={`public-qr-photo-${asset.assetId}-${idx}`}
+                                    src={photo}
+                                    alt={`${asset.assetId} ${idx + 1}`}
+                                    className="photo-preview"
+                                  />
+                                ))
+                              ) : (
+                                <div className="photo-placeholder">{t.noPhoto}</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="field field-wide">
+                            <span>Components</span>
+                            <div className="public-asset-component-section">
+                              {publicComponents.length ? (
+                                <div className="public-asset-component-list">
+                                  {publicComponents.map((component) => {
+                                    const componentPhotos = Array.isArray(component.photos) && component.photos.length
+                                      ? component.photos
+                                      : component.photo
+                                      ? [component.photo]
+                                      : [];
+                                    return (
+                                      <article className="public-asset-component-card" key={`public-component-${component.id}-${component.assetId}`}>
+                                        <div className="public-asset-component-photo-wrap">
+                                          {componentPhotos[0] ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                              src={componentPhotos[0]}
+                                              alt={component.assetId || "component"}
+                                              className="public-asset-component-photo"
+                                            />
+                                          ) : (
+                                            <div className="public-asset-component-photo public-asset-component-photo-placeholder">{t.noPhoto}</div>
+                                          )}
+                                        </div>
+                                        <div className="public-asset-component-body">
+                                          <div className="public-asset-component-id">{component.assetId || "-"}</div>
+                                          <div className="public-asset-component-name">
+                                            {component.name || assetItemName(component.category || "", component.type || "", component.pcType || "")}
+                                          </div>
+                                          <div className="public-asset-component-meta">
+                                            <span><strong>Role:</strong> {component.componentRole || component.type || "-"}</span>
+                                            <span><strong>Status:</strong> {assetStatusLabel(component.status || "-")}</span>
+                                            <span><strong>Location:</strong> {component.location || "-"}</span>
+                                            <span><strong>Assigned:</strong> {component.assignedTo || "-"}</span>
+                                          </div>
+                                        </div>
+                                      </article>
+                                    );
+                                  })}
                                 </div>
-                                <div className="public-asset-component-body">
-                                  <div className="public-asset-component-id">{component.assetId || "-"}</div>
-                                  <div className="public-asset-component-name">
-                                    {component.name || assetItemName(component.category || "", component.type || "", component.pcType || "")}
-                                  </div>
-                                  <div className="public-asset-component-meta">
-                                    <span><strong>Role:</strong> {component.componentRole || component.type || "-"}</span>
-                                    <span><strong>Status:</strong> {assetStatusLabel(component.status || "-")}</span>
-                                    <span><strong>Location:</strong> {component.location || "-"}</span>
-                                    <span><strong>Assigned:</strong> {component.assignedTo || "-"}</span>
-                                  </div>
+                              ) : (
+                                <div className="detail-value">No linked components.</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="field field-wide">
+                            <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
+                            <div className="public-asset-history-section">
+                              {publicMaintenanceHistory.length ? (
+                                <div className="public-asset-history-list">
+                                  {publicMaintenanceHistory.map((entry) => (
+                                    <article className="public-asset-history-card" key={`public-maint-${entry.id}`}>
+                                      <div className="public-asset-history-head">
+                                        <div className="public-asset-history-title">{entry.type || "Maintenance"}</div>
+                                        <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                                      </div>
+                                      <div className="public-asset-history-grid">
+                                        {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(entry.completion || "-"))}
+                                        {renderPublicHistoryMeta("Condition", entry.condition || "-")}
+                                        {renderPublicHistoryMeta("By", entry.by || "-")}
+                                        {renderPublicHistoryMeta("Cost", entry.cost || "-")}
+                                      </div>
+                                      <div className="public-asset-history-note">
+                                        <span className="public-asset-history-label">Note</span>
+                                        <p>{entry.note || "-"}</p>
+                                      </div>
+                                    </article>
+                                  ))}
                                 </div>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="detail-value">No linked components.</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="field field-wide">
-                  <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
-                  <div className="public-asset-history-section">
-                    {publicMaintenanceHistory.length ? (
-                      <div className="public-asset-history-list">
-                        {publicMaintenanceHistory.map((entry) => (
-                          <article className="public-asset-history-card" key={`public-maint-${entry.id}`}>
-                            <div className="public-asset-history-head">
-                              <div className="public-asset-history-title">{entry.type || "Maintenance"}</div>
-                              <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                              ) : (
+                                renderPublicHistoryEmpty("No maintenance history yet.")
+                              )}
                             </div>
-                            <div className="public-asset-history-grid">
-                              {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(entry.completion || "-"))}
-                              {renderPublicHistoryMeta("Condition", entry.condition || "-")}
-                              {renderPublicHistoryMeta("By", entry.by || "-")}
-                              {renderPublicHistoryMeta("Cost", entry.cost || "-")}
+                          </div>
+                          <div className="field field-wide">
+                            <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
+                            <div className="public-asset-history-section">
+                              {publicTransferHistory.length ? (
+                                <div className="public-asset-history-list">
+                                  {publicTransferHistory.map((entry) => {
+                                    const custody = publicCustodyHistory.find(
+                                      (row) =>
+                                        String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
+                                        String(row.toCampus || "") === String(entry.toCampus || "") &&
+                                        String(row.toLocation || "") === String(entry.toLocation || "")
+                                    );
+                                    return (
+                                      <article className="public-asset-history-card" key={`public-transfer-${entry.id}`}>
+                                        <div className="public-asset-history-head">
+                                          <div className="public-asset-history-title">Location Transfer</div>
+                                          <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                                        </div>
+                                        <div className="public-asset-history-grid">
+                                          {renderPublicHistoryMeta("From Campus", campusLabel(entry.fromCampus || "-"))}
+                                          {renderPublicHistoryMeta("To Campus", campusLabel(entry.toCampus || "-"))}
+                                          {renderPublicHistoryMeta("From Location", entry.fromLocation || "-")}
+                                          {renderPublicHistoryMeta("To Location", entry.toLocation || "-")}
+                                          {renderPublicHistoryMeta("From Staff", custody?.fromUser || "-")}
+                                          {renderPublicHistoryMeta("To Staff", custody?.toUser || "-")}
+                                          {renderPublicHistoryMeta("Ack", custody?.responsibilityAck ? "Yes" : "No")}
+                                          {renderPublicHistoryMeta("By", entry.by || "-")}
+                                        </div>
+                                        <div className="public-asset-history-note">
+                                          <span className="public-asset-history-label">Reason</span>
+                                          <p>{entry.reason || "-"}</p>
+                                        </div>
+                                      </article>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                renderPublicHistoryEmpty("No transfer location history yet.")
+                              )}
                             </div>
-                            <div className="public-asset-history-note">
-                              <span className="public-asset-history-label">Note</span>
-                              <p>{entry.note || "-"}</p>
+                          </div>
+                          <div className="field field-wide">
+                            <h3 className="section-title" style={{ margin: 0 }}>Activity History</h3>
+                            <div className="public-asset-history-section">
+                              {publicActivityHistory.length ? (
+                                <div className="public-asset-history-list">
+                                  {publicActivityHistory.map((entry) => (
+                                    <article className="public-asset-history-card public-asset-history-card-status" key={entry.id}>
+                                      <div className="public-asset-history-head">
+                                        <div className="public-asset-history-title">
+                                          {entry.custody && entry.status
+                                            ? "Assignment + Status"
+                                            : entry.custody
+                                            ? formatPublicHistoryAction(entry.custody.action || "Assignment")
+                                            : "Status Update"}
+                                        </div>
+                                        <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                                      </div>
+                                      <div className="public-asset-history-grid">
+                                        {entry.custody ? renderPublicHistoryMeta("From User", entry.custody.fromUser || "-") : null}
+                                        {entry.custody ? renderPublicHistoryMeta("To User", entry.custody.toUser || "-") : null}
+                                        {entry.status ? renderPublicHistoryMeta("From Status", assetStatusLabel(entry.status.fromStatus || "-")) : null}
+                                        {entry.status ? renderPublicHistoryMeta("To Status", assetStatusLabel(entry.status.toStatus || "-")) : null}
+                                        {entry.custody ? renderPublicHistoryMeta("Ack", entry.custody.responsibilityAck ? "Yes" : "No") : null}
+                                        {renderPublicHistoryMeta("By", entry.by || "-")}
+                                      </div>
+                                      <div className="public-asset-history-note">
+                                        <span className="public-asset-history-label">{entry.status ? "Reason" : "Note"}</span>
+                                        <p>{entry.note || "-"}</p>
+                                      </div>
+                                    </article>
+                                  ))}
+                                </div>
+                              ) : (
+                                renderPublicHistoryEmpty("No activity history yet.")
+                              )}
                             </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No maintenance history yet.")
-                    )}
-                  </div>
-                </div>
-                  <div className="field field-wide">
-                  <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
-                  <div className="public-asset-history-section">
-                    {publicTransferHistory.length ? (
-                      <div className="public-asset-history-list">
-                        {publicTransferHistory.map((entry) => {
-                          const custody = publicCustodyHistory.find(
-                            (row) =>
-                              String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
-                              String(row.toCampus || "") === String(entry.toCampus || "") &&
-                              String(row.toLocation || "") === String(entry.toLocation || "")
-                          );
-                          return (
-                            <article className="public-asset-history-card" key={`public-transfer-${entry.id}`}>
-                              <div className="public-asset-history-head">
-                                <div className="public-asset-history-title">Location Transfer</div>
-                                <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
-                              </div>
-                              <div className="public-asset-history-grid">
-                                {renderPublicHistoryMeta("From Campus", campusLabel(entry.fromCampus || "-"))}
-                                {renderPublicHistoryMeta("To Campus", campusLabel(entry.toCampus || "-"))}
-                                {renderPublicHistoryMeta("From Location", entry.fromLocation || "-")}
-                                {renderPublicHistoryMeta("To Location", entry.toLocation || "-")}
-                                {renderPublicHistoryMeta("From Staff", custody?.fromUser || "-")}
-                                {renderPublicHistoryMeta("To Staff", custody?.toUser || "-")}
-                                {renderPublicHistoryMeta("Ack", custody?.responsibilityAck ? "Yes" : "No")}
-                                {renderPublicHistoryMeta("By", entry.by || "-")}
-                              </div>
-                              <div className="public-asset-history-note">
-                                <span className="public-asset-history-label">Reason</span>
-                                <p>{entry.reason || "-"}</p>
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No transfer location history yet.")
-                    )}
-                  </div>
-                </div>
-                  <div className="field field-wide">
-                  <h3 className="section-title" style={{ margin: 0 }}>Activity History</h3>
-                  <div className="public-asset-history-section">
-                    {publicActivityHistory.length ? (
-                      <div className="public-asset-history-list">
-                        {publicActivityHistory.map((entry) => (
-                          <article className="public-asset-history-card public-asset-history-card-status" key={entry.id}>
-                            <div className="public-asset-history-head">
-                              <div className="public-asset-history-title">
-                                {entry.custody && entry.status
-                                  ? "Assignment + Status"
-                                  : entry.custody
-                                  ? formatPublicHistoryAction(entry.custody.action || "Assignment")
-                                  : "Status Update"}
-                              </div>
-                              <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
-                            </div>
-                            <div className="public-asset-history-grid">
-                              {entry.custody ? renderPublicHistoryMeta("From User", entry.custody.fromUser || "-") : null}
-                              {entry.custody ? renderPublicHistoryMeta("To User", entry.custody.toUser || "-") : null}
-                              {entry.status ? renderPublicHistoryMeta("From Status", assetStatusLabel(entry.status.fromStatus || "-")) : null}
-                              {entry.status ? renderPublicHistoryMeta("To Status", assetStatusLabel(entry.status.toStatus || "-")) : null}
-                              {entry.custody ? renderPublicHistoryMeta("Ack", entry.custody.responsibilityAck ? "Yes" : "No") : null}
-                              {renderPublicHistoryMeta("By", entry.by || "-")}
-                            </div>
-                            <div className="public-asset-history-note">
-                              <span className="public-asset-history-label">{entry.status ? "Reason" : "Note"}</span>
-                              <p>{entry.note || "-"}</p>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      renderPublicHistoryEmpty("No activity history yet.")
-                    )}
-                  </div>
-                </div>
+                          </div>
+                        </div>,
+                        "Visible for Super Admin."
+                      )
+                    : null}
                 </div>
               </>
             ) : (

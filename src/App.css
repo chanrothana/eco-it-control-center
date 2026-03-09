@@ -2254,6 +2254,13 @@ label.backup-action-btn {
   gap: 12px;
 }
 
+.vault-search-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .vault-search-card-head h4 {
   margin: 8px 0 4px;
   color: #523116;
@@ -2265,6 +2272,25 @@ label.backup-action-btn {
   margin: 0;
   color: #7a6549;
   font-size: 14px;
+}
+
+.vault-search-copy-btn {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d7c4aa;
+  border-radius: 12px;
+  background: #fff7ec;
+  color: #7a4d1f;
+}
+
+.vault-search-copy-btn.is-copied {
+  border-color: #b9d4c3;
+  background: #edf8f1;
+  color: #2c7a4b;
 }
 
 .vault-search-badge {
@@ -7978,6 +8004,47 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .vault-search-field {
+    max-width: none;
+  }
+
+  .vault-search-card {
+    padding: 12px;
+    gap: 10px;
+    position: relative;
+  }
+
+  .vault-search-card-head h4 {
+    font-size: 18px;
+    margin-top: 6px;
+  }
+
+  .vault-search-card-head p {
+    font-size: 13px;
+  }
+
+  .vault-search-item {
+    padding: 9px 10px;
+  }
+
+  .vault-guide-card {
+    padding: 9px 10px 10px;
+    border-radius: 14px;
+  }
+
+  .vault-guide-count {
+    min-height: 48px;
+    font-size: 30px;
+  }
+
+  .vault-guide-card strong {
+    font-size: 16px;
+  }
+
+  .vault-guide-card span {
+    font-size: 12px;
+  }
+
   .vault-section-head {
     flex-direction: column;
     align-items: flex-start;
@@ -8121,6 +8188,57 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-action-panel {
   margin-bottom: 12px;
+}
+
+.public-asset-summary {
+  margin-bottom: 12px;
+}
+
+.public-asset-grid-summary {
+  gap: 0;
+}
+
+.public-asset-group {
+  border: 1px solid #d8c09b;
+  border-radius: 20px;
+  background: rgba(255, 252, 246, 0.92);
+  box-shadow: 0 14px 32px rgba(120, 78, 28, 0.08);
+  overflow: hidden;
+}
+
+.public-asset-group + .public-asset-group {
+  margin-top: 12px;
+}
+
+.public-asset-group-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 0;
+  background: linear-gradient(135deg, rgba(255, 245, 228, 0.95), rgba(246, 227, 191, 0.92));
+  color: #52351e;
+  font-size: 18px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.public-asset-group-toggle strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.public-asset-group-hint {
+  padding: 0 18px 14px;
+  color: #7a5c3b;
+  font-size: 13px;
+}
+
+.public-asset-group-body {
+  padding: 0 18px 18px;
 }
 
 .public-asset-mobile-card {
@@ -9770,6 +9888,100 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: 1fr;
   }
 
+  .vault-search-toolbar {
+    margin-bottom: 10px;
+  }
+
+  .vault-search-input-wrap {
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 14px;
+  }
+
+  .vault-search-card {
+    padding: 10px;
+    border-radius: 14px;
+    gap: 8px;
+    position: relative;
+  }
+
+  .vault-search-card-head {
+    display: block;
+    padding-right: 42px;
+  }
+
+  .vault-search-card-head h4 {
+    margin: 4px 0 0;
+    font-size: 17px;
+    line-height: 1.2;
+  }
+
+  .vault-search-card-head p {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .vault-search-badge {
+    min-height: 24px;
+    padding: 0 8px;
+    font-size: 11px;
+  }
+
+  .vault-search-copy-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .vault-search-item {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    align-items: start;
+    gap: 4px 8px;
+    padding: 3px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .vault-search-item span {
+    min-width: 0;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  .vault-search-item strong {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .vault-section-count {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .vault-guide-grid {
+    gap: 8px;
+  }
+
+  .vault-dashboard-note {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .vault-dashboard-note strong {
+    margin-bottom: 4px;
+  }
+
+  .vault-dashboard-note p {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
   .vault-status-grid .report-quick-status-pill span {
     font-size: 14px;
   }
@@ -9941,6 +10153,20 @@ tr.row-maint-maintenance:hover td {
   .public-asset-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .public-asset-group-toggle {
+    padding: 14px 16px;
+    font-size: 16px;
+  }
+
+  .public-asset-group-body {
+    padding: 0 14px 14px;
+  }
+
+  .public-asset-group-hint {
+    padding: 0 14px 12px;
+    font-size: 12px;
   }
 
   .public-asset-grid .field {
