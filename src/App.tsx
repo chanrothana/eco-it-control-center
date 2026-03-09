@@ -9497,6 +9497,28 @@ export default function App() {
     }
   }, [authUser]);
 
+  const loadInventorySync = useCallback(async () => {
+    if (!authUser) return;
+    try {
+      const settingsRes = await requestJson<{ settings?: ServerSettings }>("/api/settings");
+      const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
+      const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
+      setInventoryItems(serverInventoryItems);
+      setInventoryTxns(serverInventoryTxns);
+      writeInventoryItemFallback(serverInventoryItems);
+      writeInventoryTxnFallback(serverInventoryTxns);
+    } catch (err) {
+      if (
+        isApiUnavailableError(err) ||
+        isMissingRouteError(err) ||
+        isUnauthorizedError(err)
+      ) {
+        return;
+      }
+      console.warn("Failed to sync inventory data", err);
+    }
+  }, [authUser]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -9713,6 +9735,26 @@ export default function App() {
     }, 60000);
     return () => window.clearInterval(timer);
   }, [authUser, loadMaintenanceNotifications]);
+
+  useEffect(() => {
+    if (!authUser || tab !== "inventory") return;
+
+    void loadInventorySync();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void loadInventorySync();
+    }, 4000);
+    const handleFocus = () => {
+      void loadInventorySync();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [authUser, tab, loadInventorySync]);
 
   useEffect(() => {
     if (tab === "setup" && isAdmin) {

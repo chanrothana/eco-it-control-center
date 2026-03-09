@@ -7,8 +7,8 @@ const WEB_PORT = 3000;
 const API_PORT = 4000;
 const isPhoneMode = process.argv.includes("--phone");
 // Local mode should stay loopback-only; phone mode exposes to LAN.
-const apiHost = isPhoneMode ? "0.0.0.0" : "localhost";
-const webHost = isPhoneMode ? "0.0.0.0" : "localhost";
+const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
+const webHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
 const children = [];
 let shuttingDown = false;
 

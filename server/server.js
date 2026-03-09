@@ -1839,9 +1839,40 @@ function sendTelegramMessageToChat(chatId, text, photoUrl = "") {
           disable_web_page_preview: true,
         };
     sendTelegramRequest(method, payload).then((result) => {
+      let messageId = 0;
+      try {
+        const parsed = JSON.parse(toText(result && result.body));
+        messageId = Number(parsed && parsed.result && parsed.result.message_id) || 0;
+      } catch {
+        messageId = 0;
+      }
       resolve({
         ok: Boolean(result && result.ok),
         chatId: toText(chatId),
+        messageId,
+        statusCode: Number(result && result.statusCode) || 0,
+        body: toText(result && result.body),
+      });
+    });
+  });
+}
+
+function deleteTelegramMessageFromChat(chatId, messageId) {
+  return new Promise((resolve) => {
+    const normalizedChatId = toText(chatId);
+    const normalizedMessageId = Number(messageId) || 0;
+    if (!normalizedChatId || !normalizedMessageId) {
+      resolve({ ok: false, chatId: normalizedChatId, messageId: normalizedMessageId, statusCode: 0, body: "" });
+      return;
+    }
+    sendTelegramRequest("deleteMessage", {
+      chat_id: normalizedChatId,
+      message_id: normalizedMessageId,
+    }).then((result) => {
+      resolve({
+        ok: Boolean(result && result.ok),
+        chatId: normalizedChatId,
+        messageId: normalizedMessageId,
         statusCode: Number(result && result.statusCode) || 0,
         body: toText(result && result.body),
       });
@@ -1904,6 +1935,10 @@ async function sendTelegramMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
       : [];
+  const includeResults =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
+      ? Boolean(options.includeResults)
+      : false;
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds);
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
   telegramLastDiscoveredChats = discoveredChats;
@@ -1950,6 +1985,12 @@ async function sendTelegramMessage(text, options = {}) {
       results.map((row) => ({ chatId: row.chatId, statusCode: row.statusCode, body: row.body.slice(0, 160) }))
     );
   }
+  if (includeResults) {
+    return {
+      ok: successCount > 0,
+      results,
+    };
+  }
   return successCount > 0;
 }
 
@@ -1983,6 +2024,31 @@ function formatInventoryOutTelegramStatus(status) {
   const normalized = toUpper(status);
   if (normalized === "APPROVED") return "អាចដកចេញបាន";
   return toText(status) || "-";
+}
+
+function normalizeTelegramMessageRefs(refs) {
+  if (!Array.isArray(refs)) return [];
+  return refs
+    .map((row) => ({
+      chatId: toText(row && row.chatId),
+      messageId: Number(row && row.messageId) || 0,
+    }))
+    .filter((row) => row.chatId && row.messageId);
+}
+
+async function deleteTelegramMessagesByRefs(refs) {
+  const targets = normalizeTelegramMessageRefs(refs);
+  if (!targets.length) return { ok: true, successCount: 0, results: [] };
+  const results = [];
+  for (const row of targets) {
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await deleteTelegramMessageFromChat(row.chatId, row.messageId));
+  }
+  return {
+    ok: results.every((row) => row.ok),
+    successCount: results.filter((row) => row.ok).length,
+    results,
+  };
 }
 
 function discoverTelegramChatIds() {
@@ -2087,10 +2153,15 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], 
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendTelegramMessage(lines.join("\n"), {
+  const report = await sendTelegramMessage(lines.join("\n"), {
     db,
     photoUrl: resolveInventoryItemPhotoForTelegram(db, txn),
+    includeResults: true,
   });
+  return {
+    ok: Boolean(report && report.ok),
+    messageRefs: normalizeTelegramMessageRefs(report && report.results),
+  };
 }
 
 async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
@@ -2116,10 +2187,15 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendTelegramMessage(lines.join("\n"), {
+  const report = await sendTelegramMessage(lines.join("\n"), {
     db,
     photoUrl: resolveInventoryItemPhotoForTelegram(db, txn),
+    includeResults: true,
   });
+  return {
+    ok: Boolean(report && report.ok),
+    messageRefs: normalizeTelegramMessageRefs(report && report.results),
+  };
 }
 
 initStorageSync();
@@ -4349,6 +4425,7 @@ const server = http.createServer(async (req, res) => {
         approvalDecisionBy: approvalStatus === "APPROVED" ? (approvalDecisionBy || toText(user.displayName) || toText(user.username)) : "",
         approvalDecisionAt: approvalStatus === "APPROVED" ? (approvalDecisionAt || new Date().toISOString()) : "",
         approvalDecisionNote: approvalStatus === "APPROVED" ? approvalDecisionNote : "",
+        telegramMessageRefs: [],
       };
       let approverTargets = [];
       if (approvalStatus === "PENDING") {
@@ -4381,10 +4458,18 @@ const server = http.createServer(async (req, res) => {
       await writeDb(db);
       let telegramAlertSent = false;
       if (normalizeInventoryTxnType(txn.type) === "OUT") {
+        let telegramReport = null;
         if (approvalStatus === "PENDING") {
-          telegramAlertSent = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets, db);
+          telegramReport = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets, db);
         } else {
-          telegramAlertSent = await sendTelegramInventoryOutRecordedAlert(txn, db);
+          telegramReport = await sendTelegramInventoryOutRecordedAlert(txn, db);
+        }
+        telegramAlertSent = Boolean(telegramReport && telegramReport.ok);
+        if (telegramAlertSent) {
+          txn.telegramMessageRefs = normalizeTelegramMessageRefs(telegramReport && telegramReport.messageRefs);
+          nextTxns[0] = txn;
+          setInventoryState(db, settings, items, nextTxns);
+          await writeDb(db);
         }
       }
       sendJson(res, 201, { txn, telegramAlertSent });
@@ -4651,11 +4736,16 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: "Cannot delete this transaction because it would make stock negative" });
         return;
       }
+      const telegramDeleteReport = await deleteTelegramMessagesByRefs(current.telegramMessageRefs);
       const nextTxns = txns.filter((row) => Number(row.id) !== txnId);
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(db, admin, "DELETE", "inventory_txn", `${toText(current.itemCode)}-${txnId}`, `${toText(current.type)} ${Number(current.qty) || 0}`);
       await writeDb(db);
-      sendJson(res, 200, { ok: true });
+      sendJson(res, 200, {
+        ok: true,
+        telegramDeleted: telegramDeleteReport.ok,
+        telegramDeleteCount: telegramDeleteReport.successCount,
+      });
       return;
     }
 
