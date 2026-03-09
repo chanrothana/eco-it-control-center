@@ -1343,6 +1343,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Walkie Talkie", itemKm: "វិទ្យុទាក់ទង", code: "WTK" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
+    { itemEn: "Piano", itemKm: "ព្យាណូ", code: "PNO" },
   ],
 };
 
@@ -19309,6 +19310,7 @@ export default function App() {
     if (code === "RPN" || name.includes("rear panel")) return icon(Puzzle);
     if (code === "TBL" || name.includes("table")) return icon(Building2);
     if (code === "CHR" || name.includes("chair")) return icon(Building2);
+    if (code === "PNO" || name.includes("piano")) return icon(Building2);
 
     if (isSafety) return icon(Shield);
     if (isFacility) return icon(Building2);

@@ -182,7 +182,7 @@ const TYPE_CODES = {
     "FGP",
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "WDP", "WTK", "FPN", "RPN", "TBL", "CHR"],
+  FACILITY: ["AC", "WDP", "WTK", "FPN", "RPN", "TBL", "CHR", "PNO"],
 };
 const TYPE_LABELS = {
   PC: "Computer",
@@ -222,6 +222,7 @@ const TYPE_LABELS = {
   RPN: "Rear Panel",
   TBL: "Table",
   CHR: "Chair",
+  PNO: "Piano",
 };
 const CATEGORY_CODE = {
   IT: "COM",
