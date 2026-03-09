@@ -18248,6 +18248,24 @@ export default function App() {
       </div>
     );
   }
+  function renderMaintenanceSinglePreview(
+    entry: {
+      photo?: string;
+      photos?: string[];
+      beforePhotos?: string[];
+      afterPhotos?: string[];
+    },
+    altPrefix = "maintenance-single"
+  ) {
+    const normalized = normalizeMaintenanceEntryPhotos(entry);
+    const photo = normalized.afterPhotos[0] || normalized.beforePhotos[0] || normalized.photo || "";
+    if (!photo) return null;
+    return (
+      <div className="public-asset-history-photo-single">
+        {renderAssetPhoto(photo, altPrefix)}
+      </div>
+    );
+  }
   const maintenanceCompletionText = useCallback(
     (completionRaw: string) => {
       const isDone = String(completionRaw || "").trim().toLowerCase() === "done";
@@ -21696,15 +21714,13 @@ export default function App() {
                                 <div className="public-asset-history-list">
                                   {publicMaintenanceHistory.map((entry) => (
                                     <article className="public-asset-history-card" key={`public-maint-${entry.id}`}>
-                                      <div className="public-asset-history-head">
-                                        <div className="public-asset-history-title">{entry.type || "Maintenance"}</div>
-                                        <div className="public-asset-history-head-side">
-                                          <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
-                                          <div className="public-asset-history-photo-groups">
-                                            {renderMaintenancePhotoGroups(entry, `public-maint-${entry.id}`)}
+                                        <div className="public-asset-history-head">
+                                          <div className="public-asset-history-title">{entry.type || "Maintenance"}</div>
+                                          <div className="public-asset-history-head-side">
+                                            <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
+                                            {renderMaintenanceSinglePreview(entry, `public-maint-${entry.id}`)}
                                           </div>
                                         </div>
-                                      </div>
                                       <div className="public-asset-history-grid">
                                         {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(entry.completion || "-"))}
                                         {renderPublicHistoryMeta("Condition", entry.condition || "-")}
@@ -32837,60 +32853,121 @@ export default function App() {
             )}
 
             {reportType === "set_code" && (
-              <div className="table-wrap report-table-wrap" ref={setCodeReportTableWrapRef}>
-                <table>
-                  <colgroup>
-                    {SET_CODE_REPORT_COLUMN_KEYS.map((key, index) => (
-                      <col key={`set-code-col-${key}`} style={{ width: `${setCodeReportColumnWidths[index]}%` }} />
-                    ))}
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>{t.setCode}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(0, e.clientX)} /></th>
-                      <th>{t.photo}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(1, e.clientX)} /></th>
-                      <th>Main Set ({t.assetId})<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(2, e.clientX)} /></th>
-                      <th>Main Item<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(3, e.clientX)} /></th>
-                      <th>{lang === "km" ? "អ្នកប្រើមេ" : "Main Assigned Staff"}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(4, e.clientX)} /></th>
-                      <th>{t.campus}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(5, e.clientX)} /></th>
-                      <th>Total Items<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(6, e.clientX)} /></th>
-                      <th>Connected Items</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <>
+                {isPhoneView ? (
+                  <div className="report-mobile-only report-card-list">
                     {setCodeReportRows.length ? (
                       setCodeReportRows.map((row) => (
-                        <tr key={`report-set-code-${row.key}`}>
-                          <td><strong>{row.setCode}</strong></td>
-                          <td>{renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}</td>
-                          <td>{row.mainAssetId}</td>
-                          <td>{row.mainItem}</td>
-                          <td>{row.mainAssignedTo || "-"}</td>
-                          <td>{reportCampusName(row.campus)}</td>
-                          <td>{row.totalItems}</td>
-                          <td>
+                        <article key={`report-set-code-mobile-${row.key}`} className="report-card report-set-card">
+                          <div className="report-set-card-top">
+                            <div className="report-set-card-title">
+                              <strong className="report-card-id">{row.setCode}</strong>
+                              <div className="tiny report-card-sub">{reportCampusName(row.campus)}</div>
+                            </div>
+                            <div className="report-set-card-count">
+                              <span>{lang === "km" ? "សរុប" : "Total"}</span>
+                              <strong>{row.totalItems}</strong>
+                            </div>
+                          </div>
+                          <div className="report-set-main-card">
+                            <div className="report-set-main-photo">
+                              {renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}
+                            </div>
+                            <div className="report-set-main-info">
+                              <strong>{row.mainAssetId}</strong>
+                              <span>{row.mainItem}</span>
+                              <small>
+                                {lang === "km" ? "អ្នកប្រើមេ" : "Main Assigned Staff"}: {row.mainAssignedTo || "-"}
+                              </small>
+                            </div>
+                          </div>
+                          <div className="report-set-connected-block">
+                            <div className="report-set-connected-head">
+                              <strong>{lang === "km" ? "ឧបករណ៍ភ្ជាប់" : "Connected Items"}</strong>
+                              <span>{row.connectedItems.length}</span>
+                            </div>
                             {row.connectedItems.length ? (
-                              <div className="set-code-connected-list">
+                              <div className="report-set-connected-mobile-list">
                                 {row.connectedItems.map((item) => (
-                                  <div key={`${row.key}-${item.assetId}`} className="set-code-connected-item">
-                                    {renderAssetPhoto(item.photo || "", item.assetId)}
-                                    <span>{item.assetId} ({item.itemName}) - {item.assignedTo || "-"}</span>
+                                  <div key={`${row.key}-${item.assetId}`} className="report-set-connected-mobile-item">
+                                    <div className="report-set-connected-mobile-photo">
+                                      {renderAssetPhoto(item.photo || "", item.assetId)}
+                                    </div>
+                                    <div className="report-set-connected-mobile-info">
+                                      <strong>{item.assetId}</strong>
+                                      <span>{item.itemName}</span>
+                                      <small>{lang === "km" ? "អ្នកប្រើ" : "Assigned"}: {item.assignedTo || "-"}</small>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
                             ) : (
-                              "-"
+                              <div className="panel-note">{lang === "km" ? "មិនមានឧបករណ៍ភ្ជាប់ទេ។" : "No connected items."}</div>
                             )}
-                          </td>
-                        </tr>
+                          </div>
+                        </article>
                       ))
                     ) : (
-                      <tr>
-                        <td colSpan={8}>No set code records found.</td>
-                      </tr>
+                      <div className="panel-note">No set code records found.</div>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                ) : (
+                  <div className="table-wrap report-table-wrap report-desktop-only" ref={setCodeReportTableWrapRef}>
+                    <table>
+                      <colgroup>
+                        {SET_CODE_REPORT_COLUMN_KEYS.map((key, index) => (
+                          <col key={`set-code-col-${key}`} style={{ width: `${setCodeReportColumnWidths[index]}%` }} />
+                        ))}
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th>{t.setCode}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(0, e.clientX)} /></th>
+                          <th>{t.photo}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(1, e.clientX)} /></th>
+                          <th>Main Set ({t.assetId})<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(2, e.clientX)} /></th>
+                          <th>Main Item<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(3, e.clientX)} /></th>
+                          <th>{lang === "km" ? "អ្នកប្រើមេ" : "Main Assigned Staff"}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(4, e.clientX)} /></th>
+                          <th>{t.campus}<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(5, e.clientX)} /></th>
+                          <th>Total Items<span className="column-resizer" onMouseDown={(e) => startSetCodeReportColumnResize(6, e.clientX)} /></th>
+                          <th>Connected Items</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {setCodeReportRows.length ? (
+                          setCodeReportRows.map((row) => (
+                            <tr key={`report-set-code-${row.key}`}>
+                              <td><strong>{row.setCode}</strong></td>
+                              <td>{renderAssetPhoto(row.mainPhoto || "", row.mainAssetId)}</td>
+                              <td>{row.mainAssetId}</td>
+                              <td>{row.mainItem}</td>
+                              <td>{row.mainAssignedTo || "-"}</td>
+                              <td>{reportCampusName(row.campus)}</td>
+                              <td>{row.totalItems}</td>
+                              <td>
+                                {row.connectedItems.length ? (
+                                  <div className="set-code-connected-list">
+                                    {row.connectedItems.map((item) => (
+                                      <div key={`${row.key}-${item.assetId}`} className="set-code-connected-item">
+                                        {renderAssetPhoto(item.photo || "", item.assetId)}
+                                        <span>{item.assetId} ({item.itemName}) - {item.assignedTo || "-"}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  "-"
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8}>No set code records found.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
 
             {reportType === "overdue" && (
@@ -32927,38 +33004,77 @@ export default function App() {
             )}
 
             {reportType === "asset_by_location" && (
-              <div className="table-wrap report-table-wrap">
-                <table className="report-asset-by-location-table">
-                  <thead>
-                    <tr>
-                      <th>{t.campus}</th>
-                      <th>{t.location}</th>
-                      <th>Total Units</th>
-                      <th>IT Units</th>
-                      <th>Safety Units</th>
-                      <th className="report-item-breakdown-head">Item Breakdown</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <>
+                {isPhoneView ? (
+                  <div className="report-mobile-only report-card-list">
                     {filteredLocationAssetSummaryRows.length ? (
                       filteredLocationAssetSummaryRows.map((row) => (
-                        <tr key={`report-loc-${row.campus}-${row.location}`}>
-                          <td>{reportCampusName(row.campus)}</td>
-                          <td>{row.location}</td>
-                          <td><strong>{row.total}</strong></td>
-                          <td>{row.it}</td>
-                          <td>{row.safety}</td>
-                          <td className="report-item-breakdown-cell">{row.itemSummary || "-"}</td>
-                        </tr>
+                        <article key={`report-loc-mobile-${row.campus}-${row.location}`} className="report-card report-location-card">
+                          <div className="report-location-card-head">
+                            <div className="report-location-card-title">
+                              <strong>{row.location}</strong>
+                              <span>{reportCampusName(row.campus)}</span>
+                            </div>
+                            <div className="report-location-card-total">
+                              <span>{lang === "km" ? "សរុប" : "Total"}</span>
+                              <strong>{row.total}</strong>
+                            </div>
+                          </div>
+                          <div className="report-location-card-stats">
+                            <div>
+                              <span>IT</span>
+                              <strong>{row.it}</strong>
+                            </div>
+                            <div>
+                              <span>Safety</span>
+                              <strong>{row.safety}</strong>
+                            </div>
+                          </div>
+                          <div className="report-location-card-breakdown">
+                            <small>{lang === "km" ? "បំបែកតាមមុខទំនិញ" : "Item Breakdown"}</small>
+                            <p>{row.itemSummary || "-"}</p>
+                          </div>
+                        </article>
                       ))
                     ) : (
-                      <tr>
-                        <td colSpan={6}>No assets by location yet.</td>
-                      </tr>
+                      <div className="panel-note">No assets by location yet.</div>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                ) : (
+                  <div className="table-wrap report-table-wrap report-desktop-only">
+                    <table className="report-asset-by-location-table">
+                      <thead>
+                        <tr>
+                          <th>{t.campus}</th>
+                          <th>{t.location}</th>
+                          <th>Total Units</th>
+                          <th>IT Units</th>
+                          <th>Safety Units</th>
+                          <th className="report-item-breakdown-head">Item Breakdown</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredLocationAssetSummaryRows.length ? (
+                          filteredLocationAssetSummaryRows.map((row) => (
+                            <tr key={`report-loc-${row.campus}-${row.location}`}>
+                              <td>{reportCampusName(row.campus)}</td>
+                              <td>{row.location}</td>
+                              <td><strong>{row.total}</strong></td>
+                              <td>{row.it}</td>
+                              <td>{row.safety}</td>
+                              <td className="report-item-breakdown-cell">{row.itemSummary || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6}>No assets by location yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
 
             {reportType === "transfer" && (
