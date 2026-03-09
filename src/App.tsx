@@ -20812,6 +20812,7 @@ export default function App() {
         photo: "",
       });
       setPublicQrRequestFileKey((k) => k + 1);
+      setPublicQrSectionsOpen((prev) => ({ ...prev, request: false }));
       setPublicQrRecordMessage("Work order created. The maintenance team can now follow up this asset.");
     } catch (err) {
       setPublicQrRecordError(err instanceof Error ? err.message : "Failed to create work order");
@@ -20866,6 +20867,7 @@ export default function App() {
         photo: "",
       });
       setPublicQrRecordFileKey((k) => k + 1);
+      setPublicQrSectionsOpen((prev) => ({ ...prev, maintenance: false }));
       setPublicQrRecordMessage("Maintenance record saved.");
     } catch (err) {
       setPublicQrRecordError(err instanceof Error ? err.message : "Failed to save maintenance record");
@@ -21226,7 +21228,7 @@ export default function App() {
                             </label>
                             <div className="field field-wide">
                               <button
-                                className="tab"
+                                className="btn-primary"
                                 type="button"
                                 disabled={publicQrRecordBusy || !publicQrRecordForm.date || !publicQrRecordForm.note.trim()}
                                 onClick={() => void addMaintenanceRecordFromPublicQr(asset)}
