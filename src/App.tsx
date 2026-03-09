@@ -93,6 +93,11 @@ type MaintenanceEntry = {
   by?: string;
   photo?: string;
   photos?: string[];
+  ticketId?: number;
+  ticketNo?: string;
+  requestSource?: string;
+  requestedBy?: string;
+  requestTitle?: string;
 };
 type VerificationEntry = {
   id: number;
@@ -9554,6 +9559,31 @@ export default function App() {
     }
   }, [authUser]);
 
+  const loadTicketSync = useCallback(async () => {
+    if (!authUser) return;
+    try {
+      const params = new URLSearchParams();
+      if (campusFilter !== "ALL") params.set("campus", campusFilter);
+      const [ticketRes, statsRes] = await Promise.all([
+        requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
+        requestJson<{ stats: DashboardStats }>(`/api/dashboard?${params.toString()}`),
+      ]);
+      setTickets(normalizeArray<Ticket>(ticketRes.tickets));
+      if (statsRes.stats) {
+        setStats(statsRes.stats);
+      }
+    } catch (err) {
+      if (
+        isApiUnavailableError(err) ||
+        isMissingRouteError(err) ||
+        isUnauthorizedError(err)
+      ) {
+        return;
+      }
+      console.warn("Failed to sync work orders", err);
+    }
+  }, [authUser, campusFilter]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -9790,6 +9820,26 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleFocus);
     };
   }, [authUser, tab, loadInventorySync]);
+
+  useEffect(() => {
+    if (!authUser || (tab !== "tickets" && tab !== "dashboard")) return;
+
+    void loadTicketSync();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void loadTicketSync();
+    }, 4000);
+    const handleFocus = () => {
+      void loadTicketSync();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [authUser, tab, loadTicketSync]);
 
   useEffect(() => {
     if (tab === "setup" && isAdmin) {
@@ -20625,6 +20675,7 @@ export default function App() {
           requestedBy: publicQrRequestForm.requestedBy.trim(),
           requesterContact: publicQrRequestForm.requesterContact.trim(),
           priority: publicQrRequestForm.priority,
+          requestSource: "qr_asset",
           photo: publicQrRequestForm.photo || "",
         }),
       });
@@ -20710,6 +20761,10 @@ export default function App() {
 
   function renderPublicHistoryEmpty(message: string) {
     return <div className="public-asset-history-empty">{message}</div>;
+  }
+
+  function formatTicketRequestSource(value?: string) {
+    return String(value || "").trim().toLowerCase() === "qr_asset" ? "QR Asset Scan" : "Manual";
   }
 
   function renderPublicQrGroup(
@@ -21174,6 +21229,9 @@ export default function App() {
                                         {renderPublicHistoryMeta("Condition", entry.condition || "-")}
                                         {renderPublicHistoryMeta("By", entry.by || "-")}
                                         {renderPublicHistoryMeta("Cost", entry.cost || "-")}
+                                        {entry.ticketNo ? renderPublicHistoryMeta("Work Order", entry.ticketNo) : null}
+                                        {entry.requestSource ? renderPublicHistoryMeta("Request Source", formatTicketRequestSource(entry.requestSource)) : null}
+                                        {entry.requestedBy ? renderPublicHistoryMeta("Requested By", entry.requestedBy) : null}
                                       </div>
                                       <div className="public-asset-history-note">
                                         <span className="public-asset-history-label">Note</span>
@@ -26174,6 +26232,7 @@ export default function App() {
                       <th>{t.category}</th>
                       <th>{t.titleLabel}</th>
                       <th>{t.priority}</th>
+                      <th>Source</th>
                       <th>Assign To</th>
                       <th>{t.status}</th>
                       <th>{t.requestedBy}</th>
@@ -26194,6 +26253,7 @@ export default function App() {
                             {ticket.assetId ? <div className="tiny">{t.asset}: {ticket.assetId}</div> : null}
                           </td>
                           <td>{(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}</td>
+                          <td>{formatTicketRequestSource(ticket.requestSource)}</td>
                           <td>
                             <select
                               className="status-select"
@@ -26250,7 +26310,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={11}>{t.noWorkOrders}</td>
+                        <td colSpan={12}>{t.noWorkOrders}</td>
                       </tr>
                     )}
                   </tbody>
@@ -26268,7 +26328,7 @@ export default function App() {
                 <button className="tab" onClick={closeTicketMaintenanceModal}>Close</button>
               </div>
               <div className="tiny" style={{ marginBottom: 12 }}>
-                Asset: <strong>{ticketMaintenanceModal.assetId || "-"}</strong> | Request: {ticketMaintenanceModal.title}
+                Asset: <strong>{ticketMaintenanceModal.assetId || "-"}</strong> | Request: {ticketMaintenanceModal.title} | Source: {formatTicketRequestSource(ticketMaintenanceModal.requestSource)}
               </div>
               <div className="form-grid">
                 <label className="field">
