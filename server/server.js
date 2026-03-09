@@ -5512,11 +5512,11 @@ const server = http.createServer(async (req, res) => {
         by,
         photo: photos[0] || photo,
         photos: photos.slice(0, 5),
-        ticketId: Number(ticket.id) || 0,
-        ticketNo: ticket.ticketNo || "",
-        requestSource: toText(ticket.requestSource) || "manual",
-        requestedBy: ticket.requestedBy || "",
-        requestTitle: ticket.title || "",
+        ticketId: 0,
+        ticketNo: "",
+        requestSource: "manual",
+        requestedBy: "",
+        requestTitle: "",
       };
       db.assets[idx].maintenanceHistory = Array.isArray(db.assets[idx].maintenanceHistory)
         ? [entry, ...db.assets[idx].maintenanceHistory]

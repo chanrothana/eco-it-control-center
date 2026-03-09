@@ -29032,39 +29032,62 @@ export default function App() {
                   {isPhoneView ? (
                     cleaningSupplyMonthlyItemCampusRows.rows.length ? (
                       <div className="inventory-campus-item-cards">
-                        {cleaningSupplyMonthlyItemCampusRows.rows.map((row) => (
-                          <article key={`item-campus-card-${row.itemCode}`} className="inventory-campus-item-card">
-                            <div className="inventory-campus-item-card-head">
-                              <div>
-                                <strong>{row.itemCode}</strong>
-                                <div>{inventoryDisplayName(row.itemName, lang)}</div>
+                        {cleaningSupplyMonthlyItemCampusRows.rows.map((row) => {
+                          const activeCampuses = cleaningSupplyMonthlyItemCampusRows.campuses
+                            .map((campus) => ({
+                              campus,
+                              qty: Number(row.campusQty[campus] || 0),
+                            }))
+                            .filter((entry) => entry.qty > 0);
+                          const hiddenCampusCount =
+                            cleaningSupplyMonthlyItemCampusRows.campuses.length - activeCampuses.length;
+                          return (
+                            <article key={`item-campus-card-${row.itemCode}`} className="inventory-campus-item-card inventory-campus-item-card-phone">
+                              <div className="inventory-campus-item-card-head">
+                                <div className="inventory-campus-item-head-main">
+                                  <span className="inventory-campus-item-code">{row.itemCode}</span>
+                                  <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                </div>
+                                <div className="inventory-campus-item-total-wrap">
+                                  <small>{lang === "km" ? "សរុប" : "Total"}</small>
+                                  <span className="inventory-campus-item-total">{row.total}</span>
+                                </div>
                               </div>
-                              <span className="inventory-campus-item-total">{row.total}</span>
-                            </div>
-                            <div className="inventory-campus-item-campus-list">
-                              {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => {
-                                const qty = Number(row.campusQty[campus] || 0);
-                                const percent = qty > 0
-                                  ? Math.max(8, Math.round((qty / cleaningSupplyMonthlyItemCampusRows.max) * 100))
-                                  : 0;
-                                return (
-                                  <div key={`item-campus-card-row-${row.itemCode}-${campus}`} className="inventory-campus-item-campus-row">
-                                    <div className="inventory-campus-item-campus-meta">
-                                      <span>{inventoryCampusLabel(campus)}</span>
-                                      <strong>{qty}</strong>
-                                    </div>
-                                    <div className="inventory-supply-mini-track">
-                                      <div
-                                        className="inventory-supply-mini-fill"
-                                        style={{ width: `${percent}%`, opacity: qty > 0 ? 1 : 0.25 }}
-                                      />
-                                    </div>
+                              <div className="inventory-campus-item-campus-list">
+                                {activeCampuses.length ? (
+                                  activeCampuses.map(({ campus, qty }) => {
+                                    const percent = Math.max(
+                                      8,
+                                      Math.round((qty / cleaningSupplyMonthlyItemCampusRows.max) * 100)
+                                    );
+                                    return (
+                                      <div key={`item-campus-card-row-${row.itemCode}-${campus}`} className="inventory-campus-item-campus-row inventory-campus-item-campus-row-phone">
+                                        <div className="inventory-campus-item-campus-meta">
+                                          <span>{inventoryCampusLabel(campus)}</span>
+                                          <strong>{qty}</strong>
+                                        </div>
+                                        <div className="inventory-supply-mini-track">
+                                          <div className="inventory-supply-mini-fill" style={{ width: `${percent}%` }} />
+                                        </div>
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="inventory-campus-item-empty">
+                                    {lang === "km" ? "មិនមានការប្រើប្រាស់ក្នុងខែនេះ" : "No campus usage this month."}
                                   </div>
-                                );
-                              })}
-                            </div>
-                          </article>
-                        ))}
+                                )}
+                              </div>
+                              {hiddenCampusCount > 0 ? (
+                                <div className="inventory-campus-item-footnote">
+                                  {lang === "km"
+                                    ? `មាន ${hiddenCampusCount} សាខាផ្សេងទៀតមិនមានការប្រើប្រាស់`
+                                    : `${hiddenCampusCount} other campuses have no usage`}
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="tiny">No cleaning-supply usage in this month.</p>
