@@ -4,6 +4,7 @@ const fsSync = require("fs");
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const zlib = require("zlib");
 const { URL } = require("url");
 
 function loadServerEnvFile() {
@@ -88,6 +89,9 @@ const DB_PATH = resolveStoragePath(process.env.DB_PATH, "db.json");
 const SQLITE_PATH = resolveStoragePath(process.env.SQLITE_PATH, "data.sqlite");
 const UPLOADS_DIR = resolveStoragePath(process.env.UPLOADS_DIR, "uploads");
 const BACKUPS_DIR = resolveStoragePath(process.env.BACKUPS_DIR, "backups");
+const DB_MIRROR_PATH = process.env.DB_MIRROR_PATH ? resolveStoragePath(process.env.DB_MIRROR_PATH, "db-mirror.json") : "";
+const BACKUP_MIRROR_DIR = process.env.BACKUP_MIRROR_DIR ? resolveStoragePath(process.env.BACKUP_MIRROR_DIR, "backup-mirror") : "";
+const BACKUP_COMPRESS = String(process.env.BACKUP_COMPRESS || "true").toLowerCase() !== "false";
 const AUTO_BACKUP_ENABLED = String(process.env.AUTO_BACKUP_ENABLED || "true").toLowerCase() !== "false";
 const AUTO_BACKUP_INTERVAL_HOURS = Math.max(1, Number(process.env.AUTO_BACKUP_INTERVAL_HOURS || 24));
 const AUTO_BACKUP_INTERVAL_MS = AUTO_BACKUP_INTERVAL_HOURS * 60 * 60 * 1000;
@@ -738,14 +742,14 @@ async function writeDb(db) {
     normalized.users = [...DEFAULT_USERS];
   }
   if (!HAS_NATIVE_SQLITE) {
-    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-    await fs.writeFile(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
+    await writeJsonAtomic(DB_PATH, normalized);
+    await mirrorDbSnapshot(normalized);
     return;
   }
   replaceSqliteDataSync(normalized);
   try {
-    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-    await fs.writeFile(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
+    await writeJsonAtomic(DB_PATH, normalized);
+    await mirrorDbSnapshot(normalized);
   } catch (err) {
     console.warn("Could not mirror SQLite to JSON:", err instanceof Error ? err.message : err);
   }
@@ -758,10 +762,24 @@ async function ensureBackupsDir() {
 async function createBackupSnapshot(requestedByUser = null, summary = "Server backup file created") {
   const db = await readDb();
   await ensureBackupsDir();
+  await ensureOptionalBackupMirrorDir();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const name = `backup-${stamp}.json`;
   const filePath = path.join(BACKUPS_DIR, name);
-  await fs.writeFile(filePath, JSON.stringify(normalizeImportedDb(db), null, 2));
+  const normalizedDb = normalizeImportedDb(db);
+  const jsonText = JSON.stringify(normalizedDb, null, 2);
+  const jsonBuffer = Buffer.from(jsonText, "utf8");
+  await writeBufferAtomic(filePath, jsonBuffer);
+  if (BACKUP_COMPRESS) {
+    const gzBuffer = zlib.gzipSync(jsonBuffer, { level: 9 });
+    await writeBufferAtomic(`${filePath}.gz`, gzBuffer);
+    if (BACKUP_MIRROR_DIR) {
+      await writeBufferAtomic(path.join(BACKUP_MIRROR_DIR, `${name}.gz`), gzBuffer);
+    }
+  }
+  if (BACKUP_MIRROR_DIR) {
+    await writeBufferAtomic(path.join(BACKUP_MIRROR_DIR, name), jsonBuffer);
+  }
   appendAuditLog(db, requestedByUser, "BACKUP_CREATE", "backup", name, summary);
   await writeDb(db);
   return name;
@@ -774,8 +792,24 @@ async function pruneOldBackups() {
   await Promise.all(
     entries.map(async (entry) => {
       if (!entry.isFile()) return;
-      if (!entry.name.startsWith("backup-") || !entry.name.endsWith(".json")) return;
+      if (!entry.name.startsWith("backup-")) return;
+      if (!entry.name.endsWith(".json") && !entry.name.endsWith(".json.gz")) return;
       const fullPath = path.join(BACKUPS_DIR, entry.name);
+      const stat = await fs.stat(fullPath).catch(() => null);
+      if (!stat) return;
+      if (now - stat.mtimeMs > AUTO_BACKUP_RETENTION_MS) {
+        await fs.rm(fullPath, { force: true });
+      }
+    })
+  );
+  if (!BACKUP_MIRROR_DIR) return;
+  const mirrorEntries = await fs.readdir(BACKUP_MIRROR_DIR, { withFileTypes: true }).catch(() => []);
+  await Promise.all(
+    mirrorEntries.map(async (entry) => {
+      if (!entry.isFile()) return;
+      if (!entry.name.startsWith("backup-")) return;
+      if (!entry.name.endsWith(".json") && !entry.name.endsWith(".json.gz")) return;
+      const fullPath = path.join(BACKUP_MIRROR_DIR, entry.name);
       const stat = await fs.stat(fullPath).catch(() => null);
       if (!stat) return;
       if (now - stat.mtimeMs > AUTO_BACKUP_RETENTION_MS) {
@@ -822,6 +856,41 @@ function normalizeMaintenanceReminderOffsets(input) {
     )
   ).sort((a, b) => b - a);
   return cleaned.length ? cleaned : [7, 6, 5, 4, 3, 2, 1, 0];
+}
+
+function isPathInside(parentPath, childPath) {
+  const parent = path.resolve(parentPath);
+  const child = path.resolve(childPath);
+  return child === parent || child.startsWith(parent + path.sep);
+}
+
+async function writeBufferAtomic(filePath, content) {
+  const dirPath = path.dirname(filePath);
+  await fs.mkdir(dirPath, { recursive: true });
+  const tempPath = path.join(
+    dirPath,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString("hex")}.tmp`
+  );
+  await fs.writeFile(tempPath, content);
+  await fs.rename(tempPath, filePath);
+}
+
+async function writeJsonAtomic(filePath, value) {
+  await writeBufferAtomic(filePath, JSON.stringify(value, null, 2));
+}
+
+async function mirrorDbSnapshot(normalizedDb) {
+  if (!DB_MIRROR_PATH) return;
+  try {
+    await writeJsonAtomic(DB_MIRROR_PATH, normalizedDb);
+  } catch (err) {
+    console.warn("Could not write DB mirror:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function ensureOptionalBackupMirrorDir() {
+  if (!BACKUP_MIRROR_DIR) return;
+  await fs.mkdir(BACKUP_MIRROR_DIR, { recursive: true });
 }
 
 function normalizeInventoryItems(input) {
@@ -5756,15 +5825,34 @@ async function startServer() {
 
   server.listen(PORT, HOST, () => {
     const bindHost = HOST === "0.0.0.0" ? "localhost" : HOST;
+    const appRoot = path.join(__dirname, "..");
+    const usingRepoStorage =
+      isPathInside(appRoot, DB_PATH) ||
+      isPathInside(appRoot, SQLITE_PATH) ||
+      isPathInside(appRoot, UPLOADS_DIR) ||
+      isPathInside(appRoot, BACKUPS_DIR);
     console.log(`API running at http://${bindHost}:${PORT}`);
     console.log(`Storage paths: DATA_ROOT=${DATA_ROOT} SQLITE_PATH=${SQLITE_PATH} DB_PATH=${DB_PATH}`);
     console.log(`Uploads=${UPLOADS_DIR} Backups=${BACKUPS_DIR}`);
+    if (DB_MIRROR_PATH) {
+      console.log(`DB mirror=${DB_MIRROR_PATH}`);
+    }
+    if (BACKUP_MIRROR_DIR) {
+      console.log(`Backup mirror=${BACKUP_MIRROR_DIR} (${BACKUP_COMPRESS ? "json + gzip" : "json"})`);
+    }
     if (AUTO_BACKUP_ENABLED) {
       console.log(
         `Auto backup enabled: every ${AUTO_BACKUP_INTERVAL_HOURS}h, retention ${AUTO_BACKUP_RETENTION_DAYS} days`
       );
     } else {
       console.log("Auto backup disabled");
+    }
+    if (usingRepoStorage) {
+      console.warn("[STORAGE] Active data paths are still inside the app directory.");
+      console.warn("[STORAGE] Safer production setup: set DATA_ROOT to a persistent disk and BACKUP_MIRROR_DIR to a second location.");
+    }
+    if (IS_PROD && !BACKUP_MIRROR_DIR) {
+      console.warn("[STORAGE] BACKUP_MIRROR_DIR is not configured. Backups currently exist only in the primary storage path.");
     }
   });
 }
