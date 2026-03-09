@@ -127,6 +127,11 @@ let telegramLastSendReport = {
   errors: [],
 };
 let telegramLastDiscoveredChats = [];
+const PUBLIC_APP_URL = String(
+  process.env.PUBLIC_APP_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  ""
+).trim().replace(/\/+$/, "");
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const INDEX_FILE = path.join(BUILD_DIR, "index.html");
 const CAMPUS_MAP = {
@@ -1763,22 +1768,17 @@ function purgeNotificationsForAsset(db, assetDbId) {
   return db.notifications.length !== before;
 }
 
-function sendTelegramMessageToChat(chatId, text) {
+function sendTelegramRequest(method, payload) {
   return new Promise((resolve) => {
-    if (!toText(chatId) || !toText(text)) return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
-    const payload = JSON.stringify({
-      chat_id: toText(chatId),
-      text: toText(text),
-      disable_web_page_preview: true,
-    });
+    const bodyText = JSON.stringify(payload || {});
     const req = https.request(
       {
         hostname: "api.telegram.org",
-        path: `/bot${encodeURIComponent(TELEGRAM_BOT_TOKEN)}/sendMessage`,
+        path: `/bot${encodeURIComponent(TELEGRAM_BOT_TOKEN)}/${method}`,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload),
+          "Content-Length": Buffer.byteLength(bodyText),
         },
         timeout: 5000,
       },
@@ -1790,7 +1790,6 @@ function sendTelegramMessageToChat(chatId, text) {
         res.on("end", () =>
           resolve({
             ok: Boolean(res.statusCode >= 200 && res.statusCode < 300),
-            chatId: toText(chatId),
             statusCode: Number(res.statusCode || 0),
             body: String(body || ""),
           })
@@ -1800,7 +1799,6 @@ function sendTelegramMessageToChat(chatId, text) {
     req.on("error", (err) =>
       resolve({
         ok: false,
-        chatId: toText(chatId),
         statusCode: 0,
         body: err instanceof Error ? err.message : String(err || ""),
       })
@@ -1809,13 +1807,38 @@ function sendTelegramMessageToChat(chatId, text) {
       req.destroy();
       resolve({
         ok: false,
-        chatId: toText(chatId),
         statusCode: 0,
         body: "request timeout",
       });
     });
-    req.write(payload);
+    req.write(bodyText);
     req.end();
+  });
+}
+
+function sendTelegramMessageToChat(chatId, text, photoUrl = "") {
+  return new Promise((resolve) => {
+    if (!toText(chatId) || !toText(text)) return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
+    const method = toText(photoUrl) ? "sendPhoto" : "sendMessage";
+    const payload = toText(photoUrl)
+      ? {
+          chat_id: toText(chatId),
+          photo: toText(photoUrl),
+          caption: toText(text).slice(0, 1024),
+        }
+      : {
+          chat_id: toText(chatId),
+          text: toText(text),
+          disable_web_page_preview: true,
+        };
+    sendTelegramRequest(method, payload).then((result) => {
+      resolve({
+        ok: Boolean(result && result.ok),
+        chatId: toText(chatId),
+        statusCode: Number(result && result.statusCode) || 0,
+        body: toText(result && result.body),
+      });
+    });
   });
 }
 
@@ -1840,11 +1863,11 @@ function waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
-async function sendTelegramMessageToChatWithRetry(chatId, text, attempts = 3) {
+async function sendTelegramMessageToChatWithRetry(chatId, text, photoUrl = "", attempts = 3) {
   let last = { ok: false, chatId: toText(chatId), statusCode: 0, body: "" };
   for (let i = 0; i < attempts; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    last = await sendTelegramMessageToChat(chatId, text);
+    last = await sendTelegramMessageToChat(chatId, text, photoUrl);
     if (last.ok) return last;
     if (!shouldRetryTelegramResult(last) || i === attempts - 1) return last;
     // eslint-disable-next-line no-await-in-loop
@@ -1866,6 +1889,10 @@ async function sendTelegramMessage(text, options = {}) {
     return false;
   }
   const db = options && typeof options === "object" ? options.db : null;
+  const photoUrl =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoUrl")
+      ? toText(options.photoUrl)
+      : "";
   const explicitChatIds =
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
@@ -1879,7 +1906,7 @@ async function sendTelegramMessage(text, options = {}) {
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
-    results.push(await sendTelegramMessageToChatWithRetry(chatId, text));
+    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl));
   }
   let successCount = results.filter((row) => row.ok).length;
   if (!successCount && TELEGRAM_DISCOVER_CHAT_IDS) {
@@ -1896,7 +1923,7 @@ async function sendTelegramMessage(text, options = {}) {
     for (const chatId of retryTargets) {
       if (results.some((row) => row.ok && row.chatId === chatId)) continue;
       // eslint-disable-next-line no-await-in-loop
-      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, 2));
+      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2));
     }
     successCount = results.filter((row) => row.ok).length;
   }
@@ -1917,6 +1944,27 @@ async function sendTelegramMessage(text, options = {}) {
     );
   }
   return successCount > 0;
+}
+
+function resolveTelegramPhotoUrl(photoPath) {
+  const raw = toText(photoPath);
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (!raw.startsWith("/uploads/")) return "";
+  if (!PUBLIC_APP_URL) return "";
+  return `${PUBLIC_APP_URL}${raw}`;
+}
+
+function resolveInventoryItemPhotoForTelegram(db, txn) {
+  const txnPhotoUrl = resolveTelegramPhotoUrl(toText(txn && txn.photo));
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const items = normalizeInventoryItems(settings.inventoryItems);
+  const item = items.find((row) => Number(row.id) === Number(txn && txn.itemId));
+  const itemPhotoUrl = resolveTelegramPhotoUrl(toText(item && item.photo));
+  return itemPhotoUrl || txnPhotoUrl || "";
 }
 
 function discoverTelegramChatIds() {
@@ -2021,7 +2069,10 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], 
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendTelegramMessage(lines.join("\n"), { db });
+  return sendTelegramMessage(lines.join("\n"), {
+    db,
+    photoUrl: resolveInventoryItemPhotoForTelegram(db, txn),
+  });
 }
 
 async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
@@ -2047,7 +2098,10 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendTelegramMessage(lines.join("\n"), { db });
+  return sendTelegramMessage(lines.join("\n"), {
+    db,
+    photoUrl: resolveInventoryItemPhotoForTelegram(db, txn),
+  });
 }
 
 initStorageSync();
