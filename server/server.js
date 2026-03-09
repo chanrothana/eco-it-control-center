@@ -141,6 +141,13 @@ const CAMPUS_MAP = {
   C3: "Boeung Snor Campus",
   C4: "Veng Sreng Campus",
 };
+const CAMPUS_KHMER_MAP = {
+  "Samdach Pan Campus": "សាខាសម្ដេចប៉ាន",
+  "Chaktomuk Campus": "សាខាចតុមុខ",
+  "Chaktomuk Campus (C2.2)": "សាខាចតុមុខ (C2.2)",
+  "Boeung Snor Campus": "សាខាបឹងស្នោរ",
+  "Veng Sreng Campus": "សាខាវេងស្រេង",
+};
 const CAMPUS_NAMES = Object.values(CAMPUS_MAP);
 const TYPE_CODES = {
   IT: [
@@ -1967,6 +1974,17 @@ function resolveInventoryItemPhotoForTelegram(db, txn) {
   return itemPhotoUrl || txnPhotoUrl || "";
 }
 
+function formatTelegramCampusKhmer(campus) {
+  const label = toText(campus);
+  return CAMPUS_KHMER_MAP[label] || label || "-";
+}
+
+function formatInventoryOutTelegramStatus(status) {
+  const normalized = toUpper(status);
+  if (normalized === "APPROVED") return "អាចដកចេញបាន";
+  return toText(status) || "-";
+}
+
 function discoverTelegramChatIds() {
   return new Promise((resolve) => {
     if (!TELEGRAM_BOT_TOKEN) return resolve([]);
@@ -2081,14 +2099,14 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   const itemCode = toText(txn.itemCode) || "-";
   const itemName = toText(txn.itemName) || "Item";
   const qty = Number(txn.qty || 0);
-  const campus = toText(txn.campus) || "-";
+  const campus = formatTelegramCampusKhmer(txn.campus);
   const date = toText(txn.date) || "-";
   const recordedBy = toText(txn.by) || toText(txn.approvalRequestedBy) || "staff";
-  const status = toUpper(txn.approvalStatus) || "APPROVED";
+  const status = formatInventoryOutTelegramStatus(txn.approvalStatus || "APPROVED");
   const reason = toText(txn.note);
   const lines = [
     "ជូនដំណឹង ECO IT - ស្តុក",
-    "បានកត់ត្រាចេញស្តុក",
+    "ចេញសម្ភារៈ (Item Out)",
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `បរិមាណ: ${qty} | សាខា: ${campus}`,
     `កាលបរិច្ឆេទ: ${date}`,
