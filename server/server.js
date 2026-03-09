@@ -875,6 +875,7 @@ function normalizeInventoryTxns(input) {
       approvalDecisionBy: toText(row.approvalDecisionBy),
       approvalDecisionAt: toText(row.approvalDecisionAt),
       approvalDecisionNote: toText(row.approvalDecisionNote),
+      telegramMessageRefs: normalizeTelegramMessageRefs(row.telegramMessageRefs),
     }));
 }
 
