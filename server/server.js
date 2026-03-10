@@ -2875,35 +2875,10 @@ function normalizeCompletion(value) {
   return "Not Yet";
 }
 
-function isReplacementDone(typeValue, completionValue) {
-  const type = toText(typeValue).trim().toLowerCase();
-  const completion = normalizeCompletion(completionValue);
-  if (completion !== "Done") return false;
-  return type === "replacement" || type === "replacment";
-}
-
 function syncAssetStatusFromMaintenance(asset) {
   if (!asset || typeof asset !== "object") return false;
-  const maintenanceHistory = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
-  const latestReplacement = maintenanceHistory.find((entry) =>
-    isReplacementDone(entry?.type, entry?.completion)
-  );
-  if (!latestReplacement) return false;
-  const currentStatus = toText(asset.status) || "Active";
-  if (currentStatus === "Retired") return false;
-  asset.status = "Retired";
-  const statusEntry = {
-    id: Date.now() + Math.floor(Math.random() * 1000),
-    date: new Date().toISOString(),
-    fromStatus: currentStatus,
-    toStatus: "Retired",
-    reason: `Auto defective after replacement maintenance on ${toText(latestReplacement?.date) || "unknown date"}`,
-    by: toText(latestReplacement?.by),
-  };
-  asset.statusHistory = Array.isArray(asset.statusHistory)
-    ? [statusEntry, ...asset.statusHistory]
-    : [statusEntry];
-  return true;
+  // Replacement of a part should not automatically retire/defective the whole asset.
+  return false;
 }
 
 function cascadeChildAssetAssignment(db, parentAsset, nextAssignedTo, options = {}) {

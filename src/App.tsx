@@ -3953,35 +3953,12 @@ function normalizeAssetForUi(asset: Asset): Asset {
     return resolveApiResourceUrl(text);
   };
   const normalizedPhotos = photos.map(normalizeUrl).filter(Boolean);
-  const isReplacementDone = (typeRaw: string, completionRaw: string) => {
-    const type = String(typeRaw || "").trim().toLowerCase();
-    const completion = String(completionRaw || "").trim().toLowerCase();
-    return (type === "replacement" || type === "replacment") && completion === "done";
-  };
-  const hasReplacementDone = Array.isArray(asset.maintenanceHistory)
-    ? asset.maintenanceHistory.some((entry) => isReplacementDone(entry?.type || "", entry?.completion || ""))
-    : false;
   const normalizedMaintenanceHistory = Array.isArray(asset.maintenanceHistory)
     ? asset.maintenanceHistory.map((entry) => ({
         ...entry,
         ...normalizeMaintenanceEntryPhotos(entry || {}),
       }))
     : [];
-  const currentStatus = String(asset.status || "Active");
-  const shouldAutoRetire = hasReplacementDone && currentStatus !== "Retired";
-  const nextStatusHistory = shouldAutoRetire
-    ? [
-        {
-          id: Date.now() + Math.floor(Math.random() * 1000),
-          date: new Date().toISOString(),
-          fromStatus: currentStatus || "Active",
-          toStatus: "Retired",
-          reason: "Auto corrected in UI: replacement maintenance is marked Done",
-          by: "System",
-        },
-        ...(Array.isArray(asset.statusHistory) ? asset.statusHistory : []),
-      ]
-    : asset.statusHistory;
   const custodyHistory = Array.isArray(asset.custodyHistory) ? asset.custodyHistory : [];
   const custodyStatus =
     asset.custodyStatus === "ASSIGNED" || asset.custodyStatus === "IN_STOCK"
@@ -3994,8 +3971,8 @@ function normalizeAssetForUi(asset: Asset): Asset {
     photos: normalizedPhotos,
     photo: normalizeUrl(normalizedPhotos[0] || ""),
     maintenanceHistory: normalizedMaintenanceHistory,
-    status: shouldAutoRetire ? "Retired" : asset.status,
-    statusHistory: nextStatusHistory,
+    status: asset.status,
+    statusHistory: asset.statusHistory,
     custodyHistory,
     custodyStatus,
   };
@@ -16256,15 +16233,6 @@ export default function App() {
       photo: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || [])[0] || "",
       photos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
     };
-    const sourceAsset = assets.find((a) => a.id === assetId) || null;
-    const maintenanceType = entry.type.trim().toLowerCase();
-    const shouldAutoRetire =
-      entry.completion === "Done" &&
-      (maintenanceType === "replacement" || maintenanceType === "replacment");
-    const shouldApplyRetireStatus =
-      shouldAutoRetire && (sourceAsset?.status || "Active") !== "Retired";
-    const retireReason = `Auto defective after replacement maintenance on ${entry.date}`;
-
     setBusy(true);
     setError("");
     try {
@@ -16288,29 +16256,12 @@ export default function App() {
             nextRepeatWeekday = 0;
           }
         }
-        const statusHistory = Array.isArray(asset.statusHistory) ? asset.statusHistory : [];
-        const nextStatusHistory =
-          shouldApplyRetireStatus && asset.status !== "Retired"
-            ? [
-                {
-                  id: Date.now() + 1,
-                  date: new Date().toISOString(),
-                  fromStatus: asset.status || "Active",
-                  toStatus: "Retired",
-                  reason: retireReason,
-                },
-                ...statusHistory,
-              ]
-            : statusHistory;
-
         return {
           ...asset,
           nextMaintenanceDate,
           repeatMode: nextRepeatMode,
           repeatWeekOfMonth: nextRepeatWeekOfMonth,
           repeatWeekday: nextRepeatWeekday,
-          status: shouldApplyRetireStatus ? "Retired" : asset.status,
-          statusHistory: nextStatusHistory,
           maintenanceHistory: [entry, ...(asset.maintenanceHistory || [])],
         };
       });
@@ -16329,23 +16280,9 @@ export default function App() {
               repeatMode: savedAsset.repeatMode || "NONE",
               repeatWeekOfMonth: Number(savedAsset.repeatWeekOfMonth || 0),
               repeatWeekday: Number(savedAsset.repeatWeekday || 0),
-              status: shouldApplyRetireStatus ? "Retired" : savedAsset.status || "Active",
+              status: savedAsset.status || "Active",
             }),
           });
-          if (shouldApplyRetireStatus) {
-            try {
-              await requestJson<{ asset: Asset }>(`/api/assets/${assetId}/status`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  status: "Retired",
-                  fromStatus: sourceAsset?.status || "Active",
-                  reason: retireReason,
-                }),
-              });
-            } catch {
-              // Status is already set via /api/assets PATCH above; keep flow successful.
-            }
-          }
         }
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
@@ -16355,9 +16292,6 @@ export default function App() {
       setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
-      if (shouldApplyRetireStatus) {
-        appendUiAudit("UPDATE_STATUS", "asset", String(assetId), "Defective (auto from replacement)");
-      }
       setMaintenanceRecordForm((f) => ({
         ...f,
         date: "",
@@ -16717,6 +16651,45 @@ export default function App() {
       note: "",
     }));
     setTransferQuickAssetId(asset.id);
+  }
+
+  function openMaintenanceQuickFromDetail(asset: Asset) {
+    openQuickRecordModal(asset);
+    setAssetDetailId(null);
+  }
+
+  function openTransferQuickFromDetail(asset: Asset) {
+    openTransferFromAsset(asset);
+    setAssetDetailId(null);
+  }
+
+  function openMaintenancePageFromDetail(asset: Asset) {
+    openMaintenanceRecordFromScheduleAsset(asset);
+    setAssetDetailId(null);
+  }
+
+  function openTransferPageFromDetail(asset: Asset) {
+    setTab("transfer");
+    setTransferView("record");
+    setTransferFilterCampus("ALL");
+    setTransferFilterLocation("ALL");
+    setTransferFilterCategory("ALL");
+    setTransferFilterName("ALL");
+    setShowTransferAssetPicker(true);
+    setTransferForm((prev) => ({
+      ...prev,
+      assetId: String(asset.id),
+      date: toYmd(new Date()),
+      toCampus: asset.campus,
+      toLocation: asset.location || "",
+      toAssignedTo: asset.assignedTo || "",
+      responsibilityConfirmed: false,
+      returnConfirmed: false,
+      reason: "",
+      by: prev.by || authUser?.displayName || authUser?.username || "",
+      note: "",
+    }));
+    setAssetDetailId(null);
   }
 
   function startMaintenanceEntryEdit(entry: MaintenanceEntry) {
@@ -18634,6 +18607,20 @@ export default function App() {
         ) : null}
       </div>
     );
+  }
+  function renderMaintenancePhotoColumn(
+    entry: {
+      photo?: string;
+      photos?: string[];
+      beforePhotos?: string[];
+      afterPhotos?: string[];
+    },
+    stage: "before" | "after",
+    altPrefix = "maintenance-column"
+  ) {
+    const normalized = normalizeMaintenanceEntryPhotos(entry);
+    const photos = stage === "before" ? normalized.beforePhotos : normalized.afterPhotos;
+    return renderMaintenancePhotoStack({ photos }, `${altPrefix}-${stage}`);
   }
   function renderMaintenanceSinglePreview(
     entry: {
@@ -25972,6 +25959,22 @@ export default function App() {
                     <h2>Asset Detail - {detailAsset.assetId}</h2>
                     <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
                   </div>
+                  {isAdmin ? (
+                    <div className="asset-actions" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+                      <button type="button" className="btn-primary btn-small" onClick={() => openMaintenanceQuickFromDetail(detailAsset)}>
+                        Record Maintenance
+                      </button>
+                      <button type="button" className="btn-primary btn-small" onClick={() => openTransferQuickFromDetail(detailAsset)}>
+                        Record Transfer
+                      </button>
+                      <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
+                        Open Maintenance Page
+                      </button>
+                      <button type="button" className="tab btn-small" onClick={() => openTransferPageFromDetail(detailAsset)}>
+                        Open Transfer Page
+                      </button>
+                    </div>
+                  ) : null}
                   <div className="panel-row" style={{ marginTop: 6 }}>
                     <h3 className="section-title" style={{ margin: 0 }}>Asset Details</h3>
                     <button
@@ -26180,7 +26183,8 @@ export default function App() {
                             <th>Work Status</th>
                             <th>Condition</th>
                             <th>Note</th>
-                            <th>{t.photo}</th>
+                            <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
+                            <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
                             <th>Cost</th>
                             <th>By</th>
                           </tr>
@@ -26194,16 +26198,15 @@ export default function App() {
                                 <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
                                 <td data-label="Condition">{h.condition || "-"}</td>
                                 <td data-label="Noted">{h.note}</td>
-                                <td data-label="Photo">
-                                  {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`)}
-                                </td>
+                                <td data-label="Before">{renderMaintenancePhotoColumn(h, "before", `asset-detail-history-${h.id}`)}</td>
+                                <td data-label="After">{renderMaintenancePhotoColumn(h, "after", `asset-detail-history-${h.id}`)}</td>
                                 <td data-label="Cost">{h.cost || "-"}</td>
                                 <td data-label="By">{h.by || "-"}</td>
                               </tr>
                             ))
                           ) : (
                             <tr className="asset-detail-empty-row">
-                              <td colSpan={8}>No maintenance records yet.</td>
+                              <td colSpan={9}>No maintenance records yet.</td>
                             </tr>
                           )}
                         </tbody>
@@ -27080,7 +27083,8 @@ export default function App() {
                           <th>Work Status</th>
                           <th>Condition</th>
                           <th>Note</th>
-                          <th>{t.photo}</th>
+                          <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
+                          <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
                           <th>Cost</th>
                           <th>By</th>
                         </tr>
@@ -27094,14 +27098,15 @@ export default function App() {
                               <td>{maintenanceCompletionText(h.completion || "-")}</td>
                               <td>{h.condition || "-"}</td>
                               <td>{h.note}</td>
-                              <td>{renderMaintenancePhotoGroups(h, `maintenance-modal-${h.id}`)}</td>
+                              <td>{renderMaintenancePhotoColumn(h, "before", `maintenance-modal-${h.id}`)}</td>
+                              <td>{renderMaintenancePhotoColumn(h, "after", `maintenance-modal-${h.id}`)}</td>
                               <td>{h.cost || "-"}</td>
                               <td>{h.by || "-"}</td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={8}>No maintenance records yet.</td>
+                            <td colSpan={9}>No maintenance records yet.</td>
                           </tr>
                         )}
                       </tbody>
@@ -27111,7 +27116,7 @@ export default function App() {
               </div>
             )}
 
-            {assetsView === "list" && quickRecordAsset && (
+            {quickRecordAsset && (
               <div className="modal-backdrop" onClick={() => setQuickRecordAssetId(null)}>
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
@@ -27276,7 +27281,7 @@ export default function App() {
               </div>
             )}
 
-            {assetsView === "list" && transferQuickAssetId && transferQuickAsset && (
+            {transferQuickAssetId && transferQuickAsset && (
               <div className="modal-backdrop" onClick={() => { setTransferQuickAssetId(null); }}>
                 <section className="panel modal-panel transfer-modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
@@ -32567,7 +32572,8 @@ export default function App() {
                         <th>Work Status</th>
                         <th>Condition</th>
                         <th>Note</th>
-                        <th>{t.photo}</th>
+                        <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
+                        <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
                         <th>Cost</th>
                         <th>By</th>
                         <th>{t.edit}</th>
@@ -32661,34 +32667,38 @@ export default function App() {
                             </td>
                             <td>
                               {maintenanceEditingEntryId === entry.id ? (
-                                <div className="maintenance-edit-photo-fields">
-                                  <div>
-                                    <small>{lang === "km" ? "មុនថែទាំ" : "Before"}</small>
-                                    <input
-                                      key={`${maintenanceEditFileKey}-${entry.id}-before`}
-                                      className="file-input"
-                                      type="file"
-                                      accept="image/*"
-                                      multiple
-                                      onChange={(e) => void onMaintenanceEditPhotoFile(e, "before")}
-                                    />
-                                    <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.beforePhotos || [] }, `maintenance-edit-before-${entry.id}`)}</div>
-                                  </div>
-                                  <div>
-                                    <small>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</small>
-                                    <input
-                                      key={`${maintenanceEditFileKey}-${entry.id}-after`}
-                                      className="file-input"
-                                      type="file"
-                                      accept="image/*"
-                                      multiple
-                                      onChange={(e) => void onMaintenanceEditPhotoFile(e, "after")}
-                                    />
-                                    <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.afterPhotos || [] }, `maintenance-edit-after-${entry.id}`)}</div>
-                                  </div>
+                                <div>
+                                  <small>{lang === "km" ? "មុនថែទាំ" : "Before"}</small>
+                                  <input
+                                    key={`${maintenanceEditFileKey}-${entry.id}-before`}
+                                    className="file-input"
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => void onMaintenanceEditPhotoFile(e, "before")}
+                                  />
+                                  <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.beforePhotos || [] }, `maintenance-edit-before-${entry.id}`)}</div>
                                 </div>
                               ) : (
-                                renderMaintenancePhotoGroups(entry, `maintenance-detail-${entry.id}`)
+                                renderMaintenancePhotoColumn(entry, "before", `maintenance-detail-${entry.id}`)
+                              )}
+                            </td>
+                            <td>
+                              {maintenanceEditingEntryId === entry.id ? (
+                                <div>
+                                  <small>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</small>
+                                  <input
+                                    key={`${maintenanceEditFileKey}-${entry.id}-after`}
+                                    className="file-input"
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => void onMaintenanceEditPhotoFile(e, "after")}
+                                  />
+                                  <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.afterPhotos || [] }, `maintenance-edit-after-${entry.id}`)}</div>
+                                </div>
+                              ) : (
+                                renderMaintenancePhotoColumn(entry, "after", `maintenance-detail-${entry.id}`)
                               )}
                             </td>
                             <td>
