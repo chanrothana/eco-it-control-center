@@ -5087,7 +5087,7 @@ const server = http.createServer(async (req, res) => {
       const receivedBy = toText(body.receivedBy ?? current.receivedBy);
       const txnSource = toUpper(body.txnSource ?? current.txnSource) || "GENERAL";
       const referenceAssetId = toText(body.referenceAssetId ?? current.referenceAssetId);
-      const referenceAssetDbId = Number(body.referenceAssetDbId ?? current.referenceAssetDbId || 0);
+      const referenceAssetDbId = Number(body.referenceAssetDbId ?? current.referenceAssetDbId ?? 0);
       const supplier = toText(body.supplier ?? current.supplier);
       const invoiceNo = toText(body.invoiceNo ?? current.invoiceNo);
       const unitCost = Math.max(0, Number(body.unitCost ?? current.unitCost ?? 0));
