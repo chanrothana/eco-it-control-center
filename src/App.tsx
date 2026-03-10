@@ -31584,50 +31584,52 @@ export default function App() {
             <div className="form-grid">
               <label className="field">
                 <span>{t.campus}</span>
-                <select
-                  className="input"
+                <LocationPicker
                   value={bulkScheduleForm.campus}
-                  onChange={(e) => setBulkScheduleForm((f) => ({ ...f, campus: e.target.value }))}
-                >
-                  <option value="ALL">{t.allCampuses}</option>
-                  {campusOptions.map((campus) => (
-                    <option key={`bulk-campus-${campus}`} value={campus}>
-                      {campusLabel(campus)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setBulkScheduleForm((f) => ({ ...f, campus: value }))}
+                  options={[
+                    { value: "ALL", label: t.allCampuses },
+                    ...campusOptions.map((campus) => ({
+                      value: campus,
+                      label: campusLabel(campus),
+                    })),
+                  ]}
+                  placeholder={t.allCampuses}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                />
               </label>
               <label className="field">
                 <span>{t.category}</span>
-                <select
-                  className="input"
+                <LocationPicker
                   value={bulkScheduleForm.category}
-                  onChange={(e) => {
-                    const category = e.target.value;
+                  onChange={(value) => {
+                    const category = value;
                     const firstType = (allTypeOptions[category] || [])[0]?.code || "";
                     setBulkScheduleForm((f) => ({ ...f, category, type: firstType }));
                   }}
-                >
-                  {CATEGORY_OPTIONS.map((cat) => (
-                    <option key={`bulk-cat-${cat.value}`} value={cat.value}>
-                      {lang === "km" ? cat.km : cat.en}
-                    </option>
-                  ))}
-                </select>
+                  options={CATEGORY_OPTIONS.map((cat) => ({
+                    value: cat.value,
+                    label: lang === "km" ? cat.km : cat.en,
+                  }))}
+                  placeholder={t.category}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                  emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+                />
               </label>
               <label className="field">
                 <span>Item Type</span>
-                <select
-                  className="input"
+                <AssetTypePicker
                   value={bulkScheduleForm.type}
-                  onChange={(e) => setBulkScheduleForm((f) => ({ ...f, type: e.target.value }))}
-                >
-                  {(allTypeOptions[bulkScheduleForm.category] || []).map((item) => (
-                    <option key={`bulk-type-${bulkScheduleForm.category}-${item.code}`} value={item.code}>
-                      {assetItemName(bulkScheduleForm.category, item.code)} ({item.code})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setBulkScheduleForm((f) => ({ ...f, type: value }))}
+                  options={(allTypeOptions[bulkScheduleForm.category] || []).map((item) => ({
+                    code: item.code,
+                    label: assetItemName(bulkScheduleForm.category, item.code),
+                  }))}
+                  placeholder="Select item type"
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទទំនិញ..." : "Search item type..."}
+                  emptyText={lang === "km" ? "មិនមានប្រភេទទំនិញ" : "No item type found."}
+                />
               </label>
               <label className="field">
                 <span>Next Maintenance Date</span>
