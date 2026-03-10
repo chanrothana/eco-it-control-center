@@ -9247,7 +9247,7 @@ tr.row-maint-maintenance:hover td {
 .public-asset-history-head-side {
   display: grid;
   justify-items: end;
-  gap: 8px;
+  gap: 4px;
 }
 
 .public-asset-history-title {
@@ -9284,7 +9284,6 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-history-photo-groups {
   display: grid;
-  justify-items: end;
   gap: 10px;
 }
 
@@ -9301,7 +9300,7 @@ tr.row-maint-maintenance:hover td {
 }
 
 .public-asset-history-photo-groups .maintenance-photo-group {
-  justify-items: end;
+  justify-items: start;
 }
 
 .public-asset-history-photo-groups .maintenance-photo-group > small {
@@ -9309,7 +9308,7 @@ tr.row-maint-maintenance:hover td {
 }
 
 .public-asset-history-photo-groups .maintenance-photo-stack {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .public-asset-history-photo-groups .maintenance-photo-stack .table-photo,
@@ -9385,6 +9384,13 @@ tr.row-maint-maintenance:hover td {
   line-height: 1.45;
   color: #355182;
   overflow-wrap: anywhere;
+}
+
+.public-asset-history-photo-section {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 2px dashed #c5d5ea;
 }
 
 .public-asset-history-empty {

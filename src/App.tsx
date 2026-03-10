@@ -18585,23 +18585,29 @@ export default function App() {
       beforePhotos?: string[];
       afterPhotos?: string[];
     },
-    altPrefix = "maintenance-group"
+    altPrefix = "maintenance-group",
+    labels?: {
+      before?: string;
+      after?: string;
+    }
   ) {
     const normalized = normalizeMaintenanceEntryPhotos(entry);
     const hasBefore = normalized.beforePhotos.length > 0;
     const hasAfter = normalized.afterPhotos.length > 0;
+    const beforeLabel = labels?.before || (lang === "km" ? "មុនថែទាំ" : "Before");
+    const afterLabel = labels?.after || (lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After");
     if (!hasBefore && !hasAfter) return <span className="photo-empty">{t.noPhoto}</span>;
     return (
       <div className="maintenance-photo-groups">
         {hasBefore ? (
           <div className="maintenance-photo-group">
-            <small>{lang === "km" ? "មុនថែទាំ" : "Before"}</small>
+            <small>{beforeLabel}</small>
             {renderMaintenancePhotoStack({ photos: normalized.beforePhotos }, `${altPrefix}-before`)}
           </div>
         ) : null}
         {hasAfter ? (
           <div className="maintenance-photo-group">
-            <small>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</small>
+            <small>{afterLabel}</small>
             {renderMaintenancePhotoStack({ photos: normalized.afterPhotos }, `${altPrefix}-after`)}
           </div>
         ) : null}
@@ -18621,24 +18627,6 @@ export default function App() {
     const normalized = normalizeMaintenanceEntryPhotos(entry);
     const photos = stage === "before" ? normalized.beforePhotos : normalized.afterPhotos;
     return renderMaintenancePhotoStack({ photos }, `${altPrefix}-${stage}`);
-  }
-  function renderMaintenanceSinglePreview(
-    entry: {
-      photo?: string;
-      photos?: string[];
-      beforePhotos?: string[];
-      afterPhotos?: string[];
-    },
-    altPrefix = "maintenance-single"
-  ) {
-    const normalized = normalizeMaintenanceEntryPhotos(entry);
-    const photo = normalized.afterPhotos[0] || normalized.beforePhotos[0] || normalized.photo || "";
-    if (!photo) return null;
-    return (
-      <div className="public-asset-history-photo-single">
-        {renderAssetPhoto(photo, altPrefix)}
-      </div>
-    );
   }
   const maintenanceCompletionText = useCallback(
     (completionRaw: string) => {
@@ -21719,6 +21707,39 @@ export default function App() {
     return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
   }
 
+  function isMaintenanceLinkedStatusEntry(
+    status: StatusEntry,
+    maintenanceHistory: MaintenanceEntry[]
+  ) {
+    const statusDate = String(status.date || "").slice(0, 10);
+    const statusBy = normalizePublicActivityText(status.by);
+    const statusReason = normalizePublicActivityText(status.reason);
+    if (!statusReason) return false;
+
+    return maintenanceHistory.some((entry) => {
+      const maintenanceDate = String(entry.date || "").slice(0, 10);
+      if (maintenanceDate !== statusDate) return false;
+
+      const maintenanceBy = normalizePublicActivityText(entry.by);
+      if (statusBy && maintenanceBy && statusBy !== maintenanceBy) return false;
+
+      const note = normalizePublicActivityText(entry.note);
+      const condition = normalizePublicActivityText(entry.condition);
+      const type = normalizePublicActivityText(entry.type);
+      const completion = normalizePublicActivityText(entry.completion);
+      const summaryParts = [type, completion, condition, note].filter(Boolean);
+      const summary = summaryParts.join(" ");
+
+      return (
+        statusReason.includes("maintenance") ||
+        summary.includes(statusReason) ||
+        statusReason.includes(summary) ||
+        (note && (statusReason.includes(note) || note.includes(statusReason))) ||
+        (condition && (statusReason.includes(condition) || condition.includes(statusReason)))
+      );
+    });
+  }
+
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
     const showPublicQrSetFields = asset?.category === "IT";
@@ -21761,12 +21782,15 @@ export default function App() {
       };
       const events: PublicActivityEvent[] = [];
       const consumedStatus = new Set<number>();
+      const visibleStatusHistory = publicStatusHistory.filter(
+        (status) => !isMaintenanceLinkedStatusEntry(status, publicMaintenanceHistory)
+      );
 
       for (const custody of publicCustodyHistory) {
         const custodyDate = String(custody.date || "").slice(0, 10);
         const custodyBy = normalizePublicActivityText(custody.by);
         const custodyNote = normalizePublicActivityText(custody.note);
-        const statusMatch = publicStatusHistory.find((status) => {
+        const statusMatch = visibleStatusHistory.find((status) => {
           if (consumedStatus.has(status.id)) return false;
           const statusDate = String(status.date || "").slice(0, 10);
           const statusBy = normalizePublicActivityText(status.by);
@@ -21794,7 +21818,7 @@ export default function App() {
         });
       }
 
-      for (const status of publicStatusHistory) {
+      for (const status of visibleStatusHistory) {
         if (consumedStatus.has(status.id)) continue;
         events.push({
           id: `public-activity-status-${status.id}`,
@@ -22213,7 +22237,6 @@ export default function App() {
                                           <div className="public-asset-history-title">{entry.type || "Maintenance"}</div>
                                           <div className="public-asset-history-head-side">
                                             <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
-                                            {renderMaintenanceSinglePreview(entry, `public-maint-${entry.id}`)}
                                           </div>
                                         </div>
                                       <div className="public-asset-history-grid">
@@ -22228,6 +22251,15 @@ export default function App() {
                                       <div className="public-asset-history-note">
                                         <span className="public-asset-history-label">Note</span>
                                         <p>{entry.note || "-"}</p>
+                                      </div>
+                                      <div className="public-asset-history-photo-section">
+                                        <span className="public-asset-history-label">Photos</span>
+                                        <div className="public-asset-history-photo-groups">
+                                          {renderMaintenancePhotoGroups(entry, `public-maint-${entry.id}`, {
+                                            before: lang === "km" ? "មុនថែទាំ" : "Before Maintenance",
+                                            after: lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After Maintenance",
+                                          })}
+                                        </div>
                                       </div>
                                     </article>
                                   ))}
