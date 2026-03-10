@@ -7969,10 +7969,16 @@ tr.row-maint-maintenance:hover td {
   min-width: 130px;
 }
 
+.maintenance-history-modal-table th:nth-child(4),
+.maintenance-history-modal-table td:nth-child(4) {
+  width: 15%;
+  min-width: 140px;
+}
+
 .maintenance-history-modal-table th:nth-child(5),
 .maintenance-history-modal-table td:nth-child(5) {
-  width: 34%;
-  min-width: 280px;
+  width: 27%;
+  min-width: 320px;
 }
 
 .maintenance-history-modal-table th:nth-child(6),
@@ -7981,11 +7987,17 @@ tr.row-maint-maintenance:hover td {
   min-width: 110px;
 }
 
+.maintenance-history-modal-table th:nth-child(7),
+.maintenance-history-modal-table td:nth-child(7) {
+  width: 110px;
+  min-width: 110px;
+}
+
 .maintenance-history-modal-table td:nth-child(5) {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
 }
 
 .image-preview-panel {

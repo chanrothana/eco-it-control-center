@@ -5647,8 +5647,8 @@ export default function App() {
     direction: "asc",
   });
   const [setCodeReportColumnWidths, setSetCodeReportColumnWidths] = useState<number[]>(DEFAULT_SET_CODE_REPORT_COLUMN_WIDTHS);
-  const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
-  const [qrLocationFilter, setQrLocationFilter] = useState("ALL");
+  const [qrCampusFilter, setQrCampusFilter] = useState<string[]>(["ALL"]);
+  const [qrLocationFilter, setQrLocationFilter] = useState<string[]>(["ALL"]);
   const [qrCategoryFilter, setQrCategoryFilter] = useState<string[]>(["ALL"]);
   const [qrStatusFilter, setQrStatusFilter] = useState<string[]>(["ALL"]);
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
@@ -19969,8 +19969,8 @@ export default function App() {
       return;
     }
     if (reportType === "qr_labels") {
-      setQrCampusFilter("ALL");
-      setQrLocationFilter("ALL");
+      setQrCampusFilter(["ALL"]);
+      setQrLocationFilter(["ALL"]);
       setQrCategoryFilter(["ALL"]);
       setQrStatusFilter(["ALL"]);
       setQrItemFilter(["ALL"]);
@@ -19987,8 +19987,8 @@ export default function App() {
     const ymd = toYmd(today);
     setReportType("asset_master");
     resetAssetMasterReportFilters();
-    setQrCampusFilter("ALL");
-    setQrLocationFilter("ALL");
+    setQrCampusFilter(["ALL"]);
+    setQrLocationFilter(["ALL"]);
     setQrCategoryFilter(["ALL"]);
     setQrStatusFilter(["ALL"]);
     setQrItemFilter(["ALL"]);
@@ -20010,16 +20010,16 @@ export default function App() {
 
   const qrLocationFilterOptions = useMemo(() => {
     const source =
-      qrCampusFilter === "ALL"
+      qrCampusFilter.includes("ALL")
         ? qrLabelRows
-        : qrLabelRows.filter((row) => row.campus === qrCampusFilter);
+        : qrLabelRows.filter((row) => qrCampusFilter.includes(row.campus));
     const options = Array.from(new Set(source.map((row) => String(row.location || "").trim()).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrLabelRows, qrCampusFilter]);
   const qrRowsByCampusLocation = useMemo(() => {
     return qrLabelRows.filter((row) => {
-      if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
-      if (qrLocationFilter !== "ALL" && String(row.location || "").trim() !== qrLocationFilter) return false;
+      if (!qrCampusFilter.includes("ALL") && !qrCampusFilter.includes(row.campus)) return false;
+      if (!qrLocationFilter.includes("ALL") && !qrLocationFilter.includes(String(row.location || "").trim())) return false;
       return true;
     });
   }, [qrLabelRows, qrCampusFilter, qrLocationFilter]);
@@ -20054,10 +20054,15 @@ export default function App() {
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrRowsByCampusLocationCategoryStatus]);
   useEffect(() => {
-    if (qrLocationFilter === "ALL") return;
-    if (!qrLocationFilterOptions.includes(qrLocationFilter)) {
-      setQrLocationFilter("ALL");
-    }
+    setQrLocationFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const next = prev.filter((location) => qrLocationFilterOptions.includes(location));
+      if (!next.length) return ["ALL"];
+      if (next.length === prev.length && next.every((value, index) => value === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
   }, [qrLocationFilter, qrLocationFilterOptions]);
   useEffect(() => {
     setQrCategoryFilter((prev) => {
@@ -20084,7 +20089,12 @@ export default function App() {
   useEffect(() => {
     setQrItemFilter((prev) => {
       if (prev.includes("ALL")) return prev;
-      return prev.filter((item) => qrItemFilterOptions.includes(item));
+      const next = prev.filter((item) => qrItemFilterOptions.includes(item));
+      if (!next.length) return ["ALL"];
+      if (next.length === prev.length && next.every((value, index) => value === prev[index])) {
+        return prev;
+      }
+      return next;
     });
   }, [qrItemFilterOptions]);
   const quickCountCampusFilterOptions = useMemo(
@@ -20805,8 +20815,8 @@ export default function App() {
 
   const qrFilteredRows = useMemo(() => {
     return qrLabelRows.filter((row) => {
-      if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
-      if (qrLocationFilter !== "ALL" && String(row.location || "").trim() !== qrLocationFilter) return false;
+      if (!qrCampusFilter.includes("ALL") && !qrCampusFilter.includes(row.campus)) return false;
+      if (!qrLocationFilter.includes("ALL") && !qrLocationFilter.includes(String(row.location || "").trim())) return false;
       if (!qrCategoryFilter.includes("ALL") && !qrCategoryFilter.includes(row.category)) return false;
       if (!qrStatusFilter.includes("ALL") && !qrStatusFilter.includes(String(row.status || "").trim())) return false;
       if (!qrItemFilter.includes("ALL") && !qrItemFilter.includes(row.itemName)) return false;
@@ -33444,28 +33454,44 @@ export default function App() {
               ) : null}
               {reportType === "qr_labels" ? (
                 <>
-                  <LocationPicker
-                    value={qrCampusFilter}
-                    onChange={setQrCampusFilter}
-                    options={[
-                      { value: "ALL", label: t.allCampuses },
-                      ...campusOptions.map((campus) => ({
-                        value: campus,
-                        label: reportCampusName(campus),
-                      })),
-                    ]}
-                    placeholder={t.allCampuses}
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(qrCampusFilter, t.allCampuses, reportCampusName)}
+                    options={campusOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    selectedValues={qrCampusFilter}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={qrCampusFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setQrCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", campusOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setQrCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, campusOptions)
+                      )
+                    }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
-                  <LocationPicker
-                    value={qrLocationFilter}
-                    onChange={setQrLocationFilter}
-                    options={[
-                      { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
-                      ...qrLocationFilterOptions.map((location) => ({ value: location, label: location })),
-                    ]}
-                    placeholder={lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(qrLocationFilter, lang === "km" ? "គ្រប់ទីតាំង" : "All Locations")}
+                    options={qrLocationFilterOptions.map((location) => ({ value: location, label: location }))}
+                    selectedValues={qrLocationFilter}
+                    allOptionLabel={lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
+                    allOptionChecked={qrLocationFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setQrLocationFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", qrLocationFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setQrLocationFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, qrLocationFilterOptions)
+                      )
+                    }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
                     emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                   />
