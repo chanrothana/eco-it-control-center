@@ -17499,17 +17499,14 @@ export default function App() {
         : [],
     [detailAsset, sortByNewestDate]
   );
-  const detailTvRemoteChildren = useMemo(
+  const detailLinkedComponents = useMemo(
     () =>
-      detailAsset &&
-      detailAsset.category === "IT" &&
-      detailAsset.type === "TV"
+      detailAsset
         ? assets
             .filter(
               (asset) =>
                 asset.assetId !== detailAsset.assetId &&
-                asset.type === REMOTE_TYPE_CODE &&
-                String(asset.parentAssetId || "").trim() === detailAsset.assetId
+                String(asset.parentAssetId || "").trim() === String(detailAsset.assetId || "").trim()
             )
             .sort(
               (a, b) =>
@@ -26108,16 +26105,79 @@ export default function App() {
                     {detailAsset.category === "IT" ? (
                       <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
                     ) : null}
-                    {detailAsset.category === "IT" && detailAsset.type === "TV" ? (
+                    {detailLinkedComponents.length ? (
                       <div className="field field-wide">
-                        <span>Included Remotes</span>
-                        <div className="detail-value">
-                          {detailTvRemoteChildren.length
-                            ? `${detailTvRemoteChildren.length} remote${detailTvRemoteChildren.length > 1 ? "s" : ""}: ${detailTvRemoteChildren
-                                .map((asset) => asset.assetId)
-                                .join(", ")}`
-                            : "No remote linked"}
-                        </div>
+                        <span>{detailAsset.type === "TV" ? "Included Components / Remotes" : "Linked Components"}</span>
+                        {isPhoneView ? (
+                          <div className="public-asset-component-section">
+                            <div className="public-asset-component-list">
+                              {detailLinkedComponents.map((component) => {
+                                const componentPhotos = normalizeAssetPhotos(component);
+                                return (
+                                  <article className="public-asset-component-card" key={`detail-component-phone-${component.id}-${component.assetId}`}>
+                                    <div className="public-asset-component-photo-wrap">
+                                      {componentPhotos[0] ? (
+                                        <img
+                                          loading="lazy"
+                                          decoding="async"
+                                          src={componentPhotos[0]}
+                                          alt={component.assetId || "component"}
+                                          className="public-asset-component-photo"
+                                        />
+                                      ) : (
+                                        <div className="public-asset-component-photo public-asset-component-photo-placeholder">{t.noPhoto}</div>
+                                      )}
+                                    </div>
+                                    <div className="public-asset-component-body">
+                                      <div className="public-asset-component-id">{component.assetId || "-"}</div>
+                                      <div className="public-asset-component-name">
+                                        {assetItemName(component.category, component.type, component.pcType || "")}
+                                      </div>
+                                      <div className="public-asset-component-meta">
+                                        <span><strong>Role:</strong> {component.componentRole || component.type || "-"}</span>
+                                      </div>
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className="asset-detail-component-columns"
+                            style={{
+                              gridTemplateColumns: `repeat(${Math.max(detailLinkedComponents.length, 1)}, minmax(0, 1fr))`,
+                            }}
+                          >
+                            {detailLinkedComponents.map((component) => {
+                              const componentPhotos = normalizeAssetPhotos(component);
+                              return (
+                                <article className="asset-detail-component-column" key={`detail-component-desktop-${component.id}-${component.assetId}`}>
+                                  <div className="asset-detail-component-column-photo-wrap">
+                                    {componentPhotos[0] ? (
+                                      <img
+                                        loading="lazy"
+                                        decoding="async"
+                                        src={componentPhotos[0]}
+                                        alt={component.assetId || "component"}
+                                        className="asset-detail-component-photo"
+                                      />
+                                    ) : (
+                                        <div className="asset-detail-component-photo asset-detail-component-photo-placeholder">{t.noPhoto}</div>
+                                      )}
+                                  </div>
+                                  <div className="asset-detail-component-column-body">
+                                    <div className="asset-detail-component-column-id">{component.assetId || "-"}</div>
+                                    <div className="asset-detail-component-column-item">
+                                      {assetItemName(component.category, component.type, component.pcType || "")}
+                                    </div>
+                                    <div className="asset-detail-component-column-meta"><strong>Role:</strong> {component.componentRole || component.type || "-"}</div>
+                                  </div>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ) : null}
                     <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
