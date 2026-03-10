@@ -1450,8 +1450,6 @@ const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
 const REMOTE_TYPE_CODE = "RMT";
 const WALKIE_CHARGER_TYPE_CODE = "ADP";
-const INACTIVE_TABLET_HOLDING_CAMPUS = "Chaktomuk Campus (C2.2)";
-const INACTIVE_TABLET_HOLDING_LOCATION = "Admin Office 2.2";
 const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
 const SHARED_LOCATION_KEYWORDS = [
   "teacher office",
@@ -9663,21 +9661,8 @@ export default function App() {
   useEffect(() => {
     if (!isInactiveTabletCreate) return;
     setAssetForm((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      if (prev.campus !== INACTIVE_TABLET_HOLDING_CAMPUS) {
-        next.campus = INACTIVE_TABLET_HOLDING_CAMPUS;
-        changed = true;
-      }
-      if (prev.location !== INACTIVE_TABLET_HOLDING_LOCATION) {
-        next.location = INACTIVE_TABLET_HOLDING_LOCATION;
-        changed = true;
-      }
-      if (prev.assignedTo) {
-        next.assignedTo = "";
-        changed = true;
-      }
-      return changed ? next : prev;
+      if (!prev.assignedTo) return prev;
+      return { ...prev, assignedTo: "" };
     });
   }, [isInactiveTabletCreate]);
   useEffect(() => {
@@ -23550,25 +23535,16 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>{t.location}</span>
+                    <LocationPicker
+                      value={assetForm.location}
+                      options={campusLocations.map((loc) => ({ value: loc.name, label: loc.name }))}
+                      placeholder={t.selectLocation}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                      emptyText={lang === "km" ? "រកមិនឃើញទីតាំង។" : "No location found."}
+                      onChange={(value) => setAssetForm((f) => ({ ...f, location: value }))}
+                    />
                     {isInactiveTabletCreate ? (
-                      <input
-                        className="input"
-                        value={assetForm.location}
-                        readOnly
-                        disabled
-                      />
-                    ) : (
-                      <LocationPicker
-                        value={assetForm.location}
-                        options={campusLocations.map((loc) => ({ value: loc.name, label: loc.name }))}
-                        placeholder={t.selectLocation}
-                        searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
-                        emptyText={lang === "km" ? "រកមិនឃើញទីតាំង។" : "No location found."}
-                        onChange={(value) => setAssetForm((f) => ({ ...f, location: value }))}
-                      />
-                    )}
-                    {isInactiveTabletCreate ? (
-                      <div className="tiny">Inactive iPad/Tablet is stored at {INACTIVE_TABLET_HOLDING_LOCATION}.</div>
+                      <div className="tiny">Inactive iPad/Tablet can be stored at any campus and location without assigned user.</div>
                     ) : null}
                   </label>
                   <label className="field">
