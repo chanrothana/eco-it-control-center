@@ -76,9 +76,10 @@ type Asset = {
   nextVerificationDate?: string;
   verificationFrequency?: "NONE" | "MONTHLY" | "TERMLY";
   scheduleNote?: string;
-  repeatMode?: "NONE" | "MONTHLY_WEEKDAY";
+  repeatMode?: "NONE" | "MONTHLY_WEEKDAY" | "EVERY_6_MONTHS" | "EVERY_12_MONTHS" | "WDP_FILTER_CYCLE";
   repeatWeekOfMonth?: number;
   repeatWeekday?: number;
+  repeatCycleStep?: number;
   maintenanceHistory?: MaintenanceEntry[];
   verificationHistory?: VerificationEntry[];
   transferHistory?: TransferEntry[];
@@ -2155,6 +2156,33 @@ function monthlyRepeatLabel(weekOfMonth: number, weekday: number) {
   return `Monthly on the ${ord} ${dayName}`;
 }
 
+function addMonthsToYmd(ymd: string, months: number) {
+  const raw = String(ymd || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "";
+  const [yearText, monthText, dayText] = raw.split("-");
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  const day = Number(dayText);
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) return "";
+  const baseMonthStart = new Date(year, monthIndex, 1);
+  const targetMonthStart = new Date(baseMonthStart.getFullYear(), baseMonthStart.getMonth() + Number(months || 0), 1);
+  const targetMonthLastDay = new Date(targetMonthStart.getFullYear(), targetMonthStart.getMonth() + 1, 0).getDate();
+  const safeDay = Math.max(1, Math.min(day, targetMonthLastDay));
+  return toYmd(new Date(targetMonthStart.getFullYear(), targetMonthStart.getMonth(), safeDay));
+}
+
+function maintenanceRepeatLabel(mode: string, weekOfMonth: number, weekday: number) {
+  if (mode === "MONTHLY_WEEKDAY") return monthlyRepeatLabel(weekOfMonth, weekday);
+  if (mode === "EVERY_6_MONTHS") return "Every 6 months";
+  if (mode === "EVERY_12_MONTHS") return "Every 12 months";
+  if (mode === "WDP_FILTER_CYCLE") return "WDP filter cycle (6 months / full set yearly)";
+  return "Does not repeat";
+}
+
+function getWdpFilterCycleNote(step: number) {
+  return Number(step || 1) === 2 ? "Change all 4 filters" : "Change 2 filters";
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const authToken = localStorage.getItem(AUTH_TOKEN_KEY) || runtimeAuthToken;
   const requestInit: RequestInit = {
@@ -3673,6 +3701,15 @@ function resolveNextScheduleDate(asset: Asset, fromYmd: string) {
     }
     return "";
   }
+  if (asset.repeatMode === "EVERY_6_MONTHS") {
+    return addMonthsToYmd(fromYmd, 6);
+  }
+  if (asset.repeatMode === "EVERY_12_MONTHS") {
+    return addMonthsToYmd(fromYmd, 12);
+  }
+  if (asset.repeatMode === "WDP_FILTER_CYCLE") {
+    return addMonthsToYmd(fromYmd, 6);
+  }
   return asset.nextMaintenanceDate || "";
 }
 
@@ -3690,7 +3727,7 @@ function hasCompletedMaintenanceOnDate(asset: Asset, ymd: string) {
   if (!doneDates.length) return false;
   if (doneDates.some((entryDate) => entryDate === target)) return true;
   // One-time schedule should clear once any done record exists on/after scheduled date.
-  if (asset.repeatMode !== "MONTHLY_WEEKDAY" && doneDates.some((entryDate) => entryDate >= target)) return true;
+  if (asset.repeatMode === "NONE" && doneDates.some((entryDate) => entryDate >= target)) return true;
   return history.some((entry) => {
     const entryDate = normalizeLooseDateToYmd(String(entry?.date || ""));
     if (entryDate !== target) return false;
@@ -6931,9 +6968,10 @@ export default function App() {
     assetId: "",
     date: "",
     note: "",
-    repeatMode: "NONE" as "NONE" | "MONTHLY_WEEKDAY",
+    repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
+    repeatCycleStep: 1,
   });
   const [scheduleDatePickerOpen, setScheduleDatePickerOpen] = useState(false);
   const [scheduleDateMonth, setScheduleDateMonth] = useState(() => {
@@ -6946,9 +6984,10 @@ export default function App() {
     assetId: "",
     date: toYmd(new Date()),
     note: "",
-    repeatMode: "NONE" as "NONE" | "MONTHLY_WEEKDAY",
+    repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
+    repeatCycleStep: 1,
   });
   const [scheduleQuickFilterCampus, setScheduleQuickFilterCampus] = useState("ALL");
   const [scheduleQuickFilterLocation, setScheduleQuickFilterLocation] = useState("ALL");
@@ -6960,9 +6999,10 @@ export default function App() {
     type: "FE",
     date: "",
     note: "",
-    repeatMode: "NONE" as "NONE" | "MONTHLY_WEEKDAY",
+    repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
+    repeatCycleStep: 1,
   });
   const [scheduleScopeModal, setScheduleScopeModal] = useState<null | {
     action: "edit" | "delete";
@@ -16637,13 +16677,13 @@ export default function App() {
       setError("Please select an asset first.");
       return;
     }
-    const normalizedDate =
-      scheduleForm.repeatMode === "NONE" ? normalizeYmdInput(scheduleForm.date) : "";
-    if (scheduleForm.repeatMode === "NONE" && !normalizedDate) {
+    const requiresDate = scheduleForm.repeatMode !== "MONTHLY_WEEKDAY";
+    const normalizedDate = requiresDate ? normalizeYmdInput(scheduleForm.date) : "";
+    if (requiresDate && !normalizedDate) {
       setError("Please select a valid date (YYYY-MM-DD).");
       return;
     }
-    if (scheduleForm.repeatMode === "NONE" && normalizedDate < todayYmd) {
+    if (requiresDate && normalizedDate < todayYmd) {
       setError("Cannot set schedule to a past date.");
       return;
     }
@@ -16652,7 +16692,10 @@ export default function App() {
 
     const payload = {
       nextMaintenanceDate: normalizedDate,
-      scheduleNote: scheduleForm.note.trim(),
+      scheduleNote:
+        scheduleForm.repeatMode === "WDP_FILTER_CYCLE"
+          ? getWdpFilterCycleNote(Number(scheduleForm.repeatCycleStep || 1))
+          : scheduleForm.note.trim(),
       repeatMode: scheduleForm.repeatMode,
       repeatWeekOfMonth:
         scheduleForm.repeatMode === "MONTHLY_WEEKDAY"
@@ -16661,6 +16704,10 @@ export default function App() {
       repeatWeekday:
         scheduleForm.repeatMode === "MONTHLY_WEEKDAY"
           ? Number(scheduleForm.repeatWeekday)
+          : 0,
+      repeatCycleStep:
+        scheduleForm.repeatMode === "WDP_FILTER_CYCLE"
+          ? Number(scheduleForm.repeatCycleStep || 1)
           : 0,
     };
 
@@ -16716,6 +16763,7 @@ export default function App() {
       repeatMode: "NONE",
       repeatWeekOfMonth: computedWeekOfMonth,
       repeatWeekday: computedWeekday,
+      repeatCycleStep: 1,
     });
     setScheduleQuickFilterCampus("ALL");
     setScheduleQuickFilterLocation("ALL");
@@ -16730,13 +16778,13 @@ export default function App() {
       setError("Please select an asset first.");
       return;
     }
-    const normalizedDate =
-      scheduleQuickForm.repeatMode === "NONE" ? normalizeYmdInput(scheduleQuickForm.date) : "";
-    if (scheduleQuickForm.repeatMode === "NONE" && !normalizedDate) {
+    const requiresDate = scheduleQuickForm.repeatMode !== "MONTHLY_WEEKDAY";
+    const normalizedDate = requiresDate ? normalizeYmdInput(scheduleQuickForm.date) : "";
+    if (requiresDate && !normalizedDate) {
       setError("Please select a valid date (YYYY-MM-DD).");
       return;
     }
-    if (scheduleQuickForm.repeatMode === "NONE" && normalizedDate < todayYmd) {
+    if (requiresDate && normalizedDate < todayYmd) {
       setError("Cannot set schedule to a past date.");
       return;
     }
@@ -16745,7 +16793,10 @@ export default function App() {
 
     const payload = {
       nextMaintenanceDate: normalizedDate,
-      scheduleNote: scheduleQuickForm.note.trim(),
+      scheduleNote:
+        scheduleQuickForm.repeatMode === "WDP_FILTER_CYCLE"
+          ? getWdpFilterCycleNote(Number(scheduleQuickForm.repeatCycleStep || 1))
+          : scheduleQuickForm.note.trim(),
       repeatMode: scheduleQuickForm.repeatMode,
       repeatWeekOfMonth:
         scheduleQuickForm.repeatMode === "MONTHLY_WEEKDAY"
@@ -16754,6 +16805,10 @@ export default function App() {
       repeatWeekday:
         scheduleQuickForm.repeatMode === "MONTHLY_WEEKDAY"
           ? Number(scheduleQuickForm.repeatWeekday)
+          : 0,
+      repeatCycleStep:
+        scheduleQuickForm.repeatMode === "WDP_FILTER_CYCLE"
+          ? Number(scheduleQuickForm.repeatCycleStep || 1)
           : 0,
     };
 
@@ -16799,6 +16854,7 @@ export default function App() {
       repeatMode: asset.repeatMode || "NONE",
       repeatWeekOfMonth: Number(asset.repeatWeekOfMonth || 1),
       repeatWeekday: Number(asset.repeatWeekday || 6),
+      repeatCycleStep: Number(asset.repeatCycleStep || 1),
     }));
     setScheduleView("single");
   }
@@ -16813,6 +16869,7 @@ export default function App() {
       repeatMode: "NONE" as const,
       repeatWeekOfMonth: 0,
       repeatWeekday: 0,
+      repeatCycleStep: 0,
     };
 
     setBusy(true);
@@ -16835,7 +16892,7 @@ export default function App() {
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("SCHEDULE_DELETE", "asset", String(assetId), "Schedule removed");
       if (scheduleForm.assetId === String(assetId)) {
-        setScheduleForm((f) => ({ ...f, date: "", note: "", repeatMode: "NONE" }));
+        setScheduleForm((f) => ({ ...f, date: "", note: "", repeatMode: "NONE", repeatCycleStep: 1 }));
       }
       await loadData();
     } catch (err) {
@@ -16849,7 +16906,7 @@ export default function App() {
     if (!requireAdminAction()) return;
     if (!window.confirm(`Delete schedules for all ${assetItemName(category, type)} assets?`)) return;
     const targets = assets.filter((asset) => {
-      const hasSchedule = Boolean(String(asset.nextMaintenanceDate || "").trim()) || asset.repeatMode === "MONTHLY_WEEKDAY";
+      const hasSchedule = Boolean(String(asset.nextMaintenanceDate || "").trim()) || String(asset.repeatMode || "NONE") !== "NONE";
       return hasSchedule && asset.category === category && asset.type === type;
     });
     if (!targets.length) {
@@ -16862,6 +16919,7 @@ export default function App() {
       repeatMode: "NONE" as const,
       repeatWeekOfMonth: 0,
       repeatWeekday: 0,
+      repeatCycleStep: 0,
     };
     setBusy(true);
     setError("");
@@ -16922,11 +16980,12 @@ export default function App() {
         campus: "ALL",
         category: targetAsset.category,
         type: targetAsset.type,
-        date: targetAsset.repeatMode === "NONE" ? (targetAsset.nextMaintenanceDate || "") : "",
+        date: targetAsset.repeatMode === "MONTHLY_WEEKDAY" ? "" : (targetAsset.nextMaintenanceDate || ""),
         note: targetAsset.scheduleNote || "",
         repeatMode: targetAsset.repeatMode || "NONE",
         repeatWeekOfMonth: Number(targetAsset.repeatWeekOfMonth || 1),
         repeatWeekday: Number(targetAsset.repeatWeekday || 6),
+        repeatCycleStep: Number(targetAsset.repeatCycleStep || 1),
       }));
       setScheduleView("bulk");
       return;
@@ -16940,13 +16999,13 @@ export default function App() {
 
   async function saveBulkMaintenanceSchedule() {
     if (!requireAdminAction()) return;
-    const normalizedDate =
-      bulkScheduleForm.repeatMode === "NONE" ? normalizeYmdInput(bulkScheduleForm.date) : "";
-    if (bulkScheduleForm.repeatMode === "NONE" && !normalizedDate) {
+    const requiresDate = bulkScheduleForm.repeatMode !== "MONTHLY_WEEKDAY";
+    const normalizedDate = requiresDate ? normalizeYmdInput(bulkScheduleForm.date) : "";
+    if (requiresDate && !normalizedDate) {
       setError("Please select a valid date (YYYY-MM-DD).");
       return;
     }
-    if (bulkScheduleForm.repeatMode === "NONE" && normalizedDate < todayYmd) {
+    if (requiresDate && normalizedDate < todayYmd) {
       setError("Cannot set schedule to a past date.");
       return;
     }
@@ -16963,7 +17022,10 @@ export default function App() {
 
     const payload = {
       nextMaintenanceDate: normalizedDate,
-      scheduleNote: bulkScheduleForm.note.trim(),
+      scheduleNote:
+        bulkScheduleForm.repeatMode === "WDP_FILTER_CYCLE"
+          ? getWdpFilterCycleNote(Number(bulkScheduleForm.repeatCycleStep || 1))
+          : bulkScheduleForm.note.trim(),
       repeatMode: bulkScheduleForm.repeatMode,
       repeatWeekOfMonth:
         bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY"
@@ -16972,6 +17034,10 @@ export default function App() {
       repeatWeekday:
         bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY"
           ? Number(bulkScheduleForm.repeatWeekday)
+          : 0,
+      repeatCycleStep:
+        bulkScheduleForm.repeatMode === "WDP_FILTER_CYCLE"
+          ? Number(bulkScheduleForm.repeatCycleStep || 1)
           : 0,
     };
 
@@ -17103,25 +17169,41 @@ export default function App() {
         let nextRepeatMode = asset.repeatMode || "NONE";
         let nextRepeatWeekOfMonth = Number(asset.repeatWeekOfMonth || 0);
         let nextRepeatWeekday = Number(asset.repeatWeekday || 0);
+        let nextRepeatCycleStep = Number(asset.repeatCycleStep || 1);
+        let nextScheduleNote = asset.scheduleNote || "";
         if (entry.completion === "Done") {
           if (asset.repeatMode === "MONTHLY_WEEKDAY") {
             const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
             const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
             nextMaintenanceDate = resolveNextScheduleDate(asset, shiftYmd(doneRef, 1));
+          } else if (asset.repeatMode === "EVERY_6_MONTHS" || asset.repeatMode === "EVERY_12_MONTHS") {
+            const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
+            const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
+            nextMaintenanceDate = resolveNextScheduleDate(asset, doneRef);
+          } else if (asset.repeatMode === "WDP_FILTER_CYCLE") {
+            const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
+            const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
+            nextMaintenanceDate = resolveNextScheduleDate(asset, doneRef);
+            nextRepeatCycleStep = Number(asset.repeatCycleStep || 1) === 2 ? 1 : 2;
+            nextScheduleNote = getWdpFilterCycleNote(nextRepeatCycleStep);
           } else {
             // For one-time schedules, a Done record always clears the pending schedule.
             nextMaintenanceDate = "";
             nextRepeatMode = "NONE";
             nextRepeatWeekOfMonth = 0;
             nextRepeatWeekday = 0;
+            nextRepeatCycleStep = 0;
+            nextScheduleNote = "";
           }
         }
         return {
           ...asset,
           nextMaintenanceDate,
+          scheduleNote: nextScheduleNote,
           repeatMode: nextRepeatMode,
           repeatWeekOfMonth: nextRepeatWeekOfMonth,
           repeatWeekday: nextRepeatWeekday,
+          repeatCycleStep: nextRepeatCycleStep,
           maintenanceHistory: [entry, ...(asset.maintenanceHistory || [])],
         };
       });
@@ -17137,9 +17219,11 @@ export default function App() {
             method: "PATCH",
             body: JSON.stringify({
               nextMaintenanceDate: savedAsset.nextMaintenanceDate || "",
+              scheduleNote: savedAsset.scheduleNote || "",
               repeatMode: savedAsset.repeatMode || "NONE",
               repeatWeekOfMonth: Number(savedAsset.repeatWeekOfMonth || 0),
               repeatWeekday: Number(savedAsset.repeatWeekday || 0),
+              repeatCycleStep: Number(savedAsset.repeatCycleStep || 0),
               status: savedAsset.status || "Active",
             }),
           });
@@ -19662,6 +19746,14 @@ export default function App() {
     if (scheduleForm.repeatMode !== "MONTHLY_WEEKDAY") return;
     setScheduleDatePickerOpen(false);
   }, [scheduleForm.repeatMode]);
+  const selectedScheduleAsset = useMemo(
+    () => assets.find((asset) => String(asset.id) === String(scheduleForm.assetId || "")) || null,
+    [assets, scheduleForm.assetId]
+  );
+  const selectedQuickScheduleAsset = useMemo(
+    () => assets.find((asset) => String(asset.id) === String(scheduleQuickForm.assetId || "")) || null,
+    [assets, scheduleQuickForm.assetId]
+  );
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     // Prefer current in-memory/server assets, use fallback only to fill missing fields.
@@ -31529,7 +31621,9 @@ export default function App() {
                   onChange={(e) =>
                     setBulkScheduleForm((f) => ({
                       ...f,
-                      repeatMode: e.target.value as "NONE" | "MONTHLY_WEEKDAY",
+                      repeatMode: e.target.value as NonNullable<Asset["repeatMode"]>,
+                      repeatCycleStep: e.target.value === "WDP_FILTER_CYCLE" ? 1 : 0,
+                      note: e.target.value === "WDP_FILTER_CYCLE" ? getWdpFilterCycleNote(1) : f.note,
                     }))
                   }
                 >
@@ -31537,6 +31631,11 @@ export default function App() {
                   <option value="MONTHLY_WEEKDAY">
                     {monthlyRepeatLabel(bulkScheduleForm.repeatWeekOfMonth, bulkScheduleForm.repeatWeekday)}
                   </option>
+                  <option value="EVERY_6_MONTHS">Every 6 months</option>
+                  <option value="EVERY_12_MONTHS">Every 12 months</option>
+                  {bulkScheduleForm.type === "WDP" ? (
+                    <option value="WDP_FILTER_CYCLE">WDP filter cycle (2 filters / all 4 filters)</option>
+                  ) : null}
                 </select>
               </label>
               <label className="field">
@@ -31579,8 +31678,13 @@ export default function App() {
                 <span>Schedule Note</span>
                 <input
                   className="input"
-                  value={bulkScheduleForm.note}
+                  value={
+                    bulkScheduleForm.repeatMode === "WDP_FILTER_CYCLE"
+                      ? getWdpFilterCycleNote(Number(bulkScheduleForm.repeatCycleStep || 1))
+                      : bulkScheduleForm.note
+                  }
                   onChange={(e) => setBulkScheduleForm((f) => ({ ...f, note: e.target.value }))}
+                  disabled={bulkScheduleForm.repeatMode === "WDP_FILTER_CYCLE"}
                   placeholder="Example: FE monthly same-day by campus"
                 />
               </label>
@@ -31701,14 +31805,21 @@ export default function App() {
                   onChange={(e) =>
                     setScheduleForm((f) => ({
                       ...f,
-                      repeatMode: e.target.value as "NONE" | "MONTHLY_WEEKDAY",
+                      repeatMode: e.target.value as NonNullable<Asset["repeatMode"]>,
+                      repeatCycleStep: e.target.value === "WDP_FILTER_CYCLE" ? 1 : f.repeatCycleStep,
+                      note: e.target.value === "WDP_FILTER_CYCLE" ? getWdpFilterCycleNote(1) : f.note,
                     }))
                   }
                 >
-                  <option value="NONE">No repeat (one date)</option>
+                    <option value="NONE">No repeat (one date)</option>
                   <option value="MONTHLY_WEEKDAY">
                     {monthlyRepeatLabel(scheduleForm.repeatWeekOfMonth, scheduleForm.repeatWeekday)}
                   </option>
+                  <option value="EVERY_6_MONTHS">Every 6 months</option>
+                  <option value="EVERY_12_MONTHS">Every 12 months</option>
+                  {selectedScheduleAsset?.type === "WDP" ? (
+                    <option value="WDP_FILTER_CYCLE">WDP filter cycle (2 filters / all 4 filters)</option>
+                  ) : null}
                 </select>
               </label>
               <label className="field">
@@ -31751,8 +31862,13 @@ export default function App() {
                 <span>Schedule Note</span>
                 <input
                   className="input"
-                  value={scheduleForm.note}
+                  value={
+                    scheduleForm.repeatMode === "WDP_FILTER_CYCLE"
+                      ? getWdpFilterCycleNote(Number(scheduleForm.repeatCycleStep || 1))
+                      : scheduleForm.note
+                  }
                   onChange={(e) => setScheduleForm((f) => ({ ...f, note: e.target.value }))}
+                  disabled={scheduleForm.repeatMode === "WDP_FILTER_CYCLE"}
                   placeholder="Example: Monthly preventive maintenance"
                 />
               </label>
@@ -31959,9 +32075,11 @@ export default function App() {
                           <div>{campusLabel(asset.campus)} | {asset.location || "-"}</div>
                           <div>
                             {lang === "km" ? "របៀប" : "Mode"}:{" "}
-                            {asset.repeatMode === "MONTHLY_WEEKDAY"
-                              ? monthlyRepeatLabel(Number(asset.repeatWeekOfMonth || 1), Number(asset.repeatWeekday || 6))
-                              : "Does not repeat"}
+                            {maintenanceRepeatLabel(
+                              String(asset.repeatMode || "NONE"),
+                              Number(asset.repeatWeekOfMonth || 1),
+                              Number(asset.repeatWeekday || 6)
+                            )}
                           </div>
                           <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
                         </div>
@@ -32015,9 +32133,11 @@ export default function App() {
                             <td>{asset.location || "-"}</td>
                             <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
                             <td>
-                              {asset.repeatMode === "MONTHLY_WEEKDAY"
-                                ? monthlyRepeatLabel(Number(asset.repeatWeekOfMonth || 1), Number(asset.repeatWeekday || 6))
-                                : "Does not repeat"}
+                              {maintenanceRepeatLabel(
+                                String(asset.repeatMode || "NONE"),
+                                Number(asset.repeatWeekOfMonth || 1),
+                                Number(asset.repeatWeekday || 6)
+                              )}
                             </td>
                             <td>{asset.scheduleNote || "-"}</td>
                             <td>
@@ -38016,14 +38136,21 @@ export default function App() {
                     onChange={(e) =>
                       setScheduleQuickForm((f) => ({
                         ...f,
-                        repeatMode: e.target.value as "NONE" | "MONTHLY_WEEKDAY",
+                        repeatMode: e.target.value as NonNullable<Asset["repeatMode"]>,
+                        repeatCycleStep: e.target.value === "WDP_FILTER_CYCLE" ? 1 : f.repeatCycleStep,
+                        note: e.target.value === "WDP_FILTER_CYCLE" ? getWdpFilterCycleNote(1) : f.note,
                       }))
                     }
                   >
                     <option value="NONE">Does not repeat</option>
-                    <option value="MONTHLY_WEEKDAY">
+                  <option value="MONTHLY_WEEKDAY">
                       {monthlyRepeatLabel(scheduleQuickForm.repeatWeekOfMonth, scheduleQuickForm.repeatWeekday)}
-                    </option>
+                  </option>
+                    <option value="EVERY_6_MONTHS">Every 6 months</option>
+                    <option value="EVERY_12_MONTHS">Every 12 months</option>
+                    {selectedQuickScheduleAsset?.type === "WDP" ? (
+                      <option value="WDP_FILTER_CYCLE">WDP filter cycle (2 filters / all 4 filters)</option>
+                    ) : null}
                   </select>
                 </label>
                 <label className="field">
@@ -38066,8 +38193,13 @@ export default function App() {
                   <span>{t.scheduleNote}</span>
                   <input
                     className="input"
-                    value={scheduleQuickForm.note}
+                    value={
+                      scheduleQuickForm.repeatMode === "WDP_FILTER_CYCLE"
+                        ? getWdpFilterCycleNote(Number(scheduleQuickForm.repeatCycleStep || 1))
+                        : scheduleQuickForm.note
+                    }
                     onChange={(e) => setScheduleQuickForm((f) => ({ ...f, note: e.target.value }))}
+                    disabled={scheduleQuickForm.repeatMode === "WDP_FILTER_CYCLE"}
                     placeholder="Example: Monthly preventive maintenance"
                   />
                 </label>

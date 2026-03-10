@@ -1744,7 +1744,7 @@ function hasCompletedMaintenanceOnDateServer(asset, ymd) {
     .filter(Boolean);
   if (!doneDates.length) return false;
   if (doneDates.some((entryDate) => entryDate === target)) return true;
-  if (toUpper(asset && asset.repeatMode) !== "MONTHLY_WEEKDAY" && doneDates.some((entryDate) => entryDate >= target)) {
+  if (toUpper(asset && asset.repeatMode) === "NONE" && doneDates.some((entryDate) => entryDate >= target)) {
     return true;
   }
   return history.some((entry) => {
@@ -3303,6 +3303,7 @@ function validateAsset(body) {
   const repeatMode = toUpper(body.repeatMode) || "NONE";
   const repeatWeekOfMonth = Number(body.repeatWeekOfMonth || 0);
   const repeatWeekday = Number(body.repeatWeekday || 0);
+  const repeatCycleStep = Number(body.repeatCycleStep || 0);
   const photo = toText(body.photo);
   const photos = Array.isArray(body.photos) ? body.photos : [];
   const status = toText(body.status) || "Active";
@@ -3330,8 +3331,8 @@ function validateAsset(body) {
   if (requiresUser && !sharedLocation && !assignedTo) {
     return `User is required for type ${type}`;
   }
-  if (!["NONE", "MONTHLY_WEEKDAY"].includes(repeatMode)) {
-    return "repeatMode must be NONE or MONTHLY_WEEKDAY";
+  if (!["NONE", "MONTHLY_WEEKDAY", "EVERY_6_MONTHS", "EVERY_12_MONTHS", "WDP_FILTER_CYCLE"].includes(repeatMode)) {
+    return "repeatMode must be NONE, MONTHLY_WEEKDAY, EVERY_6_MONTHS, EVERY_12_MONTHS, or WDP_FILTER_CYCLE";
   }
   if (repeatMode === "MONTHLY_WEEKDAY") {
     if (!(repeatWeekOfMonth >= 1 && repeatWeekOfMonth <= 5)) {
@@ -3339,6 +3340,14 @@ function validateAsset(body) {
     }
     if (!(repeatWeekday >= 0 && repeatWeekday <= 6)) {
       return "repeatWeekday must be between 0 and 6";
+    }
+  }
+  if (repeatMode === "WDP_FILTER_CYCLE") {
+    if (type !== "WDP") {
+      return "WDP filter cycle can only be used for Water Dispenser assets";
+    }
+    if (!(repeatCycleStep === 1 || repeatCycleStep === 2)) {
+      return "repeatCycleStep must be 1 or 2 for WDP filter cycle";
     }
   }
 
@@ -3367,6 +3376,7 @@ function validateAsset(body) {
     repeatMode,
     repeatWeekOfMonth,
     repeatWeekday,
+    repeatCycleStep,
     photo,
     photos,
     status,
