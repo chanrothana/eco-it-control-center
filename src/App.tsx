@@ -5230,6 +5230,7 @@ export default function App() {
   const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const transferDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const scheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
+  const bulkScheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const inventoryAdminMatrixDateWrapRef = useRef<HTMLDivElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
@@ -6992,6 +6993,12 @@ export default function App() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [scheduleSelectedDate, setScheduleSelectedDate] = useState(() => toYmd(new Date()));
+  const [bulkScheduleDatePickerOpen, setBulkScheduleDatePickerOpen] = useState(false);
+  const [bulkScheduleDateMonth, setBulkScheduleDateMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [bulkScheduleSelectedDate, setBulkScheduleSelectedDate] = useState(() => toYmd(new Date()));
   const [scheduleQuickCreateOpen, setScheduleQuickCreateOpen] = useState(false);
   const [scheduleQuickForm, setScheduleQuickForm] = useState({
     assetId: "",
@@ -7223,6 +7230,21 @@ export default function App() {
       document.removeEventListener("touchstart", handleOutsideTap);
     };
   }, [scheduleDatePickerOpen]);
+  useEffect(() => {
+    if (!bulkScheduleDatePickerOpen) return;
+    const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (bulkScheduleDateWrapRef.current?.contains(target)) return;
+      setBulkScheduleDatePickerOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideTap);
+    document.addEventListener("touchstart", handleOutsideTap);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideTap);
+      document.removeEventListener("touchstart", handleOutsideTap);
+    };
+  }, [bulkScheduleDatePickerOpen]);
   useEffect(() => {
     if (!inventoryAdminMatrixDatePickerOpen) return;
     const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
@@ -9076,6 +9098,59 @@ export default function App() {
       };
     });
   }, [scheduleDateMonth, getHolidayEvent]);
+  const bulkScheduleDisplayDate = useMemo(() => {
+    const ymd = normalizeYmdInput(bulkScheduleForm.date || "");
+    if (!ymd) return "";
+    if (lang === "km") return formatKhmerDateYmd(ymd);
+    const date = new Date(`${ymd}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return bulkScheduleForm.date;
+    return date.toLocaleDateString("en-US", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  }, [bulkScheduleForm.date, lang]);
+  const bulkScheduleDateMonthLabel = useMemo(
+    () =>
+      lang === "km"
+        ? formatKhmerMonthYear(bulkScheduleDateMonth)
+        : bulkScheduleDateMonth.toLocaleDateString("en-US", {
+            month: "long",
+            year: "numeric",
+          }),
+    [bulkScheduleDateMonth, lang]
+  );
+  const bulkScheduleDateCanGoPrevMonth = useMemo(() => {
+    if (isSuperAdmin) return true;
+    const now = new Date();
+    const minMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return bulkScheduleDateMonth.getTime() > minMonth.getTime();
+  }, [bulkScheduleDateMonth, isSuperAdmin]);
+  const bulkScheduleDateGridDays = useMemo(() => {
+    const year = bulkScheduleDateMonth.getFullYear();
+    const month = bulkScheduleDateMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay();
+    const endOffset = 6 - lastDay.getDay();
+    const totalCells = startOffset + lastDay.getDate() + endOffset;
+    const startDate = new Date(year, month, 1 - startOffset);
+    return Array.from({ length: totalCells }, (_, i) => {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
+      const ymd = toYmd(d);
+      const holiday = getHolidayEvent(ymd);
+      return {
+        ymd,
+        day: d.getDate(),
+        weekday: d.getDay(),
+        inMonth: d.getMonth() === month,
+        hasItems: false,
+        holidayName: holiday.name,
+        holidayType: holiday.type,
+      };
+    });
+  }, [bulkScheduleDateMonth, getHolidayEvent]);
   const transferDisplayDate = useMemo(() => {
     const ymd = normalizeYmdInput(transferForm.date || "");
     if (!ymd) return "";
@@ -14977,6 +15052,21 @@ export default function App() {
       if (nextOpen) {
         setScheduleDateMonth(new Date(base.getFullYear(), base.getMonth(), 1));
         setScheduleSelectedDate(baseDate);
+      }
+      return nextOpen;
+    });
+  }
+  function openBulkScheduleDatePicker() {
+    if (bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY") return;
+    const today = toYmd(new Date());
+    const pickedDate = normalizeYmdInput(bulkScheduleForm.date || today) || today;
+    const baseDate = !isSuperAdmin && pickedDate < today ? today : pickedDate;
+    const base = new Date(`${baseDate}T00:00:00`);
+    setBulkScheduleDatePickerOpen((prev) => {
+      const nextOpen = !prev;
+      if (nextOpen) {
+        setBulkScheduleDateMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+        setBulkScheduleSelectedDate(baseDate);
       }
       return nextOpen;
     });
@@ -31631,16 +31721,74 @@ export default function App() {
                   emptyText={lang === "km" ? "មិនមានប្រភេទទំនិញ" : "No item type found."}
                 />
               </label>
-              <label className="field">
+              <label className="field quickout-date-field" ref={bulkScheduleDateWrapRef}>
                 <span>Next Maintenance Date</span>
-                <input
-                  type="date"
-                  className="input"
-                  min={todayYmd}
-                  value={bulkScheduleForm.date}
-                  onChange={(e) => setBulkScheduleForm((f) => ({ ...f, date: e.target.value }))}
-                  disabled={bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY"}
-                />
+                <div className="quickout-date-input-wrap">
+                  <input
+                    className="input"
+                    type="text"
+                    readOnly
+                    value={bulkScheduleDisplayDate}
+                    placeholder="dd/mm/yyyy"
+                  />
+                  <button
+                    type="button"
+                    className="quickout-date-icon-btn"
+                    onClick={openBulkScheduleDatePicker}
+                    disabled={bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY"}
+                    aria-label="Open Bulk Schedule Calendar"
+                  >
+                    <Calendar size={18} />
+                  </button>
+                </div>
+                {bulkScheduleDatePickerOpen ? (
+                  <div className="quickout-eco-inline-panel">
+                    <div className="quickout-eco-head">
+                      <strong className="quickout-eco-title">{bulkScheduleDateMonthLabel}</strong>
+                      <div className="quickout-eco-nav">
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Previous month"
+                          onClick={() => setBulkScheduleDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                          disabled={!bulkScheduleDateCanGoPrevMonth}
+                        >
+                          {"<"}
+                        </button>
+                        <button
+                          type="button"
+                          className="quickout-eco-nav-btn"
+                          aria-label="Next month"
+                          onClick={() => setBulkScheduleDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                        >
+                          {">"}
+                        </button>
+                      </div>
+                    </div>
+                    <CalendarGridTemplate
+                      weekdayLabels={calendarWeekdayLabels}
+                      days={bulkScheduleDateGridDays}
+                      selectedDate={bulkScheduleSelectedDate}
+                      todayYmd={todayYmd}
+                      onSelectDate={(ymd) => {
+                        setBulkScheduleSelectedDate(ymd);
+                        setBulkScheduleForm((f) => ({ ...f, date: ymd }));
+                        setBulkScheduleDatePickerOpen(false);
+                      }}
+                      isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
+                      gridClassName="quickout-eco-grid"
+                      renderHolidayTag={(d) =>
+                        d.holidayName ? (
+                          <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                            {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                          </em>
+                        ) : null
+                      }
+                      headKeyPrefix="bulk-schedule-date-head"
+                      dayKeyPrefix="bulk-schedule-date-day"
+                    />
+                  </div>
+                ) : null}
               </label>
               <label className="field">
                 <span>Repeat</span>
