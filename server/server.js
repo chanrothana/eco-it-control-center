@@ -5214,7 +5214,17 @@ const server = http.createServer(async (req, res) => {
       const admin = requireAdmin(req, res);
       if (!admin) return;
       const body = await parseBody(req);
-      const cleaned = validateAsset(body);
+      const db = await readDb();
+      const parentAssignment = syncAssignedToFromParentAsset(db, body);
+      const bodyWithParentAssignment =
+        parentAssignment.parent && !toText(body.assignedTo)
+          ? {
+              ...body,
+              assignedTo: parentAssignment.assignedTo,
+              custodyStatus: parentAssignment.custodyStatus,
+            }
+          : body;
+      const cleaned = validateAsset(bodyWithParentAssignment);
       if (typeof cleaned === "string") {
         sendJson(res, 400, { error: cleaned });
         return;
@@ -5230,7 +5240,6 @@ const server = http.createServer(async (req, res) => {
       const initialHistory = await normalizeHistoryEntries(body.maintenanceHistory, "maintenance");
       const initialTransferHistory = normalizeTransferEntries(body.transferHistory);
       const initialCustodyHistory = normalizeCustodyEntries(body.custodyHistory);
-      const db = await readDb();
       const serialKey = normalizeSerialKey(cleaned.serialNumber);
       if (serialKey) {
         const duplicateSerial = (Array.isArray(db.assets) ? db.assets : []).find(
@@ -5245,8 +5254,9 @@ const server = http.createServer(async (req, res) => {
       }
       const seq = nextAssetSeq(db.assets, cleaned.campus, cleaned.category, cleaned.type);
       const assetId = `${assetIdCampusCode(cleaned.campus)}-${CATEGORY_CODE[cleaned.category] || "OTA"}-${cleaned.type}-${pad(seq, 3)}`;
-      const parentAssignment = syncAssignedToFromParentAsset(db, cleaned);
-      const finalAssignedTo = parentAssignment.assignedTo;
+      const finalAssignedTo = parentAssignment.parent
+        ? parentAssignment.assignedTo
+        : toText(cleaned.assignedTo);
       const custodyStatus = parentAssignment.custodyStatus;
       const finalCustodyHistory =
         initialCustodyHistory.length || !finalAssignedTo
