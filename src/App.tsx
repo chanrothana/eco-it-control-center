@@ -1372,9 +1372,9 @@ const MAINTENANCE_TYPE_OPTIONS = [
   "Upgrade",
 ];
 const INVENTORY_CATEGORY_OPTIONS = [
-  { value: "SUPPLY", label: "Cleaning Supply" },
-  { value: "CLEAN_TOOL", label: "Cleaning Tool" },
-  { value: "MAINT_TOOL", label: "Maintenance Tool" },
+  { value: "SUPPLY", label: "Cleaning Supplies" },
+  { value: "CLEAN_TOOL", label: "Cleaning Tools" },
+  { value: "MAINT_TOOL", label: "Maintenance Tools" },
 ] as const;
 const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "IN", label: "Stock In" },
@@ -3223,6 +3223,21 @@ function isPrinterAssetRow(asset: Pick<Asset, "type"> | Pick<PublicQrAsset, "typ
 }
 function isTonerInventoryItemRow(item: Pick<InventoryItem, "itemGroup"> | null | undefined) {
   return String(item?.itemGroup || "").trim().toUpperCase() === "TONER";
+}
+type InventoryBusinessGroup = "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "TONER";
+const INVENTORY_DASHBOARD_GROUP_ORDER: InventoryBusinessGroup[] = ["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL", "TONER"];
+function inventoryBusinessGroupValue(
+  item: Pick<InventoryItem, "category" | "itemGroup"> | null | undefined
+): InventoryBusinessGroup {
+  if (isTonerInventoryItemRow(item)) return "TONER";
+  const category = String(item?.category || "").trim().toUpperCase();
+  if (category === "CLEAN_TOOL") return "CLEAN_TOOL";
+  if (category === "MAINT_TOOL") return "MAINT_TOOL";
+  return "SUPPLY";
+}
+function inventoryBusinessGroupLabel(value: InventoryBusinessGroup) {
+  if (value === "TONER") return "Printer Toner";
+  return INVENTORY_CATEGORY_OPTIONS.find((option) => option.value === value)?.label || "Cleaning Supplies";
 }
 function tonerHistoryEntries(list: MaintenanceEntry[] | undefined) {
   return (Array.isArray(list) ? list : []).filter(
@@ -5286,6 +5301,7 @@ export default function App() {
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
+  const [inventoryDashboardGroup, setInventoryDashboardGroup] = useState<InventoryBusinessGroup>("SUPPLY");
   const [utilitiesView, setUtilitiesView] = useState<"entry" | "history" | "monthly" | "yearly">("entry");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
@@ -5369,58 +5385,25 @@ export default function App() {
               : []),
           ];
         case "inventory":
-          return [
-            {
-              key: "inventory.dashboard",
-              label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
-              active: inventoryView === "dashboard",
-              onSelect: () =>
-                startTabTransition(() => {
-                  setInventoryView("dashboard");
-                  setTab("inventory");
-                }),
-            },
-            {
-              key: "inventory.items",
-              label: lang === "km" ? "កំណត់ទំនិញ" : "Item Setup",
-              active: inventoryView === "items",
-              onSelect: () =>
-                startTabTransition(() => {
-                  setInventoryView("items");
-                  setTab("inventory");
-                }),
-            },
-            {
-              key: "inventory.daily",
-              label: lang === "km" ? "ប្រើប្រាស់ប្រចាំថ្ងៃ" : "Daily Usage",
-              active: inventoryView === "daily",
-              onSelect: () =>
-                startTabTransition(() => {
-                  setInventoryView("daily");
-                  setTab("inventory");
-                }),
-            },
-            {
-              key: "inventory.stock",
-              label: lang === "km" ? "ស្តុកចេញ-ចូល" : "Stock In/Out",
-              active: inventoryView === "stock",
-              onSelect: () =>
-                startTabTransition(() => {
-                  setInventoryView("stock");
-                  setTab("inventory");
-                }),
-            },
-            {
-              key: "inventory.balance",
-              label: lang === "km" ? "សមតុល្យ" : "Balance",
-              active: inventoryView === "balance",
-              onSelect: () =>
-                startTabTransition(() => {
-                  setInventoryView("balance");
-                  setTab("inventory");
-                }),
-            },
-          ];
+          return INVENTORY_DASHBOARD_GROUP_ORDER.map((group) => ({
+            key: `inventory.group.${group}`,
+            label:
+              lang === "km"
+                ? ({
+                    SUPPLY: "សម្ភារៈសម្អាត",
+                    CLEAN_TOOL: "ឧបករណ៍សម្អាត",
+                    MAINT_TOOL: "ឧបករណ៍ថែទាំ",
+                    TONER: "ទឹកថ្នាំ Printer",
+                  } as const)[group]
+                : inventoryBusinessGroupLabel(group),
+            active: inventoryDashboardGroup === group,
+            onSelect: () =>
+              startTabTransition(() => {
+                setInventoryDashboardGroup(group);
+                setInventoryView("dashboard");
+                setTab("inventory");
+              }),
+          }));
         case "utilities":
           return [
             {
@@ -6486,6 +6469,7 @@ export default function App() {
     note: "",
   });
   const [utilityMessage, setUtilityMessage] = useState("");
+  const [utilityAutofillBusy, setUtilityAutofillBusy] = useState(false);
   const [utilityInvoiceForm, setUtilityInvoiceForm] = useState({
     utilityType: "EDC" as "EDC" | "PPWS",
     campus: CAMPUS_LIST[0],
@@ -8031,6 +8015,32 @@ export default function App() {
     () => (inventoryBalanceMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
     [inventoryBalanceMode, inventoryLowStockRows, inventoryBalanceRows]
   );
+  const inventoryVisibleItemLookup = useMemo(() => {
+    const out = new Map<number, InventoryItem>();
+    for (const item of inventoryVisibleItems) out.set(Number(item.id), item);
+    return out;
+  }, [inventoryVisibleItems]);
+  const inventoryDashboardScopedRows = useMemo(
+    () => inventoryBalanceRows.filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup),
+    [inventoryBalanceRows, inventoryDashboardGroup]
+  );
+  const inventoryDashboardScopedLowStockRows = useMemo(
+    () => inventoryDashboardScopedRows.filter((row) => Number(row.currentStock || 0) < Number(row.minStock || 0)),
+    [inventoryDashboardScopedRows]
+  );
+  const inventoryDashboardScopedItemIds = useMemo(
+    () => new Set(inventoryDashboardScopedRows.map((row) => Number(row.id))),
+    [inventoryDashboardScopedRows]
+  );
+  const inventoryDashboardScopedTxns = useMemo(
+    () =>
+      inventoryVisibleTxns.filter((tx) => {
+        if (inventoryDashboardScopedItemIds.has(Number(tx.itemId || 0))) return true;
+        const item = inventoryVisibleItemLookup.get(Number(tx.itemId || 0));
+        return inventoryBusinessGroupValue(item) === inventoryDashboardGroup;
+      }),
+    [inventoryVisibleTxns, inventoryDashboardScopedItemIds, inventoryVisibleItemLookup, inventoryDashboardGroup]
+  );
   const cleaningSupplyMonthlyOptions = useMemo(() => {
     const validMonths = new Set<string>();
     const supplyItems = new Map<number, InventoryItem>();
@@ -8544,6 +8554,139 @@ export default function App() {
       atRiskRows: atRiskRows.slice(0, 6),
     };
   }, [inventoryBalanceRows, inventoryLowStockRows, inventoryPendingApprovalRows]);
+  const inventoryDashboardGroupSnapshot = useMemo(() => {
+    let totalOnHand = 0;
+    let zeroStockItems = 0;
+    let belowMinUnits = 0;
+    const atRiskRows: Array<{
+      itemCode: string;
+      itemName: string;
+      campus: string;
+      currentStock: number;
+      minStock: number;
+      deficit: number;
+    }> = [];
+
+    for (const row of inventoryDashboardScopedRows) {
+      const current = Number(row.currentStock || 0);
+      const min = Number(row.minStock || 0);
+      totalOnHand += current;
+      if (current <= 0) zeroStockItems += 1;
+      if (current < min) {
+        const deficit = min - current;
+        belowMinUnits += deficit;
+        atRiskRows.push({
+          itemCode: String(row.itemCode || "-"),
+          itemName: String(row.itemName || "-"),
+          campus: String(row.campus || "-"),
+          currentStock: current,
+          minStock: min,
+          deficit,
+        });
+      }
+    }
+
+    atRiskRows.sort((a, b) => b.deficit - a.deficit || a.itemCode.localeCompare(b.itemCode));
+
+    return {
+      totalItems: inventoryDashboardScopedRows.length,
+      lowStockItems: inventoryDashboardScopedLowStockRows.length,
+      totalOnHand,
+      zeroStockItems,
+      belowMinUnits,
+      pendingApprovals: inventoryDashboardScopedTxns.filter(
+        (tx) => isInventoryTxnUsageOut(tx.type) && tx.approvalStatus === "PENDING"
+      ).length,
+      atRiskRows: atRiskRows.slice(0, 6),
+    };
+  }, [inventoryDashboardScopedRows, inventoryDashboardScopedLowStockRows, inventoryDashboardScopedTxns]);
+  const inventoryGroupSummaryRows = useMemo(() => {
+    const map = new Map<InventoryBusinessGroup, { group: InventoryBusinessGroup; items: number; onHand: number }>();
+    for (const row of inventoryBalanceRows) {
+      const group = inventoryBusinessGroupValue(row);
+      if (!map.has(group)) map.set(group, { group, items: 0, onHand: 0 });
+      const summary = map.get(group)!;
+      summary.items += 1;
+      summary.onHand += Number(row.currentStock || 0);
+    }
+    const order: InventoryBusinessGroup[] = ["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL", "TONER"];
+    return order
+      .map((group) => map.get(group) || { group, items: 0, onHand: 0 })
+      .filter((row) => row.items > 0 || row.group === "TONER");
+  }, [inventoryBalanceRows]);
+  const inventoryDashboardScopedOutTxns = useMemo(() => {
+    const itemQuery = String(inventoryAdminItemQuery || "").trim().toLowerCase();
+    return inventoryDashboardScopedTxns.filter((tx) => {
+      if (!isInventoryTxnUsageOut(tx.type)) return false;
+      if (inventoryAdminCampusFilter !== "ALL") {
+        const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim();
+        if (campus !== inventoryAdminCampusFilter) return false;
+      }
+      if (itemQuery) {
+        const text = `${tx.itemCode || ""} ${tx.itemName || ""}`.toLowerCase();
+        if (!text.includes(itemQuery)) return false;
+      }
+      return true;
+    });
+  }, [inventoryDashboardScopedTxns, inventoryAdminCampusFilter, inventoryAdminItemQuery]);
+  const inventoryDashboardFilteredOutTxns = useMemo(
+    () =>
+      inventoryDashboardScopedOutTxns
+        .filter((tx) => String(tx.date || "").slice(0, 7) === inventoryAdminMonth)
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0)),
+    [inventoryDashboardScopedOutTxns, inventoryAdminMonth]
+  );
+  const inventoryDashboardAdminSummary = useMemo(() => {
+    const today = toYmd(new Date());
+    const yesterday = shiftYmd(today, -1);
+    let todayOut = 0;
+    let yesterdayOut = 0;
+    let monthOut = 0;
+    let pendingOutRequests = 0;
+    const monthCampusMap = new Map<string, number>();
+    const monthItemMap = new Map<string, { itemCode: string; itemName: string; qty: number }>();
+
+    for (const tx of inventoryDashboardScopedOutTxns) {
+      const date = String(tx.date || "");
+      if (date === today && isInventoryTxnStockEffective(tx)) todayOut += Number(tx.qty || 0);
+      if (date === yesterday && isInventoryTxnStockEffective(tx)) yesterdayOut += Number(tx.qty || 0);
+    }
+
+    for (const tx of inventoryDashboardFilteredOutTxns) {
+      if (tx.approvalStatus === "PENDING") pendingOutRequests += 1;
+      if (!isInventoryTxnStockEffective(tx)) continue;
+      const qty = Number(tx.qty || 0);
+      if (!Number.isFinite(qty) || qty <= 0) continue;
+      monthOut += qty;
+
+      const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "-");
+      monthCampusMap.set(campus, (monthCampusMap.get(campus) || 0) + qty);
+
+      const itemCode = String(tx.itemCode || "-");
+      const itemName = String(tx.itemName || "-");
+      const itemKey = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
+      const row = monthItemMap.get(itemKey) || { itemCode, itemName, qty: 0 };
+      row.qty += qty;
+      monthItemMap.set(itemKey, row);
+    }
+
+    const monthCampusRows = Array.from(monthCampusMap.entries())
+      .map(([campus, qty]) => ({ campus, qty }))
+      .sort((a, b) => b.qty - a.qty || a.campus.localeCompare(b.campus));
+    const topMonthItems = Array.from(monthItemMap.values())
+      .sort((a, b) => b.qty - a.qty || a.itemCode.localeCompare(b.itemCode))
+      .slice(0, 6);
+
+    return {
+      month: inventoryAdminMonth,
+      todayOut,
+      yesterdayOut,
+      monthOut,
+      pendingOutRequests,
+      monthCampusRows,
+      topMonthItems,
+    };
+  }, [inventoryDashboardScopedOutTxns, inventoryDashboardFilteredOutTxns, inventoryAdminMonth]);
   const inventoryAdminOutDayMatrix = useMemo(() => {
     const rawFrom = normalizeYmdInput(inventoryAdminMatrixDateFrom) || inventoryAdminMatrixMonthBounds.start;
     const rawTo = normalizeYmdInput(inventoryAdminMatrixDateTo) || inventoryAdminMatrixMonthBounds.end;
@@ -11856,10 +11999,68 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setUtilityInvoiceForm((prev) => ({ ...prev, photo }));
+      await autofillUtilityInvoiceFromPhoto(photo);
     } catch {
       alert(t.photoProcessError);
     } finally {
       e.target.value = "";
+    }
+  }
+
+  async function autofillUtilityInvoiceFromPhoto(photoInput?: string) {
+    if (!requireAdminAction()) return;
+    const photo = String(photoInput || utilityInvoiceForm.photo || "").trim();
+    if (!photo) {
+      setError("Please upload an invoice image first.");
+      return;
+    }
+    setUtilityAutofillBusy(true);
+    setUtilityMessage("");
+    try {
+      const res = await requestJson<{
+        ok: boolean;
+        extracted?: {
+          usage?: string;
+          amount?: string;
+          invoiceNumber?: string;
+          invoiceDate?: string;
+          billingMonth?: string;
+          providerName?: string;
+          rawText?: string;
+          warnings?: string[];
+        };
+      }>("/api/utilities/invoice-autofill", {
+        method: "POST",
+        body: JSON.stringify({
+          utilityType: utilityInvoiceForm.utilityType,
+          photo,
+        }),
+      });
+      const extracted = res.extracted || {};
+      setUtilityInvoiceForm((prev) => ({
+        ...prev,
+        photo,
+        usage: extracted.usage || prev.usage,
+        amount: extracted.amount || prev.amount,
+        invoiceNumber: extracted.invoiceNumber || prev.invoiceNumber,
+        invoiceDate: extracted.invoiceDate || prev.invoiceDate,
+        billingMonth: extracted.billingMonth || prev.billingMonth,
+        providerName: extracted.providerName || prev.providerName,
+        note:
+          prev.note ||
+          (Array.isArray(extracted.warnings) && extracted.warnings.length
+            ? `OCR note: ${extracted.warnings.join(" ")}`
+            : prev.note),
+      }));
+      setUtilityMessage(
+        Array.isArray(extracted.warnings) && extracted.warnings.length
+          ? `Invoice auto fill completed with checks needed: ${extracted.warnings.join(" ")}`
+          : "Invoice auto fill completed. Please review the values before saving."
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invoice auto fill failed.");
+    } finally {
+      setUtilityAutofillBusy(false);
     }
   }
 
@@ -11874,7 +12075,7 @@ export default function App() {
       return;
     }
     const usage = Math.max(0, Number(utilityInvoiceForm.usage) || 0);
-    const amount = Math.max(0, Number(utilityInvoiceForm.amount) || 0);
+    const amount = Math.max(0, Number(String(utilityInvoiceForm.amount).replace(/,/g, "")) || 0);
     const row: UtilityReading = {
       id: Date.now(),
       utilityType: utilityInvoiceForm.utilityType,
@@ -28660,15 +28861,32 @@ export default function App() {
             {!maintenanceQuickMode ? (
               <section className="panel">
                 <div className="panel-row">
-                  <h2>Inventory Control</h2>
+                  <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
                   <div className="panel-filters">
                     <input
                       className="input"
-                      placeholder="Search item code, name..."
+                      placeholder={`Search ${inventoryBusinessGroupLabel(inventoryDashboardGroup)}...`}
                       value={inventorySearch}
                       onChange={(e) => setInventorySearch(e.target.value)}
                     />
                   </div>
+                </div>
+                <div className="tiny" style={{ marginBottom: 10 }}>
+                  {lang === "km" ? "ក្រុមស្តុក" : "Inventory Group"}
+                </div>
+                <div className="tabs" style={{ marginBottom: 12 }}>
+                  {INVENTORY_DASHBOARD_GROUP_ORDER.map((group) => (
+                    <button
+                      key={`inventory-header-group-${group}`}
+                      className={`tab ${inventoryDashboardGroup === group ? "tab-active" : ""}`}
+                      onClick={() => setInventoryDashboardGroup(group)}
+                    >
+                      {inventoryBusinessGroupLabel(group)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tiny" style={{ marginBottom: 10 }}>
+                  {lang === "km" ? "មុខងារ" : "Functions"}
                 </div>
                 <div className="tabs">
                   <button className={`tab ${inventoryView === "dashboard" ? "tab-active" : ""}`} onClick={() => setInventoryView("dashboard")}>Dashboard</button>
@@ -28695,7 +28913,7 @@ export default function App() {
                     </select>
                   </label>
                   <label className="field">
-                    <span>Category</span>
+                    <span>Inventory Group</span>
                     <select
                       className="input"
                       value={inventoryItemForm.category}
@@ -28721,7 +28939,7 @@ export default function App() {
                       ))}
                     </select>
                     <small className="tiny">
-                      Standardized items only (Khmer/English aliases mapped in master list).
+                      Standardized items only. Printer Toner is managed in the toner section below.
                     </small>
                     {inventorySupplyMasterLocked && (
                       <small className="tiny" style={{ color: "#b03131" }}>
@@ -28751,7 +28969,7 @@ export default function App() {
                         Auto
                       </button>
                     </div>
-                    <small className="tiny">Auto format: Campus-Category-0001 (example: C2-CS-0001)</small>
+                    <small className="tiny">Auto format: Campus-Group-0001 (example: C2-CS-0001)</small>
                   </label>
                   <label className="field">
                     <span>Item Name</span>
@@ -28809,7 +29027,7 @@ export default function App() {
                         <th>Code</th>
                         <th>{t.photo}</th>
                         <th>Name</th>
-                        <th>Category</th>
+                        <th>Group</th>
                         <th>{t.campus}</th>
                         <th>{t.location}</th>
                         <th>Unit</th>
@@ -28825,7 +29043,7 @@ export default function App() {
                             <td><strong>{row.itemCode}</strong></td>
                             <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
                             <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                            <td>{row.category}</td>
+                            <td>{inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}</td>
                             <td>{inventoryCampusLabel(row.campus)}</td>
                             <td>{row.location}</td>
                             <td>{row.unit}</td>
@@ -29577,14 +29795,14 @@ export default function App() {
                 <div className="inventory-daily-head">
                   <h2>
                     {inventoryView === "dashboard"
-                      ? (lang === "km" ? "ផ្ទាំងសង្ខេបស្តុក" : "Inventory Dashboard")
+                      ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} ${lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard"}`
                       : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)")}
                   </h2>
                   <p className="tiny">
                     {inventoryView === "dashboard"
                       ? (lang === "km"
-                        ? "មើលស្ថានភាពស្តុក សំណើរ និងនិន្នាការប្រើប្រាស់សម្រាប់គ្រប់គ្រង។"
-                        : "Main inventory snapshot for stock health, approvals, and usage trends.")
+                        ? "មើលស្ថានភាពស្តុក សំណើរ និងនិន្នាការប្រើប្រាស់តាមក្រុមស្តុកនីមួយៗ។"
+                        : "Dedicated dashboard for each inventory group with stock health, approvals, and usage trends.")
                       : (lang === "km"
                         ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
                         : "Phone-friendly daily Stock-Out record for maintenance staff.")}
@@ -29593,39 +29811,70 @@ export default function App() {
                 {inventoryView === "dashboard" && !maintenanceQuickMode && isAdmin ? (
                   <article className="panel inventory-admin-control-panel">
                     <div className="panel-row">
-                      <h3 className="section-title">{lang === "km" ? "ផ្ទាំងសង្ខេបស្តុក (Admin)" : "Inventory Dashboard Snapshot"}</h3>
+                      <h3 className="section-title">{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard Snapshot"}</h3>
                       <span className="tiny">
-                        {new Date(`${inventoryAdminControlSummary.month}-01T00:00:00`).toLocaleString(undefined, {
+                        {new Date(`${inventoryDashboardAdminSummary.month}-01T00:00:00`).toLocaleString(undefined, {
                           month: "long",
                           year: "numeric",
                         })}
                       </span>
                     </div>
+                    <div className="tabs" style={{ marginBottom: 12 }}>
+                      {INVENTORY_DASHBOARD_GROUP_ORDER.map((group) => (
+                        <button
+                          key={`inventory-dashboard-group-${group}`}
+                          className={`tab ${inventoryDashboardGroup === group ? "tab-active" : ""}`}
+                          onClick={() => setInventoryDashboardGroup(group)}
+                        >
+                          {inventoryBusinessGroupLabel(group)}
+                        </button>
+                      ))}
+                    </div>
                     <div className="stats-grid inventory-admin-control-stats">
                       <article className="stat-card">
                         <div className="stat-label">{lang === "km" ? "មុខទំនិញសរុប" : "Total Items"}</div>
-                        <div className="stat-value">{inventoryDashboardSnapshot.totalItems}</div>
+                        <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
                       </article>
                       <article className="stat-card">
                         <div className="stat-label">{lang === "km" ? "ស្តុកសរុប (On Hand)" : "Total On Hand"}</div>
-                        <div className="stat-value">{inventoryDashboardSnapshot.totalOnHand}</div>
+                        <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
                       </article>
                       <article className="stat-card stat-card-overdue">
                         <div className="stat-label">{lang === "km" ? "ទាបជាង Min" : "Low Stock Items"}</div>
-                        <div className="stat-value">{inventoryDashboardSnapshot.lowStockItems}</div>
+                        <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
                       </article>
                       <article className="stat-card stat-card-overdue">
                         <div className="stat-label">{lang === "km" ? "អស់ស្តុក" : "Out of Stock Items"}</div>
-                        <div className="stat-value">{inventoryDashboardSnapshot.zeroStockItems}</div>
+                        <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
                       </article>
                       <article className="stat-card stat-card-overdue">
                         <div className="stat-label">{lang === "km" ? "ខ្វះពីកម្រិត Min" : "Units Below Min"}</div>
-                        <div className="stat-value">{inventoryDashboardSnapshot.belowMinUnits}</div>
+                        <div className="stat-value">{inventoryDashboardGroupSnapshot.belowMinUnits}</div>
                       </article>
                       <article className="stat-card stat-card-overdue">
                         <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approvals"}</div>
-                        <div className="stat-value">{inventoryDashboardSnapshot.pendingApprovals}</div>
+                        <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
                       </article>
+                    </div>
+                    <div className="table-wrap" style={{ marginTop: 12 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{lang === "km" ? "ក្រុមស្តុក" : "Inventory Group"}</th>
+                            <th>{lang === "km" ? "ចំនួនមុខទំនិញ" : "Item Count"}</th>
+                            <th>{lang === "km" ? "ស្តុកសរុប" : "Total On Hand"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inventoryGroupSummaryRows.map((row) => (
+                            <tr key={`inventory-group-summary-${row.group}`}>
+                              <td>{inventoryBusinessGroupLabel(row.group)}</td>
+                              <td>{row.items}</td>
+                              <td>{row.onHand}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                     <div className="form-grid inventory-admin-control-filters">
                       <label className="field">
@@ -29673,60 +29922,60 @@ export default function App() {
                         className="stat-card stat-card-button"
                         onClick={() =>
                           openInventoryAdminDetailModal(
-                            lang === "km" ? "ចេញស្តុក ថ្ងៃនេះ" : "Today Out Transactions",
-                            inventoryAdminScopedOutTxns.filter((tx) => String(tx.date || "") === toYmd(new Date()) && isInventoryTxnStockEffective(tx))
+                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "ចេញស្តុក ថ្ងៃនេះ" : "Today Out Transactions"}`,
+                            inventoryDashboardScopedOutTxns.filter((tx) => String(tx.date || "") === toYmd(new Date()) && isInventoryTxnStockEffective(tx))
                           )
                         }
                       >
                         <div className="stat-label">{lang === "km" ? "ចេញស្តុក ថ្ងៃនេះ" : "Today Out"}</div>
-                        <div className="stat-value">{inventoryAdminControlSummary.todayOut}</div>
+                        <div className="stat-value">{inventoryDashboardAdminSummary.todayOut}</div>
                       </button>
                       <button
                         type="button"
                         className="stat-card stat-card-button"
                         onClick={() =>
                           openInventoryAdminDetailModal(
-                            lang === "km" ? "ចេញស្តុក ម្សិលមិញ" : "Yesterday Out Transactions",
-                            inventoryAdminScopedOutTxns.filter((tx) => String(tx.date || "") === shiftYmd(toYmd(new Date()), -1) && isInventoryTxnStockEffective(tx))
+                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "ចេញស្តុក ម្សិលមិញ" : "Yesterday Out Transactions"}`,
+                            inventoryDashboardScopedOutTxns.filter((tx) => String(tx.date || "") === shiftYmd(toYmd(new Date()), -1) && isInventoryTxnStockEffective(tx))
                           )
                         }
                       >
                         <div className="stat-label">{lang === "km" ? "ចេញស្តុក ម្សិលមិញ" : "Yesterday Out"}</div>
-                        <div className="stat-value">{inventoryAdminControlSummary.yesterdayOut}</div>
+                        <div className="stat-value">{inventoryDashboardAdminSummary.yesterdayOut}</div>
                       </button>
                       <button
                         type="button"
                         className="stat-card stat-card-button"
                         onClick={() =>
                           openInventoryAdminDetailModal(
-                            lang === "km" ? "ចេញស្តុក ខែនេះ" : "Selected Month Out Transactions",
-                            inventoryAdminFilteredOutTxns.filter((tx) => isInventoryTxnStockEffective(tx))
+                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "ចេញស្តុក ខែនេះ" : "Selected Month Out Transactions"}`,
+                            inventoryDashboardFilteredOutTxns.filter((tx) => isInventoryTxnStockEffective(tx))
                           )
                         }
                       >
                         <div className="stat-label">{lang === "km" ? "ចេញស្តុក ខែនេះ" : "This Month Out"}</div>
-                        <div className="stat-value">{inventoryAdminControlSummary.monthOut}</div>
+                        <div className="stat-value">{inventoryDashboardAdminSummary.monthOut}</div>
                       </button>
                       <button
                         type="button"
                         className="stat-card stat-card-button stat-card-overdue"
                         onClick={() =>
                           openInventoryAdminDetailModal(
-                            lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approval Requests",
-                            inventoryAdminFilteredOutTxns.filter((tx) => tx.approvalStatus === "PENDING")
+                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approval Requests"}`,
+                            inventoryDashboardFilteredOutTxns.filter((tx) => tx.approvalStatus === "PENDING")
                           )
                         }
                       >
                         <div className="stat-label">{lang === "km" ? "រង់ចាំអនុម័ត" : "Pending Approvals"}</div>
-                        <div className="stat-value">{inventoryAdminControlSummary.pendingOutRequests}</div>
+                        <div className="stat-value">{inventoryDashboardAdminSummary.pendingOutRequests}</div>
                       </button>
                     </div>
                     <div className="inventory-admin-control-grid">
                       <div className="inventory-admin-control-card">
                         <strong>{lang === "km" ? "Low Stock Risk (Top)" : "Top Low Stock Risks"}</strong>
-                        {inventoryDashboardSnapshot.atRiskRows.length ? (
+                        {inventoryDashboardGroupSnapshot.atRiskRows.length ? (
                           <div className="inventory-admin-control-list">
-                            {inventoryDashboardSnapshot.atRiskRows.map((row) => (
+                            {inventoryDashboardGroupSnapshot.atRiskRows.map((row) => (
                               <div key={`inventory-admin-risk-${row.itemCode}-${row.campus}`} className="inventory-admin-control-row">
                                 <span>
                                   <strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}
@@ -29742,10 +29991,10 @@ export default function App() {
                         )}
                       </div>
                       <div className="inventory-admin-control-card">
-                        <strong>{lang === "km" ? "ចេញស្តុកតាម Campus (ខែនេះ)" : "Monthly Out by Campus"}</strong>
-                        {inventoryAdminControlSummary.monthCampusRows.length ? (
+                        <strong>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "ចេញស្តុកតាម Campus" : "Monthly Out by Campus"}</strong>
+                        {inventoryDashboardAdminSummary.monthCampusRows.length ? (
                           <div className="inventory-admin-control-list">
-                            {inventoryAdminControlSummary.monthCampusRows.slice(0, 6).map((row) => (
+                            {inventoryDashboardAdminSummary.monthCampusRows.slice(0, 6).map((row) => (
                               <button
                                 key={`inventory-admin-campus-${row.campus}`}
                                 type="button"
@@ -29753,7 +30002,7 @@ export default function App() {
                                 onClick={() =>
                                   openInventoryAdminDetailModal(
                                     `${inventoryCampusLabel(row.campus)} - ${lang === "km" ? "ចេញស្តុក" : "Out Transactions"}`,
-                                    inventoryAdminFilteredOutTxns.filter(
+                                    inventoryDashboardFilteredOutTxns.filter(
                                       (tx) =>
                                         isInventoryTxnStockEffective(tx) &&
                                         (inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim()) === row.campus
@@ -29771,10 +30020,10 @@ export default function App() {
                         )}
                       </div>
                       <div className="inventory-admin-control-card">
-                        <strong>{lang === "km" ? "Top Item ចេញស្តុក (ខែនេះ)" : "Top Out Items This Month"}</strong>
-                        {inventoryAdminControlSummary.topMonthItems.length ? (
+                        <strong>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "Top Item ចេញស្តុក" : "Top Out Items This Month"}</strong>
+                        {inventoryDashboardAdminSummary.topMonthItems.length ? (
                           <div className="inventory-admin-control-list">
-                            {inventoryAdminControlSummary.topMonthItems.map((row) => (
+                            {inventoryDashboardAdminSummary.topMonthItems.map((row) => (
                               <button
                                 key={`inventory-admin-item-${row.itemCode}-${row.itemName}`}
                                 type="button"
@@ -29782,7 +30031,7 @@ export default function App() {
                                 onClick={() =>
                                   openInventoryAdminDetailModal(
                                     `${row.itemCode} - ${inventoryDisplayName(row.itemName, lang)}`,
-                                    inventoryAdminFilteredOutTxns.filter(
+                                    inventoryDashboardFilteredOutTxns.filter(
                                       (tx) =>
                                         isInventoryTxnStockEffective(tx) &&
                                         String(tx.itemCode || "").trim().toUpperCase() === row.itemCode.toUpperCase() &&
@@ -34064,7 +34313,17 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Amount</span>
-                    <input type="number" min="0" step="0.01" className="input" value={utilityInvoiceForm.amount} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))} />
+                    <input
+                      className="input"
+                      inputMode="decimal"
+                      value={utilityInvoiceForm.amount}
+                      onChange={(e) =>
+                        setUtilityInvoiceForm((prev) => ({
+                          ...prev,
+                          amount: e.target.value.replace(/[^0-9.,]/g, ""),
+                        }))
+                      }
+                    />
                   </label>
                   <label className="field">
                     <span>Invoice Number</span>
@@ -34076,7 +34335,18 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Invoice Upload</span>
-                    <input type="file" accept="image/*,application/pdf" className="input" onChange={onUtilityInvoicePhotoFile} />
+                    <input type="file" accept="image/*" className="input" onChange={onUtilityInvoicePhotoFile} />
+                    <span className="tiny">Upload invoice image to auto fill repeated EDC/PPWS template data.</span>
+                    {utilityInvoiceForm.photo ? (
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={utilityInvoiceForm.photo}
+                        alt="utility invoice"
+                        className="table-photo"
+                        style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }}
+                      />
+                    ) : null}
                   </label>
                   <label className="field field-wide">
                     <span>{t.notes}</span>
@@ -34084,6 +34354,9 @@ export default function App() {
                   </label>
                 </div>
                 <div className="row-actions">
+                  <button className="tab" disabled={utilityAutofillBusy || !utilityInvoiceForm.photo} onClick={() => void autofillUtilityInvoiceFromPhoto()}>
+                    {utilityAutofillBusy ? "Reading Invoice..." : "Auto Fill From Invoice"}
+                  </button>
                   <button className="btn-primary" onClick={() => void saveUtilityInvoiceEntry()}>Save Utility Invoice</button>
                 </div>
               </>
@@ -36305,7 +36578,12 @@ export default function App() {
             <article className="panel" style={{ marginTop: 12 }}>
               <div className="panel-row">
                 <h3 className="section-title">{lang === "km" ? "Telegram Alert Target" : "Telegram Alert Target"}</h3>
-                <span className="tiny">{lang === "km" ? "រក្សាទុក chat ID របស់ group ដើម្បីឱ្យ Stock OUT ផ្ញើ alert បាន" : "Save the group chat ID so Stock OUT requests can alert Telegram."}</span>
+                <span className="tiny">{lang === "km" ? "រក្សាទុក chat ID របស់ group ដើម្បីឱ្យ Stock OUT និង Maintenance reminder ផ្ញើ alert បាន" : "Save the group chat ID so Stock OUT and maintenance reminders can alert Telegram."}</span>
+              </div>
+              <div className="tiny" style={{ marginBottom: 8 }}>
+                {lang === "km"
+                  ? "Bot សម្រាប់ Maintenance alert: @eco_maintenance_alert_bot"
+                  : "Maintenance alert bot: @eco_maintenance_alert_bot"}
               </div>
               <label className="field">
                 <span>{lang === "km" ? "Telegram Chat ID(s)" : "Telegram Chat ID(s)"}</span>
@@ -36321,6 +36599,11 @@ export default function App() {
                 {lang === "km"
                   ? "ប្រើ comma បំបែក chat ID ច្រើន។ Group usually starts with -100..."
                   : "Use commas for multiple chat IDs. Group IDs usually start with -100..."}
+              </div>
+              <div className="tiny" style={{ marginTop: 6 }}>
+                {lang === "km"
+                  ? "Maintenance schedule Telegram reminder នឹងប្រើ bot ថែទាំ ចាប់ពី 7 ថ្ងៃមុន ហើយបន្តផ្ញើរៀងរាល់ថ្ងៃ រហូតដល់ការងារត្រូវបានកត់ត្រាថា Done។ Server ពិនិត្យស្វ័យប្រវត្តិរៀងរាល់ម៉ោង។"
+                  : "Maintenance schedule Telegram reminders use the maintenance bot starting 7 days before due date, then continue every day until the task is recorded as Done. The server checks automatically every hour."}
               </div>
               <div className="row-actions" style={{ marginTop: 12 }}>
                 <button className="btn-primary btn-small" disabled={!isAdmin || busy} onClick={() => void saveTelegramAlertTargets()}>

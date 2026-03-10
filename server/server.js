@@ -2,10 +2,15 @@ const http = require("http");
 const https = require("https");
 const fsSync = require("fs");
 const fs = require("fs/promises");
+const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const zlib = require("zlib");
 const { URL } = require("url");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+
+const execFileAsync = promisify(execFile);
 
 function loadServerEnvFile() {
   const candidates = [
@@ -89,6 +94,7 @@ const DB_PATH = resolveStoragePath(process.env.DB_PATH, "db.json");
 const SQLITE_PATH = resolveStoragePath(process.env.SQLITE_PATH, "data.sqlite");
 const UPLOADS_DIR = resolveStoragePath(process.env.UPLOADS_DIR, "uploads");
 const BACKUPS_DIR = resolveStoragePath(process.env.BACKUPS_DIR, "backups");
+const UTILITY_INVOICE_OCR_SCRIPT = path.join(__dirname, "scripts", "utility_invoice_ocr.swift");
 const DB_MIRROR_PATH = process.env.DB_MIRROR_PATH ? resolveStoragePath(process.env.DB_MIRROR_PATH, "db-mirror.json") : "";
 const BACKUP_MIRROR_DIR = process.env.BACKUP_MIRROR_DIR ? resolveStoragePath(process.env.BACKUP_MIRROR_DIR, "backup-mirror") : "";
 const BACKUP_COMPRESS = String(process.env.BACKUP_COMPRESS || "true").toLowerCase() !== "false";
@@ -97,6 +103,11 @@ const AUTO_BACKUP_INTERVAL_HOURS = Math.max(1, Number(process.env.AUTO_BACKUP_IN
 const AUTO_BACKUP_INTERVAL_MS = AUTO_BACKUP_INTERVAL_HOURS * 60 * 60 * 1000;
 const AUTO_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.AUTO_BACKUP_RETENTION_DAYS || 30));
 const AUTO_BACKUP_RETENTION_MS = AUTO_BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES = Math.max(
+  15,
+  Number(process.env.MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES || 60)
+);
+const MAINTENANCE_ALERT_SWEEP_INTERVAL_MS = MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES * 60 * 1000;
 const ALLOW_DEV_AUTH_BYPASS =
   !IS_PROD &&
   String(process.env.ALLOW_DEV_AUTH_BYPASS || "false").toLowerCase() === "true";
@@ -108,6 +119,9 @@ const DEFAULT_VIEWER_PASSWORD = String(
 );
 const TELEGRAM_ALERT_ENABLED = String(process.env.TELEGRAM_ALERT_ENABLED || "false").toLowerCase() === "true";
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+const TELEGRAM_MAINTENANCE_BOT_TOKEN = String(
+  process.env.TELEGRAM_MAINTENANCE_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ""
+).trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const TELEGRAM_DISCOVER_CHAT_IDS =
   String(process.env.TELEGRAM_DISCOVER_CHAT_IDS || "true").toLowerCase() !== "false";
@@ -130,7 +144,17 @@ let telegramLastSendReport = {
   targets: [],
   errors: [],
 };
+let telegramMaintenanceLastSendReport = {
+  at: "",
+  ok: false,
+  successCount: 0,
+  targetCount: 0,
+  targets: [],
+  errors: [],
+};
 let telegramLastDiscoveredChats = [];
+let maintenanceAlertSweepTimer = null;
+let maintenanceAlertSweepRunning = false;
 const PUBLIC_APP_URL = String(
   process.env.PUBLIC_APP_URL ||
   process.env.RENDER_EXTERNAL_URL ||
@@ -273,6 +297,9 @@ if (ALLOW_DEV_AUTH_BYPASS) {
 }
 if (TELEGRAM_ALERT_ENABLED && (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_IDS.length)) {
   console.warn("[ALERT] Telegram enabled but TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID(S) is missing.");
+}
+if (TELEGRAM_ALERT_ENABLED && !TELEGRAM_MAINTENANCE_BOT_TOKEN) {
+  console.warn("[ALERT] Maintenance Telegram bot token is missing. Maintenance reminders will fall back to the default bot token.");
 }
 
 function mapDbToSqlRows(db) {
@@ -1690,6 +1717,45 @@ function daysUntilYmd(targetYmd) {
   return Math.round((targetMs - todayMs) / 86400000);
 }
 
+function normalizeLooseDateToYmd(text) {
+  const raw = toText(text).trim();
+  if (!raw) return "";
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    return `${iso[1]}-${String(iso[2]).padStart(2, "0")}-${String(iso[3]).padStart(2, "0")}`;
+  }
+  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${String(dmy[2]).padStart(2, "0")}-${String(dmy[1]).padStart(2, "0")}`;
+  }
+  return "";
+}
+
+function hasCompletedMaintenanceOnDateServer(asset, ymd) {
+  const target = toText(ymd).trim();
+  if (!target) return false;
+  const history = Array.isArray(asset && asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+  const doneDates = history
+    .map((entry) => {
+      const completion = toText(entry && entry.completion).trim().toLowerCase();
+      if (completion === "not yet") return "";
+      return normalizeLooseDateToYmd(toText(entry && entry.date));
+    })
+    .filter(Boolean);
+  if (!doneDates.length) return false;
+  if (doneDates.some((entryDate) => entryDate === target)) return true;
+  if (toUpper(asset && asset.repeatMode) !== "MONTHLY_WEEKDAY" && doneDates.some((entryDate) => entryDate >= target)) {
+    return true;
+  }
+  return history.some((entry) => {
+    const entryDate = normalizeLooseDateToYmd(toText(entry && entry.date));
+    if (entryDate !== target) return false;
+    const completion = toText(entry && entry.completion).trim().toLowerCase();
+    if (!completion) return true;
+    return completion !== "not yet";
+  });
+}
+
 function normalizeNotificationEntries(input) {
   if (!Array.isArray(input)) return [];
   const out = [];
@@ -1966,13 +2032,22 @@ function purgeNotificationsForAsset(db, assetDbId) {
   return db.notifications.length !== before;
 }
 
-function sendTelegramRequest(method, payload) {
+function sendTelegramRequestWithToken(botToken, method, payload) {
   return new Promise((resolve) => {
+    const token = toText(botToken).trim();
+    if (!token) {
+      resolve({
+        ok: false,
+        statusCode: 0,
+        body: "missing telegram bot token",
+      });
+      return;
+    }
     const bodyText = JSON.stringify(payload || {});
     const req = https.request(
       {
         hostname: "api.telegram.org",
-        path: `/bot${encodeURIComponent(TELEGRAM_BOT_TOKEN)}/${method}`,
+        path: `/bot${encodeURIComponent(token)}/${method}`,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2014,7 +2089,11 @@ function sendTelegramRequest(method, payload) {
   });
 }
 
-function sendTelegramMessageToChat(chatId, text, photoUrl = "") {
+function sendTelegramRequest(method, payload) {
+  return sendTelegramRequestWithToken(TELEGRAM_BOT_TOKEN, method, payload);
+}
+
+function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEGRAM_BOT_TOKEN) {
   return new Promise((resolve) => {
     if (!toText(chatId) || !toText(text)) return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
     const method = toText(photoUrl) ? "sendPhoto" : "sendMessage";
@@ -2029,7 +2108,7 @@ function sendTelegramMessageToChat(chatId, text, photoUrl = "") {
           text: toText(text),
           disable_web_page_preview: true,
         };
-    sendTelegramRequest(method, payload).then((result) => {
+    sendTelegramRequestWithToken(botToken, method, payload).then((result) => {
       let messageId = 0;
       try {
         const parsed = JSON.parse(toText(result && result.body));
@@ -2048,7 +2127,7 @@ function sendTelegramMessageToChat(chatId, text, photoUrl = "") {
   });
 }
 
-function deleteTelegramMessageFromChat(chatId, messageId) {
+function deleteTelegramMessageFromChat(chatId, messageId, botToken = TELEGRAM_BOT_TOKEN) {
   return new Promise((resolve) => {
     const normalizedChatId = toText(chatId);
     const normalizedMessageId = Number(messageId) || 0;
@@ -2056,7 +2135,7 @@ function deleteTelegramMessageFromChat(chatId, messageId) {
       resolve({ ok: false, chatId: normalizedChatId, messageId: normalizedMessageId, statusCode: 0, body: "" });
       return;
     }
-    sendTelegramRequest("deleteMessage", {
+    sendTelegramRequestWithToken(botToken, "deleteMessage", {
       chat_id: normalizedChatId,
       message_id: normalizedMessageId,
     }).then((result) => {
@@ -2092,11 +2171,11 @@ function waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
-async function sendTelegramMessageToChatWithRetry(chatId, text, photoUrl = "", attempts = 3) {
+async function sendTelegramMessageToChatWithRetry(chatId, text, photoUrl = "", attempts = 3, botToken = TELEGRAM_BOT_TOKEN) {
   let last = { ok: false, chatId: toText(chatId), statusCode: 0, body: "" };
   for (let i = 0; i < attempts; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    last = await sendTelegramMessageToChat(chatId, text, photoUrl);
+    last = await sendTelegramMessageToChat(chatId, text, photoUrl, botToken);
     if (last.ok) return last;
     if (!shouldRetryTelegramResult(last) || i === attempts - 1) return last;
     // eslint-disable-next-line no-await-in-loop
@@ -2185,6 +2264,65 @@ async function sendTelegramMessage(text, options = {}) {
   return successCount > 0;
 }
 
+async function sendTelegramMaintenanceMessage(text, options = {}) {
+  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_MAINTENANCE_BOT_TOKEN || !toText(text)) {
+    telegramMaintenanceLastSendReport = {
+      at: new Date().toISOString(),
+      ok: false,
+      successCount: 0,
+      targetCount: 0,
+      targets: [],
+      errors: ["maintenance telegram disabled, token missing, or empty text"],
+    };
+    return false;
+  }
+  const db = options && typeof options === "object" ? options.db : null;
+  const photoUrl =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoUrl")
+      ? toText(options.photoUrl)
+      : "";
+  const explicitChatIds =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
+      ? options.chatIds
+      : [];
+  const includeResults =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
+      ? Boolean(options.includeResults)
+      : false;
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds);
+  const targets = Array.from(new Set(configuredTargets));
+  if (!targets.length) return false;
+  const results = [];
+  for (const chatId of targets) {
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN));
+  }
+  const successCount = results.filter((row) => row.ok).length;
+  telegramMaintenanceLastSendReport = {
+    at: new Date().toISOString(),
+    ok: successCount > 0,
+    successCount,
+    targetCount: targets.length,
+    targets,
+    errors: results
+      .filter((row) => !row.ok)
+      .map((row) => `chat ${row.chatId}: ${row.statusCode || 0} ${toText(row.body).slice(0, 160)}`),
+  };
+  if (!successCount) {
+    console.warn(
+      "[MAINTENANCE ALERT] Telegram send failed for all targets:",
+      results.map((row) => ({ chatId: row.chatId, statusCode: row.statusCode, body: row.body.slice(0, 160) }))
+    );
+  }
+  if (includeResults) {
+    return {
+      ok: successCount > 0,
+      results,
+    };
+  }
+  return successCount > 0;
+}
+
 function resolveTelegramPhotoUrl(photoPath) {
   const raw = toText(photoPath);
   if (!raw) return "";
@@ -2242,13 +2380,14 @@ async function deleteTelegramMessagesByRefs(refs) {
   };
 }
 
-function discoverTelegramChatIds() {
+function discoverTelegramChatIds(botToken = TELEGRAM_BOT_TOKEN) {
   return new Promise((resolve) => {
-    if (!TELEGRAM_BOT_TOKEN) return resolve([]);
+    const token = toText(botToken).trim();
+    if (!token) return resolve([]);
     const req = https.request(
       {
         hostname: "api.telegram.org",
-        path: `/bot${encodeURIComponent(TELEGRAM_BOT_TOKEN)}/getUpdates?limit=100`,
+        path: `/bot${encodeURIComponent(token)}/getUpdates?limit=100`,
         method: "GET",
         timeout: 5000,
       },
@@ -2308,12 +2447,130 @@ async function sendTelegramMaintenanceBatch(rows, db = null) {
     const dateText = toText(row.scheduleDate) || "-";
     const assetId = toText(row.assetId) || "Unknown";
     const campus = toText(row.campus) || "-";
+    const location = toText(row.location) || "-";
     const title = toText(row.title) || "Maintenance Alert";
-    return `${idx + 1}. ${title}\nAsset: ${assetId} | Campus: ${campus} | Date: ${dateText}`;
+    const note = toText(row.scheduleNote || row.message || "").trim();
+    const alertLabel = toText(row.alertLabel || "").trim();
+    const suffix = note ? `\nNote: ${note}` : "";
+    return `${idx + 1}. ${title}${alertLabel ? ` (${alertLabel})` : ""}\nAsset: ${assetId} | Campus: ${campus} | Location: ${location} | Date: ${dateText}${suffix}`;
   });
   const extra = rows.length > 8 ? `\n+${rows.length - 8} more alert(s)` : "";
   const text = `Eco IT Maintenance Alerts\n${lines.join("\n\n")}${extra}`;
-  return sendTelegramMessage(text, { db });
+  return sendTelegramMaintenanceMessage(text, { db });
+}
+
+function normalizeMaintenanceTelegramDailyLog(settings) {
+  const input = settings && typeof settings === "object" && settings.maintenanceTelegramDailyLog && typeof settings.maintenanceTelegramDailyLog === "object"
+    ? settings.maintenanceTelegramDailyLog
+    : {};
+  const output = {};
+  for (const [key, value] of Object.entries(input)) {
+    const normalizedKey = toText(key).trim();
+    const normalizedValue = normalizeLooseDateToYmd(value);
+    if (!normalizedKey || !normalizedValue) continue;
+    output[normalizedKey] = normalizedValue;
+  }
+  return output;
+}
+
+function buildMaintenanceTelegramReminderRows(db) {
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const todayYmd = new Date().toISOString().slice(0, 10);
+  const dailyLog = normalizeMaintenanceTelegramDailyLog(settings);
+  const reminderRows = [];
+  let changed = false;
+  for (const [key, value] of Object.entries(dailyLog)) {
+    const sentDate = normalizeLooseDateToYmd(value);
+    if (!sentDate || sentDate < todayYmd) {
+      delete dailyLog[key];
+      changed = true;
+    }
+  }
+  const assets = Array.isArray(db && db.assets) ? db.assets : [];
+  for (const asset of assets) {
+    const scheduleDate = normalizeLooseDateToYmd(asset && asset.nextMaintenanceDate);
+    const assetIdNum = Number(asset && asset.id) || 0;
+    if (!scheduleDate || !assetIdNum) continue;
+    const days = daysUntilYmd(scheduleDate);
+    if (days === null || days > 7) continue;
+    if (hasCompletedMaintenanceOnDateServer(asset, scheduleDate)) continue;
+    const dedupeKey = `${assetIdNum}:${scheduleDate}:${todayYmd}`;
+    if (dailyLog[dedupeKey] === todayYmd) continue;
+    let alertLabel = "";
+    let title = "";
+    if (days === 7) {
+      alertLabel = "7 days before";
+      title = `Maintenance due in 7 days: ${toText(asset.assetId) || "Unknown Asset"}`;
+    } else if (days > 0) {
+      alertLabel = `${days} day${days === 1 ? "" : "s"} before`;
+      title = `Maintenance follow-up: ${toText(asset.assetId) || "Unknown Asset"}`;
+    } else if (days === 0) {
+      alertLabel = "Due today";
+      title = `Maintenance due today: ${toText(asset.assetId) || "Unknown Asset"}`;
+    } else {
+      alertLabel = `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} overdue`;
+      title = `Maintenance overdue: ${toText(asset.assetId) || "Unknown Asset"}`;
+    }
+    reminderRows.push({
+      key: dedupeKey,
+      assetDbId: assetIdNum,
+      assetId: toText(asset && asset.assetId),
+      name: toText(asset && asset.name),
+      campus: toText(asset && asset.campus),
+      location: toText(asset && asset.location),
+      scheduleDate,
+      scheduleNote: toText(asset && asset.scheduleNote),
+      title,
+      alertLabel,
+    });
+  }
+  settings.maintenanceTelegramDailyLog = dailyLog;
+  if (db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)) {
+    db.settings.maintenanceTelegramDailyLog = dailyLog;
+  } else if (db) {
+    db.settings = { maintenanceTelegramDailyLog: dailyLog };
+  }
+  return { rows: reminderRows, changed };
+}
+
+async function maybeRunMaintenanceAlertSweep() {
+  if (maintenanceAlertSweepRunning) return;
+  maintenanceAlertSweepRunning = true;
+  try {
+    const db = await readDb();
+    const createdNotifications = [];
+    const changed = ensureMaintenanceScheduleNotifications(db, createdNotifications);
+    const reminderResult = buildMaintenanceTelegramReminderRows(db);
+    if (changed || reminderResult.changed) {
+      await writeDb(db);
+    }
+    if (reminderResult.rows.length) {
+      const sent = await sendTelegramMaintenanceBatch(reminderResult.rows, db);
+      if (sent) {
+        const todayYmd = new Date().toISOString().slice(0, 10);
+        const settings =
+          db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+            ? db.settings
+            : {};
+        const dailyLog = normalizeMaintenanceTelegramDailyLog(settings);
+        reminderResult.rows.forEach((row) => {
+          dailyLog[toText(row.key)] = todayYmd;
+        });
+        db.settings = { ...(db.settings || {}), maintenanceTelegramDailyLog: dailyLog };
+        await writeDb(db);
+      }
+    }
+  } catch (err) {
+    console.warn(
+      "Maintenance alert sweep failed:",
+      err instanceof Error ? err.message : err
+    );
+  } finally {
+    maintenanceAlertSweepRunning = false;
+  }
 }
 
 async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], db = null) {
@@ -2578,6 +2835,325 @@ async function normalizePhotoList(photos, group = "assets", maxCount = 5) {
     if (out.length >= maxCount) break;
   }
   return out;
+}
+
+function extractDataUrlBuffer(dataUrl) {
+  const raw = toText(dataUrl);
+  const m = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) return null;
+  return {
+    mime: m[1].toLowerCase(),
+    buffer: Buffer.from(m[2], "base64"),
+  };
+}
+
+async function writeTempImageFromDataUrl(dataUrl, prefix = "utility-invoice") {
+  const parsed = extractDataUrlBuffer(dataUrl);
+  if (!parsed) return null;
+  const ext = extFromMime(parsed.mime);
+  const tempPath = path.join(
+    os.tmpdir(),
+    `${prefix}-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`
+  );
+  await fs.writeFile(tempPath, parsed.buffer);
+  return tempPath;
+}
+
+async function readInvoiceImagePath(photoInput) {
+  const raw = toText(photoInput);
+  if (!raw) return { path: "", temporary: false };
+  if (raw.startsWith("data:image/")) {
+    const tempPath = await writeTempImageFromDataUrl(raw);
+    return { path: tempPath || "", temporary: Boolean(tempPath) };
+  }
+  if (raw.startsWith("/uploads/")) {
+    const uploadRelative = raw.replace(/^\/uploads\//, "");
+    const safeRelative = path
+      .normalize(uploadRelative)
+      .replace(/^(\.\.(\/|\\|$))+/, "");
+    const uploadPath = path.resolve(path.join(UPLOADS_DIR, safeRelative));
+    const uploadRoot = path.resolve(UPLOADS_DIR) + path.sep;
+    if (uploadPath.startsWith(uploadRoot) && (await fileExists(uploadPath))) {
+      return { path: uploadPath, temporary: false };
+    }
+  }
+  return { path: "", temporary: false };
+}
+
+function firstNonEmptyMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const value = toText(match && match[1]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function parseMoneyValue(raw) {
+  const normalized = toText(raw).replace(/[, ]/g, "");
+  if (!normalized) return "";
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? String(numeric) : "";
+}
+
+function parseDateValue(raw) {
+  const text = toText(raw);
+  if (!text) return "";
+  const compact = text
+    .replace(/[|\\]/g, "/")
+    .replace(/\s*([/-])\s*/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  const direct = compact.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (direct) {
+    const [, year, month, day] = direct;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const dmy = compact.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmy) {
+    const [, day, month, year] = dmy;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const dmyShort = compact.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2})/);
+  if (dmyShort) {
+    const [, day, month, yearShort] = dmyShort;
+    const year = Number(yearShort) >= 70 ? `19${yearShort}` : `20${yearShort}`;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+  const words = compact.match(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})\b/i
+  );
+  if (words) {
+    const monthIndex = [
+      "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+    ].indexOf(words[1].toLowerCase());
+    if (monthIndex >= 0) {
+      return `${words[3]}-${String(monthIndex + 1).padStart(2, "0")}-${String(words[2]).padStart(2, "0")}`;
+    }
+  }
+  return "";
+}
+
+function parseBillingMonth(raw, fallbackDate = "") {
+  const date = parseDateValue(raw) || toText(fallbackDate);
+  if (date) return date.slice(0, 7);
+  const words = toText(raw).match(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/i
+  );
+  if (words) {
+    const monthIndex = [
+      "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+    ].indexOf(words[1].toLowerCase());
+    if (monthIndex >= 0) {
+      return `${words[2]}-${String(monthIndex + 1).padStart(2, "0")}`;
+    }
+  }
+  return "";
+}
+
+function parsePpwsInvoiceFields(text) {
+  const normalizedText = toText(text);
+  const lines = normalizedText
+    .split(/\r?\n/)
+    .map((line) => toText(line))
+    .filter(Boolean);
+  const flat = lines.join(" ");
+
+  const invoiceNumber = firstNonEmptyMatch(flat, [
+    /\b(PPWSA?\d{8,})\b/i,
+    /\b(PPWNSA?\d{8,})\b/i,
+  ]).replace(/^PPWNS/i, "PPWS");
+
+  const periodMatch = flat.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})\s*-\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+  const invoiceDateRaw = firstNonEmptyMatch(flat, [
+    /(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2})/,
+    /(\d{1,2}\/\d{1,2}\/\d{4})/,
+    /(\d{1,2}\/\d{1,2}\/\d{2})/,
+  ]);
+  const invoiceDate = parseDateValue(invoiceDateRaw);
+  const billingMonth = periodMatch
+    ? parseBillingMonth(periodMatch[2], invoiceDate)
+    : parseBillingMonth("", invoiceDate);
+
+  const m3Matches = Array.from(flat.matchAll(/(\d+(?:\.\d+)?)\s*M3\b/gi))
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const usage = m3Matches.length ? String(Math.max(...m3Matches)) : "";
+
+  const tailLines = lines.slice(-12);
+  const amountCandidates = tailLines
+    .flatMap((line) => Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g)).map((match) => match[1]))
+    .map((raw) => raw.replace(/\s+/g, ""))
+    .filter(Boolean);
+  const amountCounts = new Map();
+  for (const candidate of amountCandidates) {
+    amountCounts.set(candidate, (amountCounts.get(candidate) || 0) + 1);
+  }
+  let amount = "";
+  let bestCount = 0;
+  for (const [candidate, count] of amountCounts.entries()) {
+    if (count > bestCount) {
+      bestCount = count;
+      amount = candidate;
+    }
+  }
+  if (!amount) {
+    const fallbackAmount = flat.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/);
+    amount = toText(fallbackAmount && fallbackAmount[1]);
+  }
+
+  return {
+    invoiceNumber,
+    invoiceDate,
+    billingMonth,
+    usage: parseMoneyValue(usage),
+    amount: parseMoneyValue(amount),
+  };
+}
+
+function parseEdcInvoiceFields(text) {
+  const normalizedText = toText(text);
+  const lines = normalizedText
+    .split(/\r?\n/)
+    .map((line) => toText(line))
+    .filter(Boolean);
+  const flat = lines.join(" ");
+  const compact = flat.replace(/\s+/g, " ").trim();
+
+  const invoiceNumberRaw =
+    firstNonEmptyMatch(compact, [
+      /\bINV\s*\/\s*([A-Z0-9]{5,})\b/i,
+      /\bIN[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+    ]) ||
+    firstNonEmptyMatch(lines.slice(0, 8).join(" "), [
+      /\bINV\s*\/\s*([A-Z0-9]{5,})\b/i,
+      /\bIN[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+    ]);
+  const invoiceNumber = invoiceNumberRaw ? `INV/${invoiceNumberRaw.replace(/[^A-Z0-9]/gi, "")}` : "";
+
+  const allDates = Array.from(
+    flat.matchAll(/(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})/g)
+  ).map((match) => match[1]);
+  let invoiceDate = allDates.length ? parseDateValue(allDates[0]) : "";
+
+  const periodMatch = flat.match(
+    /(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})\s*(?:to|-|~|–)\s*(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})/i
+  );
+  if (!invoiceDate && periodMatch) {
+    invoiceDate = parseDateValue(periodMatch[2]);
+  }
+  const billingMonth = periodMatch
+    ? parseBillingMonth(periodMatch[2], invoiceDate)
+    : parseBillingMonth("", invoiceDate);
+
+  const kwhMatches = Array.from(flat.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi))
+    .map((match) => Number(match[1]))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const usage = kwhMatches.length ? String(Math.max(...kwhMatches)) : "";
+
+  const currencyCandidates = Array.from(flat.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g))
+    .map((match) => match[1].replace(/\s+/g, ""))
+    .filter(Boolean)
+    .map((raw) => ({
+      raw,
+      value: Number(raw.replace(/,/g, "")),
+    }))
+    .filter((entry) => Number.isFinite(entry.value) && entry.value >= 1000);
+  let amount = "";
+  if (currencyCandidates.length) {
+    currencyCandidates.sort((a, b) => b.value - a.value);
+    amount = currencyCandidates[0].raw;
+  }
+
+  return {
+    invoiceNumber,
+    invoiceDate,
+    billingMonth,
+    usage: parseMoneyValue(usage),
+    amount: parseMoneyValue(amount),
+  };
+}
+
+function parseUtilityInvoiceFromOcrText(utilityType, text) {
+  const normalizedText = toText(text);
+  const flat = normalizedText.replace(/\s+/g, " ").trim();
+  const utility = toUpper(utilityType) === "PPWS" ? "PPWS" : "EDC";
+  if (utility === "PPWS") {
+    const ppws = parsePpwsInvoiceFields(normalizedText);
+    const warnings = [];
+    if (!ppws.usage) warnings.push("Usage could not be detected from the PPWS invoice image.");
+    if (!ppws.amount) warnings.push("Amount could not be detected from the PPWS invoice image.");
+    if (!ppws.invoiceDate) warnings.push("Invoice date could not be detected from the PPWS invoice image.");
+    return {
+      utilityType: utility,
+      providerName: "Phnom Penh Water Supply Authority",
+      usage: ppws.usage,
+      amount: ppws.amount,
+      invoiceNumber: ppws.invoiceNumber,
+      invoiceDate: ppws.invoiceDate,
+      billingMonth: ppws.billingMonth,
+      rawText: normalizedText,
+      warnings,
+    };
+  }
+  const edc = parseEdcInvoiceFields(normalizedText);
+  const warnings = [];
+  if (!edc.usage) warnings.push("Usage could not be detected from the EDC invoice image.");
+  if (!edc.amount) warnings.push("Amount could not be detected from the EDC invoice image.");
+  if (!edc.invoiceDate) warnings.push("Invoice date could not be detected from the EDC invoice image.");
+  return {
+    utilityType: utility,
+    providerName: "Electricite du Cambodge",
+    usage: edc.usage,
+    amount: edc.amount,
+    invoiceNumber: edc.invoiceNumber,
+    invoiceDate: edc.invoiceDate,
+    billingMonth: edc.billingMonth,
+    rawText: normalizedText,
+    warnings,
+  };
+}
+
+async function runUtilityInvoiceOcr(imagePath) {
+  if (process.platform !== "darwin") {
+    throw new Error("Invoice OCR is available only on macOS in the local app.");
+  }
+  if (!(await fileExists(UTILITY_INVOICE_OCR_SCRIPT))) {
+    throw new Error("Invoice OCR helper is missing on the server.");
+  }
+  const { stdout, stderr } = await execFileAsync("swift", [UTILITY_INVOICE_OCR_SCRIPT, imagePath], {
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (stderr && stderr.trim()) {
+    console.warn("[utility-ocr]", stderr.trim());
+  }
+  const parsed = JSON.parse(stdout || "{}");
+  return {
+    text: toText(parsed.text),
+    lines: Array.isArray(parsed.lines) ? parsed.lines.map((line) => toText(line)).filter(Boolean) : [],
+  };
 }
 
 async function normalizeHistoryEntries(entries, group = "maintenance") {
@@ -3971,6 +4547,52 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/api/utilities/invoice-autofill") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const utilityType = toUpper(body.utilityType) === "PPWS" ? "PPWS" : "EDC";
+      const { path: imagePath, temporary } = await readInvoiceImagePath(body.photo || body.dataUrl);
+      if (!imagePath) {
+        sendJson(res, 400, { error: "Invoice image is required for auto fill." });
+        return;
+      }
+      try {
+        const ocr = await runUtilityInvoiceOcr(imagePath);
+        const extracted = parseUtilityInvoiceFromOcrText(utilityType, ocr.text);
+        const db = await readDb();
+        appendAuditLog(
+          db,
+          admin,
+          "UTILITY_INVOICE_AUTOFILL",
+          "utility_invoice",
+          utilityType,
+          `warnings=${extracted.warnings.length}`
+        );
+        await writeDb(db);
+        sendJson(res, 200, {
+          ok: true,
+          extracted,
+        });
+      } catch (err) {
+        sendJson(res, 503, {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Invoice OCR could not process this file.",
+        });
+      } finally {
+        if (temporary) {
+          try {
+            await fs.unlink(imagePath);
+          } catch {
+            // Ignore temp cleanup failures.
+          }
+        }
+      }
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await parseBody(req);
       const username = toText(body.username);
@@ -4238,7 +4860,6 @@ const server = http.createServer(async (req, res) => {
       const backfilled = backfillInventoryApprovalNotificationTargets(db);
       if (generated || backfilled) {
         await writeDb(db);
-        void sendTelegramMaintenanceBatch(createdNotifications, db);
       }
       const visible = normalizeNotificationEntries(db.notifications)
         .filter((row) => notificationVisibleToUser(row, user))
@@ -6394,6 +7015,11 @@ async function startServer() {
     }, AUTO_BACKUP_INTERVAL_MS);
   }
 
+  await maybeRunMaintenanceAlertSweep();
+  maintenanceAlertSweepTimer = setInterval(() => {
+    void maybeRunMaintenanceAlertSweep();
+  }, MAINTENANCE_ALERT_SWEEP_INTERVAL_MS);
+
   server.listen(PORT, HOST, () => {
     const bindHost = HOST === "0.0.0.0" ? "localhost" : HOST;
     const appRoot = path.join(__dirname, "..");
@@ -6418,6 +7044,9 @@ async function startServer() {
     } else {
       console.log("Auto backup disabled");
     }
+    console.log(
+      `Maintenance Telegram alert sweep: every ${MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES} minute(s)`
+    );
     if (usingRepoStorage) {
       console.warn("[STORAGE] Active data paths are still inside the app directory.");
       console.warn("[STORAGE] Safer production setup: set DATA_ROOT to a persistent disk and BACKUP_MIRROR_DIR to a second location.");
