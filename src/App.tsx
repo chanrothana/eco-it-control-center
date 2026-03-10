@@ -2982,7 +2982,8 @@ function isUnauthorizedError(err: unknown) {
 
 function isHistoryRecordNotFoundError(err: unknown) {
   if (!(err instanceof Error)) return false;
-  return err.message.toLowerCase().includes("history record not found");
+  const message = err.message.toLowerCase();
+  return message.includes("history record not found") || message.includes("status history record not found");
 }
 
 function formatDate(value: string) {
@@ -3780,7 +3781,11 @@ function normalizeMaintenanceEntryPhotos(entry: Partial<MaintenanceEntry>) {
   const afterBase = normalizeMaintenancePhotoList(entry.afterPhotos);
   const legacyAfter = normalizeMaintenancePhotoList(entry.photos);
   const photo = String(entry.photo || "").trim();
-  const afterPhotos = normalizeMaintenancePhotoList([...afterBase, ...legacyAfter, ...(photo ? [photo] : [])]);
+  const afterPhotos = afterBase.length
+    ? afterBase
+    : legacyAfter.length
+      ? legacyAfter
+      : normalizeMaintenancePhotoList(photo ? [photo] : []);
   return {
     beforePhotos,
     afterPhotos,
@@ -16909,6 +16914,50 @@ export default function App() {
     await deleteMaintenanceEntryByAsset(maintenanceDetailAssetId, entryId, true);
   }
 
+  async function deleteStatusHistoryEntryByAsset(assetDbId: number, entryId: number) {
+    if (!requireAdminAction()) return;
+    if (!assetDbId) return;
+    if (!window.confirm("Delete this status timeline record?")) return;
+
+    setBusy(true);
+    setError("");
+    try {
+      const nextLocal = readAssetFallback().map((asset) => {
+        if (asset.id !== assetDbId) return asset;
+        return normalizeAssetForUi({
+          ...asset,
+          statusHistory: (asset.statusHistory || []).filter(
+            (entry) => Number(entry.id) !== Number(entryId)
+          ),
+        });
+      });
+
+      try {
+        await requestJson<{ ok: boolean }>(`/api/assets/${assetDbId}/status-history/${entryId}`, {
+          method: "DELETE",
+        });
+      } catch (err) {
+        if (
+          !isApiUnavailableError(err) &&
+          !isMissingRouteError(err) &&
+          !isHistoryRecordNotFoundError(err)
+        ) {
+          throw err;
+        }
+      }
+
+      writeAssetFallback(nextLocal);
+      setAssets(nextLocal);
+      setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      appendUiAudit("DELETE", "status_history", String(entryId), "Deleted");
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete status timeline record");
+    } finally {
+      setBusy(false);
+    }
+  }
+
 
   function openAssetStatusChangeDialog(id: number, status: string) {
     if (!requireAdminAction()) return;
@@ -21863,17 +21912,6 @@ export default function App() {
         });
       }
 
-      for (const status of visibleStatusHistory) {
-        if (consumedStatus.has(status.id)) continue;
-        events.push({
-          id: `public-activity-status-${status.id}`,
-          date: status.date || "",
-          by: status.by || "-",
-          note: status.reason || "-",
-          status,
-        });
-      }
-
       return events.sort((a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || "")));
     })();
     return (
@@ -26440,6 +26478,7 @@ export default function App() {
                           <th>From</th>
                           <th>To</th>
                           <th>Reason</th>
+                          {isAdmin ? <th>{t.delete}</th> : null}
                         </tr>
                       </thead>
                       <tbody>
@@ -26450,11 +26489,22 @@ export default function App() {
                               <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
                               <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
                               <td data-label="Reason">{h.reason || "-"}</td>
+                              {isAdmin ? (
+                                <td data-label={t.delete}>
+                                  <button
+                                    className="btn-danger"
+                                    disabled={busy}
+                                    onClick={() => void deleteStatusHistoryEntryByAsset(detailAsset.id, h.id)}
+                                  >
+                                    X
+                                  </button>
+                                </td>
+                              ) : null}
                             </tr>
                           ))
                         ) : (
                           <tr className="asset-detail-empty-row">
-                            <td colSpan={4}>No status timeline yet.</td>
+                            <td colSpan={isAdmin ? 5 : 4}>No status timeline yet.</td>
                           </tr>
                         )}
                       </tbody>
@@ -32568,10 +32618,10 @@ export default function App() {
                         </div>
                       </div>
                       <div className="maintenance-history-simple-body">
-                        <div className="maintenance-history-simple-asset-photo">
-                          {renderAssetPhoto(row.assetPhoto || "", row.assetId)}
-                        </div>
                         <div className="maintenance-history-simple-info">
+                          <div className="maintenance-history-simple-asset-photo">
+                            {renderAssetPhoto(row.assetPhoto || "", row.assetId)}
+                          </div>
                           <div className="maintenance-history-simple-line">
                             <strong>{lang === "km" ? "Category" : "Category"}:</strong> {row.category}
                             <span className="maintenance-history-inline-sep">|</span>
@@ -32591,10 +32641,12 @@ export default function App() {
                           <div className="maintenance-history-simple-note">
                             <strong>{lang === "km" ? "Note" : "Note"}:</strong> {row.note || "-"}
                           </div>
-                          <div className="maintenance-history-simple-photos">
-                            <strong>{lang === "km" ? "Maintenance Photos" : "Maintenance Photos"}:</strong>
-                            <div>{renderMaintenancePhotoGroups(row, `maintenance-card-${row.rowId}`)}</div>
-                          </div>
+                        </div>
+                        <div className="maintenance-history-simple-photos">
+                          <strong>{lang === "km" ? "Maintenance Photos" : "Maintenance Photos"}:</strong>
+                          <div>{renderMaintenancePhotoGroups(row, `maintenance-card-${row.rowId}`, undefined, {
+                            className: "maintenance-history-photo-groups-two-col",
+                          })}</div>
                         </div>
                       </div>
                       <div className="asset-actions maintenance-history-card-actions">

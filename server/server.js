@@ -5575,6 +5575,50 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const statusHistoryDeleteMatch = url.pathname.match(/^\/api\/assets\/(\d+)\/status-history\/(\d+)$/);
+    if (req.method === "DELETE" && statusHistoryDeleteMatch) {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const assetId = Number(statusHistoryDeleteMatch[1]);
+      const entryId = Number(statusHistoryDeleteMatch[2]);
+      if (!assetId || !entryId) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+
+      const db = await readDb();
+      const idx = db.assets.findIndex((a) => a.id === assetId);
+      if (idx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+
+      const history = Array.isArray(db.assets[idx].statusHistory)
+        ? db.assets[idx].statusHistory
+        : [];
+      const before = history.length;
+      const deletedEntry = history.find((entry) => Number(entry?.id) === entryId) || null;
+      db.assets[idx].statusHistory = history.filter((entry) => Number(entry?.id) !== entryId);
+      if (db.assets[idx].statusHistory.length === before) {
+        sendJson(res, 404, { error: "Status history record not found" });
+        return;
+      }
+
+      appendAuditLog(
+        db,
+        admin,
+        "DELETE",
+        "status_history",
+        `${db.assets[idx].assetId || assetId}#${entryId}`,
+        deletedEntry
+          ? `${toText(deletedEntry.fromStatus)} -> ${toText(deletedEntry.toStatus)} | ${toText(deletedEntry.reason)}`
+          : "Status history deleted"
+      );
+      await writeDb(db);
+      sendJson(res, 200, { asset: db.assets[idx], ok: true });
+      return;
+    }
+
     const historyDeleteMatch = url.pathname.match(/^\/api\/assets\/(\d+)\/history\/(\d+)$/);
     if (req.method === "DELETE" && historyDeleteMatch) {
       const admin = requireAdmin(req, res);
