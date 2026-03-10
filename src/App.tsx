@@ -18685,7 +18685,7 @@ export default function App() {
     altPrefix = "maintenance-column"
   ) {
     const normalized = normalizeMaintenanceEntryPhotos(entry);
-    const photos = stage === "before" ? normalized.beforePhotos : normalized.afterPhotos;
+    const photos = (stage === "before" ? normalized.beforePhotos : normalized.afterPhotos).slice(0, 1);
     return renderMaintenancePhotoStack({ photos }, `${altPrefix}-${stage}`);
   }
   const maintenanceCompletionText = useCallback(
