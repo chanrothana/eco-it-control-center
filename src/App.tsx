@@ -5645,6 +5645,7 @@ export default function App() {
   const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
   const [qrLocationFilter, setQrLocationFilter] = useState("ALL");
   const [qrCategoryFilter, setQrCategoryFilter] = useState<string[]>(["ALL"]);
+  const [qrStatusFilter, setQrStatusFilter] = useState<string[]>(["ALL"]);
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
@@ -19922,6 +19923,7 @@ export default function App() {
       setQrCampusFilter("ALL");
       setQrLocationFilter("ALL");
       setQrCategoryFilter(["ALL"]);
+      setQrStatusFilter(["ALL"]);
       setQrItemFilter(["ALL"]);
       return;
     }
@@ -19939,6 +19941,7 @@ export default function App() {
     setQrCampusFilter("ALL");
     setQrLocationFilter("ALL");
     setQrCategoryFilter(["ALL"]);
+    setQrStatusFilter(["ALL"]);
     setQrItemFilter(["ALL"]);
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
@@ -19988,10 +19991,19 @@ export default function App() {
       qrCategoryFilter.includes("ALL") ? true : qrCategoryFilter.includes(row.category)
     );
   }, [qrRowsByCampusLocation, qrCategoryFilter]);
-  const qrItemFilterOptions = useMemo(() => {
-    const options = Array.from(new Set(qrRowsByCampusLocationCategory.map((row) => row.itemName).filter(Boolean)));
+  const qrStatusFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(qrRowsByCampusLocationCategory.map((row) => String(row.status || "").trim()).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrRowsByCampusLocationCategory]);
+  const qrRowsByCampusLocationCategoryStatus = useMemo(() => {
+    return qrRowsByCampusLocationCategory.filter((row) =>
+      qrStatusFilter.includes("ALL") ? true : qrStatusFilter.includes(String(row.status || "").trim())
+    );
+  }, [qrRowsByCampusLocationCategory, qrStatusFilter]);
+  const qrItemFilterOptions = useMemo(() => {
+    const options = Array.from(new Set(qrRowsByCampusLocationCategoryStatus.map((row) => row.itemName).filter(Boolean)));
+    return options.sort((a, b) => a.localeCompare(b));
+  }, [qrRowsByCampusLocationCategoryStatus]);
   useEffect(() => {
     if (qrLocationFilter === "ALL") return;
     if (!qrLocationFilterOptions.includes(qrLocationFilter)) {
@@ -20009,6 +20021,17 @@ export default function App() {
       return next;
     });
   }, [qrCategoryFilter, qrCategoryFilterOptions]);
+  useEffect(() => {
+    setQrStatusFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const next = prev.filter((status) => qrStatusFilterOptions.includes(status));
+      if (!next.length) return ["ALL"];
+      if (next.length === prev.length && next.every((value, index) => value === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [qrStatusFilterOptions]);
   useEffect(() => {
     setQrItemFilter((prev) => {
       if (prev.includes("ALL")) return prev;
@@ -20736,10 +20759,11 @@ export default function App() {
       if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
       if (qrLocationFilter !== "ALL" && String(row.location || "").trim() !== qrLocationFilter) return false;
       if (!qrCategoryFilter.includes("ALL") && !qrCategoryFilter.includes(row.category)) return false;
+      if (!qrStatusFilter.includes("ALL") && !qrStatusFilter.includes(String(row.status || "").trim())) return false;
       if (!qrItemFilter.includes("ALL") && !qrItemFilter.includes(row.itemName)) return false;
       return true;
     });
-  }, [qrLabelRows, qrCampusFilter, qrLocationFilter, qrCategoryFilter, qrItemFilter]);
+  }, [qrLabelRows, qrCampusFilter, qrLocationFilter, qrCategoryFilter, qrStatusFilter, qrItemFilter]);
 
   const qrScanBase = useMemo(() => {
     if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
@@ -33425,6 +33449,28 @@ export default function App() {
                     }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
                     emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(qrStatusFilter, lang === "km" ? "ស្ថានភាពទាំងអស់" : "All Statuses", (status) => assetStatusLabel(status))}
+                    options={qrStatusFilterOptions.map((status) => ({
+                      value: status,
+                      label: assetStatusLabel(status),
+                    }))}
+                    selectedValues={qrStatusFilter}
+                    allOptionLabel={lang === "km" ? "ស្ថានភាពទាំងអស់" : "All Statuses"}
+                    allOptionChecked={qrStatusFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setQrStatusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", qrStatusFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setQrStatusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, qrStatusFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាព..." : "Search status..."}
+                    emptyText={lang === "km" ? "មិនមានស្ថានភាព" : "No status found."}
                   />
                   <SearchableMultiSelectPicker
                     summary={summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}
