@@ -123,6 +123,7 @@ const TELEGRAM_MAINTENANCE_BOT_TOKEN = String(
   process.env.TELEGRAM_MAINTENANCE_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ""
 ).trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const TELEGRAM_MAINTENANCE_CHAT_ID = String(process.env.TELEGRAM_MAINTENANCE_CHAT_ID || "").trim();
 const TELEGRAM_DISCOVER_CHAT_IDS =
   String(process.env.TELEGRAM_DISCOVER_CHAT_IDS || "true").toLowerCase() !== "false";
 const TELEGRAM_CHAT_IDS = Array.from(
@@ -130,6 +131,17 @@ const TELEGRAM_CHAT_IDS = Array.from(
     [
       TELEGRAM_CHAT_ID,
       ...String(process.env.TELEGRAM_CHAT_IDS || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ].filter(Boolean)
+  )
+);
+const TELEGRAM_MAINTENANCE_CHAT_IDS = Array.from(
+  new Set(
+    [
+      TELEGRAM_MAINTENANCE_CHAT_ID,
+      ...String(process.env.TELEGRAM_MAINTENANCE_CHAT_IDS || "")
         .split(",")
         .map((value) => value.trim())
         .filter(Boolean),
@@ -153,6 +165,7 @@ let telegramMaintenanceLastSendReport = {
   errors: [],
 };
 let telegramLastDiscoveredChats = [];
+let telegramMaintenanceLastDiscoveredChats = [];
 let maintenanceAlertSweepTimer = null;
 let maintenanceAlertSweepRunning = false;
 const PUBLIC_APP_URL = String(
@@ -2150,14 +2163,17 @@ function deleteTelegramMessageFromChat(chatId, messageId, botToken = TELEGRAM_BO
   });
 }
 
-function resolveTelegramConfiguredChatIds(db, overrideChatIds = []) {
+function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "default") {
   const settings =
     db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
       ? db.settings
       : {};
-  const settingsTargets = normalizeTelegramChatIds(settings.telegramChatIds);
+  const settingsTargets = normalizeTelegramChatIds(
+    kind === "maintenance" ? settings.telegramMaintenanceChatIds : settings.telegramChatIds
+  );
   const explicitTargets = normalizeTelegramChatIds(overrideChatIds);
-  return Array.from(new Set([...explicitTargets, ...TELEGRAM_CHAT_IDS, ...settingsTargets]));
+  const envTargets = kind === "maintenance" ? TELEGRAM_MAINTENANCE_CHAT_IDS : TELEGRAM_CHAT_IDS;
+  return Array.from(new Set([...explicitTargets, ...envTargets, ...settingsTargets]));
 }
 
 function shouldRetryTelegramResult(result) {
@@ -2289,7 +2305,7 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
       ? Boolean(options.includeResults)
       : false;
-  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds);
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
   const targets = Array.from(new Set(configuredTargets));
   if (!targets.length) return false;
   const results = [];
@@ -4082,16 +4098,25 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const discoveredTargets = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+      const maintenanceDiscoveredTargets =
+        TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
+          ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
+          : [];
       telegramLastDiscoveredChats = discoveredTargets;
+      telegramMaintenanceLastDiscoveredChats = maintenanceDiscoveredTargets;
       const db = await readDb();
       sendJson(res, 200, {
         ok: true,
         enabled: TELEGRAM_ALERT_ENABLED,
         hasBotToken: Boolean(TELEGRAM_BOT_TOKEN),
+        hasMaintenanceBotToken: Boolean(TELEGRAM_MAINTENANCE_BOT_TOKEN),
         configuredTargets: resolveTelegramConfiguredChatIds(db),
+        maintenanceConfiguredTargets: resolveTelegramConfiguredChatIds(db, [], "maintenance"),
         discoverEnabled: TELEGRAM_DISCOVER_CHAT_IDS,
         discoveredTargets,
+        maintenanceDiscoveredTargets,
         lastSend: telegramLastSendReport,
+        maintenanceLastSend: telegramMaintenanceLastSendReport,
       });
       return;
     }
@@ -4261,6 +4286,7 @@ const server = http.createServer(async (req, res) => {
           ...settings,
           inventoryApprovalRouting: normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting),
           telegramChatIds: normalizeTelegramChatIds(settings.telegramChatIds),
+          telegramMaintenanceChatIds: normalizeTelegramChatIds(settings.telegramMaintenanceChatIds),
           staffUsers: normalizeStaffUsers(settings.staffUsers),
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
           inventoryItems: normalizeInventoryItems(settings.inventoryItems),
@@ -4318,6 +4344,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "telegramChatIds")
           ? normalizeTelegramChatIds(incoming.telegramChatIds)
           : normalizeTelegramChatIds(current.telegramChatIds);
+      const nextTelegramMaintenanceChatIds =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "telegramMaintenanceChatIds")
+          ? normalizeTelegramChatIds(incoming.telegramMaintenanceChatIds)
+          : normalizeTelegramChatIds(current.telegramMaintenanceChatIds);
       const nextInventoryItems =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryItems")
           ? normalizeInventoryItems(incoming.inventoryItems)
@@ -4382,6 +4412,7 @@ const server = http.createServer(async (req, res) => {
         maintenanceReminderOffsets: nextMaintenanceReminderOffsets,
         inventoryApprovalRouting: nextInventoryApprovalRouting,
         telegramChatIds: nextTelegramChatIds,
+        telegramMaintenanceChatIds: nextTelegramMaintenanceChatIds,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
         poolCleaningSchedules: nextPoolCleaningSchedules,

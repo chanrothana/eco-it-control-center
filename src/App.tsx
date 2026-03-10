@@ -561,10 +561,21 @@ type TelegramStatus = {
   ok: boolean;
   enabled: boolean;
   hasBotToken: boolean;
+  hasMaintenanceBotToken?: boolean;
   configuredTargets: string[];
+  maintenanceConfiguredTargets?: string[];
   discoverEnabled: boolean;
   discoveredTargets: TelegramDiscoveredChat[];
+  maintenanceDiscoveredTargets?: TelegramDiscoveredChat[];
   lastSend?: {
+    at?: string;
+    ok?: boolean;
+    successCount?: number;
+    targetCount?: number;
+    targets?: string[];
+    errors?: string[];
+  };
+  maintenanceLastSend?: {
     at?: string;
     ok?: boolean;
     successCount?: number;
@@ -580,6 +591,7 @@ type ServerSettings = {
   maintenanceReminderOffsets?: number[];
   inventoryApprovalRouting?: InventoryApprovalRoutingMap;
   telegramChatIds?: string[];
+  telegramMaintenanceChatIds?: string[];
   inventoryItems?: InventoryItem[];
   inventoryTxns?: InventoryTxn[];
   poolCleaningSchedules?: PoolCleaningSchedule[];
@@ -6924,6 +6936,7 @@ export default function App() {
   const [inventoryApprovalRoutingDraft, setInventoryApprovalRoutingDraft] = useState<InventoryApprovalRoutingDraft | null>(null);
   const [inventoryApprovalRoutingEditingRequester, setInventoryApprovalRoutingEditingRequester] = useState<string | null>(null);
   const [telegramChatIdsText, setTelegramChatIdsText] = useState("");
+  const [telegramMaintenanceChatIdsText, setTelegramMaintenanceChatIdsText] = useState("");
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [authCreateForm, setAuthCreateForm] = useState({
     staffId: "",
@@ -10470,6 +10483,11 @@ export default function App() {
             ? (settingsRes.settings?.telegramChatIds.filter(Boolean).join(", ") ?? "")
             : ""
         );
+        setTelegramMaintenanceChatIdsText(
+          Array.isArray(settingsRes.settings?.telegramMaintenanceChatIds)
+            ? (settingsRes.settings?.telegramMaintenanceChatIds.filter(Boolean).join(", ") ?? "")
+            : ""
+        );
         const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
         const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
         const serverUtilityMeters = normalizeUtilityMeters(settingsRes.settings?.utilityMeters);
@@ -11890,11 +11908,16 @@ export default function App() {
     );
   }
 
-  async function saveTelegramChatIdsToServer(nextChatIds: string[]) {
+  async function saveTelegramChatIdsToServer(nextChatIds: string[], nextMaintenanceChatIds: string[]) {
     try {
       await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
         method: "PATCH",
-        body: JSON.stringify({ settings: { telegramChatIds: nextChatIds } }),
+        body: JSON.stringify({
+          settings: {
+            telegramChatIds: nextChatIds,
+            telegramMaintenanceChatIds: nextMaintenanceChatIds,
+          },
+        }),
       });
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
@@ -11921,11 +11944,15 @@ export default function App() {
   async function saveTelegramAlertTargets() {
     if (!requireAdminAction()) return;
     const nextChatIds = parseTelegramChatIds(telegramChatIdsText);
+    const nextMaintenanceChatIds = parseTelegramChatIds(telegramMaintenanceChatIdsText);
     try {
-      await saveTelegramChatIdsToServer(nextChatIds);
+      await saveTelegramChatIdsToServer(nextChatIds, nextMaintenanceChatIds);
       setTelegramChatIdsText(nextChatIds.join(", "));
+      setTelegramMaintenanceChatIdsText(nextMaintenanceChatIds.join(", "));
       await loadTelegramStatus();
-      setSetupMessage(lang === "km" ? "បានអាប់ដេត Telegram chat ID រួចរាល់។" : "Telegram chat IDs updated.");
+      setSetupMessage(
+        lang === "km" ? "បានអាប់ដេត Telegram chat ID រួចរាល់។" : "Telegram chat IDs updated."
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save Telegram chat IDs.");
     }
@@ -36698,20 +36725,38 @@ export default function App() {
             <article className="panel" style={{ marginTop: 12 }}>
               <div className="panel-row">
                 <h3 className="section-title">{lang === "km" ? "Telegram Alert Target" : "Telegram Alert Target"}</h3>
-                <span className="tiny">{lang === "km" ? "រក្សាទុក chat ID របស់ group ដើម្បីឱ្យ Stock OUT និង Maintenance reminder ផ្ញើ alert បាន" : "Save the group chat ID so Stock OUT and maintenance reminders can alert Telegram."}</span>
+                <span className="tiny">
+                  {lang === "km"
+                    ? "រក្សាទុក group chat ID ដាច់ដោយឡែកសម្រាប់ bot ធម្មតា និង bot ថែទាំ។"
+                    : "Save separate group chat IDs for the normal alert bot and the maintenance alert bot."}
+                </span>
               </div>
               <div className="tiny" style={{ marginBottom: 8 }}>
                 {lang === "km"
-                  ? "Bot សម្រាប់ Maintenance alert: @eco_maintenance_alert_bot"
-                  : "Maintenance alert bot: @eco_maintenance_alert_bot"}
+                  ? "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot"
+                  : "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot"}
               </div>
               <label className="field">
-                <span>{lang === "km" ? "Telegram Chat ID(s)" : "Telegram Chat ID(s)"}</span>
+                <span>{lang === "km" ? "Telegram Chat ID(s) - Normal Alerts" : "Telegram Chat ID(s) - Normal Alerts"}</span>
                 <input
                   className="input"
                   value={telegramChatIdsText}
                   onChange={(e) => setTelegramChatIdsText(e.target.value)}
                   placeholder="-1001234567890, -1009876543210"
+                  disabled={!isAdmin || busy}
+                />
+              </label>
+              <label className="field" style={{ marginTop: 10 }}>
+                <span>
+                  {lang === "km"
+                    ? "Telegram Chat ID(s) - Maintenance Alerts"
+                    : "Telegram Chat ID(s) - Maintenance Alerts"}
+                </span>
+                <input
+                  className="input"
+                  value={telegramMaintenanceChatIdsText}
+                  onChange={(e) => setTelegramMaintenanceChatIdsText(e.target.value)}
+                  placeholder="-1001234567890"
                   disabled={!isAdmin || busy}
                 />
               </label>
@@ -36739,10 +36784,13 @@ export default function App() {
               {telegramStatus ? (
                 <div style={{ marginTop: 12 }}>
                   <div className="tiny">
-                    {lang === "km" ? "Configured targets" : "Configured targets"}: {telegramStatus.configuredTargets.length ? telegramStatus.configuredTargets.join(", ") : "-"}
+                    {lang === "km" ? "Configured targets (normal)" : "Configured targets (normal)"}: {telegramStatus.configuredTargets.length ? telegramStatus.configuredTargets.join(", ") : "-"}
                   </div>
                   <div className="tiny">
-                    {lang === "km" ? "Discovered chats" : "Discovered chats"}: {telegramStatus.discoveredTargets.length ? "" : "-"}
+                    {lang === "km" ? "Configured targets (maintenance)" : "Configured targets (maintenance)"}: {telegramStatus.maintenanceConfiguredTargets?.length ? telegramStatus.maintenanceConfiguredTargets.join(", ") : "-"}
+                  </div>
+                  <div className="tiny">
+                    {lang === "km" ? "Discovered chats (normal)" : "Discovered chats (normal)"}: {telegramStatus.discoveredTargets.length ? "" : "-"}
                   </div>
                   {telegramStatus.discoveredTargets.length ? (
                     <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
@@ -36754,11 +36802,31 @@ export default function App() {
                     </div>
                   ) : null}
                   <div className="tiny" style={{ marginTop: 8 }}>
-                    {lang === "km" ? "Last send" : "Last send"}: {telegramStatus.lastSend?.at || "-"}
+                    {lang === "km" ? "Discovered chats (maintenance)" : "Discovered chats (maintenance)"}: {telegramStatus.maintenanceDiscoveredTargets?.length ? "" : "-"}
+                  </div>
+                  {telegramStatus.maintenanceDiscoveredTargets?.length ? (
+                    <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
+                      {telegramStatus.maintenanceDiscoveredTargets.map((chat) => (
+                        <div key={`telegram-maintenance-chat-${chat.id}`} className="tiny" style={{ marginBottom: 6 }}>
+                          <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="tiny" style={{ marginTop: 8 }}>
+                    {lang === "km" ? "Last send (normal)" : "Last send (normal)"}: {telegramStatus.lastSend?.at || "-"}
                   </div>
                   {telegramStatus.lastSend?.errors?.length ? (
                     <div className="alert" style={{ marginTop: 8 }}>
                       {telegramStatus.lastSend.errors.join(" | ")}
+                    </div>
+                  ) : null}
+                  <div className="tiny" style={{ marginTop: 8 }}>
+                    {lang === "km" ? "Last send (maintenance)" : "Last send (maintenance)"}: {telegramStatus.maintenanceLastSend?.at || "-"}
+                  </div>
+                  {telegramStatus.maintenanceLastSend?.errors?.length ? (
+                    <div className="alert" style={{ marginTop: 8 }}>
+                      {telegramStatus.maintenanceLastSend.errors.join(" | ")}
                     </div>
                   ) : null}
                 </div>
