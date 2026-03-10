@@ -9287,6 +9287,12 @@ tr.row-maint-maintenance:hover td {
   gap: 10px;
 }
 
+.public-asset-history-photo-groups-two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
 .public-asset-history-photo-single {
   display: grid;
   justify-items: end;
@@ -9303,6 +9309,10 @@ tr.row-maint-maintenance:hover td {
   justify-items: start;
 }
 
+.public-asset-history-photo-groups-two-col .maintenance-photo-group {
+  align-content: start;
+}
+
 .public-asset-history-photo-groups .maintenance-photo-group > small {
   color: #6a7f9f;
 }
@@ -9316,6 +9326,13 @@ tr.row-maint-maintenance:hover td {
   width: 58px;
   height: 58px;
   border-radius: 12px;
+}
+
+.public-asset-history-photo-groups-two-col .maintenance-photo-stack .table-photo,
+.public-asset-history-photo-groups-two-col .maintenance-photo-stack .photo-placeholder {
+  width: min(100%, 96px);
+  height: auto;
+  aspect-ratio: 1 / 1;
 }
 
 .public-asset-history-photo-btn {

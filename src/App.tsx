@@ -5644,7 +5644,7 @@ export default function App() {
   const [setCodeReportColumnWidths, setSetCodeReportColumnWidths] = useState<number[]>(DEFAULT_SET_CODE_REPORT_COLUMN_WIDTHS);
   const [qrCampusFilter, setQrCampusFilter] = useState("ALL");
   const [qrLocationFilter, setQrLocationFilter] = useState("ALL");
-  const [qrCategoryFilter, setQrCategoryFilter] = useState("ALL");
+  const [qrCategoryFilter, setQrCategoryFilter] = useState<string[]>(["ALL"]);
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
@@ -18565,8 +18565,12 @@ export default function App() {
       </button>
     );
   }
-  function renderMaintenancePhotoStack(input: { photo?: string; photos?: string[] }, altPrefix = "maintenance") {
-    const photos = normalizeAssetPhotos(input).slice(0, 4);
+  function renderMaintenancePhotoStack(
+    input: { photo?: string; photos?: string[] },
+    altPrefix = "maintenance",
+    maxPhotos = 4
+  ) {
+    const photos = normalizeAssetPhotos(input).slice(0, maxPhotos);
     if (!photos.length) return <span className="photo-empty">{t.noPhoto}</span>;
     return (
       <div className="maintenance-photo-stack">
@@ -18589,6 +18593,10 @@ export default function App() {
     labels?: {
       before?: string;
       after?: string;
+    },
+    options?: {
+      maxPhotosPerGroup?: number;
+      className?: string;
     }
   ) {
     const normalized = normalizeMaintenanceEntryPhotos(entry);
@@ -18596,19 +18604,21 @@ export default function App() {
     const hasAfter = normalized.afterPhotos.length > 0;
     const beforeLabel = labels?.before || (lang === "km" ? "មុនថែទាំ" : "Before");
     const afterLabel = labels?.after || (lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After");
+    const maxPhotosPerGroup = Math.max(1, Number(options?.maxPhotosPerGroup || 4));
+    const groupClassName = options?.className ? `maintenance-photo-groups ${options.className}` : "maintenance-photo-groups";
     if (!hasBefore && !hasAfter) return <span className="photo-empty">{t.noPhoto}</span>;
     return (
-      <div className="maintenance-photo-groups">
+      <div className={groupClassName}>
         {hasBefore ? (
           <div className="maintenance-photo-group">
             <small>{beforeLabel}</small>
-            {renderMaintenancePhotoStack({ photos: normalized.beforePhotos }, `${altPrefix}-before`)}
+            {renderMaintenancePhotoStack({ photos: normalized.beforePhotos }, `${altPrefix}-before`, maxPhotosPerGroup)}
           </div>
         ) : null}
         {hasAfter ? (
           <div className="maintenance-photo-group">
             <small>{afterLabel}</small>
-            {renderMaintenancePhotoStack({ photos: normalized.afterPhotos }, `${altPrefix}-after`)}
+            {renderMaintenancePhotoStack({ photos: normalized.afterPhotos }, `${altPrefix}-after`, maxPhotosPerGroup)}
           </div>
         ) : null}
       </div>
@@ -19515,6 +19525,7 @@ export default function App() {
         campus: row.campus,
         category: row.category,
         location: row.location,
+        assignedTo: row.assignedTo,
         status: row.status,
         serialNumber: row.serialNumber,
       })),
@@ -19910,7 +19921,7 @@ export default function App() {
     if (reportType === "qr_labels") {
       setQrCampusFilter("ALL");
       setQrLocationFilter("ALL");
-      setQrCategoryFilter("ALL");
+      setQrCategoryFilter(["ALL"]);
       setQrItemFilter(["ALL"]);
       return;
     }
@@ -19927,7 +19938,7 @@ export default function App() {
     resetAssetMasterReportFilters();
     setQrCampusFilter("ALL");
     setQrLocationFilter("ALL");
-    setQrCategoryFilter("ALL");
+    setQrCategoryFilter(["ALL"]);
     setQrItemFilter(["ALL"]);
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
@@ -19973,7 +19984,9 @@ export default function App() {
     });
   }, [qrRowsByCampusLocation]);
   const qrRowsByCampusLocationCategory = useMemo(() => {
-    return qrRowsByCampusLocation.filter((row) => (qrCategoryFilter === "ALL" ? true : row.category === qrCategoryFilter));
+    return qrRowsByCampusLocation.filter((row) =>
+      qrCategoryFilter.includes("ALL") ? true : qrCategoryFilter.includes(row.category)
+    );
   }, [qrRowsByCampusLocation, qrCategoryFilter]);
   const qrItemFilterOptions = useMemo(() => {
     const options = Array.from(new Set(qrRowsByCampusLocationCategory.map((row) => row.itemName).filter(Boolean)));
@@ -19986,10 +19999,15 @@ export default function App() {
     }
   }, [qrLocationFilter, qrLocationFilterOptions]);
   useEffect(() => {
-    if (qrCategoryFilter === "ALL") return;
-    if (!qrCategoryFilterOptions.includes(qrCategoryFilter)) {
-      setQrCategoryFilter("ALL");
-    }
+    setQrCategoryFilter((prev) => {
+      if (prev.includes("ALL")) return prev;
+      const next = prev.filter((category) => qrCategoryFilterOptions.includes(category));
+      if (!next.length) return ["ALL"];
+      if (next.length === prev.length && next.every((value, index) => value === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
   }, [qrCategoryFilter, qrCategoryFilterOptions]);
   useEffect(() => {
     setQrItemFilter((prev) => {
@@ -20717,7 +20735,7 @@ export default function App() {
     return qrLabelRows.filter((row) => {
       if (qrCampusFilter !== "ALL" && row.campus !== qrCampusFilter) return false;
       if (qrLocationFilter !== "ALL" && String(row.location || "").trim() !== qrLocationFilter) return false;
-      if (qrCategoryFilter !== "ALL" && row.category !== qrCategoryFilter) return false;
+      if (!qrCategoryFilter.includes("ALL") && !qrCategoryFilter.includes(row.category)) return false;
       if (!qrItemFilter.includes("ALL") && !qrItemFilter.includes(row.itemName)) return false;
       return true;
     });
@@ -21127,7 +21145,9 @@ export default function App() {
               .map((row) => {
                 const qr = String(rows.find((r) => r[1] === row.assetId)?.[0] || "");
                 const serial = String(row.serialNumber || "").trim() || "-";
+                const assignedTo = String(row.assignedTo || "").trim();
                 return `<div class="qr-sticker-wrap">
+                  ${assignedTo ? `<div class="qr-sticker-user">${escapeHtml(assignedTo)}</div>` : ""}
                   <div class="qr-sticker-sn">SN: ${escapeHtml(serial)}</div>
                   <div class="qr-sticker">
                     <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
@@ -21199,6 +21219,7 @@ export default function App() {
           .is-preview-resizing, .is-preview-resizing * { cursor: col-resize !important; user-select: none !important; }
           .qr-sticker-grid { display: grid; grid-template-columns: repeat(6, 96px); column-gap: 6px; row-gap: 6px; margin-top: 6px; width: 100%; justify-content: space-between; }
           .qr-sticker-wrap { width: 96px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
+          .qr-sticker-user { width: 96px; min-height: 10px; text-align: center; font-size: 6.6px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
           .qr-sticker-sn { width: 96px; min-height: 10px; text-align: center; font-size: 6.8px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
           .qr-sticker { width: 96px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 4px 4px 4px; display: grid; gap: 3px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
           .qr-sticker-qr { width: 74px; height: 74px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
@@ -22258,6 +22279,9 @@ export default function App() {
                                           {renderMaintenancePhotoGroups(entry, `public-maint-${entry.id}`, {
                                             before: lang === "km" ? "មុនថែទាំ" : "Before Maintenance",
                                             after: lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After Maintenance",
+                                          }, {
+                                            maxPhotosPerGroup: 1,
+                                            className: "public-asset-history-photo-groups-two-col",
                                           })}
                                         </div>
                                       </div>
@@ -33369,22 +33393,36 @@ export default function App() {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
                     emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                   />
-                  <LocationPicker
-                    value={qrCategoryFilter}
-                    onChange={setQrCategoryFilter}
-                    options={[
-                      { value: "ALL", label: t.allCategories },
-                      ...qrCategoryFilterOptions.map((category) => ({
-                        value: category,
-                        label:
-                          category === "SAFETY"
-                            ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
-                            : category === "FACILITY"
-                              ? (lang === "km" ? "បរិក្ខារ" : "Facility")
-                              : category,
-                      })),
-                    ]}
-                    placeholder={t.allCategories}
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(qrCategoryFilter, t.allCategories, (category) =>
+                      category === "SAFETY"
+                        ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                        : category === "FACILITY"
+                          ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                          : category
+                    )}
+                    options={qrCategoryFilterOptions.map((category) => ({
+                      value: category,
+                      label:
+                        category === "SAFETY"
+                          ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                          : category === "FACILITY"
+                            ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                            : category,
+                    }))}
+                    selectedValues={qrCategoryFilter}
+                    allOptionLabel={t.allCategories}
+                    allOptionChecked={qrCategoryFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setQrCategoryFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", qrCategoryFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setQrCategoryFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, qrCategoryFilterOptions)
+                      )
+                    }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
                     emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
                   />
