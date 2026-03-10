@@ -65,6 +65,13 @@ type Asset = {
   warrantyUntil?: string;
   vendor?: string;
   notes?: string;
+  tonerModel?: string;
+  tonerItemId?: number;
+  tonerMinStock?: number;
+  tonerExpectedYield?: number;
+  tonerLastChangedAt?: string;
+  tonerLastPageCount?: number;
+  tonerNotes?: string;
   nextMaintenanceDate?: string;
   nextVerificationDate?: string;
   verificationFrequency?: "NONE" | "MONTHLY" | "TERMLY";
@@ -91,6 +98,13 @@ type MaintenanceEntry = {
   condition?: string;
   cost?: string;
   by?: string;
+  tonerItemId?: number;
+  tonerItemCode?: string;
+  tonerItemName?: string;
+  tonerQty?: number;
+  tonerModel?: string;
+  oldTonerStatus?: string;
+  pageCounter?: number;
   photo?: string;
   photos?: string[];
   beforePhotos?: string[];
@@ -173,6 +187,13 @@ type PublicQrAsset = {
   warrantyUntil?: string;
   vendor?: string;
   notes?: string;
+  tonerModel?: string;
+  tonerItemId?: number;
+  tonerMinStock?: number;
+  tonerExpectedYield?: number;
+  tonerLastChangedAt?: string;
+  tonerLastPageCount?: number;
+  tonerNotes?: string;
   status: string;
   photo?: string;
   photos?: string[];
@@ -203,6 +224,13 @@ type PublicQrAssetComponent = {
   serialNumber?: string;
   specs?: string;
   notes?: string;
+  tonerModel?: string;
+  tonerItemId?: number;
+  tonerMinStock?: number;
+  tonerExpectedYield?: number;
+  tonerLastChangedAt?: string;
+  tonerLastPageCount?: number;
+  tonerNotes?: string;
   status: string;
   photo?: string;
   photos?: string[];
@@ -283,6 +311,10 @@ type InventoryItem = {
   location: string;
   vendor?: string;
   notes?: string;
+  itemGroup?: "GENERAL" | "TONER";
+  compatibleAssetTypes?: string[];
+  compatibleModels?: string[];
+  defaultUnitCost?: number;
   photo?: string;
   created: string;
 };
@@ -312,6 +344,13 @@ type InventoryTxn = {
   approvalDecisionBy?: string;
   approvalDecisionAt?: string;
   approvalDecisionNote?: string;
+  txnSource?: "GENERAL" | "TONER_PURCHASE" | "TONER_CHANGE";
+  referenceAssetId?: string;
+  referenceAssetDbId?: number;
+  supplier?: string;
+  invoiceNo?: string;
+  unitCost?: number;
+  totalCost?: number;
   telegramMessageRefs?: Array<{ chatId?: string; messageId?: number }>;
 };
 type PoolCleaningSchedule = {
@@ -509,6 +548,41 @@ type ServerSettings = {
   vaultDesignLinks?: VaultDesignLink[];
   vaultNetworkDocs?: VaultNetworkDoc[];
   vaultCctvRecords?: VaultCctvRecord[];
+};
+type TonerPurchaseForm = {
+  itemId: string;
+  date: string;
+  qty: string;
+  unitCost: string;
+  supplier: string;
+  invoiceNo: string;
+  note: string;
+  by: string;
+};
+type TonerItemForm = {
+  campus: string;
+  itemCode: string;
+  itemName: string;
+  location: string;
+  openingQty: string;
+  minStock: string;
+  vendor: string;
+  tonerModel: string;
+  compatibleModels: string;
+  defaultUnitCost: string;
+  notes: string;
+};
+type TonerChangeForm = {
+  itemId: string;
+  date: string;
+  qty: string;
+  note: string;
+  by: string;
+  cost: string;
+  condition: string;
+  oldTonerStatus: string;
+  pageCounter: string;
+  photo: string;
 };
 type ItemTemplate = {
   id: number;
@@ -2972,6 +3046,19 @@ function isInventoryTxnSet(type: InventoryTxn["type"]) {
 }
 function isInventoryTxnUsageOut(type: InventoryTxn["type"]) {
   return type === "OUT" || type === "BORROW_CONSUME";
+}
+function isPrinterAssetRow(asset: Pick<Asset, "type"> | Pick<PublicQrAsset, "type"> | null | undefined) {
+  return String(asset?.type || "").trim().toUpperCase() === "PRN";
+}
+function isTonerInventoryItemRow(item: Pick<InventoryItem, "itemGroup"> | null | undefined) {
+  return String(item?.itemGroup || "").trim().toUpperCase() === "TONER";
+}
+function tonerHistoryEntries(list: MaintenanceEntry[] | undefined) {
+  return (Array.isArray(list) ? list : []).filter(
+    (entry) =>
+      String(entry?.type || "").trim().toLowerCase() === "toner replacement" ||
+      Number(entry?.tonerItemId || 0) > 0
+  );
 }
 function isInventoryTxnStockEffective(tx: InventoryTxn) {
   if (isInventoryTxnOut(tx.type) && (tx.approvalStatus === "PENDING" || tx.approvalStatus === "REJECTED")) {
@@ -5759,6 +5846,11 @@ export default function App() {
     warrantyUntil: "",
     vendor: "",
     notes: "",
+    tonerModel: "",
+    tonerItemId: "",
+    tonerMinStock: "",
+    tonerExpectedYield: "",
+    tonerNotes: "",
     nextMaintenanceDate: "",
     scheduleNote: "",
     photo: "",
@@ -5919,6 +6011,19 @@ export default function App() {
     by: "",
     photo: "",
   });
+  const [publicQrTonerForm, setPublicQrTonerForm] = useState<TonerChangeForm>({
+    itemId: "",
+    date: toYmd(new Date()),
+    qty: "1",
+    note: "",
+    by: "",
+    cost: "",
+    condition: "",
+    oldTonerStatus: "Empty",
+    pageCounter: "",
+    photo: "",
+  });
+  const [publicQrTonerFileKey, setPublicQrTonerFileKey] = useState(0);
   const [publicQrRequestFileKey, setPublicQrRequestFileKey] = useState(0);
   const [publicQrRequestForm, setPublicQrRequestForm] = useState({
     title: "",
@@ -5931,10 +6036,12 @@ export default function App() {
   const [publicQrSectionsOpen, setPublicQrSectionsOpen] = useState<{
     request: boolean;
     maintenance: boolean;
+    toner: boolean;
     details: boolean;
   }>({
     request: false,
     maintenance: false,
+    toner: false,
     details: false,
   });
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
@@ -5965,6 +6072,11 @@ export default function App() {
     warrantyUntil: "",
     vendor: "",
     notes: "",
+    tonerModel: "",
+    tonerItemId: "",
+    tonerMinStock: "",
+    tonerExpectedYield: "",
+    tonerNotes: "",
     photo: "",
     photos: [] as string[],
     status: "Active",
@@ -6034,6 +6146,42 @@ export default function App() {
     beforePhotos: [] as string[],
     afterPhotos: [] as string[],
   });
+  const [tonerPurchaseForm, setTonerPurchaseForm] = useState<TonerPurchaseForm>({
+    itemId: "",
+    date: toYmd(new Date()),
+    qty: "1",
+    unitCost: "",
+    supplier: "",
+    invoiceNo: "",
+    note: "",
+    by: "",
+  });
+  const [tonerItemForm, setTonerItemForm] = useState<TonerItemForm>({
+    campus: CAMPUS_LIST[0],
+    itemCode: "",
+    itemName: "",
+    location: "",
+    openingQty: "0",
+    minStock: "",
+    vendor: "",
+    tonerModel: "",
+    compatibleModels: "",
+    defaultUnitCost: "",
+    notes: "",
+  });
+  const [assetDetailTonerForm, setAssetDetailTonerForm] = useState<TonerChangeForm>({
+    itemId: "",
+    date: toYmd(new Date()),
+    qty: "1",
+    note: "",
+    by: "",
+    cost: "",
+    condition: "",
+    oldTonerStatus: "Empty",
+    pageCounter: "",
+    photo: "",
+  });
+  const [assetDetailTonerFileKey, setAssetDetailTonerFileKey] = useState(0);
   const [transferForm, setTransferForm] = useState({
     assetId: "",
     date: toYmd(new Date()),
@@ -7412,6 +7560,34 @@ export default function App() {
           )
         : inventoryTxns,
     [inventoryTxns, inventoryVisibleCampusSet, inventoryVisibleItemIds]
+  );
+  const tonerInventoryItems = useMemo(
+    () => inventoryVisibleItems.filter((item) => isTonerInventoryItemRow(item)),
+    [inventoryVisibleItems]
+  );
+  const tonerInventoryRows = useMemo(
+    () =>
+      tonerInventoryItems
+        .map((item) => ({
+          ...item,
+          currentStock: calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns),
+          purchaseQty: inventoryVisibleTxns
+            .filter((tx) => Number(tx.itemId) === Number(item.id) && tx.txnSource === "TONER_PURCHASE")
+            .reduce((sum, tx) => sum + Math.max(0, Number(tx.qty || 0)), 0),
+          usedQty: inventoryVisibleTxns
+            .filter((tx) => Number(tx.itemId) === Number(item.id) && tx.txnSource === "TONER_CHANGE")
+            .reduce((sum, tx) => sum + Math.max(0, Number(tx.qty || 0)), 0),
+        }))
+        .sort((a, b) => a.itemCode.localeCompare(b.itemCode)),
+    [tonerInventoryItems, inventoryVisibleTxns]
+  );
+  const tonerPurchaseTxns = useMemo(
+    () =>
+      inventoryVisibleTxns
+        .filter((tx) => tx.txnSource === "TONER_PURCHASE")
+        .slice()
+        .sort((a, b) => (b.date || "").localeCompare(a.date || "") || Number(b.id || 0) - Number(a.id || 0)),
+    [inventoryVisibleTxns]
   );
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
     return `${item.itemCode} - ${inventoryDisplayName(item.itemName, lang)} • ${inventoryCampusLabel(item.campus)}`;
@@ -10298,6 +10474,11 @@ export default function App() {
           assignedTo: createAssignedTo,
           custodyStatus: createAssignedTo ? "ASSIGNED" : "IN_STOCK",
           specs: createSpecs,
+          tonerModel: isPrinterAssetRow(assetForm) ? assetForm.tonerModel.trim() : "",
+          tonerItemId: isPrinterAssetRow(assetForm) ? Number(assetForm.tonerItemId || 0) : 0,
+          tonerMinStock: isPrinterAssetRow(assetForm) ? Number(assetForm.tonerMinStock || 0) : 0,
+          tonerExpectedYield: isPrinterAssetRow(assetForm) ? Number(assetForm.tonerExpectedYield || 0) : 0,
+          tonerNotes: isPrinterAssetRow(assetForm) ? assetForm.tonerNotes.trim() : "",
         }),
       });
 
@@ -11047,6 +11228,11 @@ export default function App() {
           warrantyUntil: "",
           vendor: "",
           notes: "",
+          tonerModel: "",
+          tonerItemId: "",
+          tonerMinStock: "",
+          tonerExpectedYield: "",
+          tonerNotes: "",
           nextMaintenanceDate: "",
           scheduleNote: "",
           photo: "",
@@ -13681,6 +13867,168 @@ export default function App() {
       by: authUser?.displayName || authUser?.username || prev.by,
     }));
   }
+  async function createTonerPurchaseRecord() {
+    if (!requireAdminAction()) return;
+    const itemId = Number(tonerPurchaseForm.itemId || 0);
+    const qty = Math.max(0, Number(tonerPurchaseForm.qty || 0));
+    const unitCost = Math.max(0, Number(tonerPurchaseForm.unitCost || 0));
+    if (!itemId || !tonerPurchaseForm.date || qty <= 0) {
+      setError("Please select toner item, date, and quantity.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await requestJson<{ txn: InventoryTxn }>("/api/toner/purchases", {
+        method: "POST",
+        body: JSON.stringify({
+          itemId,
+          date: tonerPurchaseForm.date,
+          qty,
+          unitCost,
+          supplier: tonerPurchaseForm.supplier.trim(),
+          invoiceNo: tonerPurchaseForm.invoiceNo.trim(),
+          note: tonerPurchaseForm.note.trim(),
+          by: tonerPurchaseForm.by.trim(),
+        }),
+      });
+      setInventoryTxns((prev) => [res.txn, ...prev.filter((row) => row.id !== res.txn.id)]);
+      setTonerPurchaseForm({
+        itemId: tonerPurchaseForm.itemId,
+        date: toYmd(new Date()),
+        qty: "1",
+        unitCost: "",
+        supplier: "",
+        invoiceNo: "",
+        note: "",
+        by: authUser?.displayName || authUser?.username || tonerPurchaseForm.by,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save toner purchase");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function createTonerInventoryItem() {
+    if (!requireAdminAction()) return;
+    const openingQty = Math.max(0, Number(tonerItemForm.openingQty || 0));
+    const minStock = Math.max(0, Number(tonerItemForm.minStock || 0));
+    const defaultUnitCost = Math.max(0, Number(tonerItemForm.defaultUnitCost || 0));
+    if (!tonerItemForm.campus || !tonerItemForm.itemCode.trim() || !tonerItemForm.itemName.trim() || !tonerItemForm.location.trim()) {
+      setError("Campus, item code, toner name, and location are required.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await requestJson<{ item: InventoryItem }>("/api/inventory/items", {
+        method: "POST",
+        body: JSON.stringify({
+          campus: tonerItemForm.campus,
+          category: "SUPPLY",
+          itemCode: tonerItemForm.itemCode.trim().toUpperCase(),
+          itemName: tonerItemForm.itemName.trim(),
+          unit: "pcs",
+          openingQty,
+          minStock,
+          location: tonerItemForm.location.trim(),
+          vendor: tonerItemForm.vendor.trim(),
+          notes: tonerItemForm.notes.trim(),
+          itemGroup: "TONER",
+          compatibleAssetTypes: ["PRN"],
+          compatibleModels: tonerItemForm.compatibleModels.split(",").map((value) => value.trim()).filter(Boolean),
+          defaultUnitCost,
+        }),
+      });
+      setInventoryItems((prev) => [res.item, ...prev.filter((row) => row.id !== res.item.id)]);
+      setTonerItemForm((prev) => ({
+        ...prev,
+        itemCode: "",
+        itemName: "",
+        openingQty: "0",
+        minStock: "",
+        vendor: "",
+        tonerModel: "",
+        compatibleModels: "",
+        defaultUnitCost: "",
+        notes: "",
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create toner item");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveTonerChangeForAsset(
+    asset: Pick<Asset, "id" | "assetId">,
+    form: TonerChangeForm,
+    options: { onDone?: (savedAsset: Asset) => void; setForm: React.Dispatch<React.SetStateAction<TonerChangeForm>>; resetFileKey?: () => void; setMessage?: (value: string) => void; setFormError?: (value: string) => void } 
+  ) {
+    const itemId = Number(form.itemId || 0);
+    const qty = Math.max(1, Number(form.qty || 1));
+    if (!asset?.id || !itemId || !form.date || !form.note.trim()) {
+      const message = "Please select toner, date, and note.";
+      options.setFormError?.(message);
+      setError(message);
+      return false;
+    }
+    setBusy(true);
+    options.setFormError?.("");
+    options.setMessage?.("");
+    try {
+      const res = await requestJson<{ asset: Asset; txn: InventoryTxn }>(`/api/assets/${asset.id}/toner-change`, {
+        method: "POST",
+        body: JSON.stringify({
+          itemId,
+          date: form.date,
+          qty,
+          note: form.note.trim(),
+          by: form.by.trim(),
+          cost: form.cost.trim(),
+          condition: form.condition.trim(),
+          oldTonerStatus: form.oldTonerStatus.trim(),
+          pageCounter: Number(form.pageCounter || 0),
+          photo: form.photo || "",
+        }),
+      });
+      setAssets((prev) => prev.map((row) => (row.id === res.asset.id ? { ...row, ...res.asset } : row)));
+      setInventoryTxns((prev) => [res.txn, ...prev.filter((row) => row.id !== res.txn.id)]);
+      options.setForm({
+        itemId: String(res.asset.tonerItemId || itemId),
+        date: toYmd(new Date()),
+        qty: "1",
+        note: "",
+        by: authUser?.displayName || authUser?.username || form.by,
+        cost: "",
+        condition: "",
+        oldTonerStatus: "Empty",
+        pageCounter: form.pageCounter,
+        photo: "",
+      });
+      options.resetFileKey?.();
+      options.onDone?.(res.asset);
+      options.setMessage?.("Toner change saved.");
+      setError("");
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save toner change";
+      options.setFormError?.(message);
+      setError(message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function onAssetDetailTonerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setAssetDetailTonerForm((prev) => ({ ...prev, photo }));
+    } finally {
+      e.target.value = "";
+    }
+  }
   function closeInventoryQuickOut() {
     setInventoryQuickOutModal(null);
     setInventoryQuickReasonTipsOpen(false);
@@ -14640,6 +14988,11 @@ export default function App() {
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
       notes: asset.notes || "",
+      tonerModel: asset.tonerModel || "",
+      tonerItemId: asset.tonerItemId ? String(asset.tonerItemId) : "",
+      tonerMinStock: asset.tonerMinStock ? String(asset.tonerMinStock) : "",
+      tonerExpectedYield: asset.tonerExpectedYield ? String(asset.tonerExpectedYield) : "",
+      tonerNotes: asset.tonerNotes || "",
       photo: photos[0] || "",
       photos,
       status: asset.status || "Active",
@@ -15168,6 +15521,11 @@ export default function App() {
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
       notes: assetEditForm.notes.trim(),
+      tonerModel: isPrinterAssetRow(editingAsset) ? assetEditForm.tonerModel.trim() : "",
+      tonerItemId: isPrinterAssetRow(editingAsset) ? Number(assetEditForm.tonerItemId || 0) : 0,
+      tonerMinStock: isPrinterAssetRow(editingAsset) ? Number(assetEditForm.tonerMinStock || 0) : 0,
+      tonerExpectedYield: isPrinterAssetRow(editingAsset) ? Number(assetEditForm.tonerExpectedYield || 0) : 0,
+      tonerNotes: isPrinterAssetRow(editingAsset) ? assetEditForm.tonerNotes.trim() : "",
       photo: assetEditForm.photo || "",
       photos: normalizeAssetPhotos(assetEditForm),
       status: assetEditForm.status,
@@ -17094,6 +17452,18 @@ export default function App() {
         : [],
     [detailAsset, sortByNewestDate]
   );
+  const detailTonerEntries = useMemo(
+    () => tonerHistoryEntries(detailMaintenanceEntries),
+    [detailMaintenanceEntries]
+  );
+  const detailTonerItem = useMemo(
+    () => tonerInventoryItems.find((item) => Number(item.id) === Number(detailAsset?.tonerItemId || 0)) || null,
+    [tonerInventoryItems, detailAsset?.tonerItemId]
+  );
+  const detailTonerStock = useMemo(
+    () => (detailTonerItem ? calcInventoryCurrentStockFromRows(detailTonerItem, inventoryVisibleTxns) : 0),
+    [detailTonerItem, inventoryVisibleTxns]
+  );
   const detailTransferEntries = useMemo(
     () =>
       detailAsset
@@ -17163,6 +17533,23 @@ export default function App() {
       showAllTransfer: false,
     });
   }, [assetDetailId]);
+  useEffect(() => {
+    const actor = authUser?.displayName || authUser?.username || "";
+    if (!actor) return;
+    setTonerPurchaseForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
+    setAssetDetailTonerForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
+    setPublicQrTonerForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
+  }, [authUser?.displayName, authUser?.username]);
+  useEffect(() => {
+    if (!detailAsset || !isPrinterAssetRow(detailAsset)) return;
+    const preferredItemId = String(detailAsset.tonerItemId || detailTonerItem?.id || tonerInventoryItems[0]?.id || "");
+    setAssetDetailTonerForm((prev) => ({
+      ...prev,
+      itemId: preferredItemId,
+      date: prev.date || toYmd(new Date()),
+      pageCounter: prev.pageCounter || (detailAsset.tonerLastPageCount ? String(detailAsset.tonerLastPageCount) : ""),
+    }));
+  }, [detailAsset, detailTonerItem, tonerInventoryItems]);
   const editingAsset = useMemo(
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
@@ -20438,12 +20825,24 @@ export default function App() {
       return { ...prev, by: authUser.displayName };
     });
   }, [authUser?.displayName]);
+  useEffect(() => {
+    if (!publicQrAsset || !isPrinterAssetRow(publicQrAsset)) return;
+    const preferredItemId = String(publicQrAsset.tonerItemId || tonerInventoryItems[0]?.id || "");
+    setPublicQrTonerForm((prev) => ({
+      ...prev,
+      itemId: preferredItemId,
+      date: prev.date || toYmd(new Date()),
+      by: prev.by.trim() || authUser?.displayName || authUser?.username || "",
+      pageCounter: prev.pageCounter || (publicQrAsset.tonerLastPageCount ? String(publicQrAsset.tonerLastPageCount) : ""),
+    }));
+  }, [publicQrAsset, tonerInventoryItems, authUser?.displayName, authUser?.username]);
 
   useEffect(() => {
     if (!pendingQrAssetId) return;
     setPublicQrSectionsOpen({
       request: false,
       maintenance: false,
+      toner: false,
       details: false,
     });
   }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetId, publicQrAsset]);
@@ -21127,6 +21526,21 @@ export default function App() {
     }
   }
 
+  async function onPublicQrTonerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setPublicQrTonerForm((f) => ({ ...f, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    }
+  }
+
   async function onPublicQrRequestPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -21244,6 +21658,25 @@ export default function App() {
     }
   }
 
+  async function addTonerRecordFromPublicQr(asset: PublicQrAsset) {
+    setPublicQrRecordBusy(true);
+    const ok = await saveTonerChangeForAsset(
+      asset,
+      publicQrTonerForm,
+      {
+        setForm: setPublicQrTonerForm,
+        resetFileKey: () => setPublicQrTonerFileKey((k) => k + 1),
+        setMessage: setPublicQrRecordMessage,
+        setFormError: setPublicQrRecordError,
+        onDone: (savedAsset) => setPublicQrAsset((savedAsset as unknown as PublicQrAsset)),
+      }
+    );
+    setPublicQrRecordBusy(false);
+    if (ok) {
+      setPublicQrSectionsOpen((prev) => ({ ...prev, toner: false }));
+    }
+  }
+
   function renderPublicHistoryMeta(label: string, value?: React.ReactNode) {
     return (
       <div className="public-asset-history-item">
@@ -21262,7 +21695,7 @@ export default function App() {
   }
 
   function renderPublicQrGroup(
-    key: "request" | "maintenance" | "details",
+    key: "request" | "maintenance" | "toner" | "details",
     title: string,
     content: React.ReactNode,
     hint?: string,
@@ -21609,6 +22042,81 @@ export default function App() {
                           {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
                         </>,
                         "Visible for maintenance staff and admins who can record maintenance."
+                      )
+                    : null}
+                  {publicQrCanRecordMaintenance && isPrinterAssetRow(asset)
+                    ? renderPublicQrGroup(
+                        "toner",
+                        "Toner Change",
+                        <>
+                          <div className="form-grid">
+                            <label className="field">
+                              <span>Toner Item</span>
+                              <select className="input" value={publicQrTonerForm.itemId} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, itemId: e.target.value }))}>
+                                <option value="">Select toner</option>
+                                {tonerInventoryItems
+                                  .filter((item) => item.campus === asset.campus)
+                                  .map((item) => (
+                                    <option key={`public-qr-toner-${item.id}`} value={item.id}>
+                                      {item.itemCode} - {inventoryDisplayName(item.itemName, lang)} ({calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns)} {item.unit})
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>Date</span>
+                              <input className="input" type="date" value={publicQrTonerForm.date} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, date: e.target.value }))} />
+                            </label>
+                            <label className="field">
+                              <span>Qty</span>
+                              <input className="input" type="number" min="1" value={publicQrTonerForm.qty} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, qty: e.target.value }))} />
+                            </label>
+                            <label className="field">
+                              <span>Old Toner Status</span>
+                              <select className="input" value={publicQrTonerForm.oldTonerStatus} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, oldTonerStatus: e.target.value }))}>
+                                <option value="Empty">Empty</option>
+                                <option value="Low">Low</option>
+                                <option value="Leaking">Leaking</option>
+                                <option value="Defective">Defective</option>
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>Page Counter</span>
+                              <input className="input" type="number" min="0" value={publicQrTonerForm.pageCounter} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, pageCounter: e.target.value }))} />
+                            </label>
+                            <label className="field">
+                              <span>By</span>
+                              <input className="input" value={publicQrTonerForm.by} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, by: e.target.value }))} />
+                            </label>
+                            <label className="field field-wide">
+                              <span>Note</span>
+                              <textarea className="input" rows={3} value={publicQrTonerForm.note} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, note: e.target.value }))} />
+                            </label>
+                            <label className="field">
+                              <span>Cost</span>
+                              <input className="input" value={publicQrTonerForm.cost} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, cost: e.target.value }))} />
+                            </label>
+                            <label className="field">
+                              <span>Condition</span>
+                              <input className="input" value={publicQrTonerForm.condition} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, condition: e.target.value }))} />
+                            </label>
+                            <label className="field field-wide">
+                              <span>{t.photo}</span>
+                              <input key={publicQrTonerFileKey} type="file" accept="image/*" onChange={onPublicQrTonerPhotoFile} />
+                              {publicQrTonerForm.photo ? (
+                                <img loading="lazy" decoding="async" src={publicQrTonerForm.photo} alt="toner" className="photo-preview" />
+                              ) : null}
+                            </label>
+                            <div className="field field-wide">
+                              <button className="btn-primary" type="button" disabled={publicQrRecordBusy || !publicQrTonerForm.note.trim() || !publicQrTonerForm.itemId} onClick={() => void addTonerRecordFromPublicQr(asset)}>
+                                {publicQrRecordBusy ? "Saving..." : "Save Toner Change"}
+                              </button>
+                            </div>
+                          </div>
+                          {publicQrRecordError ? <p className="alert alert-error">{publicQrRecordError}</p> : null}
+                          {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
+                        </>,
+                        "Users can scan printer QR and record toner replacement directly."
                       )
                     : null}
 
@@ -24805,6 +25313,39 @@ export default function App() {
                     <span>{t.vendor}</span>
                     <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
                   </label>
+                  {isPrinterAssetRow(assetForm) ? (
+                    <>
+                      <label className="field">
+                        <span>Toner Model</span>
+                        <input className="input" value={assetForm.tonerModel} onChange={(e) => setAssetForm((f) => ({ ...f, tonerModel: e.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Linked Toner Stock</span>
+                        <select className="input" value={assetForm.tonerItemId} onChange={(e) => setAssetForm((f) => ({ ...f, tonerItemId: e.target.value }))}>
+                          <option value="">Select toner item</option>
+                          {tonerInventoryItems
+                            .filter((item) => item.campus === assetForm.campus)
+                            .map((item) => (
+                              <option key={`asset-toner-item-${item.id}`} value={item.id}>
+                                {item.itemCode} - {inventoryDisplayName(item.itemName, lang)}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Min Toner Stock</span>
+                        <input className="input" type="number" min="0" value={assetForm.tonerMinStock} onChange={(e) => setAssetForm((f) => ({ ...f, tonerMinStock: e.target.value }))} />
+                      </label>
+                      <label className="field">
+                        <span>Expected Yield (pages)</span>
+                        <input className="input" type="number" min="0" value={assetForm.tonerExpectedYield} onChange={(e) => setAssetForm((f) => ({ ...f, tonerExpectedYield: e.target.value }))} />
+                      </label>
+                      <label className="field field-wide">
+                        <span>Toner Note</span>
+                        <textarea className="textarea" value={assetForm.tonerNotes} onChange={(e) => setAssetForm((f) => ({ ...f, tonerNotes: e.target.value }))} />
+                      </label>
+                    </>
+                  ) : null}
                   <label className="field field-wide">
                     <span>{t.specs}</span>
                     <textarea className="textarea" value={assetForm.specs} onChange={(e) => setAssetForm((f) => ({ ...f, specs: e.target.value }))} />
@@ -25496,6 +26037,17 @@ export default function App() {
                     <div className="field field-wide"><span>Notes</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
                     <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
                     <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
+                    {isPrinterAssetRow(detailAsset) ? (
+                      <>
+                        <div className="field"><span>Toner Model</span><div className="detail-value">{detailAsset.tonerModel || "-"}</div></div>
+                        <div className="field"><span>Linked Toner Stock</span><div className="detail-value">{detailTonerItem ? `${detailTonerItem.itemCode} (${detailTonerStock} ${detailTonerItem.unit})` : "-"}</div></div>
+                        <div className="field"><span>Last Toner Change</span><div className="detail-value">{formatDate(detailAsset.tonerLastChangedAt || "-")}</div></div>
+                        <div className="field"><span>Last Page Counter</span><div className="detail-value">{detailAsset.tonerLastPageCount || "-"}</div></div>
+                        <div className="field"><span>Min Toner Stock</span><div className="detail-value">{detailAsset.tonerMinStock || "-"}</div></div>
+                        <div className="field"><span>Expected Yield</span><div className="detail-value">{detailAsset.tonerExpectedYield ? `${detailAsset.tonerExpectedYield} pages` : "-"}</div></div>
+                        <div className="field field-wide"><span>Toner Note</span><div className="detail-value">{detailAsset.tonerNotes || "-"}</div></div>
+                      </>
+                    ) : null}
                     <div className="field field-wide">
                       <span>{t.photo}</span>
                       <div className="detail-value">
@@ -25503,6 +26055,77 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  ) : null}
+
+                  {isPrinterAssetRow(detailAsset) ? (
+                    <section className="panel" style={{ marginTop: 12 }}>
+                      <div className="panel-row">
+                        <h3 className="section-title" style={{ margin: 0 }}>Toner Control</h3>
+                        <span className="tiny">{detailTonerEntries.length} record(s)</span>
+                      </div>
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Toner Item</span>
+                          <select className="input" value={assetDetailTonerForm.itemId} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, itemId: e.target.value }))}>
+                            <option value="">Select toner</option>
+                            {tonerInventoryItems
+                              .filter((item) => item.campus === detailAsset.campus)
+                              .map((item) => (
+                                <option key={`detail-toner-stock-${item.id}`} value={item.id}>
+                                  {item.itemCode} - {inventoryDisplayName(item.itemName, lang)} ({calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns)} {item.unit})
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Date</span>
+                          <input className="input" type="date" value={assetDetailTonerForm.date} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, date: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Qty Used</span>
+                          <input className="input" type="number" min="1" value={assetDetailTonerForm.qty} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, qty: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Old Toner Status</span>
+                          <select className="input" value={assetDetailTonerForm.oldTonerStatus} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, oldTonerStatus: e.target.value }))}>
+                            <option value="Empty">Empty</option>
+                            <option value="Low">Low</option>
+                            <option value="Leaking">Leaking</option>
+                            <option value="Defective">Defective</option>
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Page Counter</span>
+                          <input className="input" type="number" min="0" value={assetDetailTonerForm.pageCounter} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, pageCounter: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>By</span>
+                          <input className="input" value={assetDetailTonerForm.by} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, by: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Cost</span>
+                          <input className="input" value={assetDetailTonerForm.cost} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, cost: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Condition</span>
+                          <input className="input" value={assetDetailTonerForm.condition} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, condition: e.target.value }))} />
+                        </label>
+                        <label className="field field-wide">
+                          <span>Note</span>
+                          <textarea className="textarea" value={assetDetailTonerForm.note} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        </label>
+                        <label className="field field-wide">
+                          <span>{t.photo}</span>
+                          <input key={assetDetailTonerFileKey} type="file" accept="image/*" onChange={onAssetDetailTonerPhotoFile} />
+                          {assetDetailTonerForm.photo ? <img loading="lazy" decoding="async" src={assetDetailTonerForm.photo} alt="toner" className="photo-preview" /> : null}
+                        </label>
+                      </div>
+                      <div className="asset-actions">
+                        <button className="btn-primary" disabled={busy || !assetDetailTonerForm.note.trim() || !assetDetailTonerForm.itemId} onClick={() => void saveTonerChangeForAsset(detailAsset, assetDetailTonerForm, { setForm: setAssetDetailTonerForm, resetFileKey: () => setAssetDetailTonerFileKey((k) => k + 1) })}>
+                          Save Toner Change
+                        </button>
+                      </div>
+                    </section>
                   ) : null}
 
                   <div className="panel-row" style={{ marginTop: 8 }}>
@@ -26296,6 +26919,39 @@ export default function App() {
                       <span>Vendor</span>
                       <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
                     </label>
+                    {isPrinterAssetRow(editingAsset) ? (
+                      <>
+                        <label className="field">
+                          <span>Toner Model</span>
+                          <input className="input" value={assetEditForm.tonerModel} onChange={(e) => setAssetEditForm((f) => ({ ...f, tonerModel: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Linked Toner Stock</span>
+                          <select className="input" value={assetEditForm.tonerItemId} onChange={(e) => setAssetEditForm((f) => ({ ...f, tonerItemId: e.target.value }))}>
+                            <option value="">Select toner item</option>
+                            {tonerInventoryItems
+                              .filter((item) => item.campus === editingAsset?.campus)
+                              .map((item) => (
+                                <option key={`edit-toner-item-${item.id}`} value={item.id}>
+                                  {item.itemCode} - {inventoryDisplayName(item.itemName, lang)}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Min Toner Stock</span>
+                          <input className="input" type="number" min="0" value={assetEditForm.tonerMinStock} onChange={(e) => setAssetEditForm((f) => ({ ...f, tonerMinStock: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Expected Yield (pages)</span>
+                          <input className="input" type="number" min="0" value={assetEditForm.tonerExpectedYield} onChange={(e) => setAssetEditForm((f) => ({ ...f, tonerExpectedYield: e.target.value }))} />
+                        </label>
+                        <label className="field field-wide">
+                          <span>Toner Note</span>
+                          <textarea className="textarea" value={assetEditForm.tonerNotes} onChange={(e) => setAssetEditForm((f) => ({ ...f, tonerNotes: e.target.value }))} />
+                        </label>
+                      </>
+                    ) : null}
                     <label className="field field-wide">
                       <span>Specs</span>
                       <textarea className="textarea" value={assetEditForm.specs} onChange={(e) => setAssetEditForm((f) => ({ ...f, specs: e.target.value }))} />
@@ -27345,6 +28001,191 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+
+                <article className="panel" style={{ marginTop: 12 }}>
+                  <div className="panel-row">
+                    <h3 className="section-title">Printer Toner Stock Setup</h3>
+                    <span className="tiny">{tonerInventoryRows.length} toner item(s)</span>
+                  </div>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Campus</span>
+                      <select className="input" value={tonerItemForm.campus} onChange={(e) => setTonerItemForm((f) => ({ ...f, campus: e.target.value }))}>
+                        {campusOptions.map((campus) => (
+                          <option key={`toner-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Toner Code</span>
+                      <input className="input" value={tonerItemForm.itemCode} onChange={(e) => setTonerItemForm((f) => ({ ...f, itemCode: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Toner Name</span>
+                      <input className="input" value={tonerItemForm.itemName} onChange={(e) => setTonerItemForm((f) => ({ ...f, itemName: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Toner Model</span>
+                      <input className="input" value={tonerItemForm.tonerModel} onChange={(e) => setTonerItemForm((f) => ({ ...f, tonerModel: e.target.value, itemName: f.itemName || e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Store Location</span>
+                      <input className="input" value={tonerItemForm.location} onChange={(e) => setTonerItemForm((f) => ({ ...f, location: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Opening Qty</span>
+                      <input className="input" type="number" min="0" value={tonerItemForm.openingQty} onChange={(e) => setTonerItemForm((f) => ({ ...f, openingQty: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Min Stock</span>
+                      <input className="input" type="number" min="0" value={tonerItemForm.minStock} onChange={(e) => setTonerItemForm((f) => ({ ...f, minStock: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Default Unit Cost</span>
+                      <input className="input" type="number" min="0" value={tonerItemForm.defaultUnitCost} onChange={(e) => setTonerItemForm((f) => ({ ...f, defaultUnitCost: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Vendor</span>
+                      <input className="input" value={tonerItemForm.vendor} onChange={(e) => setTonerItemForm((f) => ({ ...f, vendor: e.target.value }))} />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Compatible Printer Models</span>
+                      <input className="input" value={tonerItemForm.compatibleModels} onChange={(e) => setTonerItemForm((f) => ({ ...f, compatibleModels: e.target.value }))} placeholder="HP 4003dn, Brother DCP-L2540DW" />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Note</span>
+                      <textarea className="textarea" value={tonerItemForm.notes} onChange={(e) => setTonerItemForm((f) => ({ ...f, notes: e.target.value }))} />
+                    </label>
+                  </div>
+                  <div className="asset-actions">
+                    <button className="btn-primary" disabled={!isAdmin} onClick={() => void createTonerInventoryItem()}>
+                      Add Toner Item
+                    </button>
+                  </div>
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Name</th>
+                          <th>{t.campus}</th>
+                          <th>Current</th>
+                          <th>Purchased</th>
+                          <th>Used</th>
+                          <th>Min</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tonerInventoryRows.length ? (
+                          tonerInventoryRows.map((row) => (
+                            <tr key={`toner-stock-row-${row.id}`}>
+                              <td><strong>{row.itemCode}</strong></td>
+                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                              <td>{inventoryCampusLabel(row.campus)}</td>
+                              <td>{row.currentStock}</td>
+                              <td>{row.purchaseQty}</td>
+                              <td>{row.usedQty}</td>
+                              <td>{row.minStock}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7}>No toner items yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+
+                <article className="panel" style={{ marginTop: 12 }}>
+                  <div className="panel-row">
+                    <h3 className="section-title">Toner Purchase Records</h3>
+                    <span className="tiny">{tonerPurchaseTxns.length} purchase record(s)</span>
+                  </div>
+                  <div className="form-grid">
+                    <label className="field field-wide">
+                      <span>Toner Item</span>
+                      <select className="input" value={tonerPurchaseForm.itemId} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, itemId: e.target.value, unitCost: f.unitCost || String(tonerInventoryItems.find((item) => String(item.id) === e.target.value)?.defaultUnitCost || "") }))}>
+                        <option value="">Select toner item</option>
+                        {tonerInventoryItems.map((item) => (
+                          <option key={`toner-purchase-item-${item.id}`} value={item.id}>
+                            {item.itemCode} - {inventoryDisplayName(item.itemName, lang)} • {inventoryCampusLabel(item.campus)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Date</span>
+                      <input className="input" type="date" value={tonerPurchaseForm.date} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, date: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Qty</span>
+                      <input className="input" type="number" min="1" value={tonerPurchaseForm.qty} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, qty: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Unit Cost</span>
+                      <input className="input" type="number" min="0" value={tonerPurchaseForm.unitCost} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, unitCost: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Supplier</span>
+                      <input className="input" value={tonerPurchaseForm.supplier} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, supplier: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Invoice No</span>
+                      <input className="input" value={tonerPurchaseForm.invoiceNo} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, invoiceNo: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>By</span>
+                      <input className="input" value={tonerPurchaseForm.by} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, by: e.target.value }))} />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Note</span>
+                      <textarea className="textarea" value={tonerPurchaseForm.note} onChange={(e) => setTonerPurchaseForm((f) => ({ ...f, note: e.target.value }))} />
+                    </label>
+                  </div>
+                  <div className="asset-actions">
+                    <button className="btn-primary" disabled={!isAdmin || !tonerPurchaseForm.itemId} onClick={() => void createTonerPurchaseRecord()}>
+                      Save Purchase Record
+                    </button>
+                  </div>
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t.date}</th>
+                          <th>Item</th>
+                          <th>Qty</th>
+                          <th>Supplier</th>
+                          <th>Invoice</th>
+                          <th>Unit Cost</th>
+                          <th>Total</th>
+                          <th>{t.by}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tonerPurchaseTxns.length ? (
+                          tonerPurchaseTxns.slice(0, 20).map((row) => (
+                            <tr key={`toner-purchase-row-${row.id}`}>
+                              <td>{formatDate(row.date)}</td>
+                              <td><strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}</td>
+                              <td>{row.qty}</td>
+                              <td>{row.supplier || "-"}</td>
+                              <td>{row.invoiceNo || "-"}</td>
+                              <td>{row.unitCost || "-"}</td>
+                              <td>{row.totalCost || "-"}</td>
+                              <td>{row.by || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8}>No toner purchase records yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
               </section>
             )}
 

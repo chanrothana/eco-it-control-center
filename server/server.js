@@ -910,6 +910,14 @@ function normalizeInventoryItems(input) {
       location: toText(row.location),
       vendor: toText(row.vendor),
       notes: toText(row.notes),
+      itemGroup: toUpper(row.itemGroup) || "GENERAL",
+      compatibleAssetTypes: Array.isArray(row.compatibleAssetTypes)
+        ? row.compatibleAssetTypes.map((value) => toUpper(value)).filter(Boolean)
+        : [],
+      compatibleModels: Array.isArray(row.compatibleModels)
+        ? row.compatibleModels.map((value) => toText(value)).filter(Boolean)
+        : [],
+      defaultUnitCost: Number(row.defaultUnitCost || 0),
       photo: toText(row.photo),
       created: toText(row.created) || new Date().toISOString(),
     }));
@@ -945,6 +953,13 @@ function normalizeInventoryTxns(input) {
       approvalDecisionBy: toText(row.approvalDecisionBy),
       approvalDecisionAt: toText(row.approvalDecisionAt),
       approvalDecisionNote: toText(row.approvalDecisionNote),
+      txnSource: toUpper(row.txnSource) || "GENERAL",
+      referenceAssetId: toText(row.referenceAssetId),
+      referenceAssetDbId: Number(row.referenceAssetDbId) || 0,
+      supplier: toText(row.supplier),
+      invoiceNo: toText(row.invoiceNo),
+      unitCost: Number(row.unitCost || 0),
+      totalCost: Number(row.totalCost || 0),
       telegramMessageRefs: normalizeTelegramMessageRefs(row.telegramMessageRefs),
     }));
 }
@@ -1042,6 +1057,14 @@ function normalizeInventoryTxnType(value) {
   const raw = toUpper(value);
   if (!raw) return "";
   return INVENTORY_TXN_TYPE_SET.has(raw) ? raw : "";
+}
+
+function isPrinterAsset(asset) {
+  return toUpper(asset && asset.type) === "PRN";
+}
+
+function isTonerInventoryItem(item) {
+  return toUpper(item && item.itemGroup) === "TONER";
 }
 
 function isInventoryTxnInType(type) {
@@ -2627,6 +2650,13 @@ function validateAsset(body) {
   const photo = toText(body.photo);
   const photos = Array.isArray(body.photos) ? body.photos : [];
   const status = toText(body.status) || "Active";
+  const tonerModel = toText(body.tonerModel);
+  const tonerItemId = Number(body.tonerItemId || 0);
+  const tonerMinStock = Math.max(0, Number(body.tonerMinStock || 0));
+  const tonerExpectedYield = Math.max(0, Number(body.tonerExpectedYield || 0));
+  const tonerLastChangedAt = toText(body.tonerLastChangedAt);
+  const tonerLastPageCount = Math.max(0, Number(body.tonerLastPageCount || 0));
+  const tonerNotes = toText(body.tonerNotes);
   const statusIsActive = status.toLowerCase() === "active";
   const requiresUser =
     ["PC", "LAP", "TAB", "MON", "SPK", "DCM", "WTK"].includes(type) && statusIsActive;
@@ -2684,6 +2714,13 @@ function validateAsset(body) {
     photo,
     photos,
     status,
+    tonerModel,
+    tonerItemId,
+    tonerMinStock,
+    tonerExpectedYield,
+    tonerLastChangedAt,
+    tonerLastPageCount,
+    tonerNotes,
   };
 }
 
@@ -3188,6 +3225,13 @@ function toPublicAssetView(asset, allAssets = []) {
         condition: toText(entry?.condition),
         cost: toText(entry?.cost),
         by: toText(entry?.by),
+        tonerItemId: Number(entry?.tonerItemId || 0),
+        tonerItemCode: toText(entry?.tonerItemCode),
+        tonerItemName: toText(entry?.tonerItemName),
+        tonerQty: Number(entry?.tonerQty || 0),
+        tonerModel: toText(entry?.tonerModel),
+        oldTonerStatus: toText(entry?.oldTonerStatus),
+        pageCounter: Number(entry?.pageCounter || 0),
         photo: toText(entry?.photo),
         photos: Array.isArray(entry?.photos) ? entry.photos.map((p) => toText(p)).filter(Boolean) : [],
         beforePhotos: Array.isArray(entry?.beforePhotos) ? entry.beforePhotos.map((p) => toText(p)).filter(Boolean) : [],
@@ -3266,6 +3310,13 @@ function toPublicAssetView(asset, allAssets = []) {
     vendor: toText(source.vendor),
     notes: toText(source.notes),
     status: toText(source.status) || "Active",
+    tonerModel: toText(source.tonerModel),
+    tonerItemId: Number(source.tonerItemId || 0),
+    tonerMinStock: Number(source.tonerMinStock || 0),
+    tonerExpectedYield: Number(source.tonerExpectedYield || 0),
+    tonerLastChangedAt: toText(source.tonerLastChangedAt),
+    tonerLastPageCount: Number(source.tonerLastPageCount || 0),
+    tonerNotes: toText(source.tonerNotes),
     photo: toText(source.photo),
     photos: Array.isArray(source.photos) ? source.photos.map((p) => toText(p)).filter(Boolean) : [],
     maintenanceHistory,
@@ -4300,6 +4351,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const photo = await normalizePhotoValue(body.photo, "inventory");
+      const itemGroup = toUpper(body.itemGroup) || "GENERAL";
+      const compatibleAssetTypes = Array.isArray(body.compatibleAssetTypes)
+        ? body.compatibleAssetTypes.map((value) => toUpper(value)).filter(Boolean)
+        : [];
+      const compatibleModels = Array.isArray(body.compatibleModels)
+        ? body.compatibleModels.map((value) => toText(value)).filter(Boolean)
+        : [];
+      const defaultUnitCost = Math.max(0, Number(body.defaultUnitCost || 0));
       const item = {
         id: Date.now() + Math.floor(Math.random() * 1000),
         campus,
@@ -4312,6 +4371,10 @@ const server = http.createServer(async (req, res) => {
         location,
         vendor,
         notes,
+        itemGroup,
+        compatibleAssetTypes,
+        compatibleModels,
+        defaultUnitCost,
         photo,
         created: new Date().toISOString(),
       };
@@ -4351,6 +4414,18 @@ const server = http.createServer(async (req, res) => {
       const minStock = Math.max(0, Number(body.minStock ?? current.minStock ?? 0));
       const vendor = toText(body.vendor ?? current.vendor);
       const notes = toText(body.notes ?? current.notes);
+      const itemGroup = toUpper(body.itemGroup ?? current.itemGroup) || "GENERAL";
+      const compatibleAssetTypes = Array.isArray(body.compatibleAssetTypes)
+        ? body.compatibleAssetTypes.map((value) => toUpper(value)).filter(Boolean)
+        : Array.isArray(current.compatibleAssetTypes)
+          ? current.compatibleAssetTypes.map((value) => toUpper(value)).filter(Boolean)
+          : [];
+      const compatibleModels = Array.isArray(body.compatibleModels)
+        ? body.compatibleModels.map((value) => toText(value)).filter(Boolean)
+        : Array.isArray(current.compatibleModels)
+          ? current.compatibleModels.map((value) => toText(value)).filter(Boolean)
+          : [];
+      const defaultUnitCost = Math.max(0, Number(body.defaultUnitCost ?? current.defaultUnitCost ?? 0));
       if (!campus || !category || !itemCode || !itemName || !unit || !location) {
         sendJson(res, 400, { error: "campus, category, itemCode, itemName, unit, location are required" });
         return;
@@ -4384,6 +4459,10 @@ const server = http.createServer(async (req, res) => {
         location,
         vendor,
         notes,
+        itemGroup,
+        compatibleAssetTypes,
+        compatibleModels,
+        defaultUnitCost,
         photo: nextPhoto,
       };
       const nextItems = items.slice();
@@ -4472,6 +4551,13 @@ const server = http.createServer(async (req, res) => {
       const approvalDecisionBy = toText(body.approvalDecisionBy);
       const approvalDecisionAt = toText(body.approvalDecisionAt);
       const approvalDecisionNote = toText(body.approvalDecisionNote);
+      const txnSource = toUpper(body.txnSource) || "GENERAL";
+      const referenceAssetId = toText(body.referenceAssetId);
+      const referenceAssetDbId = Number(body.referenceAssetDbId || 0);
+      const supplier = toText(body.supplier);
+      const invoiceNo = toText(body.invoiceNo);
+      const unitCost = Math.max(0, Number(body.unitCost || 0));
+      const totalCost = Math.max(0, Number(body.totalCost || (unitCost * qty)));
 
       if ((type === "BORROW_OUT" || type === "BORROW_CONSUME") && (!toCampus || !requestedBy || !approvedBy)) {
         sendJson(res, 400, { error: "Borrow Out/Consume requires toCampus, requestedBy, approvedBy" });
@@ -4555,6 +4641,13 @@ const server = http.createServer(async (req, res) => {
         approvalDecisionBy: approvalStatus === "APPROVED" ? (approvalDecisionBy || toText(user.displayName) || toText(user.username)) : "",
         approvalDecisionAt: approvalStatus === "APPROVED" ? (approvalDecisionAt || new Date().toISOString()) : "",
         approvalDecisionNote: approvalStatus === "APPROVED" ? approvalDecisionNote : "",
+        txnSource,
+        referenceAssetId,
+        referenceAssetDbId,
+        supplier,
+        invoiceNo,
+        unitCost,
+        totalCost,
         telegramMessageRefs: [],
       };
       let approverTargets = [];
@@ -4603,6 +4696,227 @@ const server = http.createServer(async (req, res) => {
         }
       }
       sendJson(res, 201, { txn, telegramAlertSent, duplicateSuppressed: false });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/toner/purchases") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const itemId = Number(body.itemId || 0);
+      const qty = Math.max(0, Math.round(Number(body.qty || 0)));
+      const date = toText(body.date);
+      const by = toText(body.by) || toText(admin.displayName) || toText(admin.username);
+      const supplier = toText(body.supplier);
+      const invoiceNo = toText(body.invoiceNo);
+      const note = toText(body.note);
+      const unitCost = Math.max(0, Number(body.unitCost || 0));
+      if (!itemId || !date || qty <= 0) {
+        sendJson(res, 400, { error: "itemId, date, qty are required" });
+        return;
+      }
+
+      const db = await readDb();
+      const { settings, items, txns } = getInventoryState(db);
+      const item = items.find((row) => Number(row.id) === itemId);
+      if (!item) {
+        sendJson(res, 404, { error: "Item not found" });
+        return;
+      }
+      if (!isTonerInventoryItem(item)) {
+        sendJson(res, 400, { error: "Selected inventory item is not marked as toner" });
+        return;
+      }
+      if (!userCanAccessCampus(admin, toText(item.campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+
+      const txn = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        itemId: item.id,
+        campus: toText(item.campus),
+        itemCode: toText(item.itemCode),
+        itemName: toText(item.itemName),
+        date,
+        type: "IN",
+        qty,
+        by,
+        note,
+        fromCampus: "",
+        toCampus: toText(item.campus),
+        expectedReturnDate: "",
+        requestedBy: "",
+        approvedBy: "",
+        receivedBy: "",
+        photo: "",
+        borrowStatus: "",
+        approvalStatus: "APPROVED",
+        approvalRequestedBy: "",
+        approvalRequestedUser: "",
+        approvalRequestedAt: "",
+        approvalDecisionBy: by,
+        approvalDecisionAt: new Date().toISOString(),
+        approvalDecisionNote: "",
+        txnSource: "TONER_PURCHASE",
+        referenceAssetId: "",
+        referenceAssetDbId: 0,
+        supplier,
+        invoiceNo,
+        unitCost,
+        totalCost: Math.max(0, Number(body.totalCost || unitCost * qty)),
+        telegramMessageRefs: [],
+      };
+
+      const nextTxns = [txn, ...txns];
+      setInventoryState(db, settings, items, nextTxns);
+      appendAuditLog(db, admin, "CREATE", "toner_purchase", `${txn.itemCode}-${txn.id}`, `${qty} @ ${unitCost}`);
+      await writeDb(db);
+      sendJson(res, 201, { txn });
+      return;
+    }
+
+    const tonerChangeMatch = url.pathname.match(/^\/api\/assets\/(\d+)\/toner-change$/);
+    if (req.method === "POST" && tonerChangeMatch) {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!canRecordMaintenance(user)) {
+        sendJson(res, 403, { error: "Maintenance record permission required" });
+        return;
+      }
+      const assetDbId = Number(tonerChangeMatch[1]);
+      const body = await parseBody(req);
+      const date = toText(body.date);
+      const itemId = Number(body.itemId || 0);
+      const qty = Math.max(1, Math.round(Number(body.qty || 1)));
+      const note = toText(body.note);
+      const by = toText(body.by) || toText(user.displayName) || toText(user.username);
+      const cost = toText(body.cost);
+      const condition = toText(body.condition);
+      const oldTonerStatus = toText(body.oldTonerStatus);
+      const pageCounter = Math.max(0, Number(body.pageCounter || 0));
+      const photo = await normalizePhotoValue(body.photo, "maintenance");
+      if (!assetDbId || !itemId || !date || !note) {
+        sendJson(res, 400, { error: "date, itemId, note are required" });
+        return;
+      }
+
+      const db = await readDb();
+      const assetIdx = db.assets.findIndex((row) => Number(row.id) === assetDbId);
+      if (assetIdx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      const asset = db.assets[assetIdx];
+      if (!isPrinterAsset(asset)) {
+        sendJson(res, 400, { error: "Toner change is only available for printer assets" });
+        return;
+      }
+      if (!userCanAccessCampus(user, toText(asset.campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+
+      const { settings, items, txns } = getInventoryState(db);
+      const item = items.find((row) => Number(row.id) === itemId);
+      if (!item) {
+        sendJson(res, 404, { error: "Inventory item not found" });
+        return;
+      }
+      if (!isTonerInventoryItem(item)) {
+        sendJson(res, 400, { error: "Selected item is not marked as toner" });
+        return;
+      }
+      const currentStock = calcInventoryCurrentStock(item, txns);
+      if (qty > currentStock) {
+        sendJson(res, 400, { error: `Not enough toner stock. Current: ${currentStock}` });
+        return;
+      }
+      if (Number(asset.tonerItemId || 0) && Number(asset.tonerItemId || 0) !== Number(item.id)) {
+        sendJson(res, 400, { error: "Selected toner does not match this printer configuration" });
+        return;
+      }
+
+      const entry = {
+        id: Date.now(),
+        date,
+        type: "Toner Replacement",
+        note,
+        completion: "Done",
+        condition,
+        cost,
+        by,
+        tonerItemId: item.id,
+        tonerItemCode: toText(item.itemCode),
+        tonerItemName: toText(item.itemName),
+        tonerQty: qty,
+        tonerModel: toText(asset.tonerModel) || toText(item.itemName),
+        oldTonerStatus,
+        pageCounter,
+        photo,
+        photos: photo ? [photo] : [],
+        beforePhotos: [],
+        afterPhotos: photo ? [photo] : [],
+        ticketId: 0,
+        ticketNo: "",
+        requestSource: "qr_asset",
+        requestedBy: "",
+        requestTitle: "Toner replacement",
+      };
+      const txn = {
+        id: Date.now() + Math.floor(Math.random() * 1000) + 1,
+        itemId: item.id,
+        campus: toText(item.campus),
+        itemCode: toText(item.itemCode),
+        itemName: toText(item.itemName),
+        date,
+        type: "OUT",
+        qty,
+        by,
+        note: note || `Toner used for ${toText(asset.assetId)}`,
+        fromCampus: toText(item.campus),
+        toCampus: toText(item.campus),
+        expectedReturnDate: "",
+        requestedBy: "",
+        approvedBy: "",
+        receivedBy: "",
+        photo: "",
+        borrowStatus: "",
+        approvalStatus: "APPROVED",
+        approvalRequestedBy: "",
+        approvalRequestedUser: "",
+        approvalRequestedAt: "",
+        approvalDecisionBy: by,
+        approvalDecisionAt: new Date().toISOString(),
+        approvalDecisionNote: "",
+        txnSource: "TONER_CHANGE",
+        referenceAssetId: toText(asset.assetId),
+        referenceAssetDbId: Number(asset.id) || 0,
+        supplier: "",
+        invoiceNo: "",
+        unitCost: Math.max(0, Number(item.defaultUnitCost || 0)),
+        totalCost: Math.max(0, qty * Number(item.defaultUnitCost || 0)),
+        telegramMessageRefs: [],
+      };
+
+      db.assets[assetIdx] = {
+        ...asset,
+        tonerModel: toText(asset.tonerModel) || toText(item.itemName),
+        tonerItemId: item.id,
+        tonerLastChangedAt: date,
+        tonerLastPageCount: pageCounter,
+        maintenanceHistory: Array.isArray(asset.maintenanceHistory)
+          ? [entry, ...asset.maintenanceHistory]
+          : [entry],
+      };
+      setInventoryState(db, settings, items, [txn, ...txns]);
+      appendAuditLog(db, user, "CREATE", "toner_change", `${toText(asset.assetId)}#${entry.id}`, `${toText(item.itemCode)} x${qty}`);
+      ensureMaintenanceScheduleNotifications(db);
+      await writeDb(db);
+      sendJson(res, 201, { asset: db.assets[assetIdx], entry, txn });
       return;
     }
 
@@ -4771,6 +5085,13 @@ const server = http.createServer(async (req, res) => {
       const requestedBy = toText(body.requestedBy ?? current.requestedBy);
       const approvedBy = toText(body.approvedBy ?? current.approvedBy);
       const receivedBy = toText(body.receivedBy ?? current.receivedBy);
+      const txnSource = toUpper(body.txnSource ?? current.txnSource) || "GENERAL";
+      const referenceAssetId = toText(body.referenceAssetId ?? current.referenceAssetId);
+      const referenceAssetDbId = Number(body.referenceAssetDbId ?? current.referenceAssetDbId || 0);
+      const supplier = toText(body.supplier ?? current.supplier);
+      const invoiceNo = toText(body.invoiceNo ?? current.invoiceNo);
+      const unitCost = Math.max(0, Number(body.unitCost ?? current.unitCost ?? 0));
+      const totalCost = Math.max(0, Number(body.totalCost ?? current.totalCost ?? (unitCost * qty)));
       if ((type === "BORROW_OUT" || type === "BORROW_CONSUME") && (!toCampus || !requestedBy || !approvedBy)) {
         sendJson(res, 400, { error: "Borrow Out/Consume requires toCampus, requestedBy, approvedBy" });
         return;
@@ -4818,6 +5139,13 @@ const server = http.createServer(async (req, res) => {
         requestedBy,
         approvedBy,
         receivedBy,
+        txnSource,
+        referenceAssetId,
+        referenceAssetDbId,
+        supplier,
+        invoiceNo,
+        unitCost,
+        totalCost,
         photo: nextPhoto,
         borrowStatus:
           type === "BORROW_OUT"
