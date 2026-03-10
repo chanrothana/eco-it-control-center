@@ -1341,6 +1341,82 @@ function normalizePoolComplaints(input) {
     }));
 }
 
+function normalizeUtilityMeters(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      meterType: toUpper(row.meterType) === "WATER" ? "Water" : "Electricity",
+      meterCode: toText(row.meterCode),
+      meterName: toText(row.meterName),
+      campus: normalizeCampusInput(row.campus) || CAMPUS_LIST[0],
+      building: toText(row.building),
+      location: toText(row.location),
+      provider: toText(row.provider),
+      serialNumber: toText(row.serialNumber),
+      unit: toText(row.unit) || (toUpper(row.meterType) === "WATER" ? "m3" : "kWh"),
+      installedDate: toText(row.installedDate),
+      openingReading: Math.max(0, Number(row.openingReading) || 0),
+      status: toUpper(row.status) === "INACTIVE" ? "Inactive" : "Active",
+      photo: toText(row.photo),
+      notes: toText(row.notes),
+      created: toText(row.created) || new Date().toISOString(),
+    }))
+    .filter((row) => row.meterCode && row.meterName);
+}
+
+function normalizeUtilityReadings(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => {
+      const legacyMeterType = toUpper(row.meterType) === "WATER" ? "Water" : "Electricity";
+      const utilityType =
+        toUpper(row.utilityType) === "PPWS"
+          ? "PPWS"
+          : toUpper(row.utilityType) === "EDC"
+            ? "EDC"
+            : legacyMeterType === "Water"
+              ? "PPWS"
+              : "EDC";
+      const previousReading = Math.max(0, Number(row.previousReading) || 0);
+      const currentReading = Math.max(previousReading, Number(row.currentReading) || 0);
+      const invoiceDate = toText(row.invoiceDate) || toText(row.readingDate) || toText(row.billingMonth);
+      const billingMonth = toText(row.billingMonth) || (invoiceDate ? invoiceDate.slice(0, 7) : "");
+      const unit = toText(row.unit) || (utilityType === "PPWS" ? "m3" : "kWh");
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        utilityType,
+        campus: normalizeCampusInput(row.campus) || CAMPUS_LIST[0],
+        building: toText(row.building),
+        location: toText(row.location),
+        unit,
+        invoiceDate,
+        billingMonth,
+        usage: Math.max(0, Number(row.usage) || currentReading - previousReading),
+        amount: Math.max(0, Number(row.amount) || 0),
+        invoiceNumber: toText(row.invoiceNumber),
+        providerName:
+          toText(row.providerName) ||
+          toText(row.provider) ||
+          (utilityType === "PPWS" ? "Phnom Penh Water Supply Authority" : "Electricite du Cambodge"),
+        photo: toText(row.photo),
+        note: toText(row.note),
+        created: toText(row.created) || new Date().toISOString(),
+        meterId: Number(row.meterId) || 0,
+        meterCode: toText(row.meterCode),
+        meterName: toText(row.meterName),
+        meterType: legacyMeterType,
+        readingDate: toText(row.readingDate),
+        previousReading,
+        currentReading,
+        readerName: toText(row.readerName),
+      };
+    })
+    .filter((row) => row.campus && row.billingMonth && row.invoiceDate);
+}
+
 function assetCategoryCode(category) {
   const normalized = normalizeCategoryInput(category);
   if (normalized === "IT") return "COM";
@@ -1524,6 +1600,8 @@ function normalizeImportedDb(input) {
   const poolChemicalRecords = normalizePoolChemicalRecords(settings.poolChemicalRecords);
   const poolOperationRecords = normalizePoolOperationRecords(settings.poolOperationRecords);
   const poolComplaints = normalizePoolComplaints(settings.poolComplaints);
+  const utilityMeters = normalizeUtilityMeters(settings.utilityMeters);
+  const utilityReadings = normalizeUtilityReadings(settings.utilityReadings);
   const normalizedAssetsRaw = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
@@ -1562,6 +1640,8 @@ function normalizeImportedDb(input) {
       poolChemicalRecords,
       poolOperationRecords,
       poolComplaints,
+      utilityMeters,
+      utilityReadings,
       vaultAccounts,
       vaultCredentials,
       vaultDesignLinks,
@@ -3604,6 +3684,8 @@ const server = http.createServer(async (req, res) => {
           poolChemicalRecords: normalizePoolChemicalRecords(settings.poolChemicalRecords),
           poolOperationRecords: normalizePoolOperationRecords(settings.poolOperationRecords),
           poolComplaints: normalizePoolComplaints(settings.poolComplaints),
+          utilityMeters: normalizeUtilityMeters(settings.utilityMeters),
+          utilityReadings: normalizeUtilityReadings(settings.utilityReadings),
           vaultAccounts: normalizeVaultAccounts(settings.vaultAccounts),
           vaultCredentials: normalizeVaultCredentials(settings.vaultCredentials),
           vaultDesignLinks: normalizeVaultDesignLinks(settings.vaultDesignLinks),
@@ -3678,6 +3760,14 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "poolComplaints")
           ? normalizePoolComplaints(incoming.poolComplaints)
           : normalizePoolComplaints(current.poolComplaints);
+      const nextUtilityMeters =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "utilityMeters")
+          ? normalizeUtilityMeters(incoming.utilityMeters)
+          : normalizeUtilityMeters(current.utilityMeters);
+      const nextUtilityReadings =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "utilityReadings")
+          ? normalizeUtilityReadings(incoming.utilityReadings)
+          : normalizeUtilityReadings(current.utilityReadings);
       const nextVaultAccounts =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultAccounts")
           ? normalizeVaultAccounts(incoming.vaultAccounts)
@@ -3713,6 +3803,8 @@ const server = http.createServer(async (req, res) => {
         poolChemicalRecords: nextPoolChemicalRecords,
         poolOperationRecords: nextPoolOperationRecords,
         poolComplaints: nextPoolComplaints,
+        utilityMeters: nextUtilityMeters,
+        utilityReadings: nextUtilityReadings,
         vaultAccounts: nextVaultAccounts,
         vaultCredentials: nextVaultCredentials,
         vaultDesignLinks: nextVaultDesignLinks,

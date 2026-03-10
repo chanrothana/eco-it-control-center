@@ -11625,3 +11625,50 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     transform: translateY(-12px);
   }
 }
+
+.utility-chart-list {
+  display: grid;
+  gap: 10px;
+}
+
+.utility-chart-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.utility-chart-label {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.utility-chart-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.utility-chart-bar {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.utility-chart-bar-edc {
+  background: linear-gradient(90deg, #3f6cb3 0%, #587fbd 100%);
+}
+
+.utility-chart-bar-ppws {
+  background: linear-gradient(90deg, #2f8b6a 0%, #52a985 100%);
+}
+
+@media (max-width: 768px) {
+  .utility-chart-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -245,7 +245,7 @@ type ReportType =
   | "maintenance_completion"
   | "verification_summary"
   | "qr_labels";
-type EdAssetTemplate = "ALL" | "computer" | "ipad" | "speaker" | "tv" | "aircon" | "monitor" | "peripheral";
+type EdAssetTemplate = "ALL" | "computer" | "ipad" | "speaker" | "tv" | "aircon" | "monitor" | "walkie" | "peripheral";
 
 type Ticket = {
   id: number;
@@ -416,6 +416,49 @@ type PoolComplaint = {
   note?: string;
   created: string;
 };
+type UtilityMeter = {
+  id: number;
+  meterType: "Water" | "Electricity";
+  meterCode: string;
+  meterName: string;
+  campus: string;
+  building: string;
+  location: string;
+  provider?: string;
+  serialNumber?: string;
+  unit: string;
+  installedDate?: string;
+  openingReading: number;
+  status: "Active" | "Inactive";
+  photo?: string;
+  notes?: string;
+  created: string;
+};
+type UtilityReading = {
+  id: number;
+  utilityType?: "EDC" | "PPWS";
+  campus: string;
+  building?: string;
+  location?: string;
+  unit: string;
+  invoiceDate: string;
+  billingMonth: string;
+  usage: number;
+  amount?: number;
+  invoiceNumber?: string;
+  providerName?: string;
+  photo?: string;
+  note?: string;
+  created: string;
+  meterId?: number;
+  meterCode?: string;
+  meterName?: string;
+  meterType?: "Water" | "Electricity";
+  readingDate?: string;
+  previousReading?: number;
+  currentReading?: number;
+  readerName?: string;
+};
 
 type DashboardStats = {
   totalAssets: number;
@@ -433,6 +476,7 @@ type NavModule =
   | "dashboard"
   | "assets"
   | "inventory"
+  | "utilities"
   | "pool"
   | "tickets"
   | "schedule"
@@ -542,6 +586,8 @@ type ServerSettings = {
   poolChemicalRecords?: PoolChemicalRecord[];
   poolOperationRecords?: PoolOperationRecord[];
   poolComplaints?: PoolComplaint[];
+  utilityMeters?: UtilityMeter[];
+  utilityReadings?: UtilityReading[];
   itemTemplates?: ItemTemplate[];
   vaultAccounts?: VaultAccount[];
   vaultCredentials?: VaultCredential[];
@@ -834,6 +880,8 @@ const POOL_EQUIPMENT_FALLBACK_KEY = "it_pool_equipment_v1";
 const POOL_CHEMICAL_FALLBACK_KEY = "it_pool_chemical_v1";
 const POOL_OPERATION_FALLBACK_KEY = "it_pool_operation_v1";
 const POOL_COMPLAINT_FALLBACK_KEY = "it_pool_complaint_v1";
+const UTILITY_METER_FALLBACK_KEY = "it_utility_meters_v1";
+const UTILITY_READING_FALLBACK_KEY = "it_utility_readings_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
 const APP_VERSION = "v2.3.0";
 const DEFAULT_MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
@@ -862,6 +910,7 @@ const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "dashboard",
   "assets",
   "inventory",
+  "utilities",
   "pool",
   "schedule",
   "transfer",
@@ -873,6 +922,7 @@ const ALL_NAV_MODULES: NavModule[] = [
   "dashboard",
   "assets",
   "inventory",
+  "utilities",
   "pool",
   "tickets",
   "schedule",
@@ -888,6 +938,7 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   dashboard: "core",
   assets: "core",
   inventory: "core",
+  utilities: "operations",
   pool: "operations",
   tickets: "operations",
   schedule: "operations",
@@ -928,6 +979,17 @@ const MENU_ACCESS_TREE: Array<{
     labelEn: "Inventory",
     labelKm: "ស្តុក",
     children: [{ key: "inventory.main", labelEn: "Inventory Management", labelKm: "គ្រប់គ្រងស្តុក" }],
+  },
+  {
+    module: "utilities",
+    labelEn: "Utilities",
+    labelKm: "សេវាប្រើប្រាស់",
+    children: [
+      { key: "utilities.register", labelEn: "Monthly Entry", labelKm: "បញ្ចូលប្រចាំខែ" },
+      { key: "utilities.reading", labelEn: "History", labelKm: "ប្រវត្តិ" },
+      { key: "utilities.history", labelEn: "Monthly Comparison", labelKm: "ប្រៀបធៀបប្រចាំខែ" },
+      { key: "utilities.reports", labelEn: "Yearly Report", labelKm: "របាយការណ៍ប្រចាំឆ្នាំ" },
+    ],
   },
   {
     module: "pool",
@@ -2571,6 +2633,8 @@ function clearAllFallbackCaches() {
     POOL_CHEMICAL_FALLBACK_KEY,
     POOL_OPERATION_FALLBACK_KEY,
     POOL_COMPLAINT_FALLBACK_KEY,
+    UTILITY_METER_FALLBACK_KEY,
+    UTILITY_READING_FALLBACK_KEY,
     VAULT_ACCOUNTS_FALLBACK_KEY,
     VAULT_CREDENTIALS_FALLBACK_KEY,
     VAULT_DESIGN_LINKS_FALLBACK_KEY,
@@ -2716,6 +2780,86 @@ function normalizePoolComplaints(input: unknown): PoolComplaint[] {
     }));
 }
 
+function normalizeUtilityMeters(input: unknown): UtilityMeter[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): UtilityMeter => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      meterType: String(row.meterType || "").trim().toLowerCase() === "water" ? "Water" : "Electricity",
+      meterCode: String(row.meterCode || "").trim(),
+      meterName: String(row.meterName || "").trim(),
+      campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
+      building: String(row.building || "").trim(),
+      location: String(row.location || "").trim(),
+      provider: String(row.provider || "").trim(),
+      serialNumber: String(row.serialNumber || "").trim(),
+      unit: String(row.unit || "").trim() || (String(row.meterType || "").trim().toLowerCase() === "water" ? "m3" : "kWh"),
+      installedDate: String(row.installedDate || "").trim(),
+      openingReading: Math.max(0, Number(row.openingReading) || 0),
+      status: String(row.status || "").trim().toLowerCase() === "inactive" ? "Inactive" : "Active",
+      photo: String(row.photo || "").trim(),
+      notes: String(row.notes || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.meterCode && row.meterName);
+}
+
+function normalizeUtilityReadings(input: unknown): UtilityReading[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): UtilityReading => {
+      const legacyMeterType = String(row.meterType || "").trim().toLowerCase() === "water" ? "Water" : "Electricity";
+      const utilityType = String(row.utilityType || "").trim().toUpperCase() === "PPWS"
+        ? "PPWS"
+        : String(row.utilityType || "").trim().toUpperCase() === "EDC"
+          ? "EDC"
+          : legacyMeterType === "Water"
+            ? "PPWS"
+            : "EDC";
+      const previousReading = Math.max(0, Number(row.previousReading) || 0);
+      const currentReading = Math.max(previousReading, Number(row.currentReading) || 0);
+      const invoiceDate =
+        String(row.invoiceDate || "").trim() ||
+        String(row.readingDate || "").trim() ||
+        String(row.billingMonth || "").trim();
+      const billingMonth =
+        String(row.billingMonth || "").trim() ||
+        (invoiceDate ? invoiceDate.slice(0, 7) : "");
+      const unit =
+        String(row.unit || "").trim() ||
+        (utilityType === "PPWS" ? "m3" : "kWh");
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        utilityType,
+        campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
+        building: String(row.building || "").trim(),
+        location: String(row.location || "").trim(),
+        unit,
+        invoiceDate,
+        billingMonth,
+        usage: Math.max(0, Number(row.usage) || currentReading - previousReading),
+        amount: Math.max(0, Number(row.amount) || 0),
+        invoiceNumber: String(row.invoiceNumber || "").trim(),
+        providerName:
+          String(row.providerName || "").trim() ||
+          String(row.provider || "").trim() ||
+          (utilityType === "PPWS" ? "Phnom Penh Water Supply Authority" : "Electricite du Cambodge"),
+        photo: String(row.photo || "").trim(),
+        note: String(row.note || "").trim(),
+        created: String(row.created || "").trim() || new Date().toISOString(),
+        meterId: Number(row.meterId) || 0,
+        meterCode: String(row.meterCode || "").trim(),
+        meterName: String(row.meterName || "").trim(),
+        meterType: legacyMeterType,
+        readingDate: String(row.readingDate || "").trim(),
+        previousReading,
+        currentReading,
+        readerName: String(row.readerName || "").trim(),
+      };
+    })
+    .filter((row) => row.campus && row.billingMonth && row.invoiceDate);
+}
+
 function readPoolCleaningScheduleFallback(): PoolCleaningSchedule[] {
   try {
     const raw = localStorage.getItem(POOL_CLEANING_SCHEDULE_FALLBACK_KEY);
@@ -2784,6 +2928,34 @@ function readPoolComplaintFallback(): PoolComplaint[] {
 
 function writePoolComplaintFallback(rows: PoolComplaint[]) {
   trySetLocalStorage(POOL_COMPLAINT_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readUtilityMeterFallback(): UtilityMeter[] {
+  try {
+    const raw = localStorage.getItem(UTILITY_METER_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeUtilityMeters(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeUtilityMeterFallback(rows: UtilityMeter[]) {
+  trySetLocalStorage(UTILITY_METER_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readUtilityReadingFallback(): UtilityReading[] {
+  try {
+    const raw = localStorage.getItem(UTILITY_READING_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeUtilityReadings(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeUtilityReadingFallback(rows: UtilityReading[]) {
+  trySetLocalStorage(UTILITY_READING_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function normalizeVaultAccounts(input: unknown): VaultAccount[] {
@@ -5003,6 +5175,7 @@ export default function App() {
       { id: "dashboard", label: t.dashboard },
       { id: "assets", label: t.assets },
       { id: "inventory", label: t.inventory },
+      { id: "utilities", label: lang === "km" ? "សេវាប្រើប្រាស់" : "Utilities" },
       { id: "pool", label: t.pool },
       { id: "tickets", label: t.workOrders },
       { id: "schedule", label: t.schedule },
@@ -5013,7 +5186,7 @@ export default function App() {
       ...(isAdmin ? [{ id: "vault" as NavModule, label: "IT Vault" }] : []),
       ...(isAdmin ? [{ id: "setup" as NavModule, label: t.setup }] : []),
     ],
-    [isAdmin, t]
+    [isAdmin, lang, t]
   );
   const navIcon = useCallback((id: NavModule) => {
     switch (id) {
@@ -5023,6 +5196,8 @@ export default function App() {
         return <Boxes size={16} aria-hidden={true} />;
       case "inventory":
         return <Package size={16} aria-hidden={true} />;
+      case "utilities":
+        return <Lightbulb size={16} aria-hidden={true} />;
       case "pool":
         return <Droplets size={16} aria-hidden={true} />;
       case "tickets":
@@ -5111,6 +5286,7 @@ export default function App() {
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
+  const [utilitiesView, setUtilitiesView] = useState<"entry" | "history" | "monthly" | "yearly">("entry");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
@@ -5242,6 +5418,49 @@ export default function App() {
                 startTabTransition(() => {
                   setInventoryView("balance");
                   setTab("inventory");
+                }),
+            },
+          ];
+        case "utilities":
+          return [
+            {
+              key: "utilities.register",
+              label: lang === "km" ? "បញ្ចូលប្រចាំខែ" : "Monthly Entry",
+              active: utilitiesView === "entry",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setUtilitiesView("entry");
+                  setTab("utilities");
+                }),
+            },
+            {
+              key: "utilities.reading",
+              label: lang === "km" ? "ប្រវត្តិ" : "History",
+              active: utilitiesView === "history",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setUtilitiesView("history");
+                  setTab("utilities");
+                }),
+            },
+            {
+              key: "utilities.history",
+              label: lang === "km" ? "ប្រៀបធៀបប្រចាំខែ" : "Monthly Comparison",
+              active: utilitiesView === "monthly",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setUtilitiesView("monthly");
+                  setTab("utilities");
+                }),
+            },
+            {
+              key: "utilities.reports",
+              label: lang === "km" ? "របាយការណ៍ប្រចាំឆ្នាំ" : "Yearly Report",
+              active: utilitiesView === "yearly",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setUtilitiesView("yearly");
+                  setTab("utilities");
                 }),
             },
           ];
@@ -5560,6 +5779,7 @@ export default function App() {
       t.cleaningSchedule,
       t.poolComplaints,
       transferView,
+      utilitiesView,
       verificationView,
     ]
   );
@@ -5747,6 +5967,8 @@ export default function App() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>([]);
+  const [utilityMeters, setUtilityMeters] = useState<UtilityMeter[]>(() => readUtilityMeterFallback());
+  const [utilityReadings, setUtilityReadings] = useState<UtilityReading[]>(() => readUtilityReadingFallback());
   const [poolCleaningSchedules, setPoolCleaningSchedules] = useState<PoolCleaningSchedule[]>([]);
   const [poolEquipmentChecks, setPoolEquipmentChecks] = useState<PoolEquipmentCheck[]>([]);
   const [poolChemicalRecords, setPoolChemicalRecords] = useState<PoolChemicalRecord[]>([]);
@@ -6235,6 +6457,46 @@ export default function App() {
     status: "Open" as PoolComplaint["status"],
     photo: "",
     note: "",
+  });
+  const [utilityMeterForm, setUtilityMeterForm] = useState({
+    meterType: "Electricity" as UtilityMeter["meterType"],
+    meterCode: "",
+    meterName: "",
+    campus: CAMPUS_LIST[0],
+    building: "",
+    location: "",
+    provider: "",
+    serialNumber: "",
+    unit: "kWh",
+    installedDate: "",
+    openingReading: "0",
+    status: "Active" as UtilityMeter["status"],
+    photo: "",
+    notes: "",
+  });
+  const [editingUtilityMeterId, setEditingUtilityMeterId] = useState<number | null>(null);
+  const [utilityReadingForm, setUtilityReadingForm] = useState({
+    meterId: "",
+    readingDate: toYmd(new Date()),
+    billingMonth: toYmd(new Date()).slice(0, 7),
+    currentReading: "",
+    amount: "",
+    readerName: "",
+    photo: "",
+    note: "",
+  });
+  const [utilityMessage, setUtilityMessage] = useState("");
+  const [utilityInvoiceForm, setUtilityInvoiceForm] = useState({
+    utilityType: "EDC" as "EDC" | "PPWS",
+    campus: CAMPUS_LIST[0],
+    billingMonth: toYmd(new Date()).slice(0, 7),
+    invoiceDate: toYmd(new Date()),
+    usage: "",
+    amount: "",
+    invoiceNumber: "",
+    providerName: "Electricite du Cambodge",
+    note: "",
+    photo: "",
   });
   const [transferFilterCampus, setTransferFilterCampus] = useState("ALL");
   const [transferFilterLocation, setTransferFilterLocation] = useState("ALL");
@@ -7187,6 +7449,12 @@ export default function App() {
     writeInventoryTxnFallback(inventoryTxns);
   }, [inventoryTxns]);
   useEffect(() => {
+    writeUtilityMeterFallback(utilityMeters);
+  }, [utilityMeters]);
+  useEffect(() => {
+    writeUtilityReadingFallback(utilityReadings);
+  }, [utilityReadings]);
+  useEffect(() => {
     writePoolCleaningScheduleFallback(poolCleaningSchedules);
   }, [poolCleaningSchedules]);
   useEffect(() => {
@@ -7232,6 +7500,74 @@ export default function App() {
     }
     return out;
   }, [customTypeOptions]);
+
+  const utilityMeterOptions = useMemo(
+    () =>
+      [...utilityMeters].sort((a, b) =>
+        `${a.meterType} ${a.meterCode}`.localeCompare(`${b.meterType} ${b.meterCode}`, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+      ),
+    [utilityMeters]
+  );
+  const utilityCurrentMonthKey = toYmd(new Date()).slice(0, 7);
+  const utilityCurrentYear = utilityCurrentMonthKey.slice(0, 4);
+  const utilityUsageSummary = useMemo(() => {
+    let ppwsUsage = 0;
+    let edcUsage = 0;
+    let totalAmount = 0;
+    for (const row of utilityReadings) {
+      if (row.billingMonth !== utilityCurrentMonthKey) continue;
+      if (row.utilityType === "PPWS") ppwsUsage += Number(row.usage) || 0;
+      else edcUsage += Number(row.usage) || 0;
+      totalAmount += Number(row.amount) || 0;
+    }
+    return { ppwsUsage, edcUsage, totalAmount };
+  }, [utilityCurrentMonthKey, utilityReadings]);
+  const utilityCampusSummary = useMemo(() => {
+    const map = new Map<string, { ppws: number; edc: number; amount: number }>();
+    for (const row of utilityReadings) {
+      const key = row.campus || CAMPUS_LIST[0];
+      if (!map.has(key)) map.set(key, { ppws: 0, edc: 0, amount: 0 });
+      const summary = map.get(key)!;
+      if (row.utilityType === "PPWS") summary.ppws += Number(row.usage) || 0;
+      else summary.edc += Number(row.usage) || 0;
+      summary.amount += Number(row.amount) || 0;
+    }
+    return Array.from(map.entries())
+      .map(([campus, summary]) => ({ campus, ...summary }))
+      .sort((a, b) => compareCampusByCode(a.campus, b.campus));
+  }, [utilityReadings]);
+  const utilityMonthlyComparison = useMemo(() => {
+    const map = new Map<string, { month: string; edcUsage: number; ppwsUsage: number; amount: number }>();
+    for (const row of utilityReadings) {
+      if (!row.billingMonth?.startsWith(utilityCurrentYear)) continue;
+      if (!map.has(row.billingMonth)) {
+        map.set(row.billingMonth, { month: row.billingMonth, edcUsage: 0, ppwsUsage: 0, amount: 0 });
+      }
+      const summary = map.get(row.billingMonth)!;
+      if (row.utilityType === "PPWS") summary.ppwsUsage += Number(row.usage) || 0;
+      else summary.edcUsage += Number(row.usage) || 0;
+      summary.amount += Number(row.amount) || 0;
+    }
+    return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
+  }, [utilityCurrentYear, utilityReadings]);
+  const utilityYearlySummary = useMemo(() => {
+    const map = new Map<string, { year: string; edcUsage: number; ppwsUsage: number; amount: number }>();
+    for (const row of utilityReadings) {
+      const year = String(row.billingMonth || "").slice(0, 4);
+      if (!year) continue;
+      if (!map.has(year)) {
+        map.set(year, { year, edcUsage: 0, ppwsUsage: 0, amount: 0 });
+      }
+      const summary = map.get(year)!;
+      if (row.utilityType === "PPWS") summary.ppwsUsage += Number(row.usage) || 0;
+      else summary.edcUsage += Number(row.usage) || 0;
+      summary.amount += Number(row.amount) || 0;
+    }
+    return Array.from(map.values()).sort((a, b) => b.year.localeCompare(a.year));
+  }, [utilityReadings]);
 
   const currentTypeOptions = useMemo(
     () => {
@@ -9953,6 +10289,8 @@ export default function App() {
         );
         const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
         const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
+        const serverUtilityMeters = normalizeUtilityMeters(settingsRes.settings?.utilityMeters);
+        const serverUtilityReadings = normalizeUtilityReadings(settingsRes.settings?.utilityReadings);
         const serverPoolCleaningSchedules = normalizePoolCleaningSchedules(settingsRes.settings?.poolCleaningSchedules);
         const serverPoolEquipmentChecks = normalizePoolEquipmentChecks(settingsRes.settings?.poolEquipmentChecks);
         const serverPoolChemicalRecords = normalizePoolChemicalRecords(settingsRes.settings?.poolChemicalRecords);
@@ -9960,6 +10298,8 @@ export default function App() {
         const serverPoolComplaints = normalizePoolComplaints(settingsRes.settings?.poolComplaints);
         const fallbackInventoryItems = readInventoryItemFallback();
         const fallbackInventoryTxns = readInventoryTxnFallback();
+        const fallbackUtilityMeters = readUtilityMeterFallback();
+        const fallbackUtilityReadings = readUtilityReadingFallback();
         const fallbackPoolCleaningSchedules = readPoolCleaningScheduleFallback();
         const fallbackPoolEquipmentChecks = readPoolEquipmentFallback();
         const fallbackPoolChemicalRecords = readPoolChemicalFallback();
@@ -9967,6 +10307,8 @@ export default function App() {
         const fallbackPoolComplaints = readPoolComplaintFallback();
         const nextInventoryItems = serverInventoryItems.length ? serverInventoryItems : fallbackInventoryItems;
         const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
+        const nextUtilityMeters = serverUtilityMeters.length ? serverUtilityMeters : fallbackUtilityMeters;
+        const nextUtilityReadings = serverUtilityReadings.length ? serverUtilityReadings : fallbackUtilityReadings;
         const nextPoolCleaningSchedules = serverPoolCleaningSchedules.length
           ? serverPoolCleaningSchedules
           : fallbackPoolCleaningSchedules;
@@ -9984,6 +10326,8 @@ export default function App() {
           : fallbackPoolComplaints;
         setInventoryItems(nextInventoryItems);
         setInventoryTxns(nextInventoryTxns);
+        setUtilityMeters(nextUtilityMeters);
+        setUtilityReadings(nextUtilityReadings);
         setPoolCleaningSchedules(nextPoolCleaningSchedules);
         setPoolEquipmentChecks(nextPoolEquipmentChecks);
         setPoolChemicalRecords(nextPoolChemicalRecords);
@@ -10052,6 +10396,8 @@ export default function App() {
         setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
         setInventoryItems(readInventoryItemFallback());
         setInventoryTxns(readInventoryTxnFallback());
+        setUtilityMeters(readUtilityMeterFallback());
+        setUtilityReadings(readUtilityReadingFallback());
         setPoolCleaningSchedules(readPoolCleaningScheduleFallback());
         setPoolEquipmentChecks(readPoolEquipmentFallback());
         setPoolChemicalRecords(readPoolChemicalFallback());
@@ -11443,6 +11789,328 @@ export default function App() {
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
       throw err;
+    }
+  }
+
+  async function saveUtilitySettingsToServer(nextMeters: UtilityMeter[], nextReadings: UtilityReading[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settings: {
+            utilityMeters: nextMeters,
+            utilityReadings: nextReadings,
+          },
+        }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function onUtilityMeterPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setUtilityMeterForm((prev) => ({ ...prev, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onUtilityReadingPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setUtilityReadingForm((prev) => ({ ...prev, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onUtilityInvoicePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setUtilityInvoiceForm((prev) => ({ ...prev, photo }));
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function saveUtilityInvoiceEntry() {
+    if (!requireAdminAction()) return;
+    if (!utilityInvoiceForm.billingMonth || !utilityInvoiceForm.invoiceDate) {
+      setError("Billing month and invoice date are required.");
+      return;
+    }
+    if (utilityInvoiceForm.usage === "" || utilityInvoiceForm.amount === "") {
+      setError("Usage and amount are required.");
+      return;
+    }
+    const usage = Math.max(0, Number(utilityInvoiceForm.usage) || 0);
+    const amount = Math.max(0, Number(utilityInvoiceForm.amount) || 0);
+    const row: UtilityReading = {
+      id: Date.now(),
+      utilityType: utilityInvoiceForm.utilityType,
+      campus: utilityInvoiceForm.campus,
+      unit: utilityInvoiceForm.utilityType === "PPWS" ? "m3" : "kWh",
+      invoiceDate: utilityInvoiceForm.invoiceDate,
+      billingMonth: utilityInvoiceForm.billingMonth,
+      usage,
+      amount,
+      invoiceNumber: utilityInvoiceForm.invoiceNumber.trim(),
+      providerName:
+        utilityInvoiceForm.providerName.trim() ||
+        (utilityInvoiceForm.utilityType === "PPWS"
+          ? "Phnom Penh Water Supply Authority"
+          : "Electricite du Cambodge"),
+      photo: utilityInvoiceForm.photo || "",
+      note: utilityInvoiceForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextReadings = [row, ...utilityReadings].sort((a, b) =>
+      `${b.billingMonth}-${b.invoiceDate}`.localeCompare(`${a.billingMonth}-${a.invoiceDate}`)
+    );
+    setUtilityReadings(nextReadings);
+    setUtilityInvoiceForm({
+      utilityType: utilityInvoiceForm.utilityType,
+      campus: utilityInvoiceForm.campus,
+      billingMonth: toYmd(new Date()).slice(0, 7),
+      invoiceDate: toYmd(new Date()),
+      usage: "",
+      amount: "",
+      invoiceNumber: "",
+      providerName:
+        utilityInvoiceForm.utilityType === "PPWS"
+          ? "Phnom Penh Water Supply Authority"
+          : "Electricite du Cambodge",
+      note: "",
+      photo: "",
+    });
+    setUtilityMessage(`${row.utilityType} invoice saved for ${row.billingMonth}.`);
+    try {
+      await saveUtilitySettingsToServer(utilityMeters, nextReadings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save utility invoice");
+    }
+  }
+
+  async function deleteUtilityInvoiceEntry(readingId: number) {
+    if (!requireAdminAction()) return;
+    const nextReadings = utilityReadings.filter((row) => Number(row.id) !== Number(readingId));
+    setUtilityReadings(nextReadings);
+    try {
+      await saveUtilitySettingsToServer(utilityMeters, nextReadings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete utility invoice");
+    }
+  }
+
+  async function saveUtilityMeter() {
+    if (!requireAdminAction()) return;
+    if (!utilityMeterForm.meterCode.trim() || !utilityMeterForm.meterName.trim() || !utilityMeterForm.location.trim()) {
+      setError("Meter code, meter name, and location are required.");
+      return;
+    }
+    const nextUnit =
+      utilityMeterForm.unit.trim() || (utilityMeterForm.meterType === "Water" ? "m3" : "kWh");
+    const row: UtilityMeter = {
+      id: editingUtilityMeterId || Date.now(),
+      meterType: utilityMeterForm.meterType,
+      meterCode: utilityMeterForm.meterCode.trim().toUpperCase(),
+      meterName: utilityMeterForm.meterName.trim(),
+      campus: utilityMeterForm.campus,
+      building: utilityMeterForm.building.trim(),
+      location: utilityMeterForm.location.trim(),
+      provider: utilityMeterForm.provider.trim(),
+      serialNumber: utilityMeterForm.serialNumber.trim(),
+      unit: nextUnit,
+      installedDate: utilityMeterForm.installedDate,
+      openingReading: Math.max(0, Number(utilityMeterForm.openingReading) || 0),
+      status: utilityMeterForm.status,
+      photo: utilityMeterForm.photo || "",
+      notes: utilityMeterForm.notes.trim(),
+      created:
+        utilityMeters.find((meter) => Number(meter.id) === Number(editingUtilityMeterId))?.created || new Date().toISOString(),
+    };
+    const duplicate = utilityMeters.find(
+      (meter) =>
+        Number(meter.id) !== Number(editingUtilityMeterId) &&
+        String(meter.meterCode || "").trim().toUpperCase() === row.meterCode
+    );
+    if (duplicate) {
+      setError(`Meter code already exists (${duplicate.meterCode}).`);
+      return;
+    }
+    const nextMeters = editingUtilityMeterId
+      ? utilityMeters.map((meter) => (Number(meter.id) === Number(editingUtilityMeterId) ? row : meter))
+      : [row, ...utilityMeters];
+    setUtilityMeters(nextMeters);
+    setUtilityMeterForm({
+      meterType: "Electricity",
+      meterCode: "",
+      meterName: "",
+      campus: CAMPUS_LIST[0],
+      building: "",
+      location: "",
+      provider: "",
+      serialNumber: "",
+      unit: "kWh",
+      installedDate: "",
+      openingReading: "0",
+      status: "Active",
+      photo: "",
+      notes: "",
+    });
+    setEditingUtilityMeterId(null);
+    setUtilityMessage(`Meter ${row.meterCode} saved.`);
+    try {
+      await saveUtilitySettingsToServer(nextMeters, utilityReadings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save utility meter");
+    }
+  }
+
+  function startEditUtilityMeter(meter: UtilityMeter) {
+    setEditingUtilityMeterId(meter.id);
+    setUtilitiesView("entry");
+    setUtilityMeterForm({
+      meterType: meter.meterType,
+      meterCode: meter.meterCode,
+      meterName: meter.meterName,
+      campus: meter.campus,
+      building: meter.building || "",
+      location: meter.location || "",
+      provider: meter.provider || "",
+      serialNumber: meter.serialNumber || "",
+      unit: meter.unit || (meter.meterType === "Water" ? "m3" : "kWh"),
+      installedDate: meter.installedDate || "",
+      openingReading: String(meter.openingReading || 0),
+      status: meter.status,
+      photo: meter.photo || "",
+      notes: meter.notes || "",
+    });
+  }
+
+  async function deleteUtilityMeter(meterId: number) {
+    if (!requireAdminAction()) return;
+    const nextMeters = utilityMeters.filter((row) => Number(row.id) !== Number(meterId));
+    const nextReadings = utilityReadings.filter((row) => Number(row.meterId) !== Number(meterId));
+    setUtilityMeters(nextMeters);
+    setUtilityReadings(nextReadings);
+    if (Number(editingUtilityMeterId) === Number(meterId)) {
+      setEditingUtilityMeterId(null);
+    }
+    try {
+      await saveUtilitySettingsToServer(nextMeters, nextReadings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete utility meter");
+    }
+  }
+
+  async function saveUtilityReading() {
+    if (!requireAdminAction()) return;
+    const meter = utilityMeters.find((row) => Number(row.id) === Number(utilityReadingForm.meterId));
+    if (!meter) {
+      setError("Please select a meter.");
+      return;
+    }
+    if (!utilityReadingForm.readingDate || utilityReadingForm.currentReading === "") {
+      setError("Reading date and current reading are required.");
+      return;
+    }
+    const previousRows = utilityReadings
+      .filter((row) => Number(row.meterId) === Number(meter.id))
+      .sort((a, b) => Date.parse(String(b.readingDate || "")) - Date.parse(String(a.readingDate || "")));
+    const previousReading = previousRows[0]?.currentReading ?? Number(meter.openingReading || 0);
+    const currentReading = Number(utilityReadingForm.currentReading);
+    if (!Number.isFinite(currentReading) || currentReading < previousReading) {
+      setError(`Current reading must be ${previousReading} or higher.`);
+      return;
+    }
+    const row: UtilityReading = {
+      id: Date.now(),
+      utilityType: meter.meterType === "Water" ? "PPWS" : "EDC",
+      meterId: meter.id,
+      meterCode: meter.meterCode,
+      meterName: meter.meterName,
+      meterType: meter.meterType,
+      campus: meter.campus,
+      building: meter.building,
+      location: meter.location,
+      unit: meter.unit,
+      invoiceDate: utilityReadingForm.readingDate,
+      readingDate: utilityReadingForm.readingDate,
+      billingMonth: utilityReadingForm.billingMonth || utilityReadingForm.readingDate.slice(0, 7),
+      previousReading,
+      currentReading,
+      usage: currentReading - previousReading,
+      amount: Math.max(0, Number(utilityReadingForm.amount) || 0),
+      invoiceNumber: "",
+      providerName:
+        meter.provider ||
+        (meter.meterType === "Water" ? "Phnom Penh Water Supply Authority" : "Electricite du Cambodge"),
+      readerName: utilityReadingForm.readerName.trim(),
+      photo: utilityReadingForm.photo || "",
+      note: utilityReadingForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextReadings = [row, ...utilityReadings].sort(
+      (a, b) => Date.parse(String(b.readingDate || "")) - Date.parse(String(a.readingDate || ""))
+    );
+    setUtilityReadings(nextReadings);
+    setUtilityReadingForm({
+      meterId: utilityReadingForm.meterId,
+      readingDate: toYmd(new Date()),
+      billingMonth: toYmd(new Date()).slice(0, 7),
+      currentReading: "",
+      amount: "",
+      readerName: "",
+      photo: "",
+      note: "",
+    });
+    setUtilityMessage(`Reading saved for ${meter.meterCode}.`);
+    try {
+      await saveUtilitySettingsToServer(utilityMeters, nextReadings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save utility reading");
+    }
+  }
+
+  async function deleteUtilityReading(readingId: number) {
+    if (!requireAdminAction()) return;
+    const nextReadings = utilityReadings.filter((row) => Number(row.id) !== Number(readingId));
+    setUtilityReadings(nextReadings);
+    try {
+      await saveUtilitySettingsToServer(utilityMeters, nextReadings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete utility reading");
     }
   }
 
@@ -19763,6 +20431,7 @@ export default function App() {
             { value: "tv", label: "TV List" },
             { value: "aircon", label: "Air-Con List" },
             { value: "monitor", label: "Monitor List" },
+            { value: "walkie", label: "Walkie Talkie List" },
             { value: "peripheral", label: "Computer Peripheral List" },
           ]
         : [
@@ -19773,6 +20442,7 @@ export default function App() {
             { value: "tv", label: "TV List" },
             { value: "aircon", label: "Air-Con List" },
             { value: "monitor", label: "Monitor List" },
+            { value: "walkie", label: "Walkie Talkie List" },
             { value: "peripheral", label: "Computer Peripheral List" },
           ],
     [lang]
@@ -19788,6 +20458,7 @@ export default function App() {
       if (edAssetTemplate === "tv") return item.includes("tv") || item.includes("television");
       if (edAssetTemplate === "aircon") return item.includes("air conditioner") || item.includes("air-con");
       if (edAssetTemplate === "monitor") return item.includes("monitor");
+      if (edAssetTemplate === "walkie") return item.includes("walkie");
       if (edAssetTemplate === "peripheral") {
         return (
           item.includes("keyboard") ||
@@ -33331,6 +34002,230 @@ export default function App() {
                           <td colSpan={13}>No verification records yet.</td>
                         </tr>
                       )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {tab === "utilities" && (
+          <section className="panel">
+            <div className="tabs">
+              <button className={`tab ${utilitiesView === "entry" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("entry")}>Monthly Entry</button>
+              <button className={`tab ${utilitiesView === "history" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("history")}>History</button>
+              <button className={`tab ${utilitiesView === "monthly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("monthly")}>Monthly Comparison</button>
+              <button className={`tab ${utilitiesView === "yearly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("yearly")}>Yearly Report</button>
+            </div>
+            {utilityMessage ? <p className="tiny">{utilityMessage}</p> : null}
+
+            {utilitiesView === "entry" && (
+              <>
+                <h2>Utility Monthly Entry</h2>
+                <div className="form-grid inventory-item-grid">
+                  <label className="field">
+                    <span>Utility</span>
+                    <select
+                      className="input"
+                      value={utilityInvoiceForm.utilityType}
+                      onChange={(e) =>
+                        setUtilityInvoiceForm((prev) => ({
+                          ...prev,
+                          utilityType: e.target.value as "EDC" | "PPWS",
+                          providerName:
+                            e.target.value === "PPWS"
+                              ? "Phnom Penh Water Supply Authority"
+                              : "Electricite du Cambodge",
+                        }))
+                      }
+                    >
+                      <option value="EDC">EDC</option>
+                      <option value="PPWS">PPWS</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select className="input" value={utilityInvoiceForm.campus} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, campus: e.target.value }))}>
+                      {campusOptions.map((campus) => <option key={`utility-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Billing Month</span>
+                    <input type="month" className="input" value={utilityInvoiceForm.billingMonth} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, billingMonth: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Invoice Date</span>
+                    <input type="date" className="input" value={utilityInvoiceForm.invoiceDate} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, invoiceDate: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Usage ({utilityInvoiceForm.utilityType === "PPWS" ? "m3" : "kWh"})</span>
+                    <input type="number" min="0" step="0.01" className="input" value={utilityInvoiceForm.usage} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, usage: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Amount</span>
+                    <input type="number" min="0" step="0.01" className="input" value={utilityInvoiceForm.amount} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Invoice Number</span>
+                    <input className="input" value={utilityInvoiceForm.invoiceNumber} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Provider Name</span>
+                    <input className="input" value={utilityInvoiceForm.providerName} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, providerName: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Invoice Upload</span>
+                    <input type="file" accept="image/*,application/pdf" className="input" onChange={onUtilityInvoicePhotoFile} />
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.notes}</span>
+                    <textarea className="input" value={utilityInvoiceForm.note} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, note: e.target.value }))} />
+                  </label>
+                </div>
+                <div className="row-actions">
+                  <button className="btn-primary" onClick={() => void saveUtilityInvoiceEntry()}>Save Utility Invoice</button>
+                </div>
+              </>
+            )}
+
+            {utilitiesView === "history" && (
+              <>
+                <h2>Utility Invoice History</h2>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Invoice Date</th>
+                        <th>Billing Month</th>
+                        <th>Utility</th>
+                        <th>{t.campus}</th>
+                        <th>Usage</th>
+                        <th>Amount</th>
+                        <th>Invoice No.</th>
+                        <th>Provider</th>
+                        <th>{t.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {utilityReadings.length ? utilityReadings.map((row) => (
+                        <tr key={`utility-history-row-${row.id}`}>
+                          <td>{row.billingMonth || "-"}</td>
+                          <td>{formatDate(row.invoiceDate)}</td>
+                          <td>{row.billingMonth || "-"}</td>
+                          <td>{row.utilityType || "-"}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.usage} {row.unit}</td>
+                          <td>{row.amount || "-"}</td>
+                          <td>{row.invoiceNumber || "-"}</td>
+                          <td>{row.providerName || "-"}</td>
+                          <td><button className="danger-icon-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={9}>No utility invoice history yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {utilitiesView === "monthly" && (
+              <>
+                <h2>Monthly Comparison</h2>
+                <div className={`stats-grid ${isPhoneView ? "stats-grid-phone" : ""}`} style={{ marginBottom: 12 }}>
+                  <article className="stat-card"><div className="stat-label">This Month EDC</div><div className="stat-value">{utilityUsageSummary.edcUsage.toFixed(2)} kWh</div></article>
+                  <article className="stat-card"><div className="stat-label">This Month PPWS</div><div className="stat-value">{utilityUsageSummary.ppwsUsage.toFixed(2)} m3</div></article>
+                  <article className="stat-card"><div className="stat-label">This Month Cost</div><div className="stat-value">{utilityUsageSummary.totalAmount.toFixed(2)}</div></article>
+                </div>
+                <div className="table-wrap" style={{ marginBottom: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Month</th>
+                        <th>EDC Usage (kWh)</th>
+                        <th>PPWS Usage (m3)</th>
+                        <th>Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {utilityMonthlyComparison.length ? utilityMonthlyComparison.map((row) => (
+                        <tr key={`utility-month-${row.month}`}>
+                          <td>{row.month}</td>
+                          <td>{row.edcUsage.toFixed(2)}</td>
+                          <td>{row.ppwsUsage.toFixed(2)}</td>
+                          <td>{row.amount.toFixed(2)}</td>
+                        </tr>
+                      )) : <tr><td colSpan={4}>No monthly utility data yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="utility-chart-list">
+                  {utilityMonthlyComparison.map((row) => {
+                    const maxUsage = Math.max(
+                      1,
+                      ...utilityMonthlyComparison.map((entry) => Math.max(entry.edcUsage, entry.ppwsUsage))
+                    );
+                    return (
+                      <div key={`utility-month-chart-${row.month}`} className="utility-chart-row">
+                        <div className="utility-chart-label">{row.month}</div>
+                        <div className="utility-chart-bars">
+                          <div className="utility-chart-bar utility-chart-bar-edc" style={{ width: `${(row.edcUsage / maxUsage) * 100}%` }}>
+                            EDC {row.edcUsage.toFixed(0)}
+                          </div>
+                          <div className="utility-chart-bar utility-chart-bar-ppws" style={{ width: `${(row.ppwsUsage / maxUsage) * 100}%` }}>
+                            PPWS {row.ppwsUsage.toFixed(0)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {utilitiesView === "yearly" && (
+              <>
+                <h2>Yearly Utility Report</h2>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Year</th>
+                        <th>EDC Usage (kWh)</th>
+                        <th>PPWS Usage (m3)</th>
+                        <th>Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {utilityYearlySummary.length ? utilityYearlySummary.map((row) => (
+                        <tr key={`utility-year-summary-${row.year}`}>
+                          <td>{row.year}</td>
+                          <td>{row.edcUsage.toFixed(2)}</td>
+                          <td>{row.ppwsUsage.toFixed(2)}</td>
+                          <td>{row.amount.toFixed(2)}</td>
+                        </tr>
+                      )) : <tr><td colSpan={4}>No yearly utility report data yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.campus}</th>
+                        <th>EDC Usage (kWh)</th>
+                        <th>PPWS Usage (m3)</th>
+                        <th>Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {utilityCampusSummary.length ? utilityCampusSummary.map((row) => (
+                        <tr key={`utility-campus-summary-${row.campus}`}>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.edc.toFixed(2)}</td>
+                          <td>{row.ppws.toFixed(2)}</td>
+                          <td>{row.amount.toFixed(2)}</td>
+                        </tr>
+                      )) : <tr><td colSpan={4}>No campus utility report data yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
