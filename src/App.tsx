@@ -17601,7 +17601,12 @@ export default function App() {
     const current = assets.find((a) => a.id === assetId);
     if (!current) return false;
     const fromUser = String(current.assignedTo || "").trim();
-    const toUser = String(transferForm.toAssignedTo || "").trim();
+    const destinationLocation = transferForm.toLocation.trim();
+    const requestedToUser = String(transferForm.toAssignedTo || "").trim();
+    const toUser =
+      isSharedLocation(destinationLocation) && requestedToUser === fromUser
+        ? ""
+        : requestedToUser;
     const assignmentChanged = fromUser !== toUser;
     if (toUser && assignmentChanged && !transferForm.responsibilityConfirmed) {
       setError("Please confirm staff responsibility before assigning this asset.");
@@ -17618,7 +17623,7 @@ export default function App() {
       fromCampus: current.campus,
       fromLocation: current.location || "-",
       toCampus: transferForm.toCampus,
-      toLocation: transferForm.toLocation.trim(),
+      toLocation: destinationLocation,
       reason: transferForm.reason.trim(),
       by: transferForm.by.trim(),
       note: transferForm.note.trim(),
@@ -17704,7 +17709,7 @@ export default function App() {
       date: toYmd(new Date()),
       toCampus: asset.campus,
       toLocation: asset.location || "",
-      toAssignedTo: asset.assignedTo || "",
+      toAssignedTo: isSharedLocation(asset.location || "") ? "" : (asset.assignedTo || ""),
       responsibilityConfirmed: false,
       returnConfirmed: false,
       reason: "",
@@ -17743,7 +17748,7 @@ export default function App() {
       date: toYmd(new Date()),
       toCampus: asset.campus,
       toLocation: asset.location || "",
-      toAssignedTo: asset.assignedTo || "",
+      toAssignedTo: isSharedLocation(asset.location || "") ? "" : (asset.assignedTo || ""),
       responsibilityConfirmed: false,
       returnConfirmed: false,
       reason: "",
@@ -28722,13 +28727,66 @@ export default function App() {
                       <select
                         className="input"
                         value={transferForm.toLocation}
-                        onChange={(e) => setTransferForm((f) => ({ ...f, toLocation: e.target.value }))}
+                        onChange={(e) =>
+                          setTransferForm((f) => {
+                            const nextLocation = e.target.value;
+                            return {
+                              ...f,
+                              toLocation: nextLocation,
+                              toAssignedTo: isSharedLocation(nextLocation) ? "" : f.toAssignedTo,
+                              responsibilityConfirmed: false,
+                              returnConfirmed: false,
+                            };
+                          })
+                        }
                       >
                         <option value="">Select location</option>
                         {transferLocationOptions.map((loc) => (
                           <option key={`quick-to-location-${loc.id}`} value={loc.name}>{loc.name}</option>
                         ))}
                       </select>
+                    </label>
+                    <label className="field">
+                      <span>Current Staff</span>
+                      <input className="input" value={transferQuickAsset.assignedTo || "-"} readOnly />
+                    </label>
+                    <label className="field">
+                      <span>Assign To Staff</span>
+                      <select
+                        className="input"
+                        value={transferForm.toAssignedTo}
+                        onChange={(e) =>
+                          setTransferForm((f) => ({
+                            ...f,
+                            toAssignedTo: e.target.value,
+                            responsibilityConfirmed: false,
+                            returnConfirmed: false,
+                          }))
+                        }
+                      >
+                        <option value="">Unassigned / In Stock</option>
+                        {users.map((u) => (
+                          <option key={`quick-transfer-user-${u.id}`} value={u.fullName}>
+                            {u.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field check-field">
+                      <span>Staff responsibility confirm</span>
+                      <input
+                        type="checkbox"
+                        checked={transferForm.responsibilityConfirmed}
+                        onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
+                      />
+                    </label>
+                    <label className="field check-field">
+                      <span>Previous holder returned item</span>
+                      <input
+                        type="checkbox"
+                        checked={transferForm.returnConfirmed}
+                        onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
+                      />
                     </label>
                     <label className="field">
                       <span>Reason</span>
@@ -32753,7 +32811,18 @@ export default function App() {
                 <select
                   className="input"
                   value={transferForm.toLocation}
-                  onChange={(e) => setTransferForm((f) => ({ ...f, toLocation: e.target.value }))}
+                  onChange={(e) =>
+                    setTransferForm((f) => {
+                      const nextLocation = e.target.value;
+                      return {
+                        ...f,
+                        toLocation: nextLocation,
+                        toAssignedTo: isSharedLocation(nextLocation) ? "" : f.toAssignedTo,
+                        responsibilityConfirmed: false,
+                        returnConfirmed: false,
+                      };
+                    })
+                  }
                 >
                   <option value="">Select location</option>
                   {transferLocationOptions.map((loc) => (
