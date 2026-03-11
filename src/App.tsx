@@ -5452,6 +5452,14 @@ export default function App() {
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
+  const canUseUtilityInvoiceOcr = useMemo(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+    const host = String(window.location.hostname || "").trim().toLowerCase();
+    const isLocalHost = host === "127.0.0.1" || host === "localhost";
+    const platformText = `${navigator.platform || ""} ${navigator.userAgent || ""}`;
+    const isMac = /mac/i.test(platformText);
+    return isLocalHost && isMac;
+  }, []);
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "vault") setVaultTab("dashboard");
@@ -12237,7 +12245,11 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setUtilityInvoiceForm((prev) => ({ ...prev, photo }));
-      await autofillUtilityInvoiceFromPhoto(photo);
+      if (canUseUtilityInvoiceOcr) {
+        await autofillUtilityInvoiceFromPhoto(photo);
+      } else {
+        setUtilityMessage("Invoice image uploaded. Auto fill is available only in the local macOS app.");
+      }
     } catch {
       alert(t.photoProcessError);
     } finally {
@@ -35260,7 +35272,11 @@ export default function App() {
                   <label className="field">
                     <span>Invoice Upload</span>
                     <input type="file" accept="image/*" className="input" onChange={onUtilityInvoicePhotoFile} />
-                    <span className="tiny">Upload invoice image to auto fill repeated EDC/PPWS template data.</span>
+                    <span className="tiny">
+                      {canUseUtilityInvoiceOcr
+                        ? "Upload invoice image to auto fill repeated EDC/PPWS template data."
+                        : "Upload invoice image here. Auto fill works only in the local macOS app; phone/web entry is manual."}
+                    </span>
                     {utilityInvoiceForm.photo ? (
                       <img
                         loading="lazy"
@@ -35278,7 +35294,12 @@ export default function App() {
                   </label>
                 </div>
                 <div className="row-actions">
-                  <button className="tab" disabled={utilityAutofillBusy || !utilityInvoiceForm.photo} onClick={() => void autofillUtilityInvoiceFromPhoto()}>
+                  <button
+                    className="tab"
+                    disabled={!canUseUtilityInvoiceOcr || utilityAutofillBusy || !utilityInvoiceForm.photo}
+                    title={canUseUtilityInvoiceOcr ? "" : "Available only in the local macOS app"}
+                    onClick={() => void autofillUtilityInvoiceFromPhoto()}
+                  >
                     {utilityAutofillBusy ? "Reading Invoice..." : "Auto Fill From Invoice"}
                   </button>
                   <button className="btn-primary" onClick={() => void saveUtilityInvoiceEntry()}>Save Utility Invoice</button>
