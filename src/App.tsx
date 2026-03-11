@@ -136,6 +136,43 @@ type TransferEntry = {
   by?: string;
   note?: string;
 };
+type TransferHistoryRow = {
+  rowId: string;
+  assetDbId: number;
+  transferEntryId: number;
+  custodyEntryId: number;
+  assetId: string;
+  date: string;
+  fromCampus: string;
+  fromLocation: string;
+  toCampus: string;
+  toLocation: string;
+  fromUser: string;
+  toUser: string;
+  responsibilityAck: string;
+  responsibilityAckValue: boolean;
+  by: string;
+  reason: string;
+  note: string;
+};
+type TransferHistoryEditForm = {
+  rowId: string;
+  assetDbId: number;
+  transferEntryId: number;
+  custodyEntryId: number;
+  assetId: string;
+  date: string;
+  fromCampus: string;
+  fromLocation: string;
+  toCampus: string;
+  toLocation: string;
+  fromUser: string;
+  toUser: string;
+  responsibilityAck: boolean;
+  by: string;
+  reason: string;
+  note: string;
+};
 type StatusEntry = {
   id: number;
   date: string;
@@ -3497,6 +3534,49 @@ function buildAssetId(campus: string, category: string, type: string, seq: numbe
   return `${assetIdCampusCode(campus)}-${categoryCode(category)}-${normalizedType}-${padAssetSeq(seq)}`;
 }
 
+function sortTransferHistoryEntries(list: TransferEntry[]) {
+  return [...list].sort((a, b) => {
+    const byDate = String(b.date || "").localeCompare(String(a.date || ""));
+    if (byDate !== 0) return byDate;
+    return Number(b.id || 0) - Number(a.id || 0);
+  });
+}
+
+function sortCustodyHistoryEntries(list: CustodyEntry[]) {
+  return [...list].sort((a, b) => {
+    const byDate = String(b.date || "").localeCompare(String(a.date || ""));
+    if (byDate !== 0) return byDate;
+    return Number(b.id || 0) - Number(a.id || 0);
+  });
+}
+
+function deriveTransferDrivenAssetState(
+  asset: Asset,
+  transferHistory: TransferEntry[],
+  custodyHistory: CustodyEntry[],
+  fallback?: {
+    campus?: string;
+    location?: string;
+    assignedTo?: string;
+    custodyStatus?: Asset["custodyStatus"];
+  }
+) {
+  const latestTransfer = sortTransferHistoryEntries(transferHistory)[0] || null;
+  const latestCustody = sortCustodyHistoryEntries(custodyHistory)[0] || null;
+  const fallbackAssignedTo = String(fallback?.assignedTo || "").trim();
+  const assignedTo = latestCustody
+    ? String(latestCustody.toUser || "").trim()
+    : fallbackAssignedTo || String(asset.assignedTo || "").trim();
+  return {
+    campus: latestTransfer?.toCampus || fallback?.campus || asset.campus,
+    location: latestTransfer?.toLocation || fallback?.location || asset.location,
+    assignedTo,
+    custodyStatus: latestCustody
+      ? (assignedTo ? "ASSIGNED" : "IN_STOCK")
+      : (fallback?.custodyStatus || asset.custodyStatus || (assignedTo ? "ASSIGNED" : "IN_STOCK")),
+  };
+}
+
 function toYmd(value: Date) {
   const y = value.getFullYear();
   const m = String(value.getMonth() + 1).padStart(2, "0");
@@ -6435,6 +6515,7 @@ export default function App() {
     by: "",
     note: "",
   });
+  const [transferHistoryEdit, setTransferHistoryEdit] = useState<TransferHistoryEditForm | null>(null);
   const [transferDatePickerOpen, setTransferDatePickerOpen] = useState(false);
   const [transferDateMonth, setTransferDateMonth] = useState(() => {
     const now = new Date();
@@ -17707,6 +17788,203 @@ export default function App() {
     }
   }
 
+  function openTransferHistoryEdit(row: TransferHistoryRow) {
+    if (!requireSuperAdminAction()) return;
+    setTransferHistoryEdit({
+      rowId: row.rowId,
+      assetDbId: row.assetDbId,
+      transferEntryId: row.transferEntryId,
+      custodyEntryId: row.custodyEntryId,
+      assetId: row.assetId,
+      date: normalizeYmdInput(row.date) || row.date || toYmd(new Date()),
+      fromCampus: row.fromCampus,
+      fromLocation: row.fromLocation,
+      toCampus: row.toCampus,
+      toLocation: row.toLocation,
+      fromUser: row.fromUser,
+      toUser: row.toUser,
+      responsibilityAck: row.responsibilityAckValue,
+      by: row.by,
+      reason: row.reason,
+      note: row.note,
+    });
+  }
+
+  async function saveTransferHistoryEdit() {
+    if (!requireSuperAdminAction()) return;
+    if (!transferHistoryEdit) return;
+    const asset = assets.find((row) => row.id === transferHistoryEdit.assetDbId);
+    if (!asset) {
+      setError("Transfer asset not found.");
+      return;
+    }
+    const normalizedDate = normalizeYmdInput(transferHistoryEdit.date) || transferHistoryEdit.date;
+    if (!normalizedDate) {
+      setError("Transfer date is required.");
+      return;
+    }
+    if (!transferHistoryEdit.fromCampus || !transferHistoryEdit.toCampus || !transferHistoryEdit.toLocation.trim()) {
+      setError("From campus, to campus, and to location are required.");
+      return;
+    }
+
+    const nextTransferHistory = (asset.transferHistory || []).map((entry) =>
+      Number(entry.id) !== Number(transferHistoryEdit.transferEntryId)
+        ? entry
+        : {
+            ...entry,
+            date: normalizedDate,
+            fromCampus: transferHistoryEdit.fromCampus,
+            fromLocation: transferHistoryEdit.fromLocation.trim(),
+            toCampus: transferHistoryEdit.toCampus,
+            toLocation: transferHistoryEdit.toLocation.trim(),
+            by: transferHistoryEdit.by.trim(),
+            reason: transferHistoryEdit.reason.trim(),
+            note: transferHistoryEdit.note.trim(),
+          }
+    );
+
+    const fromUser = transferHistoryEdit.fromUser.trim();
+    const toUser = isSharedLocation(transferHistoryEdit.toLocation) ? "" : transferHistoryEdit.toUser.trim();
+    const needsCustodyEntry = Boolean(fromUser || toUser);
+    let nextCustodyHistory = [...(asset.custodyHistory || [])];
+    if (transferHistoryEdit.custodyEntryId) {
+      nextCustodyHistory = nextCustodyHistory
+        .map((entry) =>
+          Number(entry.id) !== Number(transferHistoryEdit.custodyEntryId)
+            ? entry
+            : {
+                ...entry,
+                date: normalizedDate,
+                action: toUser ? "ASSIGN" : "UNASSIGN",
+                fromCampus: transferHistoryEdit.fromCampus,
+                fromLocation: transferHistoryEdit.fromLocation.trim(),
+                toCampus: transferHistoryEdit.toCampus,
+                toLocation: transferHistoryEdit.toLocation.trim(),
+                fromUser,
+                toUser,
+                responsibilityAck: Boolean(transferHistoryEdit.responsibilityAck),
+                by: transferHistoryEdit.by.trim(),
+                note: transferHistoryEdit.note.trim() || transferHistoryEdit.reason.trim(),
+              }
+        )
+        .filter((entry) => needsCustodyEntry || Number(entry.id) !== Number(transferHistoryEdit.custodyEntryId));
+    } else if (needsCustodyEntry) {
+      nextCustodyHistory.unshift({
+        id: Date.now(),
+        date: normalizedDate,
+        action: toUser ? "ASSIGN" : "UNASSIGN",
+        fromCampus: transferHistoryEdit.fromCampus,
+        fromLocation: transferHistoryEdit.fromLocation.trim(),
+        toCampus: transferHistoryEdit.toCampus,
+        toLocation: transferHistoryEdit.toLocation.trim(),
+        fromUser,
+        toUser,
+        responsibilityAck: Boolean(transferHistoryEdit.responsibilityAck),
+        by: transferHistoryEdit.by.trim(),
+        note: transferHistoryEdit.note.trim() || transferHistoryEdit.reason.trim(),
+      });
+    }
+
+    const snapshot = deriveTransferDrivenAssetState(asset, nextTransferHistory, nextCustodyHistory);
+    const updatedAsset = {
+      ...asset,
+      ...snapshot,
+      transferHistory: nextTransferHistory,
+      custodyHistory: nextCustodyHistory,
+    };
+
+    setBusy(true);
+    setError("");
+    try {
+      const nextLocal = readAssetFallback().map((row) => (row.id === asset.id ? updatedAsset : row));
+      try {
+        await requestJson<{ asset: Asset }>(`/api/assets/${asset.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            campus: snapshot.campus,
+            location: snapshot.location,
+            assignedTo: snapshot.assignedTo,
+            custodyStatus: snapshot.custodyStatus,
+            transferHistory: nextTransferHistory,
+            custodyHistory: nextCustodyHistory,
+          }),
+        });
+      } catch (err) {
+        if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+      }
+      writeAssetFallback(nextLocal);
+      setAssets(nextLocal);
+      setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      appendUiAudit("UPDATE", "transfer_history", transferHistoryEdit.rowId, `${transferHistoryEdit.assetId}`);
+      setTransferHistoryEdit(null);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update transfer history");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteTransferHistoryRow(row: TransferHistoryRow) {
+    if (!requireSuperAdminAction()) return;
+    if (!window.confirm(`Delete transfer history for ${row.assetId} on ${formatDate(row.date || "-")}?`)) return;
+    const asset = assets.find((entry) => entry.id === row.assetDbId);
+    if (!asset) {
+      setError("Transfer asset not found.");
+      return;
+    }
+
+    const nextTransferHistory = (asset.transferHistory || []).filter(
+      (entry) => Number(entry.id) !== Number(row.transferEntryId)
+    );
+    const nextCustodyHistory = (asset.custodyHistory || []).filter(
+      (entry) => Number(entry.id) !== Number(row.custodyEntryId)
+    );
+    const snapshot = deriveTransferDrivenAssetState(asset, nextTransferHistory, nextCustodyHistory, {
+      campus: row.fromCampus || asset.campus,
+      location: row.fromLocation || asset.location,
+      assignedTo: row.fromUser || "",
+      custodyStatus: row.fromUser ? "ASSIGNED" : "IN_STOCK",
+    });
+    const updatedAsset = {
+      ...asset,
+      ...snapshot,
+      transferHistory: nextTransferHistory,
+      custodyHistory: nextCustodyHistory,
+    };
+
+    setBusy(true);
+    setError("");
+    try {
+      const nextLocal = readAssetFallback().map((entry) => (entry.id === asset.id ? updatedAsset : entry));
+      try {
+        await requestJson<{ asset: Asset }>(`/api/assets/${asset.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            campus: snapshot.campus,
+            location: snapshot.location,
+            assignedTo: snapshot.assignedTo,
+            custodyStatus: snapshot.custodyStatus,
+            transferHistory: nextTransferHistory,
+            custodyHistory: nextCustodyHistory,
+          }),
+        });
+      } catch (err) {
+        if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+      }
+      writeAssetFallback(nextLocal);
+      setAssets(nextLocal);
+      setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      appendUiAudit("DELETE", "transfer_history", row.rowId, row.assetId);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete transfer history");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function openTransferFromAsset(asset: Asset) {
     setTransferForm((prev) => ({
       ...prev,
@@ -20266,24 +20544,10 @@ export default function App() {
     }
   }, [transferForm.assetId]);
 
-  const allTransferRows = useMemo(() => {
+  const allTransferRows = useMemo<TransferHistoryRow[]>(() => {
     const cachedAssets = readAssetFallback();
     const sourceAssets = cachedAssets.length ? cachedAssets : assets;
-    const rows: Array<{
-      rowId: string;
-      assetId: string;
-      date: string;
-      fromCampus: string;
-      fromLocation: string;
-      toCampus: string;
-      toLocation: string;
-      fromUser: string;
-      toUser: string;
-      responsibilityAck: string;
-      by: string;
-      reason: string;
-      note: string;
-    }> = [];
+    const rows: TransferHistoryRow[] = [];
     for (const asset of sourceAssets) {
       for (const entry of asset.transferHistory || []) {
         const matchedCustody = (asset.custodyHistory || []).find(
@@ -20294,6 +20558,9 @@ export default function App() {
         );
         rows.push({
           rowId: `${asset.id}-${entry.id}`,
+          assetDbId: asset.id,
+          transferEntryId: Number(entry.id || 0),
+          custodyEntryId: Number(matchedCustody?.id || 0),
           assetId: asset.assetId,
           date: entry.date || "",
           fromCampus: entry.fromCampus || "",
@@ -20303,6 +20570,7 @@ export default function App() {
           fromUser: matchedCustody?.fromUser || "",
           toUser: matchedCustody?.toUser || "",
           responsibilityAck: matchedCustody?.responsibilityAck ? "Yes" : "No",
+          responsibilityAckValue: Boolean(matchedCustody?.responsibilityAck),
           by: entry.by || "",
           reason: entry.reason || "",
           note: entry.note || "",
@@ -21322,14 +21590,16 @@ export default function App() {
     for (const asset of quickCountBaseAssets) {
       const status = String(asset.status || "Active").trim().toLowerCase();
       const history = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+      const latestHistory = [...history].sort((a, b) => sortByNewestDate(a.date, b.date))[0];
       const hasOpenMaintenance = history.some(
         (entry) => String(entry?.completion || "").trim().toLowerCase() === "not yet"
       );
       const hasBrokenSignal =
         status.includes("broken") ||
-        history.some((entry) =>
-          isBrokenMaintenance(String(entry?.condition || ""), String(entry?.note || ""))
-        );
+        status.includes("defect") ||
+        ((status === "maintenance" || status === "inactive" || status === "retired") &&
+          latestHistory &&
+          isBrokenMaintenance(String(latestHistory?.condition || ""), String(latestHistory?.note || "")));
 
       if (status === "retired") buckets.retired.push(asset);
       else if (status === "inactive") buckets.inactive.push(asset);
@@ -21340,7 +21610,7 @@ export default function App() {
     }
 
     return buckets;
-  }, [quickCountBaseAssets, isBrokenMaintenance]);
+  }, [quickCountBaseAssets, isBrokenMaintenance, sortByNewestDate]);
   const quickCountStatusSummary = useMemo(
     () => ({
       active: quickCountStatusAssets.active.length,
@@ -32916,79 +33186,221 @@ export default function App() {
 
             {transferView === "history" && (
               <>
-            <h3 className="section-title">Transfer History</h3>
-            {isPhoneView ? (
-              <div className="transfer-mobile-history-list">
-                {allTransferRows.length ? (
-                  allTransferRows.map((row) => (
-                    <article key={`transfer-history-mobile-${row.rowId}`} className="transfer-mobile-history-card">
-                      <div className="transfer-mobile-history-head">
-                        <strong className="transfer-mobile-history-id">{row.assetId}</strong>
-                        <span className="transfer-mobile-history-date">{formatDate(row.date || "-")}</span>
+            <div className="transfer-history-header">
+              <h3 className="section-title">Transfer History</h3>
+              <p className="transfer-history-subhead">
+                Clear route view with staff handover and actions fixed at the end.
+              </p>
+            </div>
+            <div className="transfer-history-list">
+              {allTransferRows.length ? (
+                allTransferRows.map((row) => (
+                  <article key={`transfer-history-card-${row.rowId}`} className="transfer-history-card">
+                    <div className="transfer-history-card-main">
+                      <div className="transfer-history-card-head">
+                        <span className="transfer-history-date-pill">{formatDate(row.date || "-")}</span>
+                        <strong className="transfer-history-asset-pill">{row.assetId}</strong>
                       </div>
-                      <div className="transfer-mobile-history-meta">
-                        <span><strong>From:</strong> {campusLabel(row.fromCampus)} | {row.fromLocation || "-"}</span>
-                        <span><strong>To:</strong> {campusLabel(row.toCampus)} | {row.toLocation || "-"}</span>
-                        <span><strong>Staff:</strong> {row.fromUser || "-"} {"->"} {row.toUser || "-"}</span>
-                        <span><strong>Ack:</strong> {row.responsibilityAck}</span>
-                        <span><strong>By:</strong> {row.by || "-"}</span>
-                        <span><strong>Reason:</strong> {row.reason || "-"}</span>
+                      <div className="transfer-history-card-grid">
+                        <div className="transfer-history-route">
+                          <div className="transfer-history-stop">
+                            <span>From</span>
+                            <strong>{campusLabel(row.fromCampus)}</strong>
+                            <small>{row.fromLocation || "-"}</small>
+                          </div>
+                          <div className="transfer-history-route-arrow">→</div>
+                          <div className="transfer-history-stop">
+                            <span>To</span>
+                            <strong>{campusLabel(row.toCampus)}</strong>
+                            <small>{row.toLocation || "-"}</small>
+                          </div>
+                        </div>
+                        <div className="transfer-history-staff">
+                          <div className="transfer-history-mini-block">
+                            <span>Staff</span>
+                            <strong>{row.fromUser || "-"}</strong>
+                            <small>{row.toUser || "-"}</small>
+                          </div>
+                          <div className="transfer-history-mini-block">
+                            <span>Ack</span>
+                            <strong>{row.responsibilityAck}</strong>
+                            <small>{row.by || "-"}</small>
+                          </div>
+                        </div>
+                        <div className="transfer-history-detail">
+                          <div className="transfer-history-mini-block">
+                            <span>Reason</span>
+                            <strong>{row.reason || "-"}</strong>
+                          </div>
+                          <p className="transfer-history-note">{row.note || "-"}</p>
+                        </div>
                       </div>
-                      <p className="transfer-mobile-history-note"><strong>{t.notes}:</strong> {row.note || "-"}</p>
-                    </article>
-                  ))
-                ) : (
-                  <div className="panel-note">No transfer history yet.</div>
-                )}
+                    </div>
+                    {isSuperAdmin ? (
+                      <div className="transfer-history-actions">
+                        <button className="tab" disabled={busy} onClick={() => openTransferHistoryEdit(row)}>{t.edit}</button>
+                        <button className="btn-danger" disabled={busy} onClick={() => void deleteTransferHistoryRow(row)}>Delete</button>
+                      </div>
+                    ) : null}
+                  </article>
+                ))
+              ) : (
+                <div className="panel-note">No transfer history yet.</div>
+              )}
+            </div>
+            {transferHistoryEdit ? (
+              <div className="modal-backdrop" onClick={() => { if (!busy) setTransferHistoryEdit(null); }}>
+                <section className="panel modal-panel transfer-modal-panel" onClick={(e) => e.stopPropagation()}>
+                  <div className="panel-row">
+                    <h2>Edit Transfer History - {transferHistoryEdit.assetId}</h2>
+                    <button className="tab" disabled={busy} onClick={() => setTransferHistoryEdit(null)}>Close</button>
+                  </div>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Transfer Date</span>
+                      <input
+                        type="date"
+                        className="input"
+                        value={transferHistoryEdit.date}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, date: e.target.value } : f))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>From Campus</span>
+                      <select
+                        className="input"
+                        value={transferHistoryEdit.fromCampus}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, fromCampus: e.target.value } : f))}
+                      >
+                        {campusOptions.map((campus) => (
+                          <option key={`edit-transfer-from-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>From Location</span>
+                      <input
+                        className="input"
+                        value={transferHistoryEdit.fromLocation}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, fromLocation: e.target.value } : f))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>To Campus</span>
+                      <select
+                        className="input"
+                        value={transferHistoryEdit.toCampus}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, toCampus: e.target.value } : f))}
+                      >
+                        {campusOptions.map((campus) => (
+                          <option key={`edit-transfer-to-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>To Location</span>
+                      <input
+                        className="input"
+                        value={transferHistoryEdit.toLocation}
+                        onChange={(e) =>
+                          setTransferHistoryEdit((f) => {
+                            if (!f) return f;
+                            const nextLocation = e.target.value;
+                            return {
+                              ...f,
+                              toLocation: nextLocation,
+                              toUser: isSharedLocation(nextLocation) ? "" : f.toUser,
+                              responsibilityAck: isSharedLocation(nextLocation) ? false : f.responsibilityAck,
+                            };
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>From Staff</span>
+                      <select
+                        className="input"
+                        value={transferHistoryEdit.fromUser}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, fromUser: e.target.value } : f))}
+                      >
+                        <option value="">Unassigned / In Stock</option>
+                        {transferHistoryEdit.fromUser && !users.some((u) => u.fullName === transferHistoryEdit.fromUser) ? (
+                          <option value={transferHistoryEdit.fromUser}>{transferHistoryEdit.fromUser}</option>
+                        ) : null}
+                        {users.map((u) => (
+                          <option key={`edit-transfer-from-user-${u.id}`} value={u.fullName}>{u.fullName}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>To Staff</span>
+                      <select
+                        className="input"
+                        value={transferHistoryEdit.toUser}
+                        onChange={(e) =>
+                          setTransferHistoryEdit((f) => (f ? {
+                            ...f,
+                            toUser: e.target.value,
+                            responsibilityAck: e.target.value ? f.responsibilityAck : false,
+                          } : f))
+                        }
+                      >
+                        <option value="">Unassigned / In Stock</option>
+                        {transferHistoryEdit.toUser && !users.some((u) => u.fullName === transferHistoryEdit.toUser) ? (
+                          <option value={transferHistoryEdit.toUser}>{transferHistoryEdit.toUser}</option>
+                        ) : null}
+                        {users.map((u) => (
+                          <option key={`edit-transfer-to-user-${u.id}`} value={u.fullName}>{u.fullName}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field check-field">
+                      <span>Staff responsibility confirm</span>
+                      <input
+                        type="checkbox"
+                        checked={transferHistoryEdit.responsibilityAck}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, responsibilityAck: e.target.checked } : f))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>By</span>
+                      <input
+                        className="input"
+                        value={transferHistoryEdit.by}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, by: e.target.value } : f))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Reason</span>
+                      <input
+                        className="input"
+                        value={transferHistoryEdit.reason}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, reason: e.target.value } : f))}
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Note</span>
+                      <textarea
+                        className="textarea"
+                        value={transferHistoryEdit.note}
+                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, note: e.target.value } : f))}
+                      />
+                    </label>
+                  </div>
+                  <div className="asset-actions">
+                    <div className="tiny">Super Admin can correct transfer history and keep the asset snapshot in sync.</div>
+                    <div className="row-actions">
+                      <button className="tab" disabled={busy} onClick={() => setTransferHistoryEdit(null)}>Cancel</button>
+                      <button className="btn-primary" disabled={busy} onClick={() => { void saveTransferHistoryEdit(); }}>
+                        Save Update
+                      </button>
+                    </div>
+                  </div>
+                </section>
               </div>
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{t.date}</th>
-                      <th>{t.assetId}</th>
-                      <th>From Campus</th>
-                      <th>From Location</th>
-                      <th>To Campus</th>
-                      <th>To Location</th>
-                      <th>From Staff</th>
-                      <th>To Staff</th>
-                      <th>Ack</th>
-                      <th>By</th>
-                      <th>Reason</th>
-                      <th>{t.notes}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allTransferRows.length ? (
-                      allTransferRows.map((row) => (
-                        <tr key={`transfer-history-tab-${row.rowId}`}>
-                          <td>{formatDate(row.date || "-")}</td>
-                          <td><strong>{row.assetId}</strong></td>
-                          <td>{campusLabel(row.fromCampus)}</td>
-                          <td>{row.fromLocation || "-"}</td>
-                          <td>{campusLabel(row.toCampus)}</td>
-                          <td>{row.toLocation || "-"}</td>
-                          <td>{row.fromUser || "-"}</td>
-                          <td>{row.toUser || "-"}</td>
-                          <td>{row.responsibilityAck}</td>
-                          <td>{row.by || "-"}</td>
-                          <td>{row.reason || "-"}</td>
-                          <td>{row.note || "-"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={12}>No transfer history yet.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-              </>
-            )}
+            ) : null}
+          </>
+        )}
           </section>
         )}
 
