@@ -267,11 +267,16 @@ const CATEGORY_CODE = {
   FACILITY: "FFE",
 };
 const SHARED_LOCATION_KEYWORDS = [
+  "admin office",
   "teacher office",
+  "it stock",
   "itc room",
   "computer lab",
   "compuer lab",
   "compuer lap",
+  "stock room",
+  "storage room",
+  "store room",
 ];
 const DEFAULT_USERS = [
   {

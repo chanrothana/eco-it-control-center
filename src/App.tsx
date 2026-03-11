@@ -1527,11 +1527,16 @@ const REMOTE_TYPE_CODE = "RMT";
 const WALKIE_CHARGER_TYPE_CODE = "ADP";
 const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
 const SHARED_LOCATION_KEYWORDS = [
+  "admin office",
   "teacher office",
+  "it stock",
   "itc room",
   "computer lab",
   "compuer lab",
   "compuer lap",
+  "stock room",
+  "storage room",
+  "store room",
 ];
 const DESKTOP_PARENT_TYPE = "PC";
 const WATER_DISPENSER_MAIN_TYPE = "WDP";
