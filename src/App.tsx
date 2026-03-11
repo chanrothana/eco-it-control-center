@@ -20021,6 +20021,24 @@ export default function App() {
     () => scheduleByDate.get(selectedCalendarDate) || [],
     [scheduleByDate, selectedCalendarDate]
   );
+  const todayScheduledItems = useMemo(
+    () => scheduleByDate.get(todayYmd) || [],
+    [scheduleByDate, todayYmd]
+  );
+  const selectedDateScheduleStatus = useMemo(() => {
+    if (!selectedDateItems.length) return null;
+    if (selectedCalendarDate < todayYmd) {
+      return { key: "overdue", label: lang === "km" ? "លើសកាលកំណត់" : "Overdue" };
+    }
+    if (selectedCalendarDate === todayYmd) {
+      return { key: "today", label: lang === "km" ? "ថ្ងៃនេះ" : "Today" };
+    }
+    return { key: "upcoming", label: lang === "km" ? "នឹងមកដល់" : "Upcoming" };
+  }, [selectedDateItems.length, selectedCalendarDate, todayYmd, lang]);
+  const selectedDateSchedulePreview = useMemo(
+    () => selectedDateItems.slice(0, 3),
+    [selectedDateItems]
+  );
   const scheduleAlertItems = useMemo(() => {
     let title = "";
     let items: Asset[] = [];
@@ -24351,6 +24369,55 @@ export default function App() {
                     <p className="tiny dashboard-calendar-month">
                       {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
                     </p>
+                    <div className="dashboard-calendar-alert-strip">
+                      <button
+                        type="button"
+                        className="dashboard-calendar-alert-btn is-overdue"
+                        onClick={() => {
+                          setScheduleAlertItemFilter("ALL");
+                          setScheduleAlertModal("overdue");
+                        }}
+                      >
+                        <span>{lang === "km" ? "លើសកាលកំណត់" : "Overdue"}</span>
+                        <strong>{overdueScheduleAssets.length}</strong>
+                      </button>
+                      <button
+                        type="button"
+                        className="dashboard-calendar-alert-btn is-today"
+                        onClick={() => {
+                          setSelectedCalendarDate(todayYmd);
+                          if (todayScheduledItems.length) {
+                            setScheduleAlertItemFilter("ALL");
+                            setScheduleAlertModal("selected");
+                          }
+                        }}
+                      >
+                        <span>{lang === "km" ? "ថ្ងៃនេះ" : "Today"}</span>
+                        <strong>{todayScheduledItems.length}</strong>
+                      </button>
+                      <button
+                        type="button"
+                        className="dashboard-calendar-alert-btn is-upcoming"
+                        onClick={() => {
+                          setScheduleAlertItemFilter("ALL");
+                          setScheduleAlertModal("upcoming");
+                        }}
+                      >
+                        <span>{lang === "km" ? "7 ថ្ងៃបន្ទាប់" : "Next 7 Days"}</span>
+                        <strong>{upcomingScheduleAssets.length}</strong>
+                      </button>
+                      <button
+                        type="button"
+                        className="dashboard-calendar-alert-btn is-total"
+                        onClick={() => {
+                          setScheduleAlertItemFilter("ALL");
+                          setScheduleAlertModal("scheduled");
+                        }}
+                      >
+                        <span>{lang === "km" ? "បានកំណត់ទាំងអស់" : "Scheduled"}</span>
+                        <strong>{scheduleAssets.length}</strong>
+                      </button>
+                    </div>
                     <div className="dashboard-calendar-grid">
                       <CalendarGridTemplate
                         weekdayLabels={calendarWeekdayLabels}
@@ -24375,6 +24442,64 @@ export default function App() {
                         headKeyPrefix="dash-cal-head"
                         dayKeyPrefix="dash-cal-day"
                       />
+                    </div>
+                    <div className="dashboard-calendar-summary">
+                      <div className="dashboard-calendar-summary-head">
+                        <div>
+                          <strong>
+                            {lang === "km" ? "កាលវិភាគថ្ងៃបានជ្រើស" : "Selected Date Schedule"}:
+                            {" "}
+                            {lang === "km"
+                              ? formatKhmerDateYmd(selectedCalendarDate)
+                              : formatDate(selectedCalendarDate)}
+                          </strong>
+                          <div className="tiny">
+                            {selectedDateItems.length
+                              ? (lang === "km"
+                                ? `${selectedDateItems.length} ការងារ`
+                                : `${selectedDateItems.length} scheduled item(s)`)
+                              : (lang === "km"
+                                ? "មិនមានកាលវិភាគ"
+                                : "No schedule on this date")}
+                          </div>
+                        </div>
+                        {selectedDateScheduleStatus ? (
+                          <span className={`dashboard-calendar-status dashboard-calendar-status-${selectedDateScheduleStatus.key}`}>
+                            {selectedDateScheduleStatus.label}
+                          </span>
+                        ) : null}
+                      </div>
+                      {selectedDateSchedulePreview.length ? (
+                        <div className="dashboard-calendar-summary-list">
+                          {selectedDateSchedulePreview.map((asset) => (
+                            <button
+                              type="button"
+                              key={`dashboard-selected-date-${asset.id}`}
+                              className="dashboard-calendar-summary-row"
+                              onClick={() => setHistoryAssetId(asset.id)}
+                            >
+                              <strong>{asset.assetId}</strong>
+                              <span>{assetItemName(asset.category, asset.type, asset.pcType || "")}</span>
+                              <span>{campusLabel(asset.campus)} • {asset.location || "-"}</span>
+                              <span className="tiny">{asset.scheduleNote || (lang === "km" ? "មិនមានកំណត់ចំណាំ" : "No schedule note")}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      {selectedDateItems.length > selectedDateSchedulePreview.length ? (
+                        <button
+                          type="button"
+                          className="tab btn-small"
+                          onClick={() => {
+                            setScheduleAlertItemFilter("ALL");
+                            setScheduleAlertModal("selected");
+                          }}
+                        >
+                          {lang === "km"
+                            ? `មើលទាំងអស់ (${selectedDateItems.length})`
+                            : `View all (${selectedDateItems.length})`}
+                        </button>
+                      ) : null}
                     </div>
                   </article>
                 </div>
