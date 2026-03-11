@@ -1582,6 +1582,16 @@ const DIGITAL_CAMERA_TYPE = "DCM";
 const PROJECTOR_TYPE = "SLP";
 const PROJECTOR_COMPONENT_TYPES = ["PBG"] as const;
 const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set(["ADP", "RMT", "HDC"]);
+const REPORT_ITEM_FILTER_HIDDEN_NAMES = new Set([
+  "Adapter",
+  "Battery Charger",
+  "Camera Bag",
+  "Camera Battery",
+  "HDMI Cable",
+  "Memory Card",
+  "Projector Bag",
+  "Remote Control",
+]);
 const AIO_PC_TYPE = "AIO";
 const NO_PARENT_LINK_TYPES = new Set([
   DESKTOP_PARENT_TYPE,
@@ -20961,7 +20971,13 @@ export default function App() {
   }, [assetMasterRowsByCampusFilter, assetMasterCategoryFilter]);
 
   const assetMasterItemFilterOptions = useMemo(() => {
-    const options = Array.from(new Set(assetMasterRowsByCampusCategoryFilter.map((row) => row.itemName).filter(Boolean)));
+    const options = Array.from(
+      new Set(
+        assetMasterRowsByCampusCategoryFilter
+          .map((row) => row.itemName)
+          .filter((itemName) => itemName && !REPORT_ITEM_FILTER_HIDDEN_NAMES.has(itemName))
+      )
+    );
     return options.sort((a, b) => a.localeCompare(b));
   }, [assetMasterRowsByCampusCategoryFilter]);
 
