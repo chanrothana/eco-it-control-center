@@ -2802,8 +2802,22 @@ function extFromMime(mime) {
       return "webp";
     case "image/gif":
       return "gif";
+    case "application/pdf":
+      return "pdf";
+    case "text/plain":
+      return "txt";
+    case "text/csv":
+      return "csv";
+    case "application/msword":
+      return "doc";
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      return "docx";
+    case "application/vnd.ms-excel":
+      return "xls";
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      return "xlsx";
     default:
-      return "jpg";
+      return "bin";
   }
 }
 
@@ -2819,6 +2833,34 @@ async function saveDataUrlPhoto(dataUrl, group = "assets") {
   const folderPath = path.join(UPLOADS_DIR, folder);
   await fs.mkdir(folderPath, { recursive: true });
   const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+  const abs = path.join(folderPath, fileName);
+  await fs.writeFile(abs, Buffer.from(base64, "base64"));
+  return `/uploads/${folder}/${fileName}`;
+}
+
+function sanitizeUploadFileName(name, fallback = "attachment") {
+  const raw = toText(name)
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return raw || fallback;
+}
+
+async function saveDataUrlFile(dataUrl, group = "files", preferredName = "") {
+  const raw = toText(dataUrl);
+  const m = raw.match(/^data:([a-zA-Z0-9.+/-]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) return "";
+  const mime = m[1].toLowerCase();
+  const base64 = m[2];
+  const ext = extFromMime(mime);
+  const folder = toText(group).replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "files";
+  await ensureUploadsDir();
+  const folderPath = path.join(UPLOADS_DIR, folder);
+  await fs.mkdir(folderPath, { recursive: true });
+  const safePreferred = sanitizeUploadFileName(preferredName || "", "attachment");
+  const preferredExt = path.extname(safePreferred).replace(/^\./, "").toLowerCase();
+  const baseName = path.basename(safePreferred, preferredExt ? `.${preferredExt}` : "").replace(/[^a-z0-9._-]/gi, "-") || "attachment";
+  const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${baseName}.${preferredExt || ext}`;
   const abs = path.join(folderPath, fileName);
   await fs.writeFile(abs, Buffer.from(base64, "base64"));
   return `/uploads/${folder}/${fileName}`;
@@ -2856,6 +2898,51 @@ async function normalizePhotoList(photos, group = "assets", maxCount = 5) {
     if (out.length >= maxCount) break;
   }
   return out;
+}
+
+function fileNameFromUploadUrl(raw, fallback = "attachment") {
+  const text = toText(raw);
+  if (!text) return fallback;
+  try {
+    const parsed = new URL(text, "http://local");
+    const base = path.basename(parsed.pathname || "");
+    return base || fallback;
+  } catch {
+    const base = path.basename(text);
+    return base || fallback;
+  }
+}
+
+async function normalizeAttachmentValue(input, group = "maintenance_reports") {
+  if (!input) return { url: "", name: "", mimeType: "" };
+  const source = input && typeof input === "object" ? input : { url: input };
+  const raw = toText(source.url || source.file || source.reportFile || input);
+  const name = sanitizeUploadFileName(source.name || source.fileName || "", "attachment");
+  const mimeType = toText(source.mimeType || source.type);
+  if (!raw) return { url: "", name: "", mimeType: "" };
+  if (raw.startsWith("/uploads/")) {
+    return { url: raw, name: name || fileNameFromUploadUrl(raw), mimeType };
+  }
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname.startsWith("/uploads/")) {
+        return { url: parsed.pathname, name: name || fileNameFromUploadUrl(parsed.pathname), mimeType };
+      }
+    } catch {
+      // Keep legacy value as-is if URL parsing fails.
+    }
+  }
+  if (raw.startsWith("data:")) {
+    const saved = await saveDataUrlFile(raw, group, name);
+    const dataMime = raw.match(/^data:([a-zA-Z0-9.+/-]+);base64,/)?.[1] || mimeType;
+    return {
+      url: saved || "",
+      name: name || fileNameFromUploadUrl(saved),
+      mimeType: toText(dataMime),
+    };
+  }
+  return { url: raw, name: name || fileNameFromUploadUrl(raw), mimeType };
 }
 
 function extractDataUrlBuffer(dataUrl) {
@@ -3186,12 +3273,20 @@ async function normalizeHistoryEntries(entries, group = "maintenance") {
     const photos = await normalizePhotoList(entry.photos, group, 5);
     const beforePhotos = await normalizePhotoList(entry.beforePhotos, group, 5);
     const afterPhotos = await normalizePhotoList([...(Array.isArray(entry.afterPhotos) ? entry.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], group, 5);
+    const reportFile = await normalizeAttachmentValue(entry.reportFile || {
+      url: entry.reportFile,
+      name: entry.reportFileName,
+      mimeType: entry.reportFileType,
+    }, "maintenance_reports");
     out.push({
       ...entry,
       photo: afterPhotos[0] || photo,
       photos: afterPhotos.slice(0, 5),
       beforePhotos: beforePhotos.slice(0, 5),
       afterPhotos: afterPhotos.slice(0, 5),
+      reportFile: reportFile.url,
+      reportFileName: reportFile.name,
+      reportFileType: reportFile.mimeType,
     });
   }
   return out;
@@ -3898,6 +3993,9 @@ function toPublicAssetView(asset, allAssets = []) {
         photos: Array.isArray(entry?.photos) ? entry.photos.map((p) => toText(p)).filter(Boolean) : [],
         beforePhotos: Array.isArray(entry?.beforePhotos) ? entry.beforePhotos.map((p) => toText(p)).filter(Boolean) : [],
         afterPhotos: Array.isArray(entry?.afterPhotos) ? entry.afterPhotos.map((p) => toText(p)).filter(Boolean) : [],
+        reportFile: toText(entry?.reportFile),
+        reportFileName: toText(entry?.reportFileName),
+        reportFileType: toText(entry?.reportFileType),
       }))
     : [];
   const transferHistory = Array.isArray(source.transferHistory)
@@ -6264,7 +6362,6 @@ const server = http.createServer(async (req, res) => {
       const nextAfterPhotos = await normalizePhotoList(body.afterPhotos, "maintenance", 5);
       const nextCompletion = normalizeCompletion(body.completion);
       const nextCondition = toText(body.condition);
-
       const db = await readDb();
       const idx = db.assets.findIndex((a) => a.id === assetId);
       if (idx === -1) {
@@ -6282,6 +6379,18 @@ const server = http.createServer(async (req, res) => {
       }
 
       const current = history[hIdx] || {};
+      const hasNextReportFile = Object.prototype.hasOwnProperty.call(body, "reportFile");
+      const nextReportFile = hasNextReportFile
+        ? await normalizeAttachmentValue(body.reportFile || {
+            url: body.reportFile,
+            name: body.reportFileName,
+            mimeType: body.reportFileType,
+          }, "maintenance_reports")
+        : {
+            url: toText(current.reportFile),
+            name: toText(current.reportFileName),
+            mimeType: toText(current.reportFileType),
+          };
       const currentPhotos = Array.isArray(current.photos)
         ? current.photos.map((p) => toText(p)).filter(Boolean)
         : (toText(current.photo) ? [toText(current.photo)] : []);
@@ -6309,6 +6418,9 @@ const server = http.createServer(async (req, res) => {
         photos: resolvedAfterPhotos,
         beforePhotos: resolvedBeforePhotos,
         afterPhotos: resolvedAfterPhotos,
+        reportFile: nextReportFile.url,
+        reportFileName: nextReportFile.name,
+        reportFileType: nextReportFile.mimeType,
       };
       if (!updated.date || !updated.type || !updated.note) {
         sendJson(res, 400, { error: "date, type, note are required" });
@@ -6623,6 +6735,11 @@ const server = http.createServer(async (req, res) => {
       const photos = await normalizePhotoList(body.photos, "maintenance", 5);
       const beforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
       const afterPhotos = await normalizePhotoList([...(Array.isArray(body.afterPhotos) ? body.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], "maintenance", 5);
+      const reportFile = await normalizeAttachmentValue(body.reportFile || {
+        url: body.reportFile,
+        name: body.reportFileName,
+        mimeType: body.reportFileType,
+      }, "maintenance_reports");
       const completion = normalizeCompletion(body.completion);
       const condition = toText(body.condition);
       if (!date || !type || !note) {
@@ -6654,6 +6771,9 @@ const server = http.createServer(async (req, res) => {
         photos: afterPhotos.slice(0, 5),
         beforePhotos: beforePhotos.slice(0, 5),
         afterPhotos: afterPhotos.slice(0, 5),
+        reportFile: reportFile.url,
+        reportFileName: reportFile.name,
+        reportFileType: reportFile.mimeType,
         ticketId: 0,
         ticketNo: "",
         requestSource: "manual",
@@ -6948,6 +7068,11 @@ const server = http.createServer(async (req, res) => {
       const photos = await normalizePhotoList(body.photos, "maintenance", 5);
       const beforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
       const afterPhotos = await normalizePhotoList([...(Array.isArray(body.afterPhotos) ? body.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], "maintenance", 5);
+      const reportFile = await normalizeAttachmentValue(body.reportFile || {
+        url: body.reportFile,
+        name: body.reportFileName,
+        mimeType: body.reportFileType,
+      }, "maintenance_reports");
       if (!date || !type || !note) {
         sendJson(res, 400, { error: "date, type, note are required" });
         return;
@@ -6985,6 +7110,9 @@ const server = http.createServer(async (req, res) => {
         photos: afterPhotos.slice(0, 5),
         beforePhotos: beforePhotos.slice(0, 5),
         afterPhotos: afterPhotos.slice(0, 5),
+        reportFile: reportFile.url,
+        reportFileName: reportFile.name,
+        reportFileType: reportFile.mimeType,
       };
       db.assets[assetIdx].maintenanceHistory = Array.isArray(db.assets[assetIdx].maintenanceHistory)
         ? [entry, ...db.assets[assetIdx].maintenanceHistory]

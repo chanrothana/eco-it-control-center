@@ -90,6 +90,11 @@ type Asset = {
   status: string;
   created: string;
 };
+type MaintenanceReportFile = {
+  url: string;
+  name?: string;
+  mimeType?: string;
+};
 type MaintenanceEntry = {
   id: number;
   date: string;
@@ -115,6 +120,9 @@ type MaintenanceEntry = {
   requestSource?: string;
   requestedBy?: string;
   requestTitle?: string;
+  reportFile?: string;
+  reportFileName?: string;
+  reportFileType?: string;
 };
 type VerificationEntry = {
   id: number;
@@ -1413,6 +1421,7 @@ const MAINTENANCE_COMPLETION_OPTIONS = [
   { value: "Not Yet", label: "Not Yet Done" },
 ];
 const MAX_MAINTENANCE_PHOTOS = 5;
+const MAX_MAINTENANCE_REPORT_FILE_SIZE = 15 * 1024 * 1024;
 const MAINTENANCE_TYPE_OPTIONS = [
   "Preventive",
   "Corrective",
@@ -4076,6 +4085,14 @@ async function optimizeUploadPhoto(file: File): Promise<string> {
   return compressImageDataUrl(source, 1280, 1280, 0.75);
 }
 
+async function fileToMaintenanceReportFile(file: File): Promise<MaintenanceReportFile> {
+  return {
+    url: await fileToDataUrl(file),
+    name: file.name || "maintenance-report",
+    mimeType: file.type || "",
+  };
+}
+
 function normalizeAssetPhotos(input: { photo?: string; photos?: string[] }) {
   const out: string[] = [];
   const list = Array.isArray(input.photos) ? input.photos : [];
@@ -4107,6 +4124,43 @@ function normalizeMaintenancePhotoList(input: unknown, maxCount = MAX_MAINTENANC
   return out;
 }
 
+function normalizeMaintenanceReportFile(input: unknown): MaintenanceReportFile | null {
+  if (!input) return null;
+  if (typeof input === "string") {
+    const url = String(input || "").trim();
+    if (!url) return null;
+    return { url, name: "", mimeType: "" };
+  }
+  if (typeof input === "object") {
+    const source = input as Partial<MaintenanceReportFile> & {
+      reportFile?: string;
+      reportFileName?: string;
+      reportFileType?: string;
+    };
+    const url = String(source.url || source.reportFile || "").trim();
+    if (!url) return null;
+    return {
+      url,
+      name: String(source.name || source.reportFileName || "").trim(),
+      mimeType: String(source.mimeType || source.reportFileType || "").trim(),
+    };
+  }
+  return null;
+}
+
+function maintenanceReportFileLabel(file: MaintenanceReportFile | null | undefined) {
+  const normalized = normalizeMaintenanceReportFile(file);
+  if (!normalized?.url) return "";
+  if (normalized.name) return normalized.name;
+  try {
+    const parsed = new URL(normalized.url, "http://local");
+    const base = parsed.pathname.split("/").filter(Boolean).pop() || "";
+    return base || "maintenance-report";
+  } catch {
+    return normalized.url.split("/").filter(Boolean).pop() || "maintenance-report";
+  }
+}
+
 function normalizeMaintenanceEntryPhotos(entry: Partial<MaintenanceEntry>) {
   const beforePhotos = normalizeMaintenancePhotoList(entry.beforePhotos);
   const afterBase = normalizeMaintenancePhotoList(entry.afterPhotos);
@@ -4123,6 +4177,11 @@ function normalizeMaintenanceEntryPhotos(entry: Partial<MaintenanceEntry>) {
     photo: afterPhotos[0] || "",
     photos: afterPhotos,
   };
+}
+
+function normalizeMaintenanceReportFileUrl(file: MaintenanceReportFile | null | undefined) {
+  const normalized = normalizeMaintenanceReportFile(file);
+  return normalized?.url ? resolveApiResourceUrl(normalized.url) : "";
 }
 
 function normalizeAssetSerialKey(value: string) {
@@ -4312,6 +4371,11 @@ function normalizeAssetForUi(asset: Asset): Asset {
     ? asset.maintenanceHistory.map((entry) => ({
         ...entry,
         ...normalizeMaintenanceEntryPhotos(entry || {}),
+        reportFile: normalizeMaintenanceReportFileUrl({
+          url: entry.reportFile || "",
+          name: entry.reportFileName || "",
+          mimeType: entry.reportFileType || "",
+        }),
       }))
     : [];
   const custodyHistory = Array.isArray(asset.custodyHistory) ? asset.custodyHistory : [];
@@ -6466,6 +6530,7 @@ export default function App() {
     photos: [] as string[],
     beforePhotos: [] as string[],
     afterPhotos: [] as string[],
+    reportFile: null as MaintenanceReportFile | null,
   });
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
@@ -6511,6 +6576,7 @@ export default function App() {
     photos: [] as string[],
     beforePhotos: [] as string[],
     afterPhotos: [] as string[],
+    reportFile: null as MaintenanceReportFile | null,
   });
   const [tonerPurchaseForm, setTonerPurchaseForm] = useState<TonerPurchaseForm>({
     itemId: "",
@@ -6711,6 +6777,7 @@ export default function App() {
     photos: [] as string[],
     beforePhotos: [] as string[],
     afterPhotos: [] as string[],
+    reportFile: null as MaintenanceReportFile | null,
     ticketStatus: "Done",
   });
 
@@ -14514,6 +14581,60 @@ export default function App() {
     }
   }
 
+  async function onMaintenanceRecordReportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_MAINTENANCE_REPORT_FILE_SIZE) {
+      alert("Maximum report file size is 15MB.");
+      e.target.value = "";
+      return;
+    }
+    try {
+      const reportFile = await fileToMaintenanceReportFile(file);
+      setMaintenanceRecordForm((f) => ({ ...f, reportFile }));
+    } catch {
+      alert("Failed to process maintenance report file.");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onMaintenanceEditReportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_MAINTENANCE_REPORT_FILE_SIZE) {
+      alert("Maximum report file size is 15MB.");
+      e.target.value = "";
+      return;
+    }
+    try {
+      const reportFile = await fileToMaintenanceReportFile(file);
+      setMaintenanceEditForm((f) => ({ ...f, reportFile }));
+    } catch {
+      alert("Failed to process maintenance report file.");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onTicketMaintenanceReportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_MAINTENANCE_REPORT_FILE_SIZE) {
+      alert("Maximum report file size is 15MB.");
+      e.target.value = "";
+      return;
+    }
+    try {
+      const reportFile = await fileToMaintenanceReportFile(file);
+      setTicketMaintenanceForm((f) => ({ ...f, reportFile }));
+    } catch {
+      alert("Failed to process maintenance report file.");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   async function updateTicketRow(ticket: Ticket, patch: Partial<Ticket>) {
     if (!requireAdminAction()) return;
     setBusy(true);
@@ -14632,6 +14753,7 @@ export default function App() {
       photos: [],
       beforePhotos: [],
       afterPhotos: [],
+      reportFile: null,
       ticketStatus: "Done",
     });
     setTicketMaintenanceFileKey((k) => k + 1);
@@ -14651,6 +14773,7 @@ export default function App() {
       photos: [],
       beforePhotos: [],
       afterPhotos: [],
+      reportFile: null,
       ticketStatus: "Done",
     });
   }
@@ -14680,6 +14803,13 @@ export default function App() {
             photos: ticketMaintenanceForm.afterPhotos || [],
             beforePhotos: ticketMaintenanceForm.beforePhotos || [],
             afterPhotos: ticketMaintenanceForm.afterPhotos || [],
+            reportFile: ticketMaintenanceForm.reportFile
+              ? {
+                  url: ticketMaintenanceForm.reportFile.url,
+                  name: ticketMaintenanceForm.reportFile.name || "",
+                  mimeType: ticketMaintenanceForm.reportFile.mimeType || "",
+                }
+              : "",
             ticketStatus: ticketMaintenanceForm.ticketStatus,
           }),
         }
@@ -17781,6 +17911,9 @@ export default function App() {
       afterPhotos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
       photo: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || [])[0] || "",
       photos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
+      reportFile: maintenanceRecordForm.reportFile?.url || "",
+      reportFileName: maintenanceRecordForm.reportFile?.name || "",
+      reportFileType: maintenanceRecordForm.reportFile?.mimeType || "",
     };
     setBusy(true);
     setError("");
@@ -17834,7 +17967,16 @@ export default function App() {
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${assetId}/history`, {
           method: "POST",
-          body: JSON.stringify(entry),
+          body: JSON.stringify({
+            ...entry,
+            reportFile: maintenanceRecordForm.reportFile
+              ? {
+                  url: maintenanceRecordForm.reportFile.url,
+                  name: maintenanceRecordForm.reportFile.name || "",
+                  mimeType: maintenanceRecordForm.reportFile.mimeType || "",
+                }
+              : "",
+          }),
         });
         const savedAsset = nextLocal.find((a) => a.id === assetId);
         if (savedAsset) {
@@ -17872,6 +18014,7 @@ export default function App() {
         photos: [],
         beforePhotos: [],
         afterPhotos: [],
+        reportFile: null,
       }));
       setMaintenanceRecordFileKey((k) => k + 1);
       setMaintenanceView("history");
@@ -18476,6 +18619,11 @@ export default function App() {
       photos: normalizedPhotos.photos,
       beforePhotos: normalizedPhotos.beforePhotos,
       afterPhotos: normalizedPhotos.afterPhotos,
+      reportFile: normalizeMaintenanceReportFile({
+        url: entry.reportFile || "",
+        name: entry.reportFileName || "",
+        mimeType: entry.reportFileType || "",
+      }),
     });
     setMaintenanceEditFileKey((k) => k + 1);
   }
@@ -18494,6 +18642,9 @@ export default function App() {
     photos?: string[];
     beforePhotos?: string[];
     afterPhotos?: string[];
+    reportFile?: string;
+    reportFileName?: string;
+    reportFileType?: string;
   }) {
     setMaintenanceDetailAssetId(row.assetDbId);
     startMaintenanceEntryEdit({
@@ -18509,6 +18660,9 @@ export default function App() {
       photos: row.photos || [],
       beforePhotos: row.beforePhotos || [],
       afterPhotos: row.afterPhotos || [],
+      reportFile: row.reportFile || "",
+      reportFileName: row.reportFileName || "",
+      reportFileType: row.reportFileType || "",
     });
   }
 
@@ -18526,6 +18680,7 @@ export default function App() {
       photos: [],
       beforePhotos: [],
       afterPhotos: [],
+      reportFile: null,
     });
   }
 
@@ -18589,6 +18744,9 @@ export default function App() {
       afterPhotos: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || []),
       photo: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || [])[0] || "",
       photos: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || []),
+      reportFile: maintenanceEditForm.reportFile?.url || "",
+      reportFileName: maintenanceEditForm.reportFile?.name || "",
+      reportFileType: maintenanceEditForm.reportFile?.mimeType || "",
     };
 
     setBusy(true);
@@ -18605,7 +18763,16 @@ export default function App() {
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${maintenanceDetailAssetId}/history/${entryId}`, {
           method: "PATCH",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            reportFile: maintenanceEditForm.reportFile
+              ? {
+                  url: maintenanceEditForm.reportFile.url,
+                  name: maintenanceEditForm.reportFile.name || "",
+                  mimeType: maintenanceEditForm.reportFile.mimeType || "",
+                }
+              : "",
+          }),
         });
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
@@ -19095,6 +19262,7 @@ export default function App() {
       photos: [],
       beforePhotos: [],
       afterPhotos: [],
+      reportFile: null,
     });
     setMaintenanceRecordFileKey((k) => k + 1);
     setQuickRecordAssetId(asset.id);
@@ -19893,6 +20061,9 @@ export default function App() {
       photos: string[];
       beforePhotos: string[];
       afterPhotos: string[];
+      reportFile: string;
+      reportFileName: string;
+      reportFileType: string;
     }> = [];
     for (const asset of assets) {
       for (const entry of asset.maintenanceHistory || []) {
@@ -19919,6 +20090,9 @@ export default function App() {
           photos: normalizedPhotos.photos,
           beforePhotos: normalizedPhotos.beforePhotos,
           afterPhotos: normalizedPhotos.afterPhotos,
+          reportFile: entry.reportFile || "",
+          reportFileName: entry.reportFileName || "",
+          reportFileType: entry.reportFileType || "",
         });
       }
     }
@@ -20483,6 +20657,30 @@ export default function App() {
     const normalized = normalizeMaintenanceEntryPhotos(entry);
     const photos = (stage === "before" ? normalized.beforePhotos : normalized.afterPhotos).slice(0, 1);
     return renderMaintenancePhotoStack({ photos }, `${altPrefix}-${stage}`);
+  }
+  function renderMaintenanceReportFileLink(
+    file: MaintenanceReportFile | null | undefined,
+    keyPrefix = "maintenance-report-file",
+    removable = false,
+    onRemove?: () => void
+  ) {
+    const normalized = normalizeMaintenanceReportFile(file);
+    const href = normalizeMaintenanceReportFileUrl(normalized);
+    if (!href) return <span className="photo-empty">No file</span>;
+    const label = "Open Report File";
+    const title = maintenanceReportFileLabel(normalized);
+    return (
+      <div className="row-actions" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <a className="tab btn-small" href={href} target="_blank" rel="noreferrer" title={title}>
+          {label}
+        </a>
+        {removable && onRemove ? (
+          <button type="button" className="btn-danger btn-small" onClick={onRemove}>
+            Remove
+          </button>
+        ) : null}
+      </div>
+    );
   }
   const maintenanceCompletionText = useCallback(
     (completionRaw: string) => {
@@ -28300,6 +28498,19 @@ export default function App() {
                             <p className="asset-detail-maint-soft-note">
                               <strong>{t.notes}:</strong> {h.note || h.condition || "-"}
                             </p>
+                            <div className="asset-detail-maint-soft-meta">
+                              <div>
+                                <strong>{lang === "km" ? "ឯកសារ" : "Report File"}:</strong>{" "}
+                                {renderMaintenanceReportFileLink(
+                                  normalizeMaintenanceReportFile({
+                                    url: h.reportFile || "",
+                                    name: h.reportFileName || "",
+                                    mimeType: h.reportFileType || "",
+                                  }),
+                                  `asset-detail-soft-report-${h.id}`
+                                )}
+                              </div>
+                            </div>
                             <div className="asset-detail-maint-soft-photo-row">
                               {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`)}
                             </div>
@@ -28321,6 +28532,7 @@ export default function App() {
                             <th>Note</th>
                             <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
                             <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
+                            <th>{lang === "km" ? "ឯកសារ" : "Report File"}</th>
                             <th>Cost</th>
                             <th>By</th>
                           </tr>
@@ -28336,6 +28548,16 @@ export default function App() {
                                 <td data-label="Noted">{h.note}</td>
                                 <td data-label="Before">{renderMaintenancePhotoColumn(h, "before", `asset-detail-history-${h.id}`)}</td>
                                 <td data-label="After">{renderMaintenancePhotoColumn(h, "after", `asset-detail-history-${h.id}`)}</td>
+                                <td data-label="Report File">
+                                  {renderMaintenanceReportFileLink(
+                                    normalizeMaintenanceReportFile({
+                                      url: h.reportFile || "",
+                                      name: h.reportFileName || "",
+                                      mimeType: h.reportFileType || "",
+                                    }),
+                                    `asset-detail-history-report-${h.id}`
+                                  )}
+                                </td>
                                 <td data-label="Cost">{h.cost || "-"}</td>
                                 <td data-label="By">{h.by || "-"}</td>
                               </tr>
@@ -29483,6 +29705,22 @@ export default function App() {
                         </div>
                       ) : null}
                     </label>
+                    <label className="field field-wide">
+                      <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                      <input
+                        key={`${maintenanceRecordFileKey}-quick-report`}
+                        className="file-input"
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
+                        onChange={(e) => void onMaintenanceRecordReportFile(e)}
+                      />
+                      <div className="tiny">Upload service report, invoice, or technician sheet.</div>
+                      {maintenanceRecordForm.reportFile
+                        ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-quick-report", true, () =>
+                            setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
+                          )
+                        : null}
+                    </label>
                   </div>
                   <div className="asset-actions">
                     <div className="tiny">Save maintenance directly from List Asset.</div>
@@ -30070,6 +30308,20 @@ export default function App() {
                       ))}
                     </div>
                   ) : null}
+                </label>
+                <label className="field field-wide">
+                  <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                  <input
+                    key={`${ticketMaintenanceFileKey}-report`}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
+                    onChange={(e) => void onTicketMaintenanceReportFile(e)}
+                  />
+                  {ticketMaintenanceForm.reportFile
+                    ? renderMaintenanceReportFileLink(ticketMaintenanceForm.reportFile, "ticket-maintenance-report", true, () =>
+                        setTicketMaintenanceForm((f) => ({ ...f, reportFile: null }))
+                      )
+                    : <div className="tiny">Optional: attach vendor report, invoice, or service sheet.</div>}
                 </label>
               </div>
               <div className="asset-actions">
@@ -34879,6 +35131,26 @@ export default function App() {
                   </div>
                 ) : null}
               </label>
+              <label className="field field-wide">
+                <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                <input
+                  key={`${maintenanceRecordFileKey}-report`}
+                  className="file-input"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
+                  onChange={(e) => void onMaintenanceRecordReportFile(e)}
+                />
+                <div className="tiny">
+                  {lang === "km"
+                    ? "អាចភ្ជាប់ PDF, invoice, ឬឯកសាររបាយការណ៍ថែទាំទៅក្នុង asset history បាន។"
+                    : "Attach PDF, invoice, or service report file to save into asset history."}
+                </div>
+                {maintenanceRecordForm.reportFile
+                  ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-record-report", true, () =>
+                      setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
+                    )
+                  : null}
+              </label>
             </div>
             <div className="asset-actions">
               <div className="tiny">
@@ -34985,6 +35257,17 @@ export default function App() {
                           <span>BY</span>
                           <strong>{row.by || "-"}</strong>
                         </div>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
+                          <span>REPORT FILE</span>
+                          {renderMaintenanceReportFileLink(
+                            normalizeMaintenanceReportFile({
+                              url: row.reportFile || "",
+                              name: row.reportFileName || "",
+                              mimeType: row.reportFileType || "",
+                            }),
+                            `maintenance-mobile-report-${row.rowId}`
+                          )}
+                        </div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">
                         <button
@@ -35073,6 +35356,17 @@ export default function App() {
                           <div className="maintenance-history-simple-note">
                             <strong>{lang === "km" ? "Note" : "Note"}:</strong> {row.note || "-"}
                           </div>
+                          <div className="maintenance-history-simple-note">
+                            <strong>{lang === "km" ? "Report File" : "Report File"}:</strong>{" "}
+                            {renderMaintenanceReportFileLink(
+                              normalizeMaintenanceReportFile({
+                                url: row.reportFile || "",
+                                name: row.reportFileName || "",
+                                mimeType: row.reportFileType || "",
+                              }),
+                              `maintenance-card-report-${row.rowId}`
+                            )}
+                          </div>
                         </div>
                         <div className="maintenance-history-simple-photos">
                           <strong>{lang === "km" ? "Maintenance Photos" : "Maintenance Photos"}:</strong>
@@ -35138,6 +35432,7 @@ export default function App() {
                         <th>Note</th>
                         <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
                         <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
+                        <th>{lang === "km" ? "ឯកសារ" : "Report File"}</th>
                         <th>Cost</th>
                         <th>By</th>
                         <th>{t.edit}</th>
@@ -35263,6 +35558,35 @@ export default function App() {
                                 </div>
                               ) : (
                                 renderMaintenancePhotoColumn(entry, "after", `maintenance-detail-${entry.id}`)
+                              )}
+                            </td>
+                            <td>
+                              {maintenanceEditingEntryId === entry.id ? (
+                                <div>
+                                  <input
+                                    key={`${maintenanceEditFileKey}-${entry.id}-report`}
+                                    className="file-input"
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
+                                    onChange={(e) => void onMaintenanceEditReportFile(e)}
+                                  />
+                                  <div style={{ marginTop: 8 }}>
+                                    {maintenanceEditForm.reportFile
+                                      ? renderMaintenanceReportFileLink(maintenanceEditForm.reportFile, `maintenance-edit-report-${entry.id}`, true, () =>
+                                          setMaintenanceEditForm((f) => ({ ...f, reportFile: null }))
+                                        )
+                                      : <span className="photo-empty">No file</span>}
+                                  </div>
+                                </div>
+                              ) : (
+                                renderMaintenanceReportFileLink(
+                                  normalizeMaintenanceReportFile({
+                                    url: entry.reportFile || "",
+                                    name: entry.reportFileName || "",
+                                    mimeType: entry.reportFileType || "",
+                                  }),
+                                  `maintenance-detail-report-${entry.id}`
+                                )
                               )}
                             </td>
                             <td>
@@ -39968,6 +40292,19 @@ export default function App() {
                 <div className="field"><span>{lang === "km" ? "លក្ខខណ្ឌ" : "Condition"}</span><div className="detail-value">{latestMaintenanceDetailRow.condition || "-"}</div></div>
                 <div className="field"><span>{lang === "km" ? "ចំណាយ" : "Cost"}</span><div className="detail-value">{latestMaintenanceDetailRow.cost || "-"}</div></div>
                 <div className="field"><span>{t.by}</span><div className="detail-value">{latestMaintenanceDetailRow.by || "-"}</div></div>
+                <div className="field field-wide">
+                  <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                  <div className="detail-value">
+                    {renderMaintenanceReportFileLink(
+                      normalizeMaintenanceReportFile({
+                        url: latestMaintenanceDetailRow.reportFile || "",
+                        name: latestMaintenanceDetailRow.reportFileName || "",
+                        mimeType: latestMaintenanceDetailRow.reportFileType || "",
+                      }),
+                      `latest-maintenance-report-${latestMaintenanceDetailRow.rowId}`
+                    )}
+                  </div>
+                </div>
                 <div className="field field-wide"><span>{t.notes}</span><div className="detail-value latest-maint-detail-note">{latestMaintenanceDetailRow.note || "-"}</div></div>
               </div>
             </section>
