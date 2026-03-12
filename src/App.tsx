@@ -952,6 +952,8 @@ const AUTH_ACCOUNTS_FALLBACK_KEY = "it_auth_accounts_fallback_v1";
 const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
 const INVENTORY_ITEM_FALLBACK_KEY = "it_inventory_items_v1";
 const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
+const DUPLICATE_PHOTO_UPLOAD_ERROR = "duplicate-photo-upload";
+const PHOTO_USAGE_FIELD_KEYS = new Set(["photo", "photos", "beforePhotos", "afterPhotos"]);
 const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
   asset: ["asset_master", "set_code", "asset_by_location", "staff_borrowing", "qr_labels"],
   maintenance: ["maintenance_completion", "overdue"],
@@ -4119,9 +4121,49 @@ async function compressImageDataUrl(
   });
 }
 
-async function optimizeUploadPhoto(file: File): Promise<string> {
+async function optimizePhotoDataUrl(file: File): Promise<string> {
   const source = await fileToDataUrl(file);
   return compressImageDataUrl(source, 1280, 1280, 0.75);
+}
+
+function normalizePhotoUsageKey(input: string) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  if (value.startsWith("data:")) {
+    const commaIndex = value.indexOf(",");
+    return commaIndex >= 0 ? value.slice(commaIndex + 1) : value;
+  }
+  return resolveApiResourceUrl(value);
+}
+
+function addPhotoUsageValue(out: Set<string>, input: unknown) {
+  const value = normalizePhotoUsageKey(String(input || ""));
+  if (value) out.add(value);
+}
+
+function collectPhotoUsageKeys(out: Set<string>, input: unknown, seen = new WeakSet<object>()) {
+  if (!input) return;
+  if (Array.isArray(input)) {
+    for (const item of input) collectPhotoUsageKeys(out, item, seen);
+    return;
+  }
+  if (typeof input !== "object") return;
+  if (seen.has(input as object)) return;
+  seen.add(input as object);
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!value) continue;
+    if (key === "photo") {
+      addPhotoUsageValue(out, value);
+      continue;
+    }
+    if (PHOTO_USAGE_FIELD_KEYS.has(key) && Array.isArray(value)) {
+      for (const item of value) addPhotoUsageValue(out, item);
+      continue;
+    }
+    if (typeof value === "object") {
+      collectPhotoUsageKeys(out, value, seen);
+    }
+  }
 }
 
 async function fileToMaintenanceReportFile(file: File): Promise<MaintenanceReportFile> {
@@ -12565,8 +12607,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setUtilityMeterForm((prev) => ({ ...prev, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -12583,8 +12625,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setUtilityReadingForm((prev) => ({ ...prev, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -12606,8 +12648,8 @@ export default function App() {
       } else {
         setUtilityMessage("Invoice image uploaded. Auto fill is available only in the local macOS app.");
       }
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -13094,8 +13136,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setPoolComplaintForm((prev) => ({ ...prev, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -14626,8 +14668,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setTicketForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
 
@@ -14641,8 +14683,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setTicketEditForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
 
@@ -14684,8 +14726,8 @@ export default function App() {
       if (reachedLimit) {
         alert(lang === "km" ? `អាចបញ្ចូលរូបបានអតិបរមា ${MAX_MAINTENANCE_PHOTOS} ប៉ុណ្ណោះ។` : `Maximum ${MAX_MAINTENANCE_PHOTOS} photos allowed.`);
       }
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -14943,8 +14985,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setInventoryItemForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
   const persistInventorySettings = useCallback(
@@ -15646,8 +15688,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setInventoryQuickOutModal((prev) => (prev ? { ...prev, photo } : prev));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
   async function saveInventoryQuickOut() {
@@ -16950,8 +16992,8 @@ export default function App() {
         });
         return { ...f, photo: merged[0] || "", photos: merged };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -17985,8 +18027,8 @@ export default function App() {
       if (reachedLimit) {
         alert(lang === "km" ? `អាចបញ្ចូលរូបបានអតិបរមា ${MAX_MAINTENANCE_PHOTOS} ប៉ុណ្ណោះ។` : `Maximum ${MAX_MAINTENANCE_PHOTOS} photos allowed.`);
       }
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -18148,8 +18190,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setVerificationRecordForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
 
@@ -18261,8 +18303,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setVerificationEditForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
 
@@ -18825,8 +18867,8 @@ export default function App() {
           photos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
         };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19129,8 +19171,8 @@ export default function App() {
         });
         return { ...f, photo: merged[0] || "", photos: merged };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19150,8 +19192,8 @@ export default function App() {
         const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
         return { ...f, walkieChargerPhotos: chargerPhotos };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19173,8 +19215,8 @@ export default function App() {
         next[index] = optimized;
         return { ...f, tvRemotePhotos: next.slice(0, 2) };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19191,8 +19233,8 @@ export default function App() {
     try {
       const optimized = await optimizeUploadPhoto(file);
       setAssetForm((f) => ({ ...f, [key]: optimized }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19222,8 +19264,8 @@ export default function App() {
           },
         };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19252,8 +19294,8 @@ export default function App() {
           },
         };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19282,8 +19324,8 @@ export default function App() {
           },
         };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19312,8 +19354,8 @@ export default function App() {
           },
         };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19333,8 +19375,8 @@ export default function App() {
         const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
         return { ...f, walkieChargerPhotos: chargerPhotos };
       });
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19351,8 +19393,8 @@ export default function App() {
     try {
       const optimized = await optimizeUploadPhoto(file);
       setAssetEditForm((f) => ({ ...f, [key]: optimized }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
     }
@@ -19530,6 +19572,19 @@ export default function App() {
     () => assets.find((a) => a.id === quickRecordAssetId) || null,
     [assets, quickRecordAssetId]
   );
+  const maintenanceRecordSelectedAsset = useMemo(
+    () => assets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
+    [assets, maintenanceRecordForm.assetId]
+  );
+  const ticketMaintenanceAsset = useMemo(() => {
+    if (!ticketMaintenanceModal) return null;
+    if (ticketMaintenanceModal.assetDbId) {
+      const byId = assets.find((asset) => Number(asset.id) === Number(ticketMaintenanceModal.assetDbId));
+      if (byId) return byId;
+    }
+    const assetCode = String(ticketMaintenanceModal.assetId || "").trim();
+    return assetCode ? assets.find((asset) => String(asset.assetId || "").trim() === assetCode) || null : null;
+  }, [assets, ticketMaintenanceModal]);
   const detailAsset = useMemo(
     () => assets.find((a) => a.id === assetDetailId) || null,
     [assets, assetDetailId]
@@ -21240,6 +21295,91 @@ export default function App() {
     pendingStatusChange ||
     previewImage
   );
+  const usedPhotoKeys = useMemo(() => {
+    const out = new Set<string>();
+    [
+      assets,
+      tickets,
+      inventoryItems,
+      inventoryTxns,
+      utilityMeters,
+      utilityReadings,
+      poolCleaningSchedules,
+      poolEquipmentChecks,
+      poolChemicalRecords,
+      poolOperationRecords,
+      poolComplaints,
+      ticketForm,
+      ticketEditForm,
+      maintenanceRecordForm,
+      maintenanceEditForm,
+      ticketMaintenanceForm,
+      verificationRecordForm,
+      verificationEditForm,
+      assetForm,
+      assetEditForm,
+      utilityMeterForm,
+      utilityReadingForm,
+      utilityInvoiceForm,
+      inventoryItemForm,
+      inventoryTxnForm,
+      inventoryDailyForm,
+      inventoryQuickOutModal,
+    ].forEach((source) => collectPhotoUsageKeys(out, source));
+    return out;
+  }, [
+    assets,
+    tickets,
+    inventoryItems,
+    inventoryTxns,
+    utilityMeters,
+    utilityReadings,
+    poolCleaningSchedules,
+    poolEquipmentChecks,
+    poolChemicalRecords,
+    poolOperationRecords,
+    poolComplaints,
+    ticketForm,
+    ticketEditForm,
+    maintenanceRecordForm,
+    maintenanceEditForm,
+    ticketMaintenanceForm,
+    verificationRecordForm,
+    verificationEditForm,
+    assetForm,
+    assetEditForm,
+    utilityMeterForm,
+    utilityReadingForm,
+    utilityInvoiceForm,
+    inventoryItemForm,
+    inventoryTxnForm,
+    inventoryDailyForm,
+    inventoryQuickOutModal,
+  ]);
+  const optimizeUploadPhoto = useCallback(
+    async (file: File) => {
+      const photo = await optimizePhotoDataUrl(file);
+      if (usedPhotoKeys.has(normalizePhotoUsageKey(photo))) {
+        throw new Error(DUPLICATE_PHOTO_UPLOAD_ERROR);
+      }
+      return photo;
+    },
+    [usedPhotoKeys]
+  );
+  const handlePhotoUploadError = useCallback(
+    (err: unknown) => {
+      if (err instanceof Error && err.message === DUPLICATE_PHOTO_UPLOAD_ERROR) {
+        alert(
+          lang === "km"
+            ? "រូបភាពនេះត្រូវបានប្រើរួចហើយ។ មួយរូបអាចប្រើបានតែម្តងប៉ុណ្ណោះ។"
+            : "This photo is already used in another record. One photo can only be used once."
+        );
+        return;
+      }
+      alert(t.photoProcessError);
+    },
+    [lang, t.photoProcessError]
+  );
 
   function toggleMaintenanceSort(key: MaintenanceSortKey) {
     setMaintenanceSort((prev) => {
@@ -21465,6 +21605,87 @@ export default function App() {
     t.allCampuses,
     t.allCategories,
   ]);
+  const downloadMaintenanceReportTemplate = useCallback(
+    (input: {
+      asset?: Asset | null;
+      form: {
+        date?: string;
+        type?: string;
+        completion?: "Done" | "Not Yet" | string;
+        condition?: string;
+        note?: string;
+        cost?: string;
+        by?: string;
+      };
+      sourceTitle?: string;
+      requestTitle?: string;
+      requestSource?: string;
+    }) => {
+      const asset = input.asset || null;
+      const dateValue = String(input.form.date || toYmd(new Date())).trim();
+      const assetId = String(asset?.assetId || "-").trim() || "-";
+      const itemName = asset ? assetItemName(asset.category, asset.type, asset.pcType || "") : "-";
+      const campusName = asset ? campusLabel(asset.campus) : "-";
+      const locationName = String(asset?.location || "-").trim() || "-";
+      const categoryName = String(asset?.category || "-").trim() || "-";
+      const actorName = String(input.form.by || authUser?.displayName || authUser?.username || "").trim() || "-";
+      const lines = [
+        "Eco International School",
+        "Maintenance Report Template",
+        "",
+        "Use this template, update all fields below, then upload the final file back to Maintenance Report File.",
+        "Recommended final file format: PDF, DOCX, or TXT.",
+        "",
+        "Asset Information",
+        `Asset ID: ${assetId}`,
+        `Item: ${itemName}`,
+        `Category: ${categoryName}`,
+        `Campus: ${campusName}`,
+        `Location: ${locationName}`,
+        "",
+        "Maintenance Summary",
+        `Date: ${dateValue || "-"}`,
+        `Maintenance Type: ${String(input.form.type || "-").trim() || "-"}`,
+        `Work Status: ${maintenanceCompletionText((input.form.completion as "Done" | "Not Yet") || "Done")}`,
+        `Condition: ${String(input.form.condition || "-").trim() || "-"}`,
+        `Cost: ${String(input.form.cost || "-").trim() || "-"}`,
+        `By: ${actorName}`,
+        input.sourceTitle ? `Source: ${input.sourceTitle}` : "",
+        input.requestTitle ? `Work Order / Request: ${String(input.requestTitle || "").trim()}` : "",
+        input.requestSource ? `Request Source: ${String(input.requestSource || "").trim()}` : "",
+        "",
+        "Issue Found",
+        String(input.form.note || "").trim() || "Write problem description here...",
+        "",
+        "Root Cause / Finding",
+        "",
+        "Action Taken",
+        "",
+        "Parts / Materials Used",
+        "",
+        "Before Photo Reference",
+        "Attach the selected before photo(s) in the Before Photos field.",
+        "",
+        "After Photo Reference",
+        "Attach the selected after photo(s) in the After Photos field.",
+        "",
+        "Next Recommendation",
+        "",
+        `Generated On: ${formatDate(new Date().toISOString())}`,
+      ].filter(Boolean);
+      const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/plain;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safeAssetId = assetId === "-" ? "asset" : assetId.replace(/[^A-Za-z0-9_-]+/g, "-");
+      a.href = url;
+      a.download = `maintenance-report-template-${safeAssetId}-${dateValue || toYmd(new Date())}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    [assetItemName, authUser?.displayName, authUser?.username, campusLabel]
+  );
   const verificationSummaryRows = useMemo(() => {
     const year = Number(reportYear) || new Date().getFullYear();
     const range =
@@ -23933,8 +24154,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setPublicQrRecordForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
 
@@ -23948,8 +24169,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setPublicQrTonerForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
 
@@ -23963,8 +24184,8 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setPublicQrRequestForm((f) => ({ ...f, photo }));
-    } catch {
-      alert(t.photoProcessError);
+    } catch (err) {
+      handlePhotoUploadError(err);
     }
   }
 
@@ -30019,6 +30240,26 @@ export default function App() {
                     </label>
                     <label className="field field-wide">
                       <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                      <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                        <button
+                          type="button"
+                          className="tab btn-small"
+                          onClick={() =>
+                            downloadMaintenanceReportTemplate({
+                              asset: quickRecordAsset,
+                              form: maintenanceRecordForm,
+                              sourceTitle: "Quick Maintenance Record",
+                            })
+                          }
+                        >
+                          {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
+                        </button>
+                        <span className="tiny">
+                          {lang === "km"
+                            ? "ទាញយកទម្រង់នេះ កែប្រែព័ត៌មាន ហើយអាប់ឡូដឯកសារចុងក្រោយវិញ។"
+                            : "Download this template, update the content, then upload the final file back here."}
+                        </span>
+                      </div>
                       <input
                         key={`${maintenanceRecordFileKey}-quick-report`}
                         className="file-input"
@@ -30623,6 +30864,28 @@ export default function App() {
                 </label>
                 <label className="field field-wide">
                   <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                  <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                    <button
+                      type="button"
+                      className="tab btn-small"
+                      onClick={() =>
+                        downloadMaintenanceReportTemplate({
+                          asset: ticketMaintenanceAsset,
+                          form: ticketMaintenanceForm,
+                          sourceTitle: "Complete Work Order",
+                          requestTitle: ticketMaintenanceModal?.title || "",
+                          requestSource: formatTicketRequestSource(ticketMaintenanceModal?.requestSource),
+                        })
+                      }
+                    >
+                      {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
+                    </button>
+                    <span className="tiny">
+                      {lang === "km"
+                        ? "ប្រើទម្រង់នេះ ដើម្បីបំពេញរបាយការណ៍ឲ្យស្របតាមស្តង់ដារប្រព័ន្ធ។"
+                        : "Use this template so the uploaded maintenance report matches the system structure."}
+                    </span>
+                  </div>
                   <input
                     key={`${ticketMaintenanceFileKey}-report`}
                     type="file"
@@ -35445,6 +35708,26 @@ export default function App() {
               </label>
               <label className="field field-wide">
                 <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    onClick={() =>
+                      downloadMaintenanceReportTemplate({
+                        asset: maintenanceRecordSelectedAsset,
+                        form: maintenanceRecordForm,
+                        sourceTitle: "Maintenance Record",
+                      })
+                    }
+                  >
+                    {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
+                  </button>
+                  <span className="tiny">
+                    {lang === "km"
+                      ? "សូមទាញយកទម្រង់ កែប្រែឯកសារ ហើយបន្ទាប់មកអាប់ឡូដឯកសាររបាយការណ៍។"
+                      : "Download the template, update the file first, then upload the maintenance report."}
+                  </span>
+                </div>
                 <input
                   key={`${maintenanceRecordFileKey}-report`}
                   className="file-input"
@@ -35924,6 +36207,26 @@ export default function App() {
                       </label>
                       <label className="field field-wide">
                         <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                        <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                          <button
+                            type="button"
+                            className="tab btn-small"
+                            onClick={() =>
+                              downloadMaintenanceReportTemplate({
+                                asset: maintenanceDetailAsset,
+                                form: maintenanceEditForm,
+                                sourceTitle: "Edit Maintenance Record",
+                              })
+                            }
+                          >
+                            {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
+                          </button>
+                          <span className="tiny">
+                            {lang === "km"
+                              ? "ទាញយកទម្រង់ កែប្រែឯកសារ ហើយអាប់ឡូដត្រឡប់មកវិញ។"
+                              : "Download the template, update the document, then upload the final version here."}
+                          </span>
+                        </div>
                         <input
                           key={`${maintenanceEditFileKey}-${maintenanceEditingEntry.id}-report`}
                           className="file-input"
