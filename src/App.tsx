@@ -1561,6 +1561,8 @@ const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
 const REMOTE_TYPE_CODE = "RMT";
+const AIRCON_FRONT_UNIT_TYPE_CODE = "FPN";
+const AIRCON_OUTDOOR_UNIT_TYPE_CODE = "RPN";
 const WALKIE_CHARGER_TYPE_CODE = "ADP";
 const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
 const SHARED_LOCATION_KEYWORDS = [
@@ -4143,6 +4145,25 @@ function isAirconAsset(category: string, type: string) {
   return String(category || "").toUpperCase() === "FACILITY" && String(type || "").toUpperCase() === "AC";
 }
 
+function showsIncludedComponentCards(category: string, type: string) {
+  const normalizedCategory = String(category || "").trim().toUpperCase();
+  const normalizedType = String(type || "").trim().toUpperCase();
+  return (
+    (normalizedCategory === "IT" && normalizedType === TV_TYPE_CODE) ||
+    (normalizedCategory === "FACILITY" && normalizedType === "AC")
+  );
+}
+
+type AirconComponentPhotoKey = "acRemotePhoto" | "acFrontUnitPhoto" | "acOutdoorPhoto";
+
+function airconComponentLabel(type: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  if (normalizedType === REMOTE_TYPE_CODE) return "Remote";
+  if (normalizedType === AIRCON_FRONT_UNIT_TYPE_CODE) return "Front Unit (Indoor)";
+  if (normalizedType === AIRCON_OUTDOOR_UNIT_TYPE_CODE) return "Back Unit (Outdoor)";
+  return normalizedType;
+}
+
 function parseAirconSpecs(specsRaw: string) {
   const specs = String(specsRaw || "").trim();
   if (!specs) {
@@ -6175,6 +6196,9 @@ export default function App() {
     acHasFrontPanel: false,
     acHasOutdoor: false,
     acComponentNote: "",
+    acRemotePhoto: "",
+    acFrontUnitPhoto: "",
+    acOutdoorPhoto: "",
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
@@ -6403,6 +6427,9 @@ export default function App() {
     acHasFrontPanel: false,
     acHasOutdoor: false,
     acComponentNote: "",
+    acRemotePhoto: "",
+    acFrontUnitPhoto: "",
+    acOutdoorPhoto: "",
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
@@ -7788,7 +7815,13 @@ export default function App() {
       const option = (allTypeOptions[category] || allTypeOptions.IT || TYPE_OPTIONS.IT).find(
         (opt) => opt.code === typeCode
       );
-      if (!option) return typeCode;
+      if (!option) {
+        if (String(category || "").trim().toUpperCase() === "FACILITY") {
+          if (typeCode === AIRCON_FRONT_UNIT_TYPE_CODE) return "Front Unit (Indoor)";
+          if (typeCode === AIRCON_OUTDOOR_UNIT_TYPE_CODE) return "Back Unit (Outdoor)";
+        }
+        return typeCode;
+      }
       const base = lang === "km" ? option.itemKm : option.itemEn;
       if (category === "IT" && typeCode === DESKTOP_PARENT_TYPE && normalizedPcType) {
         return `${base} (${normalizedPcType})`;
@@ -9885,6 +9918,8 @@ export default function App() {
         specs: string;
         brand: string;
         vendor: string;
+        acType: string;
+        acHp: string;
         count: number;
       }
     >();
@@ -9893,6 +9928,9 @@ export default function App() {
       const specs = String(asset.specs || "").trim();
       if (!model || !specs) continue;
       const key = model.toLowerCase();
+      const parsedAircon = isAirconAsset(asset.category, asset.type)
+        ? parseAirconSpecs(specs)
+        : { acType: "", acHp: "" };
       const existing = byModel.get(key);
       if (!existing) {
         byModel.set(key, {
@@ -9900,10 +9938,14 @@ export default function App() {
           specs,
           brand: String(asset.brand || "").trim(),
           vendor: String(asset.vendor || "").trim(),
+          acType: String(parsedAircon.acType || "").trim(),
+          acHp: String(parsedAircon.acHp || "").trim(),
           count: 1,
         });
       } else {
         existing.count += 1;
+        if (!existing.acType && parsedAircon.acType) existing.acType = String(parsedAircon.acType || "").trim();
+        if (!existing.acHp && parsedAircon.acHp) existing.acHp = String(parsedAircon.acHp || "").trim();
       }
     }
     return Array.from(byModel.values()).sort((a, b) => a.model.localeCompare(b.model));
@@ -9955,6 +9997,9 @@ export default function App() {
       acHasFrontPanel: isAc ? Boolean(template.acHasFrontPanel) : false,
       acHasOutdoor: isAc ? Boolean(template.acHasOutdoor) : false,
       acComponentNote: isAc ? String(template.acComponentNote || "") : "",
+      acRemotePhoto: "",
+      acFrontUnitPhoto: "",
+      acOutdoorPhoto: "",
       walkieHasCharger: parsedWalkie.hasCharger,
       walkieChargerDetail: parsedWalkie.chargerDetail,
     }));
@@ -9975,10 +10020,18 @@ export default function App() {
       if (!String(prev.specs || "").trim()) next.specs = tpl.specs;
       if (!String(prev.brand || "").trim() && tpl.brand) next.brand = tpl.brand;
       if (!String(prev.vendor || "").trim() && tpl.vendor) next.vendor = tpl.vendor;
+      if (isAirconAsset(prev.category, prev.type)) {
+        if (!String(prev.acType || "").trim() && tpl.acType) next.acType = tpl.acType;
+        if (!String(prev.acHp || "").trim() && tpl.acHp) next.acHp = tpl.acHp;
+      }
       return next;
     });
-    setModelTemplateNote(`Model template matched: ${tpl.model}. Specs auto-filled`);
-  }, [modelTemplates]);
+    setModelTemplateNote(
+      isAirconAsset(assetForm.category, assetForm.type)
+        ? `Model template matched: ${tpl.model}. AC Type and Capacity auto-filled`
+        : `Model template matched: ${tpl.model}. Specs auto-filled`
+    );
+  }, [assetForm.category, assetForm.type, modelTemplates]);
   const applySetPackModelTemplate = useCallback((type: SetPackChildType, rawModel: string) => {
     const input = String(rawModel || "").trim();
     if (!input) return;
@@ -10060,7 +10113,10 @@ export default function App() {
         prev.acHasRemote ||
         prev.acHasFrontPanel ||
         prev.acHasOutdoor ||
-        prev.acComponentNote
+        prev.acComponentNote ||
+        prev.acRemotePhoto ||
+        prev.acFrontUnitPhoto ||
+        prev.acOutdoorPhoto
       ) {
         return {
           ...prev,
@@ -10070,6 +10126,9 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          acRemotePhoto: "",
+          acFrontUnitPhoto: "",
+          acOutdoorPhoto: "",
         };
       }
       return prev;
@@ -11035,6 +11094,37 @@ export default function App() {
     }
     const createAssignedTo = userRequired ? assetForm.assignedTo.trim() : "";
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
+    const createAirconComponents = createIsAircon
+      ? [
+          ...(assetForm.acHasRemote
+            ? [{
+                category: "IT",
+                type: REMOTE_TYPE_CODE,
+                label: "Remote",
+                note: "Auto-created Air-Con remote",
+                photo: String(assetForm.acRemotePhoto || "").trim(),
+              }]
+            : []),
+          ...(assetForm.acHasFrontPanel
+            ? [{
+                category: "FACILITY",
+                type: AIRCON_FRONT_UNIT_TYPE_CODE,
+                label: "Front Unit (Indoor)",
+                note: "Auto-created Air-Con front unit",
+                photo: String(assetForm.acFrontUnitPhoto || "").trim(),
+              }]
+            : []),
+          ...(assetForm.acHasOutdoor
+            ? [{
+                category: "FACILITY",
+                type: AIRCON_OUTDOOR_UNIT_TYPE_CODE,
+                label: "Back Unit (Outdoor)",
+                note: "Auto-created Air-Con back unit",
+                photo: String(assetForm.acOutdoorPhoto || "").trim(),
+              }]
+            : []),
+        ]
+      : [];
     if (createIsAircon && (!assetForm.acHasFrontPanel || !assetForm.acHasOutdoor)) {
       alert("Air-Con requires both Front Unit and Back Unit (Outdoor) components.");
       return;
@@ -11332,6 +11422,36 @@ export default function App() {
           });
         }
       }
+      if (createAirconComponents.length && created.asset?.assetId) {
+        for (const component of createAirconComponents) {
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: component.category,
+              type: component.type,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: `${component.note} for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: component.photo || "",
+              photos: component.photo ? [component.photo] : [],
+              status: assetForm.status,
+            }),
+          });
+        }
+      }
       if (createWalkieCharger && created.asset?.assetId) {
         await requestJson<{ asset: Asset }>("/api/assets", {
           method: "POST",
@@ -11383,6 +11503,9 @@ export default function App() {
         acHasFrontPanel: false,
         acHasOutdoor: false,
         acComponentNote: "",
+        acRemotePhoto: "",
+        acFrontUnitPhoto: "",
+        acOutdoorPhoto: "",
         walkieHasCharger: false,
         walkieChargerDetail: "",
         walkieChargerPhotos: [],
@@ -11832,6 +11955,59 @@ export default function App() {
             nextLocal = [child, ...nextLocal];
           }
         }
+        if (createAirconComponents.length) {
+          for (const component of createAirconComponents) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, component.category, component.type);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: component.category,
+              type: component.type,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(assetForm.campus, component.category, component.type, childSeq),
+              name: airconComponentLabel(component.type),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: `${component.note} for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: assetForm.status,
+                  reason: `Asset created as ${component.label}`,
+                },
+              ],
+              photo: component.photo || "",
+              photos: component.photo ? [component.photo] : [],
+              status: assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
         if (createWalkieCharger) {
           const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", WALKIE_CHARGER_TYPE_CODE);
           const child: Asset = {
@@ -11912,6 +12088,9 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          acRemotePhoto: "",
+          acFrontUnitPhoto: "",
+          acOutdoorPhoto: "",
           walkieHasCharger: false,
           walkieChargerDetail: "",
           walkieChargerPhotos: [],
@@ -16045,6 +16224,23 @@ export default function App() {
                 String(a.assetId || "").localeCompare(String(b.assetId || ""))
             )[0] || null
         : null;
+    const airconChildren =
+      isAirconAsset(asset.category, asset.type)
+        ? assets
+            .filter(
+              (entry) =>
+                entry.assetId !== asset.assetId &&
+                String(entry.parentAssetId || "").trim() === String(asset.assetId || "").trim()
+            )
+            .sort(
+              (a, b) =>
+                (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+                String(a.assetId || "").localeCompare(String(b.assetId || ""))
+            )
+        : [];
+    const airconRemoteChild = airconChildren.find((entry) => String(entry.type || "").trim().toUpperCase() === REMOTE_TYPE_CODE) || null;
+    const airconFrontUnitChild = airconChildren.find((entry) => String(entry.type || "").trim().toUpperCase() === AIRCON_FRONT_UNIT_TYPE_CODE) || null;
+    const airconOutdoorChild = airconChildren.find((entry) => String(entry.type || "").trim().toUpperCase() === AIRCON_OUTDOOR_UNIT_TYPE_CODE) || null;
     const parsedAircon = isAirconAsset(asset.category, asset.type)
       ? parseAirconSpecs(asset.specs || "")
       : {
@@ -16079,6 +16275,9 @@ export default function App() {
       acHasFrontPanel: parsedAircon.acHasFrontPanel,
       acHasOutdoor: parsedAircon.acHasOutdoor,
       acComponentNote: parsedAircon.acComponentNote,
+      acRemotePhoto: normalizeAssetPhotos(airconRemoteChild || {})[0] || "",
+      acFrontUnitPhoto: normalizeAssetPhotos(airconFrontUnitChild || {})[0] || "",
+      acOutdoorPhoto: normalizeAssetPhotos(airconOutdoorChild || {})[0] || "",
       walkieHasCharger: parsedWalkie.hasCharger || Boolean(walkieChargerChild),
       walkieChargerDetail: parsedWalkie.chargerDetail,
       walkieChargerPhotos:
@@ -16873,6 +17072,205 @@ export default function App() {
             if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
           }
           nextLocal = nextLocal.filter((asset) => asset.id !== charger.id);
+        }
+      }
+      if (editingAsset && isAirconAsset(editingAsset.category, editingAsset.type) && editingAsset.assetId) {
+        const desiredAirconComponents = [
+          ...(assetEditForm.acHasRemote
+            ? [{
+                category: "IT",
+                type: REMOTE_TYPE_CODE,
+                label: "Remote",
+                note: "Auto-created Air-Con remote",
+                photo: String(assetEditForm.acRemotePhoto || "").trim(),
+              }]
+            : []),
+          ...(assetEditForm.acHasFrontPanel
+            ? [{
+                category: "FACILITY",
+                type: AIRCON_FRONT_UNIT_TYPE_CODE,
+                label: "Front Unit (Indoor)",
+                note: "Auto-created Air-Con front unit",
+                photo: String(assetEditForm.acFrontUnitPhoto || "").trim(),
+              }]
+            : []),
+          ...(assetEditForm.acHasOutdoor
+            ? [{
+                category: "FACILITY",
+                type: AIRCON_OUTDOOR_UNIT_TYPE_CODE,
+                label: "Back Unit (Outdoor)",
+                note: "Auto-created Air-Con back unit",
+                photo: String(assetEditForm.acOutdoorPhoto || "").trim(),
+              }]
+            : []),
+        ];
+        const existingAirconChildren = nextLocal
+          .filter(
+            (asset) =>
+              asset.assetId !== editingAsset.assetId &&
+              String(asset.parentAssetId || "").trim() === String(editingAsset.assetId || "").trim() &&
+              [REMOTE_TYPE_CODE, AIRCON_FRONT_UNIT_TYPE_CODE, AIRCON_OUTDOOR_UNIT_TYPE_CODE].includes(
+                String(asset.type || "").trim().toUpperCase()
+              )
+          )
+          .sort(
+            (a, b) =>
+              (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+              String(a.assetId || "").localeCompare(String(b.assetId || ""))
+          );
+        for (const component of desiredAirconComponents) {
+          const matches = existingAirconChildren.filter(
+            (asset) => String(asset.type || "").trim().toUpperCase() === component.type
+          );
+          const active = matches[0] || null;
+          const extras = matches.slice(1);
+          if (active) {
+            const updatedComponent: Asset = {
+              ...active,
+              campus: editingAsset.campus,
+              category: component.category,
+              type: component.type,
+              location: payload.location,
+              setCode: "",
+              parentAssetId: editingAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: payload.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: payload.purchaseDate,
+              warrantyUntil: payload.warrantyUntil,
+              vendor: payload.vendor,
+              notes: `${component.note} for ${editingAsset.assetId}`,
+              photo: component.photo || "",
+              photos: component.photo ? [component.photo] : [],
+              status: payload.status,
+            };
+            nextLocal = nextLocal.map((asset) => (asset.id === active.id ? updatedComponent : asset));
+            try {
+              await requestJson<{ asset: Asset }>(`/api/assets/${active.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  location: payload.location,
+                  parentAssetId: editingAsset.assetId,
+                  brand: payload.brand,
+                  model: "",
+                  serialNumber: "",
+                  specs: "",
+                  purchaseDate: payload.purchaseDate,
+                  warrantyUntil: payload.warrantyUntil,
+                  vendor: payload.vendor,
+                  notes: `${component.note} for ${editingAsset.assetId}`,
+                  photo: component.photo || "",
+                  photos: component.photo ? [component.photo] : [],
+                  status: payload.status,
+                }),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+          } else {
+            try {
+              await requestJson<{ asset: Asset }>("/api/assets", {
+                method: "POST",
+                body: JSON.stringify({
+                  campus: editingAsset.campus,
+                  category: component.category,
+                  type: component.type,
+                  location: payload.location,
+                  setCode: "",
+                  parentAssetId: editingAsset.assetId,
+                  assignedTo: "",
+                  custodyStatus: "IN_STOCK",
+                  brand: payload.brand,
+                  model: "",
+                  serialNumber: "",
+                  specs: "",
+                  purchaseDate: payload.purchaseDate,
+                  warrantyUntil: payload.warrantyUntil,
+                  vendor: payload.vendor,
+                  notes: `${component.note} for ${editingAsset.assetId}`,
+                  nextMaintenanceDate: "",
+                  scheduleNote: "",
+                  photo: component.photo || "",
+                  photos: component.photo ? [component.photo] : [],
+                  status: payload.status,
+                }),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, component.category, component.type);
+            const newComponent: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: editingAsset.campus,
+              category: component.category,
+              type: component.type,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(editingAsset.campus, component.category, component.type, childSeq),
+              name: airconComponentLabel(component.type),
+              location: payload.location,
+              setCode: "",
+              parentAssetId: editingAsset.assetId,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: payload.brand,
+              model: "",
+              serialNumber: "",
+              specs: "",
+              purchaseDate: payload.purchaseDate,
+              warrantyUntil: payload.warrantyUntil,
+              vendor: payload.vendor,
+              notes: `${component.note} for ${editingAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: payload.status,
+                  reason: `Asset created as ${component.label}`,
+                },
+              ],
+              photo: component.photo || "",
+              photos: component.photo ? [component.photo] : [],
+              status: payload.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [newComponent, ...nextLocal];
+          }
+          for (const extra of extras) {
+            try {
+              await requestJson<{ ok: boolean }>(`/api/assets/${extra.id}`, { method: "DELETE" });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+            nextLocal = nextLocal.filter((asset) => asset.id !== extra.id);
+          }
+        }
+        const desiredTypeSet = new Set(desiredAirconComponents.map((component) => component.type));
+        const deleteTargets = existingAirconChildren.filter(
+          (asset) => !desiredTypeSet.has(String(asset.type || "").trim().toUpperCase())
+        );
+        for (const component of deleteTargets) {
+          try {
+            await requestJson<{ ok: boolean }>(`/api/assets/${component.id}`, { method: "DELETE" });
+          } catch (err) {
+            if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+          }
+          nextLocal = nextLocal.filter((asset) => asset.id !== component.id);
         }
       }
 
@@ -18505,6 +18903,24 @@ export default function App() {
     }
   }
 
+  async function onAirconComponentPhotoFile(key: AirconComponentPhotoKey, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetForm((f) => ({ ...f, [key]: optimized }));
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   async function onSetPackPhotoFile(type: SetPackChildType, e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -18640,6 +19056,24 @@ export default function App() {
         const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
         return { ...f, walkieChargerPhotos: chargerPhotos };
       });
+    } catch {
+      alert(t.photoProcessError);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onEditAirconComponentPhotoFile(key: AirconComponentPhotoKey, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetEditForm((f) => ({ ...f, [key]: optimized }));
     } catch {
       alert(t.photoProcessError);
     } finally {
@@ -25134,21 +25568,6 @@ export default function App() {
                     <div className="field field-wide">
                       <div className="row-actions" style={{ gap: 10, alignItems: "flex-end", flexWrap: "nowrap" }}>
                         <div className="field" style={{ flex: 1, minWidth: 0 }}>
-                          <span>Item Template</span>
-                          <select
-                            className="input"
-                            value={selectedCreateTemplateId}
-                            onChange={(e) => setSelectedCreateTemplateId(e.target.value)}
-                          >
-                            <option value="">No template</option>
-                            {createTemplateOptions.map((tpl) => (
-                              <option key={`create-template-${tpl.id}`} value={String(tpl.id)}>
-                                {tpl.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="field" style={{ flex: 1, minWidth: 0 }}>
                           <span>{`${t.tvRemoteCount}: ${t.selectRemote}`}</span>
                           <select
                             className="input"
@@ -25262,23 +25681,7 @@ export default function App() {
                         ) : null}
                       </div>
                     </div>
-                  ) : (
-                    <label className="field">
-                      <span>Item Template</span>
-                      <select
-                        className="input"
-                        value={selectedCreateTemplateId}
-                        onChange={(e) => setSelectedCreateTemplateId(e.target.value)}
-                      >
-                        <option value="">No template</option>
-                        {createTemplateOptions.map((tpl) => (
-                          <option key={`create-template-${tpl.id}`} value={String(tpl.id)}>
-                            {tpl.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
+                  ) : null}
                   {assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE ? (
                     <>
                       <label className="field">
@@ -26770,52 +27173,113 @@ export default function App() {
                           ))}
                         </select>
                       </label>
-                      <label className="field field-wide">
-                        <span>Included Components</span>
-                        <div className="setpack-include-grid">
-                          <label
-                            className="tab setpack-include-item"
-                            style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap" }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={assetForm.acHasRemote}
-                              onChange={(e) => setAssetForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
-                              style={{ marginRight: 8 }}
-                            />
-                            Remote
-                          </label>
-                          <label
-                            className="tab setpack-include-item"
-                            style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap" }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={assetForm.acHasFrontPanel}
-                              onChange={(e) => setAssetForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
-                              style={{ marginRight: 8 }}
-                            />
-                            Front Unit (Indoor)
-                          </label>
-                          <label className="tab setpack-include-item">
-                            <input
-                              type="checkbox"
-                              checked={assetForm.acHasOutdoor}
-                              onChange={(e) => setAssetForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
-                              style={{ marginRight: 8 }}
-                            />
-                            Back Unit (Outdoor)
-                          </label>
-                        </div>
+                      <label className="field">
+                        <span>{t.vendor}</span>
+                        <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
                       </label>
                       <label className="field field-wide">
-                        <span>Components Note</span>
-                        <input
-                          className="input"
-                          value={assetForm.acComponentNote}
-                          onChange={(e) => setAssetForm((f) => ({ ...f, acComponentNote: e.target.value }))}
-                          placeholder="Remote model/serial, indoor/outdoor serial, missing parts..."
-                        />
+                        <span>Included Components</span>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+                          <input
+                            id="aircon-remote-create-upload"
+                            className="file-input"
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={(e) => void onAirconComponentPhotoFile("acRemotePhoto", e)}
+                          />
+                          <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                              <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={assetForm.acHasRemote}
+                                  onChange={(e) => setAssetForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
+                                  style={{ marginRight: 8 }}
+                                />
+                                Remote
+                              </label>
+                              {assetForm.acHasRemote ? (
+                                String(assetForm.acRemotePhoto || "").trim() ? (
+                                  <>
+                                    <img loading="lazy" decoding="async" src={String(assetForm.acRemotePhoto || "")} alt="aircon-remote" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => ({ ...f, acRemotePhoto: "" }))}>Remove</button>
+                                  </>
+                                ) : (
+                                  <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-remote-create-upload")?.click()}>
+                                    Choose Photo
+                                  </button>
+                                )
+                              ) : null}
+                            </div>
+                          </div>
+                          <input
+                            id="aircon-front-create-upload"
+                            className="file-input"
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={(e) => void onAirconComponentPhotoFile("acFrontUnitPhoto", e)}
+                          />
+                          <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                              <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={assetForm.acHasFrontPanel}
+                                  onChange={(e) => setAssetForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
+                                  style={{ marginRight: 8 }}
+                                />
+                                Front Unit (Indoor)
+                              </label>
+                              {assetForm.acHasFrontPanel ? (
+                                String(assetForm.acFrontUnitPhoto || "").trim() ? (
+                                  <>
+                                    <img loading="lazy" decoding="async" src={String(assetForm.acFrontUnitPhoto || "")} alt="aircon-front-unit" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => ({ ...f, acFrontUnitPhoto: "" }))}>Remove</button>
+                                  </>
+                                ) : (
+                                  <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-front-create-upload")?.click()}>
+                                    Choose Photo
+                                  </button>
+                                )
+                              ) : null}
+                            </div>
+                          </div>
+                          <input
+                            id="aircon-outdoor-create-upload"
+                            className="file-input"
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={(e) => void onAirconComponentPhotoFile("acOutdoorPhoto", e)}
+                          />
+                          <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                              <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={assetForm.acHasOutdoor}
+                                  onChange={(e) => setAssetForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
+                                  style={{ marginRight: 8 }}
+                                />
+                                Back Unit (Outdoor)
+                              </label>
+                              {assetForm.acHasOutdoor ? (
+                                String(assetForm.acOutdoorPhoto || "").trim() ? (
+                                  <>
+                                    <img loading="lazy" decoding="async" src={String(assetForm.acOutdoorPhoto || "")} alt="aircon-back-unit" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => ({ ...f, acOutdoorPhoto: "" }))}>Remove</button>
+                                  </>
+                                ) : (
+                                  <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-outdoor-create-upload")?.click()}>
+                                    Choose Photo
+                                  </button>
+                                )
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
                       </label>
                     </>
                   ) : null}
@@ -26911,10 +27375,12 @@ export default function App() {
                     <span>{t.warrantyUntil}</span>
                     <input type="date" className="input" value={assetForm.warrantyUntil} onChange={(e) => setAssetForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
                   </label>
-                  <label className="field">
-                    <span>{t.vendor}</span>
-                    <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
-                  </label>
+                  {!isAirconAsset(assetForm.category, assetForm.type) ? (
+                    <label className="field">
+                      <span>{t.vendor}</span>
+                      <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
+                    </label>
+                  ) : null}
                   {isPrinterAssetRow(assetForm) ? (
                     <>
                       <label className="field">
@@ -27046,14 +27512,6 @@ export default function App() {
                     ))}
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      className="tab"
-                      type="button"
-                      disabled={busy || !isAdmin}
-                      onClick={() => void saveCurrentAssetFormAsTemplate()}
-                    >
-                      Save as Template
-                    </button>
                     <button className="btn-primary" disabled={busy || !isAdmin} onClick={createAsset}>{t.createAsset}</button>
                   </div>
                 </div>
@@ -27621,7 +28079,7 @@ export default function App() {
                     ) : null}
                     {detailLinkedComponents.length ? (
                       <div className="field field-wide">
-                        <span>{detailAsset.type === "TV" ? "Included Components / Remotes" : "Linked Components"}</span>
+                        <span>{showsIncludedComponentCards(detailAsset.category, detailAsset.type) ? "Included Components / Remotes" : "Linked Components"}</span>
                         {isPhoneView ? (
                           <div className="public-asset-component-section">
                             <div className="public-asset-component-list">
@@ -28475,34 +28933,106 @@ export default function App() {
                         </label>
                         <label className="field field-wide">
                           <span>Included Components</span>
-                          <div className="setpack-include-grid">
-                            <label className="tab setpack-include-item">
-                              <input
-                                type="checkbox"
-                                checked={assetEditForm.acHasRemote}
-                                onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
-                                style={{ marginRight: 8 }}
-                              />
-                              Remote
-                            </label>
-                            <label className="tab setpack-include-item">
-                              <input
-                                type="checkbox"
-                                checked={assetEditForm.acHasFrontPanel}
-                                onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
-                                style={{ marginRight: 8 }}
-                              />
-                              Front Unit (Indoor)
-                            </label>
-                            <label className="tab setpack-include-item">
-                              <input
-                                type="checkbox"
-                                checked={assetEditForm.acHasOutdoor}
-                                onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
-                                style={{ marginRight: 8 }}
-                              />
-                              Back Unit (Outdoor)
-                            </label>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+                            <input
+                              id="aircon-remote-edit-upload"
+                              className="file-input"
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) => void onEditAirconComponentPhotoFile("acRemotePhoto", e)}
+                            />
+                            <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                                <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={assetEditForm.acHasRemote}
+                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
+                                    style={{ marginRight: 8 }}
+                                  />
+                                  Remote
+                                </label>
+                                {assetEditForm.acHasRemote ? (
+                                  String(assetEditForm.acRemotePhoto || "").trim() ? (
+                                    <>
+                                      <img loading="lazy" decoding="async" src={String(assetEditForm.acRemotePhoto || "")} alt="edit-aircon-remote" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => ({ ...f, acRemotePhoto: "" }))}>Remove</button>
+                                    </>
+                                  ) : (
+                                    <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-remote-edit-upload")?.click()}>
+                                      Choose Photo
+                                    </button>
+                                  )
+                                ) : null}
+                              </div>
+                            </div>
+                            <input
+                              id="aircon-front-edit-upload"
+                              className="file-input"
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) => void onEditAirconComponentPhotoFile("acFrontUnitPhoto", e)}
+                            />
+                            <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                                <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={assetEditForm.acHasFrontPanel}
+                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
+                                    style={{ marginRight: 8 }}
+                                  />
+                                  Front Unit (Indoor)
+                                </label>
+                                {assetEditForm.acHasFrontPanel ? (
+                                  String(assetEditForm.acFrontUnitPhoto || "").trim() ? (
+                                    <>
+                                      <img loading="lazy" decoding="async" src={String(assetEditForm.acFrontUnitPhoto || "")} alt="edit-aircon-front" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => ({ ...f, acFrontUnitPhoto: "" }))}>Remove</button>
+                                    </>
+                                  ) : (
+                                    <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-front-edit-upload")?.click()}>
+                                      Choose Photo
+                                    </button>
+                                  )
+                                ) : null}
+                              </div>
+                            </div>
+                            <input
+                              id="aircon-outdoor-edit-upload"
+                              className="file-input"
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) => void onEditAirconComponentPhotoFile("acOutdoorPhoto", e)}
+                            />
+                            <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                                <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={assetEditForm.acHasOutdoor}
+                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
+                                    style={{ marginRight: 8 }}
+                                  />
+                                  Back Unit (Outdoor)
+                                </label>
+                                {assetEditForm.acHasOutdoor ? (
+                                  String(assetEditForm.acOutdoorPhoto || "").trim() ? (
+                                    <>
+                                      <img loading="lazy" decoding="async" src={String(assetEditForm.acOutdoorPhoto || "")} alt="edit-aircon-back" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => ({ ...f, acOutdoorPhoto: "" }))}>Remove</button>
+                                    </>
+                                  ) : (
+                                    <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-outdoor-edit-upload")?.click()}>
+                                      Choose Photo
+                                    </button>
+                                  )
+                                ) : null}
+                              </div>
+                            </div>
                           </div>
                         </label>
                         <label className="field field-wide">
