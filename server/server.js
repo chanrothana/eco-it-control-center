@@ -2890,12 +2890,109 @@ async function normalizePhotoValue(photo, group = "assets") {
 
 async function normalizePhotoList(photos, group = "assets", maxCount = 5) {
   const out = [];
+  const seenRaw = new Set();
   if (!Array.isArray(photos)) return out;
   for (const item of photos) {
+    const rawItem = toText(item);
+    if (!rawItem || seenRaw.has(rawItem)) continue;
+    seenRaw.add(rawItem);
     const normalized = await normalizePhotoValue(item, group);
     if (!normalized) continue;
     if (!out.includes(normalized)) out.push(normalized);
     if (out.length >= maxCount) break;
+  }
+  return out;
+}
+
+async function normalizeMaintenanceMediaPayload(body) {
+  const rawPhoto = body ? body.photo : "";
+  const rawPhotos = Array.isArray(body?.photos) ? body.photos : [];
+  const rawBeforePhotos = Array.isArray(body?.beforePhotos) ? body.beforePhotos : [];
+  const rawAfterPhotos = Array.isArray(body?.afterPhotos) ? body.afterPhotos : [];
+  const beforePhotos = await normalizePhotoList(rawBeforePhotos, "maintenance", 5);
+  const afterPhotos = await normalizePhotoList(
+    [...rawAfterPhotos, ...rawPhotos, ...(toText(rawPhoto) ? [rawPhoto] : [])],
+    "maintenance",
+    5
+  );
+  return {
+    beforePhotos: beforePhotos.slice(0, 5),
+    afterPhotos: afterPhotos.slice(0, 5),
+    photo: afterPhotos[0] || "",
+    photos: afterPhotos.slice(0, 5),
+  };
+}
+
+const uploadContentHashCache = new Map();
+
+async function getUploadContentHash(uploadUrl) {
+  const raw = toText(uploadUrl);
+  if (!raw || !raw.startsWith("/uploads/")) return "";
+  if (uploadContentHashCache.has(raw)) return uploadContentHashCache.get(raw);
+  const uploadRelative = raw.replace(/^\/uploads\//, "");
+  const safeRelative = path
+    .normalize(uploadRelative)
+    .replace(/^(\.\.(\/|\\|$))+/, "");
+  const uploadPath = path.resolve(path.join(UPLOADS_DIR, safeRelative));
+  const uploadRoot = path.resolve(UPLOADS_DIR) + path.sep;
+  if (!uploadPath.startsWith(uploadRoot) || !(await fileExists(uploadPath))) {
+    uploadContentHashCache.set(raw, "");
+    return "";
+  }
+  const buffer = await fs.readFile(uploadPath);
+  const hash = crypto.createHash("sha1").update(buffer).digest("hex");
+  uploadContentHashCache.set(raw, hash);
+  return hash;
+}
+
+async function dedupeMaintenancePhotoListByContent(photos, maxCount = 5) {
+  const out = [];
+  const seen = new Set();
+  const list = Array.isArray(photos) ? photos : [];
+  for (const item of list) {
+    const normalized = toText(item);
+    if (!normalized) continue;
+    const contentHash = await getUploadContentHash(normalized);
+    const key = contentHash || normalized;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+    if (out.length >= maxCount) break;
+  }
+  return out;
+}
+
+async function normalizeStoredMaintenanceEntryMedia(entry) {
+  const source = entry && typeof entry === "object" ? entry : {};
+  const beforeBase = Array.isArray(source.beforePhotos) ? source.beforePhotos : [];
+  const afterBase = [
+    ...(Array.isArray(source.afterPhotos) ? source.afterPhotos : []),
+    ...(Array.isArray(source.photos) ? source.photos : []),
+    ...(toText(source.photo) ? [source.photo] : []),
+  ];
+  const beforePhotos = await dedupeMaintenancePhotoListByContent(beforeBase, 5);
+  const afterPhotos = await dedupeMaintenancePhotoListByContent(afterBase, 5);
+  return {
+    ...source,
+    photo: afterPhotos[0] || "",
+    photos: afterPhotos,
+    beforePhotos,
+    afterPhotos,
+  };
+}
+
+async function normalizeAssetsForResponse(assets) {
+  if (!Array.isArray(assets)) return [];
+  const out = [];
+  for (const asset of assets) {
+    const source = asset && typeof asset === "object" ? asset : {};
+    const maintenanceHistory = Array.isArray(source.maintenanceHistory)
+      ? await Promise.all(source.maintenanceHistory.map((entry) => normalizeStoredMaintenanceEntryMedia(entry)))
+      : [];
+    out.push({
+      ...source,
+      maintenanceHistory,
+    });
   }
   return out;
 }
@@ -6063,7 +6160,7 @@ const server = http.createServer(async (req, res) => {
           return hay.includes(search);
         });
       }
-      sendJson(res, 200, { assets });
+      sendJson(res, 200, { assets: await normalizeAssetsForResponse(assets) });
       return;
     }
 
@@ -6353,13 +6450,10 @@ const server = http.createServer(async (req, res) => {
       const nextNote = toText(body.note);
       const nextCost = toText(body.cost);
       const nextBy = toText(body.by);
-      const nextPhoto = await normalizePhotoValue(body.photo, "maintenance");
       const hasNextPhotos = Array.isArray(body.photos);
-      const nextPhotos = await normalizePhotoList(body.photos, "maintenance", 5);
       const hasNextBeforePhotos = Array.isArray(body.beforePhotos);
-      const nextBeforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
       const hasNextAfterPhotos = Array.isArray(body.afterPhotos);
-      const nextAfterPhotos = await normalizePhotoList(body.afterPhotos, "maintenance", 5);
+      const nextMedia = await normalizeMaintenanceMediaPayload(body);
       const nextCompletion = normalizeCompletion(body.completion);
       const nextCondition = toText(body.condition);
       const db = await readDb();
@@ -6400,9 +6494,10 @@ const server = http.createServer(async (req, res) => {
       const currentAfterPhotos = Array.isArray(current.afterPhotos)
         ? current.afterPhotos.map((p) => toText(p)).filter(Boolean)
         : currentPhotos;
-      let resolvedBeforePhotos = hasNextBeforePhotos ? nextBeforePhotos : [...currentBeforePhotos];
-      let resolvedAfterPhotos = hasNextAfterPhotos ? nextAfterPhotos : (hasNextPhotos ? nextPhotos : [...currentAfterPhotos]);
-      if (nextPhoto && !resolvedAfterPhotos.includes(nextPhoto)) resolvedAfterPhotos.unshift(nextPhoto);
+      const hasPhotoOverride = Object.prototype.hasOwnProperty.call(body, "photo") && toText(body.photo);
+      let resolvedBeforePhotos = hasNextBeforePhotos ? nextMedia.beforePhotos : [...currentBeforePhotos];
+      let resolvedAfterPhotos =
+        hasNextAfterPhotos || hasNextPhotos || hasPhotoOverride ? nextMedia.afterPhotos : [...currentAfterPhotos];
       resolvedBeforePhotos = resolvedBeforePhotos.slice(0, 5);
       resolvedAfterPhotos = resolvedAfterPhotos.slice(0, 5);
       const updated = {
@@ -6414,7 +6509,7 @@ const server = http.createServer(async (req, res) => {
         note: nextNote || toText(current.note),
         cost: nextCost,
         by: nextBy,
-        photo: resolvedAfterPhotos[0] || nextPhoto || toText(current.photo),
+        photo: resolvedAfterPhotos[0] || toText(current.photo),
         photos: resolvedAfterPhotos,
         beforePhotos: resolvedBeforePhotos,
         afterPhotos: resolvedAfterPhotos,
@@ -6731,10 +6826,7 @@ const server = http.createServer(async (req, res) => {
       const note = toText(body.note);
       const cost = toText(body.cost);
       const by = toText(body.by);
-      const photo = await normalizePhotoValue(body.photo, "maintenance");
-      const photos = await normalizePhotoList(body.photos, "maintenance", 5);
-      const beforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
-      const afterPhotos = await normalizePhotoList([...(Array.isArray(body.afterPhotos) ? body.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], "maintenance", 5);
+      const media = await normalizeMaintenanceMediaPayload(body);
       const reportFile = await normalizeAttachmentValue(body.reportFile || {
         url: body.reportFile,
         name: body.reportFileName,
@@ -6767,10 +6859,10 @@ const server = http.createServer(async (req, res) => {
         note,
         cost,
         by,
-        photo: afterPhotos[0] || photo,
-        photos: afterPhotos.slice(0, 5),
-        beforePhotos: beforePhotos.slice(0, 5),
-        afterPhotos: afterPhotos.slice(0, 5),
+        photo: media.photo,
+        photos: media.photos,
+        beforePhotos: media.beforePhotos,
+        afterPhotos: media.afterPhotos,
         reportFile: reportFile.url,
         reportFileName: reportFile.name,
         reportFileType: reportFile.mimeType,
@@ -7064,10 +7156,7 @@ const server = http.createServer(async (req, res) => {
       const condition = toText(body.condition);
       const completion = normalizeCompletion(body.completion);
       const status = toText(body.ticketStatus) || "Done";
-      const photo = await normalizePhotoValue(body.photo, "maintenance");
-      const photos = await normalizePhotoList(body.photos, "maintenance", 5);
-      const beforePhotos = await normalizePhotoList(body.beforePhotos, "maintenance", 5);
-      const afterPhotos = await normalizePhotoList([...(Array.isArray(body.afterPhotos) ? body.afterPhotos : []), ...photos, ...(photo ? [photo] : [])], "maintenance", 5);
+      const media = await normalizeMaintenanceMediaPayload(body);
       const reportFile = await normalizeAttachmentValue(body.reportFile || {
         url: body.reportFile,
         name: body.reportFileName,
@@ -7106,10 +7195,10 @@ const server = http.createServer(async (req, res) => {
         note,
         cost,
         by,
-        photo: afterPhotos[0] || photo,
-        photos: afterPhotos.slice(0, 5),
-        beforePhotos: beforePhotos.slice(0, 5),
-        afterPhotos: afterPhotos.slice(0, 5),
+        photo: media.photo,
+        photos: media.photos,
+        beforePhotos: media.beforePhotos,
+        afterPhotos: media.afterPhotos,
         reportFile: reportFile.url,
         reportFileName: reportFile.name,
         reportFileType: reportFile.mimeType,

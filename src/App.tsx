@@ -285,12 +285,31 @@ type ReportType =
   | "asset_master"
   | "set_code"
   | "asset_by_location"
+  | "inventory_balance"
   | "overdue"
   | "transfer"
   | "staff_borrowing"
   | "maintenance_completion"
   | "verification_summary"
   | "qr_labels";
+
+type ReportSection = "asset" | "maintenance" | "inventory" | "transfer" | "verification";
+
+type MaintenanceReportColumnKey =
+  | "date"
+  | "assetId"
+  | "itemName"
+  | "beforePhoto"
+  | "afterPhoto"
+  | "campus"
+  | "location"
+  | "type"
+  | "completion"
+  | "condition"
+  | "cost"
+  | "by"
+  | "reportFile"
+  | "note";
 type EdAssetTemplate = "ALL" | "computer" | "ipad" | "speaker" | "tv" | "aircon" | "monitor" | "walkie" | "peripheral";
 
 type Ticket = {
@@ -933,6 +952,25 @@ const AUTH_ACCOUNTS_FALLBACK_KEY = "it_auth_accounts_fallback_v1";
 const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
 const INVENTORY_ITEM_FALLBACK_KEY = "it_inventory_items_v1";
 const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
+const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
+  asset: ["asset_master", "set_code", "asset_by_location", "staff_borrowing", "qr_labels"],
+  maintenance: ["maintenance_completion", "overdue"],
+  inventory: ["inventory_balance"],
+  transfer: ["transfer"],
+  verification: ["verification_summary"],
+};
+const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
+  asset_master: "asset",
+  set_code: "asset",
+  asset_by_location: "asset",
+  inventory_balance: "inventory",
+  overdue: "maintenance",
+  transfer: "transfer",
+  staff_borrowing: "asset",
+  maintenance_completion: "maintenance",
+  verification_summary: "verification",
+  qr_labels: "asset",
+};
 const POOL_CLEANING_SCHEDULE_FALLBACK_KEY = "it_pool_cleaning_schedule_v1";
 const POOL_EQUIPMENT_FALLBACK_KEY = "it_pool_equipment_v1";
 const POOL_CHEMICAL_FALLBACK_KEY = "it_pool_chemical_v1";
@@ -1099,6 +1137,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.asset_master", labelEn: "Asset Master Register", labelKm: "បញ្ជីទ្រព្យសម្បត្តិ" },
       { key: "reports.set_code", labelEn: "Computer Set Detail", labelKm: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
       { key: "reports.asset_by_location", labelEn: "Asset by Campus and Location", labelKm: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+      { key: "reports.inventory_balance", labelEn: "Inventory Stock Balance", labelKm: "សមតុល្យស្តុក" },
       { key: "reports.overdue", labelEn: "Overdue Maintenance", labelKm: "ថែទាំលើសកាលកំណត់" },
       { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
       { key: "reports.staff_borrowing", labelEn: "Staff Asset Assignment List", labelKm: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
@@ -5537,6 +5576,9 @@ export default function App() {
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
   const [verificationView, setVerificationView] = useState<"record" | "history">("record");
+  const [reportSection, setReportSection] = useState<ReportSection>("asset");
+  const [reportType, setReportType] = useState<ReportType>("asset_master");
+  const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
   const canUseUtilityInvoiceOcr = useMemo(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return false;
     const host = String(window.location.hostname || "").trim().toLowerCase();
@@ -5880,6 +5922,43 @@ export default function App() {
                 ]
               : []),
           ];
+        case "reports": {
+          const reportSectionLabels: Record<ReportSection, string> =
+            lang === "km"
+              ? {
+                  asset: "ទ្រព្យសម្បត្តិ",
+                  maintenance: "ថែទាំ",
+                  inventory: "ស្តុក",
+                  transfer: "ផ្ទេរ",
+                  verification: "ត្រួតពិនិត្យ",
+                }
+              : {
+                  asset: "Asset",
+                  maintenance: "Maintenance",
+                  inventory: "Inventory",
+                  transfer: "Transfer",
+                  verification: "Verification",
+                };
+          return (["asset", "maintenance", "inventory", "transfer", "verification"] as ReportSection[])
+            .filter((section) =>
+              REPORT_SECTION_TYPE_MAP[section].some((type) => canAccessMenu(`reports.${type}` as MenuAccessKey, "reports"))
+            )
+            .map((section) => ({
+              key: `reports.section.${section}`,
+              label: reportSectionLabels[section],
+              active: reportSection === section,
+              onSelect: () =>
+                startTabTransition(() => {
+                  const nextReportType =
+                    REPORT_SECTION_TYPE_MAP[section].find((type) =>
+                      canAccessMenu(`reports.${type}` as MenuAccessKey, "reports")
+                    ) || reportType;
+                  setReportSection(section);
+                  setReportType(nextReportType);
+                  setTab("reports");
+                }),
+            }));
+        }
         case "setup":
           if (!isAdmin) return [];
           return [
@@ -5995,6 +6074,8 @@ export default function App() {
       lang,
       maintenanceView,
       poolView,
+      reportSection,
+      reportType,
       scheduleView,
       setupView,
       t.cleaningSchedule,
@@ -6057,7 +6138,6 @@ export default function App() {
     key: "assignedTo",
     direction: "asc",
   });
-  const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
   const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState<string[]>(["ALL"]);
   const [assetMasterItemFilter, setAssetMasterItemFilter] = useState<string[]>(["ALL"]);
@@ -6105,6 +6185,25 @@ export default function App() {
     const now = new Date();
     return toYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   });
+  const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
+  const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
+  const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
+  const [maintenanceReportVisibleColumns, setMaintenanceReportVisibleColumns] = useState<MaintenanceReportColumnKey[]>([
+    "date",
+    "assetId",
+    "itemName",
+    "beforePhoto",
+    "afterPhoto",
+    "campus",
+    "location",
+    "type",
+    "completion",
+    "condition",
+    "cost",
+    "by",
+    "reportFile",
+    "note",
+  ]);
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
   const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
   const [reportTerm, setReportTerm] = useState<"Term 1" | "Term 2" | "Term 3">("Term 1");
@@ -8293,6 +8392,17 @@ export default function App() {
   const inventoryBalanceDisplayRows = useMemo(
     () => (inventoryBalanceMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
     [inventoryBalanceMode, inventoryLowStockRows, inventoryBalanceRows]
+  );
+  const reportInventoryRows = useMemo(
+    () => (reportInventoryMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
+    [reportInventoryMode, inventoryLowStockRows, inventoryBalanceRows]
+  );
+  const reportInventoryModeLabel = useMemo(
+    () =>
+      reportInventoryMode === "low"
+        ? (lang === "km" ? "ស្តុកទាបតែប៉ុណ្ណោះ" : "Low Stock Only")
+        : (lang === "km" ? "ស្តុកទាំងអស់" : "All Stock Items"),
+    [reportInventoryMode, lang]
   );
   const inventoryVisibleItemLookup = useMemo(() => {
     const out = new Map<number, InventoryItem>();
@@ -19707,6 +19817,13 @@ export default function App() {
         : [],
     [maintenanceDetailAsset, sortByNewestDate]
   );
+  const maintenanceEditingEntry = useMemo(
+    () =>
+      maintenanceEditingEntryId
+        ? maintenanceDetailEntries.find((entry) => Number(entry.id) === Number(maintenanceEditingEntryId)) || null
+        : null,
+    [maintenanceDetailEntries, maintenanceEditingEntryId]
+  );
   const assetStatusRowClass = useCallback((statusRaw: string) => {
     const status = String(statusRaw || "").trim().toLowerCase();
     if (status === "retired") return "row-asset-retired";
@@ -20045,6 +20162,7 @@ export default function App() {
       entryId: number;
       assetId: string;
       assetPhoto: string;
+      itemName: string;
       campus: string;
       category: string;
       assetType: string;
@@ -20074,6 +20192,7 @@ export default function App() {
           entryId: entry.id,
           assetId: asset.assetId,
           assetPhoto: asset.photo || "",
+          itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           campus: asset.campus,
           category: asset.category,
           assetType: asset.type || "",
@@ -21291,9 +21410,36 @@ export default function App() {
       if (!row.date) return false;
       if (reportDateFrom && row.date < reportDateFrom) return false;
       if (reportDateTo && row.date > reportDateTo) return false;
+      if (reportMaintenanceCampusFilter !== "ALL" && row.campus !== reportMaintenanceCampusFilter) return false;
+      if (reportMaintenanceCategoryFilter !== "ALL" && row.category !== reportMaintenanceCategoryFilter) return false;
+      if (reportMaintenanceItemFilter !== "ALL" && row.itemName !== reportMaintenanceItemFilter) return false;
       return true;
     });
-  }, [allMaintenanceRows, reportDateFrom, reportDateTo]);
+  }, [
+    allMaintenanceRows,
+    reportDateFrom,
+    reportDateTo,
+    reportMaintenanceCampusFilter,
+    reportMaintenanceCategoryFilter,
+    reportMaintenanceItemFilter,
+  ]);
+  const reportMaintenanceItemOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        allMaintenanceRows
+          .filter((row) => reportMaintenanceCampusFilter === "ALL" || row.campus === reportMaintenanceCampusFilter)
+          .filter((row) => reportMaintenanceCategoryFilter === "ALL" || row.category === reportMaintenanceCategoryFilter)
+          .map((row) => row.itemName)
+          .filter(Boolean)
+      )
+    ).sort();
+  }, [allMaintenanceRows, reportMaintenanceCampusFilter, reportMaintenanceCategoryFilter]);
+  useEffect(() => {
+    if (reportMaintenanceItemFilter === "ALL") return;
+    if (!reportMaintenanceItemOptions.includes(reportMaintenanceItemFilter)) {
+      setReportMaintenanceItemFilter("ALL");
+    }
+  }, [reportMaintenanceItemFilter, reportMaintenanceItemOptions]);
 
   const maintenanceCompletionSummary = useMemo(() => {
     const done = maintenanceCompletionRows.filter((r) => r.completion === "Done").length;
@@ -21305,6 +21451,20 @@ export default function App() {
     const to = reportDateTo || "-";
     return `${from} to ${to}`;
   }, [reportDateFrom, reportDateTo]);
+  const maintenanceCompletionFilterLabel = useMemo(() => {
+    const campusText =
+      reportMaintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(reportMaintenanceCampusFilter);
+    const categoryText = reportMaintenanceCategoryFilter === "ALL" ? t.allCategories : reportMaintenanceCategoryFilter;
+    const itemText = reportMaintenanceItemFilter === "ALL" ? "All Items" : reportMaintenanceItemFilter;
+    return `${campusText} | ${categoryText} | ${itemText}`;
+  }, [
+    reportMaintenanceCampusFilter,
+    reportMaintenanceCategoryFilter,
+    reportMaintenanceItemFilter,
+    campusLabel,
+    t.allCampuses,
+    t.allCategories,
+  ]);
   const verificationSummaryRows = useMemo(() => {
     const year = Number(reportYear) || new Date().getFullYear();
     const range =
@@ -21852,6 +22012,25 @@ export default function App() {
     [assetMasterItemBreakdown]
   );
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
+  const reportSectionOptions = useMemo<Array<{ value: ReportSection; label: string }>>(
+    () =>
+      lang === "km"
+        ? [
+            { value: "asset", label: "ទ្រព្យសម្បត្តិ" },
+            { value: "maintenance", label: "ថែទាំ" },
+            { value: "inventory", label: "ស្តុក" },
+            { value: "transfer", label: "ផ្ទេរ" },
+            { value: "verification", label: "ត្រួតពិនិត្យ" },
+          ]
+        : [
+            { value: "asset", label: "Asset" },
+            { value: "maintenance", label: "Maintenance" },
+            { value: "inventory", label: "Inventory" },
+            { value: "transfer", label: "Transfer" },
+            { value: "verification", label: "Verification" },
+          ],
+    [lang]
+  );
   const reportTypeOptions = useMemo(
     () =>
       (
@@ -21860,6 +22039,7 @@ export default function App() {
               { value: "asset_master" as ReportType, label: "បញ្ជីទ្រព្យសម្បត្តិ" },
               { value: "set_code" as ReportType, label: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
               { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+              { value: "inventory_balance" as ReportType, label: "សមតុល្យស្តុក" },
               { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
               { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
               { value: "staff_borrowing" as ReportType, label: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
@@ -21871,6 +22051,7 @@ export default function App() {
               { value: "asset_master" as ReportType, label: "Asset Master Register" },
               { value: "set_code" as ReportType, label: "Computer Set Detail" },
               { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
+              { value: "inventory_balance" as ReportType, label: "Inventory Stock Balance" },
               { value: "overdue" as ReportType, label: "Overdue Maintenance" },
               { value: "transfer" as ReportType, label: "Asset Transfer Log" },
               { value: "staff_borrowing" as ReportType, label: "Staff Asset Assignment List" },
@@ -21881,6 +22062,17 @@ export default function App() {
       ).filter((option) => canAccessMenu(`reports.${option.value}`, "reports")),
     [lang, canAccessMenu]
   );
+  const availableReportSections = useMemo(
+    () =>
+      reportSectionOptions.filter((section) =>
+        REPORT_SECTION_TYPE_MAP[section.value].some((type) => reportTypeOptions.some((option) => option.value === type))
+      ),
+    [reportSectionOptions, reportTypeOptions]
+  );
+  const currentSectionReportTypeOptions = useMemo(
+    () => reportTypeOptions.filter((option) => REPORT_SECTION_TYPE_MAP[reportSection].includes(option.value)),
+    [reportTypeOptions, reportSection]
+  );
   const selectedReportTypeLabel =
     reportTypeOptions.find((option) => option.value === reportType)?.label ||
     (lang === "km" ? "របាយការណ៍" : "Report");
@@ -21889,6 +22081,33 @@ export default function App() {
       return campusLabel(campus);
     },
     [campusLabel]
+  );
+  const maintenanceReportColumnDefs = useMemo(
+    () => [
+      { key: "date" as MaintenanceReportColumnKey, label: "Date" },
+      { key: "assetId" as MaintenanceReportColumnKey, label: t.assetId },
+      { key: "itemName" as MaintenanceReportColumnKey, label: "Item" },
+      { key: "beforePhoto" as MaintenanceReportColumnKey, label: "Before Photo" },
+      { key: "afterPhoto" as MaintenanceReportColumnKey, label: "After Photo" },
+      { key: "campus" as MaintenanceReportColumnKey, label: t.campus },
+      { key: "location" as MaintenanceReportColumnKey, label: "Location" },
+      { key: "type" as MaintenanceReportColumnKey, label: "Maintenance Type" },
+      { key: "completion" as MaintenanceReportColumnKey, label: "Work Status" },
+      { key: "condition" as MaintenanceReportColumnKey, label: "Condition" },
+      { key: "cost" as MaintenanceReportColumnKey, label: "Cost" },
+      { key: "by" as MaintenanceReportColumnKey, label: "By" },
+      { key: "reportFile" as MaintenanceReportColumnKey, label: "Report File" },
+      { key: "note" as MaintenanceReportColumnKey, label: "Note" },
+    ],
+    [t.assetId, t.campus]
+  );
+  const isMaintenanceReportColumnVisible = useCallback(
+    (key: MaintenanceReportColumnKey) => maintenanceReportVisibleColumns.includes(key),
+    [maintenanceReportVisibleColumns]
+  );
+  const visibleMaintenanceReportColumnDefs = useMemo(
+    () => maintenanceReportColumnDefs.filter((column) => maintenanceReportVisibleColumns.includes(column.key)),
+    [maintenanceReportColumnDefs, maintenanceReportVisibleColumns]
   );
   const assetMasterCampusTitle = useMemo(() => {
     if (assetMasterCampusFilter.includes("ALL")) return t.allCampuses;
@@ -21913,6 +22132,7 @@ export default function App() {
             asset_master: "បញ្ជីទ្រព្យសម្បត្តិលម្អិត តាមអ្វីដែលបានជ្រើស។",
             set_code: "មើលក្រុមឧបករណ៍ និងសមាសភាគដែលភ្ជាប់ជាមួយគ្នា។",
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
+            inventory_balance: "បោះពុម្ពសមតុល្យស្តុកតាមវត្ថុ និងទីតាំងស្តុកបច្ចុប្បន្ន។",
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
             staff_borrowing: "ទ្រព្យដែលសាលាបានចាត់តាំងឱ្យបុគ្គលិកប្រើប្រាស់ និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
@@ -21924,6 +22144,7 @@ export default function App() {
             asset_master: "Detailed asset list based on selected filters.",
             set_code: "View each computer set with all connected items.",
             asset_by_location: "Summary count by campus and location.",
+            inventory_balance: "Standard stock balance report with current stock by item and campus.",
             overdue: "Show assets that are overdue for maintenance.",
             transfer: "Transfer history between campuses and locations.",
             staff_borrowing: "Assets currently assigned to staff with accountability records.",
@@ -21943,6 +22164,7 @@ export default function App() {
     () =>
       reportType === "asset_master" ||
       reportType === "asset_by_location" ||
+      reportType === "inventory_balance" ||
       reportType === "maintenance_completion" ||
       reportType === "verification_summary" ||
       reportType === "qr_labels",
@@ -21977,6 +22199,29 @@ export default function App() {
       const ymd = toYmd(today);
       setReportDateFrom(`${ymd.slice(0, 7)}-01`);
       setReportDateTo(ymd);
+      setReportMaintenanceCampusFilter("ALL");
+      setReportMaintenanceCategoryFilter("ALL");
+      setReportMaintenanceItemFilter("ALL");
+      setMaintenanceReportVisibleColumns([
+        "date",
+        "assetId",
+        "itemName",
+        "beforePhoto",
+        "afterPhoto",
+        "campus",
+        "location",
+        "type",
+        "completion",
+        "condition",
+        "cost",
+        "by",
+        "reportFile",
+        "note",
+      ]);
+      return;
+    }
+    if (reportType === "inventory_balance") {
+      setReportInventoryMode("all");
       return;
     }
     if (reportType === "verification_summary") {
@@ -22004,7 +22249,9 @@ export default function App() {
   const resetAllReportFiltersOnRefresh = useCallback(() => {
     const today = new Date();
     const ymd = toYmd(today);
+    setReportSection("asset");
     setReportType("asset_master");
+    setReportInventoryMode("all");
     resetAssetMasterReportFilters();
     setQrCampusFilter(["ALL"]);
     setQrLocationFilter(["ALL"]);
@@ -22026,6 +22273,22 @@ export default function App() {
     // Ensure all report filter selections start from default values on full page refresh.
     resetAllReportFiltersOnRefresh();
   }, [resetAllReportFiltersOnRefresh]);
+
+  useEffect(() => {
+    if (availableReportSections.some((section) => section.value === reportSection)) return;
+    const fallback = availableReportSections[0]?.value;
+    if (fallback && fallback !== reportSection) {
+      setReportSection(fallback);
+    }
+  }, [availableReportSections, reportSection]);
+
+  useEffect(() => {
+    if (currentSectionReportTypeOptions.some((option) => option.value === reportType)) return;
+    const fallback = currentSectionReportTypeOptions[0]?.value;
+    if (fallback && fallback !== reportType) {
+      setReportType(fallback);
+    }
+  }, [currentSectionReportTypeOptions, reportType]);
 
   const qrLocationFilterOptions = useMemo(() => {
     const source =
@@ -23056,6 +23319,23 @@ export default function App() {
         String(r.safety),
         r.itemSummary || "-",
       ]);
+    } else if (reportType === "inventory_balance") {
+      title = `Inventory Stock Balance Report - ${reportInventoryModeLabel}`;
+      columns = ["Code", "Photo", "Name", "Category", "Campus", "Location", "Unit", "Stock In", "Stock Out", "Current", "Min", "Alert"];
+      rows = reportInventoryRows.map((row) => [
+        row.itemCode,
+        toPrintablePhotoUrl(row.photo || ""),
+        inventoryDisplayName(row.itemName, lang),
+        inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row)),
+        inventoryCampusLabel(row.campus),
+        row.location || "-",
+        row.unit || "-",
+        String(row.stockIn ?? 0),
+        String(row.stockOut ?? 0),
+        String(row.currentStock ?? 0),
+        String(row.minStock ?? 0),
+        row.lowStock ? "Low" : "OK",
+      ]);
     } else if (reportType === "overdue") {
       title = "Overdue Maintenance Report";
       columns = ["Next Date", "Asset ID", "Campus", "Status", "Schedule Note"];
@@ -23098,19 +23378,49 @@ export default function App() {
         r.note || "-",
       ]);
     } else if (reportType === "maintenance_completion") {
-      title = `Maintenance Completion Report (${maintenanceCompletionRangeLabel})`;
-      columns = ["Date", "Asset ID", "Asset Photo", "Maintenance Photo", "Campus", "Type", "Work Status", "Condition", "Note"];
-      rows = maintenanceCompletionRows.map((r) => [
-        formatDate(r.date || "-"),
-        r.assetId,
-        toPrintablePhotoUrl(r.assetPhoto || ""),
-        toPrintablePhotoUrl(r.photo || ""),
-        reportCampusName(r.campus),
-        r.type || "-",
-        r.completion || "-",
-        r.condition || "-",
-        r.note || "-",
-      ]);
+      title = `Maintenance Report for ED (${maintenanceCompletionRangeLabel})`;
+      const visibleDefs = maintenanceReportColumnDefs.filter((def) => isMaintenanceReportColumnVisible(def.key));
+      columns = visibleDefs.map((def) => def.label);
+      rows = maintenanceCompletionRows.map((r) =>
+        visibleDefs.map((def) => {
+          switch (def.key) {
+            case "date":
+              return formatDate(r.date || "-");
+            case "assetId":
+              return r.assetId;
+            case "itemName":
+              return r.itemName || "-";
+            case "beforePhoto":
+              return toPrintablePhotoUrl(String((r.beforePhotos || [])[0] || ""));
+            case "afterPhoto":
+              return toPrintablePhotoUrl(String((r.afterPhotos || [])[0] || ""));
+            case "campus":
+              return reportCampusName(r.campus);
+            case "location":
+              return r.location || "-";
+            case "type":
+              return r.type || "-";
+            case "completion":
+              return r.completion || "-";
+            case "condition":
+              return r.condition || "-";
+            case "cost":
+              return r.cost || "-";
+            case "by":
+              return r.by || "-";
+            case "reportFile":
+              return maintenanceReportFileLabel({
+                url: r.reportFile || "",
+                name: r.reportFileName || "",
+                mimeType: r.reportFileType || "",
+              }) || "-";
+            case "note":
+              return r.note || "-";
+            default:
+              return "-";
+          }
+        })
+      );
     } else if (reportType === "verification_summary") {
       const periodLabel =
         reportPeriodMode === "month"
@@ -23205,11 +23515,13 @@ export default function App() {
 
     const summaryHtml =
       reportType === "maintenance_completion"
-        ? `<p><strong>Total:</strong> ${maintenanceCompletionSummary.total} | <strong>Done:</strong> ${maintenanceCompletionSummary.done} | <strong>Not Yet:</strong> ${maintenanceCompletionSummary.notYet}</p>`
+        ? `<p><strong>Filter:</strong> ${escapeHtml(maintenanceCompletionFilterLabel)}</p><p><strong>Total:</strong> ${maintenanceCompletionSummary.total} | <strong>Done:</strong> ${maintenanceCompletionSummary.done} | <strong>Not Yet:</strong> ${maintenanceCompletionSummary.notYet}</p>`
         : reportType === "verification_summary"
         ? `<p><strong>Total:</strong> ${verificationSummary.total} | <strong>Verified:</strong> ${verificationSummary.verified} | <strong>Issue Found:</strong> ${verificationSummary.issue} | <strong>Missing:</strong> ${verificationSummary.missing}</p>`
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${filteredLocationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${filteredLocationAssetTotal}</p>`
+        : reportType === "inventory_balance"
+        ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${inventoryLowStockRows.length}</p>`
         : reportType === "staff_borrowing"
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
         : reportType === "asset_master"
@@ -35421,6 +35733,227 @@ export default function App() {
                 <p className="tiny">
                   {campusLabel(maintenanceDetailAsset.campus)} | {maintenanceDetailAsset.category} | {maintenanceDetailAsset.location || "-"}
                 </p>
+                {maintenanceEditingEntry ? (
+                  <section
+                    className="panel"
+                    style={{
+                      marginTop: 12,
+                      padding: 18,
+                      background: "#f7fbff",
+                      borderColor: "#c7d7ef",
+                    }}
+                  >
+                    <div className="panel-row" style={{ marginBottom: 12 }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>Edit Maintenance Record</h3>
+                        <div className="tiny">
+                          {formatDate(maintenanceEditingEntry.date || "-")} | {maintenanceEditingEntry.type || "-"}
+                        </div>
+                      </div>
+                      <button className="tab" type="button" onClick={cancelMaintenanceEntryEdit}>
+                        Cancel Edit
+                      </button>
+                    </div>
+                    <div className="form-grid">
+                      <label className="field">
+                        <span>Date</span>
+                        <input
+                          type="date"
+                          className="input"
+                          min={todayYmd}
+                          value={maintenanceEditForm.date}
+                          onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, date: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Type</span>
+                        <select
+                          className="input"
+                          value={maintenanceEditForm.type}
+                          onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, type: e.target.value }))}
+                        >
+                          {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
+                            <option key={`detail-type-${opt}`} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Work Status</span>
+                        <select
+                          className="input"
+                          value={maintenanceEditForm.completion}
+                          onChange={(e) =>
+                            setMaintenanceEditForm((f) => ({
+                              ...f,
+                              completion: e.target.value as "Done" | "Not Yet",
+                            }))
+                          }
+                        >
+                          {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
+                            <option key={`maintenance-edit-${opt.value}`} value={opt.value}>
+                              {opt.value === "Done" ? t.alreadyDone : t.notYetDone}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Condition</span>
+                        <input
+                          className="input"
+                          value={maintenanceEditForm.condition}
+                          onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, condition: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Cost</span>
+                        <input
+                          className="input"
+                          value={maintenanceEditForm.cost}
+                          onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, cost: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>By</span>
+                        <input
+                          className="input"
+                          value={maintenanceEditForm.by}
+                          onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, by: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field field-wide">
+                        <span>Note</span>
+                        <textarea
+                          className="textarea"
+                          rows={4}
+                          value={maintenanceEditForm.note}
+                          onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, note: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"}</span>
+                        <input
+                          key={`${maintenanceEditFileKey}-${maintenanceEditingEntry.id}-before`}
+                          className="file-input"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => void onMaintenanceEditPhotoFile(e, "before")}
+                        />
+                        <div style={{ marginTop: 8 }}>
+                          {maintenanceEditForm.beforePhotos?.length ? (
+                            <div className="asset-photo-gallery">
+                              {maintenanceEditForm.beforePhotos.map((url, index) => (
+                                <div key={`maintenance-edit-before-chip-${index}`} className="asset-photo-chip">
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={url}
+                                    alt={`maintenance-edit-before-${index + 1}`}
+                                    className="asset-photo-chip-img"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn-danger asset-photo-chip-corner-delete"
+                                    title="Remove photo"
+                                    aria-label="Remove photo"
+                                    onClick={() =>
+                                      setMaintenanceEditForm((f) => ({
+                                        ...f,
+                                        beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                                      }))
+                                    }
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="photo-empty">{t.noPhoto}</span>
+                          )}
+                        </div>
+                      </label>
+                      <label className="field">
+                        <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"}</span>
+                        <input
+                          key={`${maintenanceEditFileKey}-${maintenanceEditingEntry.id}-after`}
+                          className="file-input"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => void onMaintenanceEditPhotoFile(e, "after")}
+                        />
+                        <div style={{ marginTop: 8 }}>
+                          {maintenanceEditForm.afterPhotos?.length ? (
+                            <div className="asset-photo-gallery">
+                              {maintenanceEditForm.afterPhotos.map((url, index) => (
+                                <div key={`maintenance-edit-after-chip-${index}`} className="asset-photo-chip">
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={url}
+                                    alt={`maintenance-edit-after-${index + 1}`}
+                                    className="asset-photo-chip-img"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn-danger asset-photo-chip-corner-delete"
+                                    title="Remove photo"
+                                    aria-label="Remove photo"
+                                    onClick={() =>
+                                      setMaintenanceEditForm((f) => {
+                                        const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                        return {
+                                          ...f,
+                                          afterPhotos: nextAfter,
+                                          photo: nextAfter[0] || "",
+                                          photos: nextAfter,
+                                        };
+                                      })
+                                    }
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="photo-empty">{t.noPhoto}</span>
+                          )}
+                        </div>
+                      </label>
+                      <label className="field field-wide">
+                        <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                        <input
+                          key={`${maintenanceEditFileKey}-${maintenanceEditingEntry.id}-report`}
+                          className="file-input"
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
+                          onChange={(e) => void onMaintenanceEditReportFile(e)}
+                        />
+                        <div style={{ marginTop: 8 }}>
+                          {maintenanceEditForm.reportFile
+                            ? renderMaintenanceReportFileLink(maintenanceEditForm.reportFile, `maintenance-edit-report-${maintenanceEditingEntry.id}`, true, () =>
+                                setMaintenanceEditForm((f) => ({ ...f, reportFile: null }))
+                              )
+                            : <span className="photo-empty">No file</span>}
+                        </div>
+                      </label>
+                    </div>
+                    <div className="asset-actions" style={{ justifyContent: "flex-end", marginTop: 14 }}>
+                      <button className="tab" type="button" onClick={cancelMaintenanceEntryEdit}>
+                        Cancel
+                      </button>
+                      <button
+                        className="btn-primary"
+                        disabled={busy || !isAdmin}
+                        onClick={() => updateMaintenanceEntry(maintenanceEditingEntry.id)}
+                      >
+                        Update
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
                 <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
                   <table>
                     <thead>
@@ -35452,177 +35985,30 @@ export default function App() {
                               entry.note || ""
                             )}
                           >
+                            <td>{formatDate(entry.date || "-")}</td>
+                            <td>{entry.type}</td>
+                            <td>{maintenanceCompletionText(entry.completion || "-")}</td>
+                            <td>{entry.condition || "-"}</td>
+                            <td>{entry.note}</td>
+                            <td>{renderMaintenancePhotoColumn(entry, "before", `maintenance-detail-${entry.id}`)}</td>
+                            <td>{renderMaintenancePhotoColumn(entry, "after", `maintenance-detail-${entry.id}`)}</td>
                             <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <input
-                                  type="date"
-                                  className="table-input"
-                                  min={todayYmd}
-                                  value={maintenanceEditForm.date}
-                                  onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, date: e.target.value }))}
-                                />
-                              ) : (
-                                formatDate(entry.date || "-")
+                              {renderMaintenanceReportFileLink(
+                                normalizeMaintenanceReportFile({
+                                  url: entry.reportFile || "",
+                                  name: entry.reportFileName || "",
+                                  mimeType: entry.reportFileType || "",
+                                }),
+                                `maintenance-detail-report-${entry.id}`
                               )}
                             </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <select
-                                  className="table-input"
-                                  value={maintenanceEditForm.type}
-                                  onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, type: e.target.value }))}
-                                >
-                                  {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
-                                    <option key={`detail-type-${opt}`} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                entry.type
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <select
-                                  className="table-input"
-                                  value={maintenanceEditForm.completion}
-                                  onChange={(e) =>
-                                    setMaintenanceEditForm((f) => ({
-                                      ...f,
-                                      completion: e.target.value as "Done" | "Not Yet",
-                                    }))
-                                  }
-                                >
-                                  {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
-                                    <option key={`maintenance-edit-${opt.value}`} value={opt.value}>
-                                      {opt.value === "Done" ? t.alreadyDone : t.notYetDone}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : (
-                                maintenanceCompletionText(entry.completion || "-")
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <input
-                                  className="table-input"
-                                  value={maintenanceEditForm.condition}
-                                  onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, condition: e.target.value }))}
-                                />
-                              ) : (
-                                entry.condition || "-"
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <textarea
-                                  className="table-input"
-                                  value={maintenanceEditForm.note}
-                                  onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, note: e.target.value }))}
-                                />
-                              ) : (
-                                entry.note
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <div>
-                                  <small>{lang === "km" ? "មុនថែទាំ" : "Before"}</small>
-                                  <input
-                                    key={`${maintenanceEditFileKey}-${entry.id}-before`}
-                                    className="file-input"
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={(e) => void onMaintenanceEditPhotoFile(e, "before")}
-                                  />
-                                  <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.beforePhotos || [] }, `maintenance-edit-before-${entry.id}`)}</div>
-                                </div>
-                              ) : (
-                                renderMaintenancePhotoColumn(entry, "before", `maintenance-detail-${entry.id}`)
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <div>
-                                  <small>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</small>
-                                  <input
-                                    key={`${maintenanceEditFileKey}-${entry.id}-after`}
-                                    className="file-input"
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={(e) => void onMaintenanceEditPhotoFile(e, "after")}
-                                  />
-                                  <div>{renderMaintenancePhotoStack({ photos: maintenanceEditForm.afterPhotos || [] }, `maintenance-edit-after-${entry.id}`)}</div>
-                                </div>
-                              ) : (
-                                renderMaintenancePhotoColumn(entry, "after", `maintenance-detail-${entry.id}`)
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <div>
-                                  <input
-                                    key={`${maintenanceEditFileKey}-${entry.id}-report`}
-                                    className="file-input"
-                                    type="file"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
-                                    onChange={(e) => void onMaintenanceEditReportFile(e)}
-                                  />
-                                  <div style={{ marginTop: 8 }}>
-                                    {maintenanceEditForm.reportFile
-                                      ? renderMaintenanceReportFileLink(maintenanceEditForm.reportFile, `maintenance-edit-report-${entry.id}`, true, () =>
-                                          setMaintenanceEditForm((f) => ({ ...f, reportFile: null }))
-                                        )
-                                      : <span className="photo-empty">No file</span>}
-                                  </div>
-                                </div>
-                              ) : (
-                                renderMaintenanceReportFileLink(
-                                  normalizeMaintenanceReportFile({
-                                    url: entry.reportFile || "",
-                                    name: entry.reportFileName || "",
-                                    mimeType: entry.reportFileType || "",
-                                  }),
-                                  `maintenance-detail-report-${entry.id}`
-                                )
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <input
-                                  className="table-input"
-                                  value={maintenanceEditForm.cost}
-                                  onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, cost: e.target.value }))}
-                                />
-                              ) : (
-                                entry.cost || "-"
-                              )}
-                            </td>
-                            <td>
-                              {maintenanceEditingEntryId === entry.id ? (
-                                <input
-                                  className="table-input"
-                                  value={maintenanceEditForm.by}
-                                  onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, by: e.target.value }))}
-                                />
-                              ) : (
-                                entry.by || "-"
-                              )}
-                            </td>
+                            <td>{entry.cost || "-"}</td>
+                            <td>{entry.by || "-"}</td>
                             <td>
                               <div className="row-actions">
-                                {maintenanceEditingEntryId === entry.id ? (
-                                  <>
-                                    <button className="btn-primary btn-small" disabled={busy || !isAdmin} onClick={() => updateMaintenanceEntry(entry.id)}>
-                                      Update
-                                    </button>
-                                    <button className="tab" onClick={cancelMaintenanceEntryEdit}>Cancel</button>
-                                  </>
-                                ) : (
-                                  <button className="tab" disabled={!isAdmin} onClick={() => startMaintenanceEntryEdit(entry)}>{t.edit}</button>
-                                )}
+                                <button className="tab" disabled={!isAdmin} onClick={() => startMaintenanceEntryEdit(entry)}>
+                                  {maintenanceEditingEntryId === entry.id ? "Editing" : t.edit}
+                                </button>
                               </div>
                             </td>
                             <td>
@@ -36337,14 +36723,44 @@ export default function App() {
                 </article>
               </div>
             )}
+            {reportType === "inventory_balance" && (
+              <div className="stats-grid" style={{ marginBottom: 10 }}>
+                <article className="stat-card">
+                  <div className="stat-label">Total Inventory Items</div>
+                  <div className="stat-value">{inventoryBalanceRows.length}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Visible in Report</div>
+                  <div className="stat-value">{reportInventoryRows.length}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Low Stock Alerts</div>
+                  <div className="stat-value">{inventoryLowStockRows.length}</div>
+                </article>
+              </div>
+            )}
+            {reportType === "maintenance_completion" ? (
+              <div className="tiny" style={{ marginBottom: 10 }}>
+                ED Filter: {maintenanceCompletionFilterLabel}
+              </div>
+            ) : null}
+            {reportType === "inventory_balance" ? (
+              <div className="tiny" style={{ marginBottom: 10 }}>
+                Standard print mode: {reportInventoryModeLabel}
+              </div>
+            ) : null}
             <div className="report-builder">
               <div className="report-builder-top">
                 <label className="field report-type-field">
                   <span>{lang === "km" ? "ជំហានទី 1៖ ជ្រើសប្រភេទរបាយការណ៍" : "Step 1: Choose Report Type"}</span>
                   <LocationPicker
                     value={reportType}
-                    onChange={(value) => setReportType(value as ReportType)}
-                    options={reportTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    onChange={(value) => {
+                      const next = value as ReportType;
+                      setReportType(next);
+                      setReportSection(REPORT_TYPE_SECTION_MAP[next]);
+                    }}
+                    options={currentSectionReportTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
                     placeholder={lang === "km" ? "ជ្រើសប្រភេទរបាយការណ៍" : "Choose report type"}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទរបាយការណ៍..." : "Search report type..."}
                     emptyText={lang === "km" ? "មិនមានប្រភេទរបាយការណ៍" : "No report type found."}
@@ -36406,7 +36822,85 @@ export default function App() {
                     value={reportDateTo}
                     onChange={(e) => setReportDateTo(e.target.value)}
                   />
+                  <select
+                    className="input"
+                    value={reportMaintenanceCampusFilter}
+                    onChange={(e) => setReportMaintenanceCampusFilter(e.target.value)}
+                  >
+                    <option value="ALL">{t.allCampuses}</option>
+                    {campusOptions.map((campus) => (
+                      <option key={`report-maint-campus-${campus}`} value={campus}>
+                        {reportCampusName(campus)}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={reportMaintenanceCategoryFilter}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setReportMaintenanceCategoryFilter(next);
+                      setReportMaintenanceItemFilter("ALL");
+                    }}
+                  >
+                    <option value="ALL">{t.allCategories}</option>
+                    {CATEGORY_OPTIONS.map((category) => (
+                      <option key={`report-maint-category-${category.value}`} value={category.value}>
+                        {lang === "km" ? category.km : category.en}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={reportMaintenanceItemFilter}
+                    onChange={(e) => setReportMaintenanceItemFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Items</option>
+                    {reportMaintenanceItemOptions.map((item) => (
+                      <option key={`report-maint-item-${item}`} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <SearchableMultiSelectPicker
+                    summary={columnFilterSummary}
+                    options={maintenanceReportColumnDefs.map((column) => ({
+                      value: column.key,
+                      label: column.label,
+                    }))}
+                    selectedValues={maintenanceReportVisibleColumns}
+                    onToggleValue={(value, checked) =>
+                      setMaintenanceReportVisibleColumns((prev) => {
+                        const next = checked
+                          ? Array.from(new Set([...prev, value as MaintenanceReportColumnKey]))
+                          : prev.filter((key) => key !== value);
+                        return next.length ? next : prev;
+                      })
+                    }
+                    allOptionLabel={lang === "km" ? "ជ្រើសទាំងអស់" : "All Columns"}
+                    allOptionChecked={maintenanceReportVisibleColumns.length === maintenanceReportColumnDefs.length}
+                    onToggleAllOption={(checked) =>
+                      setMaintenanceReportVisibleColumns(
+                        checked ? maintenanceReportColumnDefs.map((column) => column.key) : maintenanceReportVisibleColumns
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search columns..."}
+                    emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No columns found."}
+                  />
                 </>
+              ) : null}
+              {reportType === "inventory_balance" ? (
+                <LocationPicker
+                  value={reportInventoryMode}
+                  onChange={(value) => setReportInventoryMode(value as "all" | "low")}
+                  options={[
+                    { value: "all", label: lang === "km" ? "ស្តុកទាំងអស់" : "All Stock Items" },
+                    { value: "low", label: lang === "km" ? "ស្តុកទាបតែប៉ុណ្ណោះ" : "Low Stock Only" },
+                  ]}
+                  placeholder={lang === "km" ? "ជ្រើសរបៀបស្តុក" : "Select stock mode"}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរករបៀប..." : "Search mode..."}
+                  emptyText={lang === "km" ? "មិនមានជម្រើស" : "No mode found."}
+                />
               ) : null}
               {reportType === "verification_summary" && reportPeriodMode === "month" ? (
                 <input
@@ -36738,6 +37232,11 @@ export default function App() {
             {reportType === "set_code" && (
               <div className="panel-note">
                 <strong>Computer set view:</strong> one row per set with main asset and connected items (with photos).
+              </div>
+            )}
+            {reportType === "inventory_balance" && (
+              <div className="panel-note">
+                <strong>Inventory stock report:</strong> standard printable stock balance table for submission and review.
               </div>
             )}
             {reportType === "qr_labels" && (
@@ -37125,6 +37624,55 @@ export default function App() {
               </>
             )}
 
+            {reportType === "inventory_balance" && (
+              <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>{t.photo}</th>
+                      <th>Name</th>
+                      <th>Category</th>
+                      <th>{t.campus}</th>
+                      <th>{t.location}</th>
+                      <th>Unit</th>
+                      <th>Stock In</th>
+                      <th>Stock Out</th>
+                      <th>Current</th>
+                      <th>Min</th>
+                      <th>Alert</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportInventoryRows.length ? (
+                      reportInventoryRows.map((row) => (
+                        <tr key={`report-inventory-balance-${row.id}`}>
+                          <td><strong>{row.itemCode}</strong></td>
+                          <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
+                          <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                          <td>{inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}</td>
+                          <td>{inventoryCampusLabel(row.campus)}</td>
+                          <td>{row.location || "-"}</td>
+                          <td>{row.unit || "-"}</td>
+                          <td>{row.stockIn}</td>
+                          <td>{row.stockOut}</td>
+                          <td><strong>{row.currentStock}</strong></td>
+                          <td>{row.minStock}</td>
+                          <td>{row.lowStock ? "Low" : "OK"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={12}>
+                          {reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {reportType === "transfer" && (
               <div className="table-wrap report-table-wrap">
                 <table>
@@ -37326,12 +37874,37 @@ export default function App() {
                             </div>
                           </div>
                           <div className="report-card-meta">
+                            <div><strong>Item:</strong> {r.itemName || "-"}</div>
                             <div><strong>{t.campus}:</strong> {reportCampusName(r.campus)}</div>
-                            <div><strong>Type:</strong> {r.type || "-"}</div>
+                            <div><strong>Location:</strong> {r.location || "-"}</div>
+                            <div><strong>Maintenance Type:</strong> {r.type || "-"}</div>
                             <div><strong>Work Status:</strong> {maintenanceCompletionText(r.completion || "-")}</div>
                             <div><strong>Condition:</strong> {r.condition || "-"}</div>
-                            <div className="report-card-row-wide"><strong>Maintenance Photo:</strong></div>
-                            <div className="report-card-row-wide report-card-photo-row">{renderAssetPhoto(r.photo || "", "maintenance")}</div>
+                            <div><strong>Cost:</strong> {r.cost || "-"}</div>
+                            <div><strong>By:</strong> {r.by || "-"}</div>
+                            <div className="report-card-row-wide"><strong>Before Photo:</strong></div>
+                            <div className="report-card-row-wide">
+                              {String((r.beforePhotos || [])[0] || "").trim()
+                                ? renderAssetPhoto(String((r.beforePhotos || [])[0] || ""), `${r.assetId}-before`)
+                                : "-"}
+                            </div>
+                            <div className="report-card-row-wide"><strong>After Photo:</strong></div>
+                            <div className="report-card-row-wide">
+                              {String((r.afterPhotos || [])[0] || "").trim()
+                                ? renderAssetPhoto(String((r.afterPhotos || [])[0] || ""), `${r.assetId}-after`)
+                                : "-"}
+                            </div>
+                            <div className="report-card-row-wide"><strong>Report File:</strong></div>
+                            <div className="report-card-row-wide">
+                              {renderMaintenanceReportFileLink(
+                                normalizeMaintenanceReportFile({
+                                  url: r.reportFile || "",
+                                  name: r.reportFileName || "",
+                                  mimeType: r.reportFileType || "",
+                                }),
+                                `report-maint-file-mobile-${r.rowId}`
+                              )}
+                            </div>
                             <div className="report-card-row-wide"><strong>Note:</strong> {r.note || "-"}</div>
                           </div>
                         </article>
@@ -37345,35 +37918,77 @@ export default function App() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Date</th>
-                          <th>{t.assetId}</th>
-                          <th>Asset Photo</th>
-                          <th>Maintenance Photo</th>
-                          <th>{t.campus}</th>
-                          <th>Type</th>
-                          <th>Work Status</th>
-                          <th>Condition</th>
-                          <th>Note</th>
+                          {visibleMaintenanceReportColumnDefs.map((column) => (
+                            <th key={`maintenance-report-head-${column.key}`}>{column.label}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
                         {maintenanceCompletionRows.length ? (
                           maintenanceCompletionRows.map((r) => (
                             <tr key={`report-completion-${r.rowId}`}>
-                              <td>{formatDate(r.date || "-")}</td>
-                              <td><strong>{r.assetId}</strong></td>
-                              <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
-                              <td>{renderAssetPhoto(r.photo || "", "maintenance")}</td>
-                              <td>{reportCampusName(r.campus)}</td>
-                              <td>{r.type || "-"}</td>
-                              <td>{maintenanceCompletionText(r.completion || "-")}</td>
-                              <td>{r.condition || "-"}</td>
-                              <td>{r.note || "-"}</td>
+                              {visibleMaintenanceReportColumnDefs.map((column) => {
+                                switch (column.key) {
+                                  case "date":
+                                    return <td key={`${r.rowId}-${column.key}`}>{formatDate(r.date || "-")}</td>;
+                                  case "assetId":
+                                    return <td key={`${r.rowId}-${column.key}`}><strong>{r.assetId}</strong></td>;
+                                  case "itemName":
+                                    return <td key={`${r.rowId}-${column.key}`}>{r.itemName || "-"}</td>;
+                                  case "beforePhoto":
+                                    return (
+                                      <td key={`${r.rowId}-${column.key}`}>
+                                        {String((r.beforePhotos || [])[0] || "").trim()
+                                          ? renderAssetPhoto(String((r.beforePhotos || [])[0] || ""), `${r.assetId}-before`)
+                                          : "-"}
+                                      </td>
+                                    );
+                                  case "afterPhoto":
+                                    return (
+                                      <td key={`${r.rowId}-${column.key}`}>
+                                        {String((r.afterPhotos || [])[0] || "").trim()
+                                          ? renderAssetPhoto(String((r.afterPhotos || [])[0] || ""), `${r.assetId}-after`)
+                                          : "-"}
+                                      </td>
+                                    );
+                                  case "campus":
+                                    return <td key={`${r.rowId}-${column.key}`}>{reportCampusName(r.campus)}</td>;
+                                  case "location":
+                                    return <td key={`${r.rowId}-${column.key}`}>{r.location || "-"}</td>;
+                                  case "type":
+                                    return <td key={`${r.rowId}-${column.key}`}>{r.type || "-"}</td>;
+                                  case "completion":
+                                    return <td key={`${r.rowId}-${column.key}`}>{maintenanceCompletionText(r.completion || "-")}</td>;
+                                  case "condition":
+                                    return <td key={`${r.rowId}-${column.key}`}>{r.condition || "-"}</td>;
+                                  case "cost":
+                                    return <td key={`${r.rowId}-${column.key}`}>{r.cost || "-"}</td>;
+                                  case "by":
+                                    return <td key={`${r.rowId}-${column.key}`}>{r.by || "-"}</td>;
+                                  case "reportFile":
+                                    return (
+                                      <td key={`${r.rowId}-${column.key}`}>
+                                        {renderMaintenanceReportFileLink(
+                                          normalizeMaintenanceReportFile({
+                                            url: r.reportFile || "",
+                                            name: r.reportFileName || "",
+                                            mimeType: r.reportFileType || "",
+                                          }),
+                                          `report-maint-file-${r.rowId}`
+                                        )}
+                                      </td>
+                                    );
+                                  case "note":
+                                    return <td key={`${r.rowId}-${column.key}`}>{r.note || "-"}</td>;
+                                  default:
+                                    return <td key={`${r.rowId}-${column.key}`}>-</td>;
+                                }
+                              })}
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={9}>No maintenance records in selected range.</td>
+                            <td colSpan={Math.max(visibleMaintenanceReportColumnDefs.length, 1)}>No maintenance records in selected range.</td>
                           </tr>
                         )}
                       </tbody>
