@@ -18878,10 +18878,6 @@ export default function App() {
     if (!requireAdminAction()) return;
     if (!maintenanceDetailAssetId) return;
     if (!maintenanceEditForm.date || !maintenanceEditForm.type.trim() || !maintenanceEditForm.note.trim()) return;
-    if (maintenanceEditForm.date < todayYmd) {
-      setError("Cannot set maintenance date to a past date.");
-      return;
-    }
 
     const payload: MaintenanceEntry = {
       id: entryId,
