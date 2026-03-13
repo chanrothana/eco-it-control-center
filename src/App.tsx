@@ -4254,6 +4254,25 @@ const MAINTENANCE_TEMPLATE_CONFIG: Record<
       "Take after photos",
     ],
     guidance: "Use this form for assets without a dedicated checklist.",
+    checklistGroups: [
+      {
+        title: "Before Work",
+        items: [
+          "Confirm reported issue with user",
+          "Check asset ID / serial number",
+          "Take before photos",
+        ],
+      },
+      {
+        title: "After Work",
+        items: [
+          "Record root cause",
+          "Record work performed",
+          "Run final test",
+          "Take after photos",
+        ],
+      },
+    ],
   },
   computer: {
     title: "Computer Maintenance",
@@ -4296,6 +4315,24 @@ const MAINTENANCE_TEMPLATE_CONFIG: Record<
       "Noise / vibration checked",
     ],
     guidance: "Use for indoor and outdoor AC service with cooling and leak verification.",
+    checklistGroups: [
+      {
+        title: "Hardware",
+        items: [
+          "Power / breaker / remote checked",
+          "Filter and coil condition checked",
+          "Fan / compressor checked",
+        ],
+      },
+      {
+        title: "Service / Cooling",
+        items: [
+          "Drain / leak checked",
+          "Temperature before / after measured",
+          "Noise / vibration checked",
+        ],
+      },
+    ],
   },
   ipad: {
     title: "iPad Maintenance",
@@ -4308,6 +4345,24 @@ const MAINTENANCE_TEMPLATE_CONFIG: Record<
       "Camera / sound checked",
     ],
     guidance: "Use for tablet troubleshooting, app issues, charging, and device health checks.",
+    checklistGroups: [
+      {
+        title: "Hardware",
+        items: [
+          "Physical condition checked",
+          "Charging / battery checked",
+          "Touch / screen checked",
+        ],
+      },
+      {
+        title: "Software",
+        items: [
+          "Wi-Fi / Bluetooth checked",
+          "Required apps tested",
+          "Camera / sound checked",
+        ],
+      },
+    ],
   },
 };
 
