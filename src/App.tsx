@@ -95,6 +95,26 @@ type MaintenanceReportFile = {
   name?: string;
   mimeType?: string;
 };
+type MaintenanceTemplateKey = "general" | "computer" | "aircon" | "ipad";
+type MaintenanceWorkflow = {
+  template?: MaintenanceTemplateKey;
+  requesterName?: string;
+  priority?: "Low" | "Normal" | "High" | "Urgent";
+  issueSummary?: string;
+  startedAt?: string;
+  completedAt?: string;
+  downtimeHours?: string;
+  safetyCheck?: boolean;
+  userIssueConfirmed?: boolean;
+  rootCause?: string;
+  workPerformed?: string;
+  partsUsed?: string;
+  toolsUsed?: string;
+  testResult?: string;
+  followUp?: string;
+  userConfirmation?: string;
+  checklist?: string[];
+};
 type MaintenanceEntry = {
   id: number;
   date: string;
@@ -123,6 +143,7 @@ type MaintenanceEntry = {
   reportFile?: string;
   reportFileName?: string;
   reportFileType?: string;
+  workflow?: MaintenanceWorkflow;
 };
 type VerificationEntry = {
   id: number;
@@ -4205,6 +4226,137 @@ function normalizeMaintenancePhotoList(input: unknown, maxCount = MAX_MAINTENANC
   return out;
 }
 
+const MAINTENANCE_WORKFLOW_PRIORITY_OPTIONS: MaintenanceWorkflow["priority"][] = [
+  "Low",
+  "Normal",
+  "High",
+  "Urgent",
+];
+
+const MAINTENANCE_TEMPLATE_CONFIG: Record<
+  MaintenanceTemplateKey,
+  { title: string; checklist: string[]; guidance: string }
+> = {
+  general: {
+    title: "General Maintenance",
+    checklist: [
+      "Confirm reported issue with user",
+      "Check asset ID / serial number",
+      "Take before photos",
+      "Record root cause",
+      "Record work performed",
+      "Run final test",
+      "Take after photos",
+    ],
+    guidance: "Use this form for assets without a dedicated checklist.",
+  },
+  computer: {
+    title: "Computer Maintenance",
+    checklist: [
+      "Power / adapter / battery checked",
+      "Display output checked",
+      "Storage / RAM checked",
+      "Network / internet checked",
+      "OS / updates / antivirus checked",
+      "Required software tested",
+    ],
+    guidance: "Use for desktop and laptop maintenance from diagnosis through user-ready test.",
+  },
+  aircon: {
+    title: "Air-Con Maintenance",
+    checklist: [
+      "Power / breaker / remote checked",
+      "Filter and coil condition checked",
+      "Drain / leak checked",
+      "Fan / compressor checked",
+      "Temperature before / after measured",
+      "Noise / vibration checked",
+    ],
+    guidance: "Use for indoor and outdoor AC service with cooling and leak verification.",
+  },
+  ipad: {
+    title: "iPad Maintenance",
+    checklist: [
+      "Physical condition checked",
+      "Charging / battery checked",
+      "Touch / screen checked",
+      "Wi-Fi / Bluetooth checked",
+      "Required apps tested",
+      "Camera / sound checked",
+    ],
+    guidance: "Use for tablet troubleshooting, app issues, charging, and device health checks.",
+  },
+};
+
+function isComputerMaintenanceAsset(asset?: Pick<Asset, "category" | "type"> | null) {
+  const category = String(asset?.category || "").trim().toUpperCase();
+  const type = String(asset?.type || "").trim().toUpperCase();
+  return category === "IT" && (type === "PC" || type === "LAP");
+}
+
+function isIpadMaintenanceAsset(asset?: Pick<Asset, "type"> | null) {
+  return String(asset?.type || "").trim().toUpperCase() === "TAB";
+}
+
+function getMaintenanceTemplateKey(asset?: Pick<Asset, "category" | "type"> | null): MaintenanceTemplateKey {
+  if (isAirconAsset(String(asset?.category || ""), String(asset?.type || ""))) return "aircon";
+  if (isIpadMaintenanceAsset(asset)) return "ipad";
+  if (isComputerMaintenanceAsset(asset)) return "computer";
+  return "general";
+}
+
+function normalizeMaintenanceWorkflow(input: unknown): MaintenanceWorkflow {
+  const source = input && typeof input === "object" ? input as MaintenanceWorkflow : {};
+  const template = String(source.template || "").trim().toLowerCase() as MaintenanceTemplateKey;
+  const checklist = Array.isArray(source.checklist)
+    ? Array.from(new Set(source.checklist.map((item) => String(item || "").trim()).filter(Boolean)))
+    : [];
+  return {
+    template: template === "computer" || template === "aircon" || template === "ipad" ? template : "general",
+    requesterName: String(source.requesterName || "").trim(),
+    priority: MAINTENANCE_WORKFLOW_PRIORITY_OPTIONS.includes(source.priority || "Normal")
+      ? source.priority
+      : "Normal",
+    issueSummary: String(source.issueSummary || "").trim(),
+    startedAt: String(source.startedAt || "").trim(),
+    completedAt: String(source.completedAt || "").trim(),
+    downtimeHours: String(source.downtimeHours || "").trim(),
+    safetyCheck: Boolean(source.safetyCheck),
+    userIssueConfirmed: Boolean(source.userIssueConfirmed),
+    rootCause: String(source.rootCause || "").trim(),
+    workPerformed: String(source.workPerformed || "").trim(),
+    partsUsed: String(source.partsUsed || "").trim(),
+    toolsUsed: String(source.toolsUsed || "").trim(),
+    testResult: String(source.testResult || "").trim(),
+    followUp: String(source.followUp || "").trim(),
+    userConfirmation: String(source.userConfirmation || "").trim(),
+    checklist,
+  };
+}
+
+function createMaintenanceRecordForm(asset?: Asset | null, preferredDate = toYmd(new Date())) {
+  const workflow = normalizeMaintenanceWorkflow({
+    template: getMaintenanceTemplateKey(asset),
+    priority: "Normal",
+  });
+  return {
+    assetId: asset ? String(asset.id) : "",
+    date: preferredDate,
+    type: "Preventive",
+    completion: "Done" as "Done" | "Not Yet",
+    condition: "",
+    note: "",
+    cost: "",
+    by: "",
+    photo: "",
+    photos: [] as string[],
+    beforePhotos: [] as string[],
+    afterPhotos: [] as string[],
+    reportFile: null as MaintenanceReportFile | null,
+    workflow,
+  };
+}
+
 function normalizeMaintenanceReportFile(input: unknown): MaintenanceReportFile | null {
   if (!input) return null;
   if (typeof input === "string") {
@@ -4452,6 +4604,7 @@ function normalizeAssetForUi(asset: Asset): Asset {
     ? asset.maintenanceHistory.map((entry) => ({
         ...entry,
         ...normalizeMaintenanceEntryPhotos(entry || {}),
+        workflow: normalizeMaintenanceWorkflow(entry.workflow),
         reportFile: normalizeMaintenanceReportFileUrl({
           url: entry.reportFile || "",
           name: entry.reportFileName || "",
@@ -6658,21 +6811,7 @@ export default function App() {
   const [transferQuickAssetId, setTransferQuickAssetId] = useState<number | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
   const [maintenanceRecordFileKey, setMaintenanceRecordFileKey] = useState(0);
-  const [maintenanceRecordForm, setMaintenanceRecordForm] = useState({
-    assetId: "",
-    date: "",
-    type: "Preventive",
-    completion: "Done" as "Done" | "Not Yet",
-    condition: "",
-    note: "",
-    cost: "",
-    by: "",
-    photo: "",
-    photos: [] as string[],
-    beforePhotos: [] as string[],
-    afterPhotos: [] as string[],
-    reportFile: null as MaintenanceReportFile | null,
-  });
+  const [maintenanceRecordForm, setMaintenanceRecordForm] = useState(() => createMaintenanceRecordForm());
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
     const now = new Date();
@@ -18034,6 +18173,32 @@ export default function App() {
     }
   }
 
+  function updateMaintenanceWorkflowField<K extends keyof MaintenanceWorkflow>(key: K, value: MaintenanceWorkflow[K]) {
+    setMaintenanceRecordForm((f) => ({
+      ...f,
+      workflow: {
+        ...normalizeMaintenanceWorkflow(f.workflow),
+        [key]: value,
+      },
+    }));
+  }
+
+  function toggleMaintenanceWorkflowChecklist(label: string) {
+    setMaintenanceRecordForm((f) => {
+      const workflow = normalizeMaintenanceWorkflow(f.workflow);
+      const next = workflow.checklist?.includes(label)
+        ? workflow.checklist.filter((item) => item !== label)
+        : [...(workflow.checklist || []), label];
+      return {
+        ...f,
+        workflow: {
+          ...workflow,
+          checklist: next,
+        },
+      };
+    });
+  }
+
   async function addMaintenanceRecordFromTab(): Promise<boolean> {
     if (!requireAdminAction()) return false;
     const assetId = Number(maintenanceRecordForm.assetId);
@@ -18047,6 +18212,21 @@ export default function App() {
     }
     if (maintenanceRecordForm.date < todayYmd) {
       setError("Cannot set maintenance date to a past date.");
+      return false;
+    }
+    const workflow = normalizeMaintenanceWorkflow({
+      ...maintenanceRecordForm.workflow,
+      template: getMaintenanceTemplateKey(maintenanceRecordSelectedAsset),
+    });
+    if (
+      !workflow.issueSummary ||
+      !workflow.rootCause ||
+      !workflow.workPerformed ||
+      !workflow.testResult ||
+      !(maintenanceRecordForm.beforePhotos || []).length ||
+      !(maintenanceRecordForm.afterPhotos || []).length
+    ) {
+      setError("Complete the maintenance workflow fields and upload at least one before and after photo.");
       return false;
     }
 
@@ -18066,6 +18246,7 @@ export default function App() {
       reportFile: maintenanceRecordForm.reportFile?.url || "",
       reportFileName: maintenanceRecordForm.reportFile?.name || "",
       reportFileType: maintenanceRecordForm.reportFile?.mimeType || "",
+      workflow,
     };
     setBusy(true);
     setError("");
@@ -18128,6 +18309,7 @@ export default function App() {
                   mimeType: maintenanceRecordForm.reportFile.mimeType || "",
                 }
               : "",
+            workflow,
           }),
         });
         const savedAsset = nextLocal.find((a) => a.id === assetId);
@@ -18149,25 +18331,12 @@ export default function App() {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
       }
 
+      const savedAsset = nextLocal.find((a) => a.id === assetId) || maintenanceRecordSelectedAsset;
       writeAssetFallback(nextLocal);
       setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
-      setMaintenanceRecordForm((f) => ({
-        ...f,
-        date: "",
-        type: "Preventive",
-        completion: "Done",
-        condition: "",
-        note: "",
-        cost: "",
-        by: authUser?.displayName || "",
-        photo: "",
-        photos: [],
-        beforePhotos: [],
-        afterPhotos: [],
-        reportFile: null,
-      }));
+      setMaintenanceRecordForm(createMaintenanceRecordForm(savedAsset));
       setMaintenanceRecordFileKey((k) => k + 1);
       setMaintenanceView("history");
       await loadData();
@@ -18178,6 +18347,218 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function renderMaintenanceWorkflowSection() {
+    if (!maintenanceRecordSelectedAsset) return null;
+    const itemName = assetItemName(
+      maintenanceRecordSelectedAsset.category,
+      maintenanceRecordSelectedAsset.type,
+      maintenanceRecordSelectedAsset.pcType || ""
+    );
+    return (
+      <>
+        <div className="field field-wide">
+          <span>{lang === "km" ? "Asset Snapshot" : "Asset Snapshot"}</span>
+          <div className="panel-note" style={{ marginTop: 8 }}>
+            <strong>{maintenanceRecordSelectedAsset.assetId}</strong> | {itemName} | {campusLabel(maintenanceRecordSelectedAsset.campus)}
+            {" • "}
+            {maintenanceRecordSelectedAsset.location || "-"}
+            {maintenanceRecordSelectedAsset.serialNumber ? ` • SN: ${maintenanceRecordSelectedAsset.serialNumber}` : ""}
+          </div>
+          <div className="tiny" style={{ marginTop: 6 }}>
+            {maintenanceRecordTemplateConfig.title}: {maintenanceRecordTemplateConfig.guidance}
+          </div>
+        </div>
+        <label className="field">
+          <span>{lang === "km" ? "Requester / User" : "Requester / User"}</span>
+          <input
+            className="input"
+            value={maintenanceRecordWorkflow.requesterName || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("requesterName", e.target.value)}
+            placeholder="Who reported or handed over the asset"
+          />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "Priority" : "Priority"}</span>
+          <select
+            className="input"
+            value={maintenanceRecordWorkflow.priority || "Normal"}
+            onChange={(e) => updateMaintenanceWorkflowField("priority", e.target.value as MaintenanceWorkflow["priority"])}
+          >
+            {MAINTENANCE_WORKFLOW_PRIORITY_OPTIONS.map((priority) => (
+              <option key={`maintenance-priority-${priority}`} value={priority}>{priority}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field field-wide">
+          <span>{lang === "km" ? "Issue / Request Summary" : "Issue / Request Summary"}</span>
+          <textarea
+            className="textarea"
+            value={maintenanceRecordWorkflow.issueSummary || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("issueSummary", e.target.value)}
+            placeholder="What was reported before maintenance started?"
+          />
+        </label>
+        <div className="field field-wide">
+          <span>{lang === "km" ? "Technical Checklist" : "Technical Checklist"}</span>
+          <div className="row-actions" style={{ marginTop: 8, flexWrap: "wrap" }}>
+            {maintenanceRecordChecklist.map((row) => (
+              <label
+                key={`maintenance-check-${row.label}`}
+                className="tab"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={row.checked}
+                  onChange={() => toggleMaintenanceWorkflowChecklist(row.label)}
+                />
+                <span>{row.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <label className="field">
+          <span>{lang === "km" ? "Start Time" : "Start Time"}</span>
+          <input
+            className="input"
+            type="datetime-local"
+            value={maintenanceRecordWorkflow.startedAt || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("startedAt", e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "End Time" : "End Time"}</span>
+          <input
+            className="input"
+            type="datetime-local"
+            value={maintenanceRecordWorkflow.completedAt || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("completedAt", e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "Downtime (hours)" : "Downtime (hours)"}</span>
+          <input
+            className="input"
+            value={maintenanceRecordWorkflow.downtimeHours || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("downtimeHours", e.target.value)}
+            placeholder="Optional"
+          />
+        </label>
+        <div className="field field-wide">
+          <span>{lang === "km" ? "Start Checks" : "Start Checks"}</span>
+          <div className="row-actions" style={{ marginTop: 8, flexWrap: "wrap" }}>
+            <label className="tab" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={Boolean(maintenanceRecordWorkflow.safetyCheck)}
+                onChange={(e) => updateMaintenanceWorkflowField("safetyCheck", e.target.checked)}
+              />
+              <span>Safety check done</span>
+            </label>
+            <label className="tab" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={Boolean(maintenanceRecordWorkflow.userIssueConfirmed)}
+                onChange={(e) => updateMaintenanceWorkflowField("userIssueConfirmed", e.target.checked)}
+              />
+              <span>User issue confirmed</span>
+            </label>
+          </div>
+        </div>
+        <label className="field field-wide">
+          <span>{lang === "km" ? "Root Cause" : "Root Cause"}</span>
+          <textarea
+            className="textarea"
+            value={maintenanceRecordWorkflow.rootCause || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("rootCause", e.target.value)}
+            placeholder="Actual diagnosis, not only symptom"
+          />
+        </label>
+        <label className="field field-wide">
+          <span>{lang === "km" ? "Work Performed" : "Work Performed"}</span>
+          <textarea
+            className="textarea"
+            value={maintenanceRecordWorkflow.workPerformed || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("workPerformed", e.target.value)}
+            placeholder="Cleaning, replacement, update, repair steps..."
+          />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "Parts Used" : "Parts Used"}</span>
+          <input
+            className="input"
+            value={maintenanceRecordWorkflow.partsUsed || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("partsUsed", e.target.value)}
+            placeholder="Part / consumable / serial"
+          />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "Tools / Software Used" : "Tools / Software Used"}</span>
+          <input
+            className="input"
+            value={maintenanceRecordWorkflow.toolsUsed || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("toolsUsed", e.target.value)}
+            placeholder="Tool, meter, app, software"
+          />
+        </label>
+        <label className="field field-wide">
+          <span>{lang === "km" ? "Final Test Result" : "Final Test Result"}</span>
+          <textarea
+            className="textarea"
+            value={maintenanceRecordWorkflow.testResult || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("testResult", e.target.value)}
+            placeholder="How did you verify the asset is working?"
+          />
+        </label>
+        <label className="field field-wide">
+          <span>{lang === "km" ? "User Confirmation" : "User Confirmation"}</span>
+          <input
+            className="input"
+            value={maintenanceRecordWorkflow.userConfirmation || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("userConfirmation", e.target.value)}
+            placeholder="User name / confirmation result"
+          />
+        </label>
+        <label className="field field-wide">
+          <span>{lang === "km" ? "Follow Up / Pending" : "Follow Up / Pending"}</span>
+          <textarea
+            className="textarea"
+            value={maintenanceRecordWorkflow.followUp || ""}
+            onChange={(e) => updateMaintenanceWorkflowField("followUp", e.target.value)}
+            placeholder="Waiting part, monitor again, none, etc."
+          />
+        </label>
+      </>
+    );
+  }
+
+  function renderSavedMaintenanceWorkflow(entry: any) {
+    const workflow = normalizeMaintenanceWorkflow(entry.workflow);
+    const hasWorkflow =
+      workflow.issueSummary ||
+      workflow.rootCause ||
+      workflow.workPerformed ||
+      workflow.testResult ||
+      (workflow.checklist || []).length;
+    if (!hasWorkflow) return null;
+    return (
+      <div className="panel-note" style={{ marginTop: 8 }}>
+        <div><strong>Template:</strong> {MAINTENANCE_TEMPLATE_CONFIG[workflow.template || "general"].title}</div>
+        <div><strong>Issue:</strong> {workflow.issueSummary || "-"}</div>
+        <div><strong>Root Cause:</strong> {workflow.rootCause || "-"}</div>
+        <div><strong>Work Performed:</strong> {workflow.workPerformed || "-"}</div>
+        <div><strong>Test Result:</strong> {workflow.testResult || "-"}</div>
+        <div><strong>Requester / User:</strong> {workflow.requesterName || "-"}</div>
+        <div><strong>Priority:</strong> {workflow.priority || "-"}</div>
+        <div><strong>Timing:</strong> {workflow.startedAt || "-"} {workflow.completedAt ? `→ ${workflow.completedAt}` : ""}</div>
+        <div><strong>Parts / Tools:</strong> {[workflow.partsUsed, workflow.toolsUsed].filter(Boolean).join(" | ") || "-"}</div>
+        <div><strong>Checklist:</strong> {(workflow.checklist || []).join(", ") || "-"}</div>
+        <div><strong>Follow Up:</strong> {workflow.followUp || "-"}</div>
+        <div><strong>User Confirmation:</strong> {workflow.userConfirmation || "-"}</div>
+      </div>
+    );
   }
 
   async function onVerificationRecordPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -19397,21 +19778,7 @@ export default function App() {
   }
 
   function openQuickRecordModal(asset: Asset) {
-    setMaintenanceRecordForm({
-      assetId: String(asset.id),
-      date: toYmd(new Date()),
-      type: "Preventive",
-      completion: "Done",
-      condition: "",
-      note: "",
-      cost: "",
-      by: "",
-      photo: "",
-      photos: [],
-      beforePhotos: [],
-      afterPhotos: [],
-      reportFile: null,
-    });
+    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, toYmd(new Date())));
     setMaintenanceRecordFileKey((k) => k + 1);
     setQuickRecordAssetId(asset.id);
   }
@@ -19421,11 +19788,7 @@ export default function App() {
     setTab("maintenance");
     setMaintenanceView("record");
     setMaintenanceRecordScheduleJumpMode(true);
-    setMaintenanceRecordForm((f) => ({
-      ...f,
-      assetId: String(asset.id),
-      date: preferredDate,
-    }));
+    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate));
   }
 
   const inventoryTxnById = useMemo(() => {
@@ -19509,11 +19872,9 @@ export default function App() {
     setTab("maintenance");
     setMaintenanceView("record");
     setMaintenanceRecordScheduleJumpMode(true);
-    setMaintenanceRecordForm((f) => ({
-      ...f,
-      assetId: targetAsset ? String(targetAsset.id) : "",
-      date: preferredDate || f.date || toYmd(new Date()),
-    }));
+    setMaintenanceRecordForm(
+      createMaintenanceRecordForm(targetAsset, preferredDate || toYmd(new Date()))
+    );
     setMobileNotificationOpen(false);
   }
 
@@ -19572,6 +19933,30 @@ export default function App() {
     () => assets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
     [assets, maintenanceRecordForm.assetId]
   );
+  const maintenanceRecordWorkflow = useMemo(
+    () => normalizeMaintenanceWorkflow(maintenanceRecordForm.workflow),
+    [maintenanceRecordForm.workflow]
+  );
+  const maintenanceRecordTemplate = maintenanceRecordWorkflow.template || getMaintenanceTemplateKey(maintenanceRecordSelectedAsset);
+  const maintenanceRecordTemplateConfig = MAINTENANCE_TEMPLATE_CONFIG[maintenanceRecordTemplate];
+  const maintenanceRecordChecklist = useMemo(() => {
+    const selected = new Set(maintenanceRecordWorkflow.checklist || []);
+    return maintenanceRecordTemplateConfig.checklist.map((label) => ({
+      label,
+      checked: selected.has(label),
+    }));
+  }, [maintenanceRecordTemplateConfig, maintenanceRecordWorkflow.checklist]);
+  const maintenanceRecordIsComplete = useMemo(() => (
+    Boolean(maintenanceRecordForm.assetId) &&
+    Boolean(maintenanceRecordForm.date) &&
+    Boolean(maintenanceRecordForm.note.trim()) &&
+    Boolean(maintenanceRecordWorkflow.issueSummary) &&
+    Boolean(maintenanceRecordWorkflow.rootCause) &&
+    Boolean(maintenanceRecordWorkflow.workPerformed) &&
+    Boolean(maintenanceRecordWorkflow.testResult) &&
+    (maintenanceRecordForm.beforePhotos || []).length > 0 &&
+    (maintenanceRecordForm.afterPhotos || []).length > 0
+  ), [maintenanceRecordForm, maintenanceRecordWorkflow]);
   const ticketMaintenanceAsset = useMemo(() => {
     if (!ticketMaintenanceModal) return null;
     if (ticketMaintenanceModal.assetDbId) {
@@ -30144,6 +30529,7 @@ export default function App() {
                         ))}
                       </select>
                     </label>
+                    {renderMaintenanceWorkflowSection()}
                     <label className="field field-wide">
                       <span>Condition Comment</span>
                       <input
@@ -30272,10 +30658,10 @@ export default function App() {
                     </label>
                   </div>
                   <div className="asset-actions">
-                    <div className="tiny">Save maintenance directly from List Asset.</div>
+                    <div className="tiny">Save maintenance directly from the asset list with full technical checklist and photo proof.</div>
                     <button
                       className="btn-primary"
-                      disabled={busy || !isAdmin || !maintenanceRecordForm.date || !maintenanceRecordForm.note.trim()}
+                      disabled={busy || !isAdmin || !maintenanceRecordIsComplete}
                       onClick={async () => {
                         const saved = await addMaintenanceRecordFromTab();
                         if (saved) setQuickRecordAssetId(null);
@@ -35447,7 +35833,18 @@ export default function App() {
                   value={maintenanceRecordForm.assetId}
                   assets={maintenanceRecordFilteredAssets}
                   getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
-                  onChange={(assetId) => setMaintenanceRecordForm((f) => ({ ...f, assetId }))}
+                  onChange={(assetId) => {
+                    const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
+                    setMaintenanceRecordForm((f) => ({
+                      ...f,
+                      assetId,
+                      workflow: {
+                        ...normalizeMaintenanceWorkflow(f.workflow),
+                        template: getMaintenanceTemplateKey(selectedAsset),
+                        checklist: [],
+                      },
+                    }));
+                  }}
                   placeholder={lang === "km" ? "ជ្រើស Asset ដែលបានចម្រោះ" : "Select filtered asset"}
                   disabled={!maintenanceRecordFilteredAssets.length}
                 />
@@ -35472,7 +35869,17 @@ export default function App() {
                         key={`maintenance-record-gallery-${asset.id}`}
                         type="button"
                         className={`maintenance-record-gallery-card ${selected ? "is-selected" : ""}`}
-                        onClick={() => setMaintenanceRecordForm((f) => ({ ...f, assetId: String(asset.id) }))}
+                        onClick={() =>
+                          setMaintenanceRecordForm((f) => ({
+                            ...f,
+                            assetId: String(asset.id),
+                            workflow: {
+                              ...normalizeMaintenanceWorkflow(f.workflow),
+                              template: getMaintenanceTemplateKey(asset),
+                              checklist: [],
+                            },
+                          }))
+                        }
                       >
                         <div className="maintenance-record-gallery-thumb">
                           {isRenderablePhotoSource(asset.photo || "") ? (
@@ -35596,6 +36003,7 @@ export default function App() {
                   </select>
                 </label>
               </div>
+              {renderMaintenanceWorkflowSection()}
               <label className="field field-wide">
                 <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
                 <input
@@ -35746,12 +36154,12 @@ export default function App() {
             <div className="asset-actions">
               <div className="tiny">
                 {lang === "km"
-                  ? "កត់ត្រាថែទាំជា បានធ្វើរួច ឬ មិនទាន់ធ្វើ ហើយបន្ថែមកំណត់ចំណាំលក្ខខណ្ឌ។"
-                  : "Track maintenance as Already Done or Not Yet Done and add condition comments."}
+                  ? "បំពេញបញ្ជីពិនិត្យបច្ចេកទេស មូលហេតុ សកម្មភាព និងរូបមុន/ក្រោយ មុនពេល Save។"
+                  : "Complete the technical checklist, diagnosis, action taken, and before/after photos before saving."}
               </div>
               <button
                 className="btn-primary"
-                disabled={busy || !isAdmin || !maintenanceRecordForm.assetId || !maintenanceRecordForm.date || !maintenanceRecordForm.note.trim()}
+                disabled={busy || !isAdmin || !maintenanceRecordIsComplete}
                 onClick={addMaintenanceRecordFromTab}
               >
                 {lang === "km" ? "បន្ថែមកំណត់ត្រាថែទាំ" : "Add Maintenance Record"}
@@ -35833,6 +36241,10 @@ export default function App() {
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
                           <span>NOTED</span>
                           <strong>{row.note || "-"}</strong>
+                        </div>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
+                          <span>WORKFLOW</span>
+                          <div>{renderSavedMaintenanceWorkflow(row)}</div>
                         </div>
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
                           <span>PHOTOS</span>
@@ -35947,6 +36359,7 @@ export default function App() {
                           <div className="maintenance-history-simple-note">
                             <strong>{lang === "km" ? "Note" : "Note"}:</strong> {row.note || "-"}
                           </div>
+                          {renderSavedMaintenanceWorkflow(row)}
                           <div className="maintenance-history-simple-note">
                             <strong>{lang === "km" ? "Report File" : "Report File"}:</strong>{" "}
                             {renderMaintenanceReportFileLink(
@@ -36288,7 +36701,10 @@ export default function App() {
                             <td>{entry.type}</td>
                             <td>{maintenanceCompletionText(entry.completion || "-")}</td>
                             <td>{entry.condition || "-"}</td>
-                            <td>{entry.note}</td>
+                            <td>
+                              <div>{entry.note}</div>
+                              {renderSavedMaintenanceWorkflow(entry)}
+                            </td>
                             <td>{renderMaintenancePhotoColumn(entry, "before", `maintenance-detail-${entry.id}`)}</td>
                             <td>{renderMaintenancePhotoColumn(entry, "after", `maintenance-detail-${entry.id}`)}</td>
                             <td>

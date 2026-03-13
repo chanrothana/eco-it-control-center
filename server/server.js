@@ -2923,6 +2923,37 @@ async function normalizeMaintenanceMediaPayload(body) {
   };
 }
 
+const MAINTENANCE_WORKFLOW_TEMPLATES = new Set(["general", "computer", "aircon", "ipad"]);
+const MAINTENANCE_WORKFLOW_PRIORITIES = new Set(["Low", "Normal", "High", "Urgent"]);
+
+function normalizeMaintenanceWorkflowPayload(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const template = toText(source.template).toLowerCase();
+  const priority = toText(source.priority);
+  const checklist = Array.isArray(source.checklist)
+    ? Array.from(new Set(source.checklist.map((item) => toText(item)).filter(Boolean)))
+    : [];
+  return {
+    template: MAINTENANCE_WORKFLOW_TEMPLATES.has(template) ? template : "general",
+    requesterName: toText(source.requesterName),
+    priority: MAINTENANCE_WORKFLOW_PRIORITIES.has(priority) ? priority : "Normal",
+    issueSummary: toText(source.issueSummary),
+    startedAt: toText(source.startedAt),
+    completedAt: toText(source.completedAt),
+    downtimeHours: toText(source.downtimeHours),
+    safetyCheck: Boolean(source.safetyCheck),
+    userIssueConfirmed: Boolean(source.userIssueConfirmed),
+    rootCause: toText(source.rootCause),
+    workPerformed: toText(source.workPerformed),
+    partsUsed: toText(source.partsUsed),
+    toolsUsed: toText(source.toolsUsed),
+    testResult: toText(source.testResult),
+    followUp: toText(source.followUp),
+    userConfirmation: toText(source.userConfirmation),
+    checklist,
+  };
+}
+
 const uploadContentHashCache = new Map();
 
 async function getUploadContentHash(uploadUrl) {
@@ -3384,6 +3415,7 @@ async function normalizeHistoryEntries(entries, group = "maintenance") {
       reportFile: reportFile.url,
       reportFileName: reportFile.name,
       reportFileType: reportFile.mimeType,
+      workflow: normalizeMaintenanceWorkflowPayload(entry.workflow),
     });
   }
   return out;
@@ -6454,6 +6486,10 @@ const server = http.createServer(async (req, res) => {
       const hasNextBeforePhotos = Array.isArray(body.beforePhotos);
       const hasNextAfterPhotos = Array.isArray(body.afterPhotos);
       const nextMedia = await normalizeMaintenanceMediaPayload(body);
+      const hasNextWorkflow = Object.prototype.hasOwnProperty.call(body, "workflow");
+      const nextWorkflow = hasNextWorkflow
+        ? normalizeMaintenanceWorkflowPayload(body.workflow)
+        : normalizeMaintenanceWorkflowPayload(current.workflow);
       const nextCompletion = normalizeCompletion(body.completion);
       const nextCondition = toText(body.condition);
       const db = await readDb();
@@ -6516,6 +6552,7 @@ const server = http.createServer(async (req, res) => {
         reportFile: nextReportFile.url,
         reportFileName: nextReportFile.name,
         reportFileType: nextReportFile.mimeType,
+        workflow: nextWorkflow,
       };
       if (!updated.date || !updated.type || !updated.note) {
         sendJson(res, 400, { error: "date, type, note are required" });
@@ -6827,6 +6864,7 @@ const server = http.createServer(async (req, res) => {
       const cost = toText(body.cost);
       const by = toText(body.by);
       const media = await normalizeMaintenanceMediaPayload(body);
+      const workflow = normalizeMaintenanceWorkflowPayload(body.workflow);
       const reportFile = await normalizeAttachmentValue(body.reportFile || {
         url: body.reportFile,
         name: body.reportFileName,
@@ -6866,6 +6904,7 @@ const server = http.createServer(async (req, res) => {
         reportFile: reportFile.url,
         reportFileName: reportFile.name,
         reportFileType: reportFile.mimeType,
+        workflow,
         ticketId: 0,
         ticketNo: "",
         requestSource: "manual",
