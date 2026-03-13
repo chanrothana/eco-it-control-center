@@ -22242,6 +22242,8 @@ export default function App() {
           pcType: asset.pcType || "",
           itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           itemDescription: toItemDescription(asset),
+          acType: isAirconAsset(asset.category, asset.type) ? parseAirconSpecs(asset.specs || "").acType : "",
+          acCapacity: isAirconAsset(asset.category, asset.type) ? parseAirconSpecs(asset.specs || "").acHp : "",
           serialNumber: String(asset.serialNumber || "").trim(),
           location: asset.location || "-",
           purchaseDate: asset.purchaseDate || "-",
@@ -22637,6 +22639,28 @@ export default function App() {
   const assetMasterItemBreakdownText = useMemo(
     () => assetMasterItemBreakdown.map(([name, count]) => `${name} = ${count}`).join(" | "),
     [assetMasterItemBreakdown]
+  );
+  const airconAssetMasterSummary = useMemo(() => {
+    const airconRows = assetMasterReportRows.filter((row) =>
+      isAirconAsset(String(row.category || ""), String(row.type || ""))
+    );
+    const byType = new Map<string, number>();
+    const byCapacity = new Map<string, number>();
+    for (const row of airconRows) {
+      const typeLabel = String(row.acType || "").trim() || "Unknown Type";
+      const capacityLabel = String(row.acCapacity || "").trim() || "Unknown Capacity";
+      byType.set(typeLabel, (byType.get(typeLabel) || 0) + 1);
+      byCapacity.set(capacityLabel, (byCapacity.get(capacityLabel) || 0) + 1);
+    }
+    return {
+      total: airconRows.length,
+      byType: Array.from(byType.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
+      byCapacity: Array.from(byCapacity.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
+    };
+  }, [assetMasterReportRows]);
+  const isAirconAssetMasterReport = useMemo(
+    () => Boolean(assetMasterReportRows.length) && airconAssetMasterSummary.total === assetMasterReportRows.length,
+    [airconAssetMasterSummary.total, assetMasterReportRows.length]
   );
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
   const reportSectionOptions = useMemo<Array<{ value: ReportSection; label: string }>>(
@@ -24156,6 +24180,18 @@ export default function App() {
             assetMasterItemBreakdown.length
               ? `<p><strong>By Item:</strong> ${assetMasterItemBreakdown
                   .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
+                  .join(" | ")}</p>`
+              : ""
+          }${
+            isAirconAssetMasterReport && airconAssetMasterSummary.byType.length
+              ? `<p><strong>By AC Type:</strong> ${airconAssetMasterSummary.byType
+                  .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
+                  .join(" | ")}</p>`
+              : ""
+          }${
+            isAirconAssetMasterReport && airconAssetMasterSummary.byCapacity.length
+              ? `<p><strong>By Capacity:</strong> ${airconAssetMasterSummary.byCapacity
+                  .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
                   .join(" | ")}</p>`
               : ""
           }`
@@ -37966,6 +38002,12 @@ export default function App() {
                 ) : null}
                 {assetMasterItemBreakdownText ? (
                   <span> | <strong>By Item:</strong> {assetMasterItemBreakdownText}</span>
+                ) : null}
+                {isAirconAssetMasterReport && airconAssetMasterSummary.byType.length ? (
+                  <span> | <strong>By AC Type:</strong> {airconAssetMasterSummary.byType.map(([name, count]) => `${name}: ${count}`).join(" | ")}</span>
+                ) : null}
+                {isAirconAssetMasterReport && airconAssetMasterSummary.byCapacity.length ? (
+                  <span> | <strong>By Capacity:</strong> {airconAssetMasterSummary.byCapacity.map(([name, count]) => `${name}: ${count}`).join(" | ")}</span>
                 ) : null}
               </div>
             )}
