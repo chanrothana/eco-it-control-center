@@ -161,6 +161,7 @@ type TransferEntry = {
   fromLocation: string;
   toCampus: string;
   toLocation: string;
+  quantity?: number;
   reason?: string;
   by?: string;
   note?: string;
@@ -687,6 +688,7 @@ type ServerSettings = {
   utilityMeters?: UtilityMeter[];
   utilityReadings?: UtilityReading[];
   itemTemplates?: ItemTemplate[];
+  furnitureModels?: FurnitureModelMaster[];
   vaultAccounts?: VaultAccount[];
   vaultCredentials?: VaultCredential[];
   vaultDesignLinks?: VaultDesignLink[];
@@ -743,6 +745,13 @@ type ItemTemplate = {
   acHasFrontPanel?: boolean;
   acHasOutdoor?: boolean;
   acComponentNote?: string;
+  created: string;
+};
+type FurnitureModelMaster = {
+  id: number;
+  type: string;
+  model: string;
+  photo?: string;
   created: string;
 };
 type VaultAccount = {
@@ -958,6 +967,7 @@ const CAMPUS_NAME_FALLBACK_KEY = "it_campus_names_fallback_v1";
 const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
 const ITEM_TYPE_FALLBACK_KEY = "it_item_types_fallback_v1";
 const ITEM_TEMPLATE_FALLBACK_KEY = "it_item_templates_fallback_v1";
+const FURNITURE_MODEL_FALLBACK_KEY = "it_furniture_models_v1";
 const CALENDAR_EVENT_FALLBACK_KEY = "it_calendar_events_v1";
 const VAULT_ACCOUNTS_FALLBACK_KEY = "it_vault_accounts_v1";
 const VAULT_CREDENTIALS_FALLBACK_KEY = "it_vault_credentials_v1";
@@ -1192,6 +1202,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "setup.permissions", labelEn: "Account Permission Setup", labelKm: "កំណត់សិទ្ធិគណនី" },
       { key: "setup.backup", labelEn: "Backup & Audit", labelKm: "បម្រុងទុក និង Audit" },
       { key: "setup.items", labelEn: "Item Name Setup", labelKm: "កំណត់ឈ្មោះទំនិញ" },
+      { key: "setup.furnitureModels", labelEn: "Furniture Models", labelKm: "ម៉ូឌែលគ្រឿងសង្ហារឹម" },
       { key: "setup.locations", labelEn: "Location Setup by Campus", labelKm: "កំណត់ទីតាំងតាមសាខា" },
       { key: "setup.calendar", labelEn: "Calendar Event Setup", labelKm: "កំណត់ព្រឹត្តិការណ៍ប្រតិទិន" },
     ],
@@ -1398,6 +1409,7 @@ const CATEGORY_OPTIONS = [
   { value: "IT", en: "IT", km: "IT" },
   { value: "SAFETY", en: "Safety", km: "សុវត្ថិភាព" },
   { value: "FACILITY", en: "Facility", km: "បរិក្ខារ" },
+  { value: "FURNITURE", en: "Furniture", km: "គ្រឿងសង្ហារឹម" },
 ];
 
 const ASSET_STATUS_OPTIONS = [
@@ -1412,12 +1424,13 @@ const ASSET_LIST_COLUMN_KEYS = [
   "category",
   "photo",
   "name",
+  "quantity",
   "location",
   "assignedTo",
   "actions",
   "status",
 ] as const;
-const DEFAULT_ASSET_LIST_COLUMN_WIDTHS = [14, 18, 8, 6, 15, 11, 10, 8, 10];
+const DEFAULT_ASSET_LIST_COLUMN_WIDTHS = [13, 17, 8, 6, 14, 7, 11, 9, 7, 8];
 const DEFAULT_ASSET_MASTER_COLUMN_WIDTHS = {
   photo: 6,
   assetId: 13,
@@ -1515,6 +1528,7 @@ const ITEM_SETUP_DEFAULT_ASSET_CATEGORY_BY_TYPE_CATEGORY: Record<string, string>
   IT: "COM",
   SAFETY: "EE",
   FACILITY: "FFE",
+  FURNITURE: "FFE",
 };
 function defaultItemSetupAssetCategory(category: string) {
   return ITEM_SETUP_DEFAULT_ASSET_CATEGORY_BY_TYPE_CATEGORY[String(category || "").trim().toUpperCase()] || "OTA";
@@ -1529,6 +1543,14 @@ function itemSetupAssetCategoryLabel(code: string) {
 }
 const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
+const FURNITURE_CONDITION_OPTIONS = ["Good", "Need Repair", "Broken", "Scrap"] as const;
+const FURNITURE_TRACKING_MODE_OPTIONS = ["Grouped", "Individual"] as const;
+const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
+  CHR: ["Toy and Me", "Primary Standard", "Office Standard"],
+  TBL: ["Toy and Me", "Primary Standard", "Office Standard"],
+  DSK: ["Student Primary Deskset", "Toy and Me Deskset"],
+  CAB: ["Filing Cabinet", "Storage Cabinet", "Classroom Cabinet"],
+};
 const INVENTORY_MASTER_ITEMS = [
   { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
   { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", spec: "", unit: "pcs", aliases: ["hand tissue", "tissue", "ក្រដាសដៃ"] },
@@ -1623,6 +1645,12 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
     { itemEn: "Piano", itemKm: "ព្យាណូ", code: "PNO" },
+  ],
+  FURNITURE: [
+    { itemEn: "Table", itemKm: "តុ", code: "TBL" },
+    { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
+    { itemEn: "Deskset", itemKm: "តុកៅអី", code: "DSK" },
+    { itemEn: "Cabinet", itemKm: "ទូ", code: "CAB" },
   ],
 };
 
@@ -2586,6 +2614,31 @@ function writeItemTemplateFallback(rows: ItemTemplate[]) {
   trySetLocalStorage(ITEM_TEMPLATE_FALLBACK_KEY, JSON.stringify(rows));
 }
 
+function readFurnitureModelFallback(): FurnitureModelMaster[] {
+  if (SERVER_ONLY_STORAGE) return [];
+  try {
+    const raw = localStorage.getItem(FURNITURE_MODEL_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((row) => ({
+        id: Number(row?.id) || Date.now() + Math.floor(Math.random() * 10000),
+        type: String(row?.type || "").trim().toUpperCase(),
+        model: String(row?.model || "").trim(),
+        photo: String(row?.photo || "").trim(),
+        created: String(row?.created || new Date().toISOString()),
+      }))
+      .filter((row) => row.type && row.model);
+  } catch {
+    return [];
+  }
+}
+
+function writeFurnitureModelFallback(rows: FurnitureModelMaster[]) {
+  if (SERVER_ONLY_STORAGE) return;
+  trySetLocalStorage(FURNITURE_MODEL_FALLBACK_KEY, JSON.stringify(rows));
+}
+
 function normalizeModulesByRole(role: AuthRole, modules?: unknown): NavModule[] {
   const allowed = new Set(ALL_NAV_MODULES);
   const list = Array.isArray(modules) ? modules.filter((x): x is NavModule => typeof x === "string" && allowed.has(x as NavModule)) : [];
@@ -3353,6 +3406,7 @@ function categoryCode(category: string) {
   if (category === "IT") return "COM";
   if (category === "SAFETY") return "EE";
   if (category === "FACILITY") return "FFE";
+  if (category === "FURNITURE") return "FFE";
   return "OTA";
 }
 function assetIdCampusCode(campus: string) {
@@ -4663,6 +4717,221 @@ function buildWalkieTalkieSpecs(baseSpecs: string, hasCharger: boolean, chargerD
   return out.join("\n").trim();
 }
 
+function isFurnitureAsset(category: string) {
+  return String(category || "").trim().toUpperCase() === "FURNITURE";
+}
+
+function defaultFurnitureTrackingMode(type: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  return normalizedType === "CAB" ? "Individual" : "Grouped";
+}
+
+function defaultFurnitureSubtype(type: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  if (normalizedType === "CHR") return "Student Chair";
+  if (normalizedType === "TBL") return "Student Table";
+  if (normalizedType === "DSK") return "Student Deskset";
+  if (normalizedType === "CAB") return "Cabinet";
+  return "";
+}
+
+function furnitureModelLabel(type: string, model: string) {
+  const subtype = defaultFurnitureSubtype(type) || "Furniture";
+  const normalizedModel = String(model || "").trim();
+  if (!normalizedModel) return subtype;
+  if (normalizedModel.toLowerCase().startsWith(`${subtype.toLowerCase()} (`)) return normalizedModel;
+  return `${subtype} (${normalizedModel})`;
+}
+
+function furnitureModelOptions(type: string) {
+  return FURNITURE_MODEL_OPTIONS_BY_TYPE[String(type || "").trim().toUpperCase()] || [];
+}
+
+function parseFurnitureSpecs(specsRaw: string) {
+  const specs = String(specsRaw || "").trim();
+  if (!specs) {
+    return {
+      trackingMode: "Grouped",
+      level: "",
+      subtype: "",
+      modelPhoto: "",
+      material: "",
+      color: "",
+      size: "",
+      quantity: "1",
+      condition: "",
+      specs: "",
+    };
+  }
+  const readLine = (label: string) => {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = specs.match(new RegExp(`${escaped}:\\s*([^|\\n;]+)`, "i"));
+    return match?.[1] ? String(match[1]).trim() : "";
+  };
+  const cleanedSpecs = specs
+    .replace(/Tracking Mode:\s*([^|\n;]+)/gi, "")
+    .replace(/Level:\s*([^|\n;]+)/gi, "")
+    .replace(/Subtype:\s*([^|\n;]+)/gi, "")
+    .replace(/Model Photo:\s*([^|\n;]+)/gi, "")
+    .replace(/Material:\s*([^|\n;]+)/gi, "")
+    .replace(/Color:\s*([^|\n;]+)/gi, "")
+    .replace(/Size:\s*([^|\n;]+)/gi, "")
+    .replace(/Quantity:\s*([^|\n;]+)/gi, "")
+    .replace(/Condition:\s*([^|\n;]+)/gi, "")
+    .replace(/[|;]+/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return {
+    trackingMode: readLine("Tracking Mode") || "Grouped",
+    level: readLine("Level"),
+    subtype: readLine("Subtype"),
+    modelPhoto: readLine("Model Photo"),
+    material: readLine("Material"),
+    color: readLine("Color"),
+    size: readLine("Size"),
+    quantity: readLine("Quantity") || "1",
+    condition: readLine("Condition"),
+    specs: cleanedSpecs,
+  };
+}
+
+function buildFurnitureSpecs(
+  baseSpecs: string,
+  fields: {
+    trackingMode: string;
+    level: string;
+    subtype: string;
+    modelPhoto: string;
+    material: string;
+    color: string;
+    size: string;
+    quantity: string;
+    condition: string;
+  }
+) {
+  const normalized = parseFurnitureSpecs(baseSpecs);
+  const out: string[] = [];
+  const trackingMode = String(fields.trackingMode || "").trim();
+  const level = String(fields.level || "").trim();
+  const subtype = String(fields.subtype || "").trim();
+  const modelPhoto = String(fields.modelPhoto || "").trim();
+  const material = String(fields.material || "").trim();
+  const color = String(fields.color || "").trim();
+  const size = String(fields.size || "").trim();
+  const quantity = String(fields.quantity || "").trim();
+  const condition = String(fields.condition || "").trim();
+  if (trackingMode) out.push(`Tracking Mode: ${trackingMode}`);
+  if (level) out.push(`Level: ${level}`);
+  if (subtype) out.push(`Subtype: ${subtype}`);
+  if (modelPhoto) out.push(`Model Photo: ${modelPhoto}`);
+  if (material) out.push(`Material: ${material}`);
+  if (color) out.push(`Color: ${color}`);
+  if (size) out.push(`Size: ${size}`);
+  if (quantity) out.push(`Quantity: ${quantity}`);
+  if (condition) out.push(`Condition: ${condition}`);
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
+}
+
+function groupedFurnitureTransferMeta(asset?: Asset | null) {
+  if (!asset || !isFurnitureAsset(asset.category)) return null;
+  const details = parseFurnitureSpecs(asset.specs || "");
+  if (String(details.trackingMode || "").trim() !== "Grouped") return null;
+  return {
+    details,
+    quantity: Math.max(1, Number(details.quantity || 1)),
+  };
+}
+
+function isGroupedFurnitureTransferAsset(asset?: Asset | null) {
+  return Boolean(groupedFurnitureTransferMeta(asset));
+}
+
+function furnitureAssetQuantity(asset?: Asset | null) {
+  if (!asset || !isFurnitureAsset(asset.category)) return null;
+  const details = parseFurnitureSpecs(asset.specs || "");
+  const quantity = Math.max(1, Number(details.quantity || 1));
+  return Number.isFinite(quantity) ? quantity : 1;
+}
+
+function furnitureModelPhoto(asset?: Asset | null) {
+  if (!asset || !isFurnitureAsset(asset.category)) return "";
+  const details = parseFurnitureSpecs(asset.specs || "");
+  return String(details.modelPhoto || "").trim();
+}
+
+function assetDisplayPhoto(asset?: Asset | null) {
+  if (!asset) return "";
+  if (isFurnitureAsset(asset.category)) {
+    return furnitureModelPhoto(asset) || String(asset.photo || "").trim();
+  }
+  return String(asset.photo || "").trim();
+}
+
+function furnitureVisibleSpecs(specsRaw: string) {
+  const details = parseFurnitureSpecs(specsRaw);
+  return String(details.specs || "").trim() || "-";
+}
+
+function furnitureReferencePhotoFromAssets(assets: Asset[], type: string, model: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  const normalizedModel = String(model || "").trim().toUpperCase();
+  if (!normalizedType || !normalizedModel) return "";
+  const match = assets.find((asset) => {
+    if (!isFurnitureAsset(asset.category)) return false;
+    if (String(asset.type || "").trim().toUpperCase() !== normalizedType) return false;
+    if (String(asset.model || "").trim().toUpperCase() !== normalizedModel) return false;
+    const details = parseFurnitureSpecs(asset.specs || "");
+    return Boolean(String(details.modelPhoto || "").trim() || normalizeAssetPhotos(asset).length);
+  });
+  if (!match) return "";
+  const details = parseFurnitureSpecs(match.specs || "");
+  return String(details.modelPhoto || "").trim() || normalizeAssetPhotos(match)[0] || "";
+}
+
+function furnitureMasterPhoto(models: FurnitureModelMaster[], type: string, model: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  const normalizedModel = String(model || "").trim().toUpperCase();
+  if (!normalizedType || !normalizedModel) return "";
+  const hit = models.find(
+    (row) =>
+      String(row.type || "").trim().toUpperCase() === normalizedType &&
+      String(row.model || "").trim().toUpperCase() === normalizedModel
+  );
+  return String(hit?.photo || "").trim();
+}
+
+function updateGroupedFurnitureAssetQuantity(asset: Asset, quantity: number) {
+  const details = parseFurnitureSpecs(asset.specs || "");
+  return {
+    ...asset,
+    specs: buildFurnitureSpecs(asset.specs || "", {
+      trackingMode: details.trackingMode || "Grouped",
+      level: details.level || "",
+      subtype: details.subtype || defaultFurnitureSubtype(asset.type),
+      modelPhoto: details.modelPhoto || "",
+      material: details.material || "",
+      color: details.color || "",
+      size: details.size || "",
+      quantity: String(Math.max(1, quantity)),
+      condition: details.condition || FURNITURE_CONDITION_OPTIONS[0],
+    }),
+  };
+}
+
+function groupedFurnitureTransferMatchKey(asset: Asset) {
+  const details = parseFurnitureSpecs(asset.specs || "");
+  return [
+    String(asset.category || "").trim().toUpperCase(),
+    String(asset.type || "").trim().toUpperCase(),
+    String(asset.model || "").trim().toUpperCase(),
+    String(details.level || "").trim().toUpperCase(),
+    String(details.subtype || "").trim().toUpperCase(),
+    String(details.trackingMode || "").trim().toUpperCase(),
+  ].join("|");
+}
+
 function normalizeAssetForUi(asset: Asset): Asset {
   const photos = normalizeAssetPhotos(asset);
   const normalizeUrl = (raw: string) => {
@@ -5841,7 +6110,7 @@ export default function App() {
   }, [lang, navMenuItems]);
   const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
-  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "locations" | "calendar">("campus");
+  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
   const [inventoryDashboardGroup, setInventoryDashboardGroup] = useState<InventoryBusinessGroup>("SUPPLY");
   const [utilitiesView, setUtilitiesView] = useState<"entry" | "history" | "monthly" | "yearly">("entry");
@@ -6305,6 +6574,20 @@ export default function App() {
                   },
                 ]
               : []),
+            ...(canAccessMenu("setup.furnitureModels", "setup")
+              ? [
+                  {
+                    key: "setup.furnitureModels",
+                    label: lang === "km" ? "ម៉ូឌែលសង្ហារឹម" : "Furniture Models",
+                    active: setupView === "furnitureModels",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("furnitureModels");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
             ...(canAccessMenu("setup.locations", "setup")
               ? [
                   {
@@ -6638,6 +6921,15 @@ export default function App() {
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
+    furnitureTrackingMode: defaultFurnitureTrackingMode("TBL") as string,
+    furnitureLevel: "",
+    furnitureSubtype: defaultFurnitureSubtype("TBL"),
+    furnitureModelPhoto: "",
+    furnitureMaterial: "",
+    furnitureColor: "",
+    furnitureSize: "",
+    furnitureQuantity: "1",
+    furnitureCondition: FURNITURE_CONDITION_OPTIONS[0] as string,
     tvRemoteCount: "1",
     tvRemotePhotos: [] as string[],
     specs: "",
@@ -6869,6 +7161,15 @@ export default function App() {
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
+    furnitureTrackingMode: defaultFurnitureTrackingMode("TBL") as string,
+    furnitureLevel: "",
+    furnitureSubtype: defaultFurnitureSubtype("TBL"),
+    furnitureModelPhoto: "",
+    furnitureMaterial: "",
+    furnitureColor: "",
+    furnitureSize: "",
+    furnitureQuantity: "1",
+    furnitureCondition: FURNITURE_CONDITION_OPTIONS[0] as string,
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -6977,6 +7278,7 @@ export default function App() {
     date: toYmd(new Date()),
     toCampus: CAMPUS_LIST[0],
     toLocation: "",
+    quantity: "1",
     toAssignedTo: "",
     responsibilityConfirmed: false,
     returnConfirmed: false,
@@ -7470,6 +7772,7 @@ export default function App() {
     name: "",
   });
   const [itemTemplates, setItemTemplates] = useState<ItemTemplate[]>(() => readItemTemplateFallback());
+  const [furnitureModels, setFurnitureModels] = useState<FurnitureModelMaster[]>(() => readFurnitureModelFallback());
   const [itemTemplateForm, setItemTemplateForm] = useState({
     name: "",
     category: "FACILITY",
@@ -7486,6 +7789,8 @@ export default function App() {
     acComponentNote: "",
   });
   const [editingItemTemplateId, setEditingItemTemplateId] = useState<number | null>(null);
+  const [furnitureModelForm, setFurnitureModelForm] = useState({ type: "CHR", model: "", photo: "" });
+  const [editingFurnitureModelId, setEditingFurnitureModelId] = useState<number | null>(null);
   const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
@@ -8057,6 +8362,9 @@ export default function App() {
   useEffect(() => {
     writeItemTemplateFallback(itemTemplates);
   }, [itemTemplates]);
+  useEffect(() => {
+    writeFurnitureModelFallback(furnitureModels);
+  }, [furnitureModels]);
   useEffect(() => {
     writeInventoryItemFallback(inventoryItems);
   }, [inventoryItems]);
@@ -10386,6 +10694,23 @@ export default function App() {
     }
     return Array.from(byModel.values()).sort((a, b) => a.model.localeCompare(b.model));
   }, [assets]);
+  const furnitureModelChoices = useCallback(
+    (type: string) => {
+      const normalizedType = String(type || "").trim().toUpperCase();
+      const masterRows = furnitureModels
+        .filter((row) => String(row.type || "").trim().toUpperCase() === normalizedType)
+        .sort((a, b) => a.model.localeCompare(b.model));
+      if (masterRows.length) return masterRows;
+      return furnitureModelOptions(type).map((model, index) => ({
+        id: index + 1,
+        type: normalizedType,
+        model,
+        photo: "",
+        created: "",
+      }));
+    },
+    [furnitureModels]
+  );
   const brandSuggestions = useMemo(() => {
     const out = new Set<string>();
     for (const asset of assets) {
@@ -10982,7 +11307,8 @@ export default function App() {
     if (tab === "setup" && setupView === "users" && !canAccessMenu("setup.users", "setup")) setSetupView("permissions");
     if (tab === "setup" && setupView === "permissions" && !canAccessMenu("setup.permissions", "setup")) setSetupView("backup");
     if (tab === "setup" && setupView === "backup" && !canAccessMenu("setup.backup", "setup")) setSetupView("items");
-    if (tab === "setup" && setupView === "items" && !canAccessMenu("setup.items", "setup")) setSetupView("locations");
+    if (tab === "setup" && setupView === "items" && !canAccessMenu("setup.items", "setup")) setSetupView("furnitureModels");
+    if (tab === "setup" && setupView === "furnitureModels" && !canAccessMenu("setup.furnitureModels", "setup")) setSetupView("locations");
     if (tab === "setup" && setupView === "locations" && !canAccessMenu("setup.locations", "setup")) setSetupView("calendar");
     if (tab === "setup" && setupView === "calendar" && !canAccessMenu("setup.calendar", "setup")) setSetupView("campus");
   }, [tab, setupView, canAccessMenu]);
@@ -11216,6 +11542,17 @@ export default function App() {
         const serverItemTemplates = Array.isArray(settingsRes.settings?.itemTemplates)
           ? normalizeArray<ItemTemplate>(settingsRes.settings?.itemTemplates as unknown[])
           : [];
+        const serverFurnitureModels = Array.isArray(settingsRes.settings?.furnitureModels)
+          ? normalizeArray<FurnitureModelMaster>(settingsRes.settings?.furnitureModels as unknown[])
+              .map((row) => ({
+                id: Number(row.id) || Date.now() + Math.floor(Math.random() * 10000),
+                type: String(row.type || "").trim().toUpperCase(),
+                model: String(row.model || "").trim(),
+                photo: String(row.photo || "").trim(),
+                created: String(row.created || new Date().toISOString()),
+              }))
+              .filter((row) => row.type && row.model)
+          : [];
         const settingsObj = settingsRes.settings || {};
         setVaultAccounts(
           Object.prototype.hasOwnProperty.call(settingsObj, "vaultAccounts")
@@ -11265,6 +11602,11 @@ export default function App() {
                 .filter((tpl) => tpl.name && tpl.type)
             : readItemTemplateFallback()
         );
+        setFurnitureModels(
+          Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels")
+            ? serverFurnitureModels
+            : readFurnitureModelFallback()
+        );
       } catch {
         // Keep local settings if /api/settings is unavailable.
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
@@ -11284,6 +11626,7 @@ export default function App() {
         setVaultNetworkDocs(readVaultNetworkDocsFallback());
         setVaultCctvRecords(readVaultCctvFallback());
         setItemTemplates(readItemTemplateFallback());
+        setFurnitureModels(readFurnitureModelFallback());
       }
 
       const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
@@ -11491,6 +11834,7 @@ export default function App() {
       : [];
     const createTvRemoteCount = isTvAsset ? Math.max(1, Math.min(2, Number(assetForm.tvRemoteCount || 1))) : 0;
     const createWalkieCharger = isWalkieAsset && Boolean(assetForm.walkieHasCharger);
+    const createIsFurniture = isFurnitureAsset(assetForm.category);
     const createWalkieChargerPhotos = createWalkieCharger
       ? Array.from(
           new Set(
@@ -11578,7 +11922,19 @@ export default function App() {
               Boolean(assetForm.walkieHasCharger),
               assetForm.walkieChargerDetail
             )
-          : assetForm.specs);
+          : (createIsFurniture
+              ? buildFurnitureSpecs(assetForm.specs, {
+                  level: "",
+                  subtype: assetForm.furnitureSubtype,
+                  trackingMode: assetForm.furnitureTrackingMode,
+                  modelPhoto: "",
+                  material: assetForm.furnitureMaterial,
+                  color: assetForm.furnitureColor,
+                  size: assetForm.furnitureSize,
+                  quantity: assetForm.furnitureQuantity,
+                  condition: assetForm.furnitureCondition,
+                })
+              : assetForm.specs));
     const mainSerial = assetForm.serialNumber.trim();
     const duplicateMain = findDuplicateAssetSerial(assets, mainSerial);
     if (duplicateMain) {
@@ -11945,6 +12301,15 @@ export default function App() {
         walkieHasCharger: false,
         walkieChargerDetail: "",
         walkieChargerPhotos: [],
+        furnitureTrackingMode: defaultFurnitureTrackingMode(f.type),
+        furnitureLevel: "",
+        furnitureSubtype: defaultFurnitureSubtype(f.type),
+        furnitureModelPhoto: "",
+        furnitureMaterial: "",
+        furnitureColor: "",
+        furnitureSize: "",
+        furnitureQuantity: "1",
+        furnitureCondition: FURNITURE_CONDITION_OPTIONS[0],
         tvRemoteCount: "1",
         tvRemotePhotos: [],
         specs: "",
@@ -13501,6 +13866,18 @@ export default function App() {
     }
   }
 
+  async function saveFurnitureModelsToServer(nextRows: FurnitureModelMaster[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ settings: { furnitureModels: nextRows } }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
   async function addVaultAccount() {
     if (!requireAdminAction()) return;
     if (!vaultAccountForm.systemName.trim() || !vaultAccountForm.accountName.trim()) {
@@ -14708,6 +15085,77 @@ export default function App() {
       await saveItemTemplatesToServer(nextRows);
     } catch (err) {
       setSetupMessage(`Template removed locally only: ${err instanceof Error ? err.message : "Cannot sync server"}`);
+    }
+  }
+
+  async function saveFurnitureModelMaster() {
+    if (!requireAdminAction()) return;
+    const type = String(furnitureModelForm.type || "").trim().toUpperCase();
+    const model = String(furnitureModelForm.model || "").trim();
+    if (!type || !model) {
+      setError("Furniture type and model name are required.");
+      return;
+    }
+    const exists = furnitureModels.some(
+      (row) =>
+        row.id !== editingFurnitureModelId &&
+        row.type === type &&
+        row.model.toLowerCase() === model.toLowerCase()
+    );
+    if (exists) {
+      setError(`Furniture model already exists: ${furnitureModelLabel(type, model)}`);
+      return;
+    }
+    const row: FurnitureModelMaster = {
+      id: editingFurnitureModelId || Date.now(),
+      type,
+      model,
+      photo: String(furnitureModelForm.photo || "").trim(),
+      created:
+        editingFurnitureModelId !== null
+          ? String(furnitureModels.find((item) => item.id === editingFurnitureModelId)?.created || new Date().toISOString())
+          : new Date().toISOString(),
+    };
+    const nextRows =
+      editingFurnitureModelId === null
+        ? [row, ...furnitureModels]
+        : furnitureModels.map((item) => (item.id === editingFurnitureModelId ? row : item));
+    setFurnitureModels(nextRows);
+    setFurnitureModelForm({ type: "CHR", model: "", photo: "" });
+    setEditingFurnitureModelId(null);
+    setSetupMessage(`${editingFurnitureModelId === null ? "Added" : "Updated"} furniture model: ${furnitureModelLabel(type, model)}`);
+    setError("");
+    try {
+      await saveFurnitureModelsToServer(nextRows);
+    } catch (err) {
+      setSetupMessage(`Furniture model saved locally only: ${err instanceof Error ? err.message : "Cannot sync server"}`);
+    }
+  }
+
+  function startEditFurnitureModelMaster(row: FurnitureModelMaster) {
+    setEditingFurnitureModelId(row.id);
+    setFurnitureModelForm({
+      type: row.type || "CHR",
+      model: row.model || "",
+      photo: row.photo || "",
+    });
+  }
+
+  function cancelEditFurnitureModelMaster() {
+    setEditingFurnitureModelId(null);
+    setFurnitureModelForm({ type: "CHR", model: "", photo: "" });
+  }
+
+  async function deleteFurnitureModelMaster(id: number) {
+    if (!requireAdminAction()) return;
+    const nextRows = furnitureModels.filter((row) => row.id !== id);
+    setFurnitureModels(nextRows);
+    if (editingFurnitureModelId === id) cancelEditFurnitureModelMaster();
+    setSetupMessage("Furniture model removed.");
+    try {
+      await saveFurnitureModelsToServer(nextRows);
+    } catch (err) {
+      setSetupMessage(`Furniture model removed locally only: ${err instanceof Error ? err.message : "Cannot sync server"}`);
     }
   }
 
@@ -16754,6 +17202,20 @@ export default function App() {
     const parsedWalkie = String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
       ? parseWalkieTalkieSpecs(asset.specs || "")
       : { hasCharger: false, chargerDetail: "", specs: parsedAircon.specs || String(asset.specs || "") };
+    const parsedFurniture = isFurnitureAsset(asset.category)
+      ? parseFurnitureSpecs(asset.specs || "")
+      : {
+          trackingMode: defaultFurnitureTrackingMode(asset.type),
+          level: "",
+          subtype: defaultFurnitureSubtype(asset.type),
+          modelPhoto: "",
+          material: "",
+          color: "",
+          size: "",
+          quantity: "1",
+          condition: FURNITURE_CONDITION_OPTIONS[0],
+          specs: parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
+        };
     setAssetEditForm({
       location: asset.location || "",
       pcType: asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
@@ -16783,7 +17245,16 @@ export default function App() {
         String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
           ? normalizeAssetPhotos(walkieChargerChild || {}).slice(0, 4)
           : [],
-      specs: parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
+      furnitureTrackingMode: parsedFurniture.trackingMode || defaultFurnitureTrackingMode(asset.type),
+      furnitureLevel: "",
+      furnitureSubtype: parsedFurniture.subtype || defaultFurnitureSubtype(asset.type),
+      furnitureModelPhoto: parsedFurniture.modelPhoto || "",
+      furnitureMaterial: parsedFurniture.material,
+      furnitureColor: parsedFurniture.color,
+      furnitureSize: parsedFurniture.size,
+      furnitureQuantity: parsedFurniture.quantity || "1",
+      furnitureCondition: parsedFurniture.condition || FURNITURE_CONDITION_OPTIONS[0],
+      specs: parsedFurniture.specs || parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
@@ -17316,7 +17787,19 @@ export default function App() {
                 Boolean(assetEditForm.walkieHasCharger),
                 assetEditForm.walkieChargerDetail
               )
-            : assetEditForm.specs.trim()),
+            : (isFurnitureAsset(editingAsset?.category || "")
+                ? buildFurnitureSpecs(assetEditForm.specs.trim(), {
+                    level: "",
+                    subtype: assetEditForm.furnitureSubtype,
+                    trackingMode: assetEditForm.furnitureTrackingMode,
+                    modelPhoto: "",
+                    material: assetEditForm.furnitureMaterial,
+                    color: assetEditForm.furnitureColor,
+                    size: assetEditForm.furnitureSize,
+                    quantity: assetEditForm.furnitureQuantity,
+                    condition: assetEditForm.furnitureCondition,
+                  })
+                : assetEditForm.specs.trim())),
       purchaseDate: assetEditForm.purchaseDate.trim(),
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
@@ -18809,19 +19292,33 @@ export default function App() {
     if (!assetId || !transferForm.toCampus || !transferForm.toLocation.trim()) return false;
     const current = assets.find((a) => a.id === assetId);
     if (!current) return false;
-    const fromUser = String(current.assignedTo || "").trim();
+    const groupedFurniture = groupedFurnitureTransferMeta(current);
     const destinationLocation = transferForm.toLocation.trim();
+    if (
+      groupedFurniture &&
+      current.campus === transferForm.toCampus &&
+      String(current.location || "").trim() === destinationLocation
+    ) {
+      setError("Grouped furniture transfer must move to a different room or campus.");
+      return false;
+    }
+    const transferQty = groupedFurniture ? Math.max(0, Number(transferForm.quantity || 0)) : 1;
+    if (groupedFurniture && (!Number.isFinite(transferQty) || transferQty < 1 || transferQty > groupedFurniture.quantity)) {
+      setError(`Transfer quantity must be between 1 and ${groupedFurniture.quantity}.`);
+      return false;
+    }
+    const fromUser = String(current.assignedTo || "").trim();
     const requestedToUser = String(transferForm.toAssignedTo || "").trim();
     const toUser =
       isSharedLocation(destinationLocation) && requestedToUser === fromUser
         ? ""
         : requestedToUser;
     const assignmentChanged = fromUser !== toUser;
-    if (toUser && assignmentChanged && !transferForm.responsibilityConfirmed) {
+    if (!groupedFurniture && toUser && assignmentChanged && !transferForm.responsibilityConfirmed) {
       setError("Please confirm staff responsibility before assigning this asset.");
       return false;
     }
-    if (fromUser && assignmentChanged && !transferForm.returnConfirmed) {
+    if (!groupedFurniture && fromUser && assignmentChanged && !transferForm.returnConfirmed) {
       setError("Please confirm previous staff return handover before reassigning.");
       return false;
     }
@@ -18833,11 +19330,12 @@ export default function App() {
       fromLocation: current.location || "-",
       toCampus: transferForm.toCampus,
       toLocation: destinationLocation,
+      ...(groupedFurniture ? { quantity: transferQty } : {}),
       reason: transferForm.reason.trim(),
       by: transferForm.by.trim(),
       note: transferForm.note.trim(),
     };
-    const custodyEntry: CustodyEntry | null = assignmentChanged
+    const custodyEntry: CustodyEntry | null = !groupedFurniture && assignmentChanged
       ? {
           id: Date.now() + 1,
           date: transferEntry.date,
@@ -18857,6 +19355,193 @@ export default function App() {
     setBusy(true);
     setError("");
     try {
+      if (groupedFurniture) {
+        const sourceQty = groupedFurniture.quantity;
+        const destinationMatch = assets.find(
+          (asset) =>
+            asset.id !== current.id &&
+            isGroupedFurnitureTransferAsset(asset) &&
+            asset.campus === transferEntry.toCampus &&
+            String(asset.location || "").trim() === transferEntry.toLocation &&
+            groupedFurnitureTransferMatchKey(asset) === groupedFurnitureTransferMatchKey(current)
+        ) || null;
+        const isFullTransfer = transferQty >= sourceQty;
+
+        let nextLocal: Asset[] = [];
+        const apiCalls: Array<Promise<unknown>> = [];
+
+        if (isFullTransfer && !destinationMatch) {
+          const movedAsset = {
+            ...current,
+            campus: transferEntry.toCampus,
+            location: transferEntry.toLocation,
+            assignedTo: "",
+            custodyStatus: "IN_STOCK" as Asset["custodyStatus"],
+            transferHistory: [transferEntry, ...(current.transferHistory || [])],
+          };
+          nextLocal = readAssetFallback().map((asset) => (asset.id === current.id ? movedAsset : asset));
+          apiCalls.push(
+            requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                campus: transferEntry.toCampus,
+                location: transferEntry.toLocation,
+                assignedTo: "",
+                custodyStatus: "IN_STOCK",
+                transferHistory: movedAsset.transferHistory || [],
+                custodyHistory: current.custodyHistory || [],
+              }),
+            })
+          );
+        } else {
+          const sourceRemainder = Math.max(0, sourceQty - transferQty);
+          const destinationQty = (destinationMatch ? groupedFurnitureTransferMeta(destinationMatch)?.quantity || 0 : 0) + transferQty;
+          const sourceUpdated =
+            sourceRemainder > 0
+              ? {
+                  ...updateGroupedFurnitureAssetQuantity(current, sourceRemainder),
+                  transferHistory: [transferEntry, ...(current.transferHistory || [])],
+                }
+              : null;
+          const destinationUpdated = destinationMatch
+            ? {
+                ...updateGroupedFurnitureAssetQuantity(destinationMatch, destinationQty),
+                transferHistory: isFullTransfer
+                  ? [transferEntry, ...(destinationMatch.transferHistory || [])]
+                  : (destinationMatch.transferHistory || []),
+              }
+            : {
+                ...updateGroupedFurnitureAssetQuantity(
+                  {
+                    ...current,
+                    id: Date.now(),
+                    seq: calcNextSeq(assets, transferEntry.toCampus, current.category, current.type),
+                    assetId: buildAssetId(
+                      transferEntry.toCampus,
+                      current.category,
+                      current.type,
+                      calcNextSeq(assets, transferEntry.toCampus, current.category, current.type)
+                    ),
+                    campus: transferEntry.toCampus,
+                    location: transferEntry.toLocation,
+                    assignedTo: "",
+                    custodyStatus: "IN_STOCK" as Asset["custodyStatus"],
+                    transferHistory: isFullTransfer ? [transferEntry] : [],
+                    custodyHistory: [],
+                    maintenanceHistory: current.maintenanceHistory || [],
+                    verificationHistory: current.verificationHistory || [],
+                    statusHistory: current.statusHistory || [],
+                    created: new Date().toISOString(),
+                  } as Asset,
+                  destinationQty
+                ),
+                transferHistory: isFullTransfer ? [transferEntry] : [],
+                custodyHistory: [],
+              };
+
+          nextLocal = readAssetFallback()
+            .filter((asset) => (sourceUpdated ? true : asset.id !== current.id))
+            .map((asset) => {
+              if (sourceUpdated && asset.id === current.id) return sourceUpdated;
+              if (destinationMatch && asset.id === destinationMatch.id) return destinationUpdated;
+              return asset;
+            });
+          if (!destinationMatch) {
+            nextLocal = [destinationUpdated, ...nextLocal];
+          }
+
+          if (sourceUpdated) {
+            apiCalls.push(
+              requestJson<{ asset: Asset }>(`/api/assets/${current.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  specs: sourceUpdated.specs,
+                  transferHistory: sourceUpdated.transferHistory || [],
+                }),
+              })
+            );
+          } else {
+            apiCalls.push(
+              requestJson<{ ok: true }>(`/api/assets/${current.id}`, {
+                method: "DELETE",
+              })
+            );
+          }
+
+          if (destinationMatch) {
+            apiCalls.push(
+              requestJson<{ asset: Asset }>(`/api/assets/${destinationMatch.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  specs: destinationUpdated.specs,
+                  transferHistory: destinationUpdated.transferHistory || destinationMatch.transferHistory || [],
+                }),
+              })
+            );
+          } else {
+            apiCalls.push(
+              requestJson<{ asset: Asset }>("/api/assets", {
+                method: "POST",
+                body: JSON.stringify({
+                  campus: destinationUpdated.campus,
+                  category: destinationUpdated.category,
+                  type: destinationUpdated.type,
+                  location: destinationUpdated.location,
+                  setCode: "",
+                  parentAssetId: "",
+                  assignedTo: "",
+                  custodyStatus: "IN_STOCK",
+                  brand: destinationUpdated.brand || "",
+                  model: destinationUpdated.model || "",
+                  serialNumber: "",
+                  specs: destinationUpdated.specs || "",
+                  purchaseDate: "",
+                  warrantyUntil: "",
+                  vendor: "",
+                  notes: destinationUpdated.notes || "",
+                  nextMaintenanceDate: "",
+                  scheduleNote: "",
+                  photo: destinationUpdated.photo || "",
+                  photos: destinationUpdated.photos || [],
+                  status: destinationUpdated.status || "Active",
+                  transferHistory: destinationUpdated.transferHistory || [],
+                  custodyHistory: [],
+                }),
+              })
+            );
+          }
+        }
+
+        try {
+          await Promise.all(apiCalls);
+        } catch (err) {
+          if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+        }
+
+        writeAssetFallback(nextLocal);
+        setAssets(nextLocal);
+        setStats(buildStatsFromAssets(nextLocal, campusFilter));
+        appendUiAudit(
+          "TRANSFER",
+          "asset",
+          String(assetId),
+          `${transferEntry.fromCampus} -> ${transferEntry.toCampus} | qty ${transferQty}`
+        );
+        setTransferForm((f) => ({
+          ...f,
+          date: "",
+          quantity: "1",
+          responsibilityConfirmed: false,
+          returnConfirmed: false,
+          reason: "",
+          by: "",
+          note: "",
+        }));
+        await loadData();
+        setTransferView("history");
+        return true;
+      }
+
       const nextLocal = readAssetFallback().map((asset) => {
         if (asset.id !== assetId) return asset;
         const custodyStatus: Asset["custodyStatus"] = toUser ? "ASSIGNED" : "IN_STOCK";
@@ -18894,6 +19579,7 @@ export default function App() {
       setTransferForm((f) => ({
         ...f,
         date: "",
+        quantity: "1",
         responsibilityConfirmed: false,
         returnConfirmed: false,
         reason: "",
@@ -19109,18 +19795,21 @@ export default function App() {
   }
 
   function openTransferFromAsset(asset: Asset) {
+    const groupedFurniture = groupedFurnitureTransferMeta(asset);
     setTransferForm((prev) => ({
       ...prev,
       assetId: String(asset.id),
       date: toYmd(new Date()),
       toCampus: asset.campus,
       toLocation: asset.location || "",
+      quantity: "1",
       toAssignedTo: isSharedLocation(asset.location || "") ? "" : (asset.assignedTo || ""),
       responsibilityConfirmed: false,
       returnConfirmed: false,
       reason: "",
       by: "",
       note: "",
+      ...(groupedFurniture ? { toAssignedTo: "" } : {}),
     }));
     setTransferQuickAssetId(asset.id);
   }
@@ -19154,6 +19843,7 @@ export default function App() {
       date: toYmd(new Date()),
       toCampus: asset.campus,
       toLocation: asset.location || "",
+      quantity: "1",
       toAssignedTo: isSharedLocation(asset.location || "") ? "" : (asset.assignedTo || ""),
       responsibilityConfirmed: false,
       returnConfirmed: false,
@@ -19575,6 +20265,24 @@ export default function App() {
         });
         return { ...f, photo: merged[0] || "", photos: merged };
       });
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onFurnitureModelMasterPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setFurnitureModelForm((f) => ({ ...f, photo: optimized }));
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
@@ -20069,6 +20777,10 @@ export default function App() {
         : [],
     [assets, detailAsset]
   );
+  const detailFurniture = useMemo(
+    () => (detailAsset && isFurnitureAsset(detailAsset.category) ? parseFurnitureSpecs(detailAsset.specs || "") : null),
+    [detailAsset]
+  );
   const detailMaintenanceVisibleEntries = useMemo(
     () =>
       assetDetailSections.showAllMaintenance
@@ -20138,6 +20850,22 @@ export default function App() {
   const editingStatusActive = useMemo(
     () => String(assetEditForm.status || "").trim().toLowerCase() === "active",
     [assetEditForm.status]
+  );
+  const createFurnitureReferencePhoto = useMemo(
+    () =>
+      isFurnitureAsset(assetForm.category)
+        ? furnitureMasterPhoto(furnitureModels, assetForm.type, assetForm.model) ||
+          furnitureReferencePhotoFromAssets(assets, assetForm.type, assetForm.model)
+        : "",
+    [assets, furnitureModels, assetForm.category, assetForm.type, assetForm.model]
+  );
+  const editFurnitureReferencePhoto = useMemo(
+    () =>
+      isFurnitureAsset(editingAsset?.category || "")
+        ? furnitureMasterPhoto(furnitureModels, editingAsset?.type || "", assetEditForm.model) ||
+          furnitureReferencePhotoFromAssets(assets, editingAsset?.type || "", assetEditForm.model)
+        : "",
+    [assets, furnitureModels, editingAsset, assetEditForm.model]
   );
   const editingUserRequired = useMemo(
     () =>
@@ -20331,6 +21059,11 @@ export default function App() {
     () => assets.find((a) => String(a.id) === transferForm.assetId) || null,
     [assets, transferForm.assetId]
   );
+  const transferGroupedFurnitureMeta = useMemo(
+    () => groupedFurnitureTransferMeta(transferAsset),
+    [transferAsset]
+  );
+  const transferIsGroupedFurniture = Boolean(transferGroupedFurnitureMeta);
   const transferRecordAssets = useMemo(
     () =>
       [...assets].sort((a, b) => {
@@ -20919,9 +21652,17 @@ export default function App() {
     campusLabel,
     assetItemName,
   ]);
-  const hideAssetAssignedStaff = useMemo(
+  const assetListFurnitureOnly = useMemo(
+    () => assetCategoryMultiFilter.length === 1 && assetCategoryMultiFilter[0] === "FURNITURE",
+    [assetCategoryMultiFilter]
+  );
+  const hideAssetAssignedStaffColumn = useMemo(
     () => assetCategoryMultiFilter.length === 1 && assetCategoryMultiFilter[0] === "SAFETY",
     [assetCategoryMultiFilter]
+  );
+  const hideAssetAssignedStaffFilter = useMemo(
+    () => hideAssetAssignedStaffColumn || assetListFurnitureOnly,
+    [hideAssetAssignedStaffColumn, assetListFurnitureOnly]
   );
   const assetCampusFilterSummary = useMemo(
     () => summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel),
@@ -20950,18 +21691,18 @@ export default function App() {
   const assetListVisibleColumns = useMemo(
     () =>
       ASSET_LIST_COLUMN_KEYS.map((key, index) => ({ key, index, width: assetListColumnWidths[index] }))
-        .filter((column) => !(hideAssetAssignedStaff && column.key === "assignedTo")),
-    [assetListColumnWidths, hideAssetAssignedStaff]
+        .filter((column) => !(hideAssetAssignedStaffColumn && column.key === "assignedTo")),
+    [assetListColumnWidths, hideAssetAssignedStaffColumn]
   );
   useEffect(() => {
-    if (!hideAssetAssignedStaff) return;
+    if (!hideAssetAssignedStaffFilter) return;
     if (!assetAssignedToMultiFilter.includes("ALL")) {
       setAssetAssignedToMultiFilter(["ALL"]);
     }
     if (assetListSort.key === "assignedTo") {
       setAssetListSort({ key: "assetId", direction: "asc" });
     }
-  }, [hideAssetAssignedStaff, assetAssignedToMultiFilter, assetListSort]);
+  }, [hideAssetAssignedStaffFilter, assetAssignedToMultiFilter, assetListSort]);
   const assetListTableWrapRef = useRef<HTMLDivElement | null>(null);
   const assetListResizeStateRef = useRef<{
     index: number;
@@ -22640,6 +23381,18 @@ export default function App() {
     () => assetMasterItemBreakdown.map(([name, count]) => `${name} = ${count}`).join(" | "),
     [assetMasterItemBreakdown]
   );
+  const assetMasterCampusBreakdown = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of assetMasterReportRows) {
+      const campus = campusLabel(String(row.campus || "").trim()) || "Unknown Campus";
+      counts.set(campus, (counts.get(campus) || 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [assetMasterReportRows, campusLabel]);
+  const assetMasterCampusBreakdownText = useMemo(
+    () => assetMasterCampusBreakdown.map(([campus, count]) => `${campus} = ${count}`).join(" | "),
+    [assetMasterCampusBreakdown]
+  );
   const airconAssetMasterSummary = useMemo(() => {
     const airconRows = assetMasterReportRows.filter((row) =>
       isAirconAsset(String(row.category || ""), String(row.type || ""))
@@ -23227,6 +23980,7 @@ export default function App() {
     const code = String(typeCode || "").trim().toUpperCase();
     const name = String(labelOrName || "").toLowerCase();
     const isFacility = String(category || "").toUpperCase() === "FACILITY";
+    const isFurniture = String(category || "").toUpperCase() === "FURNITURE";
     const isSafety = String(category || "").toUpperCase() === "SAFETY";
     const icon = (Icon: React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>) => (
       <Icon size={18} aria-hidden={true} />
@@ -23264,10 +24018,12 @@ export default function App() {
     if (code === "RPN" || name.includes("rear panel")) return icon(Puzzle);
     if (code === "TBL" || name.includes("table")) return icon(Building2);
     if (code === "CHR" || name.includes("chair")) return icon(Building2);
+    if (code === "DSK" || name.includes("deskset")) return icon(Building2);
+    if (code === "CAB" || name.includes("cabinet")) return icon(Building2);
     if (code === "PNO" || name.includes("piano")) return icon(Building2);
 
     if (isSafety) return icon(Shield);
-    if (isFacility) return icon(Building2);
+    if (isFacility || isFurniture) return icon(Building2);
     return icon(Package);
   }
   function quickCountItemIcon(itemName: string) {
@@ -24177,6 +24933,12 @@ export default function App() {
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
         : reportType === "asset_master"
         ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>${
+            assetMasterCampusBreakdown.length
+              ? `<p><strong>By Campus:</strong> ${assetMasterCampusBreakdown
+                  .map(([campus, count]) => `${escapeHtml(campus)} = ${count}`)
+                  .join(" | ")}</p>`
+              : ""
+          }${
             assetMasterItemBreakdown.length
               ? `<p><strong>By Item:</strong> ${assetMasterItemBreakdown
                   .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
@@ -26682,6 +27444,15 @@ export default function App() {
                             assignedTo: "",
                             componentRole: "",
                             componentRequired: false,
+                            furnitureTrackingMode: defaultFurnitureTrackingMode(type.code),
+                            furnitureLevel: "",
+                            furnitureSubtype: defaultFurnitureSubtype(type.code),
+                            furnitureModelPhoto: "",
+                            furnitureMaterial: "",
+                            furnitureColor: "",
+                            furnitureSize: "",
+                            furnitureQuantity: "1",
+                            furnitureCondition: FURNITURE_CONDITION_OPTIONS[0],
                           };
                         })
                       }
@@ -26699,7 +27470,21 @@ export default function App() {
                         code: opt.code,
                         label: itemNames[`${assetForm.category}:${opt.code}`] || (lang === "km" ? opt.itemKm : opt.itemEn),
                       }))}
-                      onChange={(typeCode) => setAssetForm((f) => ({ ...f, type: typeCode }))}
+                      onChange={(typeCode) =>
+                        setAssetForm((f) => ({
+                          ...f,
+                          type: typeCode,
+                          furnitureTrackingMode: defaultFurnitureTrackingMode(typeCode),
+                          furnitureLevel: "",
+                          furnitureSubtype: defaultFurnitureSubtype(typeCode),
+                          furnitureModelPhoto: "",
+                          furnitureMaterial: "",
+                          furnitureColor: "",
+                          furnitureSize: "",
+                          furnitureQuantity: "1",
+                          furnitureCondition: FURNITURE_CONDITION_OPTIONS[0],
+                        }))
+                      }
                       searchPlaceholder={lang === "km" ? "ស្វែងរកកូដប្រភេទ..." : "Search type code..."}
                       emptyText={lang === "km" ? "រកមិនឃើញប្រភេទ។" : "No type code found."}
                       getIcon={(opt) => itemTypeIcon(assetForm.category, opt.code, opt.label)}
@@ -28264,7 +29049,7 @@ export default function App() {
                       ) : null}
                     </>
                   ) : null}
-                  {userRequired && (
+                  {userRequired && !isFurnitureAsset(assetForm.category) && (
                     <label className="field">
                       <span>{t.user}</span>
                       <UserPicker
@@ -28277,43 +29062,49 @@ export default function App() {
                       />
                     </label>
                   )}
-                  <label className="field">
-                    <span>{t.brand}</span>
-                    <input
-                      className="input"
-                      list="asset-brand-options-create"
-                      value={assetForm.brand}
-                      onChange={(e) => setAssetForm((f) => ({ ...f, brand: e.target.value }))}
-                    />
-                    <datalist id="asset-brand-options-create">
-                      {brandSuggestions.map((brand) => (
-                        <option key={`brand-create-${brand.toLowerCase()}`} value={brand} />
-                      ))}
-                    </datalist>
-                  </label>
-                  <label className="field">
-                    <span>{t.model}</span>
-                    <input
-                      className="input"
-                      list="asset-model-options"
-                      value={assetForm.model}
-                      onChange={(e) => {
-                        const model = e.target.value;
-                        setAssetForm((f) => ({ ...f, model }));
-                        if (!model.trim()) setModelTemplateNote("");
-                      }}
-                      onBlur={(e) => applyModelTemplate(e.target.value)}
-                    />
-                    <datalist id="asset-model-options">
-                      {modelTemplates.map((row) => (
-                        <option key={`model-template-${row.model.toLowerCase()}`} value={row.model} />
-                      ))}
-                    </datalist>
-                  </label>
-                  <label className="field">
-                    <span>{t.serialNumber}</span>
-                    <input className="input" value={assetForm.serialNumber} onChange={(e) => setAssetForm((f) => ({ ...f, serialNumber: e.target.value }))} />
-                  </label>
+                  {!isFurnitureAsset(assetForm.category) ? (
+                    <label className="field">
+                      <span>{t.brand}</span>
+                      <input
+                        className="input"
+                        list="asset-brand-options-create"
+                        value={assetForm.brand}
+                        onChange={(e) => setAssetForm((f) => ({ ...f, brand: e.target.value }))}
+                      />
+                      <datalist id="asset-brand-options-create">
+                        {brandSuggestions.map((brand) => (
+                          <option key={`brand-create-${brand.toLowerCase()}`} value={brand} />
+                        ))}
+                      </datalist>
+                    </label>
+                  ) : null}
+                  {!isFurnitureAsset(assetForm.category) ? (
+                    <label className="field">
+                      <span>{t.model}</span>
+                      <input
+                        className="input"
+                        list="asset-model-options"
+                        value={assetForm.model}
+                        onChange={(e) => {
+                          const model = e.target.value;
+                          setAssetForm((f) => ({ ...f, model }));
+                          if (!model.trim()) setModelTemplateNote("");
+                        }}
+                        onBlur={(e) => applyModelTemplate(e.target.value)}
+                      />
+                      <datalist id="asset-model-options">
+                        {modelTemplates.map((row) => (
+                          <option key={`model-template-${row.model.toLowerCase()}`} value={row.model} />
+                        ))}
+                      </datalist>
+                    </label>
+                  ) : null}
+                  {!isFurnitureAsset(assetForm.category) || assetForm.furnitureTrackingMode === "Individual" ? (
+                    <label className="field">
+                      <span>{t.serialNumber}</span>
+                      <input className="input" value={assetForm.serialNumber} onChange={(e) => setAssetForm((f) => ({ ...f, serialNumber: e.target.value }))} />
+                    </label>
+                  ) : null}
                   {isAirconAsset(assetForm.category, assetForm.type) ? (
                     <>
                       <label className="field">
@@ -28540,15 +29331,99 @@ export default function App() {
                       </div>
                     </label>
                   ) : null}
-                  <label className="field">
-                    <span>{t.purchaseDate}</span>
-                    <input type="date" className="input" value={assetForm.purchaseDate} onChange={(e) => setAssetForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>{t.warrantyUntil}</span>
-                    <input type="date" className="input" value={assetForm.warrantyUntil} onChange={(e) => setAssetForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
-                  </label>
-                  {!isAirconAsset(assetForm.category, assetForm.type) ? (
+                  {isFurnitureAsset(assetForm.category) ? (
+                    <>
+                      <label className="field">
+                        <span>Control Mode</span>
+                        <select
+                          className="input"
+                          value={assetForm.furnitureTrackingMode}
+                          onChange={(e) =>
+                            setAssetForm((f) => ({
+                              ...f,
+                              furnitureTrackingMode: e.target.value,
+                              furnitureQuantity: e.target.value === "Individual" ? "1" : f.furnitureQuantity || "1",
+                              serialNumber: e.target.value === "Grouped" ? "" : f.serialNumber,
+                              warrantyUntil: e.target.value === "Grouped" ? "" : f.warrantyUntil,
+                            }))
+                          }
+                        >
+                          {FURNITURE_TRACKING_MODE_OPTIONS.map((option) => (
+                            <option key={`furniture-mode-create-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="tiny">Grouped = one room record with quantity. Individual = one ID per item.</div>
+                      </label>
+                      <label className="field">
+                        <span>Furniture Model</span>
+                        <select
+                          className="input"
+                          value={assetForm.model}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))}
+                        >
+                          <option value="">Select model</option>
+                          {furnitureModelChoices(assetForm.type).map((option) => (
+                            <option key={`furniture-model-create-${assetForm.type}-${option.model}`} value={option.model}>
+                              {furnitureModelLabel(assetForm.type, option.model)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Furniture Photo</span>
+                        <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                          {createFurnitureReferencePhoto ? (
+                            <img
+                              loading="lazy"
+                              decoding="async"
+                              src={createFurnitureReferencePhoto}
+                              alt={`${assetForm.model || "furniture"} reference`}
+                              className="asset-photo-chip-img"
+                              style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
+                            />
+                          ) : (
+                            <div className="tiny">No furniture photo in Furniture Models yet.</div>
+                          )}
+                          {assetForm.model ? (
+                            <div className="tiny">{furnitureModelLabel(assetForm.type, assetForm.model)}</div>
+                          ) : null}
+                        </div>
+                      </label>
+                      <label className="field">
+                        <span>Quantity</span>
+                        <input
+                          className="input"
+                          type="number"
+                          min="1"
+                          value={assetForm.furnitureQuantity}
+                          disabled={assetForm.furnitureTrackingMode === "Individual"}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, furnitureQuantity: e.target.value }))}
+                        />
+                      </label>
+                      {assetForm.furnitureTrackingMode === "Grouped" ? (
+                          <div className="field field-wide">
+                            <div className="tiny">
+                            Use one asset ID for all same furniture in this room. Example: Classroom Eco 01 {furnitureModelLabel(assetForm.type, assetForm.model || "Toy and Me")}, quantity 25.
+                            </div>
+                          </div>
+                        ) : null}
+                    </>
+                  ) : null}
+                  {!isFurnitureAsset(assetForm.category) ? (
+                    <label className="field">
+                      <span>{t.purchaseDate}</span>
+                      <input type="date" className="input" value={assetForm.purchaseDate} onChange={(e) => setAssetForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
+                    </label>
+                  ) : null}
+                  {!isFurnitureAsset(assetForm.category) || assetForm.furnitureTrackingMode === "Individual" ? (
+                    <label className="field">
+                      <span>{t.warrantyUntil}</span>
+                      <input type="date" className="input" value={assetForm.warrantyUntil} onChange={(e) => setAssetForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
+                    </label>
+                  ) : null}
+                  {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) ? (
                     <label className="field">
                       <span>{t.vendor}</span>
                       <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
@@ -28587,16 +29462,18 @@ export default function App() {
                       </label>
                     </>
                   ) : null}
-                  <label className="field field-wide">
-                    <span>{t.specs}</span>
-                    <textarea className="textarea" value={assetForm.specs} onChange={(e) => setAssetForm((f) => ({ ...f, specs: e.target.value }))} />
-                  </label>
+                  {!isFurnitureAsset(assetForm.category) ? (
+                    <label className="field field-wide">
+                      <span>{t.specs}</span>
+                      <textarea className="textarea" value={assetForm.specs} onChange={(e) => setAssetForm((f) => ({ ...f, specs: e.target.value }))} />
+                    </label>
+                  ) : null}
                   <label className="field field-wide">
                     <span>{t.notes}</span>
                     <textarea className="textarea" value={assetForm.notes} onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))} />
                   </label>
                   <label className="field field-wide">
-                    <span>{t.photo}</span>
+                    <span>{isFurnitureAsset(assetForm.category) ? "Location Photo" : t.photo}</span>
                     <input
                       key={assetFileKey}
                       ref={createPhotoInputRef}
@@ -28606,6 +29483,11 @@ export default function App() {
                       multiple
                       onChange={onPhotoFile}
                     />
+                    {isFurnitureAsset(assetForm.category) ? (
+                      <div className="tiny">
+                        Upload the real furniture photo at this room/location.
+                      </div>
+                    ) : null}
                   </label>
                 </div>
                 {!campusLocations.length ? <p className="tiny">{t.noLocationsConfigured}</p> : null}
@@ -28776,7 +29658,7 @@ export default function App() {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  {!hideAssetAssignedStaff ? (
+                  {!hideAssetAssignedStaffFilter ? (
                     <SearchableMultiSelectPicker
                       summary={assetAssignedFilterSummary}
                       options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
@@ -28822,12 +29704,15 @@ export default function App() {
                                 <div><strong>{t.campus}:</strong> {campusLabel(asset.campus)}</div>
                                 <div><strong>{t.category}:</strong> {asset.category}</div>
                                 <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
-                                {String(asset.assignedTo || "").trim() ? (
+                                {isFurnitureAsset(asset.category) ? (
+                                  <div><strong>Qty:</strong> {furnitureAssetQuantity(asset) || 1}</div>
+                                ) : null}
+                                {!assetListFurnitureOnly && String(asset.assignedTo || "").trim() ? (
                                   <div><strong>Assigned Staff:</strong> {asset.assignedTo}</div>
                                 ) : null}
                               </div>
                             </div>
-                            <div className="asset-mobile-photo">{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
+                            <div className="asset-mobile-photo">{renderAssetPhoto(assetDisplayPhoto(asset), asset.assetId)}</div>
                           </div>
                           <div className="asset-mobile-foot">
                             <div className="asset-mobile-status">
@@ -28879,7 +29764,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="table-wrap asset-list-scroll" ref={assetListTableWrapRef}>
-                    <table className={`table-compact asset-list-table ${hideAssetAssignedStaff ? "asset-list-table-hide-assigned" : ""}`}>
+                    <table className={`table-compact asset-list-table ${hideAssetAssignedStaffColumn ? "asset-list-table-hide-assigned" : ""}`}>
                       <colgroup>
                         {assetListVisibleColumns.map((column) => (
                           <col key={`asset-col-${column.key}`} style={{ width: `${column.width}%` }} />
@@ -28928,6 +29813,10 @@ export default function App() {
                             </button>
                             <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(4, e.clientX)} />
                           </th>
+                          <th>
+                            Qty
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(5, e.clientX)} />
+                          </th>
                           <th aria-sort={assetListSort.key === "location" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
                               type="button"
@@ -28936,21 +29825,28 @@ export default function App() {
                             >
                               {t.location}
                             </button>
-                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(5, e.clientX)} />
+                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(6, e.clientX)} />
                           </th>
-                          {!hideAssetAssignedStaff ? (
-                            <th aria-sort={assetListSort.key === "assignedTo" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
-                              <button
-                                type="button"
-                                className={`th-sort-btn ${assetListSort.key === "assignedTo" ? "is-active" : ""}`}
-                                onClick={() => toggleAssetListSort("assignedTo")}
-                              >
-                                {lang === "km" ? "អ្នកប្រើ" : "Assigned Staff"}
-                              </button>
-                              <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(6, e.clientX)} />
-                            </th>
+                          {!hideAssetAssignedStaffColumn ? (
+                            assetListFurnitureOnly ? (
+                              <th>
+                                Location Photo
+                                <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(7, e.clientX)} />
+                              </th>
+                            ) : (
+                              <th aria-sort={assetListSort.key === "assignedTo" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                                <button
+                                  type="button"
+                                  className={`th-sort-btn ${assetListSort.key === "assignedTo" ? "is-active" : ""}`}
+                                  onClick={() => toggleAssetListSort("assignedTo")}
+                                >
+                                  {lang === "km" ? "អ្នកប្រើ" : "Assigned Staff"}
+                                </button>
+                                <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(7, e.clientX)} />
+                              </th>
+                            )
                           ) : null}
-                          <th>{t.actions}<span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(7, e.clientX)} /></th>
+                          <th>{t.actions}<span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(8, e.clientX)} /></th>
                           <th aria-sort={assetListSort.key === "status" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
                               type="button"
@@ -28974,15 +29870,22 @@ export default function App() {
                               <td>{campusLabel(asset.campus)}</td>
                               <td>{asset.category}</td>
                               <td>
-                                {renderAssetPhoto(asset.photo || "", asset.assetId)}
+                                {renderAssetPhoto(assetDisplayPhoto(asset), asset.assetId)}
                               </td>
                               <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                              <td>{isFurnitureAsset(asset.category) ? furnitureAssetQuantity(asset) || 1 : "-"}</td>
                               <td>
                                 <span className="asset-list-location-text" title={asset.location || "-"}>
                                   {asset.location || "-"}
                                 </span>
                               </td>
-                              {!hideAssetAssignedStaff ? <td>{asset.assignedTo || "-"}</td> : null}
+                              {!hideAssetAssignedStaffColumn ? (
+                                assetListFurnitureOnly ? (
+                                  <td>{String(asset.photo || "").trim() ? renderAssetPhoto(String(asset.photo || "").trim(), `${asset.assetId}-location`) : "-"}</td>
+                                ) : (
+                                  <td>{asset.assignedTo || "-"}</td>
+                                )
+                              ) : null}
                               <td>
                                 {isAdmin ? (
                                   <div className="row-actions">
@@ -29023,7 +29926,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={9}>{t.noAssets}</td>
+                            <td colSpan={hideAssetAssignedStaffColumn ? 9 : 10}>{t.noAssets}</td>
                           </tr>
                         )}
                       </tbody>
@@ -29118,7 +30021,7 @@ export default function App() {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
                     emptyText={lang === "km" ? "មិនមានទិន្នន័យ" : "No matches"}
                   />
-                  {!hideAssetAssignedStaff ? (
+                  {!hideAssetAssignedStaffFilter ? (
                     <SearchableMultiSelectPicker
                       summary={assetAssignedFilterSummary}
                       options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
@@ -29331,6 +30234,13 @@ export default function App() {
                     <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
                     <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
                     <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
+                    {detailFurniture ? (
+                      <>
+                        <div className="field"><span>Control Mode</span><div className="detail-value">{detailFurniture.trackingMode || "-"}</div></div>
+                        <div className="field"><span>Quantity</span><div className="detail-value">{detailFurniture.quantity || "1"}</div></div>
+                        <div className="field"><span>Standard Name</span><div className="detail-value">{detailFurniture.subtype || defaultFurnitureSubtype(detailAsset.type) || "-"}</div></div>
+                      </>
+                    ) : null}
                     {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
                       <div className="field"><span>{t.pcType}</span><div className="detail-value">{detailAsset.pcType || "-"}</div></div>
                     ) : null}
@@ -29345,7 +30255,7 @@ export default function App() {
                     {detailAsset.parentAssetId ? (
                       <div className="field"><span>{t.componentRequired}</span><div className="detail-value">{detailAsset.componentRequired ? "Yes" : "No"}</div></div>
                     ) : null}
-                    <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailAsset.specs || "-"}</div></div>
+                    <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailFurniture ? furnitureVisibleSpecs(detailAsset.specs || "") : detailAsset.specs || "-"}</div></div>
                     <div className="field field-wide"><span>Notes</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
                     <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
                     <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
@@ -29360,12 +30270,29 @@ export default function App() {
                         <div className="field field-wide"><span>Toner Note</span><div className="detail-value">{detailAsset.tonerNotes || "-"}</div></div>
                       </>
                     ) : null}
-                    <div className="field field-wide">
-                      <span>{t.photo}</span>
-                      <div className="detail-value">
-                        {renderAssetPhoto(detailAsset.photo || "", detailAsset.assetId)}
+                    {detailFurniture ? (
+                      <>
+                        <div className="field field-wide">
+                          <span>Model Photo</span>
+                          <div className="detail-value">
+                            {renderAssetPhoto(furnitureModelPhoto(detailAsset), `${detailAsset.assetId}-model`)}
+                          </div>
+                        </div>
+                        <div className="field field-wide">
+                          <span>Location Photo</span>
+                          <div className="detail-value">
+                            {renderAssetPhoto(detailAsset.photo || "", `${detailAsset.assetId}-location`)}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="field field-wide">
+                        <span>{t.photo}</span>
+                        <div className="detail-value">
+                          {renderAssetPhoto(detailAsset.photo || "", detailAsset.assetId)}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                   ) : null}
 
@@ -30054,7 +30981,7 @@ export default function App() {
                         </div>
                       </div>
                     ) : null}
-                    {editingStatusActive ? (
+                    {!isFurnitureAsset(editingAsset?.category || "") && editingStatusActive ? (
                       <label className="field field-wide">
                         <span>{t.user}</span>
                         <UserPicker
@@ -30067,35 +30994,41 @@ export default function App() {
                         />
                         {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
                       </label>
-                    ) : (
+                    ) : !isFurnitureAsset(editingAsset?.category || "") ? (
                       <div className="field field-wide">
                         <span>{t.user}</span>
                         <div className="detail-value">-</div>
                         <p className="tiny">Status is not Active. User is not assigned.</p>
                       </div>
-                    )}
-                    <label className="field">
-                      <span>Brand</span>
-                      <input
-                        className="input"
-                        list="asset-brand-options-edit"
-                        value={assetEditForm.brand}
-                        onChange={(e) => setAssetEditForm((f) => ({ ...f, brand: e.target.value }))}
-                      />
-                      <datalist id="asset-brand-options-edit">
-                        {brandSuggestions.map((brand) => (
-                          <option key={`brand-edit-${brand.toLowerCase()}`} value={brand} />
-                        ))}
-                      </datalist>
-                    </label>
-                    <label className="field">
-                      <span>Model</span>
-                      <input className="input" value={assetEditForm.model} onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>Serial Number</span>
-                      <input className="input" value={assetEditForm.serialNumber} onChange={(e) => setAssetEditForm((f) => ({ ...f, serialNumber: e.target.value }))} />
-                    </label>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                      <label className="field">
+                        <span>Brand</span>
+                        <input
+                          className="input"
+                          list="asset-brand-options-edit"
+                          value={assetEditForm.brand}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, brand: e.target.value }))}
+                        />
+                        <datalist id="asset-brand-options-edit">
+                          {brandSuggestions.map((brand) => (
+                            <option key={`brand-edit-${brand.toLowerCase()}`} value={brand} />
+                          ))}
+                        </datalist>
+                      </label>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                      <label className="field">
+                        <span>Model</span>
+                        <input className="input" value={assetEditForm.model} onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))} />
+                      </label>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") || assetEditForm.furnitureTrackingMode === "Individual" ? (
+                      <label className="field">
+                        <span>Serial Number</span>
+                        <input className="input" value={assetEditForm.serialNumber} onChange={(e) => setAssetEditForm((f) => ({ ...f, serialNumber: e.target.value }))} />
+                      </label>
+                    ) : null}
                     {isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
                       <>
                         <label className="field">
@@ -30327,18 +31260,104 @@ export default function App() {
                         </div>
                       </label>
                     ) : null}
-                    <label className="field">
-                      <span>Purchase Date</span>
-                      <input type="date" className="input" value={assetEditForm.purchaseDate} onChange={(e) => setAssetEditForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>Warranty Until</span>
-                      <input type="date" className="input" value={assetEditForm.warrantyUntil} onChange={(e) => setAssetEditForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>Vendor</span>
-                      <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
-                    </label>
+                    {isFurnitureAsset(editingAsset?.category || "") ? (
+                      <>
+                        <label className="field">
+                          <span>Control Mode</span>
+                          <select
+                            className="input"
+                            value={assetEditForm.furnitureTrackingMode}
+                            onChange={(e) =>
+                              setAssetEditForm((f) => ({
+                                ...f,
+                                furnitureTrackingMode: e.target.value,
+                                furnitureQuantity: e.target.value === "Individual" ? "1" : f.furnitureQuantity || "1",
+                                serialNumber: e.target.value === "Grouped" ? "" : f.serialNumber,
+                                warrantyUntil: e.target.value === "Grouped" ? "" : f.warrantyUntil,
+                              }))
+                            }
+                          >
+                            {FURNITURE_TRACKING_MODE_OPTIONS.map((option) => (
+                              <option key={`furniture-mode-edit-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="tiny">Grouped = one room record with quantity. Individual = one ID per item.</div>
+                        </label>
+                        <label className="field">
+                          <span>Furniture Model</span>
+                          <select
+                            className="input"
+                            value={assetEditForm.model}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))}
+                          >
+                            <option value="">Select model</option>
+                            {furnitureModelChoices(editingAsset?.type || "").map((option) => (
+                              <option key={`furniture-model-edit-${editingAsset?.type || ""}-${option.model}`} value={option.model}>
+                                {furnitureModelLabel(editingAsset?.type || "", option.model)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>Furniture Photo</span>
+                          <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                            {editFurnitureReferencePhoto ? (
+                              <img
+                                loading="lazy"
+                                decoding="async"
+                                src={editFurnitureReferencePhoto}
+                                alt={`${assetEditForm.model || "furniture"} reference`}
+                                className="asset-photo-chip-img"
+                                style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
+                              />
+                            ) : (
+                              <div className="tiny">No furniture photo in Furniture Models yet.</div>
+                            )}
+                            {assetEditForm.model ? (
+                              <div className="tiny">{furnitureModelLabel(editingAsset?.type || "", assetEditForm.model)}</div>
+                            ) : null}
+                          </div>
+                        </label>
+                        <label className="field">
+                          <span>Quantity</span>
+                          <input
+                            className="input"
+                            type="number"
+                            min="1"
+                            value={assetEditForm.furnitureQuantity}
+                            disabled={assetEditForm.furnitureTrackingMode === "Individual"}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, furnitureQuantity: e.target.value }))}
+                          />
+                        </label>
+                        {assetEditForm.furnitureTrackingMode === "Grouped" ? (
+                          <div className="field field-wide">
+                            <div className="tiny">
+                              Use one asset ID for all same furniture in this room. Example: Classroom Eco 01 {furnitureModelLabel(editingAsset?.type || "", assetEditForm.model || "Toy and Me")}, quantity 25.
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                      <label className="field">
+                        <span>Purchase Date</span>
+                        <input type="date" className="input" value={assetEditForm.purchaseDate} onChange={(e) => setAssetEditForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
+                      </label>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") || assetEditForm.furnitureTrackingMode === "Individual" ? (
+                      <label className="field">
+                        <span>Warranty Until</span>
+                        <input type="date" className="input" value={assetEditForm.warrantyUntil} onChange={(e) => setAssetEditForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
+                      </label>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                      <label className="field">
+                        <span>Vendor</span>
+                        <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
+                      </label>
+                    ) : null}
                     {isPrinterAssetRow(editingAsset) ? (
                       <>
                         <label className="field">
@@ -30372,16 +31391,18 @@ export default function App() {
                         </label>
                       </>
                     ) : null}
-                    <label className="field field-wide">
-                      <span>Specs</span>
-                      <textarea className="textarea" value={assetEditForm.specs} onChange={(e) => setAssetEditForm((f) => ({ ...f, specs: e.target.value }))} />
-                    </label>
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                      <label className="field field-wide">
+                        <span>Specs</span>
+                        <textarea className="textarea" value={assetEditForm.specs} onChange={(e) => setAssetEditForm((f) => ({ ...f, specs: e.target.value }))} />
+                      </label>
+                    ) : null}
                     <label className="field field-wide">
                       <span>Notes</span>
                       <textarea className="textarea" value={assetEditForm.notes} onChange={(e) => setAssetEditForm((f) => ({ ...f, notes: e.target.value }))} />
                     </label>
                     <label className="field field-wide">
-                      <span>{t.photo}</span>
+                    <span>{isFurnitureAsset(editingAsset?.category || "") ? "Location Photo" : t.photo}</span>
                       <input
                         key={editAssetFileKey}
                         ref={editPhotoInputRef}
@@ -30391,6 +31412,11 @@ export default function App() {
                         multiple
                         onChange={onEditAssetPhotoFile}
                       />
+                      {isFurnitureAsset(editingAsset?.category || "") ? (
+                        <div className="tiny">
+                          Upload the real furniture photo at this room/location.
+                        </div>
+                      ) : null}
                     </label>
                   </div>
                   <div className="asset-actions">
@@ -30813,48 +31839,67 @@ export default function App() {
                         ))}
                       </select>
                     </label>
-                    <label className="field">
-                      <span>Current Staff</span>
-                      <input className="input" value={transferQuickAsset.assignedTo || "-"} readOnly />
-                    </label>
-                    <label className="field">
-                      <span>Assign To Staff</span>
-                      <select
-                        className="input"
-                        value={transferForm.toAssignedTo}
-                        onChange={(e) =>
-                          setTransferForm((f) => ({
-                            ...f,
-                            toAssignedTo: e.target.value,
-                            responsibilityConfirmed: false,
-                            returnConfirmed: false,
-                          }))
-                        }
-                      >
-                        <option value="">Unassigned / In Stock</option>
-                        {users.map((u) => (
-                          <option key={`quick-transfer-user-${u.id}`} value={u.fullName}>
-                            {u.fullName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="field check-field">
-                      <span>Staff responsibility confirm</span>
-                      <input
-                        type="checkbox"
-                        checked={transferForm.responsibilityConfirmed}
-                        onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
-                      />
-                    </label>
-                    <label className="field check-field">
-                      <span>Previous holder returned item</span>
-                      <input
-                        type="checkbox"
-                        checked={transferForm.returnConfirmed}
-                        onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
-                      />
-                    </label>
+                    {isGroupedFurnitureTransferAsset(transferQuickAsset) ? (
+                      <label className="field">
+                        <span>Transfer Quantity</span>
+                        <input
+                          className="input"
+                          type="number"
+                          min="1"
+                          max={groupedFurnitureTransferMeta(transferQuickAsset)?.quantity || 1}
+                          value={transferForm.quantity}
+                          onChange={(e) => setTransferForm((f) => ({ ...f, quantity: e.target.value }))}
+                        />
+                        <div className="tiny">
+                          Available in source: {groupedFurnitureTransferMeta(transferQuickAsset)?.quantity || 1}
+                        </div>
+                      </label>
+                    ) : (
+                      <>
+                        <label className="field">
+                          <span>Current Staff</span>
+                          <input className="input" value={transferQuickAsset.assignedTo || "-"} readOnly />
+                        </label>
+                        <label className="field">
+                          <span>Assign To Staff</span>
+                          <select
+                            className="input"
+                            value={transferForm.toAssignedTo}
+                            onChange={(e) =>
+                              setTransferForm((f) => ({
+                                ...f,
+                                toAssignedTo: e.target.value,
+                                responsibilityConfirmed: false,
+                                returnConfirmed: false,
+                              }))
+                            }
+                          >
+                            <option value="">Unassigned / In Stock</option>
+                            {users.map((u) => (
+                              <option key={`quick-transfer-user-${u.id}`} value={u.fullName}>
+                                {u.fullName}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field check-field">
+                          <span>Staff responsibility confirm</span>
+                          <input
+                            type="checkbox"
+                            checked={transferForm.responsibilityConfirmed}
+                            onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
+                          />
+                        </label>
+                        <label className="field check-field">
+                          <span>Previous holder returned item</span>
+                          <input
+                            type="checkbox"
+                            checked={transferForm.returnConfirmed}
+                            onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
+                          />
+                        </label>
+                      </>
+                    )}
                     <label className="field">
                       <span>Reason</span>
                       <input
@@ -30882,7 +31927,11 @@ export default function App() {
                     </label>
                   </div>
                   <div className="asset-actions">
-                    <div className="tiny">Transfer updates campus/location and saves transfer history.</div>
+                    <div className="tiny">
+                      {isGroupedFurnitureTransferAsset(transferQuickAsset)
+                        ? "Grouped furniture transfer moves quantity between room stock records."
+                        : "Transfer updates campus/location and saves transfer history."}
+                    </div>
                     <div className="row-actions">
                       <button className="tab" onClick={() => { setTransferQuickAssetId(null); }}>Cancel</button>
                       <button
@@ -34933,44 +35982,61 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <label className="field">
-                <span>Assign To Staff</span>
-                <select
-                  className="input"
-                  value={transferForm.toAssignedTo}
-                  onChange={(e) =>
-                    setTransferForm((f) => ({
-                      ...f,
-                      toAssignedTo: e.target.value,
-                      responsibilityConfirmed: false,
-                      returnConfirmed: false,
-                    }))
-                  }
-                >
-                  <option value="">Unassigned / In Stock</option>
-                  {users.map((u) => (
-                    <option key={`transfer-user-${u.id}`} value={u.fullName}>
-                      {u.fullName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field check-field">
-                <span>Staff responsibility confirm</span>
-                <input
-                  type="checkbox"
-                  checked={transferForm.responsibilityConfirmed}
-                  onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
-                />
-              </label>
-              <label className="field check-field">
-                <span>Previous holder returned item</span>
-                <input
-                  type="checkbox"
-                  checked={transferForm.returnConfirmed}
-                  onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
-                />
-              </label>
+              {transferIsGroupedFurniture ? (
+                <label className="field">
+                  <span>Transfer Quantity</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    max={transferGroupedFurnitureMeta?.quantity || 1}
+                    value={transferForm.quantity}
+                    onChange={(e) => setTransferForm((f) => ({ ...f, quantity: e.target.value }))}
+                  />
+                  <div className="tiny">Available in source: {transferGroupedFurnitureMeta?.quantity || 1}</div>
+                </label>
+              ) : (
+                <>
+                  <label className="field">
+                    <span>Assign To Staff</span>
+                    <select
+                      className="input"
+                      value={transferForm.toAssignedTo}
+                      onChange={(e) =>
+                        setTransferForm((f) => ({
+                          ...f,
+                          toAssignedTo: e.target.value,
+                          responsibilityConfirmed: false,
+                          returnConfirmed: false,
+                        }))
+                      }
+                    >
+                      <option value="">Unassigned / In Stock</option>
+                      {users.map((u) => (
+                        <option key={`transfer-user-${u.id}`} value={u.fullName}>
+                          {u.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field check-field">
+                    <span>Staff responsibility confirm</span>
+                    <input
+                      type="checkbox"
+                      checked={transferForm.responsibilityConfirmed}
+                      onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
+                    />
+                  </label>
+                  <label className="field check-field">
+                    <span>Previous holder returned item</span>
+                    <input
+                      type="checkbox"
+                      checked={transferForm.returnConfirmed}
+                      onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
+                    />
+                  </label>
+                </>
+              )}
               <label className="field">
                 <span>Reason</span>
                 <input
@@ -34998,7 +36064,11 @@ export default function App() {
               </label>
             </div>
             <div className="asset-actions">
-              <div className="tiny">Transfer updates campus/location, assignee, transfer history, and custody accountability log.</div>
+              <div className="tiny">
+                {transferIsGroupedFurniture
+                  ? "Grouped furniture transfer moves quantity between room stock records."
+                  : "Transfer updates campus/location, assignee, transfer history, and custody accountability log."}
+              </div>
               <button
                 className="btn-primary"
                 disabled={busy || !isAdmin || !transferForm.assetId || !transferForm.toCampus || !transferForm.toLocation}
@@ -38003,6 +39073,9 @@ export default function App() {
                 {assetMasterItemBreakdownText ? (
                   <span> | <strong>By Item:</strong> {assetMasterItemBreakdownText}</span>
                 ) : null}
+                {assetMasterCampusBreakdownText ? (
+                  <span> | <strong>By Campus:</strong> {assetMasterCampusBreakdownText}</span>
+                ) : null}
                 {isAirconAssetMasterReport && airconAssetMasterSummary.byType.length ? (
                   <span> | <strong>By AC Type:</strong> {airconAssetMasterSummary.byType.map(([name, count]) => `${name}: ${count}`).join(" | ")}</span>
                 ) : null}
@@ -38871,6 +39944,11 @@ export default function App() {
               {canAccessMenu("setup.items", "setup") ? (
                 <button className={`tab ${setupView === "items" ? "tab-active" : ""}`} onClick={() => setSetupView("items")}>
                   {t.itemNameSetup}
+                </button>
+              ) : null}
+              {canAccessMenu("setup.furnitureModels", "setup") ? (
+                <button className={`tab ${setupView === "furnitureModels" ? "tab-active" : ""}`} onClick={() => setSetupView("furnitureModels")}>
+                  Furniture Models
                 </button>
               ) : null}
               {canAccessMenu("setup.locations", "setup") ? (
@@ -40133,6 +41211,136 @@ export default function App() {
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          )}
+
+          {tab === "setup" && setupView === "furnitureModels" && canAccessMenu("setup.furnitureModels", "setup") && (
+          <section className="panel">
+            <h2>Furniture Model Master</h2>
+            <div className="tiny">Create furniture models once, then select them from the furniture asset form.</div>
+            <div className="form-grid" style={{ marginTop: 12 }}>
+              <label className="field">
+                <span>{t.typeCode}</span>
+                <select
+                  className="input"
+                  value={furnitureModelForm.type}
+                  disabled={!isAdmin}
+                  onChange={(e) => setFurnitureModelForm((f) => ({ ...f, type: e.target.value }))}
+                >
+                  <option value="CHR">Chair (CHR)</option>
+                  <option value="TBL">Table (TBL)</option>
+                  <option value="DSK">Deskset (DSK)</option>
+                  <option value="CAB">Cabinet (CAB)</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Model Name</span>
+                <input
+                  className="input"
+                  value={furnitureModelForm.model}
+                  disabled={!isAdmin}
+                  placeholder="Toy and Me"
+                  onChange={(e) => setFurnitureModelForm((f) => ({ ...f, model: e.target.value }))}
+                />
+              </label>
+              <label className="field field-wide">
+                <span>Model Photo</span>
+                <input
+                  id="setup-furniture-model-upload"
+                  className="file-input"
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={onFurnitureModelMasterPhotoFile}
+                />
+                <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    disabled={!isAdmin}
+                    onClick={() => document.getElementById("setup-furniture-model-upload")?.click()}
+                  >
+                    {furnitureModelForm.photo ? "Replace Photo" : "Choose Photo"}
+                  </button>
+                  {furnitureModelForm.photo ? (
+                    <>
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={furnitureModelForm.photo}
+                        alt="furniture-model-master"
+                        className="asset-photo-chip-img"
+                        style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
+                      />
+                      <button
+                        className="btn-danger"
+                        type="button"
+                        disabled={!isAdmin}
+                        onClick={() => setFurnitureModelForm((f) => ({ ...f, photo: "" }))}
+                      >
+                        Remove
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              </label>
+            </div>
+            <div className="asset-actions">
+              <div className="tiny">Example: {furnitureModelLabel(furnitureModelForm.type, furnitureModelForm.model || "Toy and Me")}</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {editingFurnitureModelId !== null ? (
+                  <button className="tab" disabled={!isAdmin} onClick={cancelEditFurnitureModelMaster}>
+                    Cancel
+                  </button>
+                ) : null}
+                <button className="btn-primary" disabled={!isAdmin} onClick={() => void saveFurnitureModelMaster()}>
+                  {editingFurnitureModelId !== null ? "Update Model" : "Save Model"}
+                </button>
+              </div>
+            </div>
+            <div className="table-wrap" style={{ marginTop: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Photo</th>
+                    <th>{t.typeCode}</th>
+                    <th>Model Name</th>
+                    <th>Display</th>
+                    <th>{t.edit}</th>
+                    <th>{t.delete}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {furnitureModels.length ? (
+                    furnitureModels
+                      .slice()
+                      .sort((a, b) => a.type.localeCompare(b.type) || a.model.localeCompare(b.model))
+                      .map((row) => (
+                        <tr key={`furniture-model-${row.id}`}>
+                          <td>{renderAssetPhoto(row.photo || "", `furniture-model-${row.id}`)}</td>
+                          <td>{row.type}</td>
+                          <td>{row.model}</td>
+                          <td>{furnitureModelLabel(row.type, row.model)}</td>
+                          <td>
+                            <button className="tab" disabled={!isAdmin} onClick={() => startEditFurnitureModelMaster(row)}>
+                              {t.edit}
+                            </button>
+                          </td>
+                          <td>
+                            <button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteFurnitureModelMaster(row.id)}>
+                              X
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6}>No furniture models yet.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

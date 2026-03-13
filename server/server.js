@@ -220,6 +220,7 @@ const TYPE_CODES = {
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
   FACILITY: ["AC", "WDP", "WTK", "FPN", "RPN", "TBL", "CHR", "PNO"],
+  FURNITURE: ["TBL", "CHR", "DSK", "CAB"],
 };
 const TYPE_LABELS = {
   PC: "Computer",
@@ -259,12 +260,15 @@ const TYPE_LABELS = {
   RPN: "Rear Panel",
   TBL: "Table",
   CHR: "Chair",
+  DSK: "Deskset",
+  CAB: "Cabinet",
   PNO: "Piano",
 };
 const CATEGORY_CODE = {
   IT: "COM",
   SAFETY: "EE",
   FACILITY: "FFE",
+  FURNITURE: "FFE",
 };
 const SHARED_LOCATION_KEYWORDS = [
   "admin office",
@@ -3492,8 +3496,9 @@ function toText(value) {
 function normalizeCategoryInput(value) {
   const raw = toUpper(value);
   if (!raw) return "";
-  if (raw === "IT" || raw === "SAFETY" || raw === "FACILITY") return raw;
+  if (raw === "IT" || raw === "SAFETY" || raw === "FACILITY" || raw === "FURNITURE") return raw;
   if (raw === "FC" || raw === "FACILITIES" || raw === "FACITY") return "FACILITY";
+  if (raw === "FUR" || raw === "FURN") return "FURNITURE";
   return raw;
 }
 
@@ -3568,7 +3573,7 @@ function validateAsset(body) {
 
   if (!campus) return "Campus is required";
   if (!category) return "Category is required";
-  if (!TYPE_CODES[category]) return "Category must be IT, SAFETY, or FACILITY";
+  if (!TYPE_CODES[category]) return "Category must be IT, SAFETY, FACILITY, or FURNITURE";
   if (!type) return "Type code is required";
   if (!TYPE_CODES[category].includes(type)) {
     return `Type code '${type}' is not allowed for ${category}`;
@@ -3729,6 +3734,33 @@ function normalizeCalendarEvents(input) {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return a.name.localeCompare(b.name);
   });
+}
+
+function normalizeFurnitureModels(input) {
+  if (!Array.isArray(input)) return [];
+  const out = [];
+  const seen = new Set();
+  for (let i = 0; i < input.length; i += 1) {
+    const row = input[i];
+    if (!row || typeof row !== "object") continue;
+    const type = toUpper(row.type);
+    const model = toText(row.model);
+    const photo = toText(row.photo);
+    if (!type || !model) continue;
+    const key = `${type}::${model.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const parsedId = Number(row.id);
+    const id = Number.isFinite(parsedId) && parsedId > 0 ? parsedId : Date.now() + i;
+    out.push({
+      id,
+      type,
+      model,
+      photo,
+      created: toText(row.created) || new Date().toISOString(),
+    });
+  }
+  return out.sort((a, b) => a.type.localeCompare(b.type) || a.model.localeCompare(b.model));
 }
 
 function validateStaffUser(body) {
@@ -4135,6 +4167,7 @@ function toPublicAssetView(asset, allAssets = []) {
         fromLocation: toText(entry?.fromLocation),
         toCampus: toText(entry?.toCampus),
         toLocation: toText(entry?.toLocation),
+        quantity: Math.max(0, Number(entry?.quantity || 0)),
         reason: toText(entry?.reason),
         by: toText(entry?.by),
         note: toText(entry?.note),
@@ -4530,6 +4563,7 @@ const server = http.createServer(async (req, res) => {
           poolComplaints: normalizePoolComplaints(settings.poolComplaints),
           utilityMeters: normalizeUtilityMeters(settings.utilityMeters),
           utilityReadings: normalizeUtilityReadings(settings.utilityReadings),
+          furnitureModels: normalizeFurnitureModels(settings.furnitureModels),
           vaultAccounts: normalizeVaultAccounts(settings.vaultAccounts),
           vaultCredentials: normalizeVaultCredentials(settings.vaultCredentials),
           vaultDesignLinks: normalizeVaultDesignLinks(settings.vaultDesignLinks),
@@ -4616,6 +4650,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "utilityReadings")
           ? normalizeUtilityReadings(incoming.utilityReadings)
           : normalizeUtilityReadings(current.utilityReadings);
+      const nextFurnitureModels =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "furnitureModels")
+          ? normalizeFurnitureModels(incoming.furnitureModels)
+          : normalizeFurnitureModels(current.furnitureModels);
       const nextVaultAccounts =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultAccounts")
           ? normalizeVaultAccounts(incoming.vaultAccounts)
@@ -4654,6 +4692,7 @@ const server = http.createServer(async (req, res) => {
         poolComplaints: nextPoolComplaints,
         utilityMeters: nextUtilityMeters,
         utilityReadings: nextUtilityReadings,
+        furnitureModels: nextFurnitureModels,
         vaultAccounts: nextVaultAccounts,
         vaultCredentials: nextVaultCredentials,
         vaultDesignLinks: nextVaultDesignLinks,
