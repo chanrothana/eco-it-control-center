@@ -1434,6 +1434,7 @@ const DEFAULT_ASSET_LIST_COLUMN_WIDTHS = [13, 17, 8, 6, 14, 7, 11, 9, 7, 8];
 const DEFAULT_ASSET_MASTER_COLUMN_WIDTHS = {
   photo: 6,
   assetId: 13,
+  acTypeCapacity: 11,
   linkedTo: 14,
   itemName: 12,
   category: 8,
@@ -1682,7 +1683,7 @@ const LAPTOP_TYPE = "LAP";
 const DIGITAL_CAMERA_TYPE = "DCM";
 const PROJECTOR_TYPE = "SLP";
 const PROJECTOR_COMPONENT_TYPES = ["PBG"] as const;
-const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set(["ADP", "RMT", "HDC"]);
+const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set(["ADP", "RMT", "HDC", "CHB", "BAG"]);
 const REPORT_ITEM_FILTER_HIDDEN_NAMES = new Set([
   "Adapter",
   "Battery Charger",
@@ -5920,6 +5921,7 @@ export default function App() {
   type AssetMasterSortKey =
     | "photo"
     | "assetId"
+    | "acTypeCapacity"
     | "linkedTo"
     | "itemName"
     | "category"
@@ -22986,6 +22988,9 @@ export default function App() {
           itemDescription: toItemDescription(asset),
           acType: isAirconAsset(asset.category, asset.type) ? parseAirconSpecs(asset.specs || "").acType : "",
           acCapacity: isAirconAsset(asset.category, asset.type) ? parseAirconSpecs(asset.specs || "").acHp : "",
+          acTypeCapacity: isAirconAsset(asset.category, asset.type)
+            ? [parseAirconSpecs(asset.specs || "").acType, parseAirconSpecs(asset.specs || "").acHp].filter(Boolean).join(" | ")
+            : "",
           serialNumber: String(asset.serialNumber || "").trim(),
           location: asset.location || "-",
           purchaseDate: asset.purchaseDate || "-",
@@ -23197,6 +23202,7 @@ export default function App() {
     () => [
       { key: "photo", label: t.photo, sortable: true },
       { key: "assetId", label: t.assetId, sortable: true },
+      { key: "acTypeCapacity", label: "Type / Capacity", sortable: true },
       { key: "linkedTo", label: "Link to Main Asset", sortable: true },
       { key: "category", label: t.category, sortable: true },
       { key: "itemDescription", label: "Item Description (Specification)", sortable: true },
@@ -23416,6 +23422,22 @@ export default function App() {
     () => Boolean(assetMasterReportRows.length) && airconAssetMasterSummary.total === assetMasterReportRows.length,
     [airconAssetMasterSummary.total, assetMasterReportRows.length]
   );
+  useEffect(() => {
+    setAssetMasterVisibleColumns((prev) => {
+      const hasColumn = prev.includes("acTypeCapacity");
+      if (isAirconAssetMasterReport && !hasColumn) {
+        const next = [...prev];
+        const assetIdIndex = next.indexOf("assetId");
+        if (assetIdIndex >= 0) next.splice(assetIdIndex + 1, 0, "acTypeCapacity");
+        else next.unshift("acTypeCapacity");
+        return next;
+      }
+      if (!isAirconAssetMasterReport && hasColumn) {
+        return prev.filter((key) => key !== "acTypeCapacity");
+      }
+      return prev;
+    });
+  }, [isAirconAssetMasterReport]);
   const columnFilterSummary = lang === "km" ? "ជ្រើសជួរឈរ" : "Select Column";
   const reportSectionOptions = useMemo<Array<{ value: ReportSection; label: string }>>(
     () =>
@@ -24668,6 +24690,8 @@ export default function App() {
               return toPrintablePhotoUrl(row.photo || "");
             case "assetId":
               return row.assetId;
+            case "acTypeCapacity":
+              return [String(row.acType || "").trim(), String(row.acCapacity || "").trim()].filter(Boolean).join(" | ") || "-";
             case "linkedTo":
               return row.linkedTo;
             case "itemName":
@@ -39119,6 +39143,9 @@ export default function App() {
                             </div>
                           </div>
                           <div className="report-card-meta">
+                            {isAirconAssetMasterReport ? (
+                              <div><strong>Type / Capacity:</strong> {[String(row.acType || "").trim(), String(row.acCapacity || "").trim()].filter(Boolean).join(" | ") || "-"}</div>
+                            ) : null}
                             <div><strong>{t.campus}:</strong> {reportCampusName(row.campus)}</div>
                             <div><strong>{t.category}:</strong> {row.category || "-"}</div>
                             <div><strong>{t.location}:</strong> {row.location || "-"}</div>
@@ -39192,6 +39219,13 @@ export default function App() {
                                   }
                                   if (column.key === "assetId") {
                                     return <td key={`${row.key}-assetId`}><strong>{row.assetId}</strong></td>;
+                                  }
+                                  if (column.key === "acTypeCapacity") {
+                                    return (
+                                      <td key={`${row.key}-acTypeCapacity`}>
+                                        {[String(row.acType || "").trim(), String(row.acCapacity || "").trim()].filter(Boolean).join(" | ") || "-"}
+                                      </td>
+                                    );
                                   }
                                   if (column.key === "linkedTo") {
                                     return <td key={`${row.key}-linkedTo`}>{row.linkedTo || "-"}</td>;
