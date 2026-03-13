@@ -21691,8 +21691,9 @@ export default function App() {
   const assetListVisibleColumns = useMemo(
     () =>
       ASSET_LIST_COLUMN_KEYS.map((key, index) => ({ key, index, width: assetListColumnWidths[index] }))
-        .filter((column) => !(hideAssetAssignedStaffColumn && column.key === "assignedTo")),
-    [assetListColumnWidths, hideAssetAssignedStaffColumn]
+        .filter((column) => !(hideAssetAssignedStaffColumn && column.key === "assignedTo"))
+        .filter((column) => !(!assetListFurnitureOnly && column.key === "quantity")),
+    [assetListColumnWidths, hideAssetAssignedStaffColumn, assetListFurnitureOnly]
   );
   useEffect(() => {
     if (!hideAssetAssignedStaffFilter) return;
@@ -29813,10 +29814,12 @@ export default function App() {
                             </button>
                             <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(4, e.clientX)} />
                           </th>
-                          <th>
-                            Qty
-                            <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(5, e.clientX)} />
-                          </th>
+                          {assetListFurnitureOnly ? (
+                            <th>
+                              Qty
+                              <span className="column-resizer" onMouseDown={(e) => startAssetListColumnResize(5, e.clientX)} />
+                            </th>
+                          ) : null}
                           <th aria-sort={assetListSort.key === "location" ? (assetListSort.direction === "asc" ? "ascending" : "descending") : "none"}>
                             <button
                               type="button"
@@ -29873,7 +29876,9 @@ export default function App() {
                                 {renderAssetPhoto(assetDisplayPhoto(asset), asset.assetId)}
                               </td>
                               <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                              <td>{isFurnitureAsset(asset.category) ? furnitureAssetQuantity(asset) || 1 : "-"}</td>
+                              {assetListFurnitureOnly ? (
+                                <td>{isFurnitureAsset(asset.category) ? furnitureAssetQuantity(asset) || 1 : "-"}</td>
+                              ) : null}
                               <td>
                                 <span className="asset-list-location-text" title={asset.location || "-"}>
                                   {asset.location || "-"}
@@ -29926,7 +29931,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={hideAssetAssignedStaffColumn ? 9 : 10}>{t.noAssets}</td>
+                            <td colSpan={assetListVisibleColumns.length}>{t.noAssets}</td>
                           </tr>
                         )}
                       </tbody>
