@@ -37141,41 +37141,43 @@ export default function App() {
                         onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
                       />
                     </label>
-                    <label className="field field-wide">
-                      <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
-                      <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                        <button
-                          type="button"
-                          className="tab btn-small"
-                          onClick={() =>
-                            downloadMaintenanceReportTemplate({
-                              asset: maintenanceRecordSelectedAsset,
-                              form: maintenanceRecordForm,
-                              sourceTitle: "Maintenance Record",
-                            })
-                          }
-                        >
-                          {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
-                        </button>
-                        <span className="tiny">
-                          {lang === "km"
-                            ? "បើចង់ អាចភ្ជាប់ឯកសាររបាយការណ៍បន្ថែមបាន។"
-                            : "Attach a report file only if you need extra documentation."}
-                        </span>
-                      </div>
-                      <input
-                        key={`${maintenanceRecordFileKey}-report`}
-                        className="file-input"
-                        type="file"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
-                        onChange={(e) => void onMaintenanceRecordReportFile(e)}
-                      />
-                      {maintenanceRecordForm.reportFile
-                        ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-record-report", true, () =>
-                            setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
-                          )
-                        : null}
-                    </label>
+                    {!isPhoneView ? (
+                      <label className="field field-wide">
+                        <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                        <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                          <button
+                            type="button"
+                            className="tab btn-small"
+                            onClick={() =>
+                              downloadMaintenanceReportTemplate({
+                                asset: maintenanceRecordSelectedAsset,
+                                form: maintenanceRecordForm,
+                                sourceTitle: "Maintenance Record",
+                              })
+                            }
+                          >
+                            {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
+                          </button>
+                          <span className="tiny">
+                            {lang === "km"
+                              ? "បើចង់ អាចភ្ជាប់ឯកសាររបាយការណ៍បន្ថែមបាន។"
+                              : "Attach a report file only if you need extra documentation."}
+                          </span>
+                        </div>
+                        <input
+                          key={`${maintenanceRecordFileKey}-report`}
+                          className="file-input"
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
+                          onChange={(e) => void onMaintenanceRecordReportFile(e)}
+                        />
+                        {maintenanceRecordForm.reportFile
+                          ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-record-report", true, () =>
+                              setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
+                            )
+                          : null}
+                      </label>
+                    ) : null}
                   </div>
                 </details>
               </div>

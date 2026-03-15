@@ -2177,12 +2177,28 @@ function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "defa
     db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
       ? db.settings
       : {};
-  const settingsTargets = normalizeTelegramChatIds(
+  const primarySettingsTargets = normalizeTelegramChatIds(
     kind === "maintenance" ? settings.telegramMaintenanceChatIds : settings.telegramChatIds
   );
+  const fallbackSettingsTargets =
+    kind === "maintenance" && !primarySettingsTargets.length
+      ? normalizeTelegramChatIds(settings.telegramChatIds)
+      : [];
   const explicitTargets = normalizeTelegramChatIds(overrideChatIds);
-  const envTargets = kind === "maintenance" ? TELEGRAM_MAINTENANCE_CHAT_IDS : TELEGRAM_CHAT_IDS;
-  return Array.from(new Set([...explicitTargets, ...envTargets, ...settingsTargets]));
+  const primaryEnvTargets = kind === "maintenance" ? TELEGRAM_MAINTENANCE_CHAT_IDS : TELEGRAM_CHAT_IDS;
+  const fallbackEnvTargets =
+    kind === "maintenance" && !primaryEnvTargets.length
+      ? TELEGRAM_CHAT_IDS
+      : [];
+  return Array.from(
+    new Set([
+      ...explicitTargets,
+      ...primaryEnvTargets,
+      ...fallbackEnvTargets,
+      ...primarySettingsTargets,
+      ...fallbackSettingsTargets,
+    ])
+  );
 }
 
 function shouldRetryTelegramResult(result) {
@@ -2346,6 +2362,50 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     };
   }
   return successCount > 0;
+}
+
+function formatTicketRequestSourceLabel(value) {
+  const key = toText(value).toLowerCase();
+  if (key === "qr_scan" || key === "qr_asset") return "QR Scan";
+  if (key === "manual") return "Manual";
+  return toText(value) || "Manual";
+}
+
+async function sendTelegramWorkOrderCreatedAlert(ticket, db = null) {
+  if (!ticket || typeof ticket !== "object") return false;
+  const lines = [
+    "ECO Maintenance Alert",
+    "New maintenance / repair request",
+    `Ticket: ${toText(ticket.ticketNo) || "-"}`,
+    `Campus: ${formatTelegramCampusKhmer(ticket.campus)}`,
+    `Category: ${toText(ticket.category) || "-"}`,
+    `Title: ${toText(ticket.title) || "-"}`,
+    `Requested By: ${toText(ticket.requestedBy) || "-"}`,
+    `Priority: ${toText(ticket.priority) || "Normal"}`,
+    `Source: ${formatTicketRequestSourceLabel(ticket.requestSource)}`,
+    `Status: ${toText(ticket.status) || "Open"}`,
+  ];
+  if (toText(ticket.assetId)) {
+    lines.push(`Asset ID: ${toText(ticket.assetId)}`);
+  }
+  if (toText(ticket.assetLocation)) {
+    lines.push(`Location: ${toText(ticket.assetLocation)}`);
+  }
+  if (toText(ticket.requesterContact)) {
+    lines.push(`Contact: ${toText(ticket.requesterContact)}`);
+  }
+  if (toText(ticket.description)) {
+    lines.push(`Description: ${toText(ticket.description)}`);
+  }
+  const report = await sendTelegramMaintenanceMessage(lines.join("\n"), {
+    db,
+    photoUrl: resolveTelegramPhotoUrl(toText(ticket.photo)),
+    includeResults: true,
+  });
+  return {
+    ok: Boolean(report && report.ok),
+    messageRefs: normalizeTelegramMessageRefs(report && report.results),
+  };
 }
 
 function resolveTelegramPhotoUrl(photoPath) {
@@ -7057,6 +7117,11 @@ const server = http.createServer(async (req, res) => {
       db.tickets.unshift(ticket);
       appendAuditLog(db, admin, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title}`);
       await writeDb(db);
+      try {
+        await sendTelegramWorkOrderCreatedAlert(ticket, db);
+      } catch (err) {
+        console.warn("[MAINTENANCE ALERT] Failed to send work-order alert:", err instanceof Error ? err.message : err);
+      }
       sendJson(res, 201, { ticket });
       return;
     }
@@ -7099,6 +7164,11 @@ const server = http.createServer(async (req, res) => {
       db.tickets.unshift(ticket);
       appendAuditLog(db, null, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title} | QR request`);
       await writeDb(db);
+      try {
+        await sendTelegramWorkOrderCreatedAlert(ticket, db);
+      } catch (err) {
+        console.warn("[MAINTENANCE ALERT] Failed to send QR work-order alert:", err instanceof Error ? err.message : err);
+      }
       sendJson(res, 201, { ticket });
       return;
     }

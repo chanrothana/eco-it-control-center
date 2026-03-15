@@ -33,9 +33,15 @@ services:
         value: "true"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: TELEGRAM_MAINTENANCE_BOT_TOKEN
+        sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
       - key: TELEGRAM_CHAT_IDS
+        sync: false
+      - key: TELEGRAM_MAINTENANCE_CHAT_ID
+        sync: false
+      - key: TELEGRAM_MAINTENANCE_CHAT_IDS
         sync: false
       - key: TELEGRAM_DISCOVER_CHAT_IDS
         value: "true"
