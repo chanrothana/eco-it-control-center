@@ -4457,15 +4457,22 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const body = await parseBody(req);
+      const kind = toText(body && body.kind).toLowerCase() === "maintenance" ? "maintenance" : "normal";
       const text =
         toText(body && body.text) ||
-        `ECO IT Telegram test\nTime: ${new Date().toISOString()}\nBy: ${toText(user.displayName) || toText(user.username) || "staff"}`;
+        `${
+          kind === "maintenance" ? "ECO Maintenance Telegram test" : "ECO IT Telegram test"
+        }\nTime: ${new Date().toISOString()}\nBy: ${toText(user.displayName) || toText(user.username) || "staff"}`;
       const db = await readDb();
-      const ok = await sendTelegramMessage(text, { db });
+      const ok =
+        kind === "maintenance"
+          ? await sendTelegramMaintenanceMessage(text, { db })
+          : await sendTelegramMessage(text, { db });
       sendJson(res, 200, {
         ok,
         enabled: TELEGRAM_ALERT_ENABLED,
-        chatTargets: resolveTelegramConfiguredChatIds(db),
+        kind,
+        chatTargets: resolveTelegramConfiguredChatIds(db, [], kind === "maintenance" ? "maintenance" : "default"),
       });
       return;
     }

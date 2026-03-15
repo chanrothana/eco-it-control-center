@@ -13122,15 +13122,15 @@ export default function App() {
   async function sendTelegramTestAlert() {
     if (!requireAdminAction()) return;
     try {
-      const res = await requestJson<{ ok: boolean; enabled: boolean; chatTargets: string[] }>("/api/alerts/telegram/test", {
+      const res = await requestJson<{ ok: boolean; enabled: boolean; kind: string; chatTargets: string[] }>("/api/alerts/telegram/test", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ kind: "maintenance" }),
       });
       await loadTelegramStatus();
       setSetupMessage(
         res.ok
-          ? (lang === "km" ? "បានផ្ញើ Telegram test រួចរាល់។" : "Telegram test sent.")
-          : (lang === "km" ? "Telegram test មិនបានផ្ញើ។" : "Telegram test failed to send.")
+          ? (lang === "km" ? "បានផ្ញើ Maintenance Telegram test រួចរាល់។" : "Maintenance Telegram test sent.")
+          : (lang === "km" ? "Maintenance Telegram test មិនបានផ្ញើ។" : "Maintenance Telegram test failed to send.")
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send Telegram test.");
