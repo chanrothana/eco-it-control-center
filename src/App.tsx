@@ -18736,32 +18736,6 @@ export default function App() {
     }
   }
 
-  function updateMaintenanceWorkflowField<K extends keyof MaintenanceWorkflow>(key: K, value: MaintenanceWorkflow[K]) {
-    setMaintenanceRecordForm((f) => ({
-      ...f,
-      workflow: {
-        ...normalizeMaintenanceWorkflow(f.workflow),
-        [key]: value,
-      },
-    }));
-  }
-
-  function toggleMaintenanceWorkflowChecklist(label: string) {
-    setMaintenanceRecordForm((f) => {
-      const workflow = normalizeMaintenanceWorkflow(f.workflow);
-      const next = workflow.checklist?.includes(label)
-        ? workflow.checklist.filter((item) => item !== label)
-        : [...(workflow.checklist || []), label];
-      return {
-        ...f,
-        workflow: {
-          ...workflow,
-          checklist: next,
-        },
-      };
-    });
-  }
-
   async function addMaintenanceRecordFromTab(): Promise<boolean> {
     if (!requireAdminAction()) return false;
     const assetId = Number(maintenanceRecordForm.assetId);
@@ -18781,19 +18755,18 @@ export default function App() {
       template: getMaintenanceTemplateKey(maintenanceRecordSelectedAsset),
     });
     if (
-      !workflow.issueSummary ||
-      !workflow.rootCause ||
-      !workflow.workPerformed ||
+      !maintenanceRecordForm.note.trim() ||
       !(maintenanceRecordForm.beforePhotos || []).length ||
       !(maintenanceRecordForm.afterPhotos || []).length
     ) {
-      setError("Fill problem found, root cause, action taken, and upload at least one before and after photo.");
+      setError("Fill note and upload at least one before and after photo.");
       return false;
     }
-    const resolvedNote =
+    const resolvedNote = String(
       maintenanceRecordForm.note.trim() ||
       workflow.workPerformed ||
-      workflow.issueSummary;
+      workflow.issueSummary
+    ).trim();
 
     const entry: MaintenanceEntry = {
       id: Date.now(),
@@ -18811,7 +18784,14 @@ export default function App() {
       reportFile: maintenanceRecordForm.reportFile?.url || "",
       reportFileName: maintenanceRecordForm.reportFile?.name || "",
       reportFileType: maintenanceRecordForm.reportFile?.mimeType || "",
-      workflow,
+      workflow: normalizeMaintenanceWorkflow({
+        ...workflow,
+        issueSummary: "",
+        rootCause: "",
+        workPerformed: "",
+        followUp: "",
+        checklist: [],
+      }),
     };
     setBusy(true);
     setError("");
@@ -18874,7 +18854,7 @@ export default function App() {
                   mimeType: maintenanceRecordForm.reportFile.mimeType || "",
                 }
               : "",
-            workflow,
+            workflow: entry.workflow,
           }),
         });
         const savedAsset = nextLocal.find((a) => a.id === assetId);
@@ -18931,117 +18911,12 @@ export default function App() {
             {maintenanceRecordSelectedAsset.location || "-"}
             {maintenanceRecordSelectedAsset.serialNumber ? ` • SN: ${maintenanceRecordSelectedAsset.serialNumber}` : ""}
           </div>
-        <div className="tiny" style={{ marginTop: 6 }}>
-          {maintenanceRecordTemplateConfig.title}: {maintenanceRecordTemplateConfig.guidance}
-        </div>
-      </div>
-        <label className="field field-wide">
-          <span>{lang === "km" ? "បញ្ហាដែលបានឃើញ" : "Problem Found"}</span>
-          <textarea
-            className="textarea"
-            value={maintenanceRecordWorkflow.issueSummary || ""}
-            onChange={(e) => updateMaintenanceWorkflowField("issueSummary", e.target.value)}
-            placeholder="What problem did the technician confirm?"
-          />
-        </label>
-        <div className="field field-wide">
-          <span>{lang === "km" ? "បញ្ជីពិនិត្យជំនួយ" : "Quick Check Guide"}</span>
-          {maintenanceRecordTemplateConfig.checklistGroups?.length ? (
-            <div
-              style={{
-                marginTop: 10,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {maintenanceRecordTemplateConfig.checklistGroups.map((group) => (
-                <div
-                  key={`maintenance-check-group-${group.title}`}
-                  className="panel"
-                  style={{ padding: 14, background: "#fffaf1", borderColor: "#e4c48e" }}
-                >
-                  <div style={{ fontWeight: 700, marginBottom: 10 }}>{group.title}</div>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {group.items.map((label) => {
-                      const checked = maintenanceRecordChecklist.some((row) => row.label === label && row.checked);
-                      return (
-                        <label
-                          key={`maintenance-check-${group.title}-${label}`}
-                          className={`tab ${checked ? "tab-active" : ""}`}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", justifyContent: "flex-start" }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleMaintenanceWorkflowChecklist(label)}
-                          />
-                          <span>{label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="row-actions" style={{ marginTop: 8, flexWrap: "wrap" }}>
-              {maintenanceRecordChecklist.map((row) => (
-                <label
-                  key={`maintenance-check-${row.label}`}
-                  className={`tab ${row.checked ? "tab-active" : ""}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer" }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={row.checked}
-                    onChange={() => toggleMaintenanceWorkflowChecklist(row.label)}
-                  />
-                  <span>{row.label}</span>
-                </label>
-              ))}
-            </div>
-          )}
           <div className="tiny" style={{ marginTop: 6 }}>
-            {lang === "km" ? "អាចចុចធីកបាន ប៉ុន្តែមិនចាំបាច់បំពេញទាំងអស់។" : "Optional tick guide. Staff does not need to complete every technical point."}
+            {lang === "km"
+              ? "របៀបសាមញ្ញ: សរសេរកំណត់ចំណាំខ្លីៗ ហើយភ្ជាប់រូបមុន និងរូបក្រោយ។"
+              : "Simple mode: add a short note, then upload before and after photos."}
           </div>
         </div>
-        <label className="field field-wide">
-          <span>{lang === "km" ? "មូលហេតុពិត" : "Root Cause"}</span>
-          <textarea
-            className="textarea"
-            value={maintenanceRecordWorkflow.rootCause || ""}
-            onChange={(e) => updateMaintenanceWorkflowField("rootCause", e.target.value)}
-            placeholder="Actual diagnosis, not only symptom"
-          />
-        </label>
-        <label className="field field-wide">
-          <span>{lang === "km" ? "សកម្មភាពដែលបានធ្វើ" : "Action Taken"}</span>
-          <textarea
-            className="textarea"
-            value={maintenanceRecordWorkflow.workPerformed || ""}
-            onChange={(e) => updateMaintenanceWorkflowField("workPerformed", e.target.value)}
-            placeholder="Cleaning, replacement, update, repair steps..."
-          />
-        </label>
-        <label className="field">
-          <span>{lang === "km" ? "គ្រឿងបន្លាស់ប្រើ" : "Parts Used"}</span>
-          <input
-            className="input"
-            value={maintenanceRecordWorkflow.partsUsed || ""}
-            onChange={(e) => updateMaintenanceWorkflowField("partsUsed", e.target.value)}
-            placeholder="Part / consumable / serial"
-          />
-        </label>
-        <label className="field field-wide">
-          <span>{lang === "km" ? "លទ្ធផល / ត្រូវតាមដានបន្ត" : "Result / Follow Up"}</span>
-          <textarea
-            className="textarea"
-            value={maintenanceRecordWorkflow.followUp || ""}
-            onChange={(e) => updateMaintenanceWorkflowField("followUp", e.target.value)}
-            placeholder="Working OK, monitor again, waiting part, etc."
-          />
-        </label>
       </>
     );
   }
@@ -20670,28 +20545,13 @@ export default function App() {
     () => assets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
     [assets, maintenanceRecordForm.assetId]
   );
-  const maintenanceRecordWorkflow = useMemo(
-    () => normalizeMaintenanceWorkflow(maintenanceRecordForm.workflow),
-    [maintenanceRecordForm.workflow]
-  );
-  const maintenanceRecordTemplate = maintenanceRecordWorkflow.template || getMaintenanceTemplateKey(maintenanceRecordSelectedAsset);
-  const maintenanceRecordTemplateConfig = MAINTENANCE_TEMPLATE_CONFIG[maintenanceRecordTemplate];
-  const maintenanceRecordChecklist = useMemo(() => {
-    const selected = new Set(maintenanceRecordWorkflow.checklist || []);
-    return maintenanceRecordTemplateConfig.checklist.map((label) => ({
-      label,
-      checked: selected.has(label),
-    }));
-  }, [maintenanceRecordTemplateConfig, maintenanceRecordWorkflow.checklist]);
   const maintenanceRecordIsComplete = useMemo(() => (
     Boolean(maintenanceRecordForm.assetId) &&
     Boolean(maintenanceRecordForm.date) &&
-    Boolean(maintenanceRecordWorkflow.issueSummary) &&
-    Boolean(maintenanceRecordWorkflow.rootCause) &&
-    Boolean(maintenanceRecordWorkflow.workPerformed) &&
+    Boolean(maintenanceRecordForm.note.trim()) &&
     (maintenanceRecordForm.beforePhotos || []).length > 0 &&
     (maintenanceRecordForm.afterPhotos || []).length > 0
-  ), [maintenanceRecordForm, maintenanceRecordWorkflow]);
+  ), [maintenanceRecordForm]);
   const ticketMaintenanceAsset = useMemo(() => {
     if (!ticketMaintenanceModal) return null;
     if (ticketMaintenanceModal.assetDbId) {
@@ -37162,39 +37022,27 @@ export default function App() {
                       ))}
                   </select>
                 </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ដោយ" : "By"}</span>
+                  <input
+                    className="input"
+                    value={maintenanceRecordForm.by}
+                    readOnly
+                  />
+                </label>
               </div>
               {renderMaintenanceWorkflowSection()}
-              <label className="field field-wide">
-                <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
-                <input
-                  className="input"
-                  value={maintenanceRecordForm.condition}
-                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
-                  placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ, ថ្មខ្សោយ, ត្រូវប្តូរឆាប់ៗ..." : "Example: Working well, battery low, replace soon..."}
-                />
-              </label>
               <label className="field field-wide">
                 <span>{lang === "km" ? "កំណត់ចំណាំថែទាំ" : "Maintenance Note"}</span>
                 <textarea
                   className="textarea"
                   value={maintenanceRecordForm.note}
                   onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, note: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span>{lang === "km" ? "ចំណាយ" : "Cost"}</span>
-                <input
-                  className="input"
-                  value={maintenanceRecordForm.cost}
-                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span>{lang === "km" ? "ដោយ" : "By"}</span>
-                <input
-                  className="input"
-                  value={maintenanceRecordForm.by}
-                  readOnly
+                  placeholder={
+                    lang === "km"
+                      ? "ឧទាហរណ៍: ជួសជុលខ្សែភ្លើងរលុង សម្អាត និងសាកល្បងរួចដំណើរការល្អ"
+                      : "Example: Fixed loose power cable, cleaned unit, tested and working normally."
+                  }
                 />
               </label>
               <label className="field">
@@ -37270,52 +37118,73 @@ export default function App() {
                   </div>
                 ) : null}
               </label>
-              <label className="field field-wide">
-                <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
-                <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                  <button
-                    type="button"
-                    className="tab btn-small"
-                    onClick={() =>
-                      downloadMaintenanceReportTemplate({
-                        asset: maintenanceRecordSelectedAsset,
-                        form: maintenanceRecordForm,
-                        sourceTitle: "Maintenance Record",
-                      })
-                    }
-                  >
-                    {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
-                  </button>
-                  <span className="tiny">
-                    {lang === "km"
-                      ? "សូមទាញយកទម្រង់ កែប្រែឯកសារ ហើយបន្ទាប់មកអាប់ឡូដឯកសាររបាយការណ៍។"
-                      : "Download the template, update the file first, then upload the maintenance report."}
-                  </span>
-                </div>
-                <input
-                  key={`${maintenanceRecordFileKey}-report`}
-                  className="file-input"
-                  type="file"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
-                  onChange={(e) => void onMaintenanceRecordReportFile(e)}
-                />
-                <div className="tiny">
-                  {lang === "km"
-                    ? "អាចភ្ជាប់ PDF, invoice, ឬឯកសាររបាយការណ៍ថែទាំទៅក្នុង asset history បាន។"
-                    : "Attach PDF, invoice, or service report file to save into asset history."}
-                </div>
-                {maintenanceRecordForm.reportFile
-                  ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-record-report", true, () =>
-                      setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
-                    )
-                  : null}
-              </label>
+              <div className="field field-wide">
+                <details>
+                  <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+                    {lang === "km" ? "ជម្រើសបន្ថែម (មិនចាំបាច់)" : "Optional Details"}
+                  </summary>
+                  <div className="form-grid" style={{ marginTop: 12 }}>
+                    <label className="field field-wide">
+                      <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
+                      <input
+                        className="input"
+                        value={maintenanceRecordForm.condition}
+                        onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                        placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ, ថ្មខ្សោយ, ត្រូវប្តូរឆាប់ៗ..." : "Example: Working well, battery low, replace soon..."}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ចំណាយ" : "Cost"}</span>
+                      <input
+                        className="input"
+                        value={maintenanceRecordForm.cost}
+                        onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
+                      <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                        <button
+                          type="button"
+                          className="tab btn-small"
+                          onClick={() =>
+                            downloadMaintenanceReportTemplate({
+                              asset: maintenanceRecordSelectedAsset,
+                              form: maintenanceRecordForm,
+                              sourceTitle: "Maintenance Record",
+                            })
+                          }
+                        >
+                          {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
+                        </button>
+                        <span className="tiny">
+                          {lang === "km"
+                            ? "បើចង់ អាចភ្ជាប់ឯកសាររបាយការណ៍បន្ថែមបាន។"
+                            : "Attach a report file only if you need extra documentation."}
+                        </span>
+                      </div>
+                      <input
+                        key={`${maintenanceRecordFileKey}-report`}
+                        className="file-input"
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
+                        onChange={(e) => void onMaintenanceRecordReportFile(e)}
+                      />
+                      {maintenanceRecordForm.reportFile
+                        ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-record-report", true, () =>
+                            setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
+                          )
+                        : null}
+                    </label>
+                  </div>
+                </details>
+              </div>
             </div>
             <div className="asset-actions">
               <div className="tiny">
                 {lang === "km"
-                  ? "បំពេញតែ បញ្ហា មូលហេតុ សកម្មភាព និងរូបមុន/ក្រោយ។"
-                  : "Fill only problem found, root cause, action taken, and before/after photos."}
+                  ? "ត្រូវការតែ កំណត់ចំណាំ រូបមុន និងរូបក្រោយ។"
+                  : "Only note, before photo, and after photo are required."}
               </div>
               <button
                 className="btn-primary"
