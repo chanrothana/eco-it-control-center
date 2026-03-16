@@ -1042,6 +1042,7 @@ function normalizeTickets(input) {
       maintenanceAssetId: Number(row.maintenanceAssetId) || 0,
       maintenanceSummary: toText(row.maintenanceSummary),
       requestSource: toText(row.requestSource) || "manual",
+      telegramMessageRefs: normalizeTelegramMessageRefs(row.telegramMessageRefs),
     }));
 }
 
@@ -7118,6 +7119,7 @@ const server = http.createServer(async (req, res) => {
         created: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         photo,
+        telegramMessageRefs: [],
         ...cleaned,
       };
 
@@ -7125,7 +7127,12 @@ const server = http.createServer(async (req, res) => {
       appendAuditLog(db, admin, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title}`);
       await writeDb(db);
       try {
-        await sendTelegramWorkOrderCreatedAlert(ticket, db);
+        const telegramReport = await sendTelegramWorkOrderCreatedAlert(ticket, db);
+        if (telegramReport && telegramReport.ok) {
+          ticket.telegramMessageRefs = normalizeTelegramMessageRefs(telegramReport.messageRefs);
+          db.tickets[0] = ticket;
+          await writeDb(db);
+        }
       } catch (err) {
         console.warn("[MAINTENANCE ALERT] Failed to send work-order alert:", err instanceof Error ? err.message : err);
       }
@@ -7166,13 +7173,19 @@ const server = http.createServer(async (req, res) => {
         created: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         photo,
+        telegramMessageRefs: [],
         ...cleaned,
       };
       db.tickets.unshift(ticket);
       appendAuditLog(db, null, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title} | QR request`);
       await writeDb(db);
       try {
-        await sendTelegramWorkOrderCreatedAlert(ticket, db);
+        const telegramReport = await sendTelegramWorkOrderCreatedAlert(ticket, db);
+        if (telegramReport && telegramReport.ok) {
+          ticket.telegramMessageRefs = normalizeTelegramMessageRefs(telegramReport.messageRefs);
+          db.tickets[0] = ticket;
+          await writeDb(db);
+        }
       } catch (err) {
         console.warn("[MAINTENANCE ALERT] Failed to send QR work-order alert:", err instanceof Error ? err.message : err);
       }
@@ -7399,6 +7412,18 @@ const server = http.createServer(async (req, res) => {
       );
       addMaintenanceDoneNotification(db, db.assets[assetIdx], entry);
       ensureMaintenanceScheduleNotifications(db);
+      const ticketTelegramRefs = normalizeTelegramMessageRefs(ticket.telegramMessageRefs);
+      if (ticketTelegramRefs.length && toText(status).toLowerCase() === "done") {
+        const telegramDeleteReport = await deleteTelegramMessagesByRefs(ticketTelegramRefs);
+        if (telegramDeleteReport.ok) {
+          db.tickets[ticketIdx].telegramMessageRefs = [];
+        } else {
+          console.warn(
+            "[MAINTENANCE ALERT] Failed to delete work-order Telegram message(s):",
+            telegramDeleteReport.results
+          );
+        }
+      }
       await writeDb(db);
       sendJson(res, 200, { ticket: db.tickets[ticketIdx], asset: db.assets[assetIdx], entry });
       return;
