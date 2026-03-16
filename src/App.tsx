@@ -2454,6 +2454,7 @@ function trySetLocalStorage(key: string, value: string) {
     USER_FALLBACK_KEY,
     INVENTORY_ITEM_FALLBACK_KEY,
     INVENTORY_TXN_FALLBACK_KEY,
+    FURNITURE_MODEL_FALLBACK_KEY,
     "ui_lang",
   ]);
   if (SERVER_ONLY_STORAGE && !allowInServerOnlyMode.has(key)) return true;
@@ -2616,7 +2617,6 @@ function writeItemTemplateFallback(rows: ItemTemplate[]) {
 }
 
 function readFurnitureModelFallback(): FurnitureModelMaster[] {
-  if (SERVER_ONLY_STORAGE) return [];
   try {
     const raw = localStorage.getItem(FURNITURE_MODEL_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
@@ -2636,7 +2636,6 @@ function readFurnitureModelFallback(): FurnitureModelMaster[] {
 }
 
 function writeFurnitureModelFallback(rows: FurnitureModelMaster[]) {
-  if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(FURNITURE_MODEL_FALLBACK_KEY, JSON.stringify(rows));
 }
 
@@ -11499,6 +11498,7 @@ export default function App() {
         const serverPoolChemicalRecords = normalizePoolChemicalRecords(settingsRes.settings?.poolChemicalRecords);
         const serverPoolOperationRecords = normalizePoolOperationRecords(settingsRes.settings?.poolOperationRecords);
         const serverPoolComplaints = normalizePoolComplaints(settingsRes.settings?.poolComplaints);
+        const fallbackFurnitureModels = readFurnitureModelFallback();
         const fallbackInventoryItems = readInventoryItemFallback();
         const fallbackInventoryTxns = readInventoryTxnFallback();
         const fallbackUtilityMeters = readUtilityMeterFallback();
@@ -11555,6 +11555,9 @@ export default function App() {
               }))
               .filter((row) => row.type && row.model)
           : [];
+        const nextFurnitureModels = serverFurnitureModels.length
+          ? serverFurnitureModels
+          : fallbackFurnitureModels;
         const settingsObj = settingsRes.settings || {};
         setVaultAccounts(
           Object.prototype.hasOwnProperty.call(settingsObj, "vaultAccounts")
@@ -11606,8 +11609,8 @@ export default function App() {
         );
         setFurnitureModels(
           Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels")
-            ? serverFurnitureModels
-            : readFurnitureModelFallback()
+            ? nextFurnitureModels
+            : fallbackFurnitureModels
         );
       } catch {
         // Keep local settings if /api/settings is unavailable.
