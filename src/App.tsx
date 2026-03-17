@@ -18749,7 +18749,7 @@ export default function App() {
     ) {
       return false;
     }
-    if (maintenanceRecordForm.date < todayYmd) {
+    if (!isSuperAdmin && maintenanceRecordForm.date < todayYmd) {
       setError("Cannot set maintenance date to a past date.");
       return false;
     }
