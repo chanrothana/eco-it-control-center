@@ -307,6 +307,7 @@ type ReportType =
   | "asset_master"
   | "set_code"
   | "asset_by_location"
+  | "furniture_control"
   | "inventory_balance"
   | "overdue"
   | "transfer"
@@ -379,6 +380,11 @@ type LocationEntry = {
   id: number;
   campus: string;
   name: string;
+  isClassroom?: boolean;
+  studentCapacity?: number;
+  currentStudents?: number;
+  tableSeatsPerTable?: number;
+  notes?: string;
 };
 type StaffUser = {
   id: number;
@@ -986,7 +992,7 @@ const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
 const DUPLICATE_PHOTO_UPLOAD_ERROR = "duplicate-photo-upload";
 const PHOTO_USAGE_FIELD_KEYS = new Set(["photo", "photos", "beforePhotos", "afterPhotos"]);
 const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
-  asset: ["asset_master", "set_code", "asset_by_location", "staff_borrowing", "qr_labels"],
+  asset: ["asset_master", "set_code", "asset_by_location", "furniture_control", "staff_borrowing", "qr_labels"],
   maintenance: ["maintenance_completion", "overdue"],
   inventory: ["inventory_balance"],
   transfer: ["transfer"],
@@ -996,6 +1002,7 @@ const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
   asset_master: "asset",
   set_code: "asset",
   asset_by_location: "asset",
+  furniture_control: "asset",
   inventory_balance: "inventory",
   overdue: "maintenance",
   transfer: "transfer",
@@ -1170,6 +1177,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.asset_master", labelEn: "Asset Master Register", labelKm: "បញ្ជីទ្រព្យសម្បត្តិ" },
       { key: "reports.set_code", labelEn: "Computer Set Detail", labelKm: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
       { key: "reports.asset_by_location", labelEn: "Asset by Campus and Location", labelKm: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+      { key: "reports.furniture_control", labelEn: "Chair/Table Control", labelKm: "គ្រប់គ្រងកៅអី និងតុ" },
       { key: "reports.inventory_balance", labelEn: "Inventory Stock Balance", labelKm: "សមតុល្យស្តុក" },
       { key: "reports.overdue", labelEn: "Overdue Maintenance", labelKm: "ថែទាំលើសកាលកំណត់" },
       { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
@@ -1683,7 +1691,15 @@ const LAPTOP_TYPE = "LAP";
 const DIGITAL_CAMERA_TYPE = "DCM";
 const PROJECTOR_TYPE = "SLP";
 const PROJECTOR_COMPONENT_TYPES = ["PBG"] as const;
-const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set(["ADP", "RMT", "HDC", "CHB", "BAG"]);
+const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set([
+  "ADP",
+  "RMT",
+  "HDC",
+  "CHB",
+  "BAG",
+  AIRCON_FRONT_UNIT_TYPE_CODE,
+  AIRCON_OUTDOOR_UNIT_TYPE_CODE,
+]);
 const REPORT_ITEM_FILTER_HIDDEN_NAMES = new Set([
   "Adapter",
   "Battery Charger",
@@ -2417,10 +2433,26 @@ function readLocationFallback(): LocationEntry[] {
   try {
     const raw = localStorage.getItem(LOCATION_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeLocationEntries(parsed);
   } catch {
     return [];
   }
+}
+
+function normalizeLocationEntries(input: unknown): LocationEntry[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row, index) => ({
+      id: Number(row.id) || Date.now() + index,
+      campus: String(row.campus || "").trim(),
+      name: String(row.name || "").trim(),
+      isClassroom: Boolean(row.isClassroom),
+      studentCapacity: Math.max(0, Number(row.studentCapacity) || 0),
+      currentStudents: Math.max(0, Number(row.currentStudents) || 0),
+      tableSeatsPerTable: Math.max(1, Number(row.tableSeatsPerTable) || 2),
+      notes: String(row.notes || "").trim(),
+    }))
+    .filter((row) => row.campus && row.name);
 }
 
 function readUserFallback(): StaffUser[] {
@@ -3340,16 +3372,22 @@ function sortLocationEntriesByName(rows: LocationEntry[]) {
 }
 
 function mergeLocations(primary: LocationEntry[], secondary: LocationEntry[]) {
-  const out: LocationEntry[] = [];
-  const seen = new Set<string>();
+  const out = new Map<string, LocationEntry>();
 
-  for (const loc of [...primary, ...secondary]) {
+  for (const loc of [...secondary, ...primary]) {
     const key = `${loc.campus.toLowerCase()}::${loc.name.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(loc);
+    const current = out.get(key);
+    out.set(key, {
+      ...(current || {}),
+      ...loc,
+      isClassroom: Boolean(loc.isClassroom ?? current?.isClassroom),
+      studentCapacity: Math.max(0, Number(loc.studentCapacity ?? current?.studentCapacity) || 0),
+      currentStudents: Math.max(0, Number(loc.currentStudents ?? current?.currentStudents) || 0),
+      tableSeatsPerTable: Math.max(1, Number(loc.tableSeatsPerTable ?? current?.tableSeatsPerTable) || 2),
+      notes: String(loc.notes ?? current?.notes ?? "").trim(),
+    });
   }
-  return out;
+  return Array.from(out.values());
 }
 
 function isMissingRouteError(err: unknown) {
@@ -6730,6 +6768,7 @@ export default function App() {
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
+  const [furnitureControlCampusFilter, setFurnitureControlCampusFilter] = useState("ALL");
   const [quickCountCampusFilter, setQuickCountCampusFilter] = useState<string[]>(["ALL"]);
   const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState<string[]>(["ALL"]);
   const [quickCountLocationFilter, setQuickCountLocationFilter] = useState<string[]>(["ALL"]);
@@ -7444,6 +7483,11 @@ export default function App() {
 
   const [locationCampus, setLocationCampus] = useState(CAMPUS_LIST[0]);
   const [locationName, setLocationName] = useState("");
+  const [locationIsClassroom, setLocationIsClassroom] = useState(false);
+  const [locationStudentCapacity, setLocationStudentCapacity] = useState("");
+  const [locationCurrentStudents, setLocationCurrentStudents] = useState("");
+  const [locationTableSeatsPerTable, setLocationTableSeatsPerTable] = useState("2");
+  const [locationNotes, setLocationNotes] = useState("");
   const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
   const [campusEditCode, setCampusEditCode] = useState("C1");
   const [campusEditName, setCampusEditName] = useState("Samdach Pan Campus");
@@ -11757,7 +11801,7 @@ export default function App() {
       }
 
       const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
-      const locationList = normalizeArray<LocationEntry>(locationRes.locations);
+      const locationList = normalizeLocationEntries(locationRes.locations);
 
       const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
       // Server-first sync: when API is reachable, use server data as single source of truth.
@@ -17417,23 +17461,57 @@ export default function App() {
         if (editingLocationId) {
           await requestJson<{ location: LocationEntry }>(`/api/locations/${editingLocationId}`, {
             method: "PATCH",
-            body: JSON.stringify({ campus: locationCampus, name: locationName.trim() }),
+            body: JSON.stringify({
+              campus: locationCampus,
+              name: locationName.trim(),
+              isClassroom: locationIsClassroom,
+              studentCapacity: Number(locationStudentCapacity || 0),
+              currentStudents: Number(locationCurrentStudents || 0),
+              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              notes: locationNotes.trim(),
+            }),
           });
         } else {
           await requestJson<{ location: LocationEntry }>("/api/locations", {
             method: "POST",
-            body: JSON.stringify({ campus: locationCampus, name: locationName.trim() }),
+            body: JSON.stringify({
+              campus: locationCampus,
+              name: locationName.trim(),
+              isClassroom: locationIsClassroom,
+              studentCapacity: Number(locationStudentCapacity || 0),
+              currentStudents: Number(locationCurrentStudents || 0),
+              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              notes: locationNotes.trim(),
+            }),
           });
         }
         if (editingLocationId) {
           nextLocal = nextLocal.map((loc) =>
             loc.id === editingLocationId
-              ? { ...loc, campus: locationCampus, name: locationName.trim() }
+              ? {
+                  ...loc,
+                  campus: locationCampus,
+                  name: locationName.trim(),
+                  isClassroom: locationIsClassroom,
+                  studentCapacity: Number(locationStudentCapacity || 0),
+                  currentStudents: Number(locationCurrentStudents || 0),
+                  tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+                  notes: locationNotes.trim(),
+                }
               : loc
           );
         } else {
           nextLocal = [
-            { id: Date.now(), campus: locationCampus, name: locationName.trim() },
+            {
+              id: Date.now(),
+              campus: locationCampus,
+              name: locationName.trim(),
+              isClassroom: locationIsClassroom,
+              studentCapacity: Number(locationStudentCapacity || 0),
+              currentStudents: Number(locationCurrentStudents || 0),
+              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              notes: locationNotes.trim(),
+            },
             ...nextLocal,
           ];
         }
@@ -17443,12 +17521,30 @@ export default function App() {
         if (editingLocationId) {
           nextLocal = current.map((loc) =>
             loc.id === editingLocationId
-              ? { ...loc, campus: locationCampus, name: locationName.trim() }
+              ? {
+                  ...loc,
+                  campus: locationCampus,
+                  name: locationName.trim(),
+                  isClassroom: locationIsClassroom,
+                  studentCapacity: Number(locationStudentCapacity || 0),
+                  currentStudents: Number(locationCurrentStudents || 0),
+                  tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+                  notes: locationNotes.trim(),
+                }
               : loc
           );
         } else {
           nextLocal = [
-            { id: Date.now(), campus: locationCampus, name: locationName.trim() },
+            {
+              id: Date.now(),
+              campus: locationCampus,
+              name: locationName.trim(),
+              isClassroom: locationIsClassroom,
+              studentCapacity: Number(locationStudentCapacity || 0),
+              currentStudents: Number(locationCurrentStudents || 0),
+              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              notes: locationNotes.trim(),
+            },
             ...current,
           ];
         }
@@ -17464,6 +17560,11 @@ export default function App() {
       );
 
       setLocationName("");
+      setLocationIsClassroom(false);
+      setLocationStudentCapacity("");
+      setLocationCurrentStudents("");
+      setLocationTableSeatsPerTable("2");
+      setLocationNotes("");
       setEditingLocationId(null);
       await loadData();
     } catch (err) {
@@ -17477,11 +17578,21 @@ export default function App() {
     setEditingLocationId(location.id);
     setLocationCampus(location.campus);
     setLocationName(location.name);
+    setLocationIsClassroom(Boolean(location.isClassroom));
+    setLocationStudentCapacity(location.studentCapacity ? String(location.studentCapacity) : "");
+    setLocationCurrentStudents(location.currentStudents ? String(location.currentStudents) : "");
+    setLocationTableSeatsPerTable(String(location.tableSeatsPerTable || 2));
+    setLocationNotes(String(location.notes || ""));
   }
 
   function cancelEditLocation() {
     setEditingLocationId(null);
     setLocationName("");
+    setLocationIsClassroom(false);
+    setLocationStudentCapacity("");
+    setLocationCurrentStudents("");
+    setLocationTableSeatsPerTable("2");
+    setLocationNotes("");
   }
 
   async function deleteLocation(id: number) {
@@ -23172,6 +23283,156 @@ export default function App() {
     () => filteredLocationAssetSummaryRows.reduce((sum, row) => sum + row.total, 0),
     [filteredLocationAssetSummaryRows]
   );
+  const furnitureControlAssetRows = useMemo(() => {
+    return assets
+      .filter((asset) => isFurnitureAsset(asset.category))
+      .filter((asset) => asset.type === "CHR" || asset.type === "TBL")
+      .map((asset) => {
+        const details = parseFurnitureSpecs(asset.specs || "");
+        const condition = String(details.condition || "").trim() || FURNITURE_CONDITION_OPTIONS[0];
+        const quantity = Math.max(1, furnitureAssetQuantity(asset) || 1);
+        const status = String(asset.status || "").trim().toLowerCase();
+        const isBroken = condition === "Broken" || condition === "Scrap" || status === "broken" || status === "scrap";
+        const isRepair = condition === "Need Repair";
+        const availableQty = isBroken || status === "inactive" ? 0 : quantity;
+        return {
+          id: asset.id,
+          type: asset.type as "CHR" | "TBL",
+          campus: asset.campus,
+          location: String(asset.location || "").trim() || "Unassigned",
+          quantity,
+          availableQty,
+          repairQty: isRepair ? quantity : 0,
+          brokenQty: isBroken ? quantity : 0,
+        };
+      });
+  }, [assets]);
+  const furnitureControlCampusRows = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        campus: string;
+        chairQty: number;
+        chairRepairQty: number;
+        chairBrokenQty: number;
+        tableQty: number;
+        tableRepairQty: number;
+        tableBrokenQty: number;
+      }
+    >();
+    const source =
+      furnitureControlCampusFilter === "ALL"
+        ? furnitureControlAssetRows
+        : furnitureControlAssetRows.filter((row) => row.campus === furnitureControlCampusFilter);
+    for (const row of source) {
+      if (!map.has(row.campus)) {
+        map.set(row.campus, {
+          campus: row.campus,
+          chairQty: 0,
+          chairRepairQty: 0,
+          chairBrokenQty: 0,
+          tableQty: 0,
+          tableRepairQty: 0,
+          tableBrokenQty: 0,
+        });
+      }
+      const current = map.get(row.campus)!;
+      if (row.type === "CHR") {
+        current.chairQty += row.availableQty;
+        current.chairRepairQty += row.repairQty;
+        current.chairBrokenQty += row.brokenQty;
+      } else if (row.type === "TBL") {
+        current.tableQty += row.availableQty;
+        current.tableRepairQty += row.repairQty;
+        current.tableBrokenQty += row.brokenQty;
+      }
+    }
+    const rows = Array.from(map.values()).sort((a, b) => campusLabel(a.campus).localeCompare(campusLabel(b.campus)));
+    const totals = rows.reduce(
+      (sum, row) => ({
+        campus: "ALL",
+        chairQty: sum.chairQty + row.chairQty,
+        chairRepairQty: sum.chairRepairQty + row.chairRepairQty,
+        chairBrokenQty: sum.chairBrokenQty + row.chairBrokenQty,
+        tableQty: sum.tableQty + row.tableQty,
+        tableRepairQty: sum.tableRepairQty + row.tableRepairQty,
+        tableBrokenQty: sum.tableBrokenQty + row.tableBrokenQty,
+      }),
+      {
+        campus: "ALL",
+        chairQty: 0,
+        chairRepairQty: 0,
+        chairBrokenQty: 0,
+        tableQty: 0,
+        tableRepairQty: 0,
+        tableBrokenQty: 0,
+      }
+    );
+    return { rows, totals };
+  }, [furnitureControlAssetRows, furnitureControlCampusFilter, campusLabel]);
+  const furnitureControlClassroomRows = useMemo(() => {
+    const classroomLocations = locations
+      .filter((row) => Boolean(row.isClassroom) || Number(row.studentCapacity || 0) > 0 || Number(row.currentStudents || 0) > 0)
+      .filter((row) => (furnitureControlCampusFilter === "ALL" ? true : row.campus === furnitureControlCampusFilter));
+    const rows = classroomLocations.map((room) => {
+      const matchingAssets = furnitureControlAssetRows.filter(
+        (asset) => asset.campus === room.campus && asset.location === room.name
+      );
+      const chairs = matchingAssets
+        .filter((asset) => asset.type === "CHR")
+        .reduce((sum, asset) => sum + asset.availableQty, 0);
+      const tables = matchingAssets
+        .filter((asset) => asset.type === "TBL")
+        .reduce((sum, asset) => sum + asset.availableQty, 0);
+      const studentCapacity = Math.max(0, Number(room.studentCapacity || 0));
+      const currentStudents = Math.max(0, Number(room.currentStudents || 0));
+      const planningStudents = currentStudents || studentCapacity;
+      const tableSeatsPerTable = Math.max(1, Number(room.tableSeatsPerTable || 2));
+      const requiredChairs = planningStudents;
+      const requiredTables = planningStudents > 0 ? Math.ceil(planningStudents / tableSeatsPerTable) : 0;
+      return {
+        id: room.id,
+        campus: room.campus,
+        location: room.name,
+        studentCapacity,
+        currentStudents,
+        planningStudents,
+        tableSeatsPerTable,
+        chairs,
+        tables,
+        requiredChairs,
+        requiredTables,
+        chairGap: chairs - requiredChairs,
+        tableGap: tables - requiredTables,
+        notes: String(room.notes || "").trim(),
+      };
+    });
+    return rows.sort(
+      (a, b) =>
+        campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
+        a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
+    );
+  }, [locations, furnitureControlCampusFilter, furnitureControlAssetRows, campusLabel]);
+  const furnitureControlCampusFilterOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(
+        [
+          ...locations.map((row) => row.campus),
+          ...furnitureControlAssetRows.map((row) => row.campus),
+        ].filter(Boolean)
+      )
+    );
+    return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
+  }, [locations, furnitureControlAssetRows, campusLabel]);
+  const furnitureControlGapSummary = useMemo(() => {
+    const classroomsWithChairShortage = furnitureControlClassroomRows.filter((row) => row.chairGap < 0).length;
+    const classroomsWithTableShortage = furnitureControlClassroomRows.filter((row) => row.tableGap < 0).length;
+    return {
+      rooms: furnitureControlClassroomRows.length,
+      chairShortage: classroomsWithChairShortage,
+      tableShortage: classroomsWithTableShortage,
+    };
+  }, [furnitureControlClassroomRows]);
   const assetMasterSetRows = useMemo(() => {
     const toItemDescription = (asset: Asset) => {
       const chunks = [
@@ -23710,6 +23971,7 @@ export default function App() {
               { value: "asset_master" as ReportType, label: "បញ្ជីទ្រព្យសម្បត្តិ" },
               { value: "set_code" as ReportType, label: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
               { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+              { value: "furniture_control" as ReportType, label: "គ្រប់គ្រងកៅអី និងតុ" },
               { value: "inventory_balance" as ReportType, label: "សមតុល្យស្តុក" },
               { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
               { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
@@ -23722,6 +23984,7 @@ export default function App() {
               { value: "asset_master" as ReportType, label: "Asset Master Register" },
               { value: "set_code" as ReportType, label: "Computer Set Detail" },
               { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
+              { value: "furniture_control" as ReportType, label: "Chair/Table Control" },
               { value: "inventory_balance" as ReportType, label: "Inventory Stock Balance" },
               { value: "overdue" as ReportType, label: "Overdue Maintenance" },
               { value: "transfer" as ReportType, label: "Asset Transfer Log" },
@@ -23803,6 +24066,7 @@ export default function App() {
             asset_master: "បញ្ជីទ្រព្យសម្បត្តិលម្អិត តាមអ្វីដែលបានជ្រើស។",
             set_code: "មើលក្រុមឧបករណ៍ និងសមាសភាគដែលភ្ជាប់ជាមួយគ្នា។",
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
+            furniture_control: "សង្ខេបកៅអី និងតុតាមសាខា និងពិនិត្យគ្រប់ថ្នាក់រៀនតាមចំនួនសិស្សបច្ចុប្បន្ន។",
             inventory_balance: "បោះពុម្ពសមតុល្យស្តុកតាមវត្ថុ និងទីតាំងស្តុកបច្ចុប្បន្ន។",
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
@@ -23815,6 +24079,7 @@ export default function App() {
             asset_master: "Detailed asset list based on selected filters.",
             set_code: "View each computer set with all connected items.",
             asset_by_location: "Summary count by campus and location.",
+            furniture_control: "Chair and table totals by campus with classroom shortage analysis based on current students.",
             inventory_balance: "Standard stock balance report with current stock by item and campus.",
             overdue: "Show assets that are overdue for maintenance.",
             transfer: "Transfer history between campuses and locations.",
@@ -23835,6 +24100,7 @@ export default function App() {
     () =>
       reportType === "asset_master" ||
       reportType === "asset_by_location" ||
+      reportType === "furniture_control" ||
       reportType === "inventory_balance" ||
       reportType === "maintenance_completion" ||
       reportType === "verification_summary" ||
@@ -23914,6 +24180,10 @@ export default function App() {
     if (reportType === "asset_by_location") {
       setAssetByLocationCampusFilter("ALL");
       setAssetByLocationLocationFilter("ALL");
+      return;
+    }
+    if (reportType === "furniture_control") {
+      setFurnitureControlCampusFilter("ALL");
     }
   }, [reportType, resetAssetMasterReportFilters]);
 
@@ -23931,6 +24201,7 @@ export default function App() {
     setQrItemFilter(["ALL"]);
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
+    setFurnitureControlCampusFilter("ALL");
     setReportPeriodMode("month");
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
@@ -24120,12 +24391,13 @@ export default function App() {
       const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
       if (!itemName) continue;
       const category = String(asset.category || "OTHER");
+      const quantity = isFurnitureAsset(asset.category) ? Math.max(1, furnitureAssetQuantity(asset) || 1) : 1;
       const key = `${category}::${itemName}`;
       const existing = map.get(key);
       if (existing) {
-        existing.count += 1;
+        existing.count += quantity;
       } else {
-        map.set(key, { category, itemName, count: 1 });
+        map.set(key, { category, itemName, count: quantity });
       }
     }
     const categoryOrder = ["IT", "SAFETY"];
@@ -24995,6 +25267,36 @@ export default function App() {
         String(r.safety),
         r.itemSummary || "-",
       ]);
+    } else if (reportType === "furniture_control") {
+      title = "Chair and Table Control Report";
+      columns = [
+        "Campus",
+        "Classroom",
+        "Current Students",
+        "Capacity",
+        "Seats / Table",
+        "Chairs Ready",
+        "Chairs Needed",
+        "Chair Gap",
+        "Tables Ready",
+        "Tables Needed",
+        "Table Gap",
+        "Notes",
+      ];
+      rows = furnitureControlClassroomRows.map((row) => [
+        reportCampusName(row.campus),
+        row.location,
+        String(row.currentStudents || 0),
+        row.studentCapacity ? String(row.studentCapacity) : "-",
+        String(row.tableSeatsPerTable),
+        String(row.chairs),
+        String(row.requiredChairs),
+        row.chairGap > 0 ? `+${row.chairGap}` : String(row.chairGap),
+        String(row.tables),
+        String(row.requiredTables),
+        row.tableGap > 0 ? `+${row.tableGap}` : String(row.tableGap),
+        row.notes || "-",
+      ]);
     } else if (reportType === "inventory_balance") {
       title = `Inventory Stock Balance Report - ${reportInventoryModeLabel}`;
       columns = ["Code", "Photo", "Name", "Category", "Campus", "Location", "Unit", "Stock In", "Stock Out", "Current", "Min", "Alert"];
@@ -25196,6 +25498,8 @@ export default function App() {
         ? `<p><strong>Total:</strong> ${verificationSummary.total} | <strong>Verified:</strong> ${verificationSummary.verified} | <strong>Issue Found:</strong> ${verificationSummary.issue} | <strong>Missing:</strong> ${verificationSummary.missing}</p>`
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${filteredLocationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${filteredLocationAssetTotal}</p>`
+        : reportType === "furniture_control"
+        ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Classrooms:</strong> ${furnitureControlGapSummary.rooms} | <strong>Chair Shortage Rooms:</strong> ${furnitureControlGapSummary.chairShortage} | <strong>Table Shortage Rooms:</strong> ${furnitureControlGapSummary.tableShortage}</p>`
         : reportType === "inventory_balance"
         ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${inventoryLowStockRows.length}</p>`
         : reportType === "staff_borrowing"
@@ -25246,6 +25550,10 @@ export default function App() {
               `<p class="meta">${escapeHtml(lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of")}: ${escapeHtml(itemText)}</p>`,
             ].join("");
           })()
+        : reportType === "furniture_control"
+        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(
+            furnitureControlCampusFilter === "ALL" ? t.allCampuses : reportCampusName(furnitureControlCampusFilter)
+          )}</p>`
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
 
     const reportContentHtml =
@@ -25268,6 +25576,101 @@ export default function App() {
               })
               .join("")}</div>`
           : `<p>No data.</p>`
+        : reportType === "furniture_control"
+        ? `<div class="preview-table-wrap">
+            <h2>Campus Summary</h2>
+            <table class="preview-report-table">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Campus</th>
+                  <th>Chairs Ready</th>
+                  <th>Chairs Need Repair</th>
+                  <th>Chairs Broken/Scrap</th>
+                  <th>Tables Ready</th>
+                  <th>Tables Need Repair</th>
+                  <th>Tables Broken/Scrap</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  furnitureControlCampusRows.rows.length
+                    ? [
+                        ...furnitureControlCampusRows.rows.map(
+                          (row, index) =>
+                            `<tr>
+                              <td>${index + 1}</td>
+                              <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                              <td>${row.chairQty}</td>
+                              <td>${row.chairRepairQty}</td>
+                              <td>${row.chairBrokenQty}</td>
+                              <td>${row.tableQty}</td>
+                              <td>${row.tableRepairQty}</td>
+                              <td>${row.tableBrokenQty}</td>
+                            </tr>`
+                        ),
+                        `<tr>
+                          <td>-</td>
+                          <td><strong>${escapeHtml(lang === "km" ? "សរុបសាលា" : "All School Total")}</strong></td>
+                          <td><strong>${furnitureControlCampusRows.totals.chairQty}</strong></td>
+                          <td>${furnitureControlCampusRows.totals.chairRepairQty}</td>
+                          <td>${furnitureControlCampusRows.totals.chairBrokenQty}</td>
+                          <td><strong>${furnitureControlCampusRows.totals.tableQty}</strong></td>
+                          <td>${furnitureControlCampusRows.totals.tableRepairQty}</td>
+                          <td>${furnitureControlCampusRows.totals.tableBrokenQty}</td>
+                        </tr>`,
+                      ].join("")
+                    : `<tr><td colspan="8">No furniture summary data.</td></tr>`
+                }
+              </tbody>
+            </table>
+            <h2 style="margin-top:18px;">Classroom Analysis</h2>
+            <table class="preview-report-table">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Campus</th>
+                  <th>Classroom</th>
+                  <th>Current Students</th>
+                  <th>Capacity</th>
+                  <th>Seats / Table</th>
+                  <th>Chairs Ready</th>
+                  <th>Chairs Needed</th>
+                  <th>Chair Gap</th>
+                  <th>Tables Ready</th>
+                  <th>Tables Needed</th>
+                  <th>Table Gap</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                  furnitureControlClassroomRows.length
+                    ? furnitureControlClassroomRows
+                        .map(
+                          (row, index) =>
+                            `<tr>
+                              <td>${index + 1}</td>
+                              <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                              <td>${escapeHtml(row.location)}</td>
+                              <td>${row.currentStudents || 0}</td>
+                              <td>${row.studentCapacity || "-"}</td>
+                              <td>${row.tableSeatsPerTable}</td>
+                              <td>${row.chairs}</td>
+                              <td>${row.requiredChairs}</td>
+                              <td>${row.chairGap > 0 ? `+${row.chairGap}` : row.chairGap}</td>
+                              <td>${row.tables}</td>
+                              <td>${row.requiredTables}</td>
+                              <td>${row.tableGap > 0 ? `+${row.tableGap}` : row.tableGap}</td>
+                              <td>${escapeHtml(row.notes || "-")}</td>
+                            </tr>`
+                        )
+                        .join("")
+                    : `<tr><td colspan="13">No classroom records yet.</td></tr>`
+                }
+              </tbody>
+            </table>
+          </div>`
         : `<div class="preview-table-wrap">
           <table class="preview-report-table">
           <colgroup>${initialColumnWidths.map((width) => `<col style="width:${width}%;" />`).join("")}</colgroup>
@@ -39003,6 +39406,26 @@ export default function App() {
                 </article>
               </div>
             )}
+            {reportType === "furniture_control" && (
+              <div className="stats-grid" style={{ marginBottom: 10 }}>
+                <article className="stat-card">
+                  <div className="stat-label">Campuses in Report</div>
+                  <div className="stat-value">{furnitureControlCampusRows.rows.length}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Classrooms Tracked</div>
+                  <div className="stat-value">{furnitureControlGapSummary.rooms}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Rooms Short of Chairs</div>
+                  <div className="stat-value">{furnitureControlGapSummary.chairShortage}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Rooms Short of Tables</div>
+                  <div className="stat-value">{furnitureControlGapSummary.tableShortage}</div>
+                </article>
+              </div>
+            )}
             {reportType === "maintenance_completion" ? (
               <div className="tiny" style={{ marginBottom: 10 }}>
                 ED Filter: {maintenanceCompletionFilterLabel}
@@ -39361,6 +39784,22 @@ export default function App() {
                   />
                 </>
               ) : null}
+              {reportType === "furniture_control" ? (
+                <LocationPicker
+                  value={furnitureControlCampusFilter}
+                  onChange={setFurnitureControlCampusFilter}
+                  options={[
+                    { value: "ALL", label: t.allCampuses },
+                    ...furnitureControlCampusFilterOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    })),
+                  ]}
+                  placeholder={t.allCampuses}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                />
+              ) : null}
               {reportType === "asset_master" ? (
                 <>
                   <LocationPicker
@@ -39510,6 +39949,11 @@ export default function App() {
             {reportType === "inventory_balance" && (
               <div className="panel-note">
                 <strong>Inventory stock report:</strong> standard printable stock balance table for submission and review.
+              </div>
+            )}
+            {reportType === "furniture_control" && (
+              <div className="panel-note">
+                <strong>Chair/table control:</strong> campus totals plus classroom shortage analysis using current students from Setup Location records.
               </div>
             )}
             {reportType === "qr_labels" && (
@@ -39904,6 +40348,105 @@ export default function App() {
                     </table>
                   </div>
                 )}
+              </>
+            )}
+
+            {reportType === "furniture_control" && (
+              <>
+                <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.campus}</th>
+                        <th>Chairs Ready</th>
+                        <th>Chairs Need Repair</th>
+                        <th>Chairs Broken/Scrap</th>
+                        <th>Tables Ready</th>
+                        <th>Tables Need Repair</th>
+                        <th>Tables Broken/Scrap</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {furnitureControlCampusRows.rows.length ? (
+                        <>
+                          {furnitureControlCampusRows.rows.map((row) => (
+                            <tr key={`furniture-campus-${row.campus}`}>
+                              <td>{reportCampusName(row.campus)}</td>
+                              <td><strong>{row.chairQty}</strong></td>
+                              <td>{row.chairRepairQty}</td>
+                              <td>{row.chairBrokenQty}</td>
+                              <td><strong>{row.tableQty}</strong></td>
+                              <td>{row.tableRepairQty}</td>
+                              <td>{row.tableBrokenQty}</td>
+                            </tr>
+                          ))}
+                          <tr>
+                            <td><strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong></td>
+                            <td><strong>{furnitureControlCampusRows.totals.chairQty}</strong></td>
+                            <td>{furnitureControlCampusRows.totals.chairRepairQty}</td>
+                            <td>{furnitureControlCampusRows.totals.chairBrokenQty}</td>
+                            <td><strong>{furnitureControlCampusRows.totals.tableQty}</strong></td>
+                            <td>{furnitureControlCampusRows.totals.tableRepairQty}</td>
+                            <td>{furnitureControlCampusRows.totals.tableBrokenQty}</td>
+                          </tr>
+                        </>
+                      ) : (
+                        <tr>
+                          <td colSpan={7}>No chair/table furniture data yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.campus}</th>
+                        <th>{t.location}</th>
+                        <th>Current Students</th>
+                        <th>Capacity</th>
+                        <th>Seats / Table</th>
+                        <th>Chairs Ready</th>
+                        <th>Chairs Needed</th>
+                        <th>Chair Gap</th>
+                        <th>Tables Ready</th>
+                        <th>Tables Needed</th>
+                        <th>Table Gap</th>
+                        <th>{t.notes}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {furnitureControlClassroomRows.length ? (
+                        furnitureControlClassroomRows.map((row) => (
+                          <tr key={`furniture-room-${row.id}`}>
+                            <td>{reportCampusName(row.campus)}</td>
+                            <td>{row.location}</td>
+                            <td>{row.currentStudents || 0}</td>
+                            <td>{row.studentCapacity || "-"}</td>
+                            <td>{row.tableSeatsPerTable}</td>
+                            <td><strong>{row.chairs}</strong></td>
+                            <td>{row.requiredChairs}</td>
+                            <td style={{ color: row.chairGap < 0 ? "#b03131" : "#23643a", fontWeight: 700 }}>
+                              {row.chairGap > 0 ? `+${row.chairGap}` : row.chairGap}
+                            </td>
+                            <td><strong>{row.tables}</strong></td>
+                            <td>{row.requiredTables}</td>
+                            <td style={{ color: row.tableGap < 0 ? "#b03131" : "#23643a", fontWeight: 700 }}>
+                              {row.tableGap > 0 ? `+${row.tableGap}` : row.tableGap}
+                            </td>
+                            <td>{row.notes || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={12}>No classroom location records yet. Mark classroom locations in Setup.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
 
@@ -41791,9 +42334,59 @@ export default function App() {
                 <span>{t.locationName}</span>
                 <input className="input" value={locationName} onChange={(e) => setLocationName(e.target.value)} />
               </label>
+              <label className="field">
+                <span>Classroom Record</span>
+                <select
+                  className="input"
+                  value={locationIsClassroom ? "YES" : "NO"}
+                  onChange={(e) => setLocationIsClassroom(e.target.value === "YES")}
+                >
+                  <option value="NO">General Location</option>
+                  <option value="YES">Classroom</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Student Capacity</span>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  value={locationStudentCapacity}
+                  onChange={(e) => setLocationStudentCapacity(e.target.value)}
+                  placeholder="Optional"
+                />
+              </label>
+              <label className="field">
+                <span>Current Students</span>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  value={locationCurrentStudents}
+                  onChange={(e) => setLocationCurrentStudents(e.target.value)}
+                  placeholder="Current class size"
+                />
+              </label>
+              <label className="field">
+                <span>Students per Table</span>
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  value={locationTableSeatsPerTable}
+                  onChange={(e) => setLocationTableSeatsPerTable(e.target.value)}
+                />
+              </label>
+              <label className="field field-wide">
+                <span>Notes</span>
+                <input className="input" value={locationNotes} onChange={(e) => setLocationNotes(e.target.value)} />
+              </label>
             </div>
             <div className="asset-actions">
-              <div className="tiny">{campusLabel(locationCampus)}</div>
+              <div className="tiny">
+                {campusLabel(locationCampus)}
+                {locationIsClassroom ? " | Classroom tracking enabled" : ""}
+              </div>
               <div style={{ display: "flex", gap: 8 }}>
                 {editingLocationId ? (
                   <button className="tab" onClick={cancelEditLocation}>{t.cancelEdit}</button>
@@ -41810,6 +42403,11 @@ export default function App() {
                   <tr>
                     <th>{t.campus}</th>
                     <th>{t.locationName}</th>
+                    <th>Type</th>
+                    <th>Capacity</th>
+                    <th>Current Students</th>
+                    <th>Per Table</th>
+                    <th>Notes</th>
                     <th>{t.edit}</th>
                     <th>{t.delete}</th>
                   </tr>
@@ -41820,6 +42418,11 @@ export default function App() {
                       <tr key={loc.id}>
                         <td>{campusLabel(loc.campus)}</td>
                         <td>{loc.name}</td>
+                        <td>{loc.isClassroom ? "Classroom" : "General"}</td>
+                        <td>{loc.studentCapacity || "-"}</td>
+                        <td>{loc.currentStudents || "-"}</td>
+                        <td>{loc.tableSeatsPerTable || 2}</td>
+                        <td>{loc.notes || "-"}</td>
                         <td>
                           <button className="tab" disabled={!isAdmin} onClick={() => startEditLocation(loc)}>{t.edit}</button>
                         </td>
@@ -41830,7 +42433,7 @@ export default function App() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4}>{t.noLocationsYet}</td>
+                      <td colSpan={9}>{t.noLocationsYet}</td>
                     </tr>
                   )}
                 </tbody>

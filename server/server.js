@@ -3704,11 +3704,16 @@ function validateAsset(body) {
 function validateLocation(body) {
   const campus = normalizeCampusInput(body.campus);
   const name = toText(body.name);
+  const isClassroom = Boolean(body.isClassroom);
+  const studentCapacity = Math.max(0, Number(body.studentCapacity || 0));
+  const currentStudents = Math.max(0, Number(body.currentStudents || 0));
+  const tableSeatsPerTable = Math.max(1, Number(body.tableSeatsPerTable || 2));
+  const notes = toText(body.notes);
 
   if (!campus) return "Campus is required";
   if (!name) return "Location name is required";
 
-  return { campus, name };
+  return { campus, name, isClassroom, studentCapacity, currentStudents, tableSeatsPerTable, notes };
 }
 
 function normalizeStaffUsers(input) {
@@ -6446,6 +6451,11 @@ const server = http.createServer(async (req, res) => {
         id: Date.now(),
         campus: cleaned.campus,
         name: cleaned.name,
+        isClassroom: cleaned.isClassroom,
+        studentCapacity: cleaned.studentCapacity,
+        currentStudents: cleaned.currentStudents,
+        tableSeatsPerTable: cleaned.tableSeatsPerTable,
+        notes: cleaned.notes,
       };
       db.locations.unshift(location);
       appendAuditLog(db, admin, "CREATE", "location", String(location.id), `${location.campus} | ${location.name}`);
@@ -6479,6 +6489,11 @@ const server = http.createServer(async (req, res) => {
 
       db.locations[idx].campus = cleaned.campus;
       db.locations[idx].name = cleaned.name;
+      db.locations[idx].isClassroom = cleaned.isClassroom;
+      db.locations[idx].studentCapacity = cleaned.studentCapacity;
+      db.locations[idx].currentStudents = cleaned.currentStudents;
+      db.locations[idx].tableSeatsPerTable = cleaned.tableSeatsPerTable;
+      db.locations[idx].notes = cleaned.notes;
       appendAuditLog(db, admin, "UPDATE", "location", String(id), `${cleaned.campus} | ${cleaned.name}`);
       await writeDb(db);
       sendJson(res, 200, { location: db.locations[idx] });
