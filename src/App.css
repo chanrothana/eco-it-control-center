@@ -1453,6 +1453,136 @@ h2 {
   justify-self: end;
 }
 
+.furniture-report-mobile-list {
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.furniture-report-mobile-section {
+  display: grid;
+  gap: 10px;
+}
+
+.furniture-report-mobile-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.furniture-report-mobile-section-head strong {
+  font-size: 18px;
+  color: #28406e;
+}
+
+.furniture-report-mobile-section-head span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6d7d9c;
+}
+
+.furniture-report-mobile-card {
+  gap: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+}
+
+.furniture-report-mobile-total {
+  border-color: #b9cdef;
+  background: linear-gradient(180deg, #f5f9ff 0%, #eaf2ff 100%);
+}
+
+.furniture-report-mobile-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.furniture-report-mobile-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.furniture-report-mobile-metrics > div {
+  border: 1px solid #d3dff2;
+  border-radius: 14px;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, 0.88);
+  display: grid;
+  gap: 4px;
+}
+
+.furniture-report-mobile-metrics span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #62759b;
+}
+
+.furniture-report-mobile-metrics strong {
+  font-size: 22px;
+  line-height: 1;
+  color: #24395f;
+}
+
+.furniture-report-mobile-metrics-tight strong {
+  font-size: 20px;
+}
+
+.furniture-report-mobile-detail {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #d8e2f2;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.furniture-report-mobile-detail small {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5870a0;
+}
+
+.furniture-report-mobile-detail p {
+  margin: 0;
+  color: #33486f;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.furniture-report-mobile-student-pill {
+  min-width: 78px;
+  border: 1px solid #c7d7f0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #f3f7ff;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.furniture-report-mobile-student-pill span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #63769a;
+}
+
+.furniture-report-mobile-student-pill strong {
+  font-size: 20px;
+  line-height: 1;
+  color: #1f3560;
+}
+
 .report-card-photo .table-photo,
 .report-card-photo .photo-placeholder {
   width: 90px;

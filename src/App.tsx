@@ -25305,11 +25305,9 @@ export default function App() {
         "Current Students",
         "Chairs Ready",
         "Chair Models",
-        "Chairs Needed",
         "Tables Ready",
         "Table Models",
-        "Tables Needed",
-        "Other Furniture",
+        "Nap Bed",
         "Notes",
       ];
       rows = furnitureControlClassroomRows.map((row) => [
@@ -25318,10 +25316,8 @@ export default function App() {
         String(row.currentStudents || 0),
         String(row.chairs),
         furnitureModelBreakdownText(row.chairModels),
-        String(row.requiredChairs),
         String(row.tables),
         furnitureModelBreakdownText(row.tableModels),
-        String(row.requiredTables),
         furnitureModelBreakdownText(row.otherFurnitureModels),
         row.notes || "-",
       ]);
@@ -25668,11 +25664,9 @@ export default function App() {
                   <th>Current Students</th>
                   <th>Chairs Ready</th>
                   <th>Chair Models</th>
-                  <th>Chairs Needed</th>
                   <th>Tables Ready</th>
                   <th>Table Models</th>
-                  <th>Tables Needed</th>
-                  <th>Other Furniture</th>
+                  <th>Nap Bed</th>
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -25689,16 +25683,14 @@ export default function App() {
                               <td>${row.currentStudents || 0}</td>
                               <td>${row.chairs}</td>
                               <td>${escapeHtml(furnitureModelBreakdownText(row.chairModels))}</td>
-                              <td>${row.requiredChairs}</td>
                               <td>${row.tables}</td>
                               <td>${escapeHtml(furnitureModelBreakdownText(row.tableModels))}</td>
-                              <td>${row.requiredTables}</td>
                               <td>${escapeHtml(furnitureModelBreakdownText(row.otherFurnitureModels))}</td>
                               <td>${escapeHtml(row.notes || "-")}</td>
                             </tr>`
                         )
                         .join("")
-                    : `<tr><td colspan="12">No classroom records yet.</td></tr>`
+                    : `<tr><td colspan="10">No classroom records yet.</td></tr>`
                 }
               </tbody>
             </table>
@@ -39977,7 +39969,7 @@ export default function App() {
             )}
             {reportType === "furniture_control" && (
               <div className="panel-note">
-                <strong>Chair/table control:</strong> campus totals plus classroom shortage analysis using current students from Setup Location records.
+                <strong>Chair/table control:</strong> campus totals plus classroom furniture details using current students from Setup Location records.
               </div>
             )}
             {reportType === "qr_labels" && (
@@ -40377,100 +40369,252 @@ export default function App() {
 
             {reportType === "furniture_control" && (
               <>
-                <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t.campus}</th>
-                        <th>Chairs Ready</th>
-                        <th>Chair Models</th>
-                        <th>Chairs Need Repair</th>
-                        <th>Chairs Broken/Scrap</th>
-                        <th>Tables Ready</th>
-                        <th>Table Models</th>
-                        <th>Tables Need Repair</th>
-                        <th>Tables Broken/Scrap</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                {isPhoneView ? (
+                  <div className="report-mobile-only report-card-list furniture-report-mobile-list">
+                    <div className="furniture-report-mobile-section">
+                      <div className="furniture-report-mobile-section-head">
+                        <strong>{lang === "km" ? "សង្ខេបតាមសាខា" : "Campus Summary"}</strong>
+                        <span>{furnitureControlCampusRows.rows.length || 0} {lang === "km" ? "សាខា" : "campuses"}</span>
+                      </div>
                       {furnitureControlCampusRows.rows.length ? (
                         <>
                           {furnitureControlCampusRows.rows.map((row) => (
-                            <tr key={`furniture-campus-${row.campus}`}>
-                              <td>{reportCampusName(row.campus)}</td>
-                              <td><strong>{row.chairQty}</strong></td>
-                              <td>{furnitureModelBreakdownText(row.chairModels)}</td>
-                              <td>{row.chairRepairQty}</td>
-                              <td>{row.chairBrokenQty}</td>
-                              <td><strong>{row.tableQty}</strong></td>
-                              <td>{furnitureModelBreakdownText(row.tableModels)}</td>
-                              <td>{row.tableRepairQty}</td>
-                              <td>{row.tableBrokenQty}</td>
-                            </tr>
+                            <article key={`furniture-campus-mobile-${row.campus}`} className="report-card furniture-report-mobile-card">
+                              <div className="report-card-head furniture-report-mobile-head">
+                                <div className="report-card-title">
+                                  <strong>{reportCampusName(row.campus)}</strong>
+                                  <div className="tiny report-card-sub">{lang === "km" ? "គ្រឿងសង្ហារឹមសិក្សា" : "Learning furniture status"}</div>
+                                </div>
+                              </div>
+                              <div className="furniture-report-mobile-metrics">
+                                <div>
+                                  <span>Chairs Ready</span>
+                                  <strong>{row.chairQty}</strong>
+                                </div>
+                                <div>
+                                  <span>Tables Ready</span>
+                                  <strong>{row.tableQty}</strong>
+                                </div>
+                                <div>
+                                  <span>Chair Repair</span>
+                                  <strong>{row.chairRepairQty}</strong>
+                                </div>
+                                <div>
+                                  <span>Table Repair</span>
+                                  <strong>{row.tableRepairQty}</strong>
+                                </div>
+                                <div>
+                                  <span>Chair Broken</span>
+                                  <strong>{row.chairBrokenQty}</strong>
+                                </div>
+                                <div>
+                                  <span>Table Broken</span>
+                                  <strong>{row.tableBrokenQty}</strong>
+                                </div>
+                              </div>
+                              <div className="furniture-report-mobile-detail">
+                                <small>Chair Models</small>
+                                <p>{furnitureModelBreakdownText(row.chairModels)}</p>
+                              </div>
+                              <div className="furniture-report-mobile-detail">
+                                <small>Table Models</small>
+                                <p>{furnitureModelBreakdownText(row.tableModels)}</p>
+                              </div>
+                            </article>
                           ))}
-                          <tr>
-                            <td><strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong></td>
-                            <td><strong>{furnitureControlCampusRows.totals.chairQty}</strong></td>
-                            <td>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.chairModels)}</td>
-                            <td>{furnitureControlCampusRows.totals.chairRepairQty}</td>
-                            <td>{furnitureControlCampusRows.totals.chairBrokenQty}</td>
-                            <td><strong>{furnitureControlCampusRows.totals.tableQty}</strong></td>
-                            <td>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.tableModels)}</td>
-                            <td>{furnitureControlCampusRows.totals.tableRepairQty}</td>
-                            <td>{furnitureControlCampusRows.totals.tableBrokenQty}</td>
-                          </tr>
+                          <article className="report-card furniture-report-mobile-card furniture-report-mobile-total">
+                            <div className="report-card-head furniture-report-mobile-head">
+                              <div className="report-card-title">
+                                <strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong>
+                                <div className="tiny report-card-sub">{lang === "km" ? "គ្រប់សាខា" : "Across all campuses"}</div>
+                              </div>
+                            </div>
+                            <div className="furniture-report-mobile-metrics">
+                              <div>
+                                <span>Chairs Ready</span>
+                                <strong>{furnitureControlCampusRows.totals.chairQty}</strong>
+                              </div>
+                              <div>
+                                <span>Tables Ready</span>
+                                <strong>{furnitureControlCampusRows.totals.tableQty}</strong>
+                              </div>
+                              <div>
+                                <span>Chair Repair</span>
+                                <strong>{furnitureControlCampusRows.totals.chairRepairQty}</strong>
+                              </div>
+                              <div>
+                                <span>Table Repair</span>
+                                <strong>{furnitureControlCampusRows.totals.tableRepairQty}</strong>
+                              </div>
+                              <div>
+                                <span>Chair Broken</span>
+                                <strong>{furnitureControlCampusRows.totals.chairBrokenQty}</strong>
+                              </div>
+                              <div>
+                                <span>Table Broken</span>
+                                <strong>{furnitureControlCampusRows.totals.tableBrokenQty}</strong>
+                              </div>
+                            </div>
+                            <div className="furniture-report-mobile-detail">
+                              <small>Chair Models</small>
+                              <p>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.chairModels)}</p>
+                            </div>
+                            <div className="furniture-report-mobile-detail">
+                              <small>Table Models</small>
+                              <p>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.tableModels)}</p>
+                            </div>
+                          </article>
                         </>
                       ) : (
-                        <tr>
-                          <td colSpan={9}>No chair/table furniture data yet.</td>
-                        </tr>
+                        <div className="panel-note">No chair/table furniture data yet.</div>
                       )}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
 
-                <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
-                        <th>Current Students</th>
-                        <th>Chairs Ready</th>
-                        <th>Chair Models</th>
-                        <th>Chairs Needed</th>
-                        <th>Tables Ready</th>
-                        <th>Table Models</th>
-                        <th>Tables Needed</th>
-                        <th>Other Furniture</th>
-                        <th>{t.notes}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                    <div className="furniture-report-mobile-section">
+                      <div className="furniture-report-mobile-section-head">
+                        <strong>{lang === "km" ? "វិភាគថ្នាក់រៀន" : "Classroom Analysis"}</strong>
+                        <span>{furnitureControlClassroomRows.length || 0} {lang === "km" ? "បន្ទប់" : "rooms"}</span>
+                      </div>
                       {furnitureControlClassroomRows.length ? (
                         furnitureControlClassroomRows.map((row) => (
-                          <tr key={`furniture-room-${row.id}`}>
-                            <td>{reportCampusName(row.campus)}</td>
-                            <td>{row.location}</td>
-                            <td>{row.currentStudents || 0}</td>
-                            <td><strong>{row.chairs}</strong></td>
-                            <td>{furnitureModelBreakdownText(row.chairModels)}</td>
-                            <td>{row.requiredChairs}</td>
-                            <td><strong>{row.tables}</strong></td>
-                            <td>{furnitureModelBreakdownText(row.tableModels)}</td>
-                            <td>{row.requiredTables}</td>
-                            <td>{furnitureModelBreakdownText(row.otherFurnitureModels)}</td>
-                            <td>{row.notes || "-"}</td>
-                          </tr>
+                          <article key={`furniture-room-mobile-${row.id}`} className="report-card furniture-report-mobile-card furniture-report-room-card">
+                            <div className="report-card-head furniture-report-mobile-head">
+                              <div className="report-card-title">
+                                <strong>{row.location}</strong>
+                                <div className="tiny report-card-sub">{reportCampusName(row.campus)}</div>
+                              </div>
+                              <div className="furniture-report-mobile-student-pill">
+                                <span>{lang === "km" ? "សិស្ស" : "Students"}</span>
+                                <strong>{row.currentStudents || 0}</strong>
+                              </div>
+                            </div>
+                            <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
+                              <div>
+                                <span>Chairs Ready</span>
+                                <strong>{row.chairs}</strong>
+                              </div>
+                              <div>
+                                <span>Tables Ready</span>
+                                <strong>{row.tables}</strong>
+                              </div>
+                            </div>
+                            <div className="furniture-report-mobile-detail">
+                              <small>Chair Models</small>
+                              <p>{furnitureModelBreakdownText(row.chairModels)}</p>
+                            </div>
+                            <div className="furniture-report-mobile-detail">
+                              <small>Table Models</small>
+                              <p>{furnitureModelBreakdownText(row.tableModels)}</p>
+                            </div>
+                            <div className="furniture-report-mobile-detail">
+                              <small>Nap Bed</small>
+                              <p>{furnitureModelBreakdownText(row.otherFurnitureModels)}</p>
+                            </div>
+                            <div className="furniture-report-mobile-detail">
+                              <small>{t.notes}</small>
+                              <p>{row.notes || "-"}</p>
+                            </div>
+                          </article>
                         ))
                       ) : (
-                        <tr>
-                          <td colSpan={11}>No classroom location records yet. Mark classroom locations in Setup.</td>
-                        </tr>
+                        <div className="panel-note">No classroom location records yet. Mark classroom locations in Setup.</div>
                       )}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{t.campus}</th>
+                            <th>Chairs Ready</th>
+                            <th>Chair Models</th>
+                            <th>Chairs Need Repair</th>
+                            <th>Chairs Broken/Scrap</th>
+                            <th>Tables Ready</th>
+                            <th>Table Models</th>
+                            <th>Tables Need Repair</th>
+                            <th>Tables Broken/Scrap</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {furnitureControlCampusRows.rows.length ? (
+                            <>
+                              {furnitureControlCampusRows.rows.map((row) => (
+                                <tr key={`furniture-campus-${row.campus}`}>
+                                  <td>{reportCampusName(row.campus)}</td>
+                                  <td><strong>{row.chairQty}</strong></td>
+                                  <td>{furnitureModelBreakdownText(row.chairModels)}</td>
+                                  <td>{row.chairRepairQty}</td>
+                                  <td>{row.chairBrokenQty}</td>
+                                  <td><strong>{row.tableQty}</strong></td>
+                                  <td>{furnitureModelBreakdownText(row.tableModels)}</td>
+                                  <td>{row.tableRepairQty}</td>
+                                  <td>{row.tableBrokenQty}</td>
+                                </tr>
+                              ))}
+                              <tr>
+                                <td><strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong></td>
+                                <td><strong>{furnitureControlCampusRows.totals.chairQty}</strong></td>
+                                <td>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.chairModels)}</td>
+                                <td>{furnitureControlCampusRows.totals.chairRepairQty}</td>
+                                <td>{furnitureControlCampusRows.totals.chairBrokenQty}</td>
+                                <td><strong>{furnitureControlCampusRows.totals.tableQty}</strong></td>
+                                <td>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.tableModels)}</td>
+                                <td>{furnitureControlCampusRows.totals.tableRepairQty}</td>
+                                <td>{furnitureControlCampusRows.totals.tableBrokenQty}</td>
+                              </tr>
+                            </>
+                          ) : (
+                            <tr>
+                              <td colSpan={9}>No chair/table furniture data yet.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{t.campus}</th>
+                            <th>{t.location}</th>
+                            <th>Current Students</th>
+                            <th>Chairs Ready</th>
+                            <th>Chair Models</th>
+                            <th>Tables Ready</th>
+                            <th>Table Models</th>
+                            <th>Nap Bed</th>
+                            <th>{t.notes}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {furnitureControlClassroomRows.length ? (
+                            furnitureControlClassroomRows.map((row) => (
+                              <tr key={`furniture-room-${row.id}`}>
+                                <td>{reportCampusName(row.campus)}</td>
+                                <td>{row.location}</td>
+                                <td>{row.currentStudents || 0}</td>
+                                <td><strong>{row.chairs}</strong></td>
+                                <td>{furnitureModelBreakdownText(row.chairModels)}</td>
+                                <td><strong>{row.tables}</strong></td>
+                                <td>{furnitureModelBreakdownText(row.tableModels)}</td>
+                                <td>{furnitureModelBreakdownText(row.otherFurnitureModels)}</td>
+                                <td>{row.notes || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={9}>No classroom location records yet. Mark classroom locations in Setup.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </>
             )}
 
