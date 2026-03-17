@@ -23287,11 +23287,13 @@ export default function App() {
         const isBroken = condition === "Broken" || condition === "Scrap" || status === "broken" || status === "scrap";
         const isRepair = condition === "Need Repair";
         const availableQty = isBroken || status === "inactive" ? 0 : quantity;
+        const modelLabel = furnitureModelLabel(asset.type, String(asset.model || "").trim());
         return {
           id: asset.id,
           type: asset.type as "CHR" | "TBL",
           campus: asset.campus,
           location: String(asset.location || "").trim() || "Unassigned",
+          modelLabel,
           quantity,
           availableQty,
           repairQty: isRepair ? quantity : 0,
@@ -23307,9 +23309,11 @@ export default function App() {
         chairQty: number;
         chairRepairQty: number;
         chairBrokenQty: number;
+        chairModels: Record<string, number>;
         tableQty: number;
         tableRepairQty: number;
         tableBrokenQty: number;
+        tableModels: Record<string, number>;
       }
     >();
     const source =
@@ -23323,9 +23327,11 @@ export default function App() {
           chairQty: 0,
           chairRepairQty: 0,
           chairBrokenQty: 0,
+          chairModels: {} as Record<string, number>,
           tableQty: 0,
           tableRepairQty: 0,
           tableBrokenQty: 0,
+          tableModels: {} as Record<string, number>,
         });
       }
       const current = map.get(row.campus)!;
@@ -23333,10 +23339,16 @@ export default function App() {
         current.chairQty += row.availableQty;
         current.chairRepairQty += row.repairQty;
         current.chairBrokenQty += row.brokenQty;
+        if (row.availableQty > 0) {
+          current.chairModels[row.modelLabel] = (current.chairModels[row.modelLabel] || 0) + row.availableQty;
+        }
       } else if (row.type === "TBL") {
         current.tableQty += row.availableQty;
         current.tableRepairQty += row.repairQty;
         current.tableBrokenQty += row.brokenQty;
+        if (row.availableQty > 0) {
+          current.tableModels[row.modelLabel] = (current.tableModels[row.modelLabel] || 0) + row.availableQty;
+        }
       }
     }
     const rows = Array.from(map.values()).sort((a, b) => campusLabel(a.campus).localeCompare(campusLabel(b.campus)));
@@ -23346,18 +23358,28 @@ export default function App() {
         chairQty: sum.chairQty + row.chairQty,
         chairRepairQty: sum.chairRepairQty + row.chairRepairQty,
         chairBrokenQty: sum.chairBrokenQty + row.chairBrokenQty,
+        chairModels: Object.entries(row.chairModels).reduce((out, [model, qty]) => {
+          out[model] = (out[model] || 0) + qty;
+          return out;
+        }, sum.chairModels),
         tableQty: sum.tableQty + row.tableQty,
         tableRepairQty: sum.tableRepairQty + row.tableRepairQty,
         tableBrokenQty: sum.tableBrokenQty + row.tableBrokenQty,
+        tableModels: Object.entries(row.tableModels).reduce((out, [model, qty]) => {
+          out[model] = (out[model] || 0) + qty;
+          return out;
+        }, sum.tableModels),
       }),
       {
         campus: "ALL",
         chairQty: 0,
         chairRepairQty: 0,
         chairBrokenQty: 0,
+        chairModels: {} as Record<string, number>,
         tableQty: 0,
         tableRepairQty: 0,
         tableBrokenQty: 0,
+        tableModels: {} as Record<string, number>,
       }
     );
     return { rows, totals };
@@ -23376,6 +23398,18 @@ export default function App() {
       const tables = matchingAssets
         .filter((asset) => asset.type === "TBL")
         .reduce((sum, asset) => sum + asset.availableQty, 0);
+      const chairModels = matchingAssets
+        .filter((asset) => asset.type === "CHR" && asset.availableQty > 0)
+        .reduce((out, asset) => {
+          out[asset.modelLabel] = (out[asset.modelLabel] || 0) + asset.availableQty;
+          return out;
+        }, {} as Record<string, number>);
+      const tableModels = matchingAssets
+        .filter((asset) => asset.type === "TBL" && asset.availableQty > 0)
+        .reduce((out, asset) => {
+          out[asset.modelLabel] = (out[asset.modelLabel] || 0) + asset.availableQty;
+          return out;
+        }, {} as Record<string, number>);
       const currentStudents = Math.max(0, Number(room.currentStudents || 0));
       const requiredChairs = currentStudents;
       const requiredTables = currentStudents > 0 ? Math.ceil(currentStudents / 2) : 0;
@@ -23385,7 +23419,9 @@ export default function App() {
         location: room.name,
         currentStudents,
         chairs,
+        chairModels,
         tables,
+        tableModels,
         requiredChairs,
         requiredTables,
         chairGap: chairs - requiredChairs,
@@ -23419,6 +23455,11 @@ export default function App() {
       tableShortage: classroomsWithTableShortage,
     };
   }, [furnitureControlClassroomRows]);
+  const furnitureModelBreakdownText = useCallback((models: Record<string, number>) => {
+    const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    if (!entries.length) return "-";
+    return entries.map(([model, qty]) => `${model} x ${qty}`).join(", ");
+  }, []);
   const assetMasterSetRows = useMemo(() => {
     const toItemDescription = (asset: Asset) => {
       const chunks = [
@@ -25260,9 +25301,11 @@ export default function App() {
         "Classroom",
         "Current Students",
         "Chairs Ready",
+        "Chair Models",
         "Chairs Needed",
         "Chair Gap",
         "Tables Ready",
+        "Table Models",
         "Tables Needed",
         "Table Gap",
         "Notes",
@@ -25272,9 +25315,11 @@ export default function App() {
         row.location,
         String(row.currentStudents || 0),
         String(row.chairs),
+        furnitureModelBreakdownText(row.chairModels),
         String(row.requiredChairs),
         row.chairGap > 0 ? `+${row.chairGap}` : String(row.chairGap),
         String(row.tables),
+        furnitureModelBreakdownText(row.tableModels),
         String(row.requiredTables),
         row.tableGap > 0 ? `+${row.tableGap}` : String(row.tableGap),
         row.notes || "-",
@@ -25567,9 +25612,11 @@ export default function App() {
                   <th>No.</th>
                   <th>Campus</th>
                   <th>Chairs Ready</th>
+                  <th>Chair Models</th>
                   <th>Chairs Need Repair</th>
                   <th>Chairs Broken/Scrap</th>
                   <th>Tables Ready</th>
+                  <th>Table Models</th>
                   <th>Tables Need Repair</th>
                   <th>Tables Broken/Scrap</th>
                 </tr>
@@ -25584,9 +25631,11 @@ export default function App() {
                               <td>${index + 1}</td>
                               <td>${escapeHtml(reportCampusName(row.campus))}</td>
                               <td>${row.chairQty}</td>
+                              <td>${escapeHtml(furnitureModelBreakdownText(row.chairModels))}</td>
                               <td>${row.chairRepairQty}</td>
                               <td>${row.chairBrokenQty}</td>
                               <td>${row.tableQty}</td>
+                              <td>${escapeHtml(furnitureModelBreakdownText(row.tableModels))}</td>
                               <td>${row.tableRepairQty}</td>
                               <td>${row.tableBrokenQty}</td>
                             </tr>`
@@ -25595,14 +25644,16 @@ export default function App() {
                           <td>-</td>
                           <td><strong>${escapeHtml(lang === "km" ? "សរុបសាលា" : "All School Total")}</strong></td>
                           <td><strong>${furnitureControlCampusRows.totals.chairQty}</strong></td>
+                          <td>${escapeHtml(furnitureModelBreakdownText(furnitureControlCampusRows.totals.chairModels))}</td>
                           <td>${furnitureControlCampusRows.totals.chairRepairQty}</td>
                           <td>${furnitureControlCampusRows.totals.chairBrokenQty}</td>
                           <td><strong>${furnitureControlCampusRows.totals.tableQty}</strong></td>
+                          <td>${escapeHtml(furnitureModelBreakdownText(furnitureControlCampusRows.totals.tableModels))}</td>
                           <td>${furnitureControlCampusRows.totals.tableRepairQty}</td>
                           <td>${furnitureControlCampusRows.totals.tableBrokenQty}</td>
                         </tr>`,
                       ].join("")
-                    : `<tr><td colspan="8">No furniture summary data.</td></tr>`
+                    : `<tr><td colspan="10">No furniture summary data.</td></tr>`
                 }
               </tbody>
             </table>
@@ -25615,9 +25666,11 @@ export default function App() {
                   <th>Classroom</th>
                   <th>Current Students</th>
                   <th>Chairs Ready</th>
+                  <th>Chair Models</th>
                   <th>Chairs Needed</th>
                   <th>Chair Gap</th>
                   <th>Tables Ready</th>
+                  <th>Table Models</th>
                   <th>Tables Needed</th>
                   <th>Table Gap</th>
                   <th>Notes</th>
@@ -25635,16 +25688,18 @@ export default function App() {
                               <td>${escapeHtml(row.location)}</td>
                               <td>${row.currentStudents || 0}</td>
                               <td>${row.chairs}</td>
+                              <td>${escapeHtml(furnitureModelBreakdownText(row.chairModels))}</td>
                               <td>${row.requiredChairs}</td>
                               <td>${row.chairGap > 0 ? `+${row.chairGap}` : row.chairGap}</td>
                               <td>${row.tables}</td>
+                              <td>${escapeHtml(furnitureModelBreakdownText(row.tableModels))}</td>
                               <td>${row.requiredTables}</td>
                               <td>${row.tableGap > 0 ? `+${row.tableGap}` : row.tableGap}</td>
                               <td>${escapeHtml(row.notes || "-")}</td>
                             </tr>`
                         )
                         .join("")
-                    : `<tr><td colspan="11">No classroom records yet.</td></tr>`
+                    : `<tr><td colspan="13">No classroom records yet.</td></tr>`
                 }
               </tbody>
             </table>
@@ -40337,9 +40392,11 @@ export default function App() {
                       <tr>
                         <th>{t.campus}</th>
                         <th>Chairs Ready</th>
+                        <th>Chair Models</th>
                         <th>Chairs Need Repair</th>
                         <th>Chairs Broken/Scrap</th>
                         <th>Tables Ready</th>
+                        <th>Table Models</th>
                         <th>Tables Need Repair</th>
                         <th>Tables Broken/Scrap</th>
                       </tr>
@@ -40351,9 +40408,11 @@ export default function App() {
                             <tr key={`furniture-campus-${row.campus}`}>
                               <td>{reportCampusName(row.campus)}</td>
                               <td><strong>{row.chairQty}</strong></td>
+                              <td>{furnitureModelBreakdownText(row.chairModels)}</td>
                               <td>{row.chairRepairQty}</td>
                               <td>{row.chairBrokenQty}</td>
                               <td><strong>{row.tableQty}</strong></td>
+                              <td>{furnitureModelBreakdownText(row.tableModels)}</td>
                               <td>{row.tableRepairQty}</td>
                               <td>{row.tableBrokenQty}</td>
                             </tr>
@@ -40361,16 +40420,18 @@ export default function App() {
                           <tr>
                             <td><strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong></td>
                             <td><strong>{furnitureControlCampusRows.totals.chairQty}</strong></td>
+                            <td>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.chairModels)}</td>
                             <td>{furnitureControlCampusRows.totals.chairRepairQty}</td>
                             <td>{furnitureControlCampusRows.totals.chairBrokenQty}</td>
                             <td><strong>{furnitureControlCampusRows.totals.tableQty}</strong></td>
+                            <td>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.tableModels)}</td>
                             <td>{furnitureControlCampusRows.totals.tableRepairQty}</td>
                             <td>{furnitureControlCampusRows.totals.tableBrokenQty}</td>
                           </tr>
                         </>
                       ) : (
                         <tr>
-                          <td colSpan={7}>No chair/table furniture data yet.</td>
+                          <td colSpan={9}>No chair/table furniture data yet.</td>
                         </tr>
                       )}
                     </tbody>
@@ -40385,9 +40446,11 @@ export default function App() {
                         <th>{t.location}</th>
                         <th>Current Students</th>
                         <th>Chairs Ready</th>
+                        <th>Chair Models</th>
                         <th>Chairs Needed</th>
                         <th>Chair Gap</th>
                         <th>Tables Ready</th>
+                        <th>Table Models</th>
                         <th>Tables Needed</th>
                         <th>Table Gap</th>
                         <th>{t.notes}</th>
@@ -40401,11 +40464,13 @@ export default function App() {
                             <td>{row.location}</td>
                             <td>{row.currentStudents || 0}</td>
                             <td><strong>{row.chairs}</strong></td>
+                            <td>{furnitureModelBreakdownText(row.chairModels)}</td>
                             <td>{row.requiredChairs}</td>
                             <td style={{ color: row.chairGap < 0 ? "#b03131" : "#23643a", fontWeight: 700 }}>
                               {row.chairGap > 0 ? `+${row.chairGap}` : row.chairGap}
                             </td>
                             <td><strong>{row.tables}</strong></td>
+                            <td>{furnitureModelBreakdownText(row.tableModels)}</td>
                             <td>{row.requiredTables}</td>
                             <td style={{ color: row.tableGap < 0 ? "#b03131" : "#23643a", fontWeight: 700 }}>
                               {row.tableGap > 0 ? `+${row.tableGap}` : row.tableGap}
@@ -40415,7 +40480,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={10}>No classroom location records yet. Mark classroom locations in Setup.</td>
+                          <td colSpan={12}>No classroom location records yet. Mark classroom locations in Setup.</td>
                         </tr>
                       )}
                     </tbody>
