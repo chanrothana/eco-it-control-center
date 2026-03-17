@@ -7484,9 +7484,7 @@ export default function App() {
   const [locationCampus, setLocationCampus] = useState(CAMPUS_LIST[0]);
   const [locationName, setLocationName] = useState("");
   const [locationIsClassroom, setLocationIsClassroom] = useState(false);
-  const [locationStudentCapacity, setLocationStudentCapacity] = useState("");
   const [locationCurrentStudents, setLocationCurrentStudents] = useState("");
-  const [locationTableSeatsPerTable, setLocationTableSeatsPerTable] = useState("2");
   const [locationNotes, setLocationNotes] = useState("");
   const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
   const [campusEditCode, setCampusEditCode] = useState("C1");
@@ -17465,9 +17463,9 @@ export default function App() {
               campus: locationCampus,
               name: locationName.trim(),
               isClassroom: locationIsClassroom,
-              studentCapacity: Number(locationStudentCapacity || 0),
               currentStudents: Number(locationCurrentStudents || 0),
-              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              studentCapacity: 0,
+              tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
             }),
           });
@@ -17478,9 +17476,9 @@ export default function App() {
               campus: locationCampus,
               name: locationName.trim(),
               isClassroom: locationIsClassroom,
-              studentCapacity: Number(locationStudentCapacity || 0),
               currentStudents: Number(locationCurrentStudents || 0),
-              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              studentCapacity: 0,
+              tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
             }),
           });
@@ -17493,9 +17491,9 @@ export default function App() {
                   campus: locationCampus,
                   name: locationName.trim(),
                   isClassroom: locationIsClassroom,
-                  studentCapacity: Number(locationStudentCapacity || 0),
                   currentStudents: Number(locationCurrentStudents || 0),
-                  tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+                  studentCapacity: 0,
+                  tableSeatsPerTable: 2,
                   notes: locationNotes.trim(),
                 }
               : loc
@@ -17507,9 +17505,9 @@ export default function App() {
               campus: locationCampus,
               name: locationName.trim(),
               isClassroom: locationIsClassroom,
-              studentCapacity: Number(locationStudentCapacity || 0),
               currentStudents: Number(locationCurrentStudents || 0),
-              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              studentCapacity: 0,
+              tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
             },
             ...nextLocal,
@@ -17526,9 +17524,9 @@ export default function App() {
                   campus: locationCampus,
                   name: locationName.trim(),
                   isClassroom: locationIsClassroom,
-                  studentCapacity: Number(locationStudentCapacity || 0),
                   currentStudents: Number(locationCurrentStudents || 0),
-                  tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+                  studentCapacity: 0,
+                  tableSeatsPerTable: 2,
                   notes: locationNotes.trim(),
                 }
               : loc
@@ -17540,9 +17538,9 @@ export default function App() {
               campus: locationCampus,
               name: locationName.trim(),
               isClassroom: locationIsClassroom,
-              studentCapacity: Number(locationStudentCapacity || 0),
               currentStudents: Number(locationCurrentStudents || 0),
-              tableSeatsPerTable: Number(locationTableSeatsPerTable || 2),
+              studentCapacity: 0,
+              tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
             },
             ...current,
@@ -17561,9 +17559,7 @@ export default function App() {
 
       setLocationName("");
       setLocationIsClassroom(false);
-      setLocationStudentCapacity("");
       setLocationCurrentStudents("");
-      setLocationTableSeatsPerTable("2");
       setLocationNotes("");
       setEditingLocationId(null);
       await loadData();
@@ -17579,9 +17575,7 @@ export default function App() {
     setLocationCampus(location.campus);
     setLocationName(location.name);
     setLocationIsClassroom(Boolean(location.isClassroom));
-    setLocationStudentCapacity(location.studentCapacity ? String(location.studentCapacity) : "");
     setLocationCurrentStudents(location.currentStudents ? String(location.currentStudents) : "");
-    setLocationTableSeatsPerTable(String(location.tableSeatsPerTable || 2));
     setLocationNotes(String(location.notes || ""));
   }
 
@@ -17589,9 +17583,7 @@ export default function App() {
     setEditingLocationId(null);
     setLocationName("");
     setLocationIsClassroom(false);
-    setLocationStudentCapacity("");
     setLocationCurrentStudents("");
-    setLocationTableSeatsPerTable("2");
     setLocationNotes("");
   }
 
@@ -23372,7 +23364,7 @@ export default function App() {
   }, [furnitureControlAssetRows, furnitureControlCampusFilter, campusLabel]);
   const furnitureControlClassroomRows = useMemo(() => {
     const classroomLocations = locations
-      .filter((row) => Boolean(row.isClassroom) || Number(row.studentCapacity || 0) > 0 || Number(row.currentStudents || 0) > 0)
+      .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
       .filter((row) => (furnitureControlCampusFilter === "ALL" ? true : row.campus === furnitureControlCampusFilter));
     const rows = classroomLocations.map((room) => {
       const matchingAssets = furnitureControlAssetRows.filter(
@@ -23384,20 +23376,14 @@ export default function App() {
       const tables = matchingAssets
         .filter((asset) => asset.type === "TBL")
         .reduce((sum, asset) => sum + asset.availableQty, 0);
-      const studentCapacity = Math.max(0, Number(room.studentCapacity || 0));
       const currentStudents = Math.max(0, Number(room.currentStudents || 0));
-      const planningStudents = currentStudents || studentCapacity;
-      const tableSeatsPerTable = Math.max(1, Number(room.tableSeatsPerTable || 2));
-      const requiredChairs = planningStudents;
-      const requiredTables = planningStudents > 0 ? Math.ceil(planningStudents / tableSeatsPerTable) : 0;
+      const requiredChairs = currentStudents;
+      const requiredTables = currentStudents > 0 ? Math.ceil(currentStudents / 2) : 0;
       return {
         id: room.id,
         campus: room.campus,
         location: room.name,
-        studentCapacity,
         currentStudents,
-        planningStudents,
-        tableSeatsPerTable,
         chairs,
         tables,
         requiredChairs,
@@ -25273,8 +25259,6 @@ export default function App() {
         "Campus",
         "Classroom",
         "Current Students",
-        "Capacity",
-        "Seats / Table",
         "Chairs Ready",
         "Chairs Needed",
         "Chair Gap",
@@ -25287,8 +25271,6 @@ export default function App() {
         reportCampusName(row.campus),
         row.location,
         String(row.currentStudents || 0),
-        row.studentCapacity ? String(row.studentCapacity) : "-",
-        String(row.tableSeatsPerTable),
         String(row.chairs),
         String(row.requiredChairs),
         row.chairGap > 0 ? `+${row.chairGap}` : String(row.chairGap),
@@ -25632,8 +25614,6 @@ export default function App() {
                   <th>Campus</th>
                   <th>Classroom</th>
                   <th>Current Students</th>
-                  <th>Capacity</th>
-                  <th>Seats / Table</th>
                   <th>Chairs Ready</th>
                   <th>Chairs Needed</th>
                   <th>Chair Gap</th>
@@ -25654,8 +25634,6 @@ export default function App() {
                               <td>${escapeHtml(reportCampusName(row.campus))}</td>
                               <td>${escapeHtml(row.location)}</td>
                               <td>${row.currentStudents || 0}</td>
-                              <td>${row.studentCapacity || "-"}</td>
-                              <td>${row.tableSeatsPerTable}</td>
                               <td>${row.chairs}</td>
                               <td>${row.requiredChairs}</td>
                               <td>${row.chairGap > 0 ? `+${row.chairGap}` : row.chairGap}</td>
@@ -25666,7 +25644,7 @@ export default function App() {
                             </tr>`
                         )
                         .join("")
-                    : `<tr><td colspan="13">No classroom records yet.</td></tr>`
+                    : `<tr><td colspan="11">No classroom records yet.</td></tr>`
                 }
               </tbody>
             </table>
@@ -40406,8 +40384,6 @@ export default function App() {
                         <th>{t.campus}</th>
                         <th>{t.location}</th>
                         <th>Current Students</th>
-                        <th>Capacity</th>
-                        <th>Seats / Table</th>
                         <th>Chairs Ready</th>
                         <th>Chairs Needed</th>
                         <th>Chair Gap</th>
@@ -40424,8 +40400,6 @@ export default function App() {
                             <td>{reportCampusName(row.campus)}</td>
                             <td>{row.location}</td>
                             <td>{row.currentStudents || 0}</td>
-                            <td>{row.studentCapacity || "-"}</td>
-                            <td>{row.tableSeatsPerTable}</td>
                             <td><strong>{row.chairs}</strong></td>
                             <td>{row.requiredChairs}</td>
                             <td style={{ color: row.chairGap < 0 ? "#b03131" : "#23643a", fontWeight: 700 }}>
@@ -40441,7 +40415,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={12}>No classroom location records yet. Mark classroom locations in Setup.</td>
+                          <td colSpan={10}>No classroom location records yet. Mark classroom locations in Setup.</td>
                         </tr>
                       )}
                     </tbody>
@@ -42346,17 +42320,6 @@ export default function App() {
                 </select>
               </label>
               <label className="field">
-                <span>Student Capacity</span>
-                <input
-                  className="input"
-                  type="number"
-                  min="0"
-                  value={locationStudentCapacity}
-                  onChange={(e) => setLocationStudentCapacity(e.target.value)}
-                  placeholder="Optional"
-                />
-              </label>
-              <label className="field">
                 <span>Current Students</span>
                 <input
                   className="input"
@@ -42365,16 +42328,6 @@ export default function App() {
                   value={locationCurrentStudents}
                   onChange={(e) => setLocationCurrentStudents(e.target.value)}
                   placeholder="Current class size"
-                />
-              </label>
-              <label className="field">
-                <span>Students per Table</span>
-                <input
-                  className="input"
-                  type="number"
-                  min="1"
-                  value={locationTableSeatsPerTable}
-                  onChange={(e) => setLocationTableSeatsPerTable(e.target.value)}
                 />
               </label>
               <label className="field field-wide">
@@ -42404,9 +42357,7 @@ export default function App() {
                     <th>{t.campus}</th>
                     <th>{t.locationName}</th>
                     <th>Type</th>
-                    <th>Capacity</th>
                     <th>Current Students</th>
-                    <th>Per Table</th>
                     <th>Notes</th>
                     <th>{t.edit}</th>
                     <th>{t.delete}</th>
@@ -42419,9 +42370,7 @@ export default function App() {
                         <td>{campusLabel(loc.campus)}</td>
                         <td>{loc.name}</td>
                         <td>{loc.isClassroom ? "Classroom" : "General"}</td>
-                        <td>{loc.studentCapacity || "-"}</td>
                         <td>{loc.currentStudents || "-"}</td>
-                        <td>{loc.tableSeatsPerTable || 2}</td>
                         <td>{loc.notes || "-"}</td>
                         <td>
                           <button className="tab" disabled={!isAdmin} onClick={() => startEditLocation(loc)}>{t.edit}</button>
@@ -42433,7 +42382,7 @@ export default function App() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={9}>{t.noLocationsYet}</td>
+                      <td colSpan={7}>{t.noLocationsYet}</td>
                     </tr>
                   )}
                 </tbody>
