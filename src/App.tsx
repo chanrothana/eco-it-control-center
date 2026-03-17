@@ -24523,12 +24523,43 @@ export default function App() {
     for (const asset of quickCountModal.assets) {
       const campus = String(asset.campus || "").trim();
       if (!campus) continue;
-      byCampus.set(campus, (byCampus.get(campus) || 0) + 1);
+      const quantity = isFurnitureAsset(asset.category) ? Math.max(1, furnitureAssetQuantity(asset) || 1) : 1;
+      byCampus.set(campus, (byCampus.get(campus) || 0) + quantity);
     }
     return Array.from(byCampus.entries())
       .map(([campus, count]) => ({ campus, count }))
       .sort((a, b) => campusLabel(a.campus).localeCompare(campusLabel(b.campus)));
   }, [quickCountModal, campusLabel]);
+  const quickCountModalFurnitureLocationTotals = useMemo(() => {
+    if (!quickCountModal?.assets?.length) {
+      return [] as Array<{ campus: string; location: string; count: number }>;
+    }
+    if (!quickCountModal.assets.every((asset) => isFurnitureAsset(asset.category))) {
+      return [] as Array<{ campus: string; location: string; count: number }>;
+    }
+
+    const byLocation = new Map<string, { campus: string; location: string; count: number }>();
+    for (const asset of quickCountModal.assets) {
+      const campus = String(asset.campus || "").trim() || "-";
+      const location = String(asset.location || "").trim() || "Unassigned";
+      const quantity = Math.max(1, furnitureAssetQuantity(asset) || 1);
+      const key = `${campus}::${location}`;
+      const existing = byLocation.get(key);
+      if (existing) {
+        existing.count += quantity;
+      } else {
+        byLocation.set(key, { campus, location, count: quantity });
+      }
+    }
+
+    return Array.from(byLocation.values()).sort(
+      (a, b) =>
+        campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
+        a.location.localeCompare(b.location)
+    );
+  }, [quickCountModal, campusLabel]);
+  const quickCountModalShowsFurnitureQuantities = quickCountModalFurnitureLocationTotals.length > 0;
+  const quickCountModalHidesUserColumn = quickCountModalShowsFurnitureQuantities;
   const openInventoryBalanceView = useCallback(
     (mode: "all" | "low") => {
       setInventoryBalanceMode(mode);
@@ -44106,6 +44137,25 @@ export default function App() {
                   ))}
                 </div>
               ) : null}
+              {quickCountModalShowsFurnitureQuantities ? (
+                <div className="panel" style={{ marginBottom: 12, padding: 12 }}>
+                  <div className="asset-actions" style={{ marginBottom: 8 }}>
+                    <strong>{lang === "km" ? "សរុបតាមបន្ទប់" : "Room Summary"}</strong>
+                    <span className="tiny">
+                      {lang === "km"
+                        ? "មើលឃើញថាបន្ទប់ណាមានគ្រឿងសង្ហារឹមប៉ុន្មាន"
+                        : "Easy view of how many furniture items are in each room."}
+                    </span>
+                  </div>
+                  <div className="tiny" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {quickCountModalFurnitureLocationTotals.map((row) => (
+                      <span key={`quick-count-location-total-${row.campus}-${row.location}`} className="report-pill">
+                        <strong>{campusLabel(row.campus)}</strong> - {row.location}: {row.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {isPhoneView ? (
                 <div className="quick-count-mobile-list">
                   {quickCountModal.assets.length ? (
@@ -44120,9 +44170,12 @@ export default function App() {
                           <div className="quick-count-mobile-meta">
                             <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
                             <div>{t.campus}: {campusLabel(asset.campus)}</div>
+                            {quickCountModalShowsFurnitureQuantities ? (
+                              <div>{lang === "km" ? "ចំនួន" : "Qty"}: {Math.max(1, furnitureAssetQuantity(asset) || 1)}</div>
+                            ) : null}
                             <div>{t.category}: {asset.category}</div>
                             <div>{t.location}: {asset.location || "-"}</div>
-                            <div>{t.user}: {asset.assignedTo || "-"}</div>
+                            {!quickCountModalHidesUserColumn ? <div>{t.user}: {asset.assignedTo || "-"}</div> : null}
                           </div>
                         </div>
                       </article>
@@ -44139,10 +44192,11 @@ export default function App() {
                         <th>{t.assetId}</th>
                         <th>{t.photo}</th>
                         <th>{t.campus}</th>
+                        {quickCountModalShowsFurnitureQuantities ? <th>{lang === "km" ? "ចំនួន" : "Qty"}</th> : null}
                         <th>{t.category}</th>
                         <th>{t.name}</th>
                         <th>{t.location}</th>
-                        <th>{t.user}</th>
+                        {!quickCountModalHidesUserColumn ? <th>{t.user}</th> : null}
                         <th>{t.status}</th>
                       </tr>
                     </thead>
@@ -44153,16 +44207,17 @@ export default function App() {
                             <td><strong>{asset.assetId}</strong></td>
                             <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
                             <td>{campusLabel(asset.campus)}</td>
+                            {quickCountModalShowsFurnitureQuantities ? <td>{Math.max(1, furnitureAssetQuantity(asset) || 1)}</td> : null}
                             <td>{asset.category}</td>
                             <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
                             <td>{asset.location || "-"}</td>
-                            <td>{asset.assignedTo || "-"}</td>
+                            {!quickCountModalHidesUserColumn ? <td>{asset.assignedTo || "-"}</td> : null}
                             <td>{assetStatusLabel(asset.status || "-")}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={8}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
+                          <td colSpan={quickCountModalShowsFurnitureQuantities ? 8 : 8}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No assets found."}</td>
                         </tr>
                       )}
                     </tbody>
