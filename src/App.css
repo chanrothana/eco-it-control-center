@@ -3626,6 +3626,47 @@ label.backup-action-btn {
   gap: 4px;
 }
 
+.inventory-shell[class*="inventory-theme-"] {
+  --inventory-theme-accent: #d96f1a;
+  --inventory-theme-soft: #fff2e2;
+  --inventory-theme-border: #efc08c;
+  --inventory-theme-strong: #8d4c16;
+}
+
+.inventory-shell.inventory-theme-supply {
+  --inventory-theme-accent: #c96a20;
+  --inventory-theme-soft: #fff1dc;
+  --inventory-theme-border: #efc38f;
+  --inventory-theme-strong: #8b4a17;
+}
+
+.inventory-shell.inventory-theme-clean-tool {
+  --inventory-theme-accent: #1c8f72;
+  --inventory-theme-soft: #e8fbf4;
+  --inventory-theme-border: #98ddc7;
+  --inventory-theme-strong: #156954;
+}
+
+.inventory-shell.inventory-theme-maint-tool {
+  --inventory-theme-accent: #2d6fb8;
+  --inventory-theme-soft: #ebf4ff;
+  --inventory-theme-border: #a9c7ec;
+  --inventory-theme-strong: #1e4f85;
+}
+
+.inventory-shell.inventory-theme-toner {
+  --inventory-theme-accent: #7a4bb7;
+  --inventory-theme-soft: #f3ecff;
+  --inventory-theme-border: #c8b1eb;
+  --inventory-theme-strong: #5a3490;
+}
+
+.inventory-shell[class*="inventory-theme-"] .inventory-daily-head h2,
+.inventory-shell[class*="inventory-theme-"] .inventory-admin-control-card strong,
+.inventory-shell[class*="inventory-theme-"] .inventory-supply-bar-meta strong {
+  color: var(--inventory-theme-strong);
+}
+
 .inventory-daily-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4782,6 +4823,36 @@ label.backup-action-btn {
 
 .inventory-admin-control-row-btn:hover {
   background: #f8fbff;
+}
+
+.inventory-shell[class*="inventory-theme-"] .inventory-dashboard-panel,
+.inventory-shell[class*="inventory-theme-"] .inventory-admin-control-panel,
+.inventory-shell[class*="inventory-theme-"] .inventory-admin-control-card,
+.inventory-shell[class*="inventory-theme-"] .inventory-admin-matrix-wrap,
+.inventory-shell[class*="inventory-theme-"] .inventory-supply-compare-panel {
+  border-color: var(--inventory-theme-border);
+}
+
+.inventory-shell[class*="inventory-theme-"] .inventory-admin-control-card,
+.inventory-shell[class*="inventory-theme-"] .inventory-admin-matrix-wrap {
+  background: linear-gradient(180deg, var(--inventory-theme-soft) 0%, #fffdf9 100%);
+}
+
+.inventory-shell[class*="inventory-theme-"] .inventory-supply-bar-track,
+.inventory-shell[class*="inventory-theme-"] .inventory-supply-mini-track {
+  background: color-mix(in srgb, var(--inventory-theme-soft) 76%, white 24%);
+}
+
+.inventory-shell[class*="inventory-theme-"] .inventory-supply-bar-fill,
+.inventory-shell[class*="inventory-theme-"] .inventory-supply-mini-fill {
+  background: linear-gradient(135deg, var(--inventory-theme-accent) 0%, var(--inventory-theme-strong) 100%);
+}
+
+.inventory-shell[class*="inventory-theme-"] .tab.tab-active,
+.inventory-shell[class*="inventory-theme-"] .stat-card-selected {
+  border-color: var(--inventory-theme-accent);
+  background: linear-gradient(135deg, var(--inventory-theme-accent) 0%, var(--inventory-theme-strong) 100%);
+  color: #fff;
 }
 
 .inventory-admin-matrix-wrap {
