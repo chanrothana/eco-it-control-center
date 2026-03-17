@@ -16147,7 +16147,7 @@ export default function App() {
       setError(`Not enough stock. Current: ${currentStock}`);
       return { ok: false };
     }
-    if (values.type === "IN") {
+    if (values.type === "IN" && !isSuperAdmin) {
       const txMonth = String(normalizeYmdInput(values.date) || values.date).slice(0, 7);
       const hasMonthlyRefill = inventoryVisibleTxns.some(
         (tx) =>
@@ -17315,7 +17315,7 @@ export default function App() {
       setError(`Not enough stock. Current: ${currentStock}`);
       return;
     }
-    if (inventoryTxnEditForm.type === "IN") {
+    if (inventoryTxnEditForm.type === "IN" && !isSuperAdmin) {
       const txMonth = String(normalizeYmdInput(inventoryTxnEditForm.date) || inventoryTxnEditForm.date).slice(0, 7);
       const hasMonthlyRefill = rowsWithoutCurrent.some(
         (tx) =>

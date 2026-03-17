@@ -5654,7 +5654,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: `Not enough stock. Current: ${currentStock}` });
         return;
       }
-      if (type === "IN") {
+      if (type === "IN" && toText(user.role) !== "Super Admin") {
         const txMonth = String(date).slice(0, 7);
         const hasMonthlyRefill = txns.some(
           (row) =>
@@ -6186,7 +6186,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: `Not enough stock. Current: ${stockWithoutCurrent}` });
         return;
       }
-      if (type === "IN") {
+      if (type === "IN" && toText(admin.role) !== "Super Admin") {
         const txMonth = String(date).slice(0, 7);
         const hasMonthlyRefill = txns.some(
           (row) =>
