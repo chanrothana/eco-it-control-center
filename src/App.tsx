@@ -23278,7 +23278,6 @@ export default function App() {
   const furnitureControlAssetRows = useMemo(() => {
     return assets
       .filter((asset) => isFurnitureAsset(asset.category))
-      .filter((asset) => asset.type === "CHR" || asset.type === "TBL")
       .map((asset) => {
         const details = parseFurnitureSpecs(asset.specs || "");
         const condition = String(details.condition || "").trim() || FURNITURE_CONDITION_OPTIONS[0];
@@ -23290,7 +23289,7 @@ export default function App() {
         const modelLabel = furnitureModelLabel(asset.type, String(asset.model || "").trim());
         return {
           id: asset.id,
-          type: asset.type as "CHR" | "TBL",
+          type: String(asset.type || "").trim().toUpperCase(),
           campus: asset.campus,
           location: String(asset.location || "").trim() || "Unassigned",
           modelLabel,
@@ -23410,6 +23409,13 @@ export default function App() {
           out[asset.modelLabel] = (out[asset.modelLabel] || 0) + asset.availableQty;
           return out;
         }, {} as Record<string, number>);
+      const otherFurnitureModels = matchingAssets
+        .filter((asset) => asset.type !== "CHR" && asset.type !== "TBL" && asset.availableQty > 0)
+        .reduce((out, asset) => {
+          const label = asset.modelLabel || defaultFurnitureSubtype(asset.type) || "Furniture";
+          out[label] = (out[label] || 0) + asset.availableQty;
+          return out;
+        }, {} as Record<string, number>);
       const currentStudents = Math.max(0, Number(room.currentStudents || 0));
       const requiredChairs = currentStudents;
       const requiredTables = currentStudents > 0 ? Math.ceil(currentStudents / 2) : 0;
@@ -23422,6 +23428,7 @@ export default function App() {
         chairModels,
         tables,
         tableModels,
+        otherFurnitureModels,
         requiredChairs,
         requiredTables,
         chairGap: chairs - requiredChairs,
@@ -23447,12 +23454,8 @@ export default function App() {
     return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
   }, [locations, furnitureControlAssetRows, campusLabel]);
   const furnitureControlGapSummary = useMemo(() => {
-    const classroomsWithChairShortage = furnitureControlClassroomRows.filter((row) => row.chairGap < 0).length;
-    const classroomsWithTableShortage = furnitureControlClassroomRows.filter((row) => row.tableGap < 0).length;
     return {
       rooms: furnitureControlClassroomRows.length,
-      chairShortage: classroomsWithChairShortage,
-      tableShortage: classroomsWithTableShortage,
     };
   }, [furnitureControlClassroomRows]);
   const furnitureModelBreakdownText = useCallback((models: Record<string, number>) => {
@@ -24093,7 +24096,7 @@ export default function App() {
             asset_master: "បញ្ជីទ្រព្យសម្បត្តិលម្អិត តាមអ្វីដែលបានជ្រើស។",
             set_code: "មើលក្រុមឧបករណ៍ និងសមាសភាគដែលភ្ជាប់ជាមួយគ្នា។",
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
-            furniture_control: "សង្ខេបកៅអី និងតុតាមសាខា និងពិនិត្យគ្រប់ថ្នាក់រៀនតាមចំនួនសិស្សបច្ចុប្បន្ន។",
+            furniture_control: "សង្ខេបកៅអី និងតុតាមសាខា ហើយបង្ហាញគ្រឿងសង្ហារឹមផ្សេងៗក្នុងថ្នាក់រៀនតាមចំនួនសិស្សបច្ចុប្បន្ន។",
             inventory_balance: "បោះពុម្ពសមតុល្យស្តុកតាមវត្ថុ និងទីតាំងស្តុកបច្ចុប្បន្ន។",
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
@@ -24106,7 +24109,7 @@ export default function App() {
             asset_master: "Detailed asset list based on selected filters.",
             set_code: "View each computer set with all connected items.",
             asset_by_location: "Summary count by campus and location.",
-            furniture_control: "Chair and table totals by campus with classroom shortage analysis based on current students.",
+            furniture_control: "Chair and table totals by campus with classroom furniture details based on current students.",
             inventory_balance: "Standard stock balance report with current stock by item and campus.",
             overdue: "Show assets that are overdue for maintenance.",
             transfer: "Transfer history between campuses and locations.",
@@ -25303,11 +25306,10 @@ export default function App() {
         "Chairs Ready",
         "Chair Models",
         "Chairs Needed",
-        "Chair Gap",
         "Tables Ready",
         "Table Models",
         "Tables Needed",
-        "Table Gap",
+        "Other Furniture",
         "Notes",
       ];
       rows = furnitureControlClassroomRows.map((row) => [
@@ -25317,11 +25319,10 @@ export default function App() {
         String(row.chairs),
         furnitureModelBreakdownText(row.chairModels),
         String(row.requiredChairs),
-        row.chairGap > 0 ? `+${row.chairGap}` : String(row.chairGap),
         String(row.tables),
         furnitureModelBreakdownText(row.tableModels),
         String(row.requiredTables),
-        row.tableGap > 0 ? `+${row.tableGap}` : String(row.tableGap),
+        furnitureModelBreakdownText(row.otherFurnitureModels),
         row.notes || "-",
       ]);
     } else if (reportType === "inventory_balance") {
@@ -25526,7 +25527,7 @@ export default function App() {
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${filteredLocationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${filteredLocationAssetTotal}</p>`
         : reportType === "furniture_control"
-        ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Classrooms:</strong> ${furnitureControlGapSummary.rooms} | <strong>Chair Shortage Rooms:</strong> ${furnitureControlGapSummary.chairShortage} | <strong>Table Shortage Rooms:</strong> ${furnitureControlGapSummary.tableShortage}</p>`
+        ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Classrooms:</strong> ${furnitureControlGapSummary.rooms}</p>`
         : reportType === "inventory_balance"
         ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${inventoryLowStockRows.length}</p>`
         : reportType === "staff_borrowing"
@@ -25668,11 +25669,10 @@ export default function App() {
                   <th>Chairs Ready</th>
                   <th>Chair Models</th>
                   <th>Chairs Needed</th>
-                  <th>Chair Gap</th>
                   <th>Tables Ready</th>
                   <th>Table Models</th>
                   <th>Tables Needed</th>
-                  <th>Table Gap</th>
+                  <th>Other Furniture</th>
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -25690,16 +25690,15 @@ export default function App() {
                               <td>${row.chairs}</td>
                               <td>${escapeHtml(furnitureModelBreakdownText(row.chairModels))}</td>
                               <td>${row.requiredChairs}</td>
-                              <td>${row.chairGap > 0 ? `+${row.chairGap}` : row.chairGap}</td>
                               <td>${row.tables}</td>
                               <td>${escapeHtml(furnitureModelBreakdownText(row.tableModels))}</td>
                               <td>${row.requiredTables}</td>
-                              <td>${row.tableGap > 0 ? `+${row.tableGap}` : row.tableGap}</td>
+                              <td>${escapeHtml(furnitureModelBreakdownText(row.otherFurnitureModels))}</td>
                               <td>${escapeHtml(row.notes || "-")}</td>
                             </tr>`
                         )
                         .join("")
-                    : `<tr><td colspan="13">No classroom records yet.</td></tr>`
+                    : `<tr><td colspan="12">No classroom records yet.</td></tr>`
                 }
               </tbody>
             </table>
@@ -39449,14 +39448,6 @@ export default function App() {
                   <div className="stat-label">Classrooms Tracked</div>
                   <div className="stat-value">{furnitureControlGapSummary.rooms}</div>
                 </article>
-                <article className="stat-card">
-                  <div className="stat-label">Rooms Short of Chairs</div>
-                  <div className="stat-value">{furnitureControlGapSummary.chairShortage}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Rooms Short of Tables</div>
-                  <div className="stat-value">{furnitureControlGapSummary.tableShortage}</div>
-                </article>
               </div>
             )}
             {reportType === "maintenance_completion" ? (
@@ -40448,11 +40439,10 @@ export default function App() {
                         <th>Chairs Ready</th>
                         <th>Chair Models</th>
                         <th>Chairs Needed</th>
-                        <th>Chair Gap</th>
                         <th>Tables Ready</th>
                         <th>Table Models</th>
                         <th>Tables Needed</th>
-                        <th>Table Gap</th>
+                        <th>Other Furniture</th>
                         <th>{t.notes}</th>
                       </tr>
                     </thead>
@@ -40466,21 +40456,16 @@ export default function App() {
                             <td><strong>{row.chairs}</strong></td>
                             <td>{furnitureModelBreakdownText(row.chairModels)}</td>
                             <td>{row.requiredChairs}</td>
-                            <td style={{ color: row.chairGap < 0 ? "#b03131" : "#23643a", fontWeight: 700 }}>
-                              {row.chairGap > 0 ? `+${row.chairGap}` : row.chairGap}
-                            </td>
                             <td><strong>{row.tables}</strong></td>
                             <td>{furnitureModelBreakdownText(row.tableModels)}</td>
                             <td>{row.requiredTables}</td>
-                            <td style={{ color: row.tableGap < 0 ? "#b03131" : "#23643a", fontWeight: 700 }}>
-                              {row.tableGap > 0 ? `+${row.tableGap}` : row.tableGap}
-                            </td>
+                            <td>{furnitureModelBreakdownText(row.otherFurnitureModels)}</td>
                             <td>{row.notes || "-"}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={12}>No classroom location records yet. Mark classroom locations in Setup.</td>
+                          <td colSpan={11}>No classroom location records yet. Mark classroom locations in Setup.</td>
                         </tr>
                       )}
                     </tbody>
