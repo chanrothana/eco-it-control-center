@@ -7963,6 +7963,25 @@ export default function App() {
     by: "",
     note: "",
   });
+  const [inventoryItemFilterCampus, setInventoryItemFilterCampus] = useState("ALL");
+  const [inventoryItemFilterGroup, setInventoryItemFilterGroup] = useState("ALL");
+  const [inventoryItemFilterQuery, setInventoryItemFilterQuery] = useState("");
+  const [inventoryItemSort, setInventoryItemSort] = useState<{
+    key:
+      | "itemCode"
+      | "photo"
+      | "itemName"
+      | "group"
+      | "campus"
+      | "location"
+      | "unit"
+      | "openingQty"
+      | "minStock";
+    direction: "asc" | "desc";
+  }>({
+    key: "itemCode",
+    direction: "asc",
+  });
   const [inventoryStockFilterCampus, setInventoryStockFilterCampus] = useState("ALL");
   const [inventoryStockFilterType, setInventoryStockFilterType] = useState("ALL");
   const [inventoryStockFilterItemId, setInventoryStockFilterItemId] = useState("");
@@ -8911,6 +8930,89 @@ export default function App() {
     }
     return rows.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
   }, [inventoryVisibleItems, inventoryVisibleTxns, inventorySearch]);
+  const inventoryItemCampusOptions = useMemo(() => {
+    const campuses = new Set<string>();
+    for (const row of inventoryBalanceRows) {
+      const campus = String(row.campus || "").trim();
+      if (campus) campuses.add(campus);
+    }
+    return Array.from(campuses).sort((a, b) => inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b)));
+  }, [inventoryBalanceRows, inventoryCampusLabel]);
+  const inventoryItemGroupOptions = useMemo(() => {
+    const groups = new Set<InventoryBusinessGroup>();
+    for (const row of inventoryBalanceRows) {
+      groups.add(inventoryBusinessGroupValue(row));
+    }
+    return Array.from(groups).sort((a, b) =>
+      inventoryBusinessGroupLabel(a).localeCompare(inventoryBusinessGroupLabel(b))
+    );
+  }, [inventoryBalanceRows]);
+  const inventoryItemRows = useMemo(() => {
+    const query = inventoryItemFilterQuery.trim().toLowerCase();
+    const rows = inventoryBalanceRows.filter((row) => {
+      if (inventoryItemFilterCampus !== "ALL" && String(row.campus || "").trim() !== inventoryItemFilterCampus) {
+        return false;
+      }
+      if (inventoryItemFilterGroup !== "ALL" && inventoryBusinessGroupValue(row) !== inventoryItemFilterGroup) {
+        return false;
+      }
+      if (!query) return true;
+      return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.location || ""} ${row.unit || ""} ${row.vendor || ""} ${row.notes || ""}`
+        .toLowerCase()
+        .includes(query);
+    });
+    rows.sort((a, b) => {
+      let compare = 0;
+      switch (inventoryItemSort.key) {
+        case "itemCode":
+          compare = String(a.itemCode || "").localeCompare(String(b.itemCode || ""));
+          break;
+        case "photo":
+          compare =
+            Number(Boolean(String(a.photo || "").trim())) - Number(Boolean(String(b.photo || "").trim())) ||
+            String(a.itemCode || "").localeCompare(String(b.itemCode || ""));
+          break;
+        case "itemName":
+          compare = inventoryDisplayName(a.itemName, lang).localeCompare(inventoryDisplayName(b.itemName, lang));
+          break;
+        case "group":
+          compare = inventoryBusinessGroupLabel(inventoryBusinessGroupValue(a)).localeCompare(
+            inventoryBusinessGroupLabel(inventoryBusinessGroupValue(b))
+          );
+          break;
+        case "campus":
+          compare = inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus));
+          break;
+        case "location":
+          compare = String(a.location || "").localeCompare(String(b.location || ""));
+          break;
+        case "unit":
+          compare = String(a.unit || "").localeCompare(String(b.unit || ""));
+          break;
+        case "openingQty":
+          compare = Number(a.openingQty || 0) - Number(b.openingQty || 0);
+          break;
+        case "minStock":
+          compare = Number(a.minStock || 0) - Number(b.minStock || 0);
+          break;
+        default:
+          compare = 0;
+      }
+      if (compare === 0) {
+        compare = String(a.itemCode || "").localeCompare(String(b.itemCode || ""));
+      }
+      return inventoryItemSort.direction === "asc" ? compare : -compare;
+    });
+    return rows;
+  }, [
+    inventoryBalanceRows,
+    inventoryItemFilterCampus,
+    inventoryItemFilterGroup,
+    inventoryItemFilterQuery,
+    inventoryItemSort,
+    inventoryCampusLabel,
+    lang,
+  ]);
   const inventoryLowStockRows = useMemo(
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
@@ -9204,6 +9306,24 @@ export default function App() {
       current.key === key
         ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
         : { key, direction: key === "date" || key === "qty" ? "desc" : "asc" }
+    );
+  }
+  function toggleInventoryItemSort(
+    key:
+      | "itemCode"
+      | "photo"
+      | "itemName"
+      | "group"
+      | "campus"
+      | "location"
+      | "unit"
+      | "openingQty"
+      | "minStock"
+  ) {
+    setInventoryItemSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: key === "openingQty" || key === "minStock" ? "desc" : "asc" }
     );
   }
   const inventoryPendingApprovalRows = useMemo(
@@ -32733,36 +32853,141 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="panel-filters inventory-item-filter-bar" style={{ marginTop: 12 }}>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select
+                      className="input"
+                      value={inventoryItemFilterCampus}
+                      onChange={(e) => setInventoryItemFilterCampus(e.target.value)}
+                    >
+                      <option value="ALL">All Campuses</option>
+                      {inventoryItemCampusOptions.map((campus) => (
+                        <option key={`inventory-item-filter-campus-${campus}`} value={campus}>
+                          {inventoryCampusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Group</span>
+                    <select
+                      className="input"
+                      value={inventoryItemFilterGroup}
+                      onChange={(e) => setInventoryItemFilterGroup(e.target.value)}
+                    >
+                      <option value="ALL">All Groups</option>
+                      {inventoryItemGroupOptions.map((group) => (
+                        <option key={`inventory-item-filter-group-${group}`} value={group}>
+                          {inventoryBusinessGroupLabel(group)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field field-wide">
+                    <span>Search</span>
+                    <input
+                      className="input"
+                      placeholder="Search code, name, location, unit, vendor..."
+                      value={inventoryItemFilterQuery}
+                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
+                    />
+                  </label>
+                </div>
+
                 <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
                   <table className="vault-responsive-table">
                     <thead>
                       <tr>
-                        <th>Code</th>
-                        <th>{t.photo}</th>
-                        <th>Name</th>
-                        <th>Group</th>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
-                        <th>Unit</th>
-                        <th>Opening</th>
-                        <th>Min</th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "itemCode" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("itemCode")}
+                          >
+                            Code {inventoryItemSort.key === "itemCode" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "photo" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("photo")}
+                          >
+                            {t.photo} {inventoryItemSort.key === "photo" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "itemName" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("itemName")}
+                          >
+                            Name {inventoryItemSort.key === "itemName" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("group")}
+                          >
+                            Group {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "campus" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("campus")}
+                          >
+                            {t.campus} {inventoryItemSort.key === "campus" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "location" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("location")}
+                          >
+                            {t.location} {inventoryItemSort.key === "location" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "unit" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("unit")}
+                          >
+                            Unit {inventoryItemSort.key === "unit" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "openingQty" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("openingQty")}
+                          >
+                            Opening {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
+                        <th>
+                          <button
+                            className={`th-sort-btn ${inventoryItemSort.key === "minStock" ? "is-active" : ""}`}
+                            onClick={() => toggleInventoryItemSort("minStock")}
+                          >
+                            Min {inventoryItemSort.key === "minStock" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                          </button>
+                        </th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {inventoryBalanceRows.length ? (
-                        inventoryBalanceRows.map((row) => (
+                      {inventoryItemRows.length ? (
+                        inventoryItemRows.map((row) => (
                           <tr key={`inv-item-row-${row.id}`}>
-                            <td><strong>{row.itemCode}</strong></td>
-                            <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                            <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                            <td>{inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}</td>
-                            <td>{inventoryCampusLabel(row.campus)}</td>
-                            <td>{row.location}</td>
-                            <td>{row.unit}</td>
-                            <td>{row.openingQty}</td>
-                            <td>{row.minStock}</td>
-                            <td>
+                            <td data-label="Code"><strong>{row.itemCode}</strong></td>
+                            <td data-label={t.photo}>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
+                            <td data-label="Name">{inventoryDisplayName(row.itemName, lang)}</td>
+                            <td data-label="Group">{inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}</td>
+                            <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
+                            <td data-label={t.location}>{row.location}</td>
+                            <td data-label="Unit">{row.unit}</td>
+                            <td data-label="Opening">{row.openingQty}</td>
+                            <td data-label="Min">{row.minStock}</td>
+                            <td data-label="Actions" className="vault-table-action-cell">
                               <div className="asset-row-actions">
                                 <button
                                   className="btn-icon-edit"
@@ -32785,8 +33010,10 @@ export default function App() {
                           </tr>
                         ))
                       ) : (
-                        <tr>
-                          <td colSpan={10}>No inventory items yet.</td>
+                        <tr className="vault-table-empty-row">
+                          <td colSpan={10}>
+                            {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
+                          </td>
                         </tr>
                       )}
                     </tbody>

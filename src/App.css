@@ -3327,6 +3327,20 @@ label.backup-action-btn {
   align-items: flex-start;
 }
 
+.inventory-item-filter-bar {
+  align-items: flex-end;
+}
+
+.inventory-item-filter-bar .field {
+  flex: 1 1 220px;
+  min-width: 180px;
+  margin-bottom: 0;
+}
+
+.inventory-item-filter-bar .field.field-wide {
+  flex: 2 1 320px;
+}
+
 .inventory-shell .panel-row > * {
   min-width: 0;
 }
