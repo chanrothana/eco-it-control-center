@@ -5502,6 +5502,14 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 403, { error: "Campus access denied" });
         return;
       }
+      if (
+        Object.prototype.hasOwnProperty.call(body, "openingQty") &&
+        Number(openingQty) !== Math.max(0, Number(current.openingQty || 0)) &&
+        toText(admin.role) !== "Super Admin"
+      ) {
+        sendJson(res, 403, { error: "Only Super Admin can change opening quantity on existing items" });
+        return;
+      }
       const duplicateCode = items.some(
         (row) =>
           Number(row.id) !== itemId &&

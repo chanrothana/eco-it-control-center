@@ -7910,6 +7910,7 @@ export default function App() {
     notes: "",
     photo: "",
   });
+  const [editingInventoryItemId, setEditingInventoryItemId] = useState<number | null>(null);
   const [inventoryCodeManual, setInventoryCodeManual] = useState(false);
   const [inventoryItemFileKey, setInventoryItemFileKey] = useState(0);
   const [inventoryTxnForm, setInventoryTxnForm] = useState({
@@ -8844,13 +8845,14 @@ export default function App() {
     if (inventoryItemForm.category !== "SUPPLY") return out;
     const masters = INVENTORY_MASTER_ITEMS.filter((item) => item.category === inventoryItemForm.category);
     for (const row of inventoryItems) {
+      if (editingInventoryItemId !== null && row.id === editingInventoryItemId) continue;
       if (row.campus !== inventoryItemForm.campus || row.category !== inventoryItemForm.category) continue;
       for (const master of masters) {
         if (inventoryItemMatchesMaster(row, master)) out.add(master.key);
       }
     }
     return out;
-  }, [inventoryItemForm.category, inventoryItemForm.campus, inventoryItems]);
+  }, [editingInventoryItemId, inventoryItemForm.category, inventoryItemForm.campus, inventoryItems]);
   const inventoryMasterOptions = useMemo(
     () =>
       INVENTORY_MASTER_ITEMS
@@ -15791,6 +15793,104 @@ export default function App() {
     setError("");
   }
 
+  function startEditInventoryItem(row: InventoryItem) {
+    const matchedMaster = INVENTORY_MASTER_ITEMS.find((master) => inventoryItemMatchesMaster(row, master));
+    setEditingInventoryItemId(row.id);
+    setInventoryCodeManual(true);
+    setInventoryItemForm({
+      campus: row.campus,
+      category: row.category,
+      masterItemKey: matchedMaster?.key || "",
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      unit: row.unit,
+      openingQty: String(row.openingQty || 0),
+      minStock: String(row.minStock || 0),
+      location: row.location,
+      vendor: row.vendor || "",
+      notes: row.notes || "",
+      photo: row.photo || "",
+    });
+  }
+
+  function cancelInventoryItemEdit() {
+    setEditingInventoryItemId(null);
+    setInventoryCodeManual(false);
+    setInventoryItemForm({
+      campus: CAMPUS_LIST[0],
+      category: "SUPPLY",
+      masterItemKey: "",
+      itemCode: "",
+      itemName: "",
+      unit: "pcs",
+      openingQty: "0",
+      minStock: "",
+      location: "",
+      vendor: "",
+      notes: "",
+      photo: "",
+    });
+    setInventoryItemFileKey((k) => k + 1);
+  }
+
+  async function updateInventoryItem() {
+    if (!requireAdminAction() || editingInventoryItemId === null) return;
+    const current = inventoryItems.find((item) => item.id === editingInventoryItemId);
+    if (!current) {
+      setError("Inventory item not found.");
+      return;
+    }
+    const masterItem = INVENTORY_MASTER_ITEMS.find((item) => item.key === inventoryItemForm.masterItemKey);
+    const itemName = masterItem
+      ? `${masterItem.nameEn}${masterItem.spec ? ` (${masterItem.spec})` : ""}`
+      : inventoryItemForm.itemName.trim() || current.itemName;
+    const unit = masterItem ? masterItem.unit : (inventoryItemForm.unit.trim() || current.unit || "pcs");
+    const itemCode = (inventoryItemForm.itemCode.trim().toUpperCase() || current.itemCode);
+    const location = inventoryItemForm.location.trim();
+    const openingQty = Number(inventoryItemForm.openingQty || 0);
+    const minStock = Number(inventoryItemForm.minStock || 0);
+    if (!itemCode || !itemName || !location) {
+      setError("Item code, item name, and location are required.");
+      return;
+    }
+    if (!Number.isFinite(openingQty) || openingQty < 0) {
+      setError("Opening Qty must be 0 or higher.");
+      return;
+    }
+    if (!Number.isFinite(minStock) || minStock < 0) {
+      setError("Min Stock must be 0 or higher.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = await requestJson<{ item: InventoryItem }>(`/api/inventory/items/${editingInventoryItemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          campus: inventoryItemForm.campus,
+          category: inventoryItemForm.category,
+          itemCode,
+          itemName,
+          unit,
+          location,
+          openingQty: Math.max(0, Math.round(openingQty)),
+          minStock: Math.max(0, Math.round(minStock)),
+          vendor: inventoryItemForm.vendor.trim(),
+          notes: inventoryItemForm.notes.trim(),
+          photo: inventoryItemForm.photo || "",
+        }),
+      });
+      setInventoryItems((prev) => prev.map((item) => (item.id === res.item.id ? res.item : item)));
+      appendUiAudit("UPDATE", "inventory_item", res.item.itemCode, `${res.item.campus} | ${res.item.itemName}`);
+      cancelInventoryItemEdit();
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update inventory item");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteInventoryItem(row: (typeof inventoryBalanceRows)[number]) {
     if (!requireAdminAction()) return;
     const hasTxnHistory = inventoryTxns.some((tx) => tx.itemId === row.id);
@@ -16687,64 +16787,225 @@ export default function App() {
       <head>
         <title>${escapeHtml(title)}</title>
         <style>
-          body { font-family: "Segoe UI", Arial, sans-serif; margin: 14px; color: #1c2e4f; }
-          h1 { margin: 0 0 8px; font-size: 22px; }
-          p.meta { margin: 0 0 10px; color: #4e6287; font-size: 12px; }
-          table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: fixed; }
-          th, td { border: 1px solid #c9d8ed; padding: 3px 2px; font-size: 9px; text-align: center; }
-          th { background: #edf4ff; font-weight: 700; }
-          td:first-child, th:first-child { text-align: left; width: 190px; max-width: 190px; font-size: 8.8px; }
-          td:last-child, th:last-child { width: 46px; font-weight: 800; }
-          thead tr:nth-child(2) th { background: #f5f9ff; font-size: 8.5px; }
+          :root { color-scheme: light; }
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f5f1e7; }
+          .report-shell { padding: 18px 20px 22px; }
+          .report-card {
+            background: #fffdf8;
+            border: 1px solid #dbc59f;
+            border-radius: 18px;
+            box-shadow: 0 10px 24px rgba(98, 74, 33, 0.08);
+            overflow: hidden;
+          }
+          .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 18px;
+            padding: 18px 22px 14px;
+            background: linear-gradient(135deg, #fff8eb 0%, #fff3dc 52%, #fdfaf4 100%);
+            border-bottom: 1px solid #e6d3b1;
+          }
+          .report-head-left { min-width: 0; flex: 1 1 auto; }
+          .report-kicker {
+            margin: 0 0 6px;
+            color: #9a7341;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+          }
+          .report-title {
+            margin: 0;
+            color: #3f2b18;
+            font-size: 28px;
+            line-height: 1.08;
+            font-weight: 900;
+          }
+          .report-subtitle {
+            margin: 6px 0 0;
+            color: #745531;
+            font-size: 13px;
+          }
+          .report-head-logo {
+            width: 210px;
+            max-width: 32vw;
+            height: auto;
+            object-fit: contain;
+            flex: 0 0 auto;
+          }
+          .report-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            padding: 14px 22px;
+            border-bottom: 1px solid #efdfc3;
+            background: #fffaf1;
+          }
+          .report-meta-card {
+            border: 1px solid #ecd8b8;
+            border-radius: 12px;
+            padding: 10px 12px;
+            background: #ffffff;
+          }
+          .report-meta-label {
+            margin: 0 0 4px;
+            color: #997347;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+          .report-meta-value {
+            margin: 0;
+            color: #2f3e35;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.25;
+          }
+          .report-table-wrap {
+            padding: 14px 16px 18px;
+            overflow-x: auto;
+          }
+          table {
+            width: max-content;
+            min-width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            background: #fff;
+          }
+          th, td {
+            border-right: 1px solid #d8e2dc;
+            border-bottom: 1px solid #d8e2dc;
+            padding: 4px 3px;
+            font-size: 9px;
+            text-align: center;
+            color: #24352c;
+          }
+          th {
+            background: #e8f0eb;
+            color: #355443;
+            font-weight: 800;
+          }
+          thead tr:first-child th {
+            border-top: 1px solid #d8e2dc;
+          }
+          th:first-child, td:first-child {
+            border-left: 1px solid #d8e2dc;
+          }
+          td:first-child, th:first-child {
+            text-align: left;
+            width: 220px;
+            max-width: 220px;
+          }
+          td:last-child, th:last-child {
+            width: 52px;
+            font-weight: 900;
+          }
+          thead tr:nth-child(2) th {
+            background: #f3f7f4;
+            font-size: 8px;
+          }
           .day-main, .day-sub { display: block; line-height: 1.05; text-align: center; }
-          .day-main { font-size: 9px; font-weight: 800; }
-          .day-sub { margin-top: 1px; font-size: 7px; color: #4d628a; font-weight: 700; }
-          .item-cell { display: flex; align-items: center; gap: 5px; }
-          .item-meta { min-width: 0; display: grid; gap: 1px; }
+          .day-main { font-size: 9px; font-weight: 900; }
+          .day-sub { margin-top: 1px; font-size: 7px; color: #667f71; font-weight: 700; }
+          .item-cell { display: flex; align-items: center; gap: 6px; }
+          .item-meta { min-width: 0; display: grid; gap: 2px; }
           .item-code, .item-name {
             line-height: 1.1;
             overflow: hidden;
-            max-width: 160px;
+            max-width: 188px;
           }
-          .item-code { white-space: nowrap; text-overflow: ellipsis; }
-          .item-code { font-size: 8px; font-weight: 800; color: #2e4a78; }
+          .item-code {
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-size: 8px;
+            font-weight: 900;
+            color: #4f6c5a;
+          }
           .item-name {
             font-size: 8.5px;
             font-weight: 700;
-            color: #1f2f4d;
+            color: #1f2f28;
             white-space: normal;
             overflow-wrap: anywhere;
-            text-overflow: clip;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             max-height: 2.2em;
           }
           .item-photo {
-            width: 16px; height: 16px; border-radius: 4px; object-fit: cover;
-            border: 1px solid #c6d6ef; background: #eef5ff; flex: 0 0 auto;
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            object-fit: cover;
+            border: 1px solid #cad8d0;
+            background: #eef5f1;
+            flex: 0 0 auto;
           }
           .item-photo-empty {
-            display: inline-grid; place-items: center; color: #6b7da2; font-weight: 700; font-size: 9px;
+            display: inline-grid;
+            place-items: center;
+            color: #73897d;
+            font-weight: 800;
+            font-size: 9px;
+          }
+          tbody tr:nth-child(even) td {
+            background: #fcfdfc;
           }
           @page { size: A3 landscape; margin: 6mm; }
-          @media print { body { margin: 0; } }
+          @media print {
+            body { margin: 0; background: #fff; }
+            .report-shell { padding: 0; }
+            .report-card { border: 0; border-radius: 0; box-shadow: none; }
+          }
         </style>
       </head>
       <body>
-        <h1>${escapeHtml(title)}</h1>
-        <p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus: ${escapeHtml(campusText)} | Period: ${escapeHtml(periodText)}</p>
-        <table>
-          <thead>
-            <tr>
-              <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "ទំនិញ" : "Item")}</th>
-              ${dayHeadHtml}
-              <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "សរុប" : "Total")}</th>
-            </tr>
-            ${campusHeadHtml}
-          </thead>
-          <tbody>${bodyHtml}</tbody>
-        </table>
+        <div class="report-shell">
+          <section class="report-card">
+            <header class="report-header">
+              <div class="report-head-left">
+                <p class="report-kicker">Eco International School</p>
+                <h1 class="report-title">${escapeHtml(title)}</h1>
+                <p class="report-subtitle">Standard inventory movement report for monthly stock-out tracking.</p>
+              </div>
+              <img loading="lazy" decoding="async" class="report-head-logo" src="/eco-logo.png" alt="Eco International School logo" />
+            </header>
+            <section class="report-meta-grid">
+              <article class="report-meta-card">
+                <p class="report-meta-label">Generated</p>
+                <p class="report-meta-value">${escapeHtml(generatedAt)}</p>
+              </article>
+              <article class="report-meta-card">
+                <p class="report-meta-label">Campus</p>
+                <p class="report-meta-value">${escapeHtml(campusText)}</p>
+              </article>
+              <article class="report-meta-card">
+                <p class="report-meta-label">Period</p>
+                <p class="report-meta-value">${escapeHtml(periodText)}</p>
+              </article>
+              <article class="report-meta-card">
+                <p class="report-meta-label">Items</p>
+                <p class="report-meta-value">${rows.length}</p>
+              </article>
+            </section>
+            <div class="report-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "ទំនិញ" : "Item")}</th>
+                    ${dayHeadHtml}
+                    <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "សរុប" : "Total")}</th>
+                  </tr>
+                  ${campusHeadHtml}
+                </thead>
+                <tbody>${bodyHtml}</tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </body>
       </html>
     `;
@@ -32429,10 +32690,15 @@ export default function App() {
                       className="input"
                       type="number"
                       min="0"
+                      disabled={editingInventoryItemId !== null && !isSuperAdmin}
                       value={inventoryItemForm.openingQty}
                       onChange={(e) => setInventoryItemForm((f) => ({ ...f, openingQty: e.target.value }))}
                     />
-                    <small className="tiny">Set starting balance for this item.</small>
+                    <small className="tiny">
+                      {editingInventoryItemId !== null && !isSuperAdmin
+                        ? "Only Super Admin can change opening qty on existing items."
+                        : "Set starting balance for this item."}
+                    </small>
                   </label>
                   <label className="field">
                     <span>Min Stock Alert</span>
@@ -32453,7 +32719,18 @@ export default function App() {
                 </div>
                 <div className="asset-actions">
                   <div className="tiny">Add consumable supplies and tools for cleaning/maintenance operation.</div>
-                  <button className="btn-primary" disabled={!isAdmin || inventorySupplyMasterLocked} onClick={createInventoryItem}>Add Inventory Item</button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {editingInventoryItemId !== null ? (
+                      <button className="tab" disabled={!isAdmin || busy} onClick={cancelInventoryItemEdit}>Cancel</button>
+                    ) : null}
+                    <button
+                      className="btn-primary"
+                      disabled={!isAdmin || inventorySupplyMasterLocked}
+                      onClick={editingInventoryItemId !== null ? updateInventoryItem : createInventoryItem}
+                    >
+                      {editingInventoryItemId !== null ? "Update Inventory Item" : "Add Inventory Item"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
@@ -32487,6 +32764,14 @@ export default function App() {
                             <td>{row.minStock}</td>
                             <td>
                               <div className="asset-row-actions">
+                                <button
+                                  className="btn-icon-edit"
+                                  disabled={!isAdmin}
+                                  onClick={() => startEditInventoryItem(row)}
+                                  title="Edit"
+                                >
+                                  ✎
+                                </button>
                                 <button
                                   className="btn-danger"
                                   disabled={!isAdmin}
@@ -33077,7 +33362,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="table-wrap vault-table-wrap inventory-stock-table-wrap" style={{ marginTop: 12 }}>
-                    <table>
+                    <table className="inventory-stock-table">
                       <thead>
                         <tr>
                           <th><button className={`th-sort-btn ${inventoryStockSort.key === "date" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("date")}>{t.date} {inventoryStockSort.key === "date" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
@@ -33095,12 +33380,15 @@ export default function App() {
                       <tbody>
                         {inventoryTxnsRows.length ? (
                           inventoryTxnsRows.map((row) => (
-                            <tr key={`inv-tx-row-${row.id}`}>
+                            <tr
+                              key={`inv-tx-row-${row.id}`}
+                              className={editingInventoryTxnId === row.id ? "inventory-stock-edit-row" : ""}
+                            >
                               {editingInventoryTxnId === row.id ? (
                                 <>
                                   <td>
                                     <input
-                                      className="table-input"
+                                      className="table-input inventory-stock-edit-date"
                                       type="date"
                                       value={inventoryTxnEditForm.date}
                                       onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, date: e.target.value }))}
@@ -33108,7 +33396,7 @@ export default function App() {
                                   </td>
                                   <td>
                                     <select
-                                      className="table-input"
+                                      className="table-input inventory-stock-edit-code"
                                       value={inventoryTxnEditForm.itemId}
                                       onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, itemId: e.target.value }))}
                                     >
@@ -33130,7 +33418,7 @@ export default function App() {
                                   </td>
                                   <td>
                                     <select
-                                      className="table-input"
+                                      className="table-input inventory-stock-edit-type"
                                       value={inventoryTxnEditForm.type}
                                       onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, type: e.target.value as InventoryTxn["type"] }))}
                                     >
@@ -33143,7 +33431,7 @@ export default function App() {
                                   </td>
                                   <td>
                                     <input
-                                      className="table-input"
+                                      className="table-input inventory-stock-edit-qty"
                                       type="number"
                                       min="0"
                                       value={inventoryTxnEditForm.qty}
@@ -33153,14 +33441,14 @@ export default function App() {
                                   <td>{row.borrowStatus || "-"}</td>
                                   <td>
                                     <input
-                                      className="table-input"
+                                      className="table-input inventory-stock-edit-by"
                                       value={inventoryTxnEditForm.by}
                                       onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, by: e.target.value }))}
                                     />
                                   </td>
                                   <td>
                                     <input
-                                      className="table-input"
+                                      className="table-input inventory-stock-edit-note"
                                       value={inventoryTxnEditForm.note}
                                       onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, note: e.target.value }))}
                                     />
