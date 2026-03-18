@@ -572,6 +572,7 @@ type AuthRole = "Super Admin" | "Admin" | "Viewer";
 type NavModule =
   | "dashboard"
   | "assets"
+  | "classroom"
   | "inventory"
   | "utilities"
   | "pool"
@@ -1061,6 +1062,7 @@ const DEFAULT_VIEWER_MODULES: NavModule[] = [
 const ALL_NAV_MODULES: NavModule[] = [
   "dashboard",
   "assets",
+  "classroom",
   "inventory",
   "utilities",
   "pool",
@@ -1077,6 +1079,7 @@ type NavSection = "core" | "operations" | "admin";
 const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   dashboard: "core",
   assets: "core",
+  classroom: "core",
   inventory: "core",
   utilities: "operations",
   pool: "operations",
@@ -1113,6 +1116,12 @@ const MENU_ACCESS_TREE: Array<{
       { key: "assets.register", labelEn: "Register Asset", labelKm: "ចុះឈ្មោះទ្រព្យសម្បត្តិ" },
       { key: "assets.list", labelEn: "Asset List", labelKm: "បញ្ជីទ្រព្យសម្បត្តិ" },
     ],
+  },
+  {
+    module: "classroom",
+    labelEn: "Classroom Control",
+    labelKm: "គ្រប់គ្រងថ្នាក់រៀន",
+    children: [{ key: "classroom.main", labelEn: "Classroom Dashboard", labelKm: "ផ្ទាំងគ្រប់គ្រងថ្នាក់រៀន" }],
   },
   {
     module: "inventory",
@@ -6050,6 +6059,7 @@ export default function App() {
     () => [
       { id: "dashboard", label: t.dashboard },
       { id: "assets", label: t.assets },
+      { id: "classroom", label: lang === "km" ? "ថ្នាក់រៀន" : "Classroom Control" },
       { id: "inventory", label: t.inventory },
       { id: "utilities", label: lang === "km" ? "សេវាប្រើប្រាស់" : "Utilities" },
       { id: "pool", label: t.pool },
@@ -6070,6 +6080,8 @@ export default function App() {
         return <BarChart3 size={16} aria-hidden={true} />;
       case "assets":
         return <Boxes size={16} aria-hidden={true} />;
+      case "classroom":
+        return <Building2 size={16} aria-hidden={true} />;
       case "inventory":
         return <Package size={16} aria-hidden={true} />;
       case "utilities":
@@ -6159,6 +6171,8 @@ export default function App() {
       .filter((section) => section.items.length > 0);
   }, [lang, navMenuItems]);
   const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
+  const [classroomCampusFilter, setClassroomCampusFilter] = useState("ALL");
+  const [classroomQuery, setClassroomQuery] = useState("");
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
@@ -6273,6 +6287,18 @@ export default function App() {
                 setTab("inventory");
               }),
           }));
+        case "classroom":
+          return [
+            {
+              key: "classroom.main",
+              label: lang === "km" ? "ផ្ទាំងគ្រប់គ្រង" : "Dashboard",
+              active: tab === "classroom",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setTab("classroom");
+                }),
+            },
+          ];
         case "utilities":
           return [
             {
@@ -6681,6 +6707,7 @@ export default function App() {
       reportType,
       scheduleView,
       setupView,
+      tab,
       t.cleaningSchedule,
       t.poolComplaints,
       transferView,
@@ -8368,6 +8395,13 @@ export default function App() {
       setAssetCampusFilter("ALL");
     }
   }, [authUser, assetCampusFilter, allowedCampuses]);
+  useEffect(() => {
+    if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
+    if (classroomCampusFilter === "ALL") return;
+    if (!allowedCampuses.includes(classroomCampusFilter)) {
+      setClassroomCampusFilter("ALL");
+    }
+  }, [authUser, classroomCampusFilter, allowedCampuses]);
 
   useEffect(() => {
     if (editingAuthUserId === null) return;
@@ -9729,18 +9763,6 @@ export default function App() {
       atRiskRows: atRiskRows.slice(0, 6),
     };
   }, [inventoryDashboardScopedRows, inventoryDashboardScopedLowStockRows, inventoryDashboardScopedTxns]);
-  const inventoryDashboardCampusControlRows = useMemo(() => {
-    const map = new Map<string, { campus: string; items: number; onHand: number; lowStockItems: number }>();
-    for (const row of inventoryDashboardScopedRows) {
-      const campus = String(row.campus || "").trim() || "-";
-      const current = map.get(campus) || { campus, items: 0, onHand: 0, lowStockItems: 0 };
-      current.items += 1;
-      current.onHand += Number(row.currentStock || 0);
-      if (Number(row.currentStock || 0) < Number(row.minStock || 0)) current.lowStockItems += 1;
-      map.set(campus, current);
-    }
-    return Array.from(map.values()).sort((a, b) => inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
-  }, [inventoryDashboardScopedRows, inventoryCampusLabel]);
   const inventoryDashboardLocationControlRows = useMemo(() => {
     const map = new Map<string, { location: string; items: number; onHand: number; lowStockItems: number }>();
     for (const row of inventoryDashboardScopedRows) {
@@ -9805,6 +9827,13 @@ export default function App() {
       .sort((a, b) => b.qty - a.qty || a.itemCode.localeCompare(b.itemCode))
       .slice(0, 8);
   }, [inventoryDashboardFilteredOutTxns]);
+  const inventoryDashboardRecentActivityRows = useMemo(
+    () =>
+      inventoryDashboardFilteredOutTxns
+        .filter((tx) => isInventoryTxnStockEffective(tx))
+        .slice(0, 8),
+    [inventoryDashboardFilteredOutTxns]
+  );
   const inventoryDashboardAdminSummary = useMemo(() => {
     const today = toYmd(new Date());
     const yesterday = shiftYmd(today, -1);
@@ -23523,6 +23552,153 @@ export default function App() {
       rooms: furnitureControlClassroomRows.length,
     };
   }, [furnitureControlClassroomRows]);
+  const classroomControlCampusOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(
+        locations
+          .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
+          .map((row) => String(row.campus || "").trim())
+          .filter(Boolean)
+      )
+    );
+    return options
+      .filter((campus) => allowedCampuses.includes(campus))
+      .sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
+  }, [locations, allowedCampuses, campusLabel]);
+  const classroomControlRoomRows = useMemo(() => {
+    const query = String(classroomQuery || "").trim().toLowerCase();
+    const visibleLocations = locations
+      .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
+      .filter((row) => allowedCampuses.includes(row.campus))
+      .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter));
+
+    const roomAssets = assets.filter((asset) => {
+      if (!allowedCampuses.includes(asset.campus)) return false;
+      return visibleLocations.some((room) => room.campus === asset.campus && room.name === asset.location);
+    });
+
+    const rows = visibleLocations.map((room) => {
+      const matchingAssets = roomAssets.filter((asset) => asset.campus === room.campus && asset.location === room.name);
+      const countAssets = (predicate: (asset: Asset, quantity: number, subtype: string, haystack: string) => boolean) =>
+        matchingAssets.reduce((sum, asset) => {
+          const quantity = isFurnitureAsset(asset.category) ? Math.max(1, furnitureAssetQuantity(asset) || 1) : 1;
+          const subtype = String(parseFurnitureSpecs(asset.specs || "").subtype || "").trim().toLowerCase();
+          const haystack = [
+            asset.category,
+            asset.type,
+            asset.name,
+            asset.model,
+            asset.specs,
+            subtype,
+          ]
+            .map((value) => String(value || "").trim().toLowerCase())
+            .join(" ");
+          return predicate(asset, quantity, subtype, haystack) ? sum + quantity : sum;
+        }, 0);
+
+      const currentStudents = Math.max(0, Number(room.currentStudents || 0));
+      const tableSeatsPerTable = Math.max(1, Number(room.tableSeatsPerTable || 2));
+      const studentChairs = countAssets(
+        (asset, quantity, subtype, haystack) =>
+          isFurnitureAsset(asset.category) &&
+          String(asset.type || "").trim().toUpperCase() === "CHR" &&
+          !subtype.includes("teacher") &&
+          !haystack.includes("teacher")
+      );
+      const teacherChair = countAssets(
+        (asset) =>
+          isFurnitureAsset(asset.category) &&
+          String(asset.type || "").trim().toUpperCase() === "CHR" &&
+          String(parseFurnitureSpecs(asset.specs || "").subtype || "").trim().toLowerCase().includes("teacher")
+      );
+      const studentTables = countAssets(
+        (asset, quantity, subtype, haystack) =>
+          isFurnitureAsset(asset.category) &&
+          (String(asset.type || "").trim().toUpperCase() === "TBL" || String(asset.type || "").trim().toUpperCase() === "DSK") &&
+          !subtype.includes("teacher") &&
+          !haystack.includes("teacher")
+      );
+      const teacherDesk = countAssets((asset, quantity, subtype, haystack) => {
+        if (!isFurnitureAsset(asset.category)) return false;
+        const type = String(asset.type || "").trim().toUpperCase();
+        return type === "DSK" || subtype.includes("teacher") || haystack.includes("teacher desk") || haystack.includes("teacher table");
+      });
+      const cabinetQty = countAssets((asset, quantity, subtype, haystack) => {
+        const type = String(asset.type || "").trim().toUpperCase();
+        return (isFurnitureAsset(asset.category) && type === "CAB") || haystack.includes("cabinet");
+      });
+      const tvQty = countAssets((asset, quantity, subtype, haystack) => {
+        const type = String(asset.type || "").trim().toUpperCase();
+        return type === TV_TYPE_CODE || haystack.includes("tv");
+      });
+      const blindQty = countAssets((asset, quantity, subtype, haystack) => haystack.includes("blind"));
+      const lightQty = countAssets((asset, quantity, subtype, haystack) => haystack.includes("light"));
+      const requiredStudentChairs = currentStudents;
+      const requiredStudentTables = currentStudents > 0 ? Math.ceil(currentStudents / tableSeatsPerTable) : 0;
+      const chairGap = studentChairs - requiredStudentChairs;
+      const tableGap = studentTables - requiredStudentTables;
+      const hasStandardGap =
+        chairGap < 0 ||
+        tableGap < 0 ||
+        teacherChair < 1 ||
+        teacherDesk < 1 ||
+        tvQty < 1 ||
+        cabinetQty < 1;
+
+      const issueNotes: string[] = [];
+      if (chairGap < 0) issueNotes.push(`Need ${Math.abs(chairGap)} student chair${Math.abs(chairGap) > 1 ? "s" : ""}`);
+      if (tableGap < 0) issueNotes.push(`Need ${Math.abs(tableGap)} student table${Math.abs(tableGap) > 1 ? "s" : ""}`);
+      if (teacherDesk < 1) issueNotes.push("Missing teacher desk");
+      if (teacherChair < 1) issueNotes.push("Missing teacher chair");
+      if (tvQty < 1) issueNotes.push("Missing TV");
+      if (cabinetQty < 1) issueNotes.push("Missing cabinet");
+
+      return {
+        id: room.id,
+        campus: room.campus,
+        location: room.name,
+        notes: String(room.notes || "").trim(),
+        currentStudents,
+        tableSeatsPerTable,
+        studentChairs,
+        requiredStudentChairs,
+        chairGap,
+        studentTables,
+        requiredStudentTables,
+        tableGap,
+        teacherDesk,
+        teacherChair,
+        cabinetQty,
+        tvQty,
+        blindQty,
+        lightQty,
+        totalAssets: matchingAssets.length,
+        status: hasStandardGap ? "Need Action" : "Ready",
+        issueText: issueNotes.join(" | ") || "Standard setup looks ready",
+      };
+    });
+
+    return rows
+      .filter((row) => {
+        if (!query) return true;
+        const text = `${row.location} ${campusLabel(row.campus)} ${row.notes} ${row.issueText}`.toLowerCase();
+        return text.includes(query);
+      })
+      .sort(
+        (a, b) =>
+          (a.status === "Need Action" ? -1 : 1) - (b.status === "Need Action" ? -1 : 1) ||
+          campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
+          a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
+      );
+  }, [locations, allowedCampuses, classroomCampusFilter, classroomQuery, assets, campusLabel]);
+  const classroomControlSummary = useMemo(() => {
+    const rooms = classroomControlRoomRows.length;
+    const needActionRooms = classroomControlRoomRows.filter((row) => row.status === "Need Action").length;
+    const readyRooms = rooms - needActionRooms;
+    const missingStudentChairs = classroomControlRoomRows.reduce((sum, row) => sum + Math.max(0, row.requiredStudentChairs - row.studentChairs), 0);
+    const missingStudentTables = classroomControlRoomRows.reduce((sum, row) => sum + Math.max(0, row.requiredStudentTables - row.studentTables), 0);
+    return { rooms, readyRooms, needActionRooms, missingStudentChairs, missingStudentTables };
+  }, [classroomControlRoomRows]);
   const furnitureModelBreakdownText = useCallback((models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     if (!entries.length) return "-";
@@ -33196,6 +33372,205 @@ export default function App() {
           </div>
         ) : null}
 
+        {tab === "classroom" && (
+          <div className="inventory-shell">
+            <section className="panel">
+              <div className="panel-row">
+                <div>
+                  <h2>{lang === "km" ? "គ្រប់គ្រងថ្នាក់រៀន" : "Classroom Control"}</h2>
+                  <div className="tiny">
+                    {lang === "km"
+                      ? "តាមដានសម្ភារៈ និងទ្រព្យសម្រាប់ថ្នាក់រៀននីមួយៗ"
+                      : "Track classroom setup, furniture, and key room assets in one place."}
+                  </div>
+                </div>
+                <div className="panel-filters">
+                  <select
+                    className="input"
+                    value={classroomCampusFilter}
+                    onChange={(e) => setClassroomCampusFilter(e.target.value)}
+                  >
+                    <option value="ALL">{t.allCampuses}</option>
+                    {classroomControlCampusOptions.map((campus) => (
+                      <option key={`classroom-campus-${campus}`} value={campus}>
+                        {campusLabel(campus)}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="input"
+                    value={classroomQuery}
+                    onChange={(e) => setClassroomQuery(e.target.value)}
+                    placeholder={lang === "km" ? "ស្វែងរកថ្នាក់រៀន..." : "Search classroom..."}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-row">
+                <h3 className="section-title">{lang === "km" ? "សង្ខេបថ្នាក់រៀន" : "Classroom Snapshot"}</h3>
+                <span className="tiny">
+                  {classroomCampusFilter === "ALL" ? t.allCampuses : campusLabel(classroomCampusFilter)}
+                </span>
+              </div>
+              <div className="stats-grid">
+                <article className="stat-card">
+                  <div className="stat-label">{lang === "km" ? "បន្ទប់ដែលតាមដាន" : "Rooms Tracked"}</div>
+                  <div className="stat-value">{classroomControlSummary.rooms}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">{lang === "km" ? "បន្ទប់រួចរាល់" : "Ready Rooms"}</div>
+                  <div className="stat-value">{classroomControlSummary.readyRooms}</div>
+                </article>
+                <article className="stat-card stat-card-overdue">
+                  <div className="stat-label">{lang === "km" ? "បន្ទប់ត្រូវតាមដាន" : "Need Action Rooms"}</div>
+                  <div className="stat-value">{classroomControlSummary.needActionRooms}</div>
+                </article>
+                <article className="stat-card stat-card-overdue">
+                  <div className="stat-label">{lang === "km" ? "កៅអីសិស្សខ្វះ" : "Missing Student Chairs"}</div>
+                  <div className="stat-value">{classroomControlSummary.missingStudentChairs}</div>
+                </article>
+                <article className="stat-card stat-card-overdue">
+                  <div className="stat-label">{lang === "km" ? "តុសិស្សខ្វះ" : "Missing Student Tables"}</div>
+                  <div className="stat-value">{classroomControlSummary.missingStudentTables}</div>
+                </article>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-row">
+                <h3 className="section-title">{lang === "km" ? "តារាងគ្រប់គ្រងថ្នាក់រៀន" : "Classroom Control Table"}</h3>
+                <span className="tiny">
+                  {lang === "km"
+                    ? "កៅអី/តុ មានការប្រៀបធៀប expected vs actual"
+                    : "Student chairs/tables compare expected vs actual."}
+                </span>
+              </div>
+              {isPhoneView ? (
+                <div className="report-card-list">
+                  {classroomControlRoomRows.length ? (
+                    classroomControlRoomRows.map((row) => (
+                      <article key={`classroom-room-card-${row.id}`} className="report-card furniture-report-mobile-card furniture-report-room-card">
+                        <div className="report-card-head furniture-report-mobile-head">
+                          <div className="report-card-title">
+                            <strong>{row.location}</strong>
+                            <div className="tiny report-card-sub">{campusLabel(row.campus)}</div>
+                          </div>
+                          <span className={`report-pill ${row.status === "Need Action" ? "report-pill-alert" : ""}`}>{row.status}</span>
+                        </div>
+                        <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
+                          <div>
+                            <span>{lang === "km" ? "សិស្ស" : "Students"}</span>
+                            <strong>{row.currentStudents}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "កៅអីសិស្ស" : "Student Chairs"}</span>
+                            <strong>{row.studentChairs}/{row.requiredStudentChairs}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "តុសិស្ស" : "Student Tables"}</span>
+                            <strong>{row.studentTables}/{row.requiredStudentTables}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "តុគ្រូ" : "Teacher Desk"}</span>
+                            <strong>{row.teacherDesk}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "កៅអីគ្រូ" : "Teacher Chair"}</span>
+                            <strong>{row.teacherChair}</strong>
+                          </div>
+                          <div>
+                            <span>TV</span>
+                            <strong>{row.tvQty}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "ទូ" : "Cabinet"}</span>
+                            <strong>{row.cabinetQty}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "វាំងនន" : "Blind"}</span>
+                            <strong>{row.blindQty}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "ភ្លើង" : "Light"}</span>
+                            <strong>{row.lightQty}</strong>
+                          </div>
+                        </div>
+                        <div className="furniture-report-mobile-detail">
+                          <small>{lang === "km" ? "ចំណុចត្រូវតាមដាន" : "Action Notes"}</small>
+                          <p>{row.issueText}</p>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">
+                      {lang === "km"
+                        ? "មិនទាន់មាន Classroom records ទេ។ សូមកំណត់ Classroom ក្នុង Setup > Location Setup."
+                        : "No classroom records yet. Mark classroom locations in Setup > Location Setup."}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.campus}</th>
+                        <th>{t.location}</th>
+                        <th>{lang === "km" ? "សិស្ស" : "Students"}</th>
+                        <th>{lang === "km" ? "កៅអីសិស្ស" : "Student Chairs"}</th>
+                        <th>{lang === "km" ? "តុសិស្ស" : "Student Tables"}</th>
+                        <th>{lang === "km" ? "តុគ្រូ" : "Teacher Desk"}</th>
+                        <th>{lang === "km" ? "កៅអីគ្រូ" : "Teacher Chair"}</th>
+                        <th>TV</th>
+                        <th>{lang === "km" ? "ទូ" : "Cabinet"}</th>
+                        <th>{lang === "km" ? "វាំងនន" : "Blind"}</th>
+                        <th>{lang === "km" ? "ភ្លើង" : "Light"}</th>
+                        <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
+                        <th>{lang === "km" ? "ចំណាំ" : "Action Notes"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classroomControlRoomRows.length ? (
+                        classroomControlRoomRows.map((row) => (
+                          <tr key={`classroom-control-row-${row.id}`}>
+                            <td>{campusLabel(row.campus)}</td>
+                            <td><strong>{row.location}</strong></td>
+                            <td>{row.currentStudents}</td>
+                            <td>
+                              <strong>{row.studentChairs}</strong> / {row.requiredStudentChairs}
+                            </td>
+                            <td>
+                              <strong>{row.studentTables}</strong> / {row.requiredStudentTables}
+                            </td>
+                            <td>{row.teacherDesk}</td>
+                            <td>{row.teacherChair}</td>
+                            <td>{row.tvQty}</td>
+                            <td>{row.cabinetQty}</td>
+                            <td>{row.blindQty}</td>
+                            <td>{row.lightQty}</td>
+                            <td>{row.status}</td>
+                            <td>{row.issueText}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={13}>
+                            {lang === "km"
+                              ? "មិនទាន់មាន Classroom records ទេ។ សូមកំណត់ Classroom ក្នុង Setup > Location Setup."
+                              : "No classroom records yet. Mark classroom locations in Setup > Location Setup."}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
         {tab === "inventory" && (
           <div className={`inventory-shell ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
             {!maintenanceQuickMode ? (
@@ -33210,9 +33585,6 @@ export default function App() {
                       onChange={(e) => setInventorySearch(e.target.value)}
                     />
                   </div>
-                </div>
-                <div className="tiny" style={{ marginBottom: 10 }}>
-                  {lang === "km" ? "ក្រុមស្តុក" : "Inventory Group"}
                 </div>
                 <div className="tabs" style={{ marginBottom: 12 }}>
                   {INVENTORY_OPERATIONAL_GROUP_ORDER.map((group) => (
@@ -33229,7 +33601,9 @@ export default function App() {
                   ))}
                 </div>
                 <div className="tiny" style={{ marginBottom: 10 }}>
-                  {lang === "km" ? "មុខងារ" : "Functions"}
+                  {lang === "km"
+                    ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - មុខងារ`
+                    : `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} Functions`}
                 </div>
                 <div className="tabs">
                   <button className={`tab ${inventoryView === "dashboard" ? "tab-active" : ""}`} onClick={() => setInventoryView("dashboard")}>Dashboard</button>
@@ -34308,75 +34682,99 @@ export default function App() {
                         })}
                       </span>
                     </div>
-                    <div className="tabs" style={{ marginBottom: 12 }}>
-                      {INVENTORY_OPERATIONAL_GROUP_ORDER.map((group) => (
-                        <button
-                          key={`inventory-dashboard-group-${group}`}
-                          className={`tab ${inventoryDashboardGroup === group ? "tab-active" : ""}`}
-                          onClick={() => setInventoryDashboardGroup(group)}
-                        >
-                          {inventoryBusinessGroupLabel(group)}
-                        </button>
-                      ))}
-                    </div>
                     <div className="stats-grid inventory-admin-control-stats">
-                      <article className="stat-card">
-                        <div className="stat-label">{lang === "km" ? "មុខទំនិញសរុប" : "Total Items"}</div>
-                        <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
-                      </article>
-                      <article className="stat-card">
-                        <div className="stat-label">{lang === "km" ? "ស្តុកសរុប (On Hand)" : "Total On Hand"}</div>
-                        <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
-                      </article>
-                      <article className="stat-card stat-card-overdue">
-                        <div className="stat-label">{lang === "km" ? "ទាបជាង Min" : "Low Stock Items"}</div>
-                        <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
-                      </article>
-                      <article className="stat-card stat-card-overdue">
-                        <div className="stat-label">{lang === "km" ? "អស់ស្តុក" : "Out of Stock Items"}</div>
-                        <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
-                      </article>
-                      <article className="stat-card stat-card-overdue">
-                        <div className="stat-label">{lang === "km" ? "ខ្វះពីកម្រិត Min" : "Units Below Min"}</div>
-                        <div className="stat-value">{inventoryDashboardGroupSnapshot.belowMinUnits}</div>
-                      </article>
-                      <article className="stat-card stat-card-overdue">
-                        <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approvals"}</div>
-                        <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
-                      </article>
+                      {inventoryDashboardGroup === "SUPPLY" ? (
+                        <>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "មុខទំនិញសរុប" : "Total Items"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
+                          </article>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "ស្តុកសរុប (On Hand)" : "Total On Hand"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "ទាបជាង Min" : "Low Stock Items"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "អស់ស្តុក" : "Out of Stock Items"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "ខ្វះពីកម្រិត Min" : "Units Below Min"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.belowMinUnits}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approvals"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
+                          </article>
+                        </>
+                      ) : inventoryDashboardGroup === "CLEAN_TOOL" ? (
+                        <>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "ប្រភេទឧបករណ៍សម្អាត" : "Total Tool Types"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
+                          </article>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "ឧបករណ៍អាចប្រើបាន" : "Units Available"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "ឧបករណ៍ខ្វះ" : "Low Coverage Tools"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "គ្មានស្តុក" : "Zero Available Tools"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
+                          </article>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "ទីតាំងគ្រប់គ្រង" : "Storage Locations"}</div>
+                            <div className="stat-value">{inventoryDashboardLocationControlRows.length}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំ" : "Pending Requests"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
+                          </article>
+                        </>
+                      ) : (
+                        <>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "ប្រភេទឧបករណ៍ថែទាំ" : "Total Tool Types"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
+                          </article>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "ឧបករណ៍រួចរាល់" : "Ready Units"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "ត្រូវតាមដាន" : "Low Readiness Tools"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "គ្មានស្តុក" : "Zero Available Tools"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
+                          </article>
+                          <article className="stat-card">
+                            <div className="stat-label">{lang === "km" ? "ទីតាំងគ្រប់គ្រង" : "Work Locations"}</div>
+                            <div className="stat-value">{inventoryDashboardLocationControlRows.length}</div>
+                          </article>
+                          <article className="stat-card stat-card-overdue">
+                            <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំ" : "Pending Requests"}</div>
+                            <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
+                          </article>
+                        </>
+                      )}
                     </div>
                     <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
                       <div className="inventory-admin-control-card">
-                        <strong>{lang === "km" ? "សង្ខេបតាម Campus" : "Selected Group by Campus"}</strong>
-                        {inventoryDashboardCampusControlRows.length ? (
-                          <div className="table-wrap" style={{ marginTop: 10 }}>
-                            <table>
-                              <thead>
-                                <tr>
-                                  <th>{t.campus}</th>
-                                  <th>{lang === "km" ? "ចំនួនមុខទំនិញ" : "Items"}</th>
-                                  <th>{lang === "km" ? "ស្តុកសរុប" : "On Hand"}</th>
-                                  <th>{lang === "km" ? "ទាបជាង Min" : "Low Stock"}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {inventoryDashboardCampusControlRows.map((row) => (
-                                  <tr key={`inventory-dashboard-campus-control-${row.campus}`}>
-                                    <td>{inventoryCampusLabel(row.campus)}</td>
-                                    <td>{row.items}</td>
-                                    <td>{row.onHand}</td>
-                                    <td>{row.lowStockItems}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមានទិន្នន័យ" : "No data for this group yet."}</div>
-                        )}
-                      </div>
-                      <div className="inventory-admin-control-card">
-                        <strong>{lang === "km" ? "តារាងគ្រប់គ្រង Item" : "Item Control"}</strong>
+                        <strong>
+                          {inventoryDashboardGroup === "SUPPLY"
+                            ? (lang === "km" ? "តារាងគ្រប់គ្រង Item" : "Item Control")
+                            : inventoryDashboardGroup === "CLEAN_TOOL"
+                              ? (lang === "km" ? "ស្ថានភាពគ្រប់គ្រងឧបករណ៍សម្អាត" : "Cleaning Tool Availability Watch")
+                              : (lang === "km" ? "ស្ថានភាពគ្រប់គ្រងឧបករណ៍ថែទាំ" : "Maintenance Tool Readiness Watch")}
+                        </strong>
                         {inventoryDashboardItemControlRows.length ? (
                           <div className="table-wrap" style={{ marginTop: 10 }}>
                             <table>
@@ -34420,287 +34818,73 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                    <div className="form-grid inventory-admin-control-filters">
-                      <label className="field">
-                        <span>{lang === "km" ? "ខែ" : "Month"}</span>
-                        <select
-                          className="input"
-                          value={inventoryAdminMonth}
-                          onChange={(e) => setInventoryAdminMonth(e.target.value)}
-                        >
-                          {inventoryAdminMonthOptions.map((month) => (
-                            <option key={`inventory-admin-month-${month}`} value={month}>
-                              {new Date(`${month}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" })}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>{t.campus}</span>
-                        <select
-                          className="input"
-                          value={inventoryAdminCampusFilter}
-                          onChange={(e) => setInventoryAdminCampusFilter(e.target.value)}
-                        >
-                          <option value="ALL">{t.allCampuses}</option>
-                          {inventoryAdminCampusOptions.map((campus) => (
-                            <option key={`inventory-admin-campus-${campus}`} value={campus}>
-                              {inventoryCampusLabel(campus)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>{lang === "km" ? "ស្វែងរក Item" : "Search Item"}</span>
-                        <input
-                          className="input"
-                          value={inventoryAdminItemQuery}
-                          onChange={(e) => setInventoryAdminItemQuery(e.target.value)}
-                          placeholder={lang === "km" ? "ស្វែងរកកូដ ឬឈ្មោះ" : "Search code or item name"}
-                        />
-                      </label>
-                    </div>
-                    <div className="stats-grid inventory-admin-control-stats">
-                      <button
-                        type="button"
-                        className="stat-card stat-card-button"
-                        onClick={() =>
-                          openInventoryAdminDetailModal(
-                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "ចេញស្តុក ថ្ងៃនេះ" : "Today Out Transactions"}`,
-                            inventoryDashboardScopedOutTxns.filter((tx) => String(tx.date || "") === toYmd(new Date()) && isInventoryTxnStockEffective(tx))
-                          )
-                        }
-                      >
-                        <div className="stat-label">{lang === "km" ? "ចេញស្តុក ថ្ងៃនេះ" : "Today Out"}</div>
-                        <div className="stat-value">{inventoryDashboardAdminSummary.todayOut}</div>
-                      </button>
-                      <button
-                        type="button"
-                        className="stat-card stat-card-button"
-                        onClick={() =>
-                          openInventoryAdminDetailModal(
-                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "ចេញស្តុក ម្សិលមិញ" : "Yesterday Out Transactions"}`,
-                            inventoryDashboardScopedOutTxns.filter((tx) => String(tx.date || "") === shiftYmd(toYmd(new Date()), -1) && isInventoryTxnStockEffective(tx))
-                          )
-                        }
-                      >
-                        <div className="stat-label">{lang === "km" ? "ចេញស្តុក ម្សិលមិញ" : "Yesterday Out"}</div>
-                        <div className="stat-value">{inventoryDashboardAdminSummary.yesterdayOut}</div>
-                      </button>
-                      <button
-                        type="button"
-                        className="stat-card stat-card-button"
-                        onClick={() =>
-                          openInventoryAdminDetailModal(
-                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "ចេញស្តុក ខែនេះ" : "Selected Month Out Transactions"}`,
-                            inventoryDashboardFilteredOutTxns.filter((tx) => isInventoryTxnStockEffective(tx))
-                          )
-                        }
-                      >
-                        <div className="stat-label">{lang === "km" ? "ចេញស្តុក ខែនេះ" : "This Month Out"}</div>
-                        <div className="stat-value">{inventoryDashboardAdminSummary.monthOut}</div>
-                      </button>
-                      <button
-                        type="button"
-                        className="stat-card stat-card-button stat-card-overdue"
-                        onClick={() =>
-                          openInventoryAdminDetailModal(
-                            `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - ${lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approval Requests"}`,
-                            inventoryDashboardFilteredOutTxns.filter((tx) => tx.approvalStatus === "PENDING")
-                          )
-                        }
-                      >
-                        <div className="stat-label">{lang === "km" ? "រង់ចាំអនុម័ត" : "Pending Approvals"}</div>
-                        <div className="stat-value">{inventoryDashboardAdminSummary.pendingOutRequests}</div>
-                      </button>
-                    </div>
-                    <div className="inventory-admin-control-grid">
-                      <div className="inventory-admin-control-card">
-                        <strong>{lang === "km" ? "Low Stock Risk (Top)" : "Top Low Stock Risks"}</strong>
-                        {inventoryDashboardGroupSnapshot.atRiskRows.length ? (
-                          <div className="inventory-admin-control-list">
-                            {inventoryDashboardGroupSnapshot.atRiskRows.map((row) => (
-                              <div key={`inventory-admin-risk-${row.itemCode}-${row.campus}`} className="inventory-admin-control-row">
-                                <span>
-                                  <strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}
-                                  <br />
-                                  <small className="tiny">{inventoryCampusLabel(row.campus)}</small>
-                                </span>
-                                <strong>{row.currentStock}/{row.minStock}</strong>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="tiny">{lang === "km" ? "គ្មានហានិភ័យស្តុកទាប" : "No low stock risk right now"}</div>
-                        )}
-                      </div>
-                      <div className="inventory-admin-control-card">
-                        <strong>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "ចេញស្តុកតាម Campus" : "Monthly Out by Campus"}</strong>
-                        {inventoryDashboardAdminSummary.monthCampusRows.length ? (
-                          <div className="inventory-admin-control-list">
-                            {inventoryDashboardAdminSummary.monthCampusRows.slice(0, 6).map((row) => (
-                              <button
-                                key={`inventory-admin-campus-${row.campus}`}
-                                type="button"
-                                className="inventory-admin-control-row inventory-admin-control-row-btn"
-                                onClick={() =>
-                                  openInventoryAdminDetailModal(
-                                    `${inventoryCampusLabel(row.campus)} - ${lang === "km" ? "ចេញស្តុក" : "Out Transactions"}`,
-                                    inventoryDashboardFilteredOutTxns.filter(
-                                      (tx) =>
-                                        isInventoryTxnStockEffective(tx) &&
-                                        (inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim()) === row.campus
-                                    )
-                                  )
-                                }
-                              >
-                                <span>{inventoryCampusLabel(row.campus)}</span>
-                                <strong>{row.qty}</strong>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យ" : "No data"}</div>
-                        )}
-                      </div>
-                      <div className="inventory-admin-control-card">
-                        <strong>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "Top Item ចេញស្តុក" : "Top Out Items This Month"}</strong>
-                        {inventoryDashboardAdminSummary.topMonthItems.length ? (
-                          <div className="inventory-admin-control-list">
-                            {inventoryDashboardAdminSummary.topMonthItems.map((row) => (
-                              <button
-                                key={`inventory-admin-item-${row.itemCode}-${row.itemName}`}
-                                type="button"
-                                className="inventory-admin-control-row inventory-admin-control-row-btn"
-                                onClick={() =>
-                                  openInventoryAdminDetailModal(
-                                    `${row.itemCode} - ${inventoryDisplayName(row.itemName, lang)}`,
-                                    inventoryDashboardFilteredOutTxns.filter(
-                                      (tx) =>
-                                        isInventoryTxnStockEffective(tx) &&
-                                        String(tx.itemCode || "").trim().toUpperCase() === row.itemCode.toUpperCase() &&
-                                        String(tx.itemName || "").trim().toLowerCase() === row.itemName.toLowerCase()
-                                    )
-                                  )
-                                }
-                              >
-                                <span>{row.itemCode} - {inventoryDisplayName(row.itemName, lang)}</span>
-                                <strong>{row.qty}</strong>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យ" : "No data"}</div>
-                        )}
-                      </div>
-                    </div>
-                    {inventoryDashboardGroup === "SUPPLY" ? (
+                    {inventoryDashboardGroup !== "SUPPLY" ? (
                       <>
-                        <article className="panel inventory-supply-compare-panel" style={{ marginTop: 12 }}>
-                          <div className="panel-row inventory-supply-compare-head">
-                            <h3 className="section-title">
-                              {lang === "km" ? "ការប្រើប្រាស់សម្ភារៈសម្អាតប្រចាំខែ តាម Campus" : "Monthly Cleaning Supplies Usage by Campus"}
-                            </h3>
-                            <label className="field inventory-supply-month-field">
-                              <span>{lang === "km" ? "ខែ" : "Month"}</span>
-                              <select
-                                className="input"
-                                value={inventorySupplyMonth}
-                                onChange={(e) => setInventorySupplyMonth(e.target.value)}
-                              >
-                                {cleaningSupplyMonthlyOptions.map((month) => (
-                                  <option key={`dashboard-supply-month-${month}`} value={month}>
-                                    {new Date(`${month}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" })}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                          {cleaningSupplyMonthlyCampusRows.rows.length ? (
-                            <div className="inventory-supply-bars">
-                              {cleaningSupplyMonthlyCampusRows.rows.map((row) => {
-                                const percent = Math.max(8, Math.round((row.qty / cleaningSupplyMonthlyCampusRows.max) * 100));
-                                return (
-                                  <div key={`dashboard-supply-campus-${row.campus}`} className="inventory-supply-bar-row">
-                                    <div className="inventory-supply-bar-meta">
-                                      <strong>{inventoryCampusLabel(row.campus)}</strong>
-                                      <span>{row.qty}</span>
-                                    </div>
-                                    <div className="inventory-supply-bar-track">
-                                      <div className="inventory-supply-bar-fill" style={{ width: `${percent}%` }} />
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យប្រើប្រាស់ក្នុងខែនេះ" : "No cleaning supplies usage for this month."}</div>
-                          )}
-                        </article>
-                        <article className="panel inventory-supply-compare-panel" style={{ marginTop: 12 }}>
-                          <div className="panel-row">
-                            <h3 className="section-title">
-                              {lang === "km" ? "Item សម្ភារៈសម្អាត តាម Campus" : "Cleaning Supplies Item Usage by Campus"}
-                            </h3>
-                            <span className="tiny">
-                              {new Date(`${inventorySupplyMonth}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" })}
-                            </span>
-                          </div>
-                          <div className="table-wrap" style={{ marginTop: 10 }}>
-                            <table>
-                              <thead>
-                                <tr>
-                                  <th>{lang === "km" ? "កូដ" : "Code"}</th>
-                                  <th>{lang === "km" ? "ឈ្មោះ" : "Name"}</th>
-                                  {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => (
-                                    <th key={`dashboard-supply-campus-head-${campus}`}>{inventoryCampusLabel(campus)}</th>
-                                  ))}
-                                  <th>{lang === "km" ? "សរុប" : "Total"}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {cleaningSupplyMonthlyItemCampusRows.rows.length ? (
-                                  cleaningSupplyMonthlyItemCampusRows.rows.slice(0, 12).map((row) => (
-                                    <tr key={`dashboard-supply-item-row-${row.itemCode}`}>
-                                      <td><strong>{row.itemCode}</strong></td>
-                                      <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                                      {cleaningSupplyMonthlyItemCampusRows.campuses.map((campus) => (
-                                        <td key={`dashboard-supply-item-cell-${row.itemCode}-${campus}`}>{row.campusQty[campus] || ""}</td>
-                                      ))}
-                                      <td><strong>{row.total}</strong></td>
-                                    </tr>
-                                  ))
-                                ) : (
-                                  <tr>
-                                    <td colSpan={Math.max(4, cleaningSupplyMonthlyItemCampusRows.campuses.length + 3)}>
-                                      {lang === "km" ? "មិនមានទិន្នន័យ Item សម្រាប់ខែនេះ" : "No item usage data for this month."}
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </article>
-                      </>
-                    ) : null}
-                    {inventoryDashboardGroup === "CLEAN_TOOL" ? (
-                      <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
+                        <div className="form-grid inventory-admin-control-filters">
+                          <label className="field">
+                            <span>{lang === "km" ? "ខែ" : "Month"}</span>
+                            <select
+                              className="input"
+                              value={inventoryAdminMonth}
+                              onChange={(e) => setInventoryAdminMonth(e.target.value)}
+                            >
+                              {inventoryAdminMonthOptions.map((month) => (
+                                <option key={`inventory-admin-month-${month}`} value={month}>
+                                  {new Date(`${month}-01T00:00:00`).toLocaleString(undefined, { month: "long", year: "numeric" })}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>{t.campus}</span>
+                            <select
+                              className="input"
+                              value={inventoryAdminCampusFilter}
+                              onChange={(e) => setInventoryAdminCampusFilter(e.target.value)}
+                            >
+                              <option value="ALL">{t.allCampuses}</option>
+                              {inventoryAdminCampusOptions.map((campus) => (
+                                <option key={`inventory-admin-campus-${campus}`} value={campus}>
+                                  {inventoryCampusLabel(campus)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>{lang === "km" ? "ស្វែងរក Item" : "Search Item"}</span>
+                            <input
+                              className="input"
+                              value={inventoryAdminItemQuery}
+                              onChange={(e) => setInventoryAdminItemQuery(e.target.value)}
+                              placeholder={lang === "km" ? "ស្វែងរកកូដ ឬឈ្មោះ" : "Search code or item name"}
+                            />
+                          </label>
+                        </div>
+                        <div className="inventory-admin-control-grid">
                         <div className="inventory-admin-control-card">
-                          <strong>{lang === "km" ? "ទីតាំងរក្សាទុកឧបករណ៍សម្អាត" : "Cleaning Tools by Storage Location"}</strong>
+                          <strong>
+                            {inventoryDashboardGroup === "CLEAN_TOOL"
+                              ? (lang === "km" ? "ការគ្រប់គ្រងតាមទីតាំងរក្សាទុក" : "Storage Location Control")
+                              : (lang === "km" ? "ការគ្រប់គ្រងតាមទីតាំងការងារ" : "Readiness by Location")}
+                          </strong>
                           {inventoryDashboardLocationControlRows.length ? (
                             <div className="table-wrap" style={{ marginTop: 10 }}>
                               <table>
                                 <thead>
                                   <tr>
                                     <th>{t.location}</th>
-                                    <th>{lang === "km" ? "មុខទំនិញ" : "Items"}</th>
-                                    <th>{lang === "km" ? "ស្តុក" : "On Hand"}</th>
-                                    <th>{lang === "km" ? "ទាប" : "Low"}</th>
+                                    <th>{lang === "km" ? "ប្រភេទឧបករណ៍" : "Tool Types"}</th>
+                                    <th>
+                                      {inventoryDashboardGroup === "CLEAN_TOOL"
+                                        ? (lang === "km" ? "អាចប្រើបាន" : "Available")
+                                        : (lang === "km" ? "រួចរាល់" : "Ready")}
+                                    </th>
+                                    <th>{lang === "km" ? "ត្រូវតាមដាន" : "Need Attention"}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {inventoryDashboardLocationControlRows.map((row) => (
-                                    <tr key={`clean-tool-location-${row.location}`}>
+                                    <tr key={`inventory-dashboard-tool-location-${row.location}`}>
                                       <td>{row.location}</td>
                                       <td>{row.items}</td>
                                       <td>{row.onHand}</td>
@@ -34715,7 +34899,68 @@ export default function App() {
                           )}
                         </div>
                         <div className="inventory-admin-control-card">
-                          <strong>{lang === "km" ? "ឧបករណ៍សម្អាត ប្រើច្រើនក្នុងខែនេះ" : "Most Used Cleaning Tools This Month"}</strong>
+                          <strong>
+                            {inventoryDashboardGroup === "CLEAN_TOOL"
+                              ? (lang === "km" ? "ឧបករណ៍សម្អាតត្រូវតាមដាន" : "Cleaning Tools Attention Needed")
+                              : (lang === "km" ? "ឧបករណ៍ថែទាំត្រូវតាមដាន" : "Maintenance Tools Attention Needed")}
+                          </strong>
+                          {inventoryDashboardGroupSnapshot.atRiskRows.length ? (
+                            <div className="inventory-admin-control-list">
+                              {inventoryDashboardGroupSnapshot.atRiskRows.map((row) => (
+                                <div key={`inventory-dashboard-tool-risk-${row.itemCode}-${row.campus}`} className="inventory-admin-control-row">
+                                  <span>
+                                    <strong>{row.itemCode}</strong> - {inventoryDisplayName(row.itemName, lang)}
+                                    <br />
+                                    <small className="tiny">{inventoryCampusLabel(row.campus)}</small>
+                                  </span>
+                                  <strong>{row.currentStock}/{row.minStock}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="tiny">
+                              {inventoryDashboardGroup === "CLEAN_TOOL"
+                                ? (lang === "km" ? "មិនមានឧបករណ៍សម្អាតត្រូវតាមដាន" : "No cleaning tools need attention right now.")
+                                : (lang === "km" ? "មិនមានឧបករណ៍ថែទាំត្រូវតាមដាន" : "No maintenance tools need attention right now.")}
+                            </div>
+                          )}
+                        </div>
+                        <div className="inventory-admin-control-card">
+                          <strong>
+                            {inventoryDashboardGroup === "CLEAN_TOOL"
+                              ? (lang === "km" ? "សកម្មភាពឧបករណ៍សម្អាតថ្មីៗ" : "Recent Cleaning Tools Activity")
+                              : (lang === "km" ? "សកម្មភាពឧបករណ៍ថែទាំថ្មីៗ" : "Recent Maintenance Tools Activity")}
+                          </strong>
+                          {inventoryDashboardRecentActivityRows.length ? (
+                            <div className="inventory-admin-control-list">
+                              {inventoryDashboardRecentActivityRows.map((tx) => (
+                                <div key={`inventory-dashboard-activity-${tx.id}`} className="inventory-admin-control-row">
+                                  <span>
+                                    <strong>{tx.itemCode || "-"}</strong> - {inventoryDisplayName(tx.itemName || "-", lang)}
+                                    <br />
+                                    <small className="tiny">
+                                      {String(tx.date || "-")} | {inventoryCampusLabel(tx.campus || "-")} | {tx.requestedBy || tx.by || "-"}
+                                    </small>
+                                  </span>
+                                  <strong>{tx.qty || 0}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="tiny">
+                              {inventoryDashboardGroup === "CLEAN_TOOL"
+                                ? (lang === "km" ? "មិនមានសកម្មភាពក្នុងខែនេះ" : "No cleaning tools activity in this month.")
+                                : (lang === "km" ? "មិនមានសកម្មភាពក្នុងខែនេះ" : "No maintenance tools activity in this month.")}
+                            </div>
+                          )}
+                        </div>
+                        </div>
+                      </>
+                    ) : null}
+                    {inventoryDashboardGroup === "CLEAN_TOOL" ? (
+                      <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
+                        <div className="inventory-admin-control-card">
+                          <strong>{lang === "km" ? "ឧបករណ៍សម្អាតចេញច្រើនក្នុងខែនេះ" : "Most Issued Cleaning Tools This Month"}</strong>
                           {inventoryDashboardTopUsageRows.length ? (
                             <div className="inventory-admin-control-list">
                               {inventoryDashboardTopUsageRows.map((row) => (
@@ -34726,7 +34971,7 @@ export default function App() {
                               ))}
                             </div>
                           ) : (
-                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមានការប្រើប្រាស់ក្នុងខែនេះ" : "No usage this month."}</div>
+                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមានការចេញប្រើក្នុងខែនេះ" : "No issued cleaning tools this month."}</div>
                           )}
                         </div>
                       </div>
@@ -34734,36 +34979,7 @@ export default function App() {
                     {inventoryDashboardGroup === "MAINT_TOOL" ? (
                       <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
                         <div className="inventory-admin-control-card">
-                          <strong>{lang === "km" ? "ភាពរួចរាល់ឧបករណ៍ថែទាំតាមទីតាំង" : "Maintenance Tools Readiness by Location"}</strong>
-                          {inventoryDashboardLocationControlRows.length ? (
-                            <div className="table-wrap" style={{ marginTop: 10 }}>
-                              <table>
-                                <thead>
-                                  <tr>
-                                    <th>{t.location}</th>
-                                    <th>{lang === "km" ? "មុខទំនិញ" : "Items"}</th>
-                                    <th>{lang === "km" ? "ស្តុក" : "On Hand"}</th>
-                                    <th>{lang === "km" ? "ទាប" : "Low"}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {inventoryDashboardLocationControlRows.map((row) => (
-                                    <tr key={`maint-tool-location-${row.location}`}>
-                                      <td>{row.location}</td>
-                                      <td>{row.items}</td>
-                                      <td>{row.onHand}</td>
-                                      <td>{row.lowStockItems}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមានទិន្នន័យទីតាំង" : "No location data yet."}</div>
-                          )}
-                        </div>
-                        <div className="inventory-admin-control-card">
-                          <strong>{lang === "km" ? "ឧបករណ៍ថែទាំប្រើច្រើនក្នុងខែនេះ" : "Most Used Maintenance Tools This Month"}</strong>
+                          <strong>{lang === "km" ? "ឧបករណ៍ថែទាំចេញច្រើនក្នុងខែនេះ" : "Most Issued Maintenance Tools This Month"}</strong>
                           {inventoryDashboardTopUsageRows.length ? (
                             <div className="inventory-admin-control-list">
                               {inventoryDashboardTopUsageRows.map((row) => (
@@ -34774,11 +34990,12 @@ export default function App() {
                               ))}
                             </div>
                           ) : (
-                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមានការប្រើប្រាស់ក្នុងខែនេះ" : "No usage this month."}</div>
+                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមានការចេញប្រើក្នុងខែនេះ" : "No issued maintenance tools this month."}</div>
                           )}
                         </div>
                       </div>
                     ) : null}
+                    {inventoryDashboardGroup === "SUPPLY" ? (
                     <div className="inventory-admin-matrix-wrap">
                       <div className="panel-row">
                         <div className="inventory-admin-matrix-title-block">
@@ -35109,6 +35326,7 @@ export default function App() {
                         </table>
                       </div>
                     </div>
+                    ) : null}
                   </article>
                 ) : null}
                 {inventoryView === "daily" ? (
