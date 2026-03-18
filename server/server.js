@@ -2427,7 +2427,7 @@ function resolveInventoryItemPhotoForTelegram(db, txn) {
   const items = normalizeInventoryItems(settings.inventoryItems);
   const item = items.find((row) => Number(row.id) === Number(txn && txn.itemId));
   const itemPhotoUrl = resolveTelegramPhotoUrl(toText(item && item.photo));
-  return itemPhotoUrl || txnPhotoUrl || "";
+  return txnPhotoUrl || itemPhotoUrl || "";
 }
 
 function formatTelegramCampusKhmer(campus) {
