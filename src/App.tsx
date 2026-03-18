@@ -6173,6 +6173,8 @@ export default function App() {
   const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
   const [classroomCampusFilter, setClassroomCampusFilter] = useState("ALL");
   const [classroomQuery, setClassroomQuery] = useState("");
+  const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("dashboard");
+  const [classroomDetailRoomId, setClassroomDetailRoomId] = useState<number | null>(null);
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
@@ -23699,6 +23701,62 @@ export default function App() {
     const missingStudentTables = classroomControlRoomRows.reduce((sum, row) => sum + Math.max(0, row.requiredStudentTables - row.studentTables), 0);
     return { rooms, readyRooms, needActionRooms, missingStudentChairs, missingStudentTables };
   }, [classroomControlRoomRows]);
+  const classroomGalleryRows = useMemo(
+    () =>
+      classroomControlRoomRows.map((row) => {
+        const roomAssets = assets.filter((asset) => asset.campus === row.campus && asset.location === row.location);
+        const leadAssetWithPhoto =
+          roomAssets.find((asset) => Boolean(assetDisplayPhoto(asset))) ||
+          roomAssets.find((asset) => Boolean(String(asset.photo || "").trim())) ||
+          null;
+        return {
+          ...row,
+          photo: leadAssetWithPhoto ? assetDisplayPhoto(leadAssetWithPhoto) : "",
+          itemCount: roomAssets.length,
+        };
+      }),
+    [classroomControlRoomRows, assets]
+  );
+  const classroomDetailRoom = useMemo(
+    () => classroomControlRoomRows.find((row) => row.id === classroomDetailRoomId) || null,
+    [classroomControlRoomRows, classroomDetailRoomId]
+  );
+  const classroomDetailItems = useMemo(() => {
+    if (!classroomDetailRoom) return [] as Array<{
+      key: string;
+      assetId: string;
+      name: string;
+      category: string;
+      subtype: string;
+      qty: number;
+      status: string;
+      photo: string;
+      notes: string;
+    }>;
+    return assets
+      .filter((asset) => asset.campus === classroomDetailRoom.campus && asset.location === classroomDetailRoom.location)
+      .map((asset) => {
+        const furnitureDetails = parseFurnitureSpecs(asset.specs || "");
+        const isFurniture = isFurnitureAsset(asset.category);
+        const subtype =
+          isFurniture
+            ? String(furnitureDetails.subtype || defaultFurnitureSubtype(asset.type) || "Furniture").trim()
+            : assetItemName(asset.category, asset.type, asset.pcType || "");
+        const furnitureName = furnitureModelLabel(asset.type, asset.model || "").trim();
+        return {
+          key: `classroom-detail-item-${asset.id}`,
+          assetId: asset.assetId,
+          name: isFurniture ? furnitureName : assetItemName(asset.category, asset.type, asset.pcType || ""),
+          category: asset.category || "-",
+          subtype,
+          qty: isFurniture ? Math.max(1, furnitureAssetQuantity(asset) || 1) : 1,
+          status: assetStatusLabel(asset.status || "-"),
+          photo: assetDisplayPhoto(asset),
+          notes: String(furnitureDetails.condition || asset.notes || "").trim(),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name) || a.assetId.localeCompare(b.assetId));
+  }, [classroomDetailRoom, assets, assetItemName, assetStatusLabel]);
   const furnitureModelBreakdownText = useCallback((models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     if (!entries.length) return "-";
@@ -33405,53 +33463,198 @@ export default function App() {
                   />
                 </div>
               </div>
-            </section>
-
-            <section className="panel">
-              <div className="panel-row">
-                <h3 className="section-title">{lang === "km" ? "សង្ខេបថ្នាក់រៀន" : "Classroom Snapshot"}</h3>
-                <span className="tiny">
-                  {classroomCampusFilter === "ALL" ? t.allCampuses : campusLabel(classroomCampusFilter)}
-                </span>
-              </div>
-              <div className="stats-grid">
-                <article className="stat-card">
-                  <div className="stat-label">{lang === "km" ? "បន្ទប់ដែលតាមដាន" : "Rooms Tracked"}</div>
-                  <div className="stat-value">{classroomControlSummary.rooms}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">{lang === "km" ? "បន្ទប់រួចរាល់" : "Ready Rooms"}</div>
-                  <div className="stat-value">{classroomControlSummary.readyRooms}</div>
-                </article>
-                <article className="stat-card stat-card-overdue">
-                  <div className="stat-label">{lang === "km" ? "បន្ទប់ត្រូវតាមដាន" : "Need Action Rooms"}</div>
-                  <div className="stat-value">{classroomControlSummary.needActionRooms}</div>
-                </article>
-                <article className="stat-card stat-card-overdue">
-                  <div className="stat-label">{lang === "km" ? "កៅអីសិស្សខ្វះ" : "Missing Student Chairs"}</div>
-                  <div className="stat-value">{classroomControlSummary.missingStudentChairs}</div>
-                </article>
-                <article className="stat-card stat-card-overdue">
-                  <div className="stat-label">{lang === "km" ? "តុសិស្សខ្វះ" : "Missing Student Tables"}</div>
-                  <div className="stat-value">{classroomControlSummary.missingStudentTables}</div>
-                </article>
+              <div className="tabs" style={{ marginTop: 12 }}>
+                <button className={`tab ${classroomView === "dashboard" ? "tab-active" : ""}`} onClick={() => setClassroomView("dashboard")}>
+                  {lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard"}
+                </button>
+                <button className={`tab ${classroomView === "gallery" ? "tab-active" : ""}`} onClick={() => setClassroomView("gallery")}>
+                  {lang === "km" ? "Gallery ថ្នាក់រៀន" : "Classroom Gallery"}
+                </button>
               </div>
             </section>
 
-            <section className="panel">
-              <div className="panel-row">
-                <h3 className="section-title">{lang === "km" ? "តារាងគ្រប់គ្រងថ្នាក់រៀន" : "Classroom Control Table"}</h3>
-                <span className="tiny">
-                  {lang === "km"
-                    ? "កៅអី/តុ មានការប្រៀបធៀប expected vs actual"
-                    : "Student chairs/tables compare expected vs actual."}
-                </span>
-              </div>
-              {isPhoneView ? (
+            {classroomView === "dashboard" ? (
+              <>
+                <section className="panel">
+                  <div className="panel-row">
+                    <h3 className="section-title">{lang === "km" ? "សង្ខេបថ្នាក់រៀន" : "Classroom Snapshot"}</h3>
+                    <span className="tiny">
+                      {classroomCampusFilter === "ALL" ? t.allCampuses : campusLabel(classroomCampusFilter)}
+                    </span>
+                  </div>
+                  <div className="stats-grid">
+                    <article className="stat-card">
+                      <div className="stat-label">{lang === "km" ? "បន្ទប់ដែលតាមដាន" : "Rooms Tracked"}</div>
+                      <div className="stat-value">{classroomControlSummary.rooms}</div>
+                    </article>
+                    <article className="stat-card">
+                      <div className="stat-label">{lang === "km" ? "បន្ទប់រួចរាល់" : "Ready Rooms"}</div>
+                      <div className="stat-value">{classroomControlSummary.readyRooms}</div>
+                    </article>
+                    <article className="stat-card stat-card-overdue">
+                      <div className="stat-label">{lang === "km" ? "បន្ទប់ត្រូវតាមដាន" : "Need Action Rooms"}</div>
+                      <div className="stat-value">{classroomControlSummary.needActionRooms}</div>
+                    </article>
+                    <article className="stat-card stat-card-overdue">
+                      <div className="stat-label">{lang === "km" ? "កៅអីសិស្សខ្វះ" : "Missing Student Chairs"}</div>
+                      <div className="stat-value">{classroomControlSummary.missingStudentChairs}</div>
+                    </article>
+                    <article className="stat-card stat-card-overdue">
+                      <div className="stat-label">{lang === "km" ? "តុសិស្សខ្វះ" : "Missing Student Tables"}</div>
+                      <div className="stat-value">{classroomControlSummary.missingStudentTables}</div>
+                    </article>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-row">
+                    <h3 className="section-title">{lang === "km" ? "តារាងគ្រប់គ្រងថ្នាក់រៀន" : "Classroom Control Table"}</h3>
+                    <span className="tiny">
+                      {lang === "km"
+                        ? "កៅអី/តុ មានការប្រៀបធៀប expected vs actual"
+                        : "Student chairs/tables compare expected vs actual."}
+                    </span>
+                  </div>
+                  {isPhoneView ? (
+                    <div className="report-card-list">
+                      {classroomControlRoomRows.length ? (
+                        classroomControlRoomRows.map((row) => (
+                          <article key={`classroom-room-card-${row.id}`} className="report-card furniture-report-mobile-card furniture-report-room-card">
+                            <div className="report-card-head furniture-report-mobile-head">
+                              <div className="report-card-title">
+                                <strong>{row.location}</strong>
+                                <div className="tiny report-card-sub">{campusLabel(row.campus)}</div>
+                              </div>
+                              <span className={`report-pill ${row.status === "Need Action" ? "report-pill-alert" : ""}`}>{row.status}</span>
+                            </div>
+                            <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
+                              <div>
+                                <span>{lang === "km" ? "សិស្ស" : "Students"}</span>
+                                <strong>{row.currentStudents}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "កៅអីសិស្ស" : "Student Chairs"}</span>
+                                <strong>{row.studentChairs}/{row.requiredStudentChairs}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "តុសិស្ស" : "Student Tables"}</span>
+                                <strong>{row.studentTables}/{row.requiredStudentTables}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "តុគ្រូ" : "Teacher Desk"}</span>
+                                <strong>{row.teacherDesk}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "កៅអីគ្រូ" : "Teacher Chair"}</span>
+                                <strong>{row.teacherChair}</strong>
+                              </div>
+                              <div>
+                                <span>TV</span>
+                                <strong>{row.tvQty}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "ទូ" : "Cabinet"}</span>
+                                <strong>{row.cabinetQty}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "វាំងនន" : "Blind"}</span>
+                                <strong>{row.blindQty}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "ភ្លើង" : "Light"}</span>
+                                <strong>{row.lightQty}</strong>
+                              </div>
+                            </div>
+                            <div className="furniture-report-mobile-detail">
+                              <small>{lang === "km" ? "ចំណុចត្រូវតាមដាន" : "Action Notes"}</small>
+                              <p>{row.issueText}</p>
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="panel-note">
+                          {lang === "km"
+                            ? "មិនទាន់មាន Classroom records ទេ។ សូមកំណត់ Classroom ក្នុង Setup > Location Setup."
+                            : "No classroom records yet. Mark classroom locations in Setup > Location Setup."}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{t.campus}</th>
+                            <th>{t.location}</th>
+                            <th>{lang === "km" ? "សិស្ស" : "Students"}</th>
+                            <th>{lang === "km" ? "កៅអីសិស្ស" : "Student Chairs"}</th>
+                            <th>{lang === "km" ? "តុសិស្ស" : "Student Tables"}</th>
+                            <th>{lang === "km" ? "តុគ្រូ" : "Teacher Desk"}</th>
+                            <th>{lang === "km" ? "កៅអីគ្រូ" : "Teacher Chair"}</th>
+                            <th>TV</th>
+                            <th>{lang === "km" ? "ទូ" : "Cabinet"}</th>
+                            <th>{lang === "km" ? "វាំងនន" : "Blind"}</th>
+                            <th>{lang === "km" ? "ភ្លើង" : "Light"}</th>
+                            <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
+                            <th>{lang === "km" ? "ចំណាំ" : "Action Notes"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {classroomControlRoomRows.length ? (
+                            classroomControlRoomRows.map((row) => (
+                              <tr key={`classroom-control-row-${row.id}`}>
+                                <td>{campusLabel(row.campus)}</td>
+                                <td><strong>{row.location}</strong></td>
+                                <td>{row.currentStudents}</td>
+                                <td>
+                                  <strong>{row.studentChairs}</strong> / {row.requiredStudentChairs}
+                                </td>
+                                <td>
+                                  <strong>{row.studentTables}</strong> / {row.requiredStudentTables}
+                                </td>
+                                <td>{row.teacherDesk}</td>
+                                <td>{row.teacherChair}</td>
+                                <td>{row.tvQty}</td>
+                                <td>{row.cabinetQty}</td>
+                                <td>{row.blindQty}</td>
+                                <td>{row.lightQty}</td>
+                                <td>{row.status}</td>
+                                <td>{row.issueText}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={13}>
+                                {lang === "km"
+                                  ? "មិនទាន់មាន Classroom records ទេ។ សូមកំណត់ Classroom ក្នុង Setup > Location Setup."
+                                  : "No classroom records yet. Mark classroom locations in Setup > Location Setup."}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              </>
+            ) : (
+              <section className="panel">
+                <div className="panel-row">
+                  <h3 className="section-title">{lang === "km" ? "Gallery ថ្នាក់រៀន" : "Classroom Gallery"}</h3>
+                  <span className="tiny">
+                    {lang === "km" ? "ចុចលើបន្ទប់មួយ ដើម្បីមើល Item ទាំងអស់" : "Click a classroom to see all room items."}
+                  </span>
+                </div>
                 <div className="report-card-list">
-                  {classroomControlRoomRows.length ? (
-                    classroomControlRoomRows.map((row) => (
-                      <article key={`classroom-room-card-${row.id}`} className="report-card furniture-report-mobile-card furniture-report-room-card">
+                  {classroomGalleryRows.length ? (
+                    classroomGalleryRows.map((row) => (
+                      <article
+                        key={`classroom-gallery-${row.id}`}
+                        className="report-card furniture-report-mobile-card furniture-report-room-card"
+                      >
+                        <div className="report-card-photo">
+                          {renderAssetPhoto(row.photo || "", `classroom-${row.id}`)}
+                        </div>
                         <div className="report-card-head furniture-report-mobile-head">
                           <div className="report-card-title">
                             <strong>{row.location}</strong>
@@ -33465,41 +33668,22 @@ export default function App() {
                             <strong>{row.currentStudents}</strong>
                           </div>
                           <div>
-                            <span>{lang === "km" ? "កៅអីសិស្ស" : "Student Chairs"}</span>
-                            <strong>{row.studentChairs}/{row.requiredStudentChairs}</strong>
+                            <span>{lang === "km" ? "Items" : "Items"}</span>
+                            <strong>{row.itemCount}</strong>
                           </div>
                           <div>
-                            <span>{lang === "km" ? "តុសិស្ស" : "Student Tables"}</span>
-                            <strong>{row.studentTables}/{row.requiredStudentTables}</strong>
+                            <span>{lang === "km" ? "កៅអី" : "Chairs"}</span>
+                            <strong>{row.studentChairs}</strong>
                           </div>
                           <div>
-                            <span>{lang === "km" ? "តុគ្រូ" : "Teacher Desk"}</span>
-                            <strong>{row.teacherDesk}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "កៅអីគ្រូ" : "Teacher Chair"}</span>
-                            <strong>{row.teacherChair}</strong>
-                          </div>
-                          <div>
-                            <span>TV</span>
-                            <strong>{row.tvQty}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "ទូ" : "Cabinet"}</span>
-                            <strong>{row.cabinetQty}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "វាំងនន" : "Blind"}</span>
-                            <strong>{row.blindQty}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "ភ្លើង" : "Light"}</span>
-                            <strong>{row.lightQty}</strong>
+                            <span>{lang === "km" ? "តុ" : "Tables"}</span>
+                            <strong>{row.studentTables}</strong>
                           </div>
                         </div>
-                        <div className="furniture-report-mobile-detail">
-                          <small>{lang === "km" ? "ចំណុចត្រូវតាមដាន" : "Action Notes"}</small>
-                          <p>{row.issueText}</p>
+                        <div className="asset-actions" style={{ justifyContent: "flex-end", marginTop: 10 }}>
+                          <button className="tab" onClick={() => setClassroomDetailRoomId(row.id)}>
+                            {lang === "km" ? "មើលបន្ទប់នេះ" : "Open Classroom"}
+                          </button>
                         </div>
                       </article>
                     ))
@@ -33511,63 +33695,8 @@ export default function App() {
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
-                        <th>{lang === "km" ? "សិស្ស" : "Students"}</th>
-                        <th>{lang === "km" ? "កៅអីសិស្ស" : "Student Chairs"}</th>
-                        <th>{lang === "km" ? "តុសិស្ស" : "Student Tables"}</th>
-                        <th>{lang === "km" ? "តុគ្រូ" : "Teacher Desk"}</th>
-                        <th>{lang === "km" ? "កៅអីគ្រូ" : "Teacher Chair"}</th>
-                        <th>TV</th>
-                        <th>{lang === "km" ? "ទូ" : "Cabinet"}</th>
-                        <th>{lang === "km" ? "វាំងនន" : "Blind"}</th>
-                        <th>{lang === "km" ? "ភ្លើង" : "Light"}</th>
-                        <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
-                        <th>{lang === "km" ? "ចំណាំ" : "Action Notes"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {classroomControlRoomRows.length ? (
-                        classroomControlRoomRows.map((row) => (
-                          <tr key={`classroom-control-row-${row.id}`}>
-                            <td>{campusLabel(row.campus)}</td>
-                            <td><strong>{row.location}</strong></td>
-                            <td>{row.currentStudents}</td>
-                            <td>
-                              <strong>{row.studentChairs}</strong> / {row.requiredStudentChairs}
-                            </td>
-                            <td>
-                              <strong>{row.studentTables}</strong> / {row.requiredStudentTables}
-                            </td>
-                            <td>{row.teacherDesk}</td>
-                            <td>{row.teacherChair}</td>
-                            <td>{row.tvQty}</td>
-                            <td>{row.cabinetQty}</td>
-                            <td>{row.blindQty}</td>
-                            <td>{row.lightQty}</td>
-                            <td>{row.status}</td>
-                            <td>{row.issueText}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={13}>
-                            {lang === "km"
-                              ? "មិនទាន់មាន Classroom records ទេ។ សូមកំណត់ Classroom ក្នុង Setup > Location Setup."
-                              : "No classroom records yet. Mark classroom locations in Setup > Location Setup."}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
+              </section>
+            )}
           </div>
         )}
 
@@ -44450,6 +44579,65 @@ export default function App() {
             </section>
           </div>
         )}
+
+        {classroomDetailRoom ? (
+          <div className="modal-backdrop" onClick={() => setClassroomDetailRoomId(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <div>
+                  <h2>{classroomDetailRoom.location}</h2>
+                  <div className="tiny">
+                    {campusLabel(classroomDetailRoom.campus)} | {lang === "km" ? "សិស្ស" : "Students"}: {classroomDetailRoom.currentStudents} | {classroomDetailRoom.status}
+                  </div>
+                </div>
+                <button className="tab" onClick={() => setClassroomDetailRoomId(null)}>{t.close}</button>
+              </div>
+              <div className="tiny" style={{ marginBottom: 12 }}>
+                {classroomDetailRoom.issueText}
+              </div>
+              <div className="report-card-list">
+                {classroomDetailItems.length ? (
+                  classroomDetailItems.map((item) => (
+                    <article key={item.key} className="report-card furniture-report-mobile-card">
+                      <div className="report-card-photo">
+                        {renderAssetPhoto(item.photo || "", item.assetId)}
+                      </div>
+                      <div className="report-card-head furniture-report-mobile-head">
+                        <div className="report-card-title">
+                          <strong>{item.name}</strong>
+                          <div className="tiny report-card-sub">{item.assetId}</div>
+                        </div>
+                        <span className="report-pill">{item.status}</span>
+                      </div>
+                      <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
+                        <div>
+                          <span>{lang === "km" ? "ប្រភេទ" : "Category"}</span>
+                          <strong>{item.category}</strong>
+                        </div>
+                        <div>
+                          <span>{lang === "km" ? "រងប្រភេទ" : "Type"}</span>
+                          <strong>{item.subtype}</strong>
+                        </div>
+                        <div>
+                          <span>{lang === "km" ? "ចំនួន" : "Qty"}</span>
+                          <strong>{item.qty}</strong>
+                        </div>
+                      </div>
+                      <div className="furniture-report-mobile-detail">
+                        <small>{t.notes}</small>
+                        <p>{item.notes || "-"}</p>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">
+                    {lang === "km" ? "មិនមាន Item នៅក្នុងថ្នាក់នេះទេ។" : "No items found in this classroom."}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {maintenanceDashboardModal && (
           <div className="modal-backdrop" onClick={() => setMaintenanceDashboardModal(null)}>
