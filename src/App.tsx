@@ -1572,6 +1572,7 @@ const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
   TBL: ["Toy and Me", "Primary Standard", "Office Standard"],
   DSK: ["Student Primary Deskset", "Toy and Me Deskset"],
   CAB: ["Filing Cabinet", "Storage Cabinet", "Classroom Cabinet"],
+  NBD: ["Standard Nap Bed", "Stackable Nap Bed", "Kindergarten Nap Bed"],
 };
 const INVENTORY_MASTER_ITEMS = [
   { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
@@ -1673,6 +1674,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
     { itemEn: "Deskset", itemKm: "តុកៅអី", code: "DSK" },
     { itemEn: "Cabinet", itemKm: "ទូ", code: "CAB" },
+    { itemEn: "Nap Bed", itemKm: "គ្រែគេងកុមារ", code: "NBD" },
   ],
 };
 
@@ -4229,7 +4231,8 @@ async function compressImageDataUrl(
   dataUrl: string,
   maxWidth = 1280,
   maxHeight = 1280,
-  quality = 0.75
+  quality = 0.75,
+  timestampText = ""
 ): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -4246,6 +4249,28 @@ async function compressImageDataUrl(
         return;
       }
       ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      const stamp = String(timestampText || "").trim();
+      if (stamp) {
+        const fontSize = Math.max(18, Math.round(targetWidth * 0.022));
+        const lineHeight = Math.round(fontSize * 1.35);
+        const paddingX = Math.max(12, Math.round(fontSize * 0.6));
+        const paddingY = Math.max(10, Math.round(fontSize * 0.5));
+        ctx.font = `700 ${fontSize}px Arial, sans-serif`;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        const textWidth = ctx.measureText(stamp).width;
+        const boxWidth = Math.ceil(textWidth + paddingX * 2);
+        const boxHeight = lineHeight + paddingY * 2;
+        const boxX = Math.max(8, targetWidth - boxWidth - 18);
+        const boxY = Math.max(8, targetHeight - boxHeight - 18);
+        ctx.fillStyle = "rgba(28, 24, 18, 0.78)";
+        ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(stamp, boxX + boxWidth - paddingX, boxY + boxHeight - paddingY);
+      }
       const compressed = canvas.toDataURL("image/jpeg", quality);
       resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
     };
@@ -4254,9 +4279,16 @@ async function compressImageDataUrl(
   });
 }
 
-async function optimizePhotoDataUrl(file: File): Promise<string> {
+function formatUploadPhotoTimestamp(date: Date) {
+  const ymd = toYmd(date);
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${ymd} ${hours}:${minutes}`;
+}
+
+async function optimizePhotoDataUrl(file: File, options?: { timestampText?: string }): Promise<string> {
   const source = await fileToDataUrl(file);
-  return compressImageDataUrl(source, 1280, 1280, 0.75);
+  return compressImageDataUrl(source, 1280, 1280, 0.75, String(options?.timestampText || "").trim());
 }
 
 function normalizePhotoUsageKey(input: string) {
@@ -4790,6 +4822,7 @@ function defaultFurnitureSubtype(type: string) {
   if (normalizedType === "TBL") return "Student Table";
   if (normalizedType === "DSK") return "Student Deskset";
   if (normalizedType === "CAB") return "Cabinet";
+  if (normalizedType === "NBD") return "Nap Bed";
   return "";
 }
 
@@ -16811,7 +16844,7 @@ export default function App() {
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
+      const photo = await optimizeUploadPhoto(file, { timestampText: formatUploadPhotoTimestamp(new Date()) });
       setInventoryQuickOutModal((prev) => (prev ? { ...prev, photo } : prev));
     } catch (err) {
       handlePhotoUploadError(err);
@@ -17080,10 +17113,10 @@ export default function App() {
     const rows = inventoryAdminOutDayMatrix.rows || [];
     const days = inventoryAdminOutDayMatrix.days || [];
     if (!rows.length || !days.length) {
-      alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់បោះពុម្ព" : "No Monthly OUT matrix data to print.");
+      alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់បោះពុម្ព" : "No monthly stock movement matrix data to print.");
       return;
     }
-    const title = lang === "km" ? "របាយការណ៍តារាងចេញស្តុកប្រចាំខែ" : "Monthly OUT Matrix Report";
+    const title = lang === "km" ? "របាយការណ៍ចលនាស្តុកប្រចាំខែ" : "Monthly Stock Movement Matrix Report";
     const generatedAt = formatDate(new Date().toISOString());
     const campusText =
       inventoryAdminMatrixCampusFilter === "ALL"
@@ -17397,7 +17430,7 @@ export default function App() {
               <div class="report-head-left">
                 <p class="report-kicker">Eco International School</p>
                 <h1 class="report-title">${escapeHtml(title)}</h1>
-                <p class="report-subtitle">Official monthly stock-out control sheet for review, print, and campus sign-off.</p>
+                <p class="report-subtitle">Official monthly stock movement control sheet for refill, usage, and campus sign-off.</p>
               </div>
               <img loading="lazy" decoding="async" class="report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
             </header>
@@ -17438,7 +17471,7 @@ export default function App() {
               <div class="report-note">
                 ${escapeHtml(lang === "km"
                   ? "ចំណាំ: របាយការណ៍នេះសម្រាប់តាមដានការចេញស្តុកប្រចាំខែ និងសម្រាប់ការត្រួតពិនិត្យដោយអ្នកទទួលខុសត្រូវតាម Campus។"
-                  : "Note: This report is used for monthly stock-out monitoring and campus-level review by responsible staff.")}
+                  : "Note: This report is used for monthly stock movement review, refill tracking, and campus-level sign-off by responsible staff.")}
               </div>
               <div class="signature-grid">
                 ${signatureHtml}
@@ -23132,8 +23165,8 @@ export default function App() {
     inventoryQuickOutModal,
   ]);
   const optimizeUploadPhoto = useCallback(
-    async (file: File) => {
-      const photo = await optimizePhotoDataUrl(file);
+    async (file: File, options?: { timestampText?: string }) => {
+      const photo = await optimizePhotoDataUrl(file, options);
       if (usedPhotoKeys.has(normalizePhotoUsageKey(photo))) {
         throw new Error(DUPLICATE_PHOTO_UPLOAD_ERROR);
       }
@@ -35310,7 +35343,7 @@ export default function App() {
                     <div className="inventory-admin-matrix-wrap">
                       <div className="panel-row">
                         <div className="inventory-admin-matrix-title-block">
-                          <strong>{lang === "km" ? "តារាងចេញស្តុកប្រចាំខែ (Item x Day)" : "Monthly OUT Matrix (Item x Day)"}</strong>
+                          <strong>{lang === "km" ? "តារាងចលនាស្តុកប្រចាំខែ (Item x Day)" : "Monthly Stock Movement Matrix (Item x Day)"}</strong>
                           <span className="tiny">
                             {inventoryAdminOutDayMatrix.splitByCampus
                               ? (lang === "km" ? "ជួរដេក=Item | ជួរឈរ=ថ្ងៃ × Campus" : "Rows = Item | Columns = Day x Campus")
@@ -43319,6 +43352,7 @@ export default function App() {
                   <option value="TBL">Table (TBL)</option>
                   <option value="DSK">Deskset (DSK)</option>
                   <option value="CAB">Cabinet (CAB)</option>
+                  <option value="NBD">Nap Bed (NBD)</option>
                 </select>
               </label>
               <label className="field">
