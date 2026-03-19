@@ -9959,8 +9959,25 @@ export default function App() {
         dayQty: Record<string, number>;
         dayCampusQty: Record<string, number>;
         total: number;
+        monthlyRefill: number;
+        stockBeforeRefill: number | null;
       }
     >();
+    const itemScopeMap = new Map<string, Array<{ id: number; campus: string; openingQty: number }>>();
+    for (const item of inventoryVisibleItems) {
+      const campus = inventoryRecordCampusCode(item.campus) || String(item.campus || "").trim();
+      if (!campuses.includes(campus)) continue;
+      const itemCode = String(item.itemCode || "-");
+      const itemName = String(item.itemName || "-");
+      const key = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
+      const list = itemScopeMap.get(key) || [];
+      list.push({
+        id: Number(item.id),
+        campus,
+        openingQty: Number(item.openingQty || 0),
+      });
+      itemScopeMap.set(key, list);
+    }
 
     for (const tx of inventoryAdminMatrixScopedOutTxns) {
       if (!isInventoryTxnStockEffective(tx)) continue;
@@ -9981,12 +9998,91 @@ export default function App() {
           dayQty: {},
           dayCampusQty: {},
           total: 0,
+          monthlyRefill: 0,
+          stockBeforeRefill: null,
         });
       }
       const row = itemMap.get(key)!;
       row.dayQty[date] = (row.dayQty[date] || 0) + qty;
       row.dayCampusQty[`${date}::${campus}`] = (row.dayCampusQty[`${date}::${campus}`] || 0) + qty;
       row.total += qty;
+    }
+
+    const relevantTxns = inventoryVisibleTxns
+      .filter((tx) => {
+        const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim();
+        return campuses.includes(campus);
+      })
+      .slice()
+      .sort(
+        (a, b) =>
+          String(normalizeYmdInput(a.date) || a.date).localeCompare(String(normalizeYmdInput(b.date) || b.date)) ||
+          Number(a.id || 0) - Number(b.id || 0)
+      );
+
+    for (const [key, row] of Array.from(itemMap.entries())) {
+      const scopedItems = itemScopeMap.get(key) || [];
+      const campusRefillMap = new Map<string, { refillQty: number; firstRefillDate: string | null }>();
+      for (const item of scopedItems) {
+        if (!campusRefillMap.has(item.campus)) {
+          campusRefillMap.set(item.campus, { refillQty: 0, firstRefillDate: null });
+        }
+      }
+
+      for (const tx of relevantTxns) {
+        if (!isInventoryTxnIn(tx.type)) continue;
+        const date = normalizeYmdInput(tx.date) || String(tx.date || "");
+        if (!date || date < rangeStart || date > rangeEnd) continue;
+        const itemCode = String(tx.itemCode || "-");
+        const itemName = String(tx.itemName || "-");
+        const txKey = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
+        if (txKey !== key) continue;
+        const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim();
+        if (!campuses.includes(campus)) continue;
+        const current = campusRefillMap.get(campus) || { refillQty: 0, firstRefillDate: null };
+        current.refillQty += Number(tx.qty || 0);
+        current.firstRefillDate = current.firstRefillDate ? (current.firstRefillDate < date ? current.firstRefillDate : date) : date;
+        campusRefillMap.set(campus, current);
+      }
+
+      let monthlyRefill = 0;
+      let stockBeforeRefillTotal = 0;
+      let hasRefill = false;
+
+      for (const [campus, refillMeta] of Array.from(campusRefillMap.entries())) {
+        monthlyRefill += refillMeta.refillQty;
+        if (!refillMeta.firstRefillDate) continue;
+        hasRefill = true;
+        const campusItemIds = new Set(scopedItems.filter((item) => item.campus === campus).map((item) => item.id));
+        const stockByItem = new Map<number, number>();
+        for (const item of scopedItems.filter((item) => item.campus === campus)) {
+          stockByItem.set(item.id, item.openingQty);
+        }
+        for (const tx of relevantTxns) {
+          const txItemId = Number(tx.itemId || 0);
+          if (!campusItemIds.has(txItemId)) continue;
+          const date = normalizeYmdInput(tx.date) || String(tx.date || "");
+          if (!date || date >= refillMeta.firstRefillDate) continue;
+          if (!isInventoryTxnStockEffective(tx)) continue;
+          const current = Number(stockByItem.get(txItemId) || 0);
+          const qty = Number(tx.qty || 0);
+          if (isInventoryTxnSet(tx.type)) {
+            stockByItem.set(txItemId, qty);
+            continue;
+          }
+          if (isInventoryTxnIn(tx.type)) {
+            stockByItem.set(txItemId, current + qty);
+            continue;
+          }
+          if (isInventoryTxnOut(tx.type)) {
+            stockByItem.set(txItemId, current - qty);
+          }
+        }
+        stockBeforeRefillTotal += Array.from(stockByItem.values()).reduce((sum, qty) => sum + Number(qty || 0), 0);
+      }
+
+      row.monthlyRefill = monthlyRefill;
+      row.stockBeforeRefill = hasRefill ? stockBeforeRefillTotal : null;
     }
 
     const rows = Array.from(itemMap.values()).sort((a, b) => b.total - a.total || a.itemCode.localeCompare(b.itemCode));
@@ -10001,6 +10097,7 @@ export default function App() {
     isSuperAdmin,
     calendarEvents,
     inventoryVisibleItems,
+    inventoryVisibleTxns,
   ]);
   const inventoryVisibleItemById = useMemo(() => {
     const map = new Map<number, InventoryItem>();
@@ -17039,6 +17136,8 @@ export default function App() {
               <div class="item-name">${escapeHtml(itemNameText)}</div>
             </div>
           </td>
+          <td><strong>${row.stockBeforeRefill ?? ""}</strong></td>
+          <td><strong>${row.monthlyRefill || ""}</strong></td>
           ${cells}
           <td><strong>${row.total}</strong></td>
         </tr>`;
@@ -17185,6 +17284,10 @@ export default function App() {
             width: 48px;
             font-weight: 900;
           }
+          .control-col {
+            width: 64px;
+            min-width: 64px;
+          }
           thead tr:nth-child(2) th {
             background: #f6f9f7;
             font-size: 8px;
@@ -17321,6 +17424,8 @@ export default function App() {
                 <thead>
                   <tr>
                     <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "ទំនិញ" : "Item")}</th>
+                    <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "ស្តុកមុនបន្ថែម" : "Stock Before Refill")}</th>
+                    <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "បន្ថែមប្រចាំខែ" : "Monthly Refill")}</th>
                     ${dayHeadHtml}
                     <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "សរុប" : "Total")}</th>
                   </tr>
@@ -35405,6 +35510,18 @@ export default function App() {
                               >
                                 {lang === "km" ? "Item" : "Item"}
                               </th>
+                              <th
+                                className="inventory-admin-matrix-total-head"
+                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                              >
+                                {lang === "km" ? "ស្តុកមុនបន្ថែម" : "Stock Before Refill"}
+                              </th>
+                              <th
+                                className="inventory-admin-matrix-total-head"
+                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                              >
+                                {lang === "km" ? "បន្ថែមប្រចាំខែ" : "Monthly Refill"}
+                              </th>
                               {inventoryAdminOutDayMatrix.days.map((day) => (
                                 inventoryAdminOutDayMatrix.splitByCampus ? (
                                   <th
@@ -35482,6 +35599,12 @@ export default function App() {
                                       </div>
                                     </div>
                                   </th>
+                                  <td className="inventory-admin-matrix-total-cell">
+                                    {row.stockBeforeRefill ?? ""}
+                                  </td>
+                                  <td className="inventory-admin-matrix-total-cell">
+                                    {row.monthlyRefill || ""}
+                                  </td>
                                   {inventoryAdminOutDayMatrix.days.map((day) =>
                                     inventoryAdminOutDayMatrix.splitByCampus
                                       ? inventoryAdminOutDayMatrix.campuses.map((campus) => (
