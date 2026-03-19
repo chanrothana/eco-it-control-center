@@ -159,6 +159,28 @@ type VerificationEntry = {
   by?: string;
   photo?: string;
 };
+type ClassroomVerificationItemCheck = {
+  assetDbId: number;
+  assetId: string;
+  name: string;
+  expectedQty: number;
+  actualQty: number;
+  condition: "Good" | "Fair" | "Damaged" | "Missing";
+  action: "OK" | "Repair" | "Replace" | "Add More" | "Missing";
+  note?: string;
+};
+type ClassroomVerificationRecord = {
+  id: number;
+  classroomId: number;
+  campus: string;
+  location: string;
+  verificationMonth: string;
+  checkedDate: string;
+  checkedBy: string;
+  note?: string;
+  created: string;
+  items: ClassroomVerificationItemCheck[];
+};
 type TransferEntry = {
   id: number;
   date: string;
@@ -975,6 +997,7 @@ function normalizeInventoryApprovalRoutingMap(input: unknown): InventoryApproval
 }
 const LOCATION_FALLBACK_KEY = "it_locations_fallback_v1";
 const ASSET_FALLBACK_KEY = "it_assets_fallback_v1";
+const CLASSROOM_VERIFICATION_FALLBACK_KEY = "it_classroom_verification_v1";
 const USER_FALLBACK_KEY = "it_users_fallback_v1";
 const CAMPUS_NAME_FALLBACK_KEY = "it_campus_names_fallback_v1";
 const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
@@ -2523,6 +2546,49 @@ function trySetLocalStorage(key: string, value: string) {
 
 function writeLocationFallback(list: LocationEntry[]) {
   trySetLocalStorage(LOCATION_FALLBACK_KEY, JSON.stringify(list));
+}
+
+function readClassroomVerificationFallback(): ClassroomVerificationRecord[] {
+  if (SERVER_ONLY_STORAGE) return [];
+  try {
+    const raw = localStorage.getItem(CLASSROOM_VERIFICATION_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeArray<Record<string, unknown>>(parsed)
+      .filter((row) => row && typeof row === "object")
+      .map((row, index) => ({
+        id: Number(row.id) || Date.now() + index,
+        classroomId: Number(row.classroomId) || 0,
+        campus: String(row.campus || "").trim(),
+        location: String(row.location || "").trim(),
+        verificationMonth: String(row.verificationMonth || "").trim() || toYmd(new Date()).slice(0, 7),
+        checkedDate: normalizeYmdInput(String(row.checkedDate || "").trim()) || toYmd(new Date()),
+        checkedBy: String(row.checkedBy || "").trim(),
+        note: String(row.note || "").trim(),
+        created: String(row.created || "").trim() || new Date().toISOString(),
+        items: normalizeArray<Record<string, unknown>>(row.items).map((item) => ({
+          assetDbId: Number(item.assetDbId) || 0,
+          assetId: String(item.assetId || "").trim(),
+          name: String(item.name || "").trim(),
+          expectedQty: Math.max(0, Number(item.expectedQty) || 0),
+          actualQty: Math.max(0, Number(item.actualQty) || 0),
+          condition: (["Good", "Fair", "Damaged", "Missing"].includes(String(item.condition || "").trim())
+            ? String(item.condition || "").trim()
+            : "Good") as ClassroomVerificationItemCheck["condition"],
+          action: (["OK", "Repair", "Replace", "Add More", "Missing"].includes(String(item.action || "").trim())
+            ? String(item.action || "").trim()
+            : "OK") as ClassroomVerificationItemCheck["action"],
+          note: String(item.note || "").trim(),
+        })),
+      }))
+      .filter((row) => row.classroomId && row.location);
+  } catch {
+    return [];
+  }
+}
+
+function writeClassroomVerificationFallback(rows: ClassroomVerificationRecord[]) {
+  if (SERVER_ONLY_STORAGE) return;
+  trySetLocalStorage(CLASSROOM_VERIFICATION_FALLBACK_KEY, JSON.stringify(rows.slice(0, 400)));
 }
 
 function readAssetFallback(): Asset[] {
@@ -6217,6 +6283,23 @@ export default function App() {
   const [classroomQuery, setClassroomQuery] = useState("");
   const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
   const [classroomDetailRoomId, setClassroomDetailRoomId] = useState<number | null>(null);
+  const [classroomVerificationRecords, setClassroomVerificationRecords] = useState<ClassroomVerificationRecord[]>(() =>
+    readClassroomVerificationFallback()
+  );
+  const [classroomVerificationOpen, setClassroomVerificationOpen] = useState(false);
+  const [classroomVerificationForm, setClassroomVerificationForm] = useState<{
+    verificationMonth: string;
+    checkedDate: string;
+    checkedBy: string;
+    note: string;
+    items: ClassroomVerificationItemCheck[];
+  }>({
+    verificationMonth: toYmd(new Date()).slice(0, 7),
+    checkedDate: toYmd(new Date()),
+    checkedBy: "",
+    note: "",
+    items: [],
+  });
   const [inventoryDashboardModal, setInventoryDashboardModal] = useState<null | {
     title: string;
     rows: Array<{
@@ -8482,6 +8565,10 @@ export default function App() {
       resetAuthCreateForm();
     }
   }, [authAccounts, editingAuthUserId]);
+  useEffect(() => {
+    if (classroomDetailRoomId !== null) return;
+    setClassroomVerificationOpen(false);
+  }, [classroomDetailRoomId]);
 
   function requireAdminAction() {
     if (isAdmin) return true;
@@ -17997,6 +18084,103 @@ export default function App() {
     }
   }
 
+  function openClassroomVerification() {
+    if (!classroomDetailRoom) return;
+    const verificationMonth = toYmd(new Date()).slice(0, 7);
+    const existing =
+      classroomVerificationRecords.find(
+        (row) => row.classroomId === classroomDetailRoom.id && row.verificationMonth === verificationMonth
+      ) || null;
+    const existingItems = new Map<number, ClassroomVerificationItemCheck>(
+      (existing?.items || []).map((item) => [item.assetDbId, item])
+    );
+    setClassroomVerificationForm({
+      verificationMonth,
+      checkedDate: existing?.checkedDate || toYmd(new Date()),
+      checkedBy: existing?.checkedBy || authUser?.displayName || authUser?.username || "",
+      note: existing?.note || "",
+      items: classroomDetailItems.map((item) => {
+        const previous = existingItems.get(item.id);
+        return {
+          assetDbId: item.id,
+          assetId: item.assetId,
+          name: item.name,
+          expectedQty: item.qty,
+          actualQty: previous?.actualQty ?? item.qty,
+          condition: previous?.condition || "Good",
+          action: previous?.action || "OK",
+          note: previous?.note || "",
+        };
+      }),
+    });
+    setClassroomVerificationOpen(true);
+  }
+
+  function cancelClassroomVerification() {
+    setClassroomVerificationOpen(false);
+    setClassroomVerificationForm({
+      verificationMonth: toYmd(new Date()).slice(0, 7),
+      checkedDate: toYmd(new Date()),
+      checkedBy: authUser?.displayName || authUser?.username || "",
+      note: "",
+      items: [],
+    });
+  }
+
+  function saveClassroomVerification() {
+    if (!classroomDetailRoom) return;
+    const checkedBy = String(classroomVerificationForm.checkedBy || "").trim();
+    const checkedDate = normalizeYmdInput(classroomVerificationForm.checkedDate);
+    const verificationMonth = String(classroomVerificationForm.verificationMonth || "").trim();
+    if (!checkedBy) {
+      alert("Checked By is required.");
+      return;
+    }
+    if (!checkedDate) {
+      alert("Checked Date is required.");
+      return;
+    }
+    if (!verificationMonth) {
+      alert("Verification month is required.");
+      return;
+    }
+    const nextRecord: ClassroomVerificationRecord = {
+      id: classroomCurrentMonthVerification?.id || Date.now(),
+      classroomId: classroomDetailRoom.id,
+      campus: classroomDetailRoom.campus,
+      location: classroomDetailRoom.location,
+      verificationMonth,
+      checkedDate,
+      checkedBy,
+      note: String(classroomVerificationForm.note || "").trim(),
+      created: classroomCurrentMonthVerification?.created || new Date().toISOString(),
+      items: classroomVerificationForm.items.map((item) => ({
+        ...item,
+        actualQty: Math.max(0, Number(item.actualQty) || 0),
+        note: String(item.note || "").trim(),
+      })),
+    };
+    const nextRows = [
+      nextRecord,
+      ...classroomVerificationRecords.filter(
+        (row) => !(row.classroomId === nextRecord.classroomId && row.verificationMonth === nextRecord.verificationMonth)
+      ),
+    ].sort(
+      (a, b) =>
+        String(b.checkedDate || "").localeCompare(String(a.checkedDate || "")) ||
+        String(b.created || "").localeCompare(String(a.created || ""))
+    );
+    setClassroomVerificationRecords(nextRows);
+    writeClassroomVerificationFallback(nextRows);
+    appendUiAudit(
+      "CLASSROOM_VERIFY",
+      "classroom",
+      String(classroomDetailRoom.id),
+      `${classroomDetailRoom.location} | ${verificationMonth} | ${checkedBy}`
+    );
+    setClassroomVerificationOpen(false);
+  }
+
   async function removeAsset(id: number) {
     if (!requireAdminAction()) return;
     if (!window.confirm(t.deleteConfirm)) return;
@@ -24069,6 +24253,38 @@ export default function App() {
       })
       .sort((a, b) => a.name.localeCompare(b.name) || a.assetId.localeCompare(b.assetId));
   }, [classroomDetailRoom, assets, assetItemName, assetStatusLabel]);
+  const classroomLatestVerification = useMemo(() => {
+    if (!classroomDetailRoom) return null;
+    return (
+      [...classroomVerificationRecords]
+        .filter((row) => row.classroomId === classroomDetailRoom.id)
+        .sort(
+          (a, b) =>
+            String(b.checkedDate || "").localeCompare(String(a.checkedDate || "")) ||
+            String(b.created || "").localeCompare(String(a.created || ""))
+        )[0] || null
+    );
+  }, [classroomVerificationRecords, classroomDetailRoom]);
+  const classroomCurrentMonthVerification = useMemo(() => {
+    if (!classroomDetailRoom) return null;
+    const targetMonth = String(classroomVerificationForm.verificationMonth || "").trim() || toYmd(new Date()).slice(0, 7);
+    return (
+      classroomVerificationRecords.find(
+        (row) => row.classroomId === classroomDetailRoom.id && row.verificationMonth === targetMonth
+      ) || null
+    );
+  }, [classroomVerificationRecords, classroomDetailRoom, classroomVerificationForm.verificationMonth]);
+  const classroomVerificationIssueCount = useMemo(
+    () =>
+      classroomVerificationForm.items.filter(
+        (item) =>
+          item.actualQty < item.expectedQty ||
+          item.condition === "Damaged" ||
+          item.condition === "Missing" ||
+          item.action !== "OK"
+      ).length,
+    [classroomVerificationForm.items]
+  );
   const furnitureModelBreakdownText = useCallback((models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     if (!entries.length) return "-";
@@ -45130,11 +45346,194 @@ export default function App() {
                     {campusLabel(classroomDetailRoom.campus)} | {lang === "km" ? "សិស្ស" : "Students"}: {classroomDetailRoom.currentStudents} | {classroomDetailRoom.status}
                   </div>
                 </div>
-                <button className="tab" onClick={() => setClassroomDetailRoomId(null)}>{t.close}</button>
+                <div className="row-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <button className="tab" onClick={classroomVerificationOpen ? cancelClassroomVerification : openClassroomVerification}>
+                    {classroomVerificationOpen ? "Cancel Verify" : "Monthly Verify"}
+                  </button>
+                  <button className="tab" onClick={() => setClassroomDetailRoomId(null)}>{t.close}</button>
+                </div>
               </div>
               <div className="tiny" style={{ marginBottom: 12 }}>
                 {classroomDetailRoom.issueText}
               </div>
+              <div className="asset-actions" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                <div className="tiny">
+                  {classroomLatestVerification
+                    ? `Last check: ${classroomLatestVerification.checkedDate} | ${classroomLatestVerification.checkedBy} | ${classroomLatestVerification.verificationMonth}`
+                    : "No monthly classroom verification yet."}
+                </div>
+                <div className="tiny">
+                  {classroomCurrentMonthVerification
+                    ? `This month saved: ${classroomCurrentMonthVerification.verificationMonth}`
+                    : `This month not checked yet: ${toYmd(new Date()).slice(0, 7)}`}
+                </div>
+              </div>
+              {classroomVerificationOpen ? (
+                <section className="panel" style={{ marginBottom: 16, padding: 16 }}>
+                  <div className="panel-row">
+                    <h3 className="section-title" style={{ margin: 0 }}>Monthly Classroom Verification</h3>
+                    <span className="tiny">Issues found: {classroomVerificationIssueCount}</span>
+                  </div>
+                  <div className="form-grid" style={{ marginBottom: 12 }}>
+                    <label className="field">
+                      <span>Month</span>
+                      <input
+                        className="input"
+                        type="month"
+                        value={classroomVerificationForm.verificationMonth}
+                        onChange={(e) =>
+                          setClassroomVerificationForm((prev) => ({ ...prev, verificationMonth: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Checked Date</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={classroomVerificationForm.checkedDate}
+                        onChange={(e) =>
+                          setClassroomVerificationForm((prev) => ({ ...prev, checkedDate: e.target.value }))
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Checked By</span>
+                      <input
+                        className="input"
+                        value={classroomVerificationForm.checkedBy}
+                        onChange={(e) =>
+                          setClassroomVerificationForm((prev) => ({ ...prev, checkedBy: e.target.value }))
+                        }
+                        placeholder="Staff name"
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Summary Note</span>
+                      <input
+                        className="input"
+                        value={classroomVerificationForm.note}
+                        onChange={(e) =>
+                          setClassroomVerificationForm((prev) => ({ ...prev, note: e.target.value }))
+                        }
+                        placeholder="Optional room summary note"
+                      />
+                    </label>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Expected Qty</th>
+                          <th>Actual Qty</th>
+                          <th>Condition</th>
+                          <th>Action</th>
+                          <th>Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {classroomVerificationForm.items.map((item, index) => (
+                          <tr key={`classroom-verify-${item.assetDbId}`}>
+                            <td>
+                              <strong>{item.name}</strong>
+                              <div className="tiny">{item.assetId}</div>
+                            </td>
+                            <td>{item.expectedQty}</td>
+                            <td>
+                              <input
+                                className="input"
+                                type="number"
+                                min="0"
+                                value={item.actualQty}
+                                onChange={(e) =>
+                                  setClassroomVerificationForm((prev) => {
+                                    const next = [...prev.items];
+                                    next[index] = {
+                                      ...next[index],
+                                      actualQty: Math.max(0, Number(e.target.value) || 0),
+                                    };
+                                    return { ...prev, items: next };
+                                  })
+                                }
+                              />
+                            </td>
+                            <td>
+                              <select
+                                className="input"
+                                value={item.condition}
+                                onChange={(e) =>
+                                  setClassroomVerificationForm((prev) => {
+                                    const next = [...prev.items];
+                                    next[index] = {
+                                      ...next[index],
+                                      condition: e.target.value as ClassroomVerificationItemCheck["condition"],
+                                    };
+                                    return { ...prev, items: next };
+                                  })
+                                }
+                              >
+                                <option value="Good">Good</option>
+                                <option value="Fair">Fair</option>
+                                <option value="Damaged">Damaged</option>
+                                <option value="Missing">Missing</option>
+                              </select>
+                            </td>
+                            <td>
+                              <select
+                                className="input"
+                                value={item.action}
+                                onChange={(e) =>
+                                  setClassroomVerificationForm((prev) => {
+                                    const next = [...prev.items];
+                                    next[index] = {
+                                      ...next[index],
+                                      action: e.target.value as ClassroomVerificationItemCheck["action"],
+                                    };
+                                    return { ...prev, items: next };
+                                  })
+                                }
+                              >
+                                <option value="OK">OK</option>
+                                <option value="Repair">Repair</option>
+                                <option value="Replace">Replace</option>
+                                <option value="Add More">Add More</option>
+                                <option value="Missing">Missing</option>
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                className="input"
+                                value={item.note || ""}
+                                onChange={(e) =>
+                                  setClassroomVerificationForm((prev) => {
+                                    const next = [...prev.items];
+                                    next[index] = {
+                                      ...next[index],
+                                      note: e.target.value,
+                                    };
+                                    return { ...prev, items: next };
+                                  })
+                                }
+                                placeholder="Optional item note"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="asset-actions" style={{ marginTop: 12 }}>
+                    <div className="tiny">
+                      First version: verify current items in this classroom by month, qty, condition, and action.
+                    </div>
+                    <div className="row-actions" style={{ gap: 8 }}>
+                      <button className="tab" onClick={cancelClassroomVerification}>Cancel</button>
+                      <button className="btn-primary" onClick={saveClassroomVerification}>Save Monthly Check</button>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
               <div
                 className="asset-gallery-grid"
                 style={{ gridTemplateColumns: isPhoneView ? "repeat(auto-fill, minmax(220px, 1fr))" : "repeat(5, minmax(0, 1fr))" }}
