@@ -6213,6 +6213,7 @@ export default function App() {
   }, [lang, navMenuItems]);
   const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
   const [classroomCampusFilter, setClassroomCampusFilter] = useState("ALL");
+  const [classroomRoomFilter, setClassroomRoomFilter] = useState("ALL");
   const [classroomQuery, setClassroomQuery] = useState("");
   const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
   const [classroomDetailRoomId, setClassroomDetailRoomId] = useState<number | null>(null);
@@ -8461,6 +8462,19 @@ export default function App() {
       setClassroomCampusFilter("ALL");
     }
   }, [authUser, classroomCampusFilter, allowedCampuses]);
+  useEffect(() => {
+    if (classroomRoomFilter === "ALL") return;
+    const stillValid = locations.some(
+      (row) =>
+        (Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0) &&
+        allowedCampuses.includes(row.campus) &&
+        (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter) &&
+        row.name === classroomRoomFilter
+    );
+    if (!stillValid) {
+      setClassroomRoomFilter("ALL");
+    }
+  }, [locations, allowedCampuses, classroomCampusFilter, classroomRoomFilter]);
 
   useEffect(() => {
     if (editingAuthUserId === null) return;
@@ -23845,12 +23859,26 @@ export default function App() {
       .filter((campus) => allowedCampuses.includes(campus))
       .sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
   }, [locations, allowedCampuses, campusLabel]);
+  const classroomRoomOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(
+        locations
+          .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
+          .filter((row) => allowedCampuses.includes(row.campus))
+          .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter))
+          .map((row) => String(row.name || "").trim())
+          .filter(Boolean)
+      )
+    );
+    return options.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
+  }, [locations, allowedCampuses, classroomCampusFilter]);
   const classroomControlRoomRows = useMemo(() => {
     const query = String(classroomQuery || "").trim().toLowerCase();
     const visibleLocations = locations
       .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
       .filter((row) => allowedCampuses.includes(row.campus))
-      .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter));
+      .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter))
+      .filter((row) => (classroomRoomFilter === "ALL" ? true : row.name === classroomRoomFilter));
 
     const roomAssets = assets.filter((asset) => {
       if (!allowedCampuses.includes(asset.campus)) return false;
@@ -23971,7 +23999,7 @@ export default function App() {
           campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
           a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
       );
-  }, [locations, allowedCampuses, classroomCampusFilter, classroomQuery, assets, campusLabel]);
+  }, [locations, allowedCampuses, classroomCampusFilter, classroomRoomFilter, classroomQuery, assets, campusLabel]);
   const classroomControlSummary = useMemo(() => {
     const rooms = classroomControlRoomRows.length;
     const needActionRooms = classroomControlRoomRows.filter((row) => row.status === "Need Action").length;
@@ -24006,6 +24034,7 @@ export default function App() {
   const classroomDetailItems = useMemo(() => {
     if (!classroomDetailRoom) return [] as Array<{
       key: string;
+      id: number;
       assetId: string;
       name: string;
       category: string;
@@ -24027,6 +24056,7 @@ export default function App() {
         const furnitureName = furnitureModelLabel(asset.type, asset.model || "").trim();
         return {
           key: `classroom-detail-item-${asset.id}`,
+          id: asset.id,
           assetId: asset.assetId,
           name: isFurniture ? furnitureName : assetItemName(asset.category, asset.type, asset.pcType || ""),
           category: asset.category || "-",
@@ -31490,7 +31520,7 @@ export default function App() {
               </section>
             )}
 
-            {(assetsView === "list" || assetsView === "gallery") && detailAsset && (
+            {((assetsView === "list" || assetsView === "gallery") || classroomDetailRoomId !== null) && detailAsset && (
               <div className="modal-backdrop" onClick={() => setAssetDetailId(null)}>
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
@@ -33823,11 +33853,23 @@ export default function App() {
                       </option>
                     ))}
                   </select>
+                  <select
+                    className="input"
+                    value={classroomRoomFilter}
+                    onChange={(e) => setClassroomRoomFilter(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms"}</option>
+                    {classroomRoomOptions.map((room) => (
+                      <option key={`classroom-room-${room}`} value={room}>
+                        {room}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     className="input"
                     value={classroomQuery}
                     onChange={(e) => setClassroomQuery(e.target.value)}
-                    placeholder={lang === "km" ? "ស្វែងរកថ្នាក់រៀន..." : "Search classroom..."}
+                    placeholder={lang === "km" ? "ស្វែងរកឈ្មោះបន្ទប់..." : "Search room name..."}
                   />
                 </div>
               </div>
@@ -34013,9 +34055,29 @@ export default function App() {
                     {lang === "km" ? "ចុចលើបន្ទប់មួយ ដើម្បីមើល Item ទាំងអស់" : "Click a classroom to see all room items."}
                   </span>
                 </div>
+                <div className="asset-actions" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div className="tiny">
+                    {lang === "km" ? "តម្រង" : "Filter"}:
+                    {" "}
+                    {classroomCampusFilter === "ALL" ? t.allCampuses : campusLabel(classroomCampusFilter)}
+                    {" | "}
+                    {classroomRoomFilter === "ALL" ? (lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms") : classroomRoomFilter}
+                  </div>
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    onClick={() => {
+                      setClassroomCampusFilter("ALL");
+                      setClassroomRoomFilter("ALL");
+                      setClassroomQuery("");
+                    }}
+                  >
+                    {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                  </button>
+                </div>
                 <div
                   className="asset-gallery-grid"
-                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
                 >
                   {classroomGalleryRows.length ? (
                     classroomGalleryRows.map((row) => (
@@ -45079,7 +45141,12 @@ export default function App() {
               >
                 {classroomDetailItems.length ? (
                   classroomDetailItems.map((item) => (
-                    <article key={item.key} className="asset-gallery-card">
+                    <button
+                      type="button"
+                      key={item.key}
+                      className="asset-gallery-card"
+                      onClick={() => setAssetDetailId(item.id)}
+                    >
                       <div className="asset-gallery-photo-wrap">
                         {item.photo ? (
                           <img
@@ -45106,7 +45173,7 @@ export default function App() {
                           {lang === "km" ? "ស្ថានភាព" : "Status"}: {item.status}
                         </div>
                       </div>
-                    </article>
+                    </button>
                   ))
                 ) : (
                   <div className="panel-note">
