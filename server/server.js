@@ -3701,7 +3701,7 @@ function validateAsset(body) {
   };
 }
 
-function validateLocation(body) {
+async function validateLocation(body) {
   const campus = normalizeCampusInput(body.campus);
   const name = toText(body.name);
   const isClassroom = Boolean(body.isClassroom);
@@ -3709,11 +3709,12 @@ function validateLocation(body) {
   const currentStudents = Math.max(0, Number(body.currentStudents || 0));
   const tableSeatsPerTable = Math.max(1, Number(body.tableSeatsPerTable || 2));
   const notes = toText(body.notes);
+  const photo = isClassroom ? await normalizePhotoValue(body.photo, "locations") : "";
 
   if (!campus) return "Campus is required";
   if (!name) return "Location name is required";
 
-  return { campus, name, isClassroom, studentCapacity, currentStudents, tableSeatsPerTable, notes };
+  return { campus, name, isClassroom, studentCapacity, currentStudents, tableSeatsPerTable, notes, photo };
 }
 
 function normalizeStaffUsers(input) {
@@ -6430,7 +6431,7 @@ const server = http.createServer(async (req, res) => {
       const admin = requireAdmin(req, res);
       if (!admin) return;
       const body = await parseBody(req);
-      const cleaned = validateLocation(body);
+      const cleaned = await validateLocation(body);
       if (typeof cleaned === "string") {
         sendJson(res, 400, { error: cleaned });
         return;
@@ -6456,6 +6457,7 @@ const server = http.createServer(async (req, res) => {
         currentStudents: cleaned.currentStudents,
         tableSeatsPerTable: cleaned.tableSeatsPerTable,
         notes: cleaned.notes,
+        photo: cleaned.photo,
       };
       db.locations.unshift(location);
       appendAuditLog(db, admin, "CREATE", "location", String(location.id), `${location.campus} | ${location.name}`);
@@ -6474,7 +6476,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const body = await parseBody(req);
-      const cleaned = validateLocation(body);
+      const cleaned = await validateLocation(body);
       if (typeof cleaned === "string") {
         sendJson(res, 400, { error: cleaned });
         return;
@@ -6494,6 +6496,7 @@ const server = http.createServer(async (req, res) => {
       db.locations[idx].currentStudents = cleaned.currentStudents;
       db.locations[idx].tableSeatsPerTable = cleaned.tableSeatsPerTable;
       db.locations[idx].notes = cleaned.notes;
+      db.locations[idx].photo = cleaned.photo;
       appendAuditLog(db, admin, "UPDATE", "location", String(id), `${cleaned.campus} | ${cleaned.name}`);
       await writeDb(db);
       sendJson(res, 200, { location: db.locations[idx] });

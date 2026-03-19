@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title desc">
+  <title id="title">Default classroom image</title>
+  <desc id="desc">Illustrated classroom placeholder with board, desks, and warm school colors.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f7ead7"/>
+      <stop offset="100%" stop-color="#f0d2a1"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#d99c5b"/>
+      <stop offset="100%" stop-color="#b96f2e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#bg)"/>
+  <rect x="0" y="520" width="1200" height="280" fill="url(#floor)"/>
+  <rect x="140" y="110" width="920" height="320" rx="28" fill="#fdf8ef" stroke="#d7b17c" stroke-width="10"/>
+  <rect x="225" y="165" width="750" height="190" rx="20" fill="#3d6d63"/>
+  <rect x="255" y="195" width="690" height="130" rx="12" fill="#507f75" opacity="0.18"/>
+  <rect x="120" y="120" width="55" height="290" rx="20" fill="#d7b17c"/>
+  <rect x="1025" y="120" width="55" height="290" rx="20" fill="#d7b17c"/>
+  <g fill="#8a5a2d">
+    <rect x="190" y="500" width="190" height="36" rx="12"/>
+    <rect x="410" y="500" width="190" height="36" rx="12"/>
+    <rect x="630" y="500" width="190" height="36" rx="12"/>
+    <rect x="850" y="500" width="190" height="36" rx="12"/>
+  </g>
+  <g fill="#d4e3f8" stroke="#7aa1d6" stroke-width="8">
+    <rect x="200" y="435" width="170" height="75" rx="18"/>
+    <rect x="420" y="435" width="170" height="75" rx="18"/>
+    <rect x="640" y="435" width="170" height="75" rx="18"/>
+    <rect x="860" y="435" width="170" height="75" rx="18"/>
+    <rect x="255" y="575" width="170" height="75" rx="18"/>
+    <rect x="475" y="575" width="170" height="75" rx="18"/>
+    <rect x="695" y="575" width="170" height="75" rx="18"/>
+  </g>
+  <g fill="#ffffff" opacity="0.9">
+    <circle cx="220" cy="90" r="28"/>
+    <circle cx="275" cy="80" r="18"/>
+    <circle cx="945" cy="88" r="22"/>
+    <circle cx="992" cy="78" r="14"/>
+  </g>
+  <text x="600" y="725" text-anchor="middle" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#6a4722">
+    Classroom Photo Placeholder
+  </text>
+  <text x="600" y="770" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" fill="#8a5a2d">
+    Upload a real classroom photo in Setup > Location Setup
+  </text>

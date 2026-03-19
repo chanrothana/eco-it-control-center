@@ -44,6 +44,7 @@ import CalendarGridTemplate from "./components/CalendarGridTemplate";
 const publicAssetUrl = (path: string) => `${process.env.PUBLIC_URL || ""}${path.startsWith("/") ? path : `/${path}`}`;
 const ECO_LOGO_URL = publicAssetUrl("/eco-logo.png");
 const APP_ICON_FALLBACK_URL = publicAssetUrl("/logo192.png");
+const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
 
 type Asset = {
   id: number;
@@ -389,6 +390,7 @@ type LocationEntry = {
   currentStudents?: number;
   tableSeatsPerTable?: number;
   notes?: string;
+  photo?: string;
 };
 type StaffUser = {
   id: number;
@@ -2470,6 +2472,7 @@ function normalizeLocationEntries(input: unknown): LocationEntry[] {
       currentStudents: Math.max(0, Number(row.currentStudents) || 0),
       tableSeatsPerTable: Math.max(1, Number(row.tableSeatsPerTable) || 2),
       notes: String(row.notes || "").trim(),
+      photo: String(row.photo || "").trim(),
     }))
     .filter((row) => row.campus && row.name);
 }
@@ -3404,6 +3407,7 @@ function mergeLocations(primary: LocationEntry[], secondary: LocationEntry[]) {
       currentStudents: Math.max(0, Number(loc.currentStudents ?? current?.currentStudents) || 0),
       tableSeatsPerTable: Math.max(1, Number(loc.tableSeatsPerTable ?? current?.tableSeatsPerTable) || 2),
       notes: String(loc.notes ?? current?.notes ?? "").trim(),
+      photo: String(loc.photo ?? current?.photo ?? "").trim(),
     });
   }
   return Array.from(out.values());
@@ -7574,6 +7578,8 @@ export default function App() {
   const [locationIsClassroom, setLocationIsClassroom] = useState(false);
   const [locationCurrentStudents, setLocationCurrentStudents] = useState("");
   const [locationNotes, setLocationNotes] = useState("");
+  const [locationPhoto, setLocationPhoto] = useState("");
+  const [locationPhotoFileKey, setLocationPhotoFileKey] = useState(0);
   const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
   const [campusEditCode, setCampusEditCode] = useState("C1");
   const [campusEditName, setCampusEditName] = useState("Samdach Pan Campus");
@@ -17801,6 +17807,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
+              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
             }),
           });
         } else {
@@ -17814,6 +17821,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
+              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
             }),
           });
         }
@@ -17829,6 +17837,7 @@ export default function App() {
                   studentCapacity: 0,
                   tableSeatsPerTable: 2,
                   notes: locationNotes.trim(),
+                  photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
                 }
               : loc
           );
@@ -17843,6 +17852,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
+              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
             },
             ...nextLocal,
           ];
@@ -17862,6 +17872,7 @@ export default function App() {
                   studentCapacity: 0,
                   tableSeatsPerTable: 2,
                   notes: locationNotes.trim(),
+                  photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
                 }
               : loc
           );
@@ -17876,6 +17887,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
+              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
             },
             ...current,
           ];
@@ -17895,6 +17907,8 @@ export default function App() {
       setLocationIsClassroom(false);
       setLocationCurrentStudents("");
       setLocationNotes("");
+      setLocationPhoto("");
+      setLocationPhotoFileKey((key) => key + 1);
       setEditingLocationId(null);
       await loadData();
     } catch (err) {
@@ -17911,6 +17925,8 @@ export default function App() {
     setLocationIsClassroom(Boolean(location.isClassroom));
     setLocationCurrentStudents(location.currentStudents ? String(location.currentStudents) : "");
     setLocationNotes(String(location.notes || ""));
+    setLocationPhoto(String(location.photo || "").trim());
+    setLocationPhotoFileKey((key) => key + 1);
   }
 
   function cancelEditLocation() {
@@ -17919,6 +17935,26 @@ export default function App() {
     setLocationIsClassroom(false);
     setLocationCurrentStudents("");
     setLocationNotes("");
+    setLocationPhoto("");
+    setLocationPhotoFileKey((key) => key + 1);
+  }
+
+  async function onLocationPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setLocationPhoto(photo);
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
   }
 
   async function deleteLocation(id: number) {
@@ -23902,6 +23938,7 @@ export default function App() {
         campus: room.campus,
         location: room.name,
         notes: String(room.notes || "").trim(),
+        roomPhoto: String(room.photo || "").trim(),
         currentStudents,
         tableSeatsPerTable,
         studentChairs,
@@ -23953,7 +23990,10 @@ export default function App() {
           null;
         return {
           ...row,
-          photo: leadAssetWithPhoto ? assetDisplayPhoto(leadAssetWithPhoto) : "",
+          photo:
+            String(row.roomPhoto || "").trim() ||
+            (leadAssetWithPhoto ? assetDisplayPhoto(leadAssetWithPhoto) : "") ||
+            DEFAULT_CLASSROOM_IMAGE_URL,
           itemCount: roomAssets.length,
         };
       }),
@@ -43615,6 +43655,49 @@ export default function App() {
                 <span>Notes</span>
                 <input className="input" value={locationNotes} onChange={(e) => setLocationNotes(e.target.value)} />
               </label>
+              <label className="field field-wide">
+                <span>Classroom Photo</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <input
+                    key={locationPhotoFileKey}
+                    type="file"
+                    accept="image/*"
+                    className="input"
+                    onChange={onLocationPhotoFile}
+                    disabled={!locationIsClassroom}
+                  />
+                  <div className="tiny">
+                    {locationIsClassroom
+                      ? "Upload a real classroom photo. If empty, Classroom Gallery will use the default classroom image."
+                      : "Enable Classroom Record first if you want to upload a classroom photo."}
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <div className="tiny" style={{ marginBottom: 6 }}>Gallery Preview</div>
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={String(locationPhoto || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL}
+                        alt="classroom-preview"
+                        className="photo-preview"
+                        style={{ width: 128, height: 96, objectFit: "cover" }}
+                      />
+                    </div>
+                    {String(locationPhoto || "").trim() ? (
+                      <button
+                        type="button"
+                        className="tab btn-small"
+                        onClick={() => {
+                          setLocationPhoto("");
+                          setLocationPhotoFileKey((key) => key + 1);
+                        }}
+                      >
+                        Remove uploaded photo
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </label>
             </div>
             <div className="asset-actions">
               <div className="tiny">
@@ -43638,6 +43721,7 @@ export default function App() {
                     <th>{t.campus}</th>
                     <th>{t.locationName}</th>
                     <th>Type</th>
+                    <th>Photo</th>
                     <th>Current Students</th>
                     <th>Notes</th>
                     <th>{t.edit}</th>
@@ -43651,6 +43735,11 @@ export default function App() {
                         <td>{campusLabel(loc.campus)}</td>
                         <td>{loc.name}</td>
                         <td>{loc.isClassroom ? "Classroom" : "General"}</td>
+                        <td>
+                          {loc.isClassroom
+                            ? renderAssetPhoto(String(loc.photo || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL, `${loc.name}-classroom`)
+                            : "-"}
+                        </td>
                         <td>{loc.currentStudents || "-"}</td>
                         <td>{loc.notes || "-"}</td>
                         <td>
@@ -43663,7 +43752,7 @@ export default function App() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7}>{t.noLocationsYet}</td>
+                      <td colSpan={8}>{t.noLocationsYet}</td>
                     </tr>
                   )}
                 </tbody>
