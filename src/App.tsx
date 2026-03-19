@@ -6212,6 +6212,17 @@ export default function App() {
   const [classroomQuery, setClassroomQuery] = useState("");
   const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
   const [classroomDetailRoomId, setClassroomDetailRoomId] = useState<number | null>(null);
+  const [inventoryDashboardModal, setInventoryDashboardModal] = useState<null | {
+    title: string;
+    rows: Array<{
+      key: string;
+      photo: string;
+      title: string;
+      subtitle: string;
+      meta: string;
+      badge: string;
+    }>;
+  }>(null);
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
@@ -25098,6 +25109,73 @@ export default function App() {
     },
     []
   );
+  const openInventoryDashboardStat = useCallback(
+    (target: "items" | "balance_all" | "balance_low" | "pending") => {
+      if (target === "pending") {
+        const rows = inventoryDashboardScopedTxns
+          .filter((tx) => isInventoryTxnUsageOut(tx.type) && tx.approvalStatus === "PENDING")
+          .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0))
+          .map((tx) => ({
+            key: `inventory-dashboard-pending-${tx.id}`,
+            photo: "",
+            title: `${tx.itemCode || "-"} - ${inventoryDisplayName(tx.itemName || "-", lang)}`,
+            subtitle: `${String(tx.date || "-")} | ${inventoryCampusLabel(tx.campus || "-")}`,
+            meta: `${lang === "km" ? "បរិមាណ" : "Qty"}: ${tx.qty || 0} | ${lang === "km" ? "ស្នើដោយ" : "By"}: ${tx.by || tx.approvalRequestedBy || "-"}`,
+            badge: lang === "km" ? "រង់ចាំអនុម័ត" : "Pending",
+          }));
+        setInventoryDashboardModal({
+          title: lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approvals",
+          rows,
+        });
+        return;
+      }
+      const source =
+        target === "balance_low"
+          ? inventoryDashboardScopedLowStockRows
+          : inventoryDashboardScopedRows;
+      const rows = source
+        .slice()
+        .sort((a, b) => String(a.itemCode || "").localeCompare(String(b.itemCode || "")))
+        .map((row) => {
+          const current = Number(row.currentStock || 0);
+          const min = Number(row.minStock || 0);
+          const badge =
+            current <= 0
+              ? (lang === "km" ? "អស់ស្តុក" : "Out")
+              : current < min
+                ? (lang === "km" ? "ទាប" : "Low")
+                : (lang === "km" ? "ល្អ" : "OK");
+          return {
+            key: `inventory-dashboard-row-${row.id}`,
+            photo: String(row.photo || "").trim(),
+            title: `${row.itemCode || "-"} - ${inventoryDisplayName(row.itemName || "-", lang)}`,
+            subtitle: `${inventoryCampusLabel(row.campus || "-")} | ${row.location || "-"}`,
+            meta:
+              target === "items"
+                ? `${lang === "km" ? "On Hand" : "On Hand"}: ${current} | Min: ${min} | ${lang === "km" ? "ឯកតា" : "Unit"}: ${row.unit || "-"}`
+                : `${lang === "km" ? "On Hand" : "On Hand"}: ${current} | Min: ${min}`,
+            badge,
+          };
+        });
+      setInventoryDashboardModal({
+        title:
+          target === "items"
+            ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} ${lang === "km" ? "មុខទំនិញ" : "Items"}`
+            : `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} ${lang === "km" ? "ស្តុកទាប" : "Low Stock"}`,
+        rows,
+      });
+      return;
+    },
+    [
+      inventoryDashboardGroup,
+      inventoryDashboardScopedLowStockRows,
+      inventoryDashboardScopedRows,
+      inventoryDashboardScopedTxns,
+      inventoryCampusLabel,
+      inventoryDisplayName,
+      lang,
+    ]
+  );
   function openQuickCountAssetsModal(title: string, rows: Asset[]) {
     const sorted = [...rows].sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")));
     setQuickCountModal({ title, assets: sorted });
@@ -33986,7 +34064,6 @@ export default function App() {
                     {lang === "km" ? "កត់ត្រាចេញស្តុកប្រចាំថ្ងៃ" : "Daily Stock Out"}
                   </button>
                   <button className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>Stock In/Out</button>
-                  <button className={`tab ${inventoryView === "balance" ? "tab-active" : ""}`} onClick={() => setInventoryView("balance")}>Balance & Alerts</button>
                 </div>
               </section>
             ) : null}
@@ -35059,84 +35136,84 @@ export default function App() {
                     <div className="stats-grid inventory-admin-control-stats">
                       {inventoryDashboardGroup === "SUPPLY" ? (
                         <>
-                          <article className="stat-card">
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "មុខទំនិញសរុប" : "Total Items"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
-                          </article>
-                          <article className="stat-card">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("balance_all")}>
                             <div className="stat-label">{lang === "km" ? "ស្តុកសរុប (On Hand)" : "Total On Hand"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "ទាបជាង Min" : "Low Stock Items"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "អស់ស្តុក" : "Out of Stock Items"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "ខ្វះពីកម្រិត Min" : "Units Below Min"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.belowMinUnits}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("pending")}>
                             <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approvals"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
-                          </article>
+                          </button>
                         </>
                       ) : inventoryDashboardGroup === "CLEAN_TOOL" ? (
                         <>
-                          <article className="stat-card">
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ប្រភេទឧបករណ៍សម្អាត" : "Total Tool Types"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
-                          </article>
-                          <article className="stat-card">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("balance_all")}>
                             <div className="stat-label">{lang === "km" ? "ឧបករណ៍អាចប្រើបាន" : "Units Available"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "ឧបករណ៍ខ្វះ" : "Low Coverage Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "គ្មានស្តុក" : "Zero Available Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
-                          </article>
-                          <article className="stat-card">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ទីតាំងគ្រប់គ្រង" : "Storage Locations"}</div>
                             <div className="stat-value">{inventoryDashboardLocationControlRows.length}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("pending")}>
                             <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំ" : "Pending Requests"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
-                          </article>
+                          </button>
                         </>
                       ) : (
                         <>
-                          <article className="stat-card">
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ប្រភេទឧបករណ៍ថែទាំ" : "Total Tool Types"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
-                          </article>
-                          <article className="stat-card">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("balance_all")}>
                             <div className="stat-label">{lang === "km" ? "ឧបករណ៍រួចរាល់" : "Ready Units"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "ត្រូវតាមដាន" : "Low Readiness Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "គ្មានស្តុក" : "Zero Available Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
-                          </article>
-                          <article className="stat-card">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ទីតាំងគ្រប់គ្រង" : "Work Locations"}</div>
                             <div className="stat-value">{inventoryDashboardLocationControlRows.length}</div>
-                          </article>
-                          <article className="stat-card stat-card-overdue">
+                          </button>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("pending")}>
                             <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំ" : "Pending Requests"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
-                          </article>
+                          </button>
                         </>
                       )}
                     </div>
@@ -44945,6 +45022,45 @@ export default function App() {
                 ) : (
                   <div className="panel-note">
                     {lang === "km" ? "មិនមាន Item នៅក្នុងថ្នាក់នេះទេ។" : "No items found in this classroom."}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        {inventoryDashboardModal ? (
+          <div className="modal-backdrop" onClick={() => setInventoryDashboardModal(null)}>
+            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{inventoryDashboardModal.title}</h2>
+                <button className="tab" onClick={() => setInventoryDashboardModal(null)}>{t.close}</button>
+              </div>
+              <div
+                className="asset-gallery-grid"
+                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+              >
+                {inventoryDashboardModal.rows.length ? (
+                  inventoryDashboardModal.rows.map((row) => (
+                    <article key={row.key} className="asset-gallery-card">
+                      <div className="asset-gallery-photo-wrap">
+                        {row.photo ? (
+                          <img loading="lazy" decoding="async" src={row.photo} alt={row.title} className="asset-gallery-photo" />
+                        ) : (
+                          <div className="asset-gallery-photo-empty">{lang === "km" ? "គ្មានរូបថត" : "No photo"}</div>
+                        )}
+                      </div>
+                      <div className="asset-gallery-meta">
+                        <strong>{row.title}</strong>
+                        <div>{row.subtitle}</div>
+                        <div>{row.meta}</div>
+                        <div>{lang === "km" ? "ស្ថានភាព" : "Status"}: {row.badge}</div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">
+                    {lang === "km" ? "មិនមានទិន្នន័យទេ។" : "No records found."}
                   </div>
                 )}
               </div>
