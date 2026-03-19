@@ -33840,38 +33840,6 @@ export default function App() {
                       : "Track classroom setup, furniture, and key room assets in one place."}
                   </div>
                 </div>
-                <div className="panel-filters">
-                  <select
-                    className="input"
-                    value={classroomCampusFilter}
-                    onChange={(e) => setClassroomCampusFilter(e.target.value)}
-                  >
-                    <option value="ALL">{t.allCampuses}</option>
-                    {classroomControlCampusOptions.map((campus) => (
-                      <option key={`classroom-campus-${campus}`} value={campus}>
-                        {campusLabel(campus)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="input"
-                    value={classroomRoomFilter}
-                    onChange={(e) => setClassroomRoomFilter(e.target.value)}
-                  >
-                    <option value="ALL">{lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms"}</option>
-                    {classroomRoomOptions.map((room) => (
-                      <option key={`classroom-room-${room}`} value={room}>
-                        {room}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="input"
-                    value={classroomQuery}
-                    onChange={(e) => setClassroomQuery(e.target.value)}
-                    placeholder={lang === "km" ? "ស្វែងរកឈ្មោះបន្ទប់..." : "Search room name..."}
-                  />
-                </div>
               </div>
               <div className="tabs" style={{ marginTop: 12 }}>
                 <button className={`tab ${classroomView === "dashboard" ? "tab-active" : ""}`} onClick={() => setClassroomView("dashboard")}>
@@ -34055,29 +34023,61 @@ export default function App() {
                     {lang === "km" ? "ចុចលើបន្ទប់មួយ ដើម្បីមើល Item ទាំងអស់" : "Click a classroom to see all room items."}
                   </span>
                 </div>
-                <div className="asset-actions" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div className="tiny">
-                    {lang === "km" ? "តម្រង" : "Filter"}:
-                    {" "}
-                    {classroomCampusFilter === "ALL" ? t.allCampuses : campusLabel(classroomCampusFilter)}
-                    {" | "}
-                    {classroomRoomFilter === "ALL" ? (lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms") : classroomRoomFilter}
-                  </div>
+                <div
+                  className="panel-filters"
+                  style={{
+                    marginBottom: 12,
+                    display: "grid",
+                    gridTemplateColumns: isPhoneView ? "1fr" : "repeat(4, minmax(0, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  <select
+                    className="input"
+                    value={classroomCampusFilter}
+                    onChange={(e) => setClassroomCampusFilter(e.target.value)}
+                  >
+                    <option value="ALL">{t.allCampuses}</option>
+                    {classroomControlCampusOptions.map((campus) => (
+                      <option key={`classroom-campus-${campus}`} value={campus}>
+                        {campusLabel(campus)}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={classroomRoomFilter}
+                    onChange={(e) => setClassroomRoomFilter(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms"}</option>
+                    {classroomRoomOptions.map((room) => (
+                      <option key={`classroom-room-${room}`} value={room}>
+                        {room}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="input"
+                    value={classroomQuery}
+                    onChange={(e) => setClassroomQuery(e.target.value)}
+                    placeholder={lang === "km" ? "ស្វែងរកឈ្មោះបន្ទប់..." : "Search room name..."}
+                  />
                   <button
                     type="button"
-                    className="tab btn-small"
+                    className="tab"
                     onClick={() => {
                       setClassroomCampusFilter("ALL");
                       setClassroomRoomFilter("ALL");
                       setClassroomQuery("");
                     }}
+                    style={{ minHeight: 56 }}
                   >
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
                 </div>
                 <div
                   className="asset-gallery-grid"
-                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+                  style={{ gridTemplateColumns: isPhoneView ? "repeat(auto-fill, minmax(150px, 1fr))" : "repeat(5, minmax(0, 1fr))" }}
                 >
                   {classroomGalleryRows.length ? (
                     classroomGalleryRows.map((row) => (
@@ -45137,7 +45137,7 @@ export default function App() {
               </div>
               <div
                 className="asset-gallery-grid"
-                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+                style={{ gridTemplateColumns: isPhoneView ? "repeat(auto-fill, minmax(220px, 1fr))" : "repeat(5, minmax(0, 1fr))" }}
               >
                 {classroomDetailItems.length ? (
                   classroomDetailItems.map((item) => (
@@ -45145,7 +45145,12 @@ export default function App() {
                       type="button"
                       key={item.key}
                       className="asset-gallery-card"
-                      onClick={() => setAssetDetailId(item.id)}
+                      onClick={() => {
+                        setClassroomDetailRoomId(null);
+                        setAssetsView("gallery");
+                        setTab("assets");
+                        setAssetDetailId(item.id);
+                      }}
                     >
                       <div className="asset-gallery-photo-wrap">
                         {item.photo ? (
