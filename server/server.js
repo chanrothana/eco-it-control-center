@@ -220,7 +220,7 @@ const TYPE_CODES = {
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
   FACILITY: ["AC", "WDP", "WTK", "FPN", "RPN", "TBL", "CHR", "PNO"],
-  FURNITURE: ["TBL", "CHR", "DSK", "CAB"],
+  FURNITURE: ["TBL", "CHR", "DSK", "CAB", "NBD"],
 };
 const TYPE_LABELS = {
   PC: "Computer",

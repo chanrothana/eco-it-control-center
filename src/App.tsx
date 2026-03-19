@@ -6210,7 +6210,7 @@ export default function App() {
   const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
   const [classroomCampusFilter, setClassroomCampusFilter] = useState("ALL");
   const [classroomQuery, setClassroomQuery] = useState("");
-  const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("dashboard");
+  const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
   const [classroomDetailRoomId, setClassroomDetailRoomId] = useState<number | null>(null);
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
@@ -6234,6 +6234,7 @@ export default function App() {
   }, []);
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
+      if (nextTab === "classroom") setClassroomView("gallery");
       if (nextTab === "vault") setVaultTab("dashboard");
       setTab(nextTab);
     });
@@ -6259,6 +6260,7 @@ export default function App() {
         if (nextTab === "assets" && canAccessMenu("assets.list", "assets")) {
           setAssetsView("list");
         }
+        if (nextTab === "classroom") setClassroomView("gallery");
         if (nextTab === "vault") setVaultTab("dashboard");
         setTab(nextTab);
       });
@@ -6330,10 +6332,11 @@ export default function App() {
           return [
             {
               key: "classroom.main",
-              label: lang === "km" ? "ផ្ទាំងគ្រប់គ្រង" : "Dashboard",
+              label: lang === "km" ? "Gallery ថ្នាក់រៀន" : "Classroom Gallery",
               active: tab === "classroom",
               onSelect: () =>
                 startTabTransition(() => {
+                  setClassroomView("gallery");
                   setTab("classroom");
                 }),
             },
@@ -33892,47 +33895,42 @@ export default function App() {
                     {lang === "km" ? "ចុចលើបន្ទប់មួយ ដើម្បីមើល Item ទាំងអស់" : "Click a classroom to see all room items."}
                   </span>
                 </div>
-                <div className="report-card-list">
+                <div
+                  className="asset-gallery-grid"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+                >
                   {classroomGalleryRows.length ? (
                     classroomGalleryRows.map((row) => (
-                      <article
+                      <button
+                        type="button"
                         key={`classroom-gallery-${row.id}`}
-                        className="report-card furniture-report-mobile-card furniture-report-room-card"
+                        className={`asset-gallery-card ${row.status === "Need Action" ? "row-asset-maintenance" : ""}`}
+                        onClick={() => setClassroomDetailRoomId(row.id)}
                       >
-                        <div className="report-card-photo">
-                          {renderAssetPhoto(row.photo || "", `classroom-${row.id}`)}
+                        <div className="asset-gallery-photo-wrap">
+                          {row.photo ? (
+                            <img
+                              loading="lazy"
+                              decoding="async"
+                              src={row.photo}
+                              alt={row.location}
+                              className="asset-gallery-photo"
+                            />
+                          ) : (
+                            <div className="asset-gallery-photo-empty">{lang === "km" ? "គ្មានរូបថត" : "No photo"}</div>
+                          )}
                         </div>
-                        <div className="report-card-head furniture-report-mobile-head">
-                          <div className="report-card-title">
-                            <strong>{row.location}</strong>
-                            <div className="tiny report-card-sub">{campusLabel(row.campus)}</div>
-                          </div>
-                          <span className={`report-pill ${row.status === "Need Action" ? "report-pill-alert" : ""}`}>{row.status}</span>
-                        </div>
-                        <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
+                        <div className="asset-gallery-meta">
+                          <strong>{row.location}</strong>
+                          <div>{campusLabel(row.campus)}</div>
                           <div>
-                            <span>{lang === "km" ? "សិស្ស" : "Students"}</span>
-                            <strong>{row.currentStudents}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "Items" : "Items"}</span>
-                            <strong>{row.itemCount}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "កៅអី" : "Chairs"}</span>
-                            <strong>{row.studentChairs}</strong>
+                            {lang === "km" ? "Items" : "Items"}: {row.itemCount}
                           </div>
                           <div>
-                            <span>{lang === "km" ? "តុ" : "Tables"}</span>
-                            <strong>{row.studentTables}</strong>
+                            {lang === "km" ? "ស្ថានភាព" : "Status"}: {row.status}
                           </div>
                         </div>
-                        <div className="asset-actions" style={{ justifyContent: "flex-end", marginTop: 10 }}>
-                          <button className="tab" onClick={() => setClassroomDetailRoomId(row.id)}>
-                            {lang === "km" ? "មើលបន្ទប់នេះ" : "Open Classroom"}
-                          </button>
-                        </div>
-                      </article>
+                      </button>
                     ))
                   ) : (
                     <div className="panel-note">
@@ -44909,37 +44907,38 @@ export default function App() {
               <div className="tiny" style={{ marginBottom: 12 }}>
                 {classroomDetailRoom.issueText}
               </div>
-              <div className="report-card-list">
+              <div
+                className="asset-gallery-grid"
+                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+              >
                 {classroomDetailItems.length ? (
                   classroomDetailItems.map((item) => (
-                    <article key={item.key} className="report-card furniture-report-mobile-card">
-                      <div className="report-card-photo">
-                        {renderAssetPhoto(item.photo || "", item.assetId)}
+                    <article key={item.key} className="asset-gallery-card">
+                      <div className="asset-gallery-photo-wrap">
+                        {item.photo ? (
+                          <img
+                            loading="lazy"
+                            decoding="async"
+                            src={item.photo}
+                            alt={item.assetId}
+                            className="asset-gallery-photo"
+                          />
+                        ) : (
+                          <div className="asset-gallery-photo-empty">{lang === "km" ? "គ្មានរូបថត" : "No photo"}</div>
+                        )}
                       </div>
-                      <div className="report-card-head furniture-report-mobile-head">
-                        <div className="report-card-title">
-                          <strong>{item.name}</strong>
-                          <div className="tiny report-card-sub">{item.assetId}</div>
-                        </div>
-                        <span className="report-pill">{item.status}</span>
-                      </div>
-                      <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
+                      <div className="asset-gallery-meta">
+                        <strong>{item.name}</strong>
+                        <div>{item.assetId}</div>
                         <div>
-                          <span>{lang === "km" ? "ប្រភេទ" : "Category"}</span>
-                          <strong>{item.category}</strong>
+                          {lang === "km" ? "ប្រភេទ" : "Category"}: {item.category}
                         </div>
                         <div>
-                          <span>{lang === "km" ? "រងប្រភេទ" : "Type"}</span>
-                          <strong>{item.subtype}</strong>
+                          {lang === "km" ? "ចំនួន" : "Qty"}: {item.qty}
                         </div>
                         <div>
-                          <span>{lang === "km" ? "ចំនួន" : "Qty"}</span>
-                          <strong>{item.qty}</strong>
+                          {lang === "km" ? "ស្ថានភាព" : "Status"}: {item.status}
                         </div>
-                      </div>
-                      <div className="furniture-report-mobile-detail">
-                        <small>{t.notes}</small>
-                        <p>{item.notes || "-"}</p>
                       </div>
                     </article>
                   ))
