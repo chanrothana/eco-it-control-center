@@ -1572,7 +1572,6 @@ const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
   TBL: ["Toy and Me", "Primary Standard", "Office Standard"],
   DSK: ["Student Primary Deskset", "Toy and Me Deskset"],
   CAB: ["Filing Cabinet", "Storage Cabinet", "Classroom Cabinet"],
-  NBD: ["Standard Nap Bed", "Stackable Nap Bed", "Kindergarten Nap Bed"],
 };
 const INVENTORY_MASTER_ITEMS = [
   { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
@@ -1845,8 +1844,13 @@ function canLinkToParentAsset(category: string, type: string): boolean {
     code !== "AC" &&
     code !== "WTK" &&
     code !== "TBL" &&
-    code !== "CHR"
+    code !== "CHR" &&
+    code !== "NBD"
   );
+}
+
+function isSingleFurnitureType(type: string): boolean {
+  return String(type || "").trim().toUpperCase() === "NBD";
 }
 
 function needsComponentRole(type: string): boolean {
@@ -11020,6 +11024,10 @@ export default function App() {
     },
     [assetForm.type]
   );
+  const isSingleModelFurnitureForCreate = useMemo(
+    () => isFurnitureAsset(assetForm.category) && isSingleFurnitureType(assetForm.type),
+    [assetForm.category, assetForm.type]
+  );
   const isLinkableForCreate = useMemo(
     () => canLinkToParentAsset(assetForm.category, assetForm.type),
     [assetForm.category, assetForm.type]
@@ -12438,6 +12446,7 @@ export default function App() {
           ...assetForm,
           photos: normalizeAssetPhotos(assetForm),
           type: assetForm.type.toUpperCase(),
+          model: createIsFurniture && isSingleFurnitureType(assetForm.type) ? "" : assetForm.model,
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
           componentRole: needsComponentRole(assetForm.type) ? assetForm.componentRole.trim() : "",
@@ -18572,7 +18581,7 @@ export default function App() {
       componentRequired: Boolean(assetEditForm.componentRequired),
       assignedTo: editAssignedTo,
       brand: assetEditForm.brand.trim(),
-      model: assetEditForm.model.trim(),
+      model: editingAsset && isFurnitureAsset(editingAsset.category) && isSingleFurnitureType(editingAsset.type) ? "" : assetEditForm.model.trim(),
       serialNumber: assetEditForm.serialNumber.trim(),
       specs: isAirconAsset(editingAsset?.category || "", editingAsset?.type || "")
         ? buildAirconSpecs(assetEditForm.specs.trim(), assetEditForm.acType, assetEditForm.acHp, {
@@ -21494,6 +21503,10 @@ export default function App() {
   );
   const editingIsLinkableAsset = useMemo(
     () => (editingAsset ? canLinkToParentAsset(editingAsset.category, editingAsset.type) : false),
+    [editingAsset]
+  );
+  const editingIsSingleModelFurniture = useMemo(
+    () => isFurnitureAsset(editingAsset?.category || "") && isSingleFurnitureType(editingAsset?.type || ""),
     [editingAsset]
   );
   const editingIsMouseKeyboardType = useMemo(
@@ -28715,6 +28728,7 @@ export default function App() {
                         setAssetForm((f) => ({
                           ...f,
                           type: typeCode,
+                          model: "",
                           furnitureTrackingMode: defaultFurnitureTrackingMode(typeCode),
                           furnitureLevel: "",
                           furnitureSubtype: defaultFurnitureSubtype(typeCode),
@@ -30597,41 +30611,50 @@ export default function App() {
                         </select>
                         <div className="tiny">Grouped = one room record with quantity. Individual = one ID per item.</div>
                       </label>
-                      <label className="field">
-                        <span>Furniture Model</span>
-                        <select
-                          className="input"
-                          value={assetForm.model}
-                          onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))}
-                        >
-                          <option value="">Select model</option>
-                          {furnitureModelChoices(assetForm.type).map((option) => (
-                            <option key={`furniture-model-create-${assetForm.type}-${option.model}`} value={option.model}>
-                              {furnitureModelLabel(assetForm.type, option.model)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Furniture Photo</span>
-                        <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
-                          {createFurnitureReferencePhoto ? (
-                            <img
-                              loading="lazy"
-                              decoding="async"
-                              src={createFurnitureReferencePhoto}
-                              alt={`${assetForm.model || "furniture"} reference`}
-                              className="asset-photo-chip-img"
-                              style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
-                            />
-                          ) : (
-                            <div className="tiny">No furniture photo in Furniture Models yet.</div>
-                          )}
-                          {assetForm.model ? (
-                            <div className="tiny">{furnitureModelLabel(assetForm.type, assetForm.model)}</div>
-                          ) : null}
-                        </div>
-                      </label>
+                      {!isSingleModelFurnitureForCreate ? (
+                        <>
+                          <label className="field">
+                            <span>Furniture Model</span>
+                            <select
+                              className="input"
+                              value={assetForm.model}
+                              onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))}
+                            >
+                              <option value="">Select model</option>
+                              {furnitureModelChoices(assetForm.type).map((option) => (
+                                <option key={`furniture-model-create-${assetForm.type}-${option.model}`} value={option.model}>
+                                  {furnitureModelLabel(assetForm.type, option.model)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Furniture Photo</span>
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                              {createFurnitureReferencePhoto ? (
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={createFurnitureReferencePhoto}
+                                  alt={`${assetForm.model || "furniture"} reference`}
+                                  className="asset-photo-chip-img"
+                                  style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
+                                />
+                              ) : (
+                                <div className="tiny">No furniture photo in Furniture Models yet.</div>
+                              )}
+                              {assetForm.model ? (
+                                <div className="tiny">{furnitureModelLabel(assetForm.type, assetForm.model)}</div>
+                              ) : null}
+                            </div>
+                          </label>
+                        </>
+                      ) : (
+                        <label className="field">
+                          <span>Furniture Model</span>
+                          <div className="tiny">Nap Bed uses a single standard type. No model selection needed.</div>
+                        </label>
+                      )}
                       <label className="field">
                         <span>Quantity</span>
                         <input
@@ -30646,7 +30669,7 @@ export default function App() {
                       {assetForm.furnitureTrackingMode === "Grouped" ? (
                           <div className="field field-wide">
                             <div className="tiny">
-                            Use one asset ID for all same furniture in this room. Example: Classroom Eco 01 {furnitureModelLabel(assetForm.type, assetForm.model || "Toy and Me")}, quantity 25.
+                            Use one asset ID for all same furniture in this room. Example: Classroom Eco 01 {isSingleModelFurnitureForCreate ? "Nap Bed" : furnitureModelLabel(assetForm.type, assetForm.model || "Toy and Me")}, quantity 25.
                             </div>
                           </div>
                         ) : null}
@@ -32530,41 +32553,50 @@ export default function App() {
                           </select>
                           <div className="tiny">Grouped = one room record with quantity. Individual = one ID per item.</div>
                         </label>
-                        <label className="field">
-                          <span>Furniture Model</span>
-                          <select
-                            className="input"
-                            value={assetEditForm.model}
-                            onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))}
-                          >
-                            <option value="">Select model</option>
-                            {furnitureModelChoices(editingAsset?.type || "").map((option) => (
-                              <option key={`furniture-model-edit-${editingAsset?.type || ""}-${option.model}`} value={option.model}>
-                                {furnitureModelLabel(editingAsset?.type || "", option.model)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Furniture Photo</span>
-                          <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
-                            {editFurnitureReferencePhoto ? (
-                              <img
-                                loading="lazy"
-                                decoding="async"
-                                src={editFurnitureReferencePhoto}
-                                alt={`${assetEditForm.model || "furniture"} reference`}
-                                className="asset-photo-chip-img"
-                                style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
-                              />
-                            ) : (
-                              <div className="tiny">No furniture photo in Furniture Models yet.</div>
-                            )}
-                            {assetEditForm.model ? (
-                              <div className="tiny">{furnitureModelLabel(editingAsset?.type || "", assetEditForm.model)}</div>
-                            ) : null}
-                          </div>
-                        </label>
+                        {!editingIsSingleModelFurniture ? (
+                          <>
+                            <label className="field">
+                              <span>Furniture Model</span>
+                              <select
+                                className="input"
+                                value={assetEditForm.model}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))}
+                              >
+                                <option value="">Select model</option>
+                                {furnitureModelChoices(editingAsset?.type || "").map((option) => (
+                                  <option key={`furniture-model-edit-${editingAsset?.type || ""}-${option.model}`} value={option.model}>
+                                    {furnitureModelLabel(editingAsset?.type || "", option.model)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>Furniture Photo</span>
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                                {editFurnitureReferencePhoto ? (
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={editFurnitureReferencePhoto}
+                                    alt={`${assetEditForm.model || "furniture"} reference`}
+                                    className="asset-photo-chip-img"
+                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
+                                  />
+                                ) : (
+                                  <div className="tiny">No furniture photo in Furniture Models yet.</div>
+                                )}
+                                {assetEditForm.model ? (
+                                  <div className="tiny">{furnitureModelLabel(editingAsset?.type || "", assetEditForm.model)}</div>
+                                ) : null}
+                              </div>
+                            </label>
+                          </>
+                        ) : (
+                          <label className="field">
+                            <span>Furniture Model</span>
+                            <div className="tiny">Nap Bed uses a single standard type. No model selection needed.</div>
+                          </label>
+                        )}
                         <label className="field">
                           <span>Quantity</span>
                           <input
@@ -32579,7 +32611,7 @@ export default function App() {
                         {assetEditForm.furnitureTrackingMode === "Grouped" ? (
                           <div className="field field-wide">
                             <div className="tiny">
-                              Use one asset ID for all same furniture in this room. Example: Classroom Eco 01 {furnitureModelLabel(editingAsset?.type || "", assetEditForm.model || "Toy and Me")}, quantity 25.
+                              Use one asset ID for all same furniture in this room. Example: Classroom Eco 01 {editingIsSingleModelFurniture ? "Nap Bed" : furnitureModelLabel(editingAsset?.type || "", assetEditForm.model || "Toy and Me")}, quantity 25.
                             </div>
                           </div>
                         ) : null}
