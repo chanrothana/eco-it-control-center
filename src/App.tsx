@@ -16995,6 +16995,10 @@ export default function App() {
     const periodText = `${inventoryAdminMatrixDisplayDateFrom || "-"} - ${inventoryAdminMatrixDisplayDateTo || "-"}`;
     const splitByCampus = inventoryAdminOutDayMatrix.splitByCampus;
     const campuses = inventoryAdminOutDayMatrix.campuses || [];
+    const signatureCampuses =
+      inventoryAdminMatrixCampusFilter === "ALL"
+        ? campuses
+        : [inventoryAdminMatrixCampusFilter].filter(Boolean);
     const dayHeadHtml = days
       .map((day) => {
         const date = new Date(`${day.ymd}T00:00:00`);
@@ -17040,89 +17044,109 @@ export default function App() {
         </tr>`;
       })
       .join("");
+    const signatureHtml = signatureCampuses.length
+      ? signatureCampuses
+          .map(
+            (campus) => `
+              <div class="signature-card">
+                <div class="signature-campus">${escapeHtml(inventoryCampusLabel(campus))}</div>
+                <div class="signature-line"></div>
+                <div class="signature-role">${escapeHtml(lang === "km" ? "Staff / អ្នកទទួលខុសត្រូវ" : "Staff / Responsible Person")}</div>
+                <div class="signature-date-line"></div>
+                <div class="signature-date-label">${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</div>
+              </div>
+            `
+          )
+          .join("")
+      : `
+          <div class="signature-card">
+            <div class="signature-campus">${escapeHtml(lang === "km" ? "គ្មាន Campus" : "No Campus Selected")}</div>
+            <div class="signature-line"></div>
+            <div class="signature-role">${escapeHtml(lang === "km" ? "ហត្ថលេខា" : "Signature")}</div>
+          </div>
+        `;
     const html = `
       <html>
       <head>
         <title>${escapeHtml(title)}</title>
         <style>
           :root { color-scheme: light; }
-          body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f5f1e7; }
-          .report-shell { padding: 18px 20px 22px; }
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f7f4ec; }
+          .report-shell { padding: 14px 16px 18px; }
           .report-card {
             background: #fffdf8;
-            border: 1px solid #dbc59f;
-            border-radius: 18px;
-            box-shadow: 0 10px 24px rgba(98, 74, 33, 0.08);
+            border: 1px solid #d7c3a0;
+            border-radius: 14px;
+            box-shadow: 0 8px 18px rgba(98, 74, 33, 0.06);
             overflow: hidden;
           }
           .report-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            gap: 18px;
-            padding: 18px 22px 14px;
-            background: linear-gradient(135deg, #fff8eb 0%, #fff3dc 52%, #fdfaf4 100%);
-            border-bottom: 1px solid #e6d3b1;
+            gap: 16px;
+            padding: 14px 18px 10px;
+            background: linear-gradient(135deg, #fff8eb 0%, #fff4e0 48%, #fffdf8 100%);
+            border-bottom: 1px solid #e7d6ba;
           }
           .report-head-left { min-width: 0; flex: 1 1 auto; }
           .report-kicker {
-            margin: 0 0 6px;
+            margin: 0 0 4px;
             color: #9a7341;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 800;
-            letter-spacing: 0.16em;
+            letter-spacing: 0.14em;
             text-transform: uppercase;
           }
           .report-title {
             margin: 0;
             color: #3f2b18;
-            font-size: 28px;
-            line-height: 1.08;
+            font-size: 24px;
+            line-height: 1.06;
             font-weight: 900;
           }
           .report-subtitle {
-            margin: 6px 0 0;
+            margin: 5px 0 0;
             color: #745531;
-            font-size: 13px;
+            font-size: 12px;
           }
           .report-head-logo {
-            width: 210px;
-            max-width: 32vw;
+            width: 180px;
+            max-width: 28vw;
             height: auto;
             object-fit: contain;
             flex: 0 0 auto;
           }
-          .report-meta-grid {
+          .report-summary-bar {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 10px;
-            padding: 14px 22px;
-            border-bottom: 1px solid #efdfc3;
-            background: #fffaf1;
+            grid-template-columns: 1.2fr 1.1fr 1.3fr .6fr;
+            gap: 8px;
+            padding: 10px 18px 12px;
+            border-bottom: 1px solid #eadcc6;
+            background: #fffaf2;
           }
-          .report-meta-card {
-            border: 1px solid #ecd8b8;
-            border-radius: 12px;
-            padding: 10px 12px;
-            background: #ffffff;
+          .report-summary-block {
+            border-left: 3px solid #c99a55;
+            padding: 2px 0 2px 10px;
+            min-height: 34px;
           }
-          .report-meta-label {
-            margin: 0 0 4px;
-            color: #997347;
-            font-size: 10px;
+          .report-summary-label {
+            margin: 0 0 3px;
+            color: #8f6a3d;
+            font-size: 9px;
             font-weight: 800;
             letter-spacing: 0.12em;
             text-transform: uppercase;
           }
-          .report-meta-value {
+          .report-summary-value {
             margin: 0;
-            color: #2f3e35;
-            font-size: 13px;
+            color: #2b3d33;
+            font-size: 12px;
             font-weight: 700;
-            line-height: 1.25;
+            line-height: 1.2;
           }
           .report-table-wrap {
-            padding: 14px 16px 18px;
+            padding: 12px 14px 14px;
             overflow-x: auto;
           }
           table {
@@ -17142,7 +17166,7 @@ export default function App() {
             color: #24352c;
           }
           th {
-            background: #e8f0eb;
+            background: #edf3ef;
             color: #355443;
             font-weight: 800;
           }
@@ -17154,15 +17178,15 @@ export default function App() {
           }
           td:first-child, th:first-child {
             text-align: left;
-            width: 220px;
-            max-width: 220px;
+            width: 205px;
+            max-width: 205px;
           }
           td:last-child, th:last-child {
-            width: 52px;
+            width: 48px;
             font-weight: 900;
           }
           thead tr:nth-child(2) th {
-            background: #f3f7f4;
+            background: #f6f9f7;
             font-size: 8px;
           }
           .day-main, .day-sub { display: block; line-height: 1.05; text-align: center; }
@@ -17212,6 +17236,49 @@ export default function App() {
           tbody tr:nth-child(even) td {
             background: #fcfdfc;
           }
+          .report-footer {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            padding: 0 18px 16px;
+          }
+          .report-note {
+            color: #6e5a3d;
+            font-size: 10px;
+            line-height: 1.35;
+          }
+          .signature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+          }
+          .signature-card {
+            border: 1px solid #dcc7a7;
+            border-radius: 10px;
+            padding: 12px 12px 10px;
+            min-height: 82px;
+            background: #fffdfa;
+          }
+          .signature-campus {
+            color: #3c2b19;
+            font-size: 11px;
+            font-weight: 800;
+            margin-bottom: 18px;
+          }
+          .signature-line,
+          .signature-date-line {
+            height: 1px;
+            background: #826741;
+            margin-bottom: 5px;
+          }
+          .signature-role,
+          .signature-date-label {
+            color: #766041;
+            font-size: 9px;
+          }
+          .signature-date-line {
+            margin-top: 10px;
+          }
           @page { size: A3 landscape; margin: 6mm; }
           @media print {
             body { margin: 0; background: #fff; }
@@ -17227,26 +17294,26 @@ export default function App() {
               <div class="report-head-left">
                 <p class="report-kicker">Eco International School</p>
                 <h1 class="report-title">${escapeHtml(title)}</h1>
-                <p class="report-subtitle">Standard inventory movement report for monthly stock-out tracking.</p>
+                <p class="report-subtitle">Official monthly stock-out control sheet for review, print, and campus sign-off.</p>
               </div>
               <img loading="lazy" decoding="async" class="report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
             </header>
-            <section class="report-meta-grid">
-              <article class="report-meta-card">
-                <p class="report-meta-label">Generated</p>
-                <p class="report-meta-value">${escapeHtml(generatedAt)}</p>
+            <section class="report-summary-bar">
+              <article class="report-summary-block">
+                <p class="report-summary-label">Generated</p>
+                <p class="report-summary-value">${escapeHtml(generatedAt)}</p>
               </article>
-              <article class="report-meta-card">
-                <p class="report-meta-label">Campus</p>
-                <p class="report-meta-value">${escapeHtml(campusText)}</p>
+              <article class="report-summary-block">
+                <p class="report-summary-label">Campus</p>
+                <p class="report-summary-value">${escapeHtml(campusText)}</p>
               </article>
-              <article class="report-meta-card">
-                <p class="report-meta-label">Period</p>
-                <p class="report-meta-value">${escapeHtml(periodText)}</p>
+              <article class="report-summary-block">
+                <p class="report-summary-label">Period</p>
+                <p class="report-summary-value">${escapeHtml(periodText)}</p>
               </article>
-              <article class="report-meta-card">
-                <p class="report-meta-label">Items</p>
-                <p class="report-meta-value">${rows.length}</p>
+              <article class="report-summary-block">
+                <p class="report-summary-label">Items</p>
+                <p class="report-summary-value">${rows.length}</p>
               </article>
             </section>
             <div class="report-table-wrap">
@@ -17262,6 +17329,16 @@ export default function App() {
                 <tbody>${bodyHtml}</tbody>
               </table>
             </div>
+            <footer class="report-footer">
+              <div class="report-note">
+                ${escapeHtml(lang === "km"
+                  ? "ចំណាំ: របាយការណ៍នេះសម្រាប់តាមដានការចេញស្តុកប្រចាំខែ និងសម្រាប់ការត្រួតពិនិត្យដោយអ្នកទទួលខុសត្រូវតាម Campus។"
+                  : "Note: This report is used for monthly stock-out monitoring and campus-level review by responsible staff.")}
+              </div>
+              <div class="signature-grid">
+                ${signatureHtml}
+              </div>
+            </footer>
           </section>
         </div>
       </body>
@@ -34895,58 +34972,58 @@ export default function App() {
                         </>
                       )}
                     </div>
-                    <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
-                      <div className="inventory-admin-control-card">
-                        <strong>
-                          {inventoryDashboardGroup === "SUPPLY"
-                            ? (lang === "km" ? "តារាងគ្រប់គ្រង Item" : "Item Control")
-                            : inventoryDashboardGroup === "CLEAN_TOOL"
+                    {inventoryDashboardGroup !== "SUPPLY" ? (
+                      <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
+                        <div className="inventory-admin-control-card">
+                          <strong>
+                            {inventoryDashboardGroup === "CLEAN_TOOL"
                               ? (lang === "km" ? "ស្ថានភាពគ្រប់គ្រងឧបករណ៍សម្អាត" : "Cleaning Tool Availability Watch")
                               : (lang === "km" ? "ស្ថានភាពគ្រប់គ្រងឧបករណ៍ថែទាំ" : "Maintenance Tool Readiness Watch")}
-                        </strong>
-                        {inventoryDashboardItemControlRows.length ? (
-                          <div className="table-wrap" style={{ marginTop: 10 }}>
-                            <table>
-                              <thead>
-                                <tr>
-                                  <th>{lang === "km" ? "កូដ" : "Code"}</th>
-                                  <th>{lang === "km" ? "ឈ្មោះ" : "Name"}</th>
-                                  <th>{t.campus}</th>
-                                  <th>{t.location}</th>
-                                  <th>{lang === "km" ? "ស្តុក" : "On Hand"}</th>
-                                  <th>{lang === "km" ? "កម្រិតអប្បបរមា" : "Min"}</th>
-                                  <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {inventoryDashboardItemControlRows.map((row) => {
-                                  const isLow = Number(row.currentStock || 0) < Number(row.minStock || 0);
-                                  const isOut = Number(row.currentStock || 0) <= 0;
-                                  const statusLabel = isOut
-                                    ? (lang === "km" ? "អស់ស្តុក" : "Out")
-                                    : isLow
-                                      ? (lang === "km" ? "ទាប" : "Low")
-                                      : (lang === "km" ? "ល្អ" : "OK");
-                                  return (
-                                    <tr key={`inventory-dashboard-item-control-${row.id}`}>
-                                      <td><strong>{row.itemCode}</strong></td>
-                                      <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                                      <td>{inventoryCampusLabel(row.campus)}</td>
-                                      <td>{row.location || "-"}</td>
-                                      <td>{row.currentStock}</td>
-                                      <td>{row.minStock}</td>
-                                      <td>{statusLabel}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមាន Item នៅក្នុងក្រុមនេះ" : "No items in this group yet."}</div>
-                        )}
+                          </strong>
+                          {inventoryDashboardItemControlRows.length ? (
+                            <div className="table-wrap" style={{ marginTop: 10 }}>
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>{lang === "km" ? "កូដ" : "Code"}</th>
+                                    <th>{lang === "km" ? "ឈ្មោះ" : "Name"}</th>
+                                    <th>{t.campus}</th>
+                                    <th>{t.location}</th>
+                                    <th>{lang === "km" ? "ស្តុក" : "On Hand"}</th>
+                                    <th>{lang === "km" ? "កម្រិតអប្បបរមា" : "Min"}</th>
+                                    <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {inventoryDashboardItemControlRows.map((row) => {
+                                    const isLow = Number(row.currentStock || 0) < Number(row.minStock || 0);
+                                    const isOut = Number(row.currentStock || 0) <= 0;
+                                    const statusLabel = isOut
+                                      ? (lang === "km" ? "អស់ស្តុក" : "Out")
+                                      : isLow
+                                        ? (lang === "km" ? "ទាប" : "Low")
+                                        : (lang === "km" ? "ល្អ" : "OK");
+                                    return (
+                                      <tr key={`inventory-dashboard-item-control-${row.id}`}>
+                                        <td><strong>{row.itemCode}</strong></td>
+                                        <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                                        <td>{inventoryCampusLabel(row.campus)}</td>
+                                        <td>{row.location || "-"}</td>
+                                        <td>{row.currentStock}</td>
+                                        <td>{row.minStock}</td>
+                                        <td>{statusLabel}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមាន Item នៅក្នុងក្រុមនេះ" : "No items in this group yet."}</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    ) : null}
                     {inventoryDashboardGroup !== "SUPPLY" ? (
                       <>
                         <div className="form-grid inventory-admin-control-filters">
@@ -35455,6 +35532,54 @@ export default function App() {
                         </table>
                       </div>
                     </div>
+                    ) : null}
+                    {inventoryDashboardGroup === "SUPPLY" ? (
+                      <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
+                        <div className="inventory-admin-control-card">
+                          <strong>{lang === "km" ? "តារាងគ្រប់គ្រង Item" : "Item Control"}</strong>
+                          {inventoryDashboardItemControlRows.length ? (
+                            <div className="table-wrap" style={{ marginTop: 10 }}>
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>{lang === "km" ? "កូដ" : "Code"}</th>
+                                    <th>{lang === "km" ? "ឈ្មោះ" : "Name"}</th>
+                                    <th>{t.campus}</th>
+                                    <th>{t.location}</th>
+                                    <th>{lang === "km" ? "ស្តុក" : "On Hand"}</th>
+                                    <th>{lang === "km" ? "កម្រិតអប្បបរមា" : "Min"}</th>
+                                    <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {inventoryDashboardItemControlRows.map((row) => {
+                                    const isLow = Number(row.currentStock || 0) < Number(row.minStock || 0);
+                                    const isOut = Number(row.currentStock || 0) <= 0;
+                                    const statusLabel = isOut
+                                      ? (lang === "km" ? "អស់ស្តុក" : "Out")
+                                      : isLow
+                                        ? (lang === "km" ? "ទាប" : "Low")
+                                        : (lang === "km" ? "ល្អ" : "OK");
+                                    return (
+                                      <tr key={`inventory-dashboard-item-control-supply-${row.id}`}>
+                                        <td><strong>{row.itemCode}</strong></td>
+                                        <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                                        <td>{inventoryCampusLabel(row.campus)}</td>
+                                        <td>{row.location || "-"}</td>
+                                        <td>{row.currentStock}</td>
+                                        <td>{row.minStock}</td>
+                                        <td>{statusLabel}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមាន Item នៅក្នុងក្រុមនេះ" : "No items in this group yet."}</div>
+                          )}
+                        </div>
+                      </div>
                     ) : null}
                   </article>
                 ) : null}
