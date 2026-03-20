@@ -2483,6 +2483,17 @@ function readLocationFallback(): LocationEntry[] {
   }
 }
 
+function isClassroomLocationLike(input: {
+  isClassroom?: unknown;
+  currentStudents?: unknown;
+  name?: unknown;
+}) {
+  if (Boolean(input.isClassroom)) return true;
+  if (Number(input.currentStudents || 0) > 0) return true;
+  const name = String(input.name || "").trim().toLowerCase();
+  return name.includes("classroom") || name.includes("class room");
+}
+
 function normalizeLocationEntries(input: unknown): LocationEntry[] {
   return normalizeArray<Record<string, unknown>>(input)
     .filter((row) => row && typeof row === "object")
@@ -2490,7 +2501,7 @@ function normalizeLocationEntries(input: unknown): LocationEntry[] {
       id: Number(row.id) || Date.now() + index,
       campus: String(row.campus || "").trim(),
       name: String(row.name || "").trim(),
-      isClassroom: Boolean(row.isClassroom),
+      isClassroom: isClassroomLocationLike(row),
       studentCapacity: Math.max(0, Number(row.studentCapacity) || 0),
       currentStudents: Math.max(0, Number(row.currentStudents) || 0),
       tableSeatsPerTable: Math.max(1, Number(row.tableSeatsPerTable) || 2),
@@ -3468,7 +3479,11 @@ function mergeLocations(primary: LocationEntry[], secondary: LocationEntry[]) {
     out.set(key, {
       ...(current || {}),
       ...loc,
-      isClassroom: Boolean(loc.isClassroom ?? current?.isClassroom),
+      isClassroom: isClassroomLocationLike({
+        isClassroom: loc.isClassroom ?? current?.isClassroom,
+        currentStudents: loc.currentStudents ?? current?.currentStudents,
+        name: loc.name ?? current?.name,
+      }),
       studentCapacity: Math.max(0, Number(loc.studentCapacity ?? current?.studentCapacity) || 0),
       currentStudents: Math.max(0, Number(loc.currentStudents ?? current?.currentStudents) || 0),
       tableSeatsPerTable: Math.max(1, Number(loc.tableSeatsPerTable ?? current?.tableSeatsPerTable) || 2),
@@ -8549,7 +8564,7 @@ export default function App() {
     if (classroomRoomFilter === "ALL") return;
     const stillValid = locations.some(
       (row) =>
-        (Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0) &&
+        isClassroomLocationLike(row) &&
         allowedCampuses.includes(row.campus) &&
         (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter) &&
         row.name === classroomRoomFilter
@@ -18023,7 +18038,7 @@ export default function App() {
     setEditingLocationId(location.id);
     setLocationCampus(location.campus);
     setLocationName(location.name);
-    setLocationIsClassroom(Boolean(location.isClassroom));
+    setLocationIsClassroom(isClassroomLocationLike(location));
     setLocationCurrentStudents(location.currentStudents ? String(location.currentStudents) : "");
     setLocationNotes(String(location.notes || ""));
     setLocationPhoto(String(location.photo || "").trim());
@@ -23352,7 +23367,11 @@ export default function App() {
     quickRecordAsset ||
     transferQuickAsset ||
     maintenanceDetailAsset ||
+    classroomDetailRoomId !== null ||
+    classroomVerificationOpen ||
     inventoryQuickOutModal ||
+    inventoryDashboardModal ||
+    inventoryAdminDetailModal ||
     scheduleScopeModal ||
     scheduleQuickCreateOpen ||
     scheduleAlertModal ||
@@ -23957,7 +23976,7 @@ export default function App() {
   }, [furnitureControlAssetRows, furnitureControlCampusFilter, campusLabel]);
   const furnitureControlClassroomRows = useMemo(() => {
     const classroomLocations = locations
-      .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
+      .filter((row) => isClassroomLocationLike(row))
       .filter((row) => (furnitureControlCampusFilter === "ALL" ? true : row.campus === furnitureControlCampusFilter));
     const rows = classroomLocations.map((room) => {
       const matchingAssets = furnitureControlAssetRows.filter(
@@ -24034,7 +24053,7 @@ export default function App() {
     const options = Array.from(
       new Set(
         locations
-          .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
+          .filter((row) => isClassroomLocationLike(row))
           .map((row) => String(row.campus || "").trim())
           .filter(Boolean)
       )
@@ -24047,7 +24066,7 @@ export default function App() {
     const options = Array.from(
       new Set(
         locations
-          .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
+          .filter((row) => isClassroomLocationLike(row))
           .filter((row) => allowedCampuses.includes(row.campus))
           .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter))
           .map((row) => String(row.name || "").trim())
@@ -24059,7 +24078,7 @@ export default function App() {
   const classroomControlRoomRows = useMemo(() => {
     const query = String(classroomQuery || "").trim().toLowerCase();
     const visibleLocations = locations
-      .filter((row) => Boolean(row.isClassroom) || Number(row.currentStudents || 0) > 0)
+      .filter((row) => isClassroomLocationLike(row))
       .filter((row) => allowedCampuses.includes(row.campus))
       .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter))
       .filter((row) => (classroomRoomFilter === "ALL" ? true : row.name === classroomRoomFilter));
@@ -44012,9 +44031,9 @@ export default function App() {
                       <tr key={loc.id}>
                         <td>{campusLabel(loc.campus)}</td>
                         <td>{loc.name}</td>
-                        <td>{loc.isClassroom ? "Classroom" : "General"}</td>
+                        <td>{isClassroomLocationLike(loc) ? "Classroom" : "General"}</td>
                         <td>
-                          {loc.isClassroom
+                          {isClassroomLocationLike(loc)
                             ? renderAssetPhoto(String(loc.photo || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL, `${loc.name}-classroom`)
                             : "-"}
                         </td>
