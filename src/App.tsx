@@ -23985,6 +23985,15 @@ export default function App() {
       const matchingAssets = furnitureControlAssetRows.filter(
         (asset) => asset.campus === room.campus && asset.location === room.name
       );
+      const matchingAssetPhoto =
+        assets
+          .filter((asset) => asset.campus === room.campus && String(asset.location || "").trim() === room.name)
+          .map((asset) => normalizeAssetPhotos(asset)[0] || "")
+          .find(Boolean) || "";
+      const roomPhoto =
+        String(room.photo || "").trim() ||
+        matchingAssetPhoto ||
+        "";
       const chairs = matchingAssets
         .filter((asset) => asset.type === "CHR")
         .reduce((sum, asset) => sum + asset.availableQty, 0);
@@ -24017,6 +24026,7 @@ export default function App() {
         id: room.id,
         campus: room.campus,
         location: room.name,
+        photo: roomPhoto,
         currentStudents,
         chairs,
         chairModels,
@@ -24035,7 +24045,7 @@ export default function App() {
         campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
         a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
     );
-  }, [locations, furnitureControlCampusFilter, furnitureControlAssetRows, campusLabel]);
+  }, [locations, furnitureControlCampusFilter, furnitureControlAssetRows, campusLabel, assets]);
   const furnitureControlCampusFilterOptions = useMemo(() => {
     const options = Array.from(
       new Set(
@@ -26608,6 +26618,7 @@ export default function App() {
                   <th>No.</th>
                   <th>Campus</th>
                   <th>Classroom</th>
+                  <th>Photo</th>
                   <th>Current Students</th>
                   <th>Chairs Ready</th>
                   <th>Chair Models</th>
@@ -26627,6 +26638,11 @@ export default function App() {
                               <td>${index + 1}</td>
                               <td>${escapeHtml(reportCampusName(row.campus))}</td>
                               <td>${escapeHtml(row.location)}</td>
+                              <td>${
+                                isRenderablePhotoSource(String(row.photo || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL)
+                                  ? `<img src="${escapeHtml(String(row.photo || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL)}" alt="${escapeHtml(row.location)}" style="width:52px;height:40px;object-fit:cover;border-radius:8px;border:1px solid #dbe6f5;" />`
+                                  : "-"
+                              }</td>
                               <td>${row.currentStudents || 0}</td>
                               <td>${row.chairs}</td>
                               <td>${escapeHtml(furnitureModelBreakdownText(row.chairModels))}</td>
@@ -26637,7 +26653,7 @@ export default function App() {
                             </tr>`
                         )
                         .join("")
-                    : `<tr><td colspan="10">No classroom records yet.</td></tr>`
+                    : `<tr><td colspan="11">No classroom records yet.</td></tr>`
                 }
               </tbody>
             </table>
@@ -41922,6 +41938,7 @@ export default function App() {
                                 <strong>{row.currentStudents || 0}</strong>
                               </div>
                             </div>
+                            {renderAssetPhoto(String(row.photo || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL, `${row.location}-report-photo`)}
                             <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
                               <div>
                                 <span>Chairs Ready</span>
@@ -42015,6 +42032,7 @@ export default function App() {
                           <tr>
                             <th>{t.campus}</th>
                             <th>{t.location}</th>
+                            <th>{t.photo}</th>
                             <th>Current Students</th>
                             <th>Chairs Ready</th>
                             <th>Chair Models</th>
@@ -42030,6 +42048,7 @@ export default function App() {
                               <tr key={`furniture-room-${row.id}`}>
                                 <td>{reportCampusName(row.campus)}</td>
                                 <td>{row.location}</td>
+                                <td>{renderAssetPhoto(String(row.photo || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL, `${row.location}-report-photo`)}</td>
                                 <td>{row.currentStudents || 0}</td>
                                 <td><strong>{row.chairs}</strong></td>
                                 <td>{furnitureModelBreakdownText(row.chairModels)}</td>
@@ -42041,7 +42060,7 @@ export default function App() {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={9}>No classroom location records yet. Mark classroom locations in Setup.</td>
+                              <td colSpan={10}>No classroom location records yet. Mark classroom locations in Setup.</td>
                             </tr>
                           )}
                         </tbody>
