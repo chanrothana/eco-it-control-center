@@ -17490,16 +17490,19 @@ export default function App() {
             font-weight: 800;
           }
           .day-head-weekday {
-            background: #dfeafb;
-            color: #355487;
+            background: #dfe9f8;
+            color: #2d4a77;
+            box-shadow: inset 0 -2px 0 #c2d4ef;
           }
           .day-head-sat {
-            background: #fff0dc;
-            color: #a0601a;
+            background: #fff0dd;
+            color: #a85b12;
+            box-shadow: inset 0 -2px 0 #efc79a;
           }
           .day-head-sun {
-            background: #ffe7ef;
-            color: #c74864;
+            background: #fde9ee;
+            color: #b52841;
+            box-shadow: inset 0 -2px 0 #f3b1c0;
           }
           thead tr:first-child th {
             border-top: 1px solid #d8e2dc;
@@ -17525,16 +17528,16 @@ export default function App() {
             font-size: 8px;
           }
           .day-subhead-weekday {
-            background: #edf3ff !important;
-            color: #4a6897;
+            background: #eef3fb !important;
+            color: #4d638d;
           }
           .day-subhead-sat {
-            background: #fff7eb !important;
-            color: #a06b26;
+            background: #fff9f2 !important;
+            color: #a85b12;
           }
           .day-subhead-sun {
-            background: #fff0f5 !important;
-            color: #c16177;
+            background: #fff6f8 !important;
+            color: #b52841;
           }
           .day-main, .day-sub { display: block; line-height: 1.05; text-align: center; }
           .day-main { font-size: 9px; font-weight: 900; }
@@ -17584,13 +17587,13 @@ export default function App() {
             background: #fcfdfc;
           }
           td.matrix-cell-weekday {
-            background: #f3f7ff;
+            background: #f7fbff;
           }
           td.matrix-cell-sat {
-            background: #fff9ef;
+            background: #fff9f2;
           }
           td.matrix-cell-sun {
-            background: #fff4f8;
+            background: #fff6f8;
           }
           .report-footer {
             display: grid;
