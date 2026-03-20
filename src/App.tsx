@@ -45365,11 +45365,24 @@ export default function App() {
                     {campusLabel(classroomDetailRoom.campus)} | {lang === "km" ? "សិស្ស" : "Students"}: {classroomDetailRoom.currentStudents} | {classroomDetailRoom.status}
                   </div>
                 </div>
-                <div className="row-actions" style={{ gap: 8, flexWrap: "wrap" }}>
-                  <button className="tab" onClick={classroomVerificationOpen ? cancelClassroomVerification : openClassroomVerification}>
+                <div
+                  className="row-actions"
+                  style={{ gap: 8, flexWrap: "wrap", width: isPhoneView ? "100%" : undefined }}
+                >
+                  <button
+                    className="tab"
+                    style={isPhoneView ? { flex: 1 } : undefined}
+                    onClick={classroomVerificationOpen ? cancelClassroomVerification : openClassroomVerification}
+                  >
                     {classroomVerificationOpen ? "Cancel Verify" : "Monthly Verify"}
                   </button>
-                  <button className="tab" onClick={() => setClassroomDetailRoomId(null)}>{t.close}</button>
+                  <button
+                    className="tab"
+                    style={isPhoneView ? { flex: 1 } : undefined}
+                    onClick={() => setClassroomDetailRoomId(null)}
+                  >
+                    {t.close}
+                  </button>
                 </div>
               </div>
               <div className="tiny" style={{ marginBottom: 12 }}>
@@ -45439,27 +45452,27 @@ export default function App() {
                       />
                     </label>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Item</th>
-                          <th>Expected Qty</th>
-                          <th>Actual Qty</th>
-                          <th>Condition</th>
-                          <th>Action</th>
-                          <th>Note</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {classroomVerificationForm.items.map((item, index) => (
-                          <tr key={`classroom-verify-${item.assetDbId}`}>
-                            <td>
-                              <strong>{item.name}</strong>
-                              <div className="tiny">{item.assetId}</div>
-                            </td>
-                            <td>{item.expectedQty}</td>
-                            <td>
+                  {isPhoneView ? (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {classroomVerificationForm.items.map((item, index) => (
+                        <article
+                          key={`classroom-verify-mobile-${item.assetDbId}`}
+                          className="report-card"
+                          style={{ padding: 12, display: "grid", gap: 10 }}
+                        >
+                          <div style={{ display: "grid", gap: 2 }}>
+                            <strong style={{ color: "#22385f", fontSize: 16 }}>{item.name}</strong>
+                            <div className="tiny">{item.assetId}</div>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                            <div className="field" style={{ minWidth: 0 }}>
+                              <span>Expected Qty</span>
+                              <div className="detail-value" style={{ minHeight: 46, display: "flex", alignItems: "center" }}>
+                                {item.expectedQty}
+                              </div>
+                            </div>
+                            <label className="field" style={{ minWidth: 0 }}>
+                              <span>Actual Qty</span>
                               <input
                                 className="input"
                                 type="number"
@@ -45476,8 +45489,11 @@ export default function App() {
                                   })
                                 }
                               />
-                            </td>
-                            <td>
+                            </label>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                            <label className="field" style={{ minWidth: 0 }}>
+                              <span>Condition</span>
                               <select
                                 className="input"
                                 value={item.condition}
@@ -45497,8 +45513,9 @@ export default function App() {
                                 <option value="Damaged">Damaged</option>
                                 <option value="Missing">Missing</option>
                               </select>
-                            </td>
-                            <td>
+                            </label>
+                            <label className="field" style={{ minWidth: 0 }}>
+                              <span>Action</span>
                               <select
                                 className="input"
                                 value={item.action}
@@ -45519,43 +45536,148 @@ export default function App() {
                                 <option value="Add More">Add More</option>
                                 <option value="Missing">Missing</option>
                               </select>
-                            </td>
-                            <td>
-                              <input
-                                className="input"
-                                value={item.note || ""}
-                                onChange={(e) =>
-                                  setClassroomVerificationForm((prev) => {
-                                    const next = [...prev.items];
-                                    next[index] = {
-                                      ...next[index],
-                                      note: e.target.value,
-                                    };
-                                    return { ...prev, items: next };
-                                  })
-                                }
-                                placeholder="Optional item note"
-                              />
-                            </td>
+                            </label>
+                          </div>
+                          <label className="field field-wide" style={{ minWidth: 0 }}>
+                            <span>Note</span>
+                            <input
+                              className="input"
+                              value={item.note || ""}
+                              onChange={(e) =>
+                                setClassroomVerificationForm((prev) => {
+                                  const next = [...prev.items];
+                                  next[index] = {
+                                    ...next[index],
+                                    note: e.target.value,
+                                  };
+                                  return { ...prev, items: next };
+                                })
+                              }
+                              placeholder="Optional item note"
+                            />
+                          </label>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Item</th>
+                            <th>Expected Qty</th>
+                            <th>Actual Qty</th>
+                            <th>Condition</th>
+                            <th>Action</th>
+                            <th>Note</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {classroomVerificationForm.items.map((item, index) => (
+                            <tr key={`classroom-verify-${item.assetDbId}`}>
+                              <td>
+                                <strong>{item.name}</strong>
+                                <div className="tiny">{item.assetId}</div>
+                              </td>
+                              <td>{item.expectedQty}</td>
+                              <td>
+                                <input
+                                  className="input"
+                                  type="number"
+                                  min="0"
+                                  value={item.actualQty}
+                                  onChange={(e) =>
+                                    setClassroomVerificationForm((prev) => {
+                                      const next = [...prev.items];
+                                      next[index] = {
+                                        ...next[index],
+                                        actualQty: Math.max(0, Number(e.target.value) || 0),
+                                      };
+                                      return { ...prev, items: next };
+                                    })
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  className="input"
+                                  value={item.condition}
+                                  onChange={(e) =>
+                                    setClassroomVerificationForm((prev) => {
+                                      const next = [...prev.items];
+                                      next[index] = {
+                                        ...next[index],
+                                        condition: e.target.value as ClassroomVerificationItemCheck["condition"],
+                                      };
+                                      return { ...prev, items: next };
+                                    })
+                                  }
+                                >
+                                  <option value="Good">Good</option>
+                                  <option value="Fair">Fair</option>
+                                  <option value="Damaged">Damaged</option>
+                                  <option value="Missing">Missing</option>
+                                </select>
+                              </td>
+                              <td>
+                                <select
+                                  className="input"
+                                  value={item.action}
+                                  onChange={(e) =>
+                                    setClassroomVerificationForm((prev) => {
+                                      const next = [...prev.items];
+                                      next[index] = {
+                                        ...next[index],
+                                        action: e.target.value as ClassroomVerificationItemCheck["action"],
+                                      };
+                                      return { ...prev, items: next };
+                                    })
+                                  }
+                                >
+                                  <option value="OK">OK</option>
+                                  <option value="Repair">Repair</option>
+                                  <option value="Replace">Replace</option>
+                                  <option value="Add More">Add More</option>
+                                  <option value="Missing">Missing</option>
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  className="input"
+                                  value={item.note || ""}
+                                  onChange={(e) =>
+                                    setClassroomVerificationForm((prev) => {
+                                      const next = [...prev.items];
+                                      next[index] = {
+                                        ...next[index],
+                                        note: e.target.value,
+                                      };
+                                      return { ...prev, items: next };
+                                    })
+                                  }
+                                  placeholder="Optional item note"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   <div className="asset-actions" style={{ marginTop: 12 }}>
                     <div className="tiny">
                       First version: verify current items in this classroom by month, qty, condition, and action.
                     </div>
-                    <div className="row-actions" style={{ gap: 8 }}>
-                      <button className="tab" onClick={cancelClassroomVerification}>Cancel</button>
-                      <button className="btn-primary" onClick={saveClassroomVerification}>Save Monthly Check</button>
+                    <div className="row-actions" style={{ gap: 8, width: isPhoneView ? "100%" : undefined }}>
+                      <button className="tab" style={isPhoneView ? { flex: 1 } : undefined} onClick={cancelClassroomVerification}>Cancel</button>
+                      <button className="btn-primary" style={isPhoneView ? { flex: 1 } : undefined} onClick={saveClassroomVerification}>Save Monthly Check</button>
                     </div>
                   </div>
                 </section>
               ) : null}
               <div
                 className="asset-gallery-grid"
-                style={{ gridTemplateColumns: isPhoneView ? "repeat(auto-fill, minmax(220px, 1fr))" : "repeat(5, minmax(0, 1fr))" }}
+                style={{ gridTemplateColumns: isPhoneView ? "repeat(2, minmax(0, 1fr))" : "repeat(5, minmax(0, 1fr))" }}
               >
                 {classroomDetailItems.length ? (
                   classroomDetailItems.map((item) => (
