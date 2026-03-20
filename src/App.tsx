@@ -6444,18 +6444,7 @@ export default function App() {
               }),
           }));
         case "classroom":
-          return [
-            {
-              key: "classroom.main",
-              label: lang === "km" ? "Gallery ថ្នាក់រៀន" : "Classroom Gallery",
-              active: tab === "classroom",
-              onSelect: () =>
-                startTabTransition(() => {
-                  setClassroomView("gallery");
-                  setTab("classroom");
-                }),
-            },
-          ];
+          return [];
         case "utilities":
           return [
             {
@@ -21634,10 +21623,13 @@ export default function App() {
     const assetCode = String(ticketMaintenanceModal.assetId || "").trim();
     return assetCode ? assets.find((asset) => String(asset.assetId || "").trim() === assetCode) || null : null;
   }, [assets, ticketMaintenanceModal]);
-  const detailAsset = useMemo(
-    () => assets.find((a) => a.id === assetDetailId) || null,
-    [assets, assetDetailId]
-  );
+  const detailAsset = useMemo(() => {
+    if (assetDetailId == null) return null;
+    return (
+      assets.find((a) => String(a.id ?? "") === String(assetDetailId)) ||
+      null
+    );
+  }, [assets, assetDetailId]);
   const sortByNewestDate = useCallback(
     (aDate?: string, bDate?: string) => {
       const aTime = Date.parse(aDate || "");
@@ -34103,14 +34095,6 @@ export default function App() {
                       : "Track classroom setup, furniture, and key room assets in one place."}
                   </div>
                 </div>
-              </div>
-              <div className="tabs" style={{ marginTop: 12 }}>
-                <button className={`tab ${classroomView === "dashboard" ? "tab-active" : ""}`} onClick={() => setClassroomView("dashboard")}>
-                  {lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard"}
-                </button>
-                <button className={`tab ${classroomView === "gallery" ? "tab-active" : ""}`} onClick={() => setClassroomView("gallery")}>
-                  {lang === "km" ? "Gallery ថ្នាក់រៀន" : "Classroom Gallery"}
-                </button>
               </div>
             </section>
 
