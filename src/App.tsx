@@ -45760,6 +45760,273 @@ export default function App() {
           </div>
         ) : null}
 
+        {tab === "classroom" && classroomDetailRoomId !== null && detailAsset ? (
+          <div
+            className="modal-backdrop"
+            style={{ zIndex: 1100 }}
+            onClick={() => setAssetDetailId(null)}
+          >
+            <section
+              className="panel modal-panel"
+              style={{ position: "relative", zIndex: 1101 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="panel-row">
+                <h2>Asset Detail - {detailAsset.assetId}</h2>
+                <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
+              </div>
+              {isAdmin ? (
+                <div className="asset-actions" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+                  <button type="button" className="btn-primary btn-small" onClick={() => openMaintenanceQuickFromDetail(detailAsset)}>
+                    Record Maintenance
+                  </button>
+                  <button type="button" className="btn-primary btn-small" onClick={() => openTransferQuickFromDetail(detailAsset)}>
+                    Record Transfer
+                  </button>
+                  <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
+                    Open Maintenance Page
+                  </button>
+                  <button type="button" className="tab btn-small" onClick={() => openTransferPageFromDetail(detailAsset)}>
+                    Open Transfer Page
+                  </button>
+                </div>
+              ) : null}
+              <div className="panel-row" style={{ marginTop: 6 }}>
+                <h3 className="section-title" style={{ margin: 0 }}>Asset Details</h3>
+                <button
+                  type="button"
+                  className="tab btn-small"
+                  onClick={() =>
+                    setAssetDetailSections((prev) => ({
+                      ...prev,
+                      showDetails: !prev.showDetails,
+                    }))
+                  }
+                >
+                  {assetDetailSections.showDetails ? "Hide Details" : "View Details"}
+                </button>
+              </div>
+              {assetDetailSections.showDetails ? (
+              <div className="form-grid asset-detail-grid">
+                <div className="field field-wide">
+                  <span>{lang === "km" ? "រូបថត" : "Photo"}</span>
+                  <div className="detail-value">
+                    {assetDisplayPhoto(detailAsset) ? (
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={assetDisplayPhoto(detailAsset)}
+                        alt={detailAsset.assetId}
+                        className="table-photo"
+                        style={{ width: 180, height: 180, objectFit: "cover", borderRadius: 12 }}
+                      />
+                    ) : (
+                      <div className="photo-placeholder">{t.noPhoto}</div>
+                    )}
+                  </div>
+                </div>
+                <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(detailAsset.campus)}</div></div>
+                <div className="field"><span>{t.location}</span><div className="detail-value">{detailAsset.location || "-"}</div></div>
+                <div className="field"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(detailAsset.status)}</div></div>
+                <div className="field"><span>{t.category}</span><div className="detail-value">{detailAsset.category}</div></div>
+                <div className="field"><span>{t.typeCode}</span><div className="detail-value">{detailAsset.type}</div></div>
+                <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</div></div>
+                <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
+                <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
+                <div className="field"><span>{lang === "km" ? "លេខសម្គាល់" : "Asset ID"}</span><div className="detail-value">{detailAsset.assetId}</div></div>
+                <div className="field"><span>Serial Number</span><div className="detail-value">{String(detailAsset.serialNumber || "").trim() || "-"}</div></div>
+                <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
+                <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
+                <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
+                {detailAsset.category === "IT" ? (
+                  <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
+                ) : null}
+                {detailFurniture ? (
+                  <>
+                    <div className="field"><span>Control Mode</span><div className="detail-value">{detailFurniture.trackingMode || "-"}</div></div>
+                    <div className="field"><span>Quantity</span><div className="detail-value">{detailFurniture.quantity || "1"}</div></div>
+                  </>
+                ) : null}
+                <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
+                <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
+                <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailFurniture ? furnitureVisibleSpecs(detailAsset.specs || "") : detailAsset.specs || "-"}</div></div>
+                <div className="field field-wide"><span>{lang === "km" ? "ចំណាំ" : "Notes"}</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
+              </div>
+              ) : null}
+
+              <div className="panel-row" style={{ marginTop: 8 }}>
+                <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
+                {detailMaintenanceEntries.length > 1 ? (
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    onClick={() =>
+                      setAssetDetailSections((prev) => ({
+                        ...prev,
+                        showAllMaintenance: !prev.showAllMaintenance,
+                      }))
+                    }
+                  >
+                    {assetDetailSections.showAllMaintenance ? "Show Latest" : "Show All"}
+                  </button>
+                ) : null}
+              </div>
+              <div className="table-wrap asset-detail-history-wrap">
+                <table className="maintenance-history-modal-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Work Status</th>
+                      <th>Condition</th>
+                      <th>Note</th>
+                      <th>Cost</th>
+                      <th>By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailMaintenanceVisibleEntries.length ? (
+                      detailMaintenanceVisibleEntries.map((h) => (
+                        <tr key={`classroom-detail-history-${h.id}`}>
+                          <td data-label="Date">{formatDate(h.date)}</td>
+                          <td data-label="Type">{h.type}</td>
+                          <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
+                          <td data-label="Condition">{h.condition || "-"}</td>
+                          <td data-label="Note">{h.note || "-"}</td>
+                          <td data-label="Cost">{h.cost || "-"}</td>
+                          <td data-label="By">{h.by || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="asset-detail-empty-row">
+                        <td colSpan={7}>No maintenance records yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="panel-row" style={{ marginTop: 8 }}>
+                <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
+                {detailTransferEntries.length > 1 ? (
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    onClick={() =>
+                      setAssetDetailSections((prev) => ({
+                        ...prev,
+                        showAllTransfer: !prev.showAllTransfer,
+                      }))
+                    }
+                  >
+                    {assetDetailSections.showAllTransfer ? "Show Latest" : "Show All"}
+                  </button>
+                ) : null}
+              </div>
+              <div className="table-wrap asset-detail-history-wrap">
+                <table className="asset-detail-transfer-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>From Campus</th>
+                      <th>From Location</th>
+                      <th>To Campus</th>
+                      <th>To Location</th>
+                      <th>Reason</th>
+                      <th>By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailTransferVisibleEntries.length ? (
+                      detailTransferVisibleEntries.map((h) => (
+                        <tr key={`classroom-detail-transfer-${h.id}`}>
+                          <td data-label="Date">{formatDate(h.date)}</td>
+                          <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
+                          <td data-label="From Location">{h.fromLocation || "-"}</td>
+                          <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
+                          <td data-label="To Location">{h.toLocation || "-"}</td>
+                          <td data-label="Reason">{h.reason || "-"}</td>
+                          <td data-label="By">{h.by || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="asset-detail-empty-row">
+                        <td colSpan={7}>No transfer location history yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 className="section-title">Assigned to History</h3>
+              <div className="table-wrap asset-detail-history-wrap">
+                <table className="asset-detail-custody-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Action</th>
+                      <th>From User</th>
+                      <th>To User</th>
+                      <th>Ack</th>
+                      <th>By</th>
+                      <th>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailCustodyEntries.length ? (
+                      detailCustodyEntries.map((h) => (
+                        <tr key={`classroom-detail-custody-${h.id}`}>
+                          <td data-label="Date">{formatDate(h.date)}</td>
+                          <td data-label="Action">{h.action || "-"}</td>
+                          <td data-label="From User">{h.fromUser || "-"}</td>
+                          <td data-label="To User">{h.toUser || "-"}</td>
+                          <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
+                          <td data-label="By">{h.by || "-"}</td>
+                          <td data-label="Note">{h.note || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="asset-detail-empty-row">
+                        <td colSpan={7}>No assigned history yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 className="section-title">Status Timeline</h3>
+              <div className="table-wrap asset-detail-history-wrap">
+                <table className="asset-detail-status-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailStatusEntries.length ? (
+                      detailStatusEntries.map((h) => (
+                        <tr key={`classroom-detail-status-${h.id}`}>
+                          <td data-label="Date">{formatDate(h.date)}</td>
+                          <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
+                          <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
+                          <td data-label="Reason">{h.reason || "-"}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="asset-detail-empty-row">
+                        <td colSpan={4}>No status timeline yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        ) : null}
+
         {inventoryDashboardModal ? (
           <div className="modal-backdrop" onClick={() => setInventoryDashboardModal(null)}>
             <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
