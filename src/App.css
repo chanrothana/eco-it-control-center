@@ -5120,6 +5120,30 @@ label.backup-action-btn {
   background: var(--matrix-row-bg);
 }
 
+.inventory-admin-matrix-total-cell {
+  vertical-align: middle;
+}
+
+.inventory-admin-matrix-refill-cell {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  line-height: 1.05;
+}
+
+.inventory-admin-matrix-refill-date {
+  font-size: 10px;
+  color: #6a7d9d;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inventory-admin-matrix-refill-qty {
+  font-size: 15px;
+  color: #314b78;
+  font-weight: 900;
+}
+
 .inventory-admin-matrix tbody tr:nth-child(even) td {
   background: #f3f8ff;
 }

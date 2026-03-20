@@ -17280,15 +17280,28 @@ export default function App() {
         const weekdayShort = Number.isNaN(date.getTime())
           ? ""
           : date.toLocaleDateString("en-US", { weekday: "short" });
+        const weekdayIndex = Number.isNaN(date.getTime()) ? -1 : date.getDay();
+        const dayClass =
+          weekdayIndex === 0 ? "day-head day-head-sun" : weekdayIndex === 6 ? "day-head day-head-sat" : "day-head day-head-weekday";
         const content = `<span class="day-main">${escapeHtml(shortLabel)}</span><span class="day-sub">${escapeHtml(weekdayShort)}</span>`;
         return splitByCampus
-          ? `<th colspan="${campuses.length}">${content}</th>`
-          : `<th>${content}</th>`;
+          ? `<th colspan="${campuses.length}" class="${dayClass}">${content}</th>`
+          : `<th class="${dayClass}">${content}</th>`;
       })
       .join("");
     const campusHeadHtml = splitByCampus
       ? `<tr>${days
-          .flatMap(() => campuses.map((campus) => `<th>${escapeHtml(campus)}</th>`))
+          .flatMap((day) => {
+            const date = new Date(`${day.ymd}T00:00:00`);
+            const weekdayIndex = Number.isNaN(date.getTime()) ? -1 : date.getDay();
+            const dayClass =
+              weekdayIndex === 0
+                ? "day-subhead day-subhead-sun"
+                : weekdayIndex === 6
+                  ? "day-subhead day-subhead-sat"
+                  : "day-subhead day-subhead-weekday";
+            return campuses.map((campus) => `<th class="${dayClass}">${escapeHtml(campus)}</th>`);
+          })
           .join("")}</tr>`
       : "";
     const bodyHtml = rows
@@ -17308,9 +17321,33 @@ export default function App() {
             : "";
         const cells = splitByCampus
           ? days
-              .flatMap((day) => campuses.map((campus) => `<td>${Number(row.dayCampusQty[`${day.ymd}::${campus}`] || 0) || ""}</td>`))
+              .flatMap((day) => {
+                const date = new Date(`${day.ymd}T00:00:00`);
+                const weekdayIndex = Number.isNaN(date.getTime()) ? -1 : date.getDay();
+                const cellClass =
+                  weekdayIndex === 0
+                    ? "matrix-cell matrix-cell-sun"
+                    : weekdayIndex === 6
+                      ? "matrix-cell matrix-cell-sat"
+                      : "matrix-cell matrix-cell-weekday";
+                return campuses.map(
+                  (campus) => `<td class="${cellClass}">${Number(row.dayCampusQty[`${day.ymd}::${campus}`] || 0) || ""}</td>`
+                );
+              })
               .join("")
-          : days.map((day) => `<td>${Number(row.dayQty[day.ymd] || 0) || ""}</td>`).join("");
+          : days
+              .map((day) => {
+                const date = new Date(`${day.ymd}T00:00:00`);
+                const weekdayIndex = Number.isNaN(date.getTime()) ? -1 : date.getDay();
+                const cellClass =
+                  weekdayIndex === 0
+                    ? "matrix-cell matrix-cell-sun"
+                    : weekdayIndex === 6
+                      ? "matrix-cell matrix-cell-sat"
+                      : "matrix-cell matrix-cell-weekday";
+                return `<td class="${cellClass}">${Number(row.dayQty[day.ymd] || 0) || ""}</td>`;
+              })
+              .join("");
         return `<tr>
           <td class="item-cell">
             ${itemPhoto}
@@ -17452,6 +17489,18 @@ export default function App() {
             color: #355443;
             font-weight: 800;
           }
+          .day-head-weekday {
+            background: #dfeafb;
+            color: #355487;
+          }
+          .day-head-sat {
+            background: #fff0dc;
+            color: #a0601a;
+          }
+          .day-head-sun {
+            background: #ffe7ef;
+            color: #c74864;
+          }
           thead tr:first-child th {
             border-top: 1px solid #d8e2dc;
           }
@@ -17474,6 +17523,18 @@ export default function App() {
           thead tr:nth-child(2) th {
             background: #f6f9f7;
             font-size: 8px;
+          }
+          .day-subhead-weekday {
+            background: #edf3ff !important;
+            color: #4a6897;
+          }
+          .day-subhead-sat {
+            background: #fff7eb !important;
+            color: #a06b26;
+          }
+          .day-subhead-sun {
+            background: #fff0f5 !important;
+            color: #c16177;
           }
           .day-main, .day-sub { display: block; line-height: 1.05; text-align: center; }
           .day-main { font-size: 9px; font-weight: 900; }
@@ -17521,6 +17582,15 @@ export default function App() {
           }
           tbody tr:nth-child(even) td {
             background: #fcfdfc;
+          }
+          td.matrix-cell-weekday {
+            background: #f3f7ff;
+          }
+          td.matrix-cell-sat {
+            background: #fff9ef;
+          }
+          td.matrix-cell-sun {
+            background: #fff4f8;
           }
           .report-footer {
             display: grid;
@@ -36126,7 +36196,20 @@ export default function App() {
                                     {row.stockBeforeRefill ?? ""}
                                   </td>
                                   <td className="inventory-admin-matrix-total-cell">
-                                    {row.monthlyRefill || ""}
+                                    {row.firstRefillDate || row.monthlyRefill ? (
+                                      <div className="inventory-admin-matrix-refill-cell">
+                                        {row.firstRefillDate ? (
+                                          <span className="inventory-admin-matrix-refill-date">
+                                            {formatDate(row.firstRefillDate)}
+                                          </span>
+                                        ) : null}
+                                        {row.monthlyRefill ? (
+                                          <strong className="inventory-admin-matrix-refill-qty">{row.monthlyRefill}</strong>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      ""
+                                    )}
                                   </td>
                                   {inventoryAdminOutDayMatrix.days.map((day) =>
                                     inventoryAdminOutDayMatrix.splitByCampus
