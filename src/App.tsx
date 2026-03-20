@@ -31759,8 +31759,16 @@ export default function App() {
             )}
 
             {((assetsView === "list" || assetsView === "gallery") || classroomDetailRoomId !== null) && detailAsset && (
-              <div className="modal-backdrop" onClick={() => setAssetDetailId(null)}>
-                <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="modal-backdrop"
+                style={classroomDetailRoomId !== null ? { zIndex: 1100 } : undefined}
+                onClick={() => setAssetDetailId(null)}
+              >
+                <section
+                  className="panel modal-panel"
+                  style={classroomDetailRoomId !== null ? { position: "relative", zIndex: 1101 } : undefined}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <div className="panel-row">
                     <h2>Asset Detail - {detailAsset.assetId}</h2>
                     <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
@@ -45707,9 +45715,6 @@ export default function App() {
                       key={item.key}
                       className="asset-gallery-card"
                       onClick={() => {
-                        setClassroomDetailRoomId(null);
-                        setAssetsView("gallery");
-                        setTab("assets");
                         setAssetDetailId(item.id);
                       }}
                     >
