@@ -10124,6 +10124,7 @@ export default function App() {
         total: number;
         monthlyRefill: number;
         stockBeforeRefill: number | null;
+        firstRefillDate: string | null;
       }
     >();
     const itemScopeMap = new Map<string, Array<{ id: number; campus: string; openingQty: number }>>();
@@ -10163,6 +10164,7 @@ export default function App() {
           total: 0,
           monthlyRefill: 0,
           stockBeforeRefill: null,
+          firstRefillDate: null,
         });
       }
       const row = itemMap.get(key)!;
@@ -10211,11 +10213,15 @@ export default function App() {
       let monthlyRefill = 0;
       let stockBeforeRefillTotal = 0;
       let hasRefill = false;
+      let firstRefillDateOverall: string | null = null;
 
       for (const [campus, refillMeta] of Array.from(campusRefillMap.entries())) {
         monthlyRefill += refillMeta.refillQty;
         if (!refillMeta.firstRefillDate) continue;
         hasRefill = true;
+        firstRefillDateOverall = firstRefillDateOverall
+          ? (firstRefillDateOverall < refillMeta.firstRefillDate ? firstRefillDateOverall : refillMeta.firstRefillDate)
+          : refillMeta.firstRefillDate;
         const campusItemIds = new Set(scopedItems.filter((item) => item.campus === campus).map((item) => item.id));
         const stockByItem = new Map<number, number>();
         for (const item of scopedItems.filter((item) => item.campus === campus)) {
@@ -10246,6 +10252,7 @@ export default function App() {
 
       row.monthlyRefill = monthlyRefill;
       row.stockBeforeRefill = hasRefill ? stockBeforeRefillTotal : null;
+      row.firstRefillDate = firstRefillDateOverall;
     }
 
     const rows = Array.from(itemMap.values()).sort((a, b) => b.total - a.total || a.itemCode.localeCompare(b.itemCode));
@@ -17291,6 +17298,14 @@ export default function App() {
         const itemPhoto = isRenderablePhotoSource(row.photo || "")
           ? `<img loading="lazy" decoding="async" src="${escapeHtml(String(row.photo || ""))}" alt="${escapeHtml(itemNameText)}" class="item-photo" />`
           : `<span class="item-photo item-photo-empty">-</span>`;
+        const refillDateText = row.firstRefillDate
+          ? escapeHtml(formatDate(row.firstRefillDate))
+          : "";
+        const refillAmountText = row.monthlyRefill ? escapeHtml(String(row.monthlyRefill)) : "";
+        const refillCellHtml =
+          refillDateText || refillAmountText
+            ? `<div class="refill-cell">${refillDateText ? `<span class="refill-date">${refillDateText}</span>` : ""}${refillAmountText ? `<strong class="refill-qty">${refillAmountText}</strong>` : ""}</div>`
+            : "";
         const cells = splitByCampus
           ? days
               .flatMap((day) => campuses.map((campus) => `<td>${Number(row.dayCampusQty[`${day.ymd}::${campus}`] || 0) || ""}</td>`))
@@ -17305,7 +17320,7 @@ export default function App() {
             </div>
           </td>
           <td><strong>${row.stockBeforeRefill ?? ""}</strong></td>
-          <td><strong>${row.monthlyRefill || ""}</strong></td>
+          <td>${refillCellHtml}</td>
           ${cells}
           <td><strong>${row.total}</strong></td>
         </tr>`;
@@ -17520,14 +17535,16 @@ export default function App() {
           }
           .signature-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 220px));
             gap: 14px;
+            justify-content: start;
           }
           .signature-card {
             border: 1px solid #dcc7a7;
             border-radius: 10px;
             padding: 12px 12px 10px;
-            min-height: 82px;
+            min-height: 76px;
+            width: 220px;
             background: #fffdfa;
           }
           .signature-campus {
@@ -17549,6 +17566,23 @@ export default function App() {
           }
           .signature-date-line {
             margin-top: 10px;
+          }
+          .refill-cell {
+            display: grid;
+            gap: 1px;
+            justify-items: center;
+            line-height: 1.05;
+          }
+          .refill-date {
+            font-size: 7px;
+            color: #6b806f;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+          .refill-qty {
+            font-size: 10px;
+            color: #1f3227;
+            font-weight: 900;
           }
           @page { size: A3 landscape; margin: 6mm; }
           @media print {
