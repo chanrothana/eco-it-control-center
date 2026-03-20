@@ -163,6 +163,7 @@ type ClassroomVerificationItemCheck = {
   assetDbId: number;
   assetId: string;
   name: string;
+  photo?: string;
   expectedQty: number;
   actualQty: number;
   condition: "Good" | "Fair" | "Damaged" | "Missing";
@@ -18120,6 +18121,7 @@ export default function App() {
           assetDbId: item.id,
           assetId: item.assetId,
           name: item.name,
+          photo: previous?.photo || item.photo || "",
           expectedQty: item.qty,
           actualQty: previous?.actualQty ?? item.qty,
           condition: previous?.condition || "Good",
@@ -18171,6 +18173,7 @@ export default function App() {
       created: classroomCurrentMonthVerification?.created || new Date().toISOString(),
       items: classroomVerificationForm.items.map((item) => ({
         ...item,
+        photo: String(item.photo || "").trim(),
         actualQty: Math.max(0, Number(item.actualQty) || 0),
         note: String(item.note || "").trim(),
       })),
@@ -45460,9 +45463,27 @@ export default function App() {
                           className="report-card"
                           style={{ padding: 12, display: "grid", gap: 10 }}
                         >
-                          <div style={{ display: "grid", gap: 2 }}>
-                            <strong style={{ color: "#22385f", fontSize: 16 }}>{item.name}</strong>
-                            <div className="tiny">{item.assetId}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, alignItems: "start" }}>
+                            <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+                              <strong style={{ color: "#22385f", fontSize: 16 }}>{item.name}</strong>
+                              <div className="tiny">{item.assetId}</div>
+                            </div>
+                            {isRenderablePhotoSource(item.photo || "") ? (
+                              <img
+                                loading="lazy"
+                                decoding="async"
+                                src={String(item.photo || "")}
+                                alt={item.name}
+                                style={{
+                                  width: 54,
+                                  height: 54,
+                                  objectFit: "cover",
+                                  borderRadius: 10,
+                                  border: "1px solid #d8e4f4",
+                                  background: "#fff",
+                                }}
+                              />
+                            ) : null}
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                             <div className="field" style={{ minWidth: 0 }}>
