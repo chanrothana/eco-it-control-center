@@ -24262,6 +24262,7 @@ export default function App() {
     }>;
     return assets
       .filter((asset) => asset.campus === classroomDetailRoom.campus && asset.location === classroomDetailRoom.location)
+      .filter((asset) => String(asset.type || "").trim().toUpperCase() !== "RMT")
       .map((asset) => {
         const furnitureDetails = parseFurnitureSpecs(asset.specs || "");
         const isFurniture = isFurnitureAsset(asset.category);
