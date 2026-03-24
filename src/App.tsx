@@ -581,6 +581,50 @@ type UtilityReading = {
   currentReading?: number;
   readerName?: string;
 };
+type RentalPrinter = {
+  id: number;
+  vendor: string;
+  machineCode: string;
+  machineName: string;
+  model: string;
+  serialNumber: string;
+  campus: string;
+  location: string;
+  monoRate: number;
+  colorRate: number;
+  openingMono: number;
+  openingColor: number;
+  contractStart?: string;
+  contractEnd?: string;
+  status: "Active" | "Inactive";
+  note?: string;
+  created: string;
+};
+type RentalPrinterCounter = {
+  id: number;
+  rentalPrinterId: number;
+  vendor: string;
+  machineCode: string;
+  machineName: string;
+  model: string;
+  campus: string;
+  location: string;
+  billingMonth: string;
+  readingDate: string;
+  previousMono: number;
+  currentMono: number;
+  monoUsage: number;
+  previousColor: number;
+  currentColor: number;
+  colorUsage: number;
+  monoRate: number;
+  colorRate: number;
+  amount: number;
+  submittedBy?: string;
+  photo?: string;
+  note?: string;
+  created: string;
+};
 
 type DashboardStats = {
   totalAssets: number;
@@ -723,6 +767,8 @@ type ServerSettings = {
   poolComplaints?: PoolComplaint[];
   utilityMeters?: UtilityMeter[];
   utilityReadings?: UtilityReading[];
+  rentalPrinters?: RentalPrinter[];
+  rentalPrinterCounters?: RentalPrinterCounter[];
   itemTemplates?: ItemTemplate[];
   furnitureModels?: FurnitureModelMaster[];
   vaultAccounts?: VaultAccount[];
@@ -1049,6 +1095,8 @@ const POOL_OPERATION_FALLBACK_KEY = "it_pool_operation_v1";
 const POOL_COMPLAINT_FALLBACK_KEY = "it_pool_complaint_v1";
 const UTILITY_METER_FALLBACK_KEY = "it_utility_meters_v1";
 const UTILITY_READING_FALLBACK_KEY = "it_utility_readings_v1";
+const RENTAL_PRINTER_FALLBACK_KEY = "it_rental_printers_v1";
+const RENTAL_PRINTER_COUNTER_FALLBACK_KEY = "it_rental_printer_counters_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
 const APP_VERSION = "v2.3.0";
 const DEFAULT_MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
@@ -3210,6 +3258,72 @@ function normalizeUtilityReadings(input: unknown): UtilityReading[] {
     .filter((row) => row.campus && row.billingMonth && row.invoiceDate);
 }
 
+function normalizeRentalPrinters(input: unknown): RentalPrinter[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): RentalPrinter => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      vendor: String(row.vendor || "").trim() || "LA",
+      machineCode: String(row.machineCode || "").trim().toUpperCase(),
+      machineName: String(row.machineName || "").trim(),
+      model: String(row.model || "").trim(),
+      serialNumber: String(row.serialNumber || "").trim(),
+      campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
+      location: String(row.location || "").trim(),
+      monoRate: Math.max(0, Number(row.monoRate) || 0),
+      colorRate: Math.max(0, Number(row.colorRate) || 0),
+      openingMono: Math.max(0, Number(row.openingMono) || 0),
+      openingColor: Math.max(0, Number(row.openingColor) || 0),
+      contractStart: String(row.contractStart || "").trim(),
+      contractEnd: String(row.contractEnd || "").trim(),
+      status: String(row.status || "").trim().toLowerCase() === "inactive" ? "Inactive" : "Active",
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.machineCode && row.machineName);
+}
+
+function normalizeRentalPrinterCounters(input: unknown): RentalPrinterCounter[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): RentalPrinterCounter => {
+      const previousMono = Math.max(0, Number(row.previousMono) || 0);
+      const currentMono = Math.max(previousMono, Number(row.currentMono) || 0);
+      const previousColor = Math.max(0, Number(row.previousColor) || 0);
+      const currentColor = Math.max(previousColor, Number(row.currentColor) || 0);
+      const monoRate = Math.max(0, Number(row.monoRate) || 0);
+      const colorRate = Math.max(0, Number(row.colorRate) || 0);
+      const monoUsage = Math.max(0, Number(row.monoUsage) || currentMono - previousMono);
+      const colorUsage = Math.max(0, Number(row.colorUsage) || currentColor - previousColor);
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        rentalPrinterId: Number(row.rentalPrinterId) || 0,
+        vendor: String(row.vendor || "").trim() || "LA",
+        machineCode: String(row.machineCode || "").trim().toUpperCase(),
+        machineName: String(row.machineName || "").trim(),
+        model: String(row.model || "").trim(),
+        campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
+        location: String(row.location || "").trim(),
+        billingMonth: String(row.billingMonth || "").trim(),
+        readingDate: String(row.readingDate || row.invoiceDate || "").trim(),
+        previousMono,
+        currentMono,
+        monoUsage,
+        previousColor,
+        currentColor,
+        colorUsage,
+        monoRate,
+        colorRate,
+        amount: Math.max(0, Number(row.amount) || monoUsage * monoRate + colorUsage * colorRate),
+        submittedBy: String(row.submittedBy || row.readerName || "").trim(),
+        photo: String(row.photo || "").trim(),
+        note: String(row.note || "").trim(),
+        created: String(row.created || "").trim() || new Date().toISOString(),
+      };
+    })
+    .filter((row) => row.rentalPrinterId && row.billingMonth && row.readingDate && row.machineCode);
+}
+
 function readPoolCleaningScheduleFallback(): PoolCleaningSchedule[] {
   try {
     const raw = localStorage.getItem(POOL_CLEANING_SCHEDULE_FALLBACK_KEY);
@@ -3306,6 +3420,34 @@ function readUtilityReadingFallback(): UtilityReading[] {
 
 function writeUtilityReadingFallback(rows: UtilityReading[]) {
   trySetLocalStorage(UTILITY_READING_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readRentalPrinterFallback(): RentalPrinter[] {
+  try {
+    const raw = localStorage.getItem(RENTAL_PRINTER_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeRentalPrinters(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeRentalPrinterFallback(rows: RentalPrinter[]) {
+  trySetLocalStorage(RENTAL_PRINTER_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readRentalPrinterCounterFallback(): RentalPrinterCounter[] {
+  try {
+    const raw = localStorage.getItem(RENTAL_PRINTER_COUNTER_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeRentalPrinterCounters(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeRentalPrinterCounterFallback(rows: RentalPrinterCounter[]) {
+  trySetLocalStorage(RENTAL_PRINTER_COUNTER_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function normalizeVaultAccounts(input: unknown): VaultAccount[] {
@@ -6331,7 +6473,9 @@ export default function App() {
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
   const [inventoryDashboardGroup, setInventoryDashboardGroup] = useState<InventoryBusinessGroup>("SUPPLY");
-  const [utilitiesView, setUtilitiesView] = useState<"entry" | "history" | "monthly" | "yearly">("entry");
+  const [utilitiesView, setUtilitiesView] = useState<
+    "entry" | "history" | "monthly" | "yearly" | "rental_setup" | "rental_entry" | "rental_report"
+  >("entry");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
@@ -6484,6 +6628,36 @@ export default function App() {
               onSelect: () =>
                 startTabTransition(() => {
                   setUtilitiesView("yearly");
+                  setTab("utilities");
+                }),
+            },
+            {
+              key: "utilities.rental_setup",
+              label: lang === "km" ? "ម៉ាស៊ីនជួល" : "Rental Setup",
+              active: utilitiesView === "rental_setup",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setUtilitiesView("rental_setup");
+                  setTab("utilities");
+                }),
+            },
+            {
+              key: "utilities.rental_entry",
+              label: lang === "km" ? "បញ្ចូលកុងទ័រជួល" : "Rental Entry",
+              active: utilitiesView === "rental_entry",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setUtilitiesView("rental_entry");
+                  setTab("utilities");
+                }),
+            },
+            {
+              key: "utilities.rental_report",
+              label: lang === "km" ? "របាយការណ៍ LA" : "LA Report",
+              active: utilitiesView === "rental_report",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setUtilitiesView("rental_report");
                   setTab("utilities");
                 }),
             },
@@ -7066,6 +7240,10 @@ export default function App() {
   const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>([]);
   const [utilityMeters, setUtilityMeters] = useState<UtilityMeter[]>(() => readUtilityMeterFallback());
   const [utilityReadings, setUtilityReadings] = useState<UtilityReading[]>(() => readUtilityReadingFallback());
+  const [rentalPrinters, setRentalPrinters] = useState<RentalPrinter[]>(() => readRentalPrinterFallback());
+  const [rentalPrinterCounters, setRentalPrinterCounters] = useState<RentalPrinterCounter[]>(
+    () => readRentalPrinterCounterFallback()
+  );
   const [poolCleaningSchedules, setPoolCleaningSchedules] = useState<PoolCleaningSchedule[]>([]);
   const [poolEquipmentChecks, setPoolEquipmentChecks] = useState<PoolEquipmentCheck[]>([]);
   const [poolChemicalRecords, setPoolChemicalRecords] = useState<PoolChemicalRecord[]>([]);
@@ -7610,6 +7788,38 @@ export default function App() {
     note: "",
     photo: "",
   });
+  const [rentalPrinterMessage, setRentalPrinterMessage] = useState("");
+  const [editingRentalPrinterId, setEditingRentalPrinterId] = useState<number | null>(null);
+  const [rentalPrinterForm, setRentalPrinterForm] = useState({
+    vendor: "LA",
+    machineCode: "",
+    machineName: "",
+    model: "",
+    serialNumber: "",
+    campus: CAMPUS_LIST[0],
+    location: "",
+    monoRate: "",
+    colorRate: "",
+    openingMono: "0",
+    openingColor: "0",
+    contractStart: "",
+    contractEnd: "",
+    status: "Active" as RentalPrinter["status"],
+    note: "",
+  });
+  const [rentalCounterFileKey, setRentalCounterFileKey] = useState(0);
+  const [rentalCounterForm, setRentalCounterForm] = useState({
+    rentalPrinterId: "",
+    billingMonth: toYmd(new Date()).slice(0, 7),
+    readingDate: toYmd(new Date()),
+    currentMono: "",
+    currentColor: "",
+    amount: "",
+    submittedBy: "",
+    photo: "",
+    note: "",
+  });
+  const [rentalReportMonth, setRentalReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [transferFilterCampus, setTransferFilterCampus] = useState("ALL");
   const [transferFilterLocation, setTransferFilterLocation] = useState("ALL");
   const [transferFilterCategory, setTransferFilterCategory] = useState("ALL");
@@ -8648,6 +8858,12 @@ export default function App() {
     writeUtilityReadingFallback(utilityReadings);
   }, [utilityReadings]);
   useEffect(() => {
+    writeRentalPrinterFallback(rentalPrinters);
+  }, [rentalPrinters]);
+  useEffect(() => {
+    writeRentalPrinterCounterFallback(rentalPrinterCounters);
+  }, [rentalPrinterCounters]);
+  useEffect(() => {
     writePoolCleaningScheduleFallback(poolCleaningSchedules);
   }, [poolCleaningSchedules]);
   useEffect(() => {
@@ -8761,6 +8977,80 @@ export default function App() {
     }
     return Array.from(map.values()).sort((a, b) => b.year.localeCompare(a.year));
   }, [utilityReadings]);
+  const rentalPrinterOptions = useMemo(
+    () =>
+      [...rentalPrinters].sort((a, b) =>
+        `${a.vendor} ${a.machineCode}`.localeCompare(`${b.vendor} ${b.machineCode}`, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        })
+      ),
+    [rentalPrinters]
+  );
+  const selectedRentalPrinter = useMemo(
+    () => rentalPrinters.find((row) => Number(row.id) === Number(rentalCounterForm.rentalPrinterId)) || null,
+    [rentalCounterForm.rentalPrinterId, rentalPrinters]
+  );
+  const selectedRentalPrinterPreviousCounter = useMemo(() => {
+    if (!selectedRentalPrinter) return null;
+    const previousRows = rentalPrinterCounters
+      .filter(
+        (row) =>
+          Number(row.rentalPrinterId) === Number(selectedRentalPrinter.id) &&
+          String(row.billingMonth || "").trim() !== String(rentalCounterForm.billingMonth || "").trim()
+      )
+      .sort((a, b) => {
+        const aKey = `${a.billingMonth}-${a.readingDate}`;
+        const bKey = `${b.billingMonth}-${b.readingDate}`;
+        return bKey.localeCompare(aKey);
+      });
+    const latest = previousRows[0];
+    return latest
+      ? { previousMono: latest.currentMono, previousColor: latest.currentColor }
+      : { previousMono: selectedRentalPrinter.openingMono, previousColor: selectedRentalPrinter.openingColor };
+  }, [rentalCounterForm.billingMonth, rentalPrinterCounters, selectedRentalPrinter]);
+  const rentalCounterPreview = useMemo(() => {
+    const previousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? 0;
+    const previousColor = selectedRentalPrinterPreviousCounter?.previousColor ?? 0;
+    const currentMono = Math.max(previousMono, Number(rentalCounterForm.currentMono) || 0);
+    const currentColor = Math.max(previousColor, Number(rentalCounterForm.currentColor) || 0);
+    const monoUsage = Math.max(0, currentMono - previousMono);
+    const colorUsage = Math.max(0, currentColor - previousColor);
+    const autoAmount = selectedRentalPrinter
+      ? monoUsage * Number(selectedRentalPrinter.monoRate || 0) + colorUsage * Number(selectedRentalPrinter.colorRate || 0)
+      : 0;
+    return { previousMono, previousColor, currentMono, currentColor, monoUsage, colorUsage, autoAmount };
+  }, [rentalCounterForm.currentColor, rentalCounterForm.currentMono, selectedRentalPrinter, selectedRentalPrinterPreviousCounter]);
+  const rentalReportRows = useMemo(() => {
+    return rentalPrinterCounters
+      .filter((row) => row.billingMonth === rentalReportMonth)
+      .sort((a, b) => {
+        const campusCompare = compareCampusByCode(a.campus, b.campus);
+        if (campusCompare !== 0) return campusCompare;
+        return `${a.vendor} ${a.machineCode}`.localeCompare(`${b.vendor} ${b.machineCode}`, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      });
+  }, [rentalPrinterCounters, rentalReportMonth]);
+  const rentalReportSummary = useMemo(() => {
+    return rentalReportRows.reduce(
+      (acc, row) => {
+        acc.printers += 1;
+        acc.monoUsage += Number(row.monoUsage) || 0;
+        acc.colorUsage += Number(row.colorUsage) || 0;
+        acc.amount += Number(row.amount) || 0;
+        return acc;
+      },
+      { printers: 0, monoUsage: 0, colorUsage: 0, amount: 0 }
+    );
+  }, [rentalReportRows]);
+  const rentalMissingPrinterRows = useMemo(() => {
+    const reportSet = new Set(rentalReportRows.map((row) => Number(row.rentalPrinterId)));
+    return rentalPrinters
+      .filter((row) => row.status === "Active" && !reportSet.has(Number(row.id)))
+      .sort((a, b) => compareCampusByCode(a.campus, b.campus));
+  }, [rentalPrinters, rentalReportRows]);
 
   const currentTypeOptions = useMemo(
     () => {
@@ -12024,6 +12314,8 @@ export default function App() {
         const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
         const serverUtilityMeters = normalizeUtilityMeters(settingsRes.settings?.utilityMeters);
         const serverUtilityReadings = normalizeUtilityReadings(settingsRes.settings?.utilityReadings);
+        const serverRentalPrinters = normalizeRentalPrinters(settingsRes.settings?.rentalPrinters);
+        const serverRentalPrinterCounters = normalizeRentalPrinterCounters(settingsRes.settings?.rentalPrinterCounters);
         const serverPoolCleaningSchedules = normalizePoolCleaningSchedules(settingsRes.settings?.poolCleaningSchedules);
         const serverPoolEquipmentChecks = normalizePoolEquipmentChecks(settingsRes.settings?.poolEquipmentChecks);
         const serverPoolChemicalRecords = normalizePoolChemicalRecords(settingsRes.settings?.poolChemicalRecords);
@@ -12034,6 +12326,8 @@ export default function App() {
         const fallbackInventoryTxns = readInventoryTxnFallback();
         const fallbackUtilityMeters = readUtilityMeterFallback();
         const fallbackUtilityReadings = readUtilityReadingFallback();
+        const fallbackRentalPrinters = readRentalPrinterFallback();
+        const fallbackRentalPrinterCounters = readRentalPrinterCounterFallback();
         const fallbackPoolCleaningSchedules = readPoolCleaningScheduleFallback();
         const fallbackPoolEquipmentChecks = readPoolEquipmentFallback();
         const fallbackPoolChemicalRecords = readPoolChemicalFallback();
@@ -12043,6 +12337,10 @@ export default function App() {
         const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
         const nextUtilityMeters = serverUtilityMeters.length ? serverUtilityMeters : fallbackUtilityMeters;
         const nextUtilityReadings = serverUtilityReadings.length ? serverUtilityReadings : fallbackUtilityReadings;
+        const nextRentalPrinters = serverRentalPrinters.length ? serverRentalPrinters : fallbackRentalPrinters;
+        const nextRentalPrinterCounters = serverRentalPrinterCounters.length
+          ? serverRentalPrinterCounters
+          : fallbackRentalPrinterCounters;
         const nextPoolCleaningSchedules = serverPoolCleaningSchedules.length
           ? serverPoolCleaningSchedules
           : fallbackPoolCleaningSchedules;
@@ -12090,6 +12388,16 @@ export default function App() {
           ? serverFurnitureModels
           : fallbackFurnitureModels;
         const settingsObj = settingsRes.settings || {};
+        setRentalPrinters(
+          Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinters")
+            ? nextRentalPrinters
+            : fallbackRentalPrinters
+        );
+        setRentalPrinterCounters(
+          Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinterCounters")
+            ? nextRentalPrinterCounters
+            : fallbackRentalPrinterCounters
+        );
         setVaultAccounts(
           Object.prototype.hasOwnProperty.call(settingsObj, "vaultAccounts")
             ? nextVaultAccounts
@@ -12151,6 +12459,8 @@ export default function App() {
         setInventoryTxns(readInventoryTxnFallback());
         setUtilityMeters(readUtilityMeterFallback());
         setUtilityReadings(readUtilityReadingFallback());
+        setRentalPrinters(readRentalPrinterFallback());
+        setRentalPrinterCounters(readRentalPrinterCounterFallback());
         setPoolCleaningSchedules(readPoolCleaningScheduleFallback());
         setPoolEquipmentChecks(readPoolEquipmentFallback());
         setPoolChemicalRecords(readPoolChemicalFallback());
@@ -13715,6 +14025,26 @@ export default function App() {
     }
   }
 
+  async function saveRentalPrinterSettingsToServer(
+    nextPrinters: RentalPrinter[],
+    nextCounters: RentalPrinterCounter[]
+  ) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settings: {
+            rentalPrinters: nextPrinters,
+            rentalPrinterCounters: nextCounters,
+          },
+        }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
   async function onUtilityMeterPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -13767,6 +14097,24 @@ export default function App() {
       } else {
         setUtilityMessage("Invoice image uploaded. Auto fill is available only in the local macOS app.");
       }
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onRentalCounterPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setRentalCounterForm((prev) => ({ ...prev, photo }));
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
@@ -14079,6 +14427,208 @@ export default function App() {
       await saveUtilitySettingsToServer(utilityMeters, nextReadings);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete utility reading");
+    }
+  }
+
+  async function saveRentalPrinter() {
+    if (!requireAdminAction()) return;
+    if (!rentalPrinterForm.machineCode.trim() || !rentalPrinterForm.machineName.trim() || !rentalPrinterForm.location.trim()) {
+      setError("Machine code, machine name, and location are required.");
+      return;
+    }
+    const row: RentalPrinter = {
+      id: editingRentalPrinterId || Date.now(),
+      vendor: rentalPrinterForm.vendor.trim() || "LA",
+      machineCode: rentalPrinterForm.machineCode.trim().toUpperCase(),
+      machineName: rentalPrinterForm.machineName.trim(),
+      model: rentalPrinterForm.model.trim(),
+      serialNumber: rentalPrinterForm.serialNumber.trim(),
+      campus: rentalPrinterForm.campus,
+      location: rentalPrinterForm.location.trim(),
+      monoRate: Math.max(0, Number(rentalPrinterForm.monoRate) || 0),
+      colorRate: Math.max(0, Number(rentalPrinterForm.colorRate) || 0),
+      openingMono: Math.max(0, Number(rentalPrinterForm.openingMono) || 0),
+      openingColor: Math.max(0, Number(rentalPrinterForm.openingColor) || 0),
+      contractStart: rentalPrinterForm.contractStart,
+      contractEnd: rentalPrinterForm.contractEnd,
+      status: rentalPrinterForm.status,
+      note: rentalPrinterForm.note.trim(),
+      created:
+        rentalPrinters.find((printer) => Number(printer.id) === Number(editingRentalPrinterId))?.created ||
+        new Date().toISOString(),
+    };
+    const duplicate = rentalPrinters.find(
+      (printer) =>
+        Number(printer.id) !== Number(editingRentalPrinterId) &&
+        String(printer.machineCode || "").trim().toUpperCase() === row.machineCode
+    );
+    if (duplicate) {
+      setError(`Machine code already exists (${duplicate.machineCode}).`);
+      return;
+    }
+    const nextPrinters = editingRentalPrinterId
+      ? rentalPrinters.map((printer) => (Number(printer.id) === Number(editingRentalPrinterId) ? row : printer))
+      : [row, ...rentalPrinters];
+    setRentalPrinters(nextPrinters);
+    setEditingRentalPrinterId(null);
+    setRentalPrinterForm({
+      vendor: "LA",
+      machineCode: "",
+      machineName: "",
+      model: "",
+      serialNumber: "",
+      campus: CAMPUS_LIST[0],
+      location: "",
+      monoRate: "",
+      colorRate: "",
+      openingMono: "0",
+      openingColor: "0",
+      contractStart: "",
+      contractEnd: "",
+      status: "Active",
+      note: "",
+    });
+    setRentalPrinterMessage(`Rental printer ${row.machineCode} saved.`);
+    try {
+      await saveRentalPrinterSettingsToServer(nextPrinters, rentalPrinterCounters);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save rental printer.");
+    }
+  }
+
+  function startEditRentalPrinter(printer: RentalPrinter) {
+    setEditingRentalPrinterId(printer.id);
+    setUtilitiesView("rental_setup");
+    setRentalPrinterForm({
+      vendor: printer.vendor || "LA",
+      machineCode: printer.machineCode,
+      machineName: printer.machineName,
+      model: printer.model || "",
+      serialNumber: printer.serialNumber || "",
+      campus: printer.campus,
+      location: printer.location || "",
+      monoRate: String(printer.monoRate || 0),
+      colorRate: String(printer.colorRate || 0),
+      openingMono: String(printer.openingMono || 0),
+      openingColor: String(printer.openingColor || 0),
+      contractStart: printer.contractStart || "",
+      contractEnd: printer.contractEnd || "",
+      status: printer.status,
+      note: printer.note || "",
+    });
+  }
+
+  async function deleteRentalPrinter(printerId: number) {
+    if (!requireAdminAction()) return;
+    const nextPrinters = rentalPrinters.filter((row) => Number(row.id) !== Number(printerId));
+    const nextCounters = rentalPrinterCounters.filter((row) => Number(row.rentalPrinterId) !== Number(printerId));
+    setRentalPrinters(nextPrinters);
+    setRentalPrinterCounters(nextCounters);
+    if (Number(editingRentalPrinterId) === Number(printerId)) {
+      setEditingRentalPrinterId(null);
+    }
+    try {
+      await saveRentalPrinterSettingsToServer(nextPrinters, nextCounters);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete rental printer.");
+    }
+  }
+
+  async function saveRentalPrinterCounter() {
+    if (!requireAdminAction()) return;
+    const printer = rentalPrinters.find((row) => Number(row.id) === Number(rentalCounterForm.rentalPrinterId));
+    if (!printer) {
+      setError("Please select a rental printer.");
+      return;
+    }
+    if (!rentalCounterForm.billingMonth || !rentalCounterForm.readingDate) {
+      setError("Billing month and reading date are required.");
+      return;
+    }
+    const duplicate = rentalPrinterCounters.find(
+      (row) =>
+        Number(row.rentalPrinterId) === Number(printer.id) &&
+        String(row.billingMonth || "").trim() === String(rentalCounterForm.billingMonth || "").trim()
+    );
+    if (duplicate) {
+      setError(`Counter for ${printer.machineCode} in ${rentalCounterForm.billingMonth} already exists.`);
+      return;
+    }
+    const previousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? printer.openingMono;
+    const previousColor = selectedRentalPrinterPreviousCounter?.previousColor ?? printer.openingColor;
+    const currentMono = Number(rentalCounterForm.currentMono);
+    const currentColor = Number(rentalCounterForm.currentColor);
+    if (!Number.isFinite(currentMono) || currentMono < previousMono) {
+      setError(`Mono counter must be ${previousMono} or higher.`);
+      return;
+    }
+    if (!Number.isFinite(currentColor) || currentColor < previousColor) {
+      setError(`Color counter must be ${previousColor} or higher.`);
+      return;
+    }
+    const monoUsage = currentMono - previousMono;
+    const colorUsage = currentColor - previousColor;
+    const amount =
+      rentalCounterForm.amount === ""
+        ? monoUsage * Number(printer.monoRate || 0) + colorUsage * Number(printer.colorRate || 0)
+        : Math.max(0, Number(String(rentalCounterForm.amount).replace(/,/g, "")) || 0);
+    const row: RentalPrinterCounter = {
+      id: Date.now(),
+      rentalPrinterId: printer.id,
+      vendor: printer.vendor || "LA",
+      machineCode: printer.machineCode,
+      machineName: printer.machineName,
+      model: printer.model,
+      campus: printer.campus,
+      location: printer.location,
+      billingMonth: rentalCounterForm.billingMonth,
+      readingDate: rentalCounterForm.readingDate,
+      previousMono,
+      currentMono,
+      monoUsage,
+      previousColor,
+      currentColor,
+      colorUsage,
+      monoRate: Number(printer.monoRate || 0),
+      colorRate: Number(printer.colorRate || 0),
+      amount,
+      submittedBy: rentalCounterForm.submittedBy.trim(),
+      photo: rentalCounterForm.photo || "",
+      note: rentalCounterForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextCounters = [row, ...rentalPrinterCounters].sort((a, b) =>
+      `${b.billingMonth}-${b.readingDate}`.localeCompare(`${a.billingMonth}-${a.readingDate}`)
+    );
+    setRentalPrinterCounters(nextCounters);
+    setRentalCounterForm((prev) => ({
+      rentalPrinterId: prev.rentalPrinterId,
+      billingMonth: toYmd(new Date()).slice(0, 7),
+      readingDate: toYmd(new Date()),
+      currentMono: "",
+      currentColor: "",
+      amount: "",
+      submittedBy: "",
+      photo: "",
+      note: "",
+    }));
+    setRentalCounterFileKey((key) => key + 1);
+    setRentalPrinterMessage(`Rental counter saved for ${printer.machineCode} (${row.billingMonth}).`);
+    try {
+      await saveRentalPrinterSettingsToServer(rentalPrinters, nextCounters);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save rental printer counter.");
+    }
+  }
+
+  async function deleteRentalPrinterCounter(counterId: number) {
+    if (!requireAdminAction()) return;
+    const nextCounters = rentalPrinterCounters.filter((row) => Number(row.id) !== Number(counterId));
+    setRentalPrinterCounters(nextCounters);
+    try {
+      await saveRentalPrinterSettingsToServer(rentalPrinters, nextCounters);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete rental printer counter.");
     }
   }
 
@@ -40688,8 +41238,12 @@ export default function App() {
               <button className={`tab ${utilitiesView === "history" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("history")}>History</button>
               <button className={`tab ${utilitiesView === "monthly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("monthly")}>Monthly Comparison</button>
               <button className={`tab ${utilitiesView === "yearly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("yearly")}>Yearly Report</button>
+              <button className={`tab ${utilitiesView === "rental_setup" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("rental_setup")}>Rental Setup</button>
+              <button className={`tab ${utilitiesView === "rental_entry" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("rental_entry")}>Rental Entry</button>
+              <button className={`tab ${utilitiesView === "rental_report" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("rental_report")}>LA Report</button>
             </div>
             {utilityMessage ? <p className="tiny">{utilityMessage}</p> : null}
+            {rentalPrinterMessage ? <p className="tiny">{rentalPrinterMessage}</p> : null}
 
             {utilitiesView === "entry" && (
               <>
@@ -40930,6 +41484,339 @@ export default function App() {
                           <td>{row.amount.toFixed(2)}</td>
                         </tr>
                       )) : <tr><td colSpan={4}>No campus utility report data yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {utilitiesView === "rental_setup" && (
+              <>
+                <h2>Rental Printer Master</h2>
+                <div className="form-grid inventory-item-grid">
+                  <label className="field">
+                    <span>Vendor</span>
+                    <input className="input" value={rentalPrinterForm.vendor} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, vendor: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Machine Code</span>
+                    <input className="input" value={rentalPrinterForm.machineCode} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, machineCode: e.target.value.toUpperCase() }))} placeholder="LA-CANON-01" />
+                  </label>
+                  <label className="field">
+                    <span>Machine Name</span>
+                    <input className="input" value={rentalPrinterForm.machineName} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, machineName: e.target.value }))} placeholder="Canon Counter Room" />
+                  </label>
+                  <label className="field">
+                    <span>Model</span>
+                    <input className="input" value={rentalPrinterForm.model} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, model: e.target.value }))} placeholder="Canon iR-ADV C5850" />
+                  </label>
+                  <label className="field">
+                    <span>Serial Number</span>
+                    <input className="input" value={rentalPrinterForm.serialNumber} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, serialNumber: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select className="input" value={rentalPrinterForm.campus} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, campus: e.target.value }))}>
+                      {campusOptions.map((campus) => <option key={`rental-printer-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Location</span>
+                    <input className="input" value={rentalPrinterForm.location} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, location: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Mono Rate</span>
+                    <input className="input" inputMode="decimal" value={rentalPrinterForm.monoRate} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, monoRate: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="0.03" />
+                  </label>
+                  <label className="field">
+                    <span>Color Rate</span>
+                    <input className="input" inputMode="decimal" value={rentalPrinterForm.colorRate} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, colorRate: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="0.10" />
+                  </label>
+                  <label className="field">
+                    <span>Opening Mono</span>
+                    <input className="input" inputMode="numeric" value={rentalPrinterForm.openingMono} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, openingMono: e.target.value.replace(/[^0-9]/g, "") }))} />
+                  </label>
+                  <label className="field">
+                    <span>Opening Color</span>
+                    <input className="input" inputMode="numeric" value={rentalPrinterForm.openingColor} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, openingColor: e.target.value.replace(/[^0-9]/g, "") }))} />
+                  </label>
+                  <label className="field">
+                    <span>Contract Start</span>
+                    <input className="input" type="date" value={rentalPrinterForm.contractStart} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, contractStart: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Contract End</span>
+                    <input className="input" type="date" value={rentalPrinterForm.contractEnd} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, contractEnd: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Status</span>
+                    <select className="input" value={rentalPrinterForm.status} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, status: e.target.value as RentalPrinter["status"] }))}>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.notes}</span>
+                    <textarea className="input" value={rentalPrinterForm.note} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, note: e.target.value }))} />
+                  </label>
+                </div>
+                <div className="row-actions">
+                  {editingRentalPrinterId ? (
+                    <button
+                      className="tab"
+                      onClick={() => {
+                        setEditingRentalPrinterId(null);
+                        setRentalPrinterForm({
+                          vendor: "LA",
+                          machineCode: "",
+                          machineName: "",
+                          model: "",
+                          serialNumber: "",
+                          campus: CAMPUS_LIST[0],
+                          location: "",
+                          monoRate: "",
+                          colorRate: "",
+                          openingMono: "0",
+                          openingColor: "0",
+                          contractStart: "",
+                          contractEnd: "",
+                          status: "Active",
+                          note: "",
+                        });
+                      }}
+                    >
+                      Cancel Edit
+                    </button>
+                  ) : null}
+                  <button className="btn-primary" disabled={!isAdmin} onClick={() => void saveRentalPrinter()}>
+                    {editingRentalPrinterId ? "Update Rental Printer" : "Add Rental Printer"}
+                  </button>
+                </div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Vendor</th>
+                        <th>Machine Code</th>
+                        <th>Machine Name</th>
+                        <th>Model</th>
+                        <th>{t.campus}</th>
+                        <th>Location</th>
+                        <th>Mono Rate</th>
+                        <th>Color Rate</th>
+                        <th>Status</th>
+                        <th>{t.edit}</th>
+                        <th>{t.delete}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rentalPrinterOptions.length ? rentalPrinterOptions.map((row) => (
+                        <tr key={`rental-printer-row-${row.id}`}>
+                          <td>{row.vendor || "-"}</td>
+                          <td><strong>{row.machineCode}</strong></td>
+                          <td>{row.machineName}</td>
+                          <td>{row.model || "-"}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.location || "-"}</td>
+                          <td>{row.monoRate.toFixed(3)}</td>
+                          <td>{row.colorRate.toFixed(3)}</td>
+                          <td>{row.status}</td>
+                          <td><button className="tab" disabled={!isAdmin} onClick={() => startEditRentalPrinter(row)}>{t.edit}</button></td>
+                          <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinter(row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={11}>No rental printers yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {utilitiesView === "rental_entry" && (
+              <>
+                <h2>Rental Printer Monthly Counter Entry</h2>
+                <div className="form-grid inventory-item-grid">
+                  <label className="field">
+                    <span>Rental Printer</span>
+                    <select className="input" value={rentalCounterForm.rentalPrinterId} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, rentalPrinterId: e.target.value }))}>
+                      <option value="">Select printer</option>
+                      {rentalPrinterOptions
+                        .filter((row) => row.status === "Active")
+                        .map((row) => (
+                          <option key={`rental-counter-printer-${row.id}`} value={row.id}>
+                            {row.vendor} | {row.machineCode} | {row.machineName}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Billing Month</span>
+                    <input className="input" type="month" value={rentalCounterForm.billingMonth} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, billingMonth: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Reading Date</span>
+                    <input className="input" type="date" value={rentalCounterForm.readingDate} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, readingDate: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Previous Mono</span>
+                    <input className="input" value={selectedRentalPrinterPreviousCounter ? String(selectedRentalPrinterPreviousCounter.previousMono) : ""} readOnly />
+                  </label>
+                  <label className="field">
+                    <span>Current Mono</span>
+                    <input className="input" inputMode="numeric" value={rentalCounterForm.currentMono} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, currentMono: e.target.value.replace(/[^0-9]/g, "") }))} />
+                  </label>
+                  <label className="field">
+                    <span>Mono Usage</span>
+                    <input className="input" value={String(rentalCounterPreview.monoUsage)} readOnly />
+                  </label>
+                  <label className="field">
+                    <span>Previous Color</span>
+                    <input className="input" value={selectedRentalPrinterPreviousCounter ? String(selectedRentalPrinterPreviousCounter.previousColor) : ""} readOnly />
+                  </label>
+                  <label className="field">
+                    <span>Current Color</span>
+                    <input className="input" inputMode="numeric" value={rentalCounterForm.currentColor} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, currentColor: e.target.value.replace(/[^0-9]/g, "") }))} />
+                  </label>
+                  <label className="field">
+                    <span>Color Usage</span>
+                    <input className="input" value={String(rentalCounterPreview.colorUsage)} readOnly />
+                  </label>
+                  <label className="field">
+                    <span>Auto Amount</span>
+                    <input className="input" value={rentalCounterPreview.autoAmount.toFixed(2)} readOnly />
+                  </label>
+                  <label className="field">
+                    <span>Final Amount</span>
+                    <input className="input" inputMode="decimal" value={rentalCounterForm.amount} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, amount: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="Leave blank to use auto amount" />
+                  </label>
+                  <label className="field">
+                    <span>Submitted By</span>
+                    <input className="input" value={rentalCounterForm.submittedBy} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, submittedBy: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Counter Photo</span>
+                    <input key={rentalCounterFileKey} type="file" accept="image/*" className="input" onChange={onRentalCounterPhotoFile} />
+                    {rentalCounterForm.photo ? <img loading="lazy" decoding="async" src={rentalCounterForm.photo} alt="rental counter" className="table-photo" style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }} /> : null}
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.notes}</span>
+                    <textarea className="input" value={rentalCounterForm.note} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, note: e.target.value }))} />
+                  </label>
+                </div>
+                <div className="row-actions">
+                  <button className="btn-primary" disabled={!isAdmin || !rentalCounterForm.rentalPrinterId} onClick={() => void saveRentalPrinterCounter()}>
+                    Save Rental Counter
+                  </button>
+                </div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Month</th>
+                        <th>Machine</th>
+                        <th>{t.campus}</th>
+                        <th>Mono Usage</th>
+                        <th>Color Usage</th>
+                        <th>Amount</th>
+                        <th>By</th>
+                        <th>{t.delete}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
+                        <tr key={`rental-counter-row-${row.id}`}>
+                          <td>{row.billingMonth}</td>
+                          <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.monoUsage}</td>
+                          <td>{row.colorUsage}</td>
+                          <td>{row.amount.toFixed(2)}</td>
+                          <td>{row.submittedBy || "-"}</td>
+                          <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={8}>No rental counter records yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {utilitiesView === "rental_report" && (
+              <>
+                <div className="report-title-row">
+                  <h2>LA Rental Counter Report</h2>
+                  <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
+                    <Printer size={16} aria-hidden={true} />
+                    <span>Print Report</span>
+                  </button>
+                </div>
+                <div className="panel-filters report-filters report-filter-row" style={{ marginBottom: 12 }}>
+                  <input className="input" type="month" value={rentalReportMonth} onChange={(e) => setRentalReportMonth(e.target.value)} />
+                </div>
+                <div className="stats-grid" style={{ marginBottom: 12 }}>
+                  <article className="stat-card"><div className="stat-label">Printers Reported</div><div className="stat-value">{rentalReportSummary.printers}</div></article>
+                  <article className="stat-card"><div className="stat-label">Mono Usage</div><div className="stat-value">{rentalReportSummary.monoUsage}</div></article>
+                  <article className="stat-card"><div className="stat-label">Color Usage</div><div className="stat-value">{rentalReportSummary.colorUsage}</div></article>
+                  <article className="stat-card"><div className="stat-label">Total Amount</div><div className="stat-value">{rentalReportSummary.amount.toFixed(2)}</div></article>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Vendor</th>
+                        <th>Machine Code</th>
+                        <th>Machine Name</th>
+                        <th>Model</th>
+                        <th>{t.campus}</th>
+                        <th>Location</th>
+                        <th>Prev Mono</th>
+                        <th>Curr Mono</th>
+                        <th>Mono Usage</th>
+                        <th>Prev Color</th>
+                        <th>Curr Color</th>
+                        <th>Color Usage</th>
+                        <th>Amount</th>
+                        <th>By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rentalReportRows.length ? rentalReportRows.map((row) => (
+                        <tr key={`rental-report-row-${row.id}`}>
+                          <td>{row.vendor}</td>
+                          <td><strong>{row.machineCode}</strong></td>
+                          <td>{row.machineName || "-"}</td>
+                          <td>{row.model || "-"}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.location || "-"}</td>
+                          <td>{row.previousMono}</td>
+                          <td>{row.currentMono}</td>
+                          <td>{row.monoUsage}</td>
+                          <td>{row.previousColor}</td>
+                          <td>{row.currentColor}</td>
+                          <td>{row.colorUsage}</td>
+                          <td>{row.amount.toFixed(2)}</td>
+                          <td>{row.submittedBy || "-"}</td>
+                        </tr>
+                      )) : <tr><td colSpan={14}>No rental counter records for this month.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Missing Active Printers For {rentalReportMonth || "Selected Month"}</th>
+                        <th>{t.campus}</th>
+                        <th>Location</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rentalMissingPrinterRows.length ? rentalMissingPrinterRows.map((row) => (
+                        <tr key={`rental-missing-row-${row.id}`}>
+                          <td><strong>{row.machineCode}</strong> | {row.machineName}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.location || "-"}</td>
+                        </tr>
+                      )) : <tr><td colSpan={3}>All active rental printers have records for this month.</td></tr>}
                     </tbody>
                   </table>
                 </div>

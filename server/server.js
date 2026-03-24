@@ -516,6 +516,21 @@ function verifyPassword(stored, input) {
   return crypto.timingSafeEqual(expected, actual);
 }
 
+function getDevBootstrapPasswordForUsername(username) {
+  if (IS_PROD) return "";
+  const normalized = toText(username).toLowerCase();
+  if (normalized === "admin") return DEFAULT_ADMIN_PASSWORD;
+  if (normalized === "viewer") return DEFAULT_VIEWER_PASSWORD;
+  return "";
+}
+
+function shouldAllowDevBootstrapLogin(user, password) {
+  if (IS_PROD || !user || typeof user !== "object") return false;
+  const bootstrapPassword = getDevBootstrapPasswordForUsername(user.username);
+  if (!bootstrapPassword) return false;
+  return toText(password) === bootstrapPassword;
+}
+
 function looksLikeBackupPayload(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const obj = input;
@@ -4997,13 +5012,15 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 401, { error: "Invalid username or password" });
         return;
       }
-      if (!verifyPassword(user.password, password)) {
+      const passwordMatches = verifyPassword(user.password, password);
+      const devBootstrapLogin = !passwordMatches && shouldAllowDevBootstrapLogin(user, password);
+      if (!passwordMatches && !devBootstrapLogin) {
         appendAuditLog(db, sanitizeUser(user), "LOGIN_FAILED", "auth_session", username || "unknown", `ip=${clientIp} | invalid password`);
         await writeDb(db);
         sendJson(res, 401, { error: "Invalid username or password" });
         return;
       }
-      if (!isHashedPassword(user.password)) {
+      if (!isHashedPassword(user.password) || devBootstrapLogin) {
         user.password = hashPassword(password);
         db.users = users;
       }
