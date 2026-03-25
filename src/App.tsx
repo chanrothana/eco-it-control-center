@@ -27293,11 +27293,7 @@ export default function App() {
                   <th>No.</th>
                   <th>Campus</th>
                   <th>Chairs</th>
-                  <th>Chairs Need Repair</th>
-                  <th>Chairs Broken/Scrap</th>
                   <th>Tables</th>
-                  <th>Tables Need Repair</th>
-                  <th>Tables Broken/Scrap</th>
                   <th>Nap Beds</th>
                 </tr>
               </thead>
@@ -27311,11 +27307,7 @@ export default function App() {
                               <td>${index + 1}</td>
                               <td>${escapeHtml(reportCampusName(row.campus))}</td>
                               <td>${furnitureQuantitySummaryHtml(row.chairQty, row.chairModels)}</td>
-                              <td>${row.chairRepairQty}</td>
-                              <td>${row.chairBrokenQty}</td>
                               <td>${furnitureQuantitySummaryHtml(row.tableQty, row.tableModels)}</td>
-                              <td>${row.tableRepairQty}</td>
-                              <td>${row.tableBrokenQty}</td>
                               <td>${furnitureQuantitySummaryHtml(row.napBedQty, row.napBedModels)}</td>
                             </tr>`
                         ),
@@ -27323,15 +27315,11 @@ export default function App() {
                           <td>-</td>
                           <td><strong>${escapeHtml(lang === "km" ? "សរុបសាលា" : "All School Total")}</strong></td>
                           <td>${furnitureQuantitySummaryHtml(furnitureControlCampusRows.totals.chairQty, furnitureControlCampusRows.totals.chairModels)}</td>
-                          <td>${furnitureControlCampusRows.totals.chairRepairQty}</td>
-                          <td>${furnitureControlCampusRows.totals.chairBrokenQty}</td>
                           <td>${furnitureQuantitySummaryHtml(furnitureControlCampusRows.totals.tableQty, furnitureControlCampusRows.totals.tableModels)}</td>
-                          <td>${furnitureControlCampusRows.totals.tableRepairQty}</td>
-                          <td>${furnitureControlCampusRows.totals.tableBrokenQty}</td>
                           <td>${furnitureQuantitySummaryHtml(furnitureControlCampusRows.totals.napBedQty, furnitureControlCampusRows.totals.napBedModels)}</td>
                         </tr>`,
                       ].join("")
-                    : `<tr><td colspan="8">No furniture summary data.</td></tr>`
+                    : `<tr><td colspan="5">No furniture summary data.</td></tr>`
                 }
               </tbody>
             </table>
@@ -43075,11 +43063,7 @@ export default function App() {
                           <tr>
                             <th>{t.campus}</th>
                             <th>Chairs</th>
-                            <th>Chairs Need Repair</th>
-                            <th>Chairs Broken/Scrap</th>
                             <th>Tables</th>
-                            <th>Tables Need Repair</th>
-                            <th>Tables Broken/Scrap</th>
                             <th>Nap Beds</th>
                           </tr>
                         </thead>
@@ -43090,28 +43074,20 @@ export default function App() {
                                 <tr key={`furniture-campus-${row.campus}`}>
                                   <td>{reportCampusName(row.campus)}</td>
                                   <td>{renderFurnitureQuantityCell(row.chairQty, row.chairModels)}</td>
-                                  <td>{row.chairRepairQty}</td>
-                                  <td>{row.chairBrokenQty}</td>
                                   <td>{renderFurnitureQuantityCell(row.tableQty, row.tableModels)}</td>
-                                  <td>{row.tableRepairQty}</td>
-                                  <td>{row.tableBrokenQty}</td>
                                   <td>{renderFurnitureQuantityCell(row.napBedQty, row.napBedModels)}</td>
                                 </tr>
                               ))}
                               <tr>
                                 <td><strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong></td>
                                 <td>{renderFurnitureQuantityCell(furnitureControlCampusRows.totals.chairQty, furnitureControlCampusRows.totals.chairModels)}</td>
-                                <td>{furnitureControlCampusRows.totals.chairRepairQty}</td>
-                                <td>{furnitureControlCampusRows.totals.chairBrokenQty}</td>
                                 <td>{renderFurnitureQuantityCell(furnitureControlCampusRows.totals.tableQty, furnitureControlCampusRows.totals.tableModels)}</td>
-                                <td>{furnitureControlCampusRows.totals.tableRepairQty}</td>
-                                <td>{furnitureControlCampusRows.totals.tableBrokenQty}</td>
                                 <td>{renderFurnitureQuantityCell(furnitureControlCampusRows.totals.napBedQty, furnitureControlCampusRows.totals.napBedModels)}</td>
                               </tr>
                             </>
                           ) : (
                             <tr>
-                              <td colSpan={8}>No chair/table furniture data yet.</td>
+                              <td colSpan={4}>No chair/table furniture data yet.</td>
                             </tr>
                           )}
                         </tbody>
