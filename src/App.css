@@ -310,11 +310,12 @@ body {
   top: 14px;
   max-height: calc(100vh - 28px);
   overflow-y: auto;
+  scroll-padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   display: grid;
   gap: 10px;
-  padding: 10px;
+  padding: 10px 10px calc(28px + env(safe-area-inset-bottom, 0px));
   border: 1px solid #e2c49d;
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, #fff8ed, #ffeccd);
@@ -9239,6 +9240,8 @@ tr.row-maint-maintenance:hover td {
     max-height: calc(100vh - (16px + env(safe-area-inset-top, 0px)));
     overflow-y: auto;
     gap: 8px;
+    scroll-padding-bottom: calc(42px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(42px + env(safe-area-inset-bottom, 0px));
   }
 
   .main-nav-head {

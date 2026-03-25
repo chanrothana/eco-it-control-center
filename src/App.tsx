@@ -644,6 +644,7 @@ type NavModule =
   | "classroom"
   | "inventory"
   | "utilities"
+  | "printer"
   | "pool"
   | "tickets"
   | "schedule"
@@ -1126,6 +1127,7 @@ const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "assets",
   "inventory",
   "utilities",
+  "printer",
   "pool",
   "schedule",
   "transfer",
@@ -1139,6 +1141,7 @@ const ALL_NAV_MODULES: NavModule[] = [
   "classroom",
   "inventory",
   "utilities",
+  "printer",
   "pool",
   "tickets",
   "schedule",
@@ -1156,6 +1159,7 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   classroom: "core",
   inventory: "core",
   utilities: "operations",
+  printer: "operations",
   pool: "operations",
   tickets: "operations",
   schedule: "operations",
@@ -1212,6 +1216,16 @@ const MENU_ACCESS_TREE: Array<{
       { key: "utilities.reading", labelEn: "History", labelKm: "ប្រវត្តិ" },
       { key: "utilities.history", labelEn: "Monthly Comparison", labelKm: "ប្រៀបធៀបប្រចាំខែ" },
       { key: "utilities.reports", labelEn: "Yearly Report", labelKm: "របាយការណ៍ប្រចាំឆ្នាំ" },
+    ],
+  },
+  {
+    module: "printer",
+    labelEn: "Rental Printer",
+    labelKm: "ម៉ាស៊ីនបោះពុម្ពជួល",
+    children: [
+      { key: "printer.setup", labelEn: "Printer Setup", labelKm: "កំណត់ម៉ាស៊ីនបោះពុម្ព" },
+      { key: "printer.entry", labelEn: "Counter Entry", labelKm: "បញ្ចូលកុងទ័រ" },
+      { key: "printer.report", labelEn: "LA Report", labelKm: "របាយការណ៍ LA" },
     ],
   },
   {
@@ -6327,6 +6341,7 @@ export default function App() {
       { id: "classroom", label: lang === "km" ? "ថ្នាក់រៀន" : "Classroom Control" },
       { id: "inventory", label: t.inventory },
       { id: "utilities", label: lang === "km" ? "សេវាប្រើប្រាស់" : "Utilities" },
+      { id: "printer", label: lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer" },
       { id: "pool", label: t.pool },
       { id: "tickets", label: t.workOrders },
       { id: "schedule", label: t.schedule },
@@ -6351,6 +6366,8 @@ export default function App() {
         return <Package size={16} aria-hidden={true} />;
       case "utilities":
         return <Lightbulb size={16} aria-hidden={true} />;
+      case "printer":
+        return <Printer size={16} aria-hidden={true} />;
       case "pool":
         return <Droplets size={16} aria-hidden={true} />;
       case "tickets":
@@ -6474,8 +6491,9 @@ export default function App() {
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
   const [inventoryDashboardGroup, setInventoryDashboardGroup] = useState<InventoryBusinessGroup>("SUPPLY");
   const [utilitiesView, setUtilitiesView] = useState<
-    "entry" | "history" | "monthly" | "yearly" | "rental_setup" | "rental_entry" | "rental_report"
+    "entry" | "history" | "monthly" | "yearly"
   >("entry");
+  const [printerView, setPrinterView] = useState<"setup" | "entry" | "report">("entry");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
@@ -6631,34 +6649,37 @@ export default function App() {
                   setTab("utilities");
                 }),
             },
+          ];
+        case "printer":
+          return [
             {
-              key: "utilities.rental_setup",
-              label: lang === "km" ? "ម៉ាស៊ីនជួល" : "Rental Setup",
-              active: utilitiesView === "rental_setup",
+              key: "printer.setup",
+              label: lang === "km" ? "កំណត់ម៉ាស៊ីន" : "Printer Setup",
+              active: printerView === "setup",
               onSelect: () =>
                 startTabTransition(() => {
-                  setUtilitiesView("rental_setup");
-                  setTab("utilities");
+                  setPrinterView("setup");
+                  setTab("printer");
                 }),
             },
             {
-              key: "utilities.rental_entry",
-              label: lang === "km" ? "បញ្ចូលកុងទ័រជួល" : "Rental Entry",
-              active: utilitiesView === "rental_entry",
+              key: "printer.entry",
+              label: lang === "km" ? "បញ្ចូលកុងទ័រ" : "Counter Entry",
+              active: printerView === "entry",
               onSelect: () =>
                 startTabTransition(() => {
-                  setUtilitiesView("rental_entry");
-                  setTab("utilities");
+                  setPrinterView("entry");
+                  setTab("printer");
                 }),
             },
             {
-              key: "utilities.rental_report",
+              key: "printer.report",
               label: lang === "km" ? "របាយការណ៍ LA" : "LA Report",
-              active: utilitiesView === "rental_report",
+              active: printerView === "report",
               onSelect: () =>
                 startTabTransition(() => {
-                  setUtilitiesView("rental_report");
-                  setTab("utilities");
+                  setPrinterView("report");
+                  setTab("printer");
                 }),
             },
           ];
@@ -7023,6 +7044,7 @@ export default function App() {
       lang,
       maintenanceView,
       poolView,
+      printerView,
       reportSection,
       reportType,
       scheduleView,
@@ -7123,7 +7145,7 @@ export default function App() {
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
-  const [furnitureControlCampusFilter, setFurnitureControlCampusFilter] = useState("ALL");
+  const [furnitureControlCampusFilter, setFurnitureControlCampusFilter] = useState<string[]>(["ALL"]);
   const [quickCountCampusFilter, setQuickCountCampusFilter] = useState<string[]>(["ALL"]);
   const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState<string[]>(["ALL"]);
   const [quickCountLocationFilter, setQuickCountLocationFilter] = useState<string[]>(["ALL"]);
@@ -14498,7 +14520,8 @@ export default function App() {
 
   function startEditRentalPrinter(printer: RentalPrinter) {
     setEditingRentalPrinterId(printer.id);
-    setUtilitiesView("rental_setup");
+    setPrinterView("setup");
+    setTab("printer");
     setRentalPrinterForm({
       vendor: printer.vendor || "LA",
       machineCode: printer.machineCode,
@@ -24558,10 +24581,9 @@ export default function App() {
         tableModels: Record<string, number>;
       }
     >();
-    const source =
-      furnitureControlCampusFilter === "ALL"
-        ? furnitureControlAssetRows
-        : furnitureControlAssetRows.filter((row) => row.campus === furnitureControlCampusFilter);
+    const source = furnitureControlCampusFilter.includes("ALL")
+      ? furnitureControlAssetRows
+      : furnitureControlAssetRows.filter((row) => furnitureControlCampusFilter.includes(row.campus));
     for (const row of source) {
       if (!map.has(row.campus)) {
         map.set(row.campus, {
@@ -24629,7 +24651,7 @@ export default function App() {
   const furnitureControlClassroomRows = useMemo(() => {
     const classroomLocations = locations
       .filter((row) => isClassroomLocationLike(row))
-      .filter((row) => (furnitureControlCampusFilter === "ALL" ? true : row.campus === furnitureControlCampusFilter));
+      .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)));
     const rows = classroomLocations.map((room) => {
       const matchingAssets = furnitureControlAssetRows.filter(
         (asset) => asset.campus === room.campus && asset.location === room.name
@@ -25722,7 +25744,7 @@ export default function App() {
       return;
     }
     if (reportType === "furniture_control") {
-      setFurnitureControlCampusFilter("ALL");
+      setFurnitureControlCampusFilter(["ALL"]);
     }
   }, [reportType, resetAssetMasterReportFilters]);
 
@@ -25740,7 +25762,7 @@ export default function App() {
     setQrItemFilter(["ALL"]);
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
-    setFurnitureControlCampusFilter("ALL");
+    setFurnitureControlCampusFilter(["ALL"]);
     setReportPeriodMode("month");
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
@@ -27183,7 +27205,11 @@ export default function App() {
           })()
         : reportType === "furniture_control"
         ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(
-            furnitureControlCampusFilter === "ALL" ? t.allCampuses : reportCampusName(furnitureControlCampusFilter)
+            furnitureControlCampusFilter.includes("ALL")
+              ? t.allCampuses
+              : furnitureControlCampusFilter.length
+                ? furnitureControlCampusFilter.map((campus) => reportCampusName(campus)).join(", ")
+                : "-"
           )}</p>`
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
 
@@ -41238,12 +41264,8 @@ export default function App() {
               <button className={`tab ${utilitiesView === "history" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("history")}>History</button>
               <button className={`tab ${utilitiesView === "monthly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("monthly")}>Monthly Comparison</button>
               <button className={`tab ${utilitiesView === "yearly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("yearly")}>Yearly Report</button>
-              <button className={`tab ${utilitiesView === "rental_setup" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("rental_setup")}>Rental Setup</button>
-              <button className={`tab ${utilitiesView === "rental_entry" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("rental_entry")}>Rental Entry</button>
-              <button className={`tab ${utilitiesView === "rental_report" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("rental_report")}>LA Report</button>
             </div>
             {utilityMessage ? <p className="tiny">{utilityMessage}</p> : null}
-            {rentalPrinterMessage ? <p className="tiny">{rentalPrinterMessage}</p> : null}
 
             {utilitiesView === "entry" && (
               <>
@@ -41489,8 +41511,19 @@ export default function App() {
                 </div>
               </>
             )}
+          </section>
+        )}
 
-            {utilitiesView === "rental_setup" && (
+        {tab === "printer" && (
+          <section className="panel">
+            <div className="tabs">
+              <button className={`tab ${printerView === "setup" ? "tab-active" : ""}`} onClick={() => setPrinterView("setup")}>Printer Setup</button>
+              <button className={`tab ${printerView === "entry" ? "tab-active" : ""}`} onClick={() => setPrinterView("entry")}>Counter Entry</button>
+              <button className={`tab ${printerView === "report" ? "tab-active" : ""}`} onClick={() => setPrinterView("report")}>LA Report</button>
+            </div>
+            {rentalPrinterMessage ? <p className="tiny">{rentalPrinterMessage}</p> : null}
+
+            {printerView === "setup" && (
               <>
                 <h2>Rental Printer Master</h2>
                 <div className="form-grid inventory-item-grid">
@@ -41631,7 +41664,7 @@ export default function App() {
               </>
             )}
 
-            {utilitiesView === "rental_entry" && (
+            {printerView === "entry" && (
               <>
                 <h2>Rental Printer Monthly Counter Entry</h2>
                 <div className="form-grid inventory-item-grid">
@@ -41740,7 +41773,7 @@ export default function App() {
               </>
             )}
 
-            {utilitiesView === "rental_report" && (
+            {printerView === "report" && (
               <>
                 <div className="report-title-row">
                   <h2>LA Rental Counter Report</h2>
@@ -42243,17 +42276,25 @@ export default function App() {
                 </>
               ) : null}
               {reportType === "furniture_control" ? (
-                <LocationPicker
-                  value={furnitureControlCampusFilter}
-                  onChange={setFurnitureControlCampusFilter}
-                  options={[
-                    { value: "ALL", label: t.allCampuses },
-                    ...furnitureControlCampusFilterOptions.map((campus) => ({
-                      value: campus,
-                      label: reportCampusName(campus),
-                    })),
-                  ]}
-                  placeholder={t.allCampuses}
+                <SearchableMultiSelectPicker
+                  summary={summarizeMultiFilter(furnitureControlCampusFilter, t.allCampuses, reportCampusName)}
+                  options={furnitureControlCampusFilterOptions.map((campus) => ({
+                    value: campus,
+                    label: reportCampusName(campus),
+                  }))}
+                  selectedValues={furnitureControlCampusFilter}
+                  allOptionLabel={t.allCampuses}
+                  allOptionChecked={furnitureControlCampusFilter.includes("ALL")}
+                  onToggleAllOption={(checked) =>
+                    setFurnitureControlCampusFilter((prev) =>
+                      applyMultiFilterSelection(prev, checked, "ALL", furnitureControlCampusFilterOptions)
+                    )
+                  }
+                  onToggleValue={(value, checked) =>
+                    setFurnitureControlCampusFilter((prev) =>
+                      applyMultiFilterSelection(prev, checked, value, furnitureControlCampusFilterOptions)
+                    )
+                  }
                   searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                   emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                 />
