@@ -7921,6 +7921,39 @@ tr.row-maint-maintenance:hover td {
   display: inline-block;
 }
 
+.report-table-wrap .furniture-qty-cell {
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.35;
+}
+
+.report-table-wrap .furniture-qty-total {
+  font-weight: 800;
+}
+
+.report-table-wrap .furniture-qty-divider {
+  margin: 4px 0 5px;
+  border-top: 1px solid #d7dfd0;
+}
+
+.report-table-wrap .furniture-qty-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4e5f53;
+  margin-bottom: 2px;
+}
+
+.report-table-wrap .furniture-qty-item {
+  margin: 1px 0;
+}
+
+.report-table-wrap .furniture-qty-empty {
+  color: #6f7d73;
+}
+
 .report-table-wrap td .table-photo,
 .report-table-wrap td .photo-placeholder {
   margin: 0 auto;
