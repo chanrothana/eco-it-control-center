@@ -32192,7 +32192,13 @@ export default function App() {
                       assetListRows.map((asset) => (
                         <article key={`asset-mobile-${asset.id}`} className={`asset-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
                           <div className="asset-mobile-head">
-                            <button className="tab asset-mobile-assetid" onClick={() => setAssetDetailId(asset.id)}>
+                            <button
+                              className="tab asset-mobile-assetid"
+                              type="button"
+                              onClick={() => setAssetDetailId(asset.id)}
+                              title="View Details"
+                              aria-label={`View details for ${asset.assetId}`}
+                            >
                               <strong>{asset.assetId}</strong>
                             </button>
                           </div>
@@ -32366,7 +32372,13 @@ export default function App() {
                           assetListRows.map((asset) => (
                             <tr key={asset.id} className={assetStatusRowClass(asset.status || "")}>
                               <td>
-                                <button className="tab" onClick={() => setAssetDetailId(asset.id)}>
+                                <button
+                                  className="tab asset-list-assetid-btn"
+                                  type="button"
+                                  onClick={() => setAssetDetailId(asset.id)}
+                                  title="View Details"
+                                  aria-label={`View details for ${asset.assetId}`}
+                                >
                                   <strong>{asset.assetId}</strong>
                                 </button>
                               </td>
@@ -40131,46 +40143,48 @@ export default function App() {
                     : "No assets match current filters."}
                 </div>
               </label>
-              <div className="field field-wide">
-                <span>{lang === "km" ? "ជ្រើស Asset ពី Gallery" : "Choose Asset from Gallery"}</span>
-                <div className="maintenance-record-gallery">
-                  {maintenanceRecordFilteredAssets.slice(0, 60).map((asset) => {
-                    const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
-                    const selected = String(asset.id) === maintenanceRecordForm.assetId;
-                    return (
-                      <button
-                        key={`maintenance-record-gallery-${asset.id}`}
-                        type="button"
-                        className={`maintenance-record-gallery-card ${selected ? "is-selected" : ""}`}
-                        onClick={() =>
-                          setMaintenanceRecordForm((f) => ({
-                            ...f,
-                            assetId: String(asset.id),
-                            workflow: {
-                              ...normalizeMaintenanceWorkflow(f.workflow),
-                              template: getMaintenanceTemplateKey(asset),
-                              checklist: [],
-                            },
-                          }))
-                        }
-                      >
-                        <div className="maintenance-record-gallery-thumb">
-                          {isRenderablePhotoSource(asset.photo || "") ? (
-                            <img loading="lazy" decoding="async" src={asset.photo || ""} alt={asset.assetId} className="maintenance-record-gallery-thumb-img" />
-                          ) : (
-                            <span className="photo-empty">{t.noPhoto}</span>
-                          )}
-                        </div>
-                        <div className="maintenance-record-gallery-meta">
-                          <strong>{asset.assetId}</strong>
-                          <span>{itemName}</span>
-                          <small>{campusLabel(asset.campus)} • {asset.location || "-"}</small>
-                        </div>
-                      </button>
-                    );
-                  })}
+              {!maintenanceRecordScheduleJumpMode ? (
+                <div className="field field-wide">
+                  <span>{lang === "km" ? "ជ្រើស Asset ពី Gallery" : "Choose Asset from Gallery"}</span>
+                  <div className="maintenance-record-gallery">
+                    {maintenanceRecordFilteredAssets.slice(0, 60).map((asset) => {
+                      const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+                      const selected = String(asset.id) === maintenanceRecordForm.assetId;
+                      return (
+                        <button
+                          key={`maintenance-record-gallery-${asset.id}`}
+                          type="button"
+                          className={`maintenance-record-gallery-card ${selected ? "is-selected" : ""}`}
+                          onClick={() =>
+                            setMaintenanceRecordForm((f) => ({
+                              ...f,
+                              assetId: String(asset.id),
+                              workflow: {
+                                ...normalizeMaintenanceWorkflow(f.workflow),
+                                template: getMaintenanceTemplateKey(asset),
+                                checklist: [],
+                              },
+                            }))
+                          }
+                        >
+                          <div className="maintenance-record-gallery-thumb">
+                            {isRenderablePhotoSource(asset.photo || "") ? (
+                              <img loading="lazy" decoding="async" src={asset.photo || ""} alt={asset.assetId} className="maintenance-record-gallery-thumb-img" />
+                            ) : (
+                              <span className="photo-empty">{t.noPhoto}</span>
+                            )}
+                          </div>
+                          <div className="maintenance-record-gallery-meta">
+                            <strong>{asset.assetId}</strong>
+                            <span>{itemName}</span>
+                            <small>{campusLabel(asset.campus)} • {asset.location || "-"}</small>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
               <div className="maintenance-record-inline-triple field-wide">
                 <label className="field quickout-date-field" ref={maintenanceRecordDateWrapRef}>
                   <span>{t.date}</span>

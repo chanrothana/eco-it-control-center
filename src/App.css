@@ -6967,6 +6967,14 @@ table {
   text-align: center;
 }
 
+.asset-list-assetid-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  justify-content: center;
+  text-align: center;
+}
+
 .asset-mobile-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
