@@ -8806,6 +8806,12 @@ export default function App() {
     if (classroomDetailRoomId !== null) return;
     setClassroomVerificationOpen(false);
   }, [classroomDetailRoomId]);
+  useEffect(() => {
+    if (tab === "classroom") return;
+    if (classroomDetailRoomId === null && assetDetailId === null) return;
+    setClassroomDetailRoomId(null);
+    setAssetDetailId(null);
+  }, [tab, classroomDetailRoomId, assetDetailId]);
 
   function requireAdminAction() {
     if (isAdmin) return true;
@@ -21025,9 +21031,7 @@ export default function App() {
           const destinationUpdated = destinationMatch
             ? {
                 ...updateGroupedFurnitureAssetQuantity(destinationMatch, destinationQty),
-                transferHistory: isFullTransfer
-                  ? [transferEntry, ...(destinationMatch.transferHistory || [])]
-                  : (destinationMatch.transferHistory || []),
+                transferHistory: [transferEntry, ...(destinationMatch.transferHistory || [])],
               }
             : {
                 ...updateGroupedFurnitureAssetQuantity(
@@ -21045,7 +21049,7 @@ export default function App() {
                     location: transferEntry.toLocation,
                     assignedTo: "",
                     custodyStatus: "IN_STOCK" as Asset["custodyStatus"],
-                    transferHistory: isFullTransfer ? [transferEntry] : [],
+                    transferHistory: [transferEntry],
                     custodyHistory: [],
                     maintenanceHistory: current.maintenanceHistory || [],
                     verificationHistory: current.verificationHistory || [],
@@ -21054,7 +21058,7 @@ export default function App() {
                   } as Asset,
                   destinationQty
                 ),
-                transferHistory: isFullTransfer ? [transferEntry] : [],
+                transferHistory: [transferEntry],
                 custodyHistory: [],
               };
 
@@ -21436,16 +21440,19 @@ export default function App() {
   function openMaintenanceQuickFromDetail(asset: Asset) {
     openQuickRecordModal(asset);
     setAssetDetailId(null);
+    setClassroomDetailRoomId(null);
   }
 
   function openTransferQuickFromDetail(asset: Asset) {
     openTransferFromAsset(asset);
     setAssetDetailId(null);
+    setClassroomDetailRoomId(null);
   }
 
   function openMaintenancePageFromDetail(asset: Asset) {
     openMaintenanceRecordFromScheduleAsset(asset);
     setAssetDetailId(null);
+    setClassroomDetailRoomId(null);
   }
 
   function openTransferPageFromDetail(asset: Asset) {
@@ -21471,6 +21478,7 @@ export default function App() {
       note: "",
     }));
     setAssetDetailId(null);
+    setClassroomDetailRoomId(null);
   }
 
   function startMaintenanceEntryEdit(entry: MaintenanceEntry) {
