@@ -3340,6 +3340,38 @@ function normalizeRentalPrinterCounters(input: unknown): RentalPrinterCounter[] 
     .filter((row) => row.rentalPrinterId && row.billingMonth && row.readingDate && row.machineCode);
 }
 
+function rentalPrinterCodePart(value: string, fallback: string) {
+  const cleaned = String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+  if (!cleaned) return fallback;
+  const first = cleaned.split(/\s+/).find(Boolean) || "";
+  return first || fallback;
+}
+
+function buildRentalPrinterMachineCode(
+  vendor: string,
+  machineName: string,
+  model: string,
+  printers: RentalPrinter[],
+  excludeId?: number | null
+) {
+  const vendorCode = rentalPrinterCodePart(vendor, "LA");
+  const modelCode = rentalPrinterCodePart(model, rentalPrinterCodePart(machineName, "PRINTER"));
+  const prefix = `${vendorCode}-${modelCode}`;
+  const usedSeqs = printers
+    .filter((printer) => Number(printer.id) !== Number(excludeId || 0))
+    .map((printer) => String(printer.machineCode || "").trim().toUpperCase())
+    .map((code) => {
+      const match = code.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-(\\d+)$`));
+      return match ? Number(match[1]) : 0;
+    })
+    .filter((seq) => Number.isFinite(seq) && seq > 0);
+  const nextSeq = (usedSeqs.length ? Math.max(...usedSeqs) : 0) + 1;
+  return `${prefix}-${String(nextSeq).padStart(2, "0")}`;
+}
+
 function readPoolCleaningScheduleFallback(): PoolCleaningSchedule[] {
   try {
     const raw = localStorage.getItem(POOL_CLEANING_SCHEDULE_FALLBACK_KEY);
@@ -9079,6 +9111,17 @@ export default function App() {
       .filter((row) => row.status === "Active" && !reportSet.has(Number(row.id)))
       .sort((a, b) => compareCampusByCode(a.campus, b.campus));
   }, [rentalPrinters, rentalReportRows]);
+  const rentalPrinterAutoMachineCode = useMemo(
+    () =>
+      buildRentalPrinterMachineCode(
+        rentalPrinterForm.vendor,
+        rentalPrinterForm.machineName,
+        rentalPrinterForm.model,
+        rentalPrinters,
+        editingRentalPrinterId
+      ),
+    [editingRentalPrinterId, rentalPrinterForm.machineName, rentalPrinterForm.model, rentalPrinterForm.vendor, rentalPrinters]
+  );
 
   const currentTypeOptions = useMemo(
     () => {
@@ -14512,14 +14555,15 @@ export default function App() {
 
   async function saveRentalPrinter() {
     if (!requireAdminAction()) return;
-    if (!rentalPrinterForm.machineCode.trim() || !rentalPrinterForm.machineName.trim() || !rentalPrinterForm.location.trim()) {
-      setError("Machine code, machine name, and location are required.");
+    if (!rentalPrinterForm.machineName.trim() || !rentalPrinterForm.location.trim()) {
+      setError("Machine name and location are required.");
       return;
     }
+    const autoMachineCode = (editingRentalPrinterId ? rentalPrinterForm.machineCode : "") || rentalPrinterAutoMachineCode;
     const row: RentalPrinter = {
       id: editingRentalPrinterId || Date.now(),
       vendor: rentalPrinterForm.vendor.trim() || "LA",
-      machineCode: rentalPrinterForm.machineCode.trim().toUpperCase(),
+      machineCode: autoMachineCode.trim().toUpperCase(),
       machineName: rentalPrinterForm.machineName.trim(),
       model: rentalPrinterForm.model.trim(),
       serialNumber: rentalPrinterForm.serialNumber.trim(),
@@ -41622,8 +41666,13 @@ export default function App() {
                 <h2>Rental Printer Master</h2>
                 <div className="form-grid inventory-item-grid">
                   <label className="field">
-                    <span>Machine Code</span>
-                    <input className="input" value={rentalPrinterForm.machineCode} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, machineCode: e.target.value.toUpperCase() }))} placeholder="LA-CANON-01" />
+                    <span>Machine Code Auto</span>
+                    <input
+                      className="input"
+                      value={editingRentalPrinterId ? rentalPrinterForm.machineCode : rentalPrinterAutoMachineCode}
+                      readOnly
+                      placeholder="LA-CANON-01"
+                    />
                   </label>
                   <label className="field">
                     <span>Vendor</span>
