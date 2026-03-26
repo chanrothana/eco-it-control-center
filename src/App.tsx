@@ -7180,6 +7180,7 @@ export default function App() {
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
   const [furnitureControlCampusFilter, setFurnitureControlCampusFilter] = useState<string[]>(["ALL"]);
+  const [furnitureControlLocationFilter, setFurnitureControlLocationFilter] = useState<string[]>(["ALL"]);
   const [quickCountCampusFilter, setQuickCountCampusFilter] = useState<string[]>(["ALL"]);
   const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState<string[]>(["ALL"]);
   const [quickCountLocationFilter, setQuickCountLocationFilter] = useState<string[]>(["ALL"]);
@@ -24666,108 +24667,11 @@ export default function App() {
         };
       });
   }, [assets]);
-  const furnitureControlCampusRows = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        campus: string;
-        chairQty: number;
-        chairRepairQty: number;
-        chairBrokenQty: number;
-        chairModels: Record<string, number>;
-        tableQty: number;
-        tableRepairQty: number;
-        tableBrokenQty: number;
-        tableModels: Record<string, number>;
-        napBedQty: number;
-        napBedModels: Record<string, number>;
-      }
-    >();
-    const source = furnitureControlCampusFilter.includes("ALL")
-      ? furnitureControlAssetRows
-      : furnitureControlAssetRows.filter((row) => furnitureControlCampusFilter.includes(row.campus));
-    for (const row of source) {
-      if (!map.has(row.campus)) {
-        map.set(row.campus, {
-          campus: row.campus,
-          chairQty: 0,
-          chairRepairQty: 0,
-          chairBrokenQty: 0,
-          chairModels: {} as Record<string, number>,
-          tableQty: 0,
-          tableRepairQty: 0,
-          tableBrokenQty: 0,
-          tableModels: {} as Record<string, number>,
-          napBedQty: 0,
-          napBedModels: {} as Record<string, number>,
-        });
-      }
-      const current = map.get(row.campus)!;
-      if (row.type === "CHR") {
-        current.chairQty += row.availableQty;
-        current.chairRepairQty += row.repairQty;
-        current.chairBrokenQty += row.brokenQty;
-        if (row.availableQty > 0) {
-          current.chairModels[row.modelLabel] = (current.chairModels[row.modelLabel] || 0) + row.availableQty;
-        }
-      } else if (row.type === "TBL") {
-        current.tableQty += row.availableQty;
-        current.tableRepairQty += row.repairQty;
-        current.tableBrokenQty += row.brokenQty;
-        if (row.availableQty > 0) {
-          current.tableModels[row.modelLabel] = (current.tableModels[row.modelLabel] || 0) + row.availableQty;
-        }
-      } else if (row.type === "NBD") {
-        current.napBedQty += row.availableQty;
-        if (row.availableQty > 0) {
-          current.napBedModels[row.modelLabel] = (current.napBedModels[row.modelLabel] || 0) + row.availableQty;
-        }
-      }
-    }
-    const rows = Array.from(map.values()).sort((a, b) => campusLabel(a.campus).localeCompare(campusLabel(b.campus)));
-    const totals = rows.reduce(
-      (sum, row) => ({
-        campus: "ALL",
-        chairQty: sum.chairQty + row.chairQty,
-        chairRepairQty: sum.chairRepairQty + row.chairRepairQty,
-        chairBrokenQty: sum.chairBrokenQty + row.chairBrokenQty,
-        chairModels: Object.entries(row.chairModels).reduce((out, [model, qty]) => {
-          out[model] = (out[model] || 0) + qty;
-          return out;
-        }, sum.chairModels),
-        tableQty: sum.tableQty + row.tableQty,
-        tableRepairQty: sum.tableRepairQty + row.tableRepairQty,
-        tableBrokenQty: sum.tableBrokenQty + row.tableBrokenQty,
-        tableModels: Object.entries(row.tableModels).reduce((out, [model, qty]) => {
-          out[model] = (out[model] || 0) + qty;
-          return out;
-        }, sum.tableModels),
-        napBedQty: sum.napBedQty + row.napBedQty,
-        napBedModels: Object.entries(row.napBedModels).reduce((out, [model, qty]) => {
-          out[model] = (out[model] || 0) + qty;
-          return out;
-        }, sum.napBedModels),
-      }),
-      {
-        campus: "ALL",
-        chairQty: 0,
-        chairRepairQty: 0,
-        chairBrokenQty: 0,
-        chairModels: {} as Record<string, number>,
-        tableQty: 0,
-        tableRepairQty: 0,
-        tableBrokenQty: 0,
-        tableModels: {} as Record<string, number>,
-        napBedQty: 0,
-        napBedModels: {} as Record<string, number>,
-      }
-    );
-    return { rows, totals };
-  }, [furnitureControlAssetRows, furnitureControlCampusFilter, campusLabel]);
   const furnitureControlClassroomRows = useMemo(() => {
     const classroomLocations = locations
       .filter((row) => isClassroomLocationLike(row))
-      .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)));
+      .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)))
+      .filter((row) => (furnitureControlLocationFilter.includes("ALL") ? true : furnitureControlLocationFilter.includes(String(row.name || "").trim())));
     const rows = classroomLocations.map((room) => {
       const matchingAssets = furnitureControlAssetRows.filter(
         (asset) => asset.campus === room.campus && asset.location === room.name
@@ -24836,7 +24740,94 @@ export default function App() {
         campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
         a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
     );
-  }, [locations, furnitureControlCampusFilter, furnitureControlAssetRows, campusLabel, assets]);
+  }, [locations, furnitureControlCampusFilter, furnitureControlLocationFilter, furnitureControlAssetRows, campusLabel, assets]);
+  const furnitureControlCampusRows = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        campus: string;
+        chairQty: number;
+        chairRepairQty: number;
+        chairBrokenQty: number;
+        chairModels: Record<string, number>;
+        tableQty: number;
+        tableRepairQty: number;
+        tableBrokenQty: number;
+        tableModels: Record<string, number>;
+        napBedQty: number;
+        napBedModels: Record<string, number>;
+      }
+    >();
+    for (const row of furnitureControlClassroomRows) {
+      if (!map.has(row.campus)) {
+        map.set(row.campus, {
+          campus: row.campus,
+          chairQty: 0,
+          chairRepairQty: 0,
+          chairBrokenQty: 0,
+          chairModels: {} as Record<string, number>,
+          tableQty: 0,
+          tableRepairQty: 0,
+          tableBrokenQty: 0,
+          tableModels: {} as Record<string, number>,
+          napBedQty: 0,
+          napBedModels: {} as Record<string, number>,
+        });
+      }
+      const current = map.get(row.campus)!;
+      current.chairQty += row.chairs;
+      Object.entries(row.chairModels).forEach(([model, qty]) => {
+        current.chairModels[model] = (current.chairModels[model] || 0) + qty;
+      });
+      current.tableQty += row.tables;
+      Object.entries(row.tableModels).forEach(([model, qty]) => {
+        current.tableModels[model] = (current.tableModels[model] || 0) + qty;
+      });
+      current.napBedQty += row.napBeds;
+      Object.entries(row.napBedModels).forEach(([model, qty]) => {
+        current.napBedModels[model] = (current.napBedModels[model] || 0) + qty;
+      });
+    }
+    const rows = Array.from(map.values()).sort((a, b) => campusLabel(a.campus).localeCompare(campusLabel(b.campus)));
+    const totals = rows.reduce(
+      (sum, row) => ({
+        campus: "ALL",
+        chairQty: sum.chairQty + row.chairQty,
+        chairRepairQty: sum.chairRepairQty + row.chairRepairQty,
+        chairBrokenQty: sum.chairBrokenQty + row.chairBrokenQty,
+        chairModels: Object.entries(row.chairModels).reduce((out, [model, qty]) => {
+          out[model] = (out[model] || 0) + qty;
+          return out;
+        }, sum.chairModels),
+        tableQty: sum.tableQty + row.tableQty,
+        tableRepairQty: sum.tableRepairQty + row.tableRepairQty,
+        tableBrokenQty: sum.tableBrokenQty + row.tableBrokenQty,
+        tableModels: Object.entries(row.tableModels).reduce((out, [model, qty]) => {
+          out[model] = (out[model] || 0) + qty;
+          return out;
+        }, sum.tableModels),
+        napBedQty: sum.napBedQty + row.napBedQty,
+        napBedModels: Object.entries(row.napBedModels).reduce((out, [model, qty]) => {
+          out[model] = (out[model] || 0) + qty;
+          return out;
+        }, sum.napBedModels),
+      }),
+      {
+        campus: "ALL",
+        chairQty: 0,
+        chairRepairQty: 0,
+        chairBrokenQty: 0,
+        chairModels: {} as Record<string, number>,
+        tableQty: 0,
+        tableRepairQty: 0,
+        tableBrokenQty: 0,
+        tableModels: {} as Record<string, number>,
+        napBedQty: 0,
+        napBedModels: {} as Record<string, number>,
+      }
+    );
+    return { rows, totals };
+  }, [furnitureControlClassroomRows, campusLabel]);
   const furnitureControlCampusFilterOptions = useMemo(() => {
     const options = Array.from(
       new Set(
@@ -24848,6 +24839,25 @@ export default function App() {
     );
     return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
   }, [locations, furnitureControlAssetRows, campusLabel]);
+  const furnitureControlLocationFilterOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(
+        locations
+          .filter((row) => isClassroomLocationLike(row))
+          .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)))
+          .map((row) => String(row.name || "").trim())
+          .filter(Boolean)
+      )
+    );
+    return options.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
+  }, [locations, furnitureControlCampusFilter]);
+  useEffect(() => {
+    setFurnitureControlLocationFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      const next = prev.filter((value) => furnitureControlLocationFilterOptions.includes(value));
+      return next.length ? next : ["ALL"];
+    });
+  }, [furnitureControlLocationFilterOptions]);
   const furnitureControlGapSummary = useMemo(() => {
     return {
       rooms: furnitureControlClassroomRows.length,
@@ -25900,6 +25910,7 @@ export default function App() {
     }
     if (reportType === "furniture_control") {
       setFurnitureControlCampusFilter(["ALL"]);
+      setFurnitureControlLocationFilter(["ALL"]);
     }
   }, [reportType, resetAssetMasterReportFilters]);
 
@@ -25918,6 +25929,7 @@ export default function App() {
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
     setFurnitureControlCampusFilter(["ALL"]);
+    setFurnitureControlLocationFilter(["ALL"]);
     setReportPeriodMode("month");
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
@@ -27360,6 +27372,12 @@ export default function App() {
               ? t.allCampuses
               : furnitureControlCampusFilter.length
                 ? furnitureControlCampusFilter.map((campus) => reportCampusName(campus)).join(", ")
+                : "-"
+          )} | Room Filter: ${escapeHtml(
+            furnitureControlLocationFilter.includes("ALL")
+              ? "All Rooms"
+              : furnitureControlLocationFilter.length
+                ? furnitureControlLocationFilter.join(", ")
                 : "-"
           )}</p>`
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
@@ -42421,28 +42439,62 @@ export default function App() {
                 </>
               ) : null}
               {reportType === "furniture_control" ? (
-                <SearchableMultiSelectPicker
-                  summary={summarizeMultiFilter(furnitureControlCampusFilter, t.allCampuses, reportCampusName)}
-                  options={furnitureControlCampusFilterOptions.map((campus) => ({
-                    value: campus,
-                    label: reportCampusName(campus),
-                  }))}
-                  selectedValues={furnitureControlCampusFilter}
-                  allOptionLabel={t.allCampuses}
-                  allOptionChecked={furnitureControlCampusFilter.includes("ALL")}
-                  onToggleAllOption={(checked) =>
-                    setFurnitureControlCampusFilter((prev) =>
-                      applyMultiFilterSelection(prev, checked, "ALL", furnitureControlCampusFilterOptions)
-                    )
-                  }
-                  onToggleValue={(value, checked) =>
-                    setFurnitureControlCampusFilter((prev) =>
-                      applyMultiFilterSelection(prev, checked, value, furnitureControlCampusFilterOptions)
-                    )
-                  }
-                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
-                />
+                <>
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(furnitureControlCampusFilter, t.allCampuses, reportCampusName)}
+                    options={furnitureControlCampusFilterOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    selectedValues={furnitureControlCampusFilter}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={furnitureControlCampusFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setFurnitureControlCampusFilter((prev) => {
+                        const next = applyMultiFilterSelection(prev, checked, "ALL", furnitureControlCampusFilterOptions);
+                        setFurnitureControlLocationFilter((current) => {
+                          const cleaned = current.filter((value) => value === "ALL" || furnitureControlLocationFilterOptions.includes(value));
+                          return cleaned.length ? cleaned : ["ALL"];
+                        });
+                        return next;
+                      })
+                    }
+                    onToggleValue={(value, checked) =>
+                      setFurnitureControlCampusFilter((prev) => {
+                        const next = applyMultiFilterSelection(prev, checked, value, furnitureControlCampusFilterOptions);
+                        setFurnitureControlLocationFilter((current) => {
+                          const cleaned = current.filter((item) => item === "ALL" || furnitureControlLocationFilterOptions.includes(item));
+                          return cleaned.length ? cleaned : ["ALL"];
+                        });
+                        return next;
+                      })
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(furnitureControlLocationFilter, lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms")}
+                    options={furnitureControlLocationFilterOptions.map((location) => ({
+                      value: location,
+                      label: location,
+                    }))}
+                    selectedValues={furnitureControlLocationFilter}
+                    allOptionLabel={lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms"}
+                    allOptionChecked={furnitureControlLocationFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setFurnitureControlLocationFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", furnitureControlLocationFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setFurnitureControlLocationFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, furnitureControlLocationFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកបន្ទប់..." : "Search room/location..."}
+                    emptyText={lang === "km" ? "មិនមានបន្ទប់" : "No room found."}
+                  />
+                </>
               ) : null}
               {reportType === "asset_master" ? (
                 <>
