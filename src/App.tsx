@@ -25137,7 +25137,7 @@ export default function App() {
         <div className="furniture-qty-divider" />
         {entries.length ? (
           <>
-            <div className="furniture-qty-label">Other model:</div>
+            <div className="furniture-qty-label">Model:</div>
             {entries.map(([model, qty]) => (
               <div key={`furniture-qty-${model}`} className="furniture-qty-item">
                 - {model}: {qty}
@@ -25153,7 +25153,7 @@ export default function App() {
   const furnitureQuantitySummaryHtml = useCallback((total: number, models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     const detailHtml = entries.length
-      ? `<div class="preview-furniture-qty-label">Other model:</div>${entries
+      ? `<div class="preview-furniture-qty-label">Model:</div>${entries
           .map(([model, qty]) => `<div class="preview-furniture-qty-item">- ${escapeHtml(model)}: ${qty}</div>`)
           .join("")}`
       : `<div class="preview-furniture-qty-empty">-</div>`;
