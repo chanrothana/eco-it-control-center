@@ -3452,6 +3452,47 @@ function parseUtilityInvoiceFromOcrText(utilityType, text) {
   };
 }
 
+function parsePrinterCounterFromOcrText(text) {
+  const normalizedText = toText(text);
+  const lines = normalizedText
+    .split(/\r?\n/)
+    .map((line) => toText(line).replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const flat = lines.join(" ");
+  const warnings = [];
+
+  const total2Patterns = [
+    /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,30}(\d{2,})/i,
+    /\btotal\s*2\b[^0-9]{0,30}(\d{2,})/i,
+  ];
+  let currentMono = "";
+  for (const pattern of total2Patterns) {
+    const match = flat.match(pattern);
+    if (match && match[1]) {
+      currentMono = match[1];
+      break;
+    }
+  }
+
+  if (!currentMono) {
+    const candidateLine = lines.find((line) => /\btotal\s*2\b/i.test(line) || /\b102\b/i.test(line)) || "";
+    const candidateMatch = candidateLine.match(/(\d{2,})/g);
+    if (candidateMatch?.length) {
+      currentMono = candidateMatch[candidateMatch.length - 1];
+    }
+  }
+
+  if (!currentMono) {
+    warnings.push("Total 2 could not be detected from the printer screenshot.");
+  }
+
+  return {
+    currentMono: currentMono ? String(Number(currentMono)) : "",
+    rawText: normalizedText,
+    warnings,
+  };
+}
+
 async function runUtilityInvoiceOcr(imagePath) {
   if (process.platform !== "darwin") {
     throw new Error("Invoice OCR is available only on macOS in the local app.");
@@ -3464,6 +3505,26 @@ async function runUtilityInvoiceOcr(imagePath) {
   });
   if (stderr && stderr.trim()) {
     console.warn("[utility-ocr]", stderr.trim());
+  }
+  const parsed = JSON.parse(stdout || "{}");
+  return {
+    text: toText(parsed.text),
+    lines: Array.isArray(parsed.lines) ? parsed.lines.map((line) => toText(line)).filter(Boolean) : [],
+  };
+}
+
+async function runPrinterCounterOcr(imagePath) {
+  if (process.platform !== "darwin") {
+    throw new Error("Printer counter OCR is available only on macOS in the local app.");
+  }
+  if (!(await fileExists(UTILITY_INVOICE_OCR_SCRIPT))) {
+    throw new Error("Printer counter OCR helper is missing on the server.");
+  }
+  const { stdout, stderr } = await execFileAsync("swift", [UTILITY_INVOICE_OCR_SCRIPT, imagePath], {
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (stderr && stderr.trim()) {
+    console.warn("[printer-counter-ocr]", stderr.trim());
   }
   const parsed = JSON.parse(stdout || "{}");
   return {
@@ -4981,6 +5042,51 @@ const server = http.createServer(async (req, res) => {
             err instanceof Error
               ? err.message
               : "Invoice OCR could not process this file.",
+        });
+      } finally {
+        if (temporary) {
+          try {
+            await fs.unlink(imagePath);
+          } catch {
+            // Ignore temp cleanup failures.
+          }
+        }
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/printers/counter-autofill") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const { path: imagePath, temporary } = await readInvoiceImagePath(body.photo || body.dataUrl);
+      if (!imagePath) {
+        sendJson(res, 400, { error: "Printer screenshot is required for auto fill." });
+        return;
+      }
+      try {
+        const ocr = await runPrinterCounterOcr(imagePath);
+        const extracted = parsePrinterCounterFromOcrText(ocr.text);
+        const db = await readDb();
+        appendAuditLog(
+          db,
+          admin,
+          "PRINTER_COUNTER_AUTOFILL",
+          "rental_printer_counter",
+          String(body.machineCode || "printer"),
+          `warnings=${extracted.warnings.length}`
+        );
+        await writeDb(db);
+        sendJson(res, 200, {
+          ok: true,
+          extracted,
+        });
+      } catch (err) {
+        sendJson(res, 503, {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Printer counter OCR could not process this file.",
         });
       } finally {
         if (temporary) {

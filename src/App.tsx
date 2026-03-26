@@ -7800,6 +7800,7 @@ export default function App() {
   });
   const [utilityMessage, setUtilityMessage] = useState("");
   const [utilityAutofillBusy, setUtilityAutofillBusy] = useState(false);
+  const [rentalCounterAutofillBusy, setRentalCounterAutofillBusy] = useState(false);
   const [utilityInvoiceForm, setUtilityInvoiceForm] = useState({
     utilityType: "EDC" as "EDC" | "PPWS",
     campus: CAMPUS_LIST[0],
@@ -9037,21 +9038,18 @@ export default function App() {
       });
     const latest = previousRows[0];
     return latest
-      ? { previousMono: latest.currentMono, previousColor: latest.currentColor }
-      : { previousMono: selectedRentalPrinter.openingMono, previousColor: selectedRentalPrinter.openingColor };
+      ? { previousMono: latest.currentMono, previousColor: 0 }
+      : { previousMono: selectedRentalPrinter.openingMono, previousColor: 0 };
   }, [rentalCounterForm.billingMonth, rentalPrinterCounters, selectedRentalPrinter]);
   const rentalCounterPreview = useMemo(() => {
     const previousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? 0;
-    const previousColor = selectedRentalPrinterPreviousCounter?.previousColor ?? 0;
     const currentMono = Math.max(previousMono, Number(rentalCounterForm.currentMono) || 0);
-    const currentColor = Math.max(previousColor, Number(rentalCounterForm.currentColor) || 0);
     const monoUsage = Math.max(0, currentMono - previousMono);
-    const colorUsage = Math.max(0, currentColor - previousColor);
     const autoAmount = selectedRentalPrinter
-      ? monoUsage * Number(selectedRentalPrinter.monoRate || 0) + colorUsage * Number(selectedRentalPrinter.colorRate || 0)
+      ? monoUsage * Number(selectedRentalPrinter.monoRate || 0)
       : 0;
-    return { previousMono, previousColor, currentMono, currentColor, monoUsage, colorUsage, autoAmount };
-  }, [rentalCounterForm.currentColor, rentalCounterForm.currentMono, selectedRentalPrinter, selectedRentalPrinterPreviousCounter]);
+    return { previousMono, currentMono, monoUsage, autoAmount };
+  }, [rentalCounterForm.currentMono, selectedRentalPrinter, selectedRentalPrinterPreviousCounter]);
   const rentalReportRows = useMemo(() => {
     return rentalPrinterCounters
       .filter((row) => row.billingMonth === rentalReportMonth)
@@ -9069,11 +9067,10 @@ export default function App() {
       (acc, row) => {
         acc.printers += 1;
         acc.monoUsage += Number(row.monoUsage) || 0;
-        acc.colorUsage += Number(row.colorUsage) || 0;
         acc.amount += Number(row.amount) || 0;
         return acc;
       },
-      { printers: 0, monoUsage: 0, colorUsage: 0, amount: 0 }
+      { printers: 0, monoUsage: 0, amount: 0 }
     );
   }, [rentalReportRows]);
   const rentalMissingPrinterRows = useMemo(() => {
@@ -14146,10 +14143,62 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setRentalCounterForm((prev) => ({ ...prev, photo }));
+      if (canUseUtilityInvoiceOcr) {
+        await autofillRentalCounterFromPhoto(photo);
+      } else {
+        setRentalPrinterMessage("Printer screenshot uploaded. Auto fill is available only in the local macOS app.");
+      }
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
       e.target.value = "";
+    }
+  }
+
+  async function autofillRentalCounterFromPhoto(photoInput?: string) {
+    if (!requireAdminAction()) return;
+    const photo = String(photoInput || rentalCounterForm.photo || "").trim();
+    if (!photo) {
+      setError("Please upload a printer screenshot first.");
+      return;
+    }
+    setRentalCounterAutofillBusy(true);
+    setRentalPrinterMessage("");
+    try {
+      const res = await requestJson<{
+        ok: boolean;
+        extracted?: {
+          currentMono?: string;
+          rawText?: string;
+          warnings?: string[];
+        };
+      }>("/api/printers/counter-autofill", {
+        method: "POST",
+        body: JSON.stringify({
+          machineCode: selectedRentalPrinter?.machineCode || "",
+          photo,
+        }),
+      });
+      const extracted = res.extracted || {};
+      setRentalCounterForm((prev) => ({
+        ...prev,
+        photo,
+        currentMono: extracted.currentMono || prev.currentMono,
+        note:
+          prev.note ||
+          (Array.isArray(extracted.warnings) && extracted.warnings.length
+            ? `OCR note: ${extracted.warnings.join(" ")}`
+            : prev.note),
+      }));
+      setRentalPrinterMessage(
+        Array.isArray(extracted.warnings) && extracted.warnings.length
+          ? `Printer auto fill completed with checks needed: ${extracted.warnings.join(" ")}`
+          : "Printer auto fill completed. Please review the counter before saving."
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Printer auto fill failed.");
+    } finally {
+      setRentalCounterAutofillBusy(false);
     }
   }
 
@@ -14590,22 +14639,15 @@ export default function App() {
       return;
     }
     const previousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? printer.openingMono;
-    const previousColor = selectedRentalPrinterPreviousCounter?.previousColor ?? printer.openingColor;
     const currentMono = Number(rentalCounterForm.currentMono);
-    const currentColor = Number(rentalCounterForm.currentColor);
     if (!Number.isFinite(currentMono) || currentMono < previousMono) {
       setError(`Mono counter must be ${previousMono} or higher.`);
       return;
     }
-    if (!Number.isFinite(currentColor) || currentColor < previousColor) {
-      setError(`Color counter must be ${previousColor} or higher.`);
-      return;
-    }
     const monoUsage = currentMono - previousMono;
-    const colorUsage = currentColor - previousColor;
     const amount =
       rentalCounterForm.amount === ""
-        ? monoUsage * Number(printer.monoRate || 0) + colorUsage * Number(printer.colorRate || 0)
+        ? monoUsage * Number(printer.monoRate || 0)
         : Math.max(0, Number(String(rentalCounterForm.amount).replace(/,/g, "")) || 0);
     const row: RentalPrinterCounter = {
       id: Date.now(),
@@ -14621,11 +14663,11 @@ export default function App() {
       previousMono,
       currentMono,
       monoUsage,
-      previousColor,
-      currentColor,
-      colorUsage,
+      previousColor: 0,
+      currentColor: 0,
+      colorUsage: 0,
       monoRate: Number(printer.monoRate || 0),
-      colorRate: Number(printer.colorRate || 0),
+      colorRate: 0,
       amount,
       submittedBy: rentalCounterForm.submittedBy.trim(),
       photo: rentalCounterForm.photo || "",
@@ -41752,18 +41794,6 @@ export default function App() {
                     <input className="input" value={String(rentalCounterPreview.monoUsage)} readOnly />
                   </label>
                   <label className="field">
-                    <span>Previous Color</span>
-                    <input className="input" value={selectedRentalPrinterPreviousCounter ? String(selectedRentalPrinterPreviousCounter.previousColor) : ""} readOnly />
-                  </label>
-                  <label className="field">
-                    <span>Current Color</span>
-                    <input className="input" inputMode="numeric" value={rentalCounterForm.currentColor} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, currentColor: e.target.value.replace(/[^0-9]/g, "") }))} />
-                  </label>
-                  <label className="field">
-                    <span>Color Usage</span>
-                    <input className="input" value={String(rentalCounterPreview.colorUsage)} readOnly />
-                  </label>
-                  <label className="field">
                     <span>Auto Amount</span>
                     <input className="input" value={rentalCounterPreview.autoAmount.toFixed(2)} readOnly />
                   </label>
@@ -41776,8 +41806,13 @@ export default function App() {
                     <input className="input" value={rentalCounterForm.submittedBy} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, submittedBy: e.target.value }))} />
                   </label>
                   <label className="field">
-                    <span>Counter Photo</span>
+                    <span>Printer Screenshot</span>
                     <input key={rentalCounterFileKey} type="file" accept="image/*" className="input" onChange={onRentalCounterPhotoFile} />
+                    <span className="tiny">
+                      {canUseUtilityInvoiceOcr
+                        ? "Upload the printer screenshot. The local macOS app can read Total 2 automatically."
+                        : "Upload the printer screenshot here. Auto read works only in the local macOS app; phone/web entry is manual."}
+                    </span>
                     {rentalCounterForm.photo ? <img loading="lazy" decoding="async" src={rentalCounterForm.photo} alt="rental counter" className="table-photo" style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }} /> : null}
                   </label>
                   <label className="field field-wide">
@@ -41786,6 +41821,14 @@ export default function App() {
                   </label>
                 </div>
                 <div className="row-actions">
+                  <button
+                    className="tab"
+                    disabled={!canUseUtilityInvoiceOcr || rentalCounterAutofillBusy || !rentalCounterForm.photo}
+                    title={canUseUtilityInvoiceOcr ? "" : "Available only in the local macOS app"}
+                    onClick={() => void autofillRentalCounterFromPhoto()}
+                  >
+                    {rentalCounterAutofillBusy ? "Reading Screenshot..." : "Auto Fill Total 2"}
+                  </button>
                   <button className="btn-primary" disabled={!isAdmin || !rentalCounterForm.rentalPrinterId} onClick={() => void saveRentalPrinterCounter()}>
                     Save Rental Counter
                   </button>
@@ -41798,7 +41841,6 @@ export default function App() {
                         <th>Machine</th>
                         <th>{t.campus}</th>
                         <th>Mono Usage</th>
-                        <th>Color Usage</th>
                         <th>Amount</th>
                         <th>By</th>
                         <th>{t.delete}</th>
@@ -41811,12 +41853,11 @@ export default function App() {
                           <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
                           <td>{campusLabel(row.campus)}</td>
                           <td>{row.monoUsage}</td>
-                          <td>{row.colorUsage}</td>
                           <td>{row.amount.toFixed(2)}</td>
                           <td>{row.submittedBy || "-"}</td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={8}>No rental counter records yet.</td></tr>}
+                      )) : <tr><td colSpan={7}>No rental counter records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -41838,7 +41879,6 @@ export default function App() {
                 <div className="stats-grid" style={{ marginBottom: 12 }}>
                   <article className="stat-card"><div className="stat-label">Printers Reported</div><div className="stat-value">{rentalReportSummary.printers}</div></article>
                   <article className="stat-card"><div className="stat-label">Mono Usage</div><div className="stat-value">{rentalReportSummary.monoUsage}</div></article>
-                  <article className="stat-card"><div className="stat-label">Color Usage</div><div className="stat-value">{rentalReportSummary.colorUsage}</div></article>
                   <article className="stat-card"><div className="stat-label">Total Amount</div><div className="stat-value">{rentalReportSummary.amount.toFixed(2)}</div></article>
                 </div>
                 <div className="table-wrap">
@@ -41854,9 +41894,6 @@ export default function App() {
                         <th>Prev Mono</th>
                         <th>Curr Mono</th>
                         <th>Mono Usage</th>
-                        <th>Prev Color</th>
-                        <th>Curr Color</th>
-                        <th>Color Usage</th>
                         <th>Amount</th>
                         <th>By</th>
                       </tr>
@@ -41873,13 +41910,10 @@ export default function App() {
                           <td>{row.previousMono}</td>
                           <td>{row.currentMono}</td>
                           <td>{row.monoUsage}</td>
-                          <td>{row.previousColor}</td>
-                          <td>{row.currentColor}</td>
-                          <td>{row.colorUsage}</td>
                           <td>{row.amount.toFixed(2)}</td>
                           <td>{row.submittedBy || "-"}</td>
                         </tr>
-                      )) : <tr><td colSpan={14}>No rental counter records for this month.</td></tr>}
+                      )) : <tr><td colSpan={11}>No rental counter records for this month.</td></tr>}
                     </tbody>
                   </table>
                 </div>
