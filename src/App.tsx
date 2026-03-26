@@ -8844,7 +8844,7 @@ export default function App() {
     setClassroomVerificationOpen(false);
   }, [classroomDetailRoomId]);
   useEffect(() => {
-    if (tab === "classroom") return;
+    if (tab === "classroom" || tab === "assets") return;
     if (classroomDetailRoomId === null && assetDetailId === null) return;
     setClassroomDetailRoomId(null);
     setAssetDetailId(null);
@@ -32406,15 +32406,6 @@ export default function App() {
                               <td>
                                 {isAdmin ? (
                                   <div className="row-actions">
-                                    <button
-                                      className="tab btn-small"
-                                      type="button"
-                                      onClick={() => setAssetDetailId(asset.id)}
-                                      title="View Details"
-                                      aria-label="View Details"
-                                    >
-                                      View
-                                    </button>
                                     <button
                                       className="btn-icon-transfer"
                                       onClick={() => openTransferFromAsset(asset)}
