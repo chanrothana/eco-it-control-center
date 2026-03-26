@@ -597,6 +597,7 @@ type RentalPrinter = {
   contractStart?: string;
   contractEnd?: string;
   status: "Active" | "Inactive";
+  fixingHistory?: string;
   note?: string;
   created: string;
 };
@@ -3291,6 +3292,7 @@ function normalizeRentalPrinters(input: unknown): RentalPrinter[] {
       contractStart: String(row.contractStart || "").trim(),
       contractEnd: String(row.contractEnd || "").trim(),
       status: String(row.status || "").trim().toLowerCase() === "inactive" ? "Inactive" : "Active",
+      fixingHistory: String(row.fixingHistory || "").trim(),
       note: String(row.note || "").trim(),
       created: String(row.created || "").trim() || new Date().toISOString(),
     }))
@@ -7827,6 +7829,7 @@ export default function App() {
     contractStart: "",
     contractEnd: "",
     status: "Active" as RentalPrinter["status"],
+    fixingHistory: "",
     note: "",
   });
   const [rentalCounterFileKey, setRentalCounterFileKey] = useState(0);
@@ -14480,6 +14483,7 @@ export default function App() {
       contractStart: rentalPrinterForm.contractStart,
       contractEnd: rentalPrinterForm.contractEnd,
       status: rentalPrinterForm.status,
+      fixingHistory: rentalPrinterForm.fixingHistory.trim(),
       note: rentalPrinterForm.note.trim(),
       created:
         rentalPrinters.find((printer) => Number(printer.id) === Number(editingRentalPrinterId))?.created ||
@@ -14514,6 +14518,7 @@ export default function App() {
       contractStart: "",
       contractEnd: "",
       status: "Active",
+      fixingHistory: "",
       note: "",
     });
     setRentalPrinterMessage(`Rental printer ${row.machineCode} saved.`);
@@ -14543,6 +14548,7 @@ export default function App() {
       contractStart: printer.contractStart || "",
       contractEnd: printer.contractEnd || "",
       status: printer.status,
+      fixingHistory: printer.fixingHistory || "",
       note: printer.note || "",
     });
   }
@@ -41574,12 +41580,12 @@ export default function App() {
                 <h2>Rental Printer Master</h2>
                 <div className="form-grid inventory-item-grid">
                   <label className="field">
-                    <span>Vendor</span>
-                    <input className="input" value={rentalPrinterForm.vendor} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, vendor: e.target.value }))} />
-                  </label>
-                  <label className="field">
                     <span>Machine Code</span>
                     <input className="input" value={rentalPrinterForm.machineCode} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, machineCode: e.target.value.toUpperCase() }))} placeholder="LA-CANON-01" />
+                  </label>
+                  <label className="field">
+                    <span>Vendor</span>
+                    <input className="input" value={rentalPrinterForm.vendor} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, vendor: e.target.value }))} />
                   </label>
                   <label className="field">
                     <span>Machine Name</span>
@@ -41608,18 +41614,6 @@ export default function App() {
                     <input className="input" inputMode="decimal" value={rentalPrinterForm.monoRate} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, monoRate: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="0.03" />
                   </label>
                   <label className="field">
-                    <span>Color Rate</span>
-                    <input className="input" inputMode="decimal" value={rentalPrinterForm.colorRate} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, colorRate: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="0.10" />
-                  </label>
-                  <label className="field">
-                    <span>Opening Mono</span>
-                    <input className="input" inputMode="numeric" value={rentalPrinterForm.openingMono} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, openingMono: e.target.value.replace(/[^0-9]/g, "") }))} />
-                  </label>
-                  <label className="field">
-                    <span>Opening Color</span>
-                    <input className="input" inputMode="numeric" value={rentalPrinterForm.openingColor} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, openingColor: e.target.value.replace(/[^0-9]/g, "") }))} />
-                  </label>
-                  <label className="field">
                     <span>Contract Start</span>
                     <input className="input" type="date" value={rentalPrinterForm.contractStart} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, contractStart: e.target.value }))} />
                   </label>
@@ -41633,6 +41627,15 @@ export default function App() {
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
                     </select>
+                  </label>
+                  <label className="field field-wide">
+                    <span>Fixing History By Team</span>
+                    <textarea
+                      className="input"
+                      value={rentalPrinterForm.fixingHistory}
+                      onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, fixingHistory: e.target.value }))}
+                      placeholder="Example: 2026-03-15 changed drum | 2026-04-02 cleaned paper jam"
+                    />
                   </label>
                   <label className="field field-wide">
                     <span>{t.notes}</span>
@@ -41654,12 +41657,13 @@ export default function App() {
                           campus: CAMPUS_LIST[0],
                           location: "",
                           monoRate: "",
-                          colorRate: "",
                           openingMono: "0",
+                          colorRate: "",
                           openingColor: "0",
                           contractStart: "",
                           contractEnd: "",
                           status: "Active",
+                          fixingHistory: "",
                           note: "",
                         });
                       }}
@@ -41675,14 +41679,14 @@ export default function App() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Vendor</th>
                         <th>Machine Code</th>
+                        <th>Vendor</th>
                         <th>Machine Name</th>
                         <th>Model</th>
                         <th>{t.campus}</th>
                         <th>Location</th>
                         <th>Mono Rate</th>
-                        <th>Color Rate</th>
+                        <th>Fixing History</th>
                         <th>Status</th>
                         <th>{t.edit}</th>
                         <th>{t.delete}</th>
@@ -41691,14 +41695,14 @@ export default function App() {
                     <tbody>
                       {rentalPrinterOptions.length ? rentalPrinterOptions.map((row) => (
                         <tr key={`rental-printer-row-${row.id}`}>
-                          <td>{row.vendor || "-"}</td>
                           <td><strong>{row.machineCode}</strong></td>
+                          <td>{row.vendor || "-"}</td>
                           <td>{row.machineName}</td>
                           <td>{row.model || "-"}</td>
                           <td>{campusLabel(row.campus)}</td>
                           <td>{row.location || "-"}</td>
                           <td>{row.monoRate.toFixed(3)}</td>
-                          <td>{row.colorRate.toFixed(3)}</td>
+                          <td>{row.fixingHistory || "-"}</td>
                           <td>{row.status}</td>
                           <td><button className="tab" disabled={!isAdmin} onClick={() => startEditRentalPrinter(row)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinter(row.id)}>X</button></td>
