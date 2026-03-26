@@ -31573,7 +31573,7 @@ export default function App() {
                       </datalist>
                     </label>
                   ) : null}
-                  {!isFurnitureAsset(assetForm.category) || assetForm.furnitureTrackingMode === "Individual" ? (
+                  {!isFurnitureAsset(assetForm.category) ? (
                     <label className="field">
                       <span>{t.serialNumber}</span>
                       <input className="input" value={assetForm.serialNumber} onChange={(e) => setAssetForm((f) => ({ ...f, serialNumber: e.target.value }))} />
@@ -31817,8 +31817,8 @@ export default function App() {
                               ...f,
                               furnitureTrackingMode: e.target.value,
                               furnitureQuantity: e.target.value === "Individual" ? "1" : f.furnitureQuantity || "1",
-                              serialNumber: e.target.value === "Grouped" ? "" : f.serialNumber,
-                              warrantyUntil: e.target.value === "Grouped" ? "" : f.warrantyUntil,
+                              serialNumber: "",
+                              warrantyUntil: "",
                             }))
                           }
                         >
@@ -31900,7 +31900,7 @@ export default function App() {
                       <input type="date" className="input" value={assetForm.purchaseDate} onChange={(e) => setAssetForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
                     </label>
                   ) : null}
-                  {!isFurnitureAsset(assetForm.category) || assetForm.furnitureTrackingMode === "Individual" ? (
+                  {!isFurnitureAsset(assetForm.category) ? (
                     <label className="field">
                       <span>{t.warrantyUntil}</span>
                       <input type="date" className="input" value={assetForm.warrantyUntil} onChange={(e) => setAssetForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
@@ -32606,13 +32606,13 @@ export default function App() {
                   {isAdmin ? (
                     <div className="asset-actions" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
                       <button type="button" className="btn-primary btn-small" onClick={() => openMaintenanceQuickFromDetail(detailAsset)}>
-                        Record Maintenance
+                        {detailFurniture ? "Record Fixing" : "Record Maintenance"}
                       </button>
                       <button type="button" className="btn-primary btn-small" onClick={() => openTransferQuickFromDetail(detailAsset)}>
                         Record Transfer
                       </button>
                       <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
-                        Open Maintenance Page
+                        {detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
                       </button>
                       <button type="button" className="tab btn-small" onClick={() => openTransferPageFromDetail(detailAsset)}>
                         Open Transfer Page
@@ -32725,10 +32725,14 @@ export default function App() {
                     ) : null}
                     <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
                     <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
-                    <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
+                    {!detailFurniture ? (
+                      <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
+                    ) : null}
                     <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
                     <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
-                    <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
+                    {!detailFurniture ? (
+                      <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
+                    ) : null}
                     {detailFurniture ? (
                       <>
                         <div className="field"><span>Control Mode</span><div className="detail-value">{detailFurniture.trackingMode || "-"}</div></div>
@@ -32750,10 +32754,16 @@ export default function App() {
                     {detailAsset.parentAssetId ? (
                       <div className="field"><span>{t.componentRequired}</span><div className="detail-value">{detailAsset.componentRequired ? "Yes" : "No"}</div></div>
                     ) : null}
-                    <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailFurniture ? furnitureVisibleSpecs(detailAsset.specs || "") : detailAsset.specs || "-"}</div></div>
+                    {!detailFurniture ? (
+                      <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailAsset.specs || "-"}</div></div>
+                    ) : null}
                     <div className="field field-wide"><span>Notes</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
-                    <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
-                    <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
+                    {!detailFurniture ? (
+                      <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
+                    ) : null}
+                    {!detailFurniture ? (
+                      <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
+                    ) : null}
                     {isPrinterAssetRow(detailAsset) ? (
                       <>
                         <div className="field"><span>Toner Model</span><div className="detail-value">{detailAsset.tonerModel || "-"}</div></div>
@@ -32863,7 +32873,7 @@ export default function App() {
                   ) : null}
 
                   <div className="panel-row" style={{ marginTop: 8 }}>
-                    <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
+                    <h3 className="section-title" style={{ margin: 0 }}>{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
                     {detailMaintenanceEntries.length > 1 ? (
                       <button
                         type="button"
@@ -32914,7 +32924,7 @@ export default function App() {
                           </article>
                         ))
                       ) : (
-                        <div className="panel-note">No maintenance records yet.</div>
+                        <div className="panel-note">{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</div>
                       )}
                     </div>
                   ) : (
@@ -32961,7 +32971,7 @@ export default function App() {
                             ))
                           ) : (
                             <tr className="asset-detail-empty-row">
-                              <td colSpan={9}>No maintenance records yet.</td>
+                              <td colSpan={9}>{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</td>
                             </tr>
                           )}
                         </tbody>
@@ -33518,7 +33528,7 @@ export default function App() {
                         <input className="input" value={assetEditForm.model} onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))} />
                       </label>
                     ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") || assetEditForm.furnitureTrackingMode === "Individual" ? (
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">
                         <span>Serial Number</span>
                         <input className="input" value={assetEditForm.serialNumber} onChange={(e) => setAssetEditForm((f) => ({ ...f, serialNumber: e.target.value }))} />
@@ -33767,8 +33777,8 @@ export default function App() {
                                 ...f,
                                 furnitureTrackingMode: e.target.value,
                                 furnitureQuantity: e.target.value === "Individual" ? "1" : f.furnitureQuantity || "1",
-                                serialNumber: e.target.value === "Grouped" ? "" : f.serialNumber,
-                                warrantyUntil: e.target.value === "Grouped" ? "" : f.warrantyUntil,
+                                serialNumber: "",
+                                warrantyUntil: "",
                               }))
                             }
                           >
@@ -33850,7 +33860,7 @@ export default function App() {
                         <input type="date" className="input" value={assetEditForm.purchaseDate} onChange={(e) => setAssetEditForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
                       </label>
                     ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") || assetEditForm.furnitureTrackingMode === "Individual" ? (
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">
                         <span>Warranty Until</span>
                         <input type="date" className="input" value={assetEditForm.warrantyUntil} onChange={(e) => setAssetEditForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
@@ -34006,7 +34016,7 @@ export default function App() {
               <div className="modal-backdrop" onClick={() => setHistoryAssetId(null)}>
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
-                    <h2>Maintenance History - {historyAsset.assetId}</h2>
+                    <h2>{isFurnitureAsset(historyAsset.category) ? "Fixing History" : "Maintenance History"} - {historyAsset.assetId}</h2>
                     <div className="row-actions">
                       <button
                         className="btn-primary btn-small"
@@ -34015,12 +34025,14 @@ export default function App() {
                           openQuickRecordModal(historyAsset);
                         }}
                       >
-                        Record
+                        {isFurnitureAsset(historyAsset.category) ? "Record Fixing" : "Record"}
                       </button>
                       <button className="tab" onClick={() => setHistoryAssetId(null)}>Close</button>
                     </div>
                   </div>
-                  <p className="tiny">Purchase: {formatDate(historyAsset.purchaseDate || "-")} | Warranty: {formatDate(historyAsset.warrantyUntil || "-")}</p>
+                  {!isFurnitureAsset(historyAsset.category) ? (
+                    <p className="tiny">Purchase: {formatDate(historyAsset.purchaseDate || "-")} | Warranty: {formatDate(historyAsset.warrantyUntil || "-")}</p>
+                  ) : null}
                   <div className="table-wrap maintenance-history-modal-table-wrap" style={{ marginTop: 12 }}>
                     <table className="maintenance-history-modal-table">
                       <thead>
@@ -34053,7 +34065,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={9}>No maintenance records yet.</td>
+                            <td colSpan={9}>{isFurnitureAsset(historyAsset.category) ? "No fixing records yet." : "No maintenance records yet."}</td>
                           </tr>
                         )}
                       </tbody>
@@ -34067,7 +34079,7 @@ export default function App() {
               <div className="modal-backdrop" onClick={() => setQuickRecordAssetId(null)}>
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
-                    <h2>Record Maintenance Result - {quickRecordAsset.assetId}</h2>
+                    <h2>{isFurnitureAsset(quickRecordAsset.category) ? "Record Fixing Result" : "Record Maintenance Result"} - {quickRecordAsset.assetId}</h2>
                     <button className="tab" onClick={() => setQuickRecordAssetId(null)}>Close</button>
                   </div>
                   <div className="form-grid">
@@ -46952,13 +46964,13 @@ export default function App() {
               {isAdmin ? (
                 <div className="asset-actions" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
                   <button type="button" className="btn-primary btn-small" onClick={() => openMaintenanceQuickFromDetail(detailAsset)}>
-                    Record Maintenance
+                    {detailFurniture ? "Record Fixing" : "Record Maintenance"}
                   </button>
                   <button type="button" className="btn-primary btn-small" onClick={() => openTransferQuickFromDetail(detailAsset)}>
                     Record Transfer
                   </button>
                   <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
-                    Open Maintenance Page
+                    {detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
                   </button>
                   <button type="button" className="tab btn-small" onClick={() => openTransferPageFromDetail(detailAsset)}>
                     Open Transfer Page
@@ -47008,10 +47020,14 @@ export default function App() {
                 <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
                 <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
                 <div className="field"><span>{lang === "km" ? "លេខសម្គាល់" : "Asset ID"}</span><div className="detail-value">{detailAsset.assetId}</div></div>
-                <div className="field"><span>Serial Number</span><div className="detail-value">{String(detailAsset.serialNumber || "").trim() || "-"}</div></div>
+                {!detailFurniture ? (
+                  <div className="field"><span>Serial Number</span><div className="detail-value">{String(detailAsset.serialNumber || "").trim() || "-"}</div></div>
+                ) : null}
                 <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
                 <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
-                <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
+                {!detailFurniture ? (
+                  <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
+                ) : null}
                 {detailAsset.category === "IT" ? (
                   <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
                 ) : null}
@@ -47021,15 +47037,21 @@ export default function App() {
                     <div className="field"><span>Quantity</span><div className="detail-value">{detailFurniture.quantity || "1"}</div></div>
                   </>
                 ) : null}
-                <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
-                <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
-                <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailFurniture ? furnitureVisibleSpecs(detailAsset.specs || "") : detailAsset.specs || "-"}</div></div>
+                {!detailFurniture ? (
+                  <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
+                ) : null}
+                {!detailFurniture ? (
+                  <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
+                ) : null}
+                {!detailFurniture ? (
+                  <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailAsset.specs || "-"}</div></div>
+                ) : null}
                 <div className="field field-wide"><span>{lang === "km" ? "ចំណាំ" : "Notes"}</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
               </div>
               ) : null}
 
               <div className="panel-row" style={{ marginTop: 8 }}>
-                <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
+                <h3 className="section-title" style={{ margin: 0 }}>{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
                 {detailMaintenanceEntries.length > 1 ? (
                   <button
                     type="button"
@@ -47073,7 +47095,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr className="asset-detail-empty-row">
-                        <td colSpan={7}>No maintenance records yet.</td>
+                        <td colSpan={7}>{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</td>
                       </tr>
                     )}
                   </tbody>
