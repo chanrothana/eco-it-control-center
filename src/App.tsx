@@ -32395,6 +32395,15 @@ export default function App() {
                                 {isAdmin ? (
                                   <div className="row-actions">
                                     <button
+                                      className="tab btn-small"
+                                      type="button"
+                                      onClick={() => setAssetDetailId(asset.id)}
+                                      title="View Details"
+                                      aria-label="View Details"
+                                    >
+                                      View
+                                    </button>
+                                    <button
                                       className="btn-icon-transfer"
                                       onClick={() => openTransferFromAsset(asset)}
                                       title="Transfer"
