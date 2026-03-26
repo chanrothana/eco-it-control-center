@@ -18691,7 +18691,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
-              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
+              photo: String(locationPhoto || "").trim(),
             }),
           });
         } else {
@@ -18705,7 +18705,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
-              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
+              photo: String(locationPhoto || "").trim(),
             }),
           });
         }
@@ -18721,7 +18721,7 @@ export default function App() {
                   studentCapacity: 0,
                   tableSeatsPerTable: 2,
                   notes: locationNotes.trim(),
-                  photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
+                  photo: String(locationPhoto || "").trim(),
                 }
               : loc
           );
@@ -18736,7 +18736,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
-              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
+              photo: String(locationPhoto || "").trim(),
             },
             ...nextLocal,
           ];
@@ -18756,7 +18756,7 @@ export default function App() {
                   studentCapacity: 0,
                   tableSeatsPerTable: 2,
                   notes: locationNotes.trim(),
-                  photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
+                  photo: String(locationPhoto || "").trim(),
                 }
               : loc
           );
@@ -18771,7 +18771,7 @@ export default function App() {
               studentCapacity: 0,
               tableSeatsPerTable: 2,
               notes: locationNotes.trim(),
-              photo: locationIsClassroom ? String(locationPhoto || "").trim() : "",
+              photo: String(locationPhoto || "").trim(),
             },
             ...current,
           ];
@@ -45154,7 +45154,7 @@ export default function App() {
                 <input className="input" value={locationNotes} onChange={(e) => setLocationNotes(e.target.value)} />
               </label>
               <label className="field field-wide">
-                <span>Classroom Photo</span>
+                <span>Location Photo</span>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <input
                     key={locationPhotoFileKey}
@@ -45162,24 +45162,38 @@ export default function App() {
                     accept="image/*"
                     className="input"
                     onChange={onLocationPhotoFile}
-                    disabled={!locationIsClassroom}
                   />
                   <div className="tiny">
                     {locationIsClassroom
-                      ? "Upload a real classroom photo. If empty, Classroom Gallery will use the default classroom image."
-                      : "Enable Classroom Record first if you want to upload a classroom photo."}
+                      ? "Upload a real classroom photo. This is optional. If empty, Classroom Gallery will use the default classroom image."
+                      : "Upload a real room/location photo if you want. This is optional."}
                   </div>
                   <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                     <div>
                       <div className="tiny" style={{ marginBottom: 6 }}>Gallery Preview</div>
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        src={String(locationPhoto || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL}
-                        alt="classroom-preview"
-                        className="photo-preview"
-                        style={{ width: 128, height: 96, objectFit: "cover" }}
-                      />
+                      {String(locationPhoto || "").trim() ? (
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={String(locationPhoto || "").trim()}
+                          alt="location-preview"
+                          className="photo-preview"
+                          style={{ width: 128, height: 96, objectFit: "cover" }}
+                        />
+                      ) : locationIsClassroom ? (
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={DEFAULT_CLASSROOM_IMAGE_URL}
+                          alt="classroom-preview"
+                          className="photo-preview"
+                          style={{ width: 128, height: 96, objectFit: "cover" }}
+                        />
+                      ) : (
+                        <div className="photo-placeholder" style={{ width: 128, height: 96 }}>
+                          {t.noPhoto}
+                        </div>
+                      )}
                     </div>
                     {String(locationPhoto || "").trim() ? (
                       <button
@@ -45234,9 +45248,11 @@ export default function App() {
                         <td>{loc.name}</td>
                         <td>{isClassroomLocationLike(loc) ? "Classroom" : "General"}</td>
                         <td>
-                          {isClassroomLocationLike(loc)
-                            ? renderAssetPhoto(String(loc.photo || "").trim() || DEFAULT_CLASSROOM_IMAGE_URL, `${loc.name}-classroom`)
-                            : "-"}
+                          {String(loc.photo || "").trim()
+                            ? renderAssetPhoto(String(loc.photo || "").trim(), `${loc.name}-location`)
+                            : isClassroomLocationLike(loc)
+                              ? renderAssetPhoto(DEFAULT_CLASSROOM_IMAGE_URL, `${loc.name}-classroom`)
+                              : "-"}
                         </td>
                         <td>{loc.currentStudents || "-"}</td>
                         <td>{loc.notes || "-"}</td>
