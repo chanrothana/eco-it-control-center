@@ -323,10 +323,18 @@ body {
 }
 
 .main-nav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 10px 6px;
   border: 1px solid #e5c8a2;
   border-radius: 12px;
   background: #fff8ee;
+}
+
+.main-nav-head-copy {
+  min-width: 0;
 }
 
 .main-nav-head .eyebrow {
@@ -338,6 +346,25 @@ body {
   font-family: var(--font-head);
   font-size: 20px;
   color: #553516;
+}
+
+.main-nav-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e3c49d;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fffaf2, #fff0db);
+  color: #6b4520;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.main-nav-toggle-btn:hover {
+  border-color: #c98a56;
+  background: #ffeaca;
 }
 
 .main-nav-section {
@@ -370,6 +397,9 @@ body {
 }
 
 .main-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-height: 42px;
   width: 100%;
   border: 1px solid #e3c49d;
@@ -383,6 +413,17 @@ body {
   padding: 0 12px 0 14px;
   cursor: pointer;
   transition: 140ms ease;
+}
+
+.main-nav-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+}
+
+.main-nav-btn-label {
+  min-width: 0;
 }
 
 .main-nav-btn:hover {
@@ -436,12 +477,62 @@ body {
     align-items: stretch;
   }
 
+  .workspace-shell-nav-collapsed {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
   .main-nav-rail {
     position: relative;
     top: auto;
     max-height: none;
     height: 100%;
     min-height: 0;
+  }
+
+  .main-nav-rail-collapsed {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .main-nav-rail-collapsed .main-nav-head {
+    padding: 10px 8px;
+    justify-content: center;
+  }
+
+  .main-nav-rail-collapsed .main-nav-head-copy,
+  .main-nav-rail-collapsed .main-nav-section-label,
+  .main-nav-rail-collapsed .main-nav-btn-label,
+  .main-nav-rail-collapsed .main-nav-sublist {
+    display: none;
+  }
+
+  .main-nav-rail-collapsed .main-nav-list {
+    justify-items: center;
+    gap: 10px;
+  }
+
+  .main-nav-rail-collapsed .main-nav-btn {
+    justify-content: center;
+    padding: 0;
+    width: 52px;
+    min-width: 52px;
+    min-height: 52px;
+    border-radius: 14px;
+    box-shadow: 0 8px 18px rgba(133, 82, 29, 0.08);
+  }
+
+  .main-nav-rail-collapsed .main-nav-btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .main-nav-rail-collapsed .main-nav-btn-icon {
+    flex: 0 0 auto;
+  }
+
+  .main-nav-rail-collapsed .main-nav-toggle-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
   }
 
   .workspace-main {
@@ -2123,13 +2214,25 @@ h2 {
 
 .asset-list-toolbar {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-bottom: 14px;
 }
 
 .asset-list-title {
   margin: 0;
+}
+
+.asset-list-search-row {
+  display: flex;
+  justify-content: flex-end;
+  flex: 0 1 360px;
+  min-width: 0;
+}
+
+.asset-list-search-input {
+  width: min(100%, 360px);
 }
 
 .asset-list-filter-row {
@@ -2156,16 +2259,6 @@ h2 {
 }
 
 .asset-list-filters > * {
-  min-width: 0;
-  width: 100%;
-}
-
-.asset-list-filters .input {
-  min-width: 0;
-  width: 100%;
-}
-
-.asset-list-filters .input:last-child {
   min-width: 0;
   width: 100%;
 }
@@ -9112,6 +9205,8 @@ tr.row-maint-maintenance:hover td {
   }
 
   .asset-list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
     margin-bottom: 0;
   }
 
@@ -9121,6 +9216,12 @@ tr.row-maint-maintenance:hover td {
     margin-left: 0;
     margin-bottom: 8px;
     gap: 8px;
+  }
+
+  .asset-list-search-row {
+    flex: 1 1 auto;
+    width: 100%;
+    margin-bottom: 8px;
   }
 
   .asset-list-filters {
@@ -9171,13 +9272,8 @@ tr.row-maint-maintenance:hover td {
     width: 100%;
   }
 
-  .asset-list-filters .input {
+  .asset-list-search-input {
     width: 100%;
-    min-width: 0;
-  }
-
-  .asset-list-filters .input:last-child {
-    min-width: 0;
   }
 
   .maintenance-filters .input {
@@ -9536,6 +9632,11 @@ tr.row-maint-maintenance:hover td {
     gap: 8px;
   }
 
+  .asset-list-search-row {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+  }
+
   .asset-list-filters {
     margin-left: auto;
     flex-wrap: nowrap;
@@ -9543,11 +9644,16 @@ tr.row-maint-maintenance:hover td {
     width: 100%;
   }
 
-  .asset-list-filters .filter-menu,
-  .asset-list-filters .input {
+  .asset-list-filters .filter-menu {
     flex: 0 0 210px;
     width: 210px;
     min-width: 210px;
+  }
+
+  .asset-list-search-input {
+    flex: 0 0 260px;
+    width: 260px;
+    min-width: 260px;
   }
 
   .asset-list-filters .asset-filter-reset-btn {

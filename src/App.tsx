@@ -28,6 +28,8 @@ import {
   Settings,
   Shield,
   Snowflake,
+  PanelLeftClose,
+  PanelLeftOpen,
   Tablet,
   Tv,
   Usb,
@@ -6358,6 +6360,7 @@ export default function App() {
   };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
   const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
@@ -28968,11 +28971,28 @@ export default function App() {
           </div>
         </header>
 
-        <section className="workspace-shell">
-          <aside className="main-nav-rail">
+        <section className={`workspace-shell ${navCollapsed ? "workspace-shell-nav-collapsed" : ""}`}>
+          <aside className={`main-nav-rail ${navCollapsed ? "main-nav-rail-collapsed" : ""}`}>
             <div className="main-nav-head">
-              <p className="eyebrow">{t.menu}</p>
-              <h3>{lang === "km" ? "ការរុករកប្រព័ន្ធ" : "System Navigation"}</h3>
+              <div className="main-nav-head-copy">
+                <p className="eyebrow">{t.menu}</p>
+                <h3>{lang === "km" ? "ការរុករកប្រព័ន្ធ" : "System Navigation"}</h3>
+              </div>
+              <button
+                type="button"
+                className="main-nav-toggle-btn"
+                title={navCollapsed ? (lang === "km" ? "បង្ហាញម៉ឺនុយ" : "Show menu") : (lang === "km" ? "បិទអត្ថបទម៉ឺនុយ" : "Hide menu text")}
+                aria-label={navCollapsed ? (lang === "km" ? "បង្ហាញម៉ឺនុយ" : "Show menu") : (lang === "km" ? "បិទអត្ថបទម៉ឺនុយ" : "Hide menu text")}
+                onClick={() => {
+                  setNavCollapsed((prev) => {
+                    const next = !prev;
+                    if (next) setExpandedNavModule(null);
+                    return next;
+                  });
+                }}
+              >
+                {navCollapsed ? <PanelLeftOpen size={18} aria-hidden={true} /> : <PanelLeftClose size={18} aria-hidden={true} />}
+              </button>
             </div>
             {navSections.map((section) => (
               <section key={section.section} className="main-nav-section">
@@ -28986,12 +29006,21 @@ export default function App() {
                       <div key={item.id} className="main-nav-item-group">
                         <button
                           className={`main-nav-btn ${tab === item.id ? "main-nav-btn-active" : ""}`}
+                          type="button"
+                          title={item.label}
+                          aria-label={item.label}
                           onClick={() => {
-                            setExpandedNavModule((prev) => (hasSubmenu ? (prev === item.id ? null : item.id) : null));
+                            if (navCollapsed && hasSubmenu) {
+                              setNavCollapsed(false);
+                              setExpandedNavModule(item.id);
+                            } else {
+                              setExpandedNavModule((prev) => (hasSubmenu ? (prev === item.id ? null : item.id) : null));
+                            }
                             handleNavChange(item.id);
                           }}
                         >
-                          {item.label}
+                          <span className="main-nav-btn-icon" aria-hidden={true}>{navIcon(item.id)}</span>
+                          <span className="main-nav-btn-label">{item.label}</span>
                         </button>
                         {showSubmenu ? (
                           <div className="main-nav-sublist">
@@ -29867,33 +29896,6 @@ export default function App() {
 
         {tab === "assets" && (
           <>
-            <div className="tabs">
-              {canOpenAssetRegister ? (
-                <button
-                  className={`tab ${assetsView === "register" ? "tab-active" : ""}`}
-                  onClick={() => setAssetsView("register")}
-                >
-                  {t.registerAsset}
-                </button>
-              ) : null}
-              {canAccessMenu("assets.list", "assets") ? (
-                <button
-                  className={`tab ${assetsView === "list" ? "tab-active" : ""}`}
-                  onClick={() => setAssetsView("list")}
-                >
-                  {t.assetRegistry}
-                </button>
-              ) : null}
-              {canAccessMenu("assets.list", "assets") ? (
-                <button
-                  className={`tab ${assetsView === "gallery" ? "tab-active" : ""}`}
-                  onClick={() => setAssetsView("gallery")}
-                >
-                  {t.assetGallery}
-                </button>
-              ) : null}
-            </div>
-
             {assetsView === "register" && canOpenAssetRegister && (
               <section className="panel">
                 <h2>{t.registerAsset}</h2>
@@ -32078,6 +32080,9 @@ export default function App() {
               <section className="panel">
                 <div className="asset-list-toolbar">
                   <h2 className="asset-list-title">{t.assetRegistry}</h2>
+                  <div className="asset-list-search-row">
+                    <input className="input asset-list-search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
+                  </div>
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
                   <SearchableMultiSelectPicker
@@ -32183,7 +32188,6 @@ export default function App() {
                   <button type="button" className="tab asset-filter-reset-btn" onClick={resetAssetListFilters}>
                     {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                   </button>
-                  <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchAsset} />
                 </div>
 
                 {isPhoneView ? (
