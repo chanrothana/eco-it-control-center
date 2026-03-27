@@ -2115,6 +2115,13 @@ h2 {
   align-items: flex-start;
 }
 
+.maintenance-mobile-asset-photo .maintenance-history-photo-groups-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
 .maintenance-photo-stack {
   display: flex;
   flex-wrap: wrap;

@@ -40897,7 +40897,9 @@ export default function App() {
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
                           <span>PHOTOS</span>
                           <div className="maintenance-mobile-asset-photo">
-                            {renderMaintenancePhotoGroups(row, `maintenance-history-${row.rowId}`)}
+                            {renderMaintenancePhotoGroups(row, `maintenance-history-${row.rowId}`, undefined, {
+                              className: "maintenance-history-photo-groups-two-col",
+                            })}
                           </div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
