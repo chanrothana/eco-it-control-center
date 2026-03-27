@@ -17951,20 +17951,21 @@ export default function App() {
           }
           .topbar {
             display: grid;
-            grid-template-columns: 22mm 1fr;
+            grid-template-columns: 22mm 1fr 22mm;
             align-items: center;
-            column-gap: 8mm;
+            column-gap: 11mm;
             margin-bottom: 5mm;
           }
-          .logo { width: 18mm; height: auto; object-fit: contain; }
+          .logo { width: 21mm; height: auto; object-fit: contain; }
           .title {
             margin: 0;
             text-align: center;
             font-size: 5.2mm;
             line-height: 1.1;
             font-weight: 700;
-            padding-right: 10mm;
+            padding: 0 4mm;
           }
+          .topbar-spacer { width: 21mm; height: 1mm; }
           table { width: 100%; border-collapse: collapse; table-layout: fixed; }
           .meta-grid { margin-top: 0; }
           .meta-grid td {
@@ -17978,28 +17979,37 @@ export default function App() {
           .main-table th,
           .main-table td {
             border: 0.24mm solid #444;
-            padding: 1.2mm 1.4mm;
-            font-size: 3mm;
-            line-height: 1.15;
+            padding: 0.8mm 0.9mm;
+            font-size: 2.8mm;
+            line-height: 1.08;
             vertical-align: middle;
           }
           .main-table th {
             background: #d9d9d9;
             text-align: center;
             font-weight: 700;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            font-size: 2.2mm;
+            line-height: 1.02;
+            padding-top: 0.6mm;
+            padding-bottom: 0.6mm;
           }
-          .main-table tbody td { height: 5.4mm; }
-          .num-cell { width: 2%; text-align: center; padding-left: 0.6mm; padding-right: 0.6mm; }
-          .photo-cell { width: 8%; text-align: center; }
-          .desc-cell { width: 44%; }
-          .qty-cell { width: 9%; text-align: center; }
-          .stock-cell { width: 8%; text-align: center; }
-          .request-cell { width: 9%; text-align: center; }
-          .other-cell { width: 7%; }
-          .supplier-cell { width: 6%; }
+          .main-table th.suppliers-head {
+            white-space: nowrap;
+            word-break: normal;
+            overflow-wrap: normal;
+          }
+          .main-table tbody td { height: 5.2mm; }
+          .num-cell { text-align: center; padding-left: 0.2mm; padding-right: 0.2mm; }
+          .photo-cell { text-align: center; }
+          .qty-cell,
+          .stock-cell,
+          .request-cell { text-align: center; }
           .item-photo {
-            width: 8mm;
-            height: 8mm;
+            width: 7.5mm;
+            height: 7.5mm;
             object-fit: cover;
             border: 0.2mm solid #888;
             display: block;
@@ -18016,7 +18026,7 @@ export default function App() {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            font-size: 2.55mm;
+            font-size: 2.3mm;
           }
           .main-table th .th-2line {
             display: inline-block;
@@ -18060,6 +18070,7 @@ export default function App() {
           <div class="topbar">
             <img class="logo" src="${PURCHASE_ORDER_LOGO_URL}" alt="Eco International School logo" />
             <h1 class="title">${escapeHtml(title)}</h1>
+            <div class="topbar-spacer" aria-hidden="true"></div>
           </div>
           <table class="meta-grid">
             <tr>
@@ -18082,6 +18093,16 @@ export default function App() {
             </tr>
           </table>
           <table class="main-table">
+            <colgroup>
+              <col style="width: 5mm" />
+              <col style="width: 10mm" />
+              <col style="width: 36mm" />
+              <col style="width: 15mm" />
+              <col style="width: 12mm" />
+              <col style="width: 14mm" />
+              <col style="width: 8mm" />
+              <col style="width: 10mm" />
+            </colgroup>
             <thead>
               <tr>
                 <th>No.</th>
@@ -18091,7 +18112,7 @@ export default function App() {
                 <th>Current Stock</th>
                 <th>Amount Request</th>
                 <th>Others</th>
-                <th>Suppliers</th>
+                <th class="suppliers-head">Suppliers</th>
               </tr>
             </thead>
             <tbody>
