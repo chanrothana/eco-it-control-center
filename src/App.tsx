@@ -40910,28 +40910,8 @@ export default function App() {
                           <span>BY</span>
                           <strong>{row.by || "-"}</strong>
                         </div>
-                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
-                          <span>REPORT FILE</span>
-                          {renderMaintenanceReportFileLink(
-                            normalizeMaintenanceReportFile({
-                              url: row.reportFile || "",
-                              name: row.reportFileName || "",
-                              mimeType: row.reportFileType || "",
-                            }),
-                            `maintenance-mobile-report-${row.rowId}`
-                          )}
-                        </div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">
-                        <button
-                          className="tab"
-                          onClick={() => {
-                            setMaintenanceDetailAssetId(row.assetDbId);
-                            cancelMaintenanceEntryEdit();
-                          }}
-                        >
-                          Open Detail
-                        </button>
                         <button
                           className="tab"
                           disabled={!isAdmin}
