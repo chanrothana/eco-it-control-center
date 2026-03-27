@@ -7226,6 +7226,8 @@ export default function App() {
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [purchaseRequestCampusFilter, setPurchaseRequestCampusFilter] = useState("ALL");
+  const [purchaseRequestItemFilter, setPurchaseRequestItemFilter] = useState("ALL");
   const [maintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [maintenanceStockOutViewDate, setMaintenanceStockOutViewDate] = useState(() => toYmd(new Date()));
   const todayYmd = toYmd(new Date());
@@ -11383,6 +11385,44 @@ export default function App() {
       .sort((a, b) => b.suggestedQty - a.suggestedQty || b.usedQty - a.usedQty || a.itemCode.localeCompare(b.itemCode))
       .slice(0, 30);
   }, [inventoryVisibleItems, inventoryVisibleTxns, inventoryPurchaseWindow, inventoryStockMap]);
+  const inventoryPurchaseCampusOptions = useMemo(
+    () => Array.from(new Set(inventoryPurchaseRows.map((row) => String(row.campus || "").trim()).filter(Boolean))).sort(),
+    [inventoryPurchaseRows]
+  );
+  const inventoryPurchaseCampusPickerOptions = useMemo(
+    () => [
+      { value: "ALL", label: t.allCampuses },
+      ...inventoryPurchaseCampusOptions.map((campus) => ({
+        value: campus,
+        label: inventoryCampusLabel(campus),
+      })),
+    ],
+    [inventoryPurchaseCampusOptions, inventoryCampusLabel, t.allCampuses]
+  );
+  const inventoryPurchaseItemOptions = useMemo(
+    () => Array.from(new Set(inventoryPurchaseRows.map((row) => String(row.itemCode || "").trim()).filter(Boolean))).sort(),
+    [inventoryPurchaseRows]
+  );
+  const inventoryPurchaseItemPickerOptions = useMemo(
+    () => [
+      { value: "ALL", label: lang === "km" ? "គ្រប់ Item" : "All Items" },
+      ...inventoryPurchaseItemOptions.map((itemCode) => ({
+        value: itemCode,
+        label: itemCode,
+      })),
+    ],
+    [inventoryPurchaseItemOptions, lang]
+  );
+  const filteredInventoryPurchaseRows = useMemo(() => {
+    let rows = [...inventoryPurchaseRows];
+    if (purchaseRequestCampusFilter !== "ALL") {
+      rows = rows.filter((row) => String(row.campus || "").trim() === purchaseRequestCampusFilter);
+    }
+    if (purchaseRequestItemFilter !== "ALL") {
+      rows = rows.filter((row) => String(row.itemCode || "").trim() === purchaseRequestItemFilter);
+    }
+    return rows;
+  }, [inventoryPurchaseRows, purchaseRequestCampusFilter, purchaseRequestItemFilter]);
 
   const activePoolLabel = useMemo(() => {
     const campus = String(poolInfo.campus || "").trim();
@@ -17742,7 +17782,7 @@ export default function App() {
   }
 
   function exportPurchaseRequestCsv() {
-    if (!inventoryPurchaseRows.length) {
+    if (!filteredInventoryPurchaseRows.length) {
       alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់ Export" : "No purchase summary rows to export.");
       return;
     }
@@ -17765,7 +17805,7 @@ export default function App() {
     };
     const lines = [
       headers.join(","),
-      ...inventoryPurchaseRows.map((row) =>
+      ...filteredInventoryPurchaseRows.map((row) =>
         [
           row.itemCode,
           row.itemName,
@@ -17794,63 +17834,132 @@ export default function App() {
   }
 
   function printPurchaseRequest() {
-    if (!inventoryPurchaseRows.length) {
+    if (!filteredInventoryPurchaseRows.length) {
       alert(lang === "km" ? "មិនមានទិន្នន័យសម្រាប់បោះពុម្ព" : "No purchase summary rows to print.");
       return;
     }
-    const title = lang === "km" ? "សំណើទិញសម្ភារៈប្រចាំខែ" : "Monthly Purchase Request";
-    const generatedAt = formatDate(new Date().toISOString());
-    const rowsHtml = inventoryPurchaseRows
+    const title = lang === "km" ? "សំណើសុំទិញសម្ភារៈប្រចាំខែ" : "Monthly Purchase Order Request";
+    const today = new Date();
+    const requestDate = formatDate(toYmd(today));
+    const neededBase = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const neededDate = formatDate(toYmd(neededBase));
+    const requesterName = String(authUser?.displayName || authUser?.username || "").trim();
+    const requesterPosition = String(authUser?.role || "").trim();
+    const campusSet = Array.from(new Set(filteredInventoryPurchaseRows.map((row) => String(row.campus || "").trim()).filter(Boolean)));
+    const requestForText =
+      campusSet.length > 1
+        ? t.allCampuses
+        : campusSet.length === 1
+          ? inventoryCampusLabel(campusSet[0])
+          : "-";
+    const rowsHtml = filteredInventoryPurchaseRows
       .map(
-        (row) => `<tr>
-          <td>${escapeHtml(row.itemCode)}</td>
-          <td>${escapeHtml(row.itemName)}</td>
-          <td>${escapeHtml(inventoryCampusLabel(row.campus))}</td>
-          <td>${escapeHtml(row.category)}</td>
-          <td>${escapeHtml(row.unit)}</td>
+        (row, index) => `<tr>
+          <td class="num-cell">${index + 1}</td>
+          <td class="desc-cell">
+            <strong>${escapeHtml(inventoryDisplayName(row.itemName, lang))}</strong>
+            <span class="desc-sub">${escapeHtml(row.itemCode)}${row.unit ? ` | ${escapeHtml(row.unit)}` : ""}</span>
+          </td>
           <td>${row.usedQty}</td>
-          <td>${row.currentStock}</td>
-          <td>${row.minStock}</td>
-          <td><strong>${row.suggestedQty}</strong></td>
+          <td class="current-cell"><strong>${row.currentStock}</strong></td>
+          <td class="request-cell"><strong>${row.suggestedQty}</strong></td>
+          <td>${escapeHtml(`${inventoryCampusLabel(row.campus)} | Min ${row.minStock}`)}</td>
+          <td>${escapeHtml(String(row.vendor || "").trim() || "-")}</td>
         </tr>`
       )
       .join("");
+    const subtotalQty = filteredInventoryPurchaseRows.reduce((sum, row) => sum + Number(row.suggestedQty || 0), 0);
     const html = `
       <html>
       <head>
         <title>${escapeHtml(title)}</title>
         <style>
-          body { font-family: "Segoe UI", Arial, sans-serif; margin: 18px; color: #1c2e4f; }
-          h1 { margin: 0 0 8px; font-size: 24px; }
-          p.meta { margin: 0 0 12px; color: #4e6287; }
-          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-          th, td { border: 1px solid #c9d8ed; padding: 7px 8px; font-size: 12px; text-align: left; }
-          th { background: #edf4ff; text-transform: uppercase; letter-spacing: 0.03em; }
-          .summary { margin: 8px 0 0; color: #3f557e; }
-          @page { size: A4 landscape; margin: 8mm; }
-          @media print { body { margin: 8mm; } }
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 16px; color: #1d1d1d; }
+          .sheet { max-width: 980px; margin: 0 auto; }
+          .topbar { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 14px; margin-bottom: 10px; }
+          .logo { width: 120px; height: auto; object-fit: contain; }
+          .title { margin: 0; text-align: center; font-size: 18px; font-weight: 800; }
+          .meta-grid { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          .meta-grid td { border: 1px solid #444; padding: 4px 6px; font-size: 12px; }
+          .meta-label { font-weight: 700; width: 90px; }
+          .main-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+          .main-table th, .main-table td { border: 1px solid #444; padding: 4px 6px; font-size: 12px; vertical-align: top; }
+          .main-table th { background: #d9d9d9; text-align: center; font-weight: 800; }
+          .num-cell { width: 38px; text-align: center; }
+          .desc-cell { width: 280px; }
+          .desc-sub { display: block; margin-top: 2px; font-size: 10px; color: #555; }
+          .current-cell { background: #eaf7ef; color: #0f6a43; font-weight: 900; text-align: center; }
+          .request-cell { background: #fff1d9; color: #8a4b00; font-weight: 900; text-align: center; }
+          .subtotal-row td { background: #d9d9d9; font-weight: 800; }
+          .subtotal-label { text-align: right; }
+          .notice-box { margin-top: 12px; border: 1px solid #444; min-height: 72px; padding: 6px; font-size: 12px; }
+          .notice-label { font-weight: 700; text-decoration: underline; }
+          .sign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; margin-top: 40px; }
+          .sign-block { font-size: 12px; }
+          .sign-line { border-top: 1px solid #444; margin-top: 44px; padding-top: 4px; font-weight: 700; }
+          @page { size: A4 portrait; margin: 8mm; }
+          @media print { body { margin: 0; } }
         </style>
       </head>
       <body>
-        <h1>${escapeHtml(title)}</h1>
-        <p class="meta">Generated: ${escapeHtml(generatedAt)} | Period: ${escapeHtml(inventoryPurchaseWindow.label)}</p>
-        <p class="summary"><strong>Total Items:</strong> ${inventoryPurchaseRows.length}</p>
-        <table>
-          <thead>
+        <div class="sheet">
+          <div class="topbar">
+            <img class="logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
+            <h1 class="title">${escapeHtml(title)}</h1>
+          </div>
+          <table class="meta-grid">
             <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Campus</th>
-              <th>Category</th>
-              <th>Unit</th>
-              <th>Used Qty</th>
-              <th>Current</th>
-              <th>Min</th>
-              <th>Suggested</th>
+              <td class="meta-label">Name:</td>
+              <td>${escapeHtml(requesterName || "-")}</td>
+              <td class="meta-label">Position:</td>
+              <td>${escapeHtml(requesterPosition || "-")}</td>
             </tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
+            <tr>
+              <td class="meta-label">For:</td>
+              <td>${escapeHtml(requestForText)}</td>
+              <td class="meta-label">Purpose:</td>
+              <td>${escapeHtml("Cleaning Supplies")}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Request Date:</td>
+              <td>${escapeHtml(requestDate)}</td>
+              <td class="meta-label">Needed Date:</td>
+              <td>${escapeHtml(neededDate)}</td>
+            </tr>
+          </table>
+          <table class="main-table">
+            <thead>
+              <tr>
+                <th>No.</th>
+                <th>Description</th>
+                <th>Amount used per month</th>
+                <th>Current Stock</th>
+                <th>Amount Request</th>
+                <th>Others</th>
+                <th>Suppliers</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+              <tr class="subtotal-row">
+                <td colspan="4" class="subtotal-label">Sub Total:</td>
+                <td>${subtotalQty}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="notice-box">
+            <div class="notice-label">Other Notice :</div>
+          </div>
+          <div class="sign-row">
+            <div class="sign-block">
+              <div class="sign-line">Requester's Signature</div>
+            </div>
+            <div class="sign-block">
+              <div class="sign-line">Authorizer's Signature</div>
+            </div>
+          </div>
+        </div>
       </body>
       </html>
     `;
@@ -17949,6 +18058,9 @@ export default function App() {
     const periodText = `${inventoryAdminMatrixDisplayDateFrom || "-"} - ${inventoryAdminMatrixDisplayDateTo || "-"}`;
     const splitByCampus = inventoryAdminOutDayMatrix.splitByCampus;
     const campuses = inventoryAdminOutDayMatrix.campuses || [];
+    const matrixColumnCount = days.length * (splitByCampus ? Math.max(1, campuses.length) : 1);
+    const estimatedPrintWidth = 220 + 64 * 4 + matrixColumnCount * 38 + 52;
+    const printScale = Math.max(0.52, Math.min(1, 1120 / estimatedPrintWidth));
     const signatureCampuses =
       inventoryAdminMatrixCampusFilter === "ALL"
         ? campuses
@@ -18074,7 +18186,38 @@ export default function App() {
         <style>
           :root { color-scheme: light; }
           body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f7f4ec; }
+          body, .report-card, table, th, td {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .report-actions {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 12px 16px 0;
+            background: linear-gradient(180deg, rgba(247,244,236,0.98) 0%, rgba(247,244,236,0.92) 70%, rgba(247,244,236,0) 100%);
+          }
+          .report-action-btn {
+            border: 1px solid #c99a55;
+            background: #c99a55;
+            color: #fff;
+            border-radius: 999px;
+            padding: 9px 14px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+          }
+          .report-action-btn-primary {
+            background: #c99a55;
+            color: #fff;
+          }
           .report-shell { padding: 14px 16px 18px; }
+          .report-print-frame {
+            transform-origin: top left;
+          }
           .report-card {
             background: #fffdf8;
             border: 1px solid #d7c3a0;
@@ -18353,12 +18496,22 @@ export default function App() {
           @page { size: A3 landscape; margin: 6mm; }
           @media print {
             body { margin: 0; background: #fff; }
+            .report-actions { display: none !important; }
             .report-shell { padding: 0; }
+            .report-print-frame {
+              transform: scale(${printScale});
+              width: ${100 / printScale}%;
+            }
             .report-card { border: 0; border-radius: 0; box-shadow: none; }
           }
         </style>
       </head>
       <body>
+        <div class="report-actions">
+          <button class="report-action-btn" onclick="window.print()">Print</button>
+          <button class="report-action-btn report-action-btn-primary" onclick="window.print()">Export PDF</button>
+        </div>
+        <div class="report-print-frame">
         <div class="report-shell">
           <section class="report-card">
             <header class="report-header">
@@ -18414,6 +18567,7 @@ export default function App() {
               </div>
             </footer>
           </section>
+        </div>
         </div>
       </body>
       </html>
@@ -37694,6 +37848,30 @@ export default function App() {
                       ? "ប្រើសម្រាប់រៀបចំសំណើទិញប្រចាំខែ (ពិនិត្យ Used Qty និង Suggested Qty)"
                       : "Use this on the 27th to prepare monthly purchase request."}
                   </div>
+                  <div className="form-grid" style={{ marginBottom: 10 }}>
+                    <label className="field">
+                      <span>{t.campus}</span>
+                      <LocationPicker
+                        value={purchaseRequestCampusFilter}
+                        options={inventoryPurchaseCampusPickerOptions}
+                        onChange={setPurchaseRequestCampusFilter}
+                        placeholder={t.allCampuses}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរក Campus..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមាន Campus" : "No campus found."}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ទំនិញ" : "Item"}</span>
+                      <LocationPicker
+                        value={purchaseRequestItemFilter}
+                        options={inventoryPurchaseItemPickerOptions}
+                        onChange={setPurchaseRequestItemFilter}
+                        placeholder={lang === "km" ? "គ្រប់ Item" : "All Items"}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរក Item..." : "Search item..."}
+                        emptyText={lang === "km" ? "មិនមាន Item" : "No item found."}
+                      />
+                    </label>
+                  </div>
                   <div className="table-wrap">
                     <table>
                       <thead>
@@ -37708,8 +37886,8 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {inventoryPurchaseRows.length ? (
-                          inventoryPurchaseRows.map((row) => (
+                        {filteredInventoryPurchaseRows.length ? (
+                          filteredInventoryPurchaseRows.map((row) => (
                             <tr key={`purchase-row-${row.id}`}>
                               <td><strong>{row.itemCode}</strong></td>
                               <td>{inventoryDisplayName(row.itemName, lang)}</td>
@@ -37722,7 +37900,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់សំណើទិញ" : "No purchase summary rows."}</td>
+                            <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់តម្រងនេះ" : "No purchase summary rows for this filter."}</td>
                           </tr>
                         )}
                       </tbody>
