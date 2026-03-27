@@ -32953,7 +32953,9 @@ export default function App() {
                               </div>
                             </div>
                             <div className="asset-detail-maint-soft-photo-row">
-                              {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`)}
+                              {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, undefined, {
+                                className: "maintenance-history-photo-groups-two-col",
+                              })}
                             </div>
                           </article>
                         ))
