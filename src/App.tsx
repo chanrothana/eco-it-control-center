@@ -10487,6 +10487,7 @@ export default function App() {
         dayQty: Record<string, number>;
         dayCampusQty: Record<string, number>;
         total: number;
+        currentStock: number;
         monthlyRefill: number;
         stockBeforeRefill: number | null;
         firstRefillDate: string | null;
@@ -10527,6 +10528,7 @@ export default function App() {
           dayQty: {},
           dayCampusQty: {},
           total: 0,
+          currentStock: 0,
           monthlyRefill: 0,
           stockBeforeRefill: null,
           firstRefillDate: null,
@@ -10552,6 +10554,11 @@ export default function App() {
 
     for (const [key, row] of Array.from(itemMap.entries())) {
       const scopedItems = itemScopeMap.get(key) || [];
+      row.currentStock = scopedItems.reduce((sum, item) => {
+        const inventoryItem = inventoryVisibleItems.find((candidate) => Number(candidate.id) === Number(item.id));
+        if (!inventoryItem) return sum;
+        return sum + calcInventoryCurrentStockFromRows(inventoryItem, inventoryVisibleTxns);
+      }, 0);
       const campusRefillMap = new Map<string, { refillQty: number; firstRefillDate: string | null }>();
       for (const item of scopedItems) {
         if (!campusRefillMap.has(item.campus)) {
@@ -18034,6 +18041,7 @@ export default function App() {
           <td><strong>${row.stockBeforeRefill ?? ""}</strong></td>
           <td>${refillCellHtml}</td>
           ${cells}
+          <td><strong>${row.currentStock ?? ""}</strong></td>
           <td><strong>${row.total}</strong></td>
         </tr>`;
       })
@@ -18105,8 +18113,8 @@ export default function App() {
             font-size: 12px;
           }
           .report-head-logo {
-            width: 180px;
-            max-width: 28vw;
+            width: 220px;
+            max-width: 34vw;
             height: auto;
             object-fit: contain;
             flex: 0 0 auto;
@@ -18283,23 +18291,23 @@ export default function App() {
           }
           .signature-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 220px));
-            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 260px));
+            gap: 18px;
             justify-content: start;
           }
           .signature-card {
             border: 1px solid #dcc7a7;
             border-radius: 10px;
-            padding: 12px 12px 10px;
-            min-height: 76px;
-            width: 220px;
+            padding: 14px 14px 12px;
+            min-height: 108px;
+            width: 260px;
             background: #fffdfa;
           }
           .signature-campus {
             color: #3c2b19;
             font-size: 11px;
             font-weight: 800;
-            margin-bottom: 18px;
+            margin-bottom: 28px;
           }
           .signature-line,
           .signature-date-line {
@@ -18313,7 +18321,7 @@ export default function App() {
             font-size: 9px;
           }
           .signature-date-line {
-            margin-top: 10px;
+            margin-top: 18px;
           }
           .refill-cell {
             display: grid;
@@ -18377,6 +18385,7 @@ export default function App() {
                     <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "ស្តុកមុនបន្ថែម" : "Stock Before Refill")}</th>
                     <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "បន្ថែមប្រចាំខែ" : "Monthly Refill")}</th>
                     ${dayHeadHtml}
+                    <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock")}</th>
                     <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "សរុប" : "Total")}</th>
                   </tr>
                   ${campusHeadHtml}
@@ -36906,6 +36915,12 @@ export default function App() {
                                 className="inventory-admin-matrix-total-head"
                                 rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
                               >
+                                {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}
+                              </th>
+                              <th
+                                className="inventory-admin-matrix-total-head"
+                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                              >
                                 {lang === "km" ? "សរុប" : "Total"}
                               </th>
                             </tr>
@@ -37003,6 +37018,7 @@ export default function App() {
                                           </td>
                                         )
                                   )}
+                                  <td><strong>{row.currentStock}</strong></td>
                                   <td><strong>{row.total}</strong></td>
                                 </tr>
                               ))
@@ -37010,8 +37026,8 @@ export default function App() {
                               <tr>
                                 <td
                                   colSpan={Math.max(
-                                    3,
-                                    2 +
+                                    5,
+                                    4 +
                                       inventoryAdminOutDayMatrix.days.length *
                                         (inventoryAdminOutDayMatrix.splitByCampus
                                           ? Math.max(1, inventoryAdminOutDayMatrix.campuses.length)
