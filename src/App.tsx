@@ -18038,10 +18038,10 @@ export default function App() {
               <div class="item-name">${escapeHtml(itemNameText)}</div>
             </div>
           </td>
+          <td><strong>${row.currentStock ?? ""}</strong></td>
           <td><strong>${row.stockBeforeRefill ?? ""}</strong></td>
           <td>${refillCellHtml}</td>
           ${cells}
-          <td><strong>${row.currentStock ?? ""}</strong></td>
           <td><strong>${row.total}</strong></td>
         </tr>`;
       })
@@ -18382,10 +18382,10 @@ export default function App() {
                 <thead>
                   <tr>
                     <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "ទំនិញ" : "Item")}</th>
+                    <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock")}</th>
                     <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "ស្តុកមុនបន្ថែម" : "Stock Before Refill")}</th>
                     <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "បន្ថែមប្រចាំខែ" : "Monthly Refill")}</th>
                     ${dayHeadHtml}
-                    <th rowspan="${splitByCampus ? 2 : 1}" class="control-col">${escapeHtml(lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock")}</th>
                     <th rowspan="${splitByCampus ? 2 : 1}">${escapeHtml(lang === "km" ? "សរុប" : "Total")}</th>
                   </tr>
                   ${campusHeadHtml}
@@ -36881,6 +36881,12 @@ export default function App() {
                                 className="inventory-admin-matrix-total-head"
                                 rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
                               >
+                                {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}
+                              </th>
+                              <th
+                                className="inventory-admin-matrix-total-head"
+                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                              >
                                 {lang === "km" ? "ស្តុកមុនបន្ថែម" : "Stock Before Refill"}
                               </th>
                               <th
@@ -36911,12 +36917,6 @@ export default function App() {
                                   </th>
                                 )
                               ))}
-                              <th
-                                className="inventory-admin-matrix-total-head"
-                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
-                              >
-                                {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}
-                              </th>
                               <th
                                 className="inventory-admin-matrix-total-head"
                                 rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
@@ -36972,6 +36972,7 @@ export default function App() {
                                       </div>
                                     </div>
                                   </th>
+                                  <td><strong>{row.currentStock}</strong></td>
                                   <td className="inventory-admin-matrix-total-cell">
                                     {row.stockBeforeRefill ?? ""}
                                   </td>
@@ -37018,7 +37019,6 @@ export default function App() {
                                           </td>
                                         )
                                   )}
-                                  <td><strong>{row.currentStock}</strong></td>
                                   <td><strong>{row.total}</strong></td>
                                 </tr>
                               ))
