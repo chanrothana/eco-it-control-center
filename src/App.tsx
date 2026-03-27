@@ -42,9 +42,11 @@ import {
 import QRCode from "qrcode";
 import "./App.css";
 import CalendarGridTemplate from "./components/CalendarGridTemplate";
+import EISLogo from "./EIS_Logo.svg";
 
 const publicAssetUrl = (path: string) => `${process.env.PUBLIC_URL || ""}${path.startsWith("/") ? path : `/${path}`}`;
 const ECO_LOGO_URL = publicAssetUrl("/eco-logo.png");
+const PURCHASE_ORDER_LOGO_URL = EISLogo;
 const APP_ICON_FALLBACK_URL = publicAssetUrl("/logo192.png");
 const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
 
@@ -3878,6 +3880,14 @@ function inventoryDisplayName(itemName: string, lang: Lang) {
   const hit = Object.entries(INVENTORY_KM_NAME_MAP).find(([en]) => key.startsWith(`${en} `) || key.includes(en));
   return hit ? hit[1] : raw;
 }
+function inventoryPurchasePackSizeForItem(itemCode?: string, itemName?: string) {
+  const text = `${String(itemCode || "")} ${String(itemName || "")}`.toLowerCase();
+  if (text.includes("hand tissue")) return 24;
+  if (text.includes("toilet paper") || text.includes("rolling paper") || text.includes("roling paper")) return 12;
+  if (text.includes("shampoo") || text.includes("alcohol")) return 20;
+  if (text.includes("tissue")) return 10;
+  return 0;
+}
 const KHMER_DIGITS_MAP: Record<string, string> = {
   "0": "០",
   "1": "១",
@@ -5512,6 +5522,9 @@ type AssetTypePickerProps = {
 type LocationPickerOption = {
   value: string;
   label: string;
+  description?: string;
+  photo?: string;
+  searchText?: string;
 };
 type LocationPickerProps = {
   value: string;
@@ -5708,7 +5721,9 @@ function LocationPicker({
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return options;
-    return options.filter((opt) => `${opt.label} ${opt.value}`.toLowerCase().includes(q));
+    return options.filter((opt) =>
+      `${opt.label} ${opt.value} ${opt.description || ""} ${opt.searchText || ""}`.toLowerCase().includes(q)
+    );
   }, [options, deferredSearch]);
 
   const selectLocation = useCallback(
@@ -5731,7 +5746,15 @@ function LocationPicker({
       >
         {selected ? (
           <span className="asset-picker-selected">
-            <span>{selected.label}</span>
+            {selected.photo ? (
+              <img src={selected.photo} alt={selected.label} className="asset-picker-thumb" />
+            ) : null}
+            <span className={selected.description ? "parent-asset-picker-selected-content" : undefined}>
+              <span className="parent-asset-picker-option-title">{selected.label}</span>
+              {selected.description ? (
+                <span className="parent-asset-picker-option-meta">{selected.description}</span>
+              ) : null}
+            </span>
           </span>
         ) : (
           <span className="asset-picker-placeholder">{placeholder}</span>
@@ -5769,7 +5792,15 @@ function LocationPicker({
                   >
                     {opt.value === value ? "✓" : ""}
                   </span>
-                  <span className="asset-picker-option-label">{opt.label}</span>
+                  {opt.photo ? (
+                    <img src={opt.photo} alt={opt.label} className="asset-picker-thumb" />
+                  ) : null}
+                  <span className={opt.description ? "parent-asset-picker-option-content asset-picker-option-label" : "asset-picker-option-label"}>
+                    <span className="parent-asset-picker-option-title">{opt.label}</span>
+                    {opt.description ? (
+                      <span className="parent-asset-picker-option-meta">{opt.description}</span>
+                    ) : null}
+                  </span>
                 </button>
               ))
             ) : (
@@ -7228,6 +7259,7 @@ export default function App() {
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [purchaseRequestCampusFilter, setPurchaseRequestCampusFilter] = useState("ALL");
   const [purchaseRequestItemFilter, setPurchaseRequestItemFilter] = useState("ALL");
+  const [purchaseRequestQtyOverrides, setPurchaseRequestQtyOverrides] = useState<Record<string, string>>({});
   const [maintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [maintenanceStockOutViewDate, setMaintenanceStockOutViewDate] = useState(() => toYmd(new Date()));
   const todayYmd = toYmd(new Date());
@@ -11371,19 +11403,24 @@ export default function App() {
       const currentStock = inventoryStockMap.get(item.id) || 0;
       const usedQty = outByItem.get(item.id) || 0;
       const min = Number(item.minStock || 0);
-      const suggestedQty = Math.max(min * 2 - currentStock, 0);
+      const suggestedQtyBase = Math.max(min * 2 - currentStock, 0);
+      const packSize = inventoryPurchasePackSizeForItem(item.itemCode, item.itemName);
+      const suggestedQty = suggestedQtyBase > 0 && packSize > 0
+        ? Math.ceil(suggestedQtyBase / packSize) * packSize
+        : suggestedQtyBase;
       return {
         ...item,
         currentStock,
         usedQty,
+        packSize,
+        suggestedQtyBase,
         suggestedQty,
         lowStock: currentStock <= min,
       };
     });
-    list = list.filter((item) => item.usedQty > 0 || item.lowStock || item.suggestedQty > 0);
     return list
-      .sort((a, b) => b.suggestedQty - a.suggestedQty || b.usedQty - a.usedQty || a.itemCode.localeCompare(b.itemCode))
-      .slice(0, 30);
+      .sort((a, b) => a.itemCode.localeCompare(b.itemCode, undefined, { numeric: true, sensitivity: "base" }))
+      ;
   }, [inventoryVisibleItems, inventoryVisibleTxns, inventoryPurchaseWindow, inventoryStockMap]);
   const inventoryPurchaseCampusOptions = useMemo(
     () => Array.from(new Set(inventoryPurchaseRows.map((row) => String(row.campus || "").trim()).filter(Boolean))).sort(),
@@ -11400,16 +11437,24 @@ export default function App() {
     [inventoryPurchaseCampusOptions, inventoryCampusLabel, t.allCampuses]
   );
   const inventoryPurchaseItemOptions = useMemo(
-    () => Array.from(new Set(inventoryPurchaseRows.map((row) => String(row.itemCode || "").trim()).filter(Boolean))).sort(),
-    [inventoryPurchaseRows]
+    () =>
+      inventoryPurchaseRows
+        .map((row) => ({
+          value: String(row.itemCode || "").trim(),
+          label: String(row.itemCode || "").trim(),
+          description: inventoryDisplayName(row.itemName, lang),
+          photo: String(row.photo || "").trim(),
+          searchText: `${String(row.itemCode || "").trim()} ${inventoryDisplayName(row.itemName, lang)} ${inventoryCampusLabel(row.campus)}`,
+        }))
+        .filter((row) => row.value)
+        .filter((row, index, list) => list.findIndex((entry) => entry.value === row.value) === index)
+        .sort((a, b) => a.value.localeCompare(b.value)),
+    [inventoryPurchaseRows, lang, inventoryCampusLabel]
   );
   const inventoryPurchaseItemPickerOptions = useMemo(
     () => [
       { value: "ALL", label: lang === "km" ? "គ្រប់ Item" : "All Items" },
-      ...inventoryPurchaseItemOptions.map((itemCode) => ({
-        value: itemCode,
-        label: itemCode,
-      })),
+      ...inventoryPurchaseItemOptions,
     ],
     [inventoryPurchaseItemOptions, lang]
   );
@@ -11423,6 +11468,16 @@ export default function App() {
     }
     return rows;
   }, [inventoryPurchaseRows, purchaseRequestCampusFilter, purchaseRequestItemFilter]);
+  const getPurchaseRequestQty = useCallback(
+    (row: { id: number; suggestedQty: number }) => {
+      const raw = String(purchaseRequestQtyOverrides[String(row.id)] || "").trim();
+      if (!raw) return Number(row.suggestedQty || 0);
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed < 0) return Number(row.suggestedQty || 0);
+      return parsed;
+    },
+    [purchaseRequestQtyOverrides]
+  );
 
   const activePoolLabel = useMemo(() => {
     const campus = String(poolInfo.campus || "").trim();
@@ -17815,7 +17870,7 @@ export default function App() {
           row.usedQty,
           row.currentStock,
           row.minStock,
-          row.suggestedQty,
+          getPurchaseRequestQty(row),
           inventoryPurchaseWindow.label,
         ]
           .map(escapeCsvCell)
@@ -17856,55 +17911,154 @@ export default function App() {
       .map(
         (row, index) => `<tr>
           <td class="num-cell">${index + 1}</td>
+          <td class="photo-cell">${
+            isRenderablePhotoSource(String(row.photo || "").trim())
+              ? `<img loading="lazy" decoding="async" src="${escapeHtml(String(row.photo || "").trim())}" alt="${escapeHtml(inventoryDisplayName(row.itemName, lang))}" class="item-photo" />`
+              : ""
+          }</td>
           <td class="desc-cell">
             <strong>${escapeHtml(inventoryDisplayName(row.itemName, lang))}</strong>
             <span class="desc-sub">${escapeHtml(row.itemCode)}${row.unit ? ` | ${escapeHtml(row.unit)}` : ""}</span>
           </td>
-          <td>${row.usedQty}</td>
-          <td class="current-cell"><strong>${row.currentStock}</strong></td>
-          <td class="request-cell"><strong>${row.suggestedQty}</strong></td>
-          <td>${escapeHtml(`${inventoryCampusLabel(row.campus)} | Min ${row.minStock}`)}</td>
-          <td>${escapeHtml(String(row.vendor || "").trim() || "-")}</td>
+          <td class="qty-cell">${row.usedQty}</td>
+          <td class="stock-cell">${row.currentStock}</td>
+          <td class="request-cell">${getPurchaseRequestQty(row)}</td>
+          <td class="other-cell"></td>
+          <td class="supplier-cell">${escapeHtml(String(row.vendor || "").trim())}</td>
         </tr>`
       )
       .join("");
-    const subtotalQty = filteredInventoryPurchaseRows.reduce((sum, row) => sum + Number(row.suggestedQty || 0), 0);
+    const subtotalQty = filteredInventoryPurchaseRows.reduce((sum, row) => sum + getPurchaseRequestQty(row), 0);
     const html = `
       <html>
       <head>
         <title>${escapeHtml(title)}</title>
         <style>
-          body { font-family: "Segoe UI", Arial, sans-serif; margin: 16px; color: #1d1d1d; }
-          .sheet { max-width: 980px; margin: 0 auto; }
-          .topbar { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 14px; margin-bottom: 10px; }
-          .logo { width: 120px; height: auto; object-fit: contain; }
-          .title { margin: 0; text-align: center; font-size: 18px; font-weight: 800; }
-          .meta-grid { width: 100%; border-collapse: collapse; margin-top: 8px; }
-          .meta-grid td { border: 1px solid #444; padding: 4px 6px; font-size: 12px; }
-          .meta-label { font-weight: 700; width: 90px; }
-          .main-table { width: 100%; border-collapse: collapse; margin-top: 14px; }
-          .main-table th, .main-table td { border: 1px solid #444; padding: 4px 6px; font-size: 12px; vertical-align: top; }
-          .main-table th { background: #d9d9d9; text-align: center; font-weight: 800; }
-          .num-cell { width: 38px; text-align: center; }
-          .desc-cell { width: 280px; }
-          .desc-sub { display: block; margin-top: 2px; font-size: 10px; color: #555; }
-          .current-cell { background: #eaf7ef; color: #0f6a43; font-weight: 900; text-align: center; }
-          .request-cell { background: #fff1d9; color: #8a4b00; font-weight: 900; text-align: center; }
-          .subtotal-row td { background: #d9d9d9; font-weight: 800; }
-          .subtotal-label { text-align: right; }
-          .notice-box { margin-top: 12px; border: 1px solid #444; min-height: 72px; padding: 6px; font-size: 12px; }
+          :root { color-scheme: light; }
+          body {
+            font-family: Arial, "Helvetica Neue", sans-serif;
+            margin: 0;
+            color: #111;
+            background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .sheet {
+            width: 138mm;
+            margin: 0 auto;
+            padding: 7mm 5mm 6mm;
+            box-sizing: border-box;
+          }
+          .topbar {
+            display: grid;
+            grid-template-columns: 22mm 1fr;
+            align-items: center;
+            column-gap: 8mm;
+            margin-bottom: 5mm;
+          }
+          .logo { width: 18mm; height: auto; object-fit: contain; }
+          .title {
+            margin: 0;
+            text-align: center;
+            font-size: 5.2mm;
+            line-height: 1.1;
+            font-weight: 700;
+            padding-right: 10mm;
+          }
+          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .meta-grid { margin-top: 0; }
+          .meta-grid td {
+            border: 0.24mm solid #444;
+            padding: 1.2mm 1.5mm;
+            font-size: 3.2mm;
+            line-height: 1.15;
+          }
+          .meta-label { font-weight: 700; width: 14mm; }
+          .main-table { margin-top: 4mm; }
+          .main-table th,
+          .main-table td {
+            border: 0.24mm solid #444;
+            padding: 1.2mm 1.4mm;
+            font-size: 3mm;
+            line-height: 1.15;
+            vertical-align: middle;
+          }
+          .main-table th {
+            background: #d9d9d9;
+            text-align: center;
+            font-weight: 700;
+          }
+          .main-table tbody td { height: 5.4mm; }
+          .num-cell { width: 2%; text-align: center; padding-left: 0.6mm; padding-right: 0.6mm; }
+          .photo-cell { width: 8%; text-align: center; }
+          .desc-cell { width: 44%; }
+          .qty-cell { width: 9%; text-align: center; }
+          .stock-cell { width: 8%; text-align: center; }
+          .request-cell { width: 9%; text-align: center; }
+          .other-cell { width: 7%; }
+          .supplier-cell { width: 6%; }
+          .item-photo {
+            width: 8mm;
+            height: 8mm;
+            object-fit: cover;
+            border: 0.2mm solid #888;
+            display: block;
+            margin: 0 auto;
+          }
+          .desc-sub {
+            display: block;
+            margin-top: 0.6mm;
+            font-size: 2.4mm;
+            color: #555;
+          }
+          .desc-cell strong {
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 2.55mm;
+          }
+          .main-table th .th-2line {
+            display: inline-block;
+            line-height: 1.05;
+          }
+          .subtotal-row td {
+            background: #d9d9d9;
+            font-weight: 700;
+          }
+          .subtotal-label { text-align: right; padding-right: 2mm; }
+          .notice-box {
+            margin-top: 3mm;
+            border: 0.24mm solid #444;
+            min-height: 21mm;
+            padding: 1.6mm 1.8mm;
+            font-size: 3mm;
+            box-sizing: border-box;
+          }
           .notice-label { font-weight: 700; text-decoration: underline; }
-          .sign-row { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; margin-top: 40px; }
-          .sign-block { font-size: 12px; }
-          .sign-line { border-top: 1px solid #444; margin-top: 44px; padding-top: 4px; font-weight: 700; }
-          @page { size: A4 portrait; margin: 8mm; }
-          @media print { body { margin: 0; } }
+          .sign-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 22mm;
+            margin-top: 11mm;
+          }
+          .sign-block { font-size: 3mm; }
+          .sign-line {
+            border-top: 0.24mm solid #444;
+            margin-top: 17mm;
+            padding-top: 1.8mm;
+            font-weight: 700;
+          }
+          @page { size: A5 portrait; margin: 0; }
+          @media print {
+            body { margin: 0; }
+          }
         </style>
       </head>
       <body>
         <div class="sheet">
           <div class="topbar">
-            <img class="logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
+            <img class="logo" src="${PURCHASE_ORDER_LOGO_URL}" alt="Eco International School logo" />
             <h1 class="title">${escapeHtml(title)}</h1>
           </div>
           <table class="meta-grid">
@@ -17931,8 +18085,9 @@ export default function App() {
             <thead>
               <tr>
                 <th>No.</th>
+                <th>Photo</th>
                 <th>Description</th>
-                <th>Amount used per month</th>
+                <th><span class="th-2line">Amount used<br />per month</span></th>
                 <th>Current Stock</th>
                 <th>Amount Request</th>
                 <th>Others</th>
@@ -17942,7 +18097,7 @@ export default function App() {
             <tbody>
               ${rowsHtml}
               <tr class="subtotal-row">
-                <td colspan="4" class="subtotal-label">Sub Total:</td>
+                <td colspan="5" class="subtotal-label">Sub Total:</td>
                 <td>${subtotalQty}</td>
                 <td colspan="2"></td>
               </tr>
@@ -35429,25 +35584,6 @@ export default function App() {
                     />
                   </div>
                 </div>
-                <div className="tabs" style={{ marginBottom: 12 }}>
-                  {INVENTORY_OPERATIONAL_GROUP_ORDER.map((group) => (
-                    <button
-                      key={`inventory-header-group-${group}`}
-                      className={`tab ${inventoryDashboardGroup === group ? "tab-active" : ""}`}
-                      onClick={() => {
-                        setInventoryDashboardGroup(group);
-                        setInventoryView("dashboard");
-                      }}
-                    >
-                      {inventoryBusinessGroupLabel(group)}
-                    </button>
-                  ))}
-                </div>
-                <div className="tiny" style={{ marginBottom: 10 }}>
-                  {lang === "km"
-                    ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} - មុខងារ`
-                    : `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} Functions`}
-                </div>
                 <div className="tabs">
                   <button className={`tab ${inventoryView === "dashboard" ? "tab-active" : ""}`} onClick={() => setInventoryView("dashboard")}>Dashboard</button>
                   <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
@@ -37207,55 +37343,127 @@ export default function App() {
                       </div>
                     </div>
                     ) : null}
-                    {inventoryDashboardGroup === "SUPPLY" ? (
-                      <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
-                        <div className="inventory-admin-control-card">
-                          <strong>{lang === "km" ? "តារាងគ្រប់គ្រង Item" : "Item Control"}</strong>
-                          {inventoryDashboardItemControlRows.length ? (
-                            <div className="table-wrap" style={{ marginTop: 10 }}>
-                              <table>
-                                <thead>
-                                  <tr>
-                                    <th>{lang === "km" ? "កូដ" : "Code"}</th>
-                                    <th>{lang === "km" ? "ឈ្មោះ" : "Name"}</th>
-                                    <th>{t.campus}</th>
-                                    <th>{t.location}</th>
-                                    <th>{lang === "km" ? "ស្តុក" : "On Hand"}</th>
-                                    <th>{lang === "km" ? "កម្រិតអប្បបរមា" : "Min"}</th>
-                                    <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {inventoryDashboardItemControlRows.map((row) => {
-                                    const isLow = Number(row.currentStock || 0) < Number(row.minStock || 0);
-                                    const isOut = Number(row.currentStock || 0) <= 0;
-                                    const statusLabel = isOut
-                                      ? (lang === "km" ? "អស់ស្តុក" : "Out")
-                                      : isLow
-                                        ? (lang === "km" ? "ទាប" : "Low")
-                                        : (lang === "km" ? "ល្អ" : "OK");
-                                    return (
-                                      <tr key={`inventory-dashboard-item-control-supply-${row.id}`}>
-                                        <td><strong>{row.itemCode}</strong></td>
-                                        <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                                        <td>{inventoryCampusLabel(row.campus)}</td>
-                                        <td>{row.location || "-"}</td>
-                                        <td>{row.currentStock}</td>
-                                        <td>{row.minStock}</td>
-                                        <td>{statusLabel}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមាន Item នៅក្នុងក្រុមនេះ" : "No items in this group yet."}</div>
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
                   </article>
+                ) : null}
+                {inventoryView === "dashboard" && inventoryDashboardGroup === "SUPPLY" && !maintenanceQuickMode ? (
+                <article className="panel" style={{ marginTop: 12 }}>
+                  <div className="panel-row">
+                    <h3 className="section-title">{lang === "km" ? "សង្ខេបទិញសម្ភារៈ (ថ្ងៃ 27)" : "Purchase Summary (27th Cutoff)"}</h3>
+                    <div className="row-actions">
+                      <span className="tiny">{inventoryPurchaseWindow.label}</span>
+                      <button type="button" className="tab btn-small" onClick={exportPurchaseRequestCsv}>
+                        {lang === "km" ? "ទាញយក CSV" : "Export CSV"}
+                      </button>
+                      <button type="button" className="btn-primary btn-small" onClick={printPurchaseRequest}>
+                        {lang === "km" ? "បោះពុម្ព/PDF" : "Print / PDF"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="tiny" style={{ marginBottom: 8 }}>
+                    {lang === "km"
+                      ? "ប្រើសម្រាប់រៀបចំសំណើទិញប្រចាំខែ (ពិនិត្យ Used Qty និង Suggested Qty)"
+                      : "Use this on the 27th to prepare monthly purchase request."}
+                  </div>
+                  <div className="form-grid" style={{ marginBottom: 10 }}>
+                    <label className="field">
+                      <span>{t.campus}</span>
+                      <LocationPicker
+                        value={purchaseRequestCampusFilter}
+                        options={inventoryPurchaseCampusPickerOptions}
+                        onChange={setPurchaseRequestCampusFilter}
+                        placeholder={t.allCampuses}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរក Campus..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមាន Campus" : "No campus found."}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ទំនិញ" : "Item"}</span>
+                      <LocationPicker
+                        value={purchaseRequestItemFilter}
+                        options={inventoryPurchaseItemPickerOptions}
+                        onChange={setPurchaseRequestItemFilter}
+                        placeholder={lang === "km" ? "គ្រប់ Item" : "All Items"}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរក Item..." : "Search item..."}
+                        emptyText={lang === "km" ? "មិនមាន Item" : "No item found."}
+                      />
+                    </label>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Name</th>
+                          <th>{t.campus}</th>
+                          <th>{lang === "km" ? "ប្រើក្នុងរយៈពេល" : "Used Qty"}</th>
+                          <th>{lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current"}</th>
+                          <th>{lang === "km" ? "អប្បបរមា" : "Min"}</th>
+                          <th>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredInventoryPurchaseRows.length ? (
+                          filteredInventoryPurchaseRows.map((row) => (
+                            <tr key={`purchase-row-${row.id}`}>
+                              <td><strong>{row.itemCode}</strong></td>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  {isRenderablePhotoSource(String(row.photo || "").trim()) ? (
+                                    <img
+                                      loading="lazy"
+                                      decoding="async"
+                                      src={String(row.photo || "").trim()}
+                                      alt={inventoryDisplayName(row.itemName, lang)}
+                                      className="inventory-admin-matrix-item-photo"
+                                    />
+                                  ) : (
+                                    <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
+                                  )}
+                                  <div className="inventory-admin-matrix-item-text">
+                                    <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>{inventoryCampusLabel(row.campus)}</td>
+                              <td>{row.usedQty}</td>
+                              <td>{row.currentStock}</td>
+                              <td>{row.minStock}</td>
+                              <td>
+                                <div style={{ display: "grid", gap: 4 }}>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={purchaseRequestQtyOverrides[String(row.id)] ?? String(row.suggestedQty ?? 0)}
+                                    onChange={(e) =>
+                                      setPurchaseRequestQtyOverrides((prev) => ({
+                                        ...prev,
+                                        [String(row.id)]: e.target.value,
+                                      }))
+                                    }
+                                    style={{ minWidth: 88, fontWeight: 700 }}
+                                  />
+                                  {Number(row.packSize || 0) > 0 ? (
+                                    <span className="tiny">
+                                      {String(row.itemName || "").toLowerCase().includes("shampoo") || String(row.itemName || "").toLowerCase().includes("alcohol")
+                                        ? `1 box = ${row.packSize} bottles`
+                                        : `1 box = ${row.packSize} units`}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់តម្រងនេះ" : "No purchase summary rows for this filter."}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
                 ) : null}
                 {inventoryView === "daily" ? (
                   <>
@@ -37827,86 +38035,6 @@ export default function App() {
                     {lang === "km" ? "រក្សាទុកប្រតិបត្តិការ" : "Save Daily Record"}
                   </button>
                 </div>
-                ) : null}
-
-                {!maintenanceQuickMode ? (
-                <article className="panel" style={{ marginTop: 12 }}>
-                  <div className="panel-row">
-                    <h3 className="section-title">{lang === "km" ? "សង្ខេបទិញសម្ភារៈ (ថ្ងៃ 27)" : "Purchase Summary (27th Cutoff)"}</h3>
-                    <div className="row-actions">
-                      <span className="tiny">{inventoryPurchaseWindow.label}</span>
-                      <button type="button" className="tab btn-small" onClick={exportPurchaseRequestCsv}>
-                        {lang === "km" ? "ទាញយក CSV" : "Export CSV"}
-                      </button>
-                      <button type="button" className="btn-primary btn-small" onClick={printPurchaseRequest}>
-                        {lang === "km" ? "បោះពុម្ព/PDF" : "Print / PDF"}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="tiny" style={{ marginBottom: 8 }}>
-                    {lang === "km"
-                      ? "ប្រើសម្រាប់រៀបចំសំណើទិញប្រចាំខែ (ពិនិត្យ Used Qty និង Suggested Qty)"
-                      : "Use this on the 27th to prepare monthly purchase request."}
-                  </div>
-                  <div className="form-grid" style={{ marginBottom: 10 }}>
-                    <label className="field">
-                      <span>{t.campus}</span>
-                      <LocationPicker
-                        value={purchaseRequestCampusFilter}
-                        options={inventoryPurchaseCampusPickerOptions}
-                        onChange={setPurchaseRequestCampusFilter}
-                        placeholder={t.allCampuses}
-                        searchPlaceholder={lang === "km" ? "ស្វែងរក Campus..." : "Search campus..."}
-                        emptyText={lang === "km" ? "មិនមាន Campus" : "No campus found."}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ទំនិញ" : "Item"}</span>
-                      <LocationPicker
-                        value={purchaseRequestItemFilter}
-                        options={inventoryPurchaseItemPickerOptions}
-                        onChange={setPurchaseRequestItemFilter}
-                        placeholder={lang === "km" ? "គ្រប់ Item" : "All Items"}
-                        searchPlaceholder={lang === "km" ? "ស្វែងរក Item..." : "Search item..."}
-                        emptyText={lang === "km" ? "មិនមាន Item" : "No item found."}
-                      />
-                    </label>
-                  </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Code</th>
-                          <th>Name</th>
-                          <th>{t.campus}</th>
-                          <th>{lang === "km" ? "ប្រើក្នុងរយៈពេល" : "Used Qty"}</th>
-                          <th>{lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current"}</th>
-                          <th>{lang === "km" ? "អប្បបរមា" : "Min"}</th>
-                          <th>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredInventoryPurchaseRows.length ? (
-                          filteredInventoryPurchaseRows.map((row) => (
-                            <tr key={`purchase-row-${row.id}`}>
-                              <td><strong>{row.itemCode}</strong></td>
-                              <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                              <td>{inventoryCampusLabel(row.campus)}</td>
-                              <td>{row.usedQty}</td>
-                              <td>{row.currentStock}</td>
-                              <td>{row.minStock}</td>
-                              <td><strong>{row.suggestedQty}</strong></td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់តម្រងនេះ" : "No purchase summary rows for this filter."}</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </article>
                 ) : null}
 
                 {!maintenanceQuickMode ? (
