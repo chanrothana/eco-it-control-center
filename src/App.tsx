@@ -18038,7 +18038,7 @@ export default function App() {
               <div class="item-name">${escapeHtml(itemNameText)}</div>
             </div>
           </td>
-          <td><strong>${row.currentStock ?? ""}</strong></td>
+          <td class="current-stock-cell"><strong>${row.currentStock ?? ""}</strong></td>
           <td><strong>${row.stockBeforeRefill ?? ""}</strong></td>
           <td>${refillCellHtml}</td>
           ${cells}
@@ -18205,6 +18205,16 @@ export default function App() {
           .control-col {
             width: 64px;
             min-width: 64px;
+          }
+          .current-stock-cell {
+            background: #e8f7ef !important;
+            color: #0f6a43;
+            font-weight: 900;
+          }
+          .current-stock-cell strong {
+            color: inherit;
+            font-size: 10px;
+            font-weight: 900;
           }
           thead tr:nth-child(2) th {
             background: #f6f9f7;
@@ -36972,7 +36982,7 @@ export default function App() {
                                       </div>
                                     </div>
                                   </th>
-                                  <td><strong>{row.currentStock}</strong></td>
+                                  <td className="inventory-admin-matrix-total-cell inventory-admin-matrix-current-stock-cell"><strong>{row.currentStock}</strong></td>
                                   <td className="inventory-admin-matrix-total-cell">
                                     {row.stockBeforeRefill ?? ""}
                                   </td>
