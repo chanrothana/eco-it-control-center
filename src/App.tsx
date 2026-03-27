@@ -18432,8 +18432,8 @@ export default function App() {
             font-size: 12px;
           }
           .report-head-logo {
-            width: 220px;
-            max-width: 34vw;
+            width: 260px;
+            max-width: 38vw;
             height: auto;
             object-fit: contain;
             flex: 0 0 auto;
