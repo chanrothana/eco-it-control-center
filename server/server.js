@@ -1482,6 +1482,73 @@ function normalizeUtilityReadings(input) {
     .filter((row) => row.campus && row.billingMonth && row.invoiceDate);
 }
 
+function normalizeRentalPrinters(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      vendor: toText(row.vendor) || "LA",
+      machineCode: toUpper(row.machineCode),
+      machineName: toText(row.machineName),
+      model: toText(row.model),
+      serialNumber: toText(row.serialNumber),
+      ipAddress: toText(row.ipAddress),
+      photo: toText(row.photo),
+      campus: normalizeCampusInput(row.campus) || CAMPUS_LIST[0],
+      location: toText(row.location),
+      monoRate: Math.max(0, Number(row.monoRate) || 0),
+      colorRate: Math.max(0, Number(row.colorRate) || 0),
+      openingMono: Math.max(0, Number(row.openingMono) || 0),
+      openingColor: Math.max(0, Number(row.openingColor) || 0),
+      contractStart: toText(row.contractStart),
+      contractEnd: toText(row.contractEnd),
+      status: toUpper(row.status) === "INACTIVE" ? "Inactive" : "Active",
+      fixingHistory: toText(row.fixingHistory),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }))
+    .filter((row) => row.machineCode && row.machineName);
+}
+
+function normalizeRentalPrinterCounters(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => {
+      const previousMono = Math.max(0, Number(row.previousMono) || 0);
+      const currentMono = Math.max(previousMono, Number(row.currentMono) || 0);
+      const previousColor = Math.max(0, Number(row.previousColor) || 0);
+      const currentColor = Math.max(previousColor, Number(row.currentColor) || 0);
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        rentalPrinterId: Number(row.rentalPrinterId) || 0,
+        vendor: toText(row.vendor) || "LA",
+        machineCode: toUpper(row.machineCode),
+        machineName: toText(row.machineName),
+        model: toText(row.model),
+        campus: normalizeCampusInput(row.campus) || CAMPUS_LIST[0],
+        location: toText(row.location),
+        billingMonth: toText(row.billingMonth),
+        readingDate: toText(row.readingDate),
+        previousMono,
+        currentMono,
+        monoUsage: Math.max(0, Number(row.monoUsage) || currentMono - previousMono),
+        previousColor,
+        currentColor,
+        colorUsage: Math.max(0, Number(row.colorUsage) || currentColor - previousColor),
+        monoRate: Math.max(0, Number(row.monoRate) || 0),
+        colorRate: Math.max(0, Number(row.colorRate) || 0),
+        amount: Math.max(0, Number(row.amount) || 0),
+        submittedBy: toText(row.submittedBy),
+        photo: toText(row.photo),
+        note: toText(row.note),
+        created: toText(row.created) || new Date().toISOString(),
+      };
+    })
+    .filter((row) => row.rentalPrinterId && row.machineCode && row.billingMonth);
+}
+
 function assetCategoryCode(category) {
   const normalized = normalizeCategoryInput(category);
   if (normalized === "IT") return "COM";
