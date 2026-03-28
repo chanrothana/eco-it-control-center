@@ -12567,12 +12567,12 @@ export default function App() {
         const settingsObj = settingsRes.settings || {};
         setRentalPrinters(
           Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinters")
-            ? nextRentalPrinters
+            ? (nextRentalPrinters.length ? nextRentalPrinters : fallbackRentalPrinters)
             : fallbackRentalPrinters
         );
         setRentalPrinterCounters(
           Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinterCounters")
-            ? nextRentalPrinterCounters
+            ? (nextRentalPrinterCounters.length ? nextRentalPrinterCounters : fallbackRentalPrinterCounters)
             : fallbackRentalPrinterCounters
         );
         setVaultAccounts(
@@ -22792,6 +22792,10 @@ export default function App() {
   const detailTonerStock = useMemo(
     () => (detailTonerItem ? calcInventoryCurrentStockFromRows(detailTonerItem, inventoryVisibleTxns) : 0),
     [detailTonerItem, inventoryVisibleTxns]
+  );
+  const detailTonerSummaryRow = useMemo(
+    () => tonerInventoryRows.find((row) => Number(row.id) === Number(detailTonerItem?.id || 0)) || null,
+    [tonerInventoryRows, detailTonerItem?.id]
   );
   const detailTransferEntries = useMemo(
     () =>
@@ -33188,7 +33192,34 @@ export default function App() {
                     <section className="panel" style={{ marginTop: 12 }}>
                       <div className="panel-row">
                         <h3 className="section-title" style={{ margin: 0 }}>Toner Control</h3>
-                        <span className="tiny">{detailTonerEntries.length} record(s)</span>
+                        <div className="row-actions">
+                          <span className="tiny">{detailTonerEntries.length} record(s)</span>
+                          <button
+                            type="button"
+                            className="tab btn-small"
+                            onClick={() => {
+                              setTab("inventory");
+                              setInventoryView("items");
+                              setAssetDetailId(null);
+                            }}
+                          >
+                            Open Toner Report
+                          </button>
+                        </div>
+                      </div>
+                      <div className="form-grid" style={{ marginBottom: 10 }}>
+                        <div className="field">
+                          <span>In Stock</span>
+                          <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.currentStock : detailTonerStock}</div>
+                        </div>
+                        <div className="field">
+                          <span>Used</span>
+                          <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.usedQty : detailTonerEntries.length}</div>
+                        </div>
+                        <div className="field">
+                          <span>Purchased</span>
+                          <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.purchaseQty : "-"}</div>
+                        </div>
                       </div>
                       <div className="form-grid">
                         <label className="field">
