@@ -3489,7 +3489,16 @@ function readRentalPrinterFallback(): RentalPrinter[] {
 }
 
 function writeRentalPrinterFallback(rows: RentalPrinter[]) {
-  trySetLocalStorage(RENTAL_PRINTER_FALLBACK_KEY, JSON.stringify(rows));
+  trySetLocalStorage(
+    RENTAL_PRINTER_FALLBACK_KEY,
+    JSON.stringify(
+      rows.map((row) => ({
+        ...row,
+        // Keep the fallback light so printer register rows survive refresh even when photos are large.
+        photo: "",
+      }))
+    )
+  );
 }
 
 function readRentalPrinterCounterFallback(): RentalPrinterCounter[] {
@@ -42275,6 +42284,7 @@ export default function App() {
                     <thead>
                       <tr>
                         <th>Machine Code</th>
+                        <th>Photo</th>
                         <th>Vendor</th>
                         <th>Machine Name</th>
                         <th>Model</th>
@@ -42291,6 +42301,7 @@ export default function App() {
                       {rentalPrinterOptions.length ? rentalPrinterOptions.map((row) => (
                         <tr key={`rental-printer-row-${row.id}`}>
                           <td><strong>{row.machineCode}</strong></td>
+                          <td>{row.photo ? renderAssetPhoto(row.photo, row.machineName || row.machineCode) : "-"}</td>
                           <td>{row.vendor || "-"}</td>
                           <td>{row.machineName}</td>
                           <td>{row.model || "-"}</td>
@@ -42302,7 +42313,7 @@ export default function App() {
                           <td><button className="tab" disabled={!isAdmin} onClick={() => startEditRentalPrinter(row)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinter(row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={11}>No rental printers yet.</td></tr>}
+                      )) : <tr><td colSpan={12}>No rental printers yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
