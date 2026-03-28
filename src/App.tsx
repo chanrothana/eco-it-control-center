@@ -593,6 +593,7 @@ type RentalPrinter = {
   model: string;
   serialNumber: string;
   ipAddress?: string;
+  photo?: string;
   campus: string;
   location: string;
   monoRate: number;
@@ -3289,6 +3290,7 @@ function normalizeRentalPrinters(input: unknown): RentalPrinter[] {
       model: String(row.model || "").trim(),
       serialNumber: String(row.serialNumber || "").trim(),
       ipAddress: String(row.ipAddress || "").trim(),
+      photo: String(row.photo || "").trim(),
       campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
       location: String(row.location || "").trim(),
       monoRate: Math.max(0, Number(row.monoRate) || 0),
@@ -7894,6 +7896,7 @@ export default function App() {
     model: "",
     serialNumber: "",
     ipAddress: "",
+    photo: "",
     campus: CAMPUS_LIST[0],
     location: "",
     monoRate: "",
@@ -14357,6 +14360,25 @@ export default function App() {
     }
   }
 
+  async function onRentalPrinterPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setRentalPrinterForm((prev) => ({ ...prev, photo }));
+      setRentalPrinterMessage("Machine photo uploaded.");
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   async function autofillRentalCounterFromPhoto(photoInput?: string) {
     if (!requireAdminAction()) return;
     const photo = String(photoInput || rentalCounterForm.photo || "").trim();
@@ -14727,6 +14749,7 @@ export default function App() {
       model: rentalPrinterForm.model.trim(),
       serialNumber: rentalPrinterForm.serialNumber.trim(),
       ipAddress: rentalPrinterForm.ipAddress.trim(),
+      photo: rentalPrinterForm.photo.trim(),
       campus: rentalPrinterForm.campus,
       location: rentalPrinterForm.location.trim(),
       monoRate: 0,
@@ -14763,6 +14786,7 @@ export default function App() {
       model: "",
       serialNumber: "",
       ipAddress: "",
+      photo: "",
       campus: CAMPUS_LIST[0],
       location: "",
       monoRate: "",
@@ -14794,6 +14818,7 @@ export default function App() {
       model: printer.model || "",
       serialNumber: printer.serialNumber || "",
       ipAddress: printer.ipAddress || "",
+      photo: printer.photo || "",
       campus: printer.campus,
       location: printer.location || "",
       monoRate: String(printer.monoRate || 0),
@@ -42129,6 +42154,30 @@ export default function App() {
                 <h2>Rental Printer Master</h2>
                 <div className="form-grid inventory-item-grid rental-printer-master-grid">
                   <label className="field">
+                    <span>{t.campus}</span>
+                    <select className="input" value={rentalPrinterForm.campus} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, campus: e.target.value }))}>
+                      {campusOptions.map((campus) => <option key={`rental-printer-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Location</span>
+                    <input className="input" value={rentalPrinterForm.location} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, location: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Machine Photo</span>
+                    <input type="file" accept="image/*" className="input" onChange={onRentalPrinterPhotoFile} />
+                    {rentalPrinterForm.photo ? (
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={rentalPrinterForm.photo}
+                        alt="rental printer"
+                        className="table-photo"
+                        style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }}
+                      />
+                    ) : null}
+                  </label>
+                  <label className="field">
                     <span>Machine Code Auto</span>
                     <input
                       className="input"
@@ -42156,16 +42205,6 @@ export default function App() {
                   <label className="field">
                     <span>Printer IP / Web Address</span>
                     <input className="input" value={rentalPrinterForm.ipAddress} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, ipAddress: e.target.value }))} placeholder="192.168.1.50 or http://192.168.1.50" />
-                  </label>
-                  <label className="field">
-                    <span>{t.campus}</span>
-                    <select className="input" value={rentalPrinterForm.campus} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, campus: e.target.value }))}>
-                      {campusOptions.map((campus) => <option key={`rental-printer-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Location</span>
-                    <input className="input" value={rentalPrinterForm.location} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, location: e.target.value }))} />
                   </label>
                   <label className="field">
                     <span>Contract Start</span>
@@ -42209,6 +42248,7 @@ export default function App() {
                           model: "",
                           serialNumber: "",
                           ipAddress: "",
+                          photo: "",
                           campus: CAMPUS_LIST[0],
                           location: "",
                           monoRate: "",
