@@ -33517,8 +33517,12 @@ export default function App() {
                               <div className="asset-detail-transfer-soft-meta">
                                 <span><strong>From:</strong> {campusLabel(h.fromCampus)} | {h.fromLocation || "-"}</span>
                                 <span><strong>To:</strong> {campusLabel(h.toCampus)} | {h.toLocation || "-"}</span>
-                                <span><strong>Staff:</strong> {custody?.fromUser || "-"} {"->"} {custody?.toUser || "-"}</span>
-                                <span><strong>Ack:</strong> {custody?.responsibilityAck ? "Yes" : "No"}</span>
+                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                  <span><strong>Staff:</strong> {custody?.fromUser || "-"} {"->"} {custody?.toUser || "-"}</span>
+                                ) : null}
+                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                  <span><strong>Ack:</strong> {custody?.responsibilityAck ? "Yes" : "No"}</span>
+                                ) : null}
                                 <span><strong>By:</strong> {h.by || "-"}</span>
                               </div>
                               <p className="asset-detail-transfer-soft-note">
@@ -33541,9 +33545,9 @@ export default function App() {
                             <th>From Location</th>
                             <th>To Campus</th>
                             <th>To Location</th>
-                            <th>From Staff</th>
-                            <th>To Staff</th>
-                            <th>Ack</th>
+                            {!isAirconAsset(detailAsset.category, detailAsset.type) ? <th>From Staff</th> : null}
+                            {!isAirconAsset(detailAsset.category, detailAsset.type) ? <th>To Staff</th> : null}
+                            {!isAirconAsset(detailAsset.category, detailAsset.type) ? <th>Ack</th> : null}
                             <th>Reason</th>
                             <th>By</th>
                           </tr>
@@ -33564,9 +33568,15 @@ export default function App() {
                                 <td data-label="From Location">{h.fromLocation || "-"}</td>
                                 <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
                                 <td data-label="To Location">{h.toLocation || "-"}</td>
-                                <td data-label="From Staff">{custody?.fromUser || "-"}</td>
-                                <td data-label="To Staff">{custody?.toUser || "-"}</td>
-                                <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
+                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                  <td data-label="From Staff">{custody?.fromUser || "-"}</td>
+                                ) : null}
+                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                  <td data-label="To Staff">{custody?.toUser || "-"}</td>
+                                ) : null}
+                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                  <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
+                                ) : null}
                                 <td data-label="Reason">{h.reason || "-"}</td>
                                 <td data-label="By">{h.by || "-"}</td>
                               </tr>
@@ -33574,7 +33584,7 @@ export default function App() {
                             })
                           ) : (
                             <tr className="asset-detail-empty-row">
-                              <td colSpan={10}>No transfer location history yet.</td>
+                              <td colSpan={isAirconAsset(detailAsset.category, detailAsset.type) ? 7 : 10}>No transfer location history yet.</td>
                             </tr>
                           )}
                         </tbody>
@@ -33582,41 +33592,45 @@ export default function App() {
                     </div>
                   )}
 
-                  <h3 className="section-title">Assigned to History</h3>
-                  <div className="table-wrap asset-detail-history-wrap">
-                    <table className="asset-detail-custody-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Action</th>
-                          <th>From User</th>
-                          <th>To User</th>
-                          <th>Ack</th>
-                          <th>By</th>
-                          <th>Note</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailCustodyEntries.length ? (
-                          detailCustodyEntries.map((h) => (
-                            <tr key={`detail-custody-${h.id}`}>
-                              <td data-label="Date">{formatDate(h.date)}</td>
-                              <td data-label="Action">{h.action || "-"}</td>
-                              <td data-label="From User">{h.fromUser || "-"}</td>
-                              <td data-label="To User">{h.toUser || "-"}</td>
-                              <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
-                              <td data-label="By">{h.by || "-"}</td>
-                              <td data-label="Note">{h.note || "-"}</td>
+                  {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                    <>
+                      <h3 className="section-title">Assigned to History</h3>
+                      <div className="table-wrap asset-detail-history-wrap">
+                        <table className="asset-detail-custody-table">
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Action</th>
+                              <th>From User</th>
+                              <th>To User</th>
+                              <th>Ack</th>
+                              <th>By</th>
+                              <th>Note</th>
                             </tr>
-                          ))
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={7}>No assigned history yet.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                          </thead>
+                          <tbody>
+                            {detailCustodyEntries.length ? (
+                              detailCustodyEntries.map((h) => (
+                                <tr key={`detail-custody-${h.id}`}>
+                                  <td data-label="Date">{formatDate(h.date)}</td>
+                                  <td data-label="Action">{h.action || "-"}</td>
+                                  <td data-label="From User">{h.fromUser || "-"}</td>
+                                  <td data-label="To User">{h.toUser || "-"}</td>
+                                  <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
+                                  <td data-label="By">{h.by || "-"}</td>
+                                  <td data-label="Note">{h.note || "-"}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr className="asset-detail-empty-row">
+                                <td colSpan={7}>No assigned history yet.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : null}
 
                   <h3 className="section-title">Status Timeline</h3>
                   <div className="table-wrap asset-detail-history-wrap">
@@ -47723,41 +47737,45 @@ export default function App() {
                 </table>
               </div>
 
-              <h3 className="section-title">Assigned to History</h3>
-              <div className="table-wrap asset-detail-history-wrap">
-                <table className="asset-detail-custody-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Action</th>
-                      <th>From User</th>
-                      <th>To User</th>
-                      <th>Ack</th>
-                      <th>By</th>
-                      <th>Note</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailCustodyEntries.length ? (
-                      detailCustodyEntries.map((h) => (
-                        <tr key={`classroom-detail-custody-${h.id}`}>
-                          <td data-label="Date">{formatDate(h.date)}</td>
-                          <td data-label="Action">{h.action || "-"}</td>
-                          <td data-label="From User">{h.fromUser || "-"}</td>
-                          <td data-label="To User">{h.toUser || "-"}</td>
-                          <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
-                          <td data-label="By">{h.by || "-"}</td>
-                          <td data-label="Note">{h.note || "-"}</td>
+              {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                <>
+                  <h3 className="section-title">Assigned to History</h3>
+                  <div className="table-wrap asset-detail-history-wrap">
+                    <table className="asset-detail-custody-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Action</th>
+                          <th>From User</th>
+                          <th>To User</th>
+                          <th>Ack</th>
+                          <th>By</th>
+                          <th>Note</th>
                         </tr>
-                      ))
-                    ) : (
-                      <tr className="asset-detail-empty-row">
-                        <td colSpan={7}>No assigned history yet.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody>
+                        {detailCustodyEntries.length ? (
+                          detailCustodyEntries.map((h) => (
+                            <tr key={`classroom-detail-custody-${h.id}`}>
+                              <td data-label="Date">{formatDate(h.date)}</td>
+                              <td data-label="Action">{h.action || "-"}</td>
+                              <td data-label="From User">{h.fromUser || "-"}</td>
+                              <td data-label="To User">{h.toUser || "-"}</td>
+                              <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
+                              <td data-label="By">{h.by || "-"}</td>
+                              <td data-label="Note">{h.note || "-"}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr className="asset-detail-empty-row">
+                            <td colSpan={7}>No assigned history yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
 
               <h3 className="section-title">Status Timeline</h3>
               <div className="table-wrap asset-detail-history-wrap">
