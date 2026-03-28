@@ -4706,6 +4706,8 @@ const server = http.createServer(async (req, res) => {
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
           inventoryItems: normalizeInventoryItems(settings.inventoryItems),
           inventoryTxns: normalizeInventoryTxns(settings.inventoryTxns),
+          rentalPrinters: normalizeRentalPrinters(settings.rentalPrinters),
+          rentalPrinterCounters: normalizeRentalPrinterCounters(settings.rentalPrinterCounters),
           poolCleaningSchedules: normalizePoolCleaningSchedules(settings.poolCleaningSchedules),
           poolEquipmentChecks: normalizePoolEquipmentChecks(settings.poolEquipmentChecks),
           poolChemicalRecords: normalizePoolChemicalRecords(settings.poolChemicalRecords),
@@ -4772,6 +4774,14 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryTxns")
           ? normalizeInventoryTxns(incoming.inventoryTxns)
           : normalizeInventoryTxns(current.inventoryTxns);
+      const nextRentalPrinters =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "rentalPrinters")
+          ? normalizeRentalPrinters(incoming.rentalPrinters)
+          : normalizeRentalPrinters(current.rentalPrinters);
+      const nextRentalPrinterCounters =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "rentalPrinterCounters")
+          ? normalizeRentalPrinterCounters(incoming.rentalPrinterCounters)
+          : normalizeRentalPrinterCounters(current.rentalPrinterCounters);
       const nextPoolCleaningSchedules =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "poolCleaningSchedules")
           ? normalizePoolCleaningSchedules(incoming.poolCleaningSchedules)
@@ -4835,6 +4845,8 @@ const server = http.createServer(async (req, res) => {
         telegramMaintenanceChatIds: nextTelegramMaintenanceChatIds,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
+        rentalPrinters: nextRentalPrinters,
+        rentalPrinterCounters: nextRentalPrinterCounters,
         poolCleaningSchedules: nextPoolCleaningSchedules,
         poolEquipmentChecks: nextPoolEquipmentChecks,
         poolChemicalRecords: nextPoolChemicalRecords,
