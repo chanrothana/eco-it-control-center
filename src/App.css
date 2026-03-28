@@ -2496,6 +2496,10 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.rental-printer-master-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .field span {
   font-size: var(--font-size-sm);
   font-weight: 700;
@@ -11318,6 +11322,10 @@ tr.row-maint-maintenance:hover td {
 
   .workspace-main .inventory-item-grid .field-wide {
     grid-column: 1 / -1 !important;
+  }
+
+  .workspace-main .form-grid.inventory-item-grid.rental-printer-master-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
   .inventory-daily-gallery-grid {

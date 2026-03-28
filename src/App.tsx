@@ -592,6 +592,7 @@ type RentalPrinter = {
   machineName: string;
   model: string;
   serialNumber: string;
+  ipAddress?: string;
   campus: string;
   location: string;
   monoRate: number;
@@ -3287,6 +3288,7 @@ function normalizeRentalPrinters(input: unknown): RentalPrinter[] {
       machineName: String(row.machineName || "").trim(),
       model: String(row.model || "").trim(),
       serialNumber: String(row.serialNumber || "").trim(),
+      ipAddress: String(row.ipAddress || "").trim(),
       campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
       location: String(row.location || "").trim(),
       monoRate: Math.max(0, Number(row.monoRate) || 0),
@@ -7891,6 +7893,7 @@ export default function App() {
     machineName: "",
     model: "",
     serialNumber: "",
+    ipAddress: "",
     campus: CAMPUS_LIST[0],
     location: "",
     monoRate: "",
@@ -9093,6 +9096,12 @@ export default function App() {
     () => rentalPrinters.find((row) => Number(row.id) === Number(rentalCounterForm.rentalPrinterId)) || null,
     [rentalCounterForm.rentalPrinterId, rentalPrinters]
   );
+  const selectedRentalPrinterWebUrl = useMemo(() => {
+    const rawIp = String(selectedRentalPrinter?.ipAddress || "").trim();
+    if (!rawIp) return "";
+    if (/^https?:\/\//i.test(rawIp)) return rawIp;
+    return `http://${rawIp}`;
+  }, [selectedRentalPrinter]);
   const selectedRentalPrinterPreviousCounter = useMemo(() => {
     if (!selectedRentalPrinter) return null;
     const previousRows = rentalPrinterCounters
@@ -9143,6 +9152,50 @@ export default function App() {
       { printers: 0, monoUsage: 0, amount: 0 }
     );
   }, [rentalReportRows]);
+  const rentalCampusReportBlocks = useMemo(() => {
+    const monthSet = new Set<string>();
+    const campusMap = new Map<
+      string,
+      Map<string, { previousMono: number; currentMono: number; monoUsage: number }>
+    >();
+    for (const row of rentalPrinterCounters) {
+      const month = String(row.billingMonth || "").trim();
+      const campus = String(row.campus || "").trim();
+      if (!month || !campus) continue;
+      if (month > rentalReportMonth) continue;
+      monthSet.add(month);
+      const campusRows = campusMap.get(campus) || new Map<string, { previousMono: number; currentMono: number; monoUsage: number }>();
+      const current = campusRows.get(month) || { previousMono: 0, currentMono: 0, monoUsage: 0 };
+      current.previousMono += Math.max(0, Number(row.previousMono) || 0);
+      current.currentMono += Math.max(0, Number(row.currentMono) || 0);
+      current.monoUsage += Math.max(0, Number(row.monoUsage) || 0);
+      campusRows.set(month, current);
+      campusMap.set(campus, campusRows);
+    }
+    const months = Array.from(monthSet).sort((a, b) => a.localeCompare(b));
+    return Array.from(campusMap.entries())
+      .sort((a, b) => compareCampusByCode(a[0], b[0]))
+      .map(([campus, monthRows]) => ({
+        campus,
+        rows: months
+          .filter((month) => monthRows.has(month))
+          .map((month) => {
+            const totals = monthRows.get(month)!;
+            const monthDate = new Date(`${month}-01T00:00:00`);
+            const monthLabel = Number.isNaN(monthDate.getTime())
+              ? month
+              : monthDate.toLocaleDateString("en-US", { month: "long" });
+            return {
+              month,
+              monthLabel,
+              previousMono: totals.previousMono,
+              currentMono: totals.currentMono,
+              monoUsage: totals.monoUsage,
+            };
+          }),
+      }))
+      .filter((block) => block.rows.length > 0);
+  }, [rentalPrinterCounters, rentalReportMonth]);
   const rentalMissingPrinterRows = useMemo(() => {
     const reportSet = new Set(rentalReportRows.map((row) => Number(row.rentalPrinterId)));
     return rentalPrinters
@@ -14673,9 +14726,10 @@ export default function App() {
       machineName: rentalPrinterForm.machineName.trim(),
       model: rentalPrinterForm.model.trim(),
       serialNumber: rentalPrinterForm.serialNumber.trim(),
+      ipAddress: rentalPrinterForm.ipAddress.trim(),
       campus: rentalPrinterForm.campus,
       location: rentalPrinterForm.location.trim(),
-      monoRate: Math.max(0, Number(rentalPrinterForm.monoRate) || 0),
+      monoRate: 0,
       colorRate: Math.max(0, Number(rentalPrinterForm.colorRate) || 0),
       openingMono: Math.max(0, Number(rentalPrinterForm.openingMono) || 0),
       openingColor: Math.max(0, Number(rentalPrinterForm.openingColor) || 0),
@@ -14708,6 +14762,7 @@ export default function App() {
       machineName: "",
       model: "",
       serialNumber: "",
+      ipAddress: "",
       campus: CAMPUS_LIST[0],
       location: "",
       monoRate: "",
@@ -14738,6 +14793,7 @@ export default function App() {
       machineName: printer.machineName,
       model: printer.model || "",
       serialNumber: printer.serialNumber || "",
+      ipAddress: printer.ipAddress || "",
       campus: printer.campus,
       location: printer.location || "",
       monoRate: String(printer.monoRate || 0),
@@ -14795,10 +14851,6 @@ export default function App() {
       return;
     }
     const monoUsage = currentMono - previousMono;
-    const amount =
-      rentalCounterForm.amount === ""
-        ? monoUsage * Number(printer.monoRate || 0)
-        : Math.max(0, Number(String(rentalCounterForm.amount).replace(/,/g, "")) || 0);
     const row: RentalPrinterCounter = {
       id: Date.now(),
       rentalPrinterId: printer.id,
@@ -14816,9 +14868,9 @@ export default function App() {
       previousColor: 0,
       currentColor: 0,
       colorUsage: 0,
-      monoRate: Number(printer.monoRate || 0),
+      monoRate: 0,
       colorRate: 0,
-      amount,
+      amount: 0,
       submittedBy: rentalCounterForm.submittedBy.trim(),
       photo: rentalCounterForm.photo || "",
       note: rentalCounterForm.note.trim(),
@@ -42070,17 +42122,12 @@ export default function App() {
 
         {tab === "printer" && (
           <section className="panel">
-            <div className="tabs">
-              <button className={`tab ${printerView === "setup" ? "tab-active" : ""}`} onClick={() => setPrinterView("setup")}>Printer Setup</button>
-              <button className={`tab ${printerView === "entry" ? "tab-active" : ""}`} onClick={() => setPrinterView("entry")}>Counter Entry</button>
-              <button className={`tab ${printerView === "report" ? "tab-active" : ""}`} onClick={() => setPrinterView("report")}>LA Report</button>
-            </div>
             {rentalPrinterMessage ? <p className="tiny">{rentalPrinterMessage}</p> : null}
 
             {printerView === "setup" && (
               <>
                 <h2>Rental Printer Master</h2>
-                <div className="form-grid inventory-item-grid">
+                <div className="form-grid inventory-item-grid rental-printer-master-grid">
                   <label className="field">
                     <span>Machine Code Auto</span>
                     <input
@@ -42107,6 +42154,10 @@ export default function App() {
                     <input className="input" value={rentalPrinterForm.serialNumber} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, serialNumber: e.target.value }))} />
                   </label>
                   <label className="field">
+                    <span>Printer IP / Web Address</span>
+                    <input className="input" value={rentalPrinterForm.ipAddress} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, ipAddress: e.target.value }))} placeholder="192.168.1.50 or http://192.168.1.50" />
+                  </label>
+                  <label className="field">
                     <span>{t.campus}</span>
                     <select className="input" value={rentalPrinterForm.campus} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, campus: e.target.value }))}>
                       {campusOptions.map((campus) => <option key={`rental-printer-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
@@ -42115,10 +42166,6 @@ export default function App() {
                   <label className="field">
                     <span>Location</span>
                     <input className="input" value={rentalPrinterForm.location} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, location: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Mono Rate</span>
-                    <input className="input" inputMode="decimal" value={rentalPrinterForm.monoRate} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, monoRate: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="0.03" />
                   </label>
                   <label className="field">
                     <span>Contract Start</span>
@@ -42161,6 +42208,7 @@ export default function App() {
                           machineName: "",
                           model: "",
                           serialNumber: "",
+                          ipAddress: "",
                           campus: CAMPUS_LIST[0],
                           location: "",
                           monoRate: "",
@@ -42190,9 +42238,9 @@ export default function App() {
                         <th>Vendor</th>
                         <th>Machine Name</th>
                         <th>Model</th>
+                        <th>Printer IP</th>
                         <th>{t.campus}</th>
                         <th>Location</th>
-                        <th>Mono Rate</th>
                         <th>Fixing History</th>
                         <th>Status</th>
                         <th>{t.edit}</th>
@@ -42206,9 +42254,9 @@ export default function App() {
                           <td>{row.vendor || "-"}</td>
                           <td>{row.machineName}</td>
                           <td>{row.model || "-"}</td>
+                          <td>{row.ipAddress || "-"}</td>
                           <td>{campusLabel(row.campus)}</td>
                           <td>{row.location || "-"}</td>
-                          <td>{row.monoRate.toFixed(3)}</td>
                           <td>{row.fixingHistory || "-"}</td>
                           <td>{row.status}</td>
                           <td><button className="tab" disabled={!isAdmin} onClick={() => startEditRentalPrinter(row)}>{t.edit}</button></td>
@@ -42259,24 +42307,16 @@ export default function App() {
                     <input className="input" value={String(rentalCounterPreview.monoUsage)} readOnly />
                   </label>
                   <label className="field">
-                    <span>Auto Amount</span>
-                    <input className="input" value={rentalCounterPreview.autoAmount.toFixed(2)} readOnly />
-                  </label>
-                  <label className="field">
-                    <span>Final Amount</span>
-                    <input className="input" inputMode="decimal" value={rentalCounterForm.amount} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, amount: e.target.value.replace(/[^0-9.]/g, "") }))} placeholder="Leave blank to use auto amount" />
-                  </label>
-                  <label className="field">
                     <span>Submitted By</span>
                     <input className="input" value={rentalCounterForm.submittedBy} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, submittedBy: e.target.value }))} />
                   </label>
                   <label className="field">
-                    <span>Printer Screenshot</span>
+                    <span>Printer Screenshot (Optional)</span>
                     <input key={rentalCounterFileKey} type="file" accept="image/*" className="input" onChange={onRentalCounterPhotoFile} />
                     <span className="tiny">
                       {canUseUtilityInvoiceOcr
-                        ? "Upload the printer screenshot. The local macOS app can read Total 2 automatically."
-                        : "Upload the printer screenshot here. Auto read works only in the local macOS app; phone/web entry is manual."}
+                        ? "Optional. Upload a screenshot only if you want auto fill in the local macOS app."
+                        : "Optional. Phone/web entry is manual. Upload only if you want to keep proof."}
                     </span>
                     {rentalCounterForm.photo ? <img loading="lazy" decoding="async" src={rentalCounterForm.photo} alt="rental counter" className="table-photo" style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }} /> : null}
                   </label>
@@ -42286,6 +42326,15 @@ export default function App() {
                   </label>
                 </div>
                 <div className="row-actions">
+                  {selectedRentalPrinterWebUrl ? (
+                    <button
+                      className="tab"
+                      type="button"
+                      onClick={() => window.open(selectedRentalPrinterWebUrl, "_blank", "noopener,noreferrer")}
+                    >
+                      Open Printer Web
+                    </button>
+                  ) : null}
                   <button
                     className="tab"
                     disabled={!canUseUtilityInvoiceOcr || rentalCounterAutofillBusy || !rentalCounterForm.photo}
@@ -42306,7 +42355,6 @@ export default function App() {
                         <th>Machine</th>
                         <th>{t.campus}</th>
                         <th>Mono Usage</th>
-                        <th>Amount</th>
                         <th>By</th>
                         <th>{t.delete}</th>
                       </tr>
@@ -42318,11 +42366,10 @@ export default function App() {
                           <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
                           <td>{campusLabel(row.campus)}</td>
                           <td>{row.monoUsage}</td>
-                          <td>{row.amount.toFixed(2)}</td>
                           <td>{row.submittedBy || "-"}</td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={7}>No rental counter records yet.</td></tr>}
+                      )) : <tr><td colSpan={6}>No rental counter records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -42332,11 +42379,14 @@ export default function App() {
             {printerView === "report" && (
               <>
                 <div className="report-title-row">
-                  <h2>LA Rental Counter Report</h2>
+                  <h2>Canon Counter Report All Campuses</h2>
                   <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
                     <Printer size={16} aria-hidden={true} />
                     <span>Print Report</span>
                   </button>
+                </div>
+                <div className="tiny" style={{ marginBottom: 10, fontSize: 16, fontWeight: 700, textAlign: "center" }}>
+                  Provider Company LA
                 </div>
                 <div className="panel-filters report-filters report-filter-row" style={{ marginBottom: 12 }}>
                   <input className="input" type="month" value={rentalReportMonth} onChange={(e) => setRentalReportMonth(e.target.value)} />
@@ -42344,43 +42394,57 @@ export default function App() {
                 <div className="stats-grid" style={{ marginBottom: 12 }}>
                   <article className="stat-card"><div className="stat-label">Printers Reported</div><div className="stat-value">{rentalReportSummary.printers}</div></article>
                   <article className="stat-card"><div className="stat-label">Mono Usage</div><div className="stat-value">{rentalReportSummary.monoUsage}</div></article>
-                  <article className="stat-card"><div className="stat-label">Total Amount</div><div className="stat-value">{rentalReportSummary.amount.toFixed(2)}</div></article>
                 </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Vendor</th>
-                        <th>Machine Code</th>
-                        <th>Machine Name</th>
-                        <th>Model</th>
-                        <th>{t.campus}</th>
-                        <th>Location</th>
-                        <th>Prev Mono</th>
-                        <th>Curr Mono</th>
-                        <th>Mono Usage</th>
-                        <th>Amount</th>
-                        <th>By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rentalReportRows.length ? rentalReportRows.map((row) => (
-                        <tr key={`rental-report-row-${row.id}`}>
-                          <td>{row.vendor}</td>
-                          <td><strong>{row.machineCode}</strong></td>
-                          <td>{row.machineName || "-"}</td>
-                          <td>{row.model || "-"}</td>
-                          <td>{campusLabel(row.campus)}</td>
-                          <td>{row.location || "-"}</td>
-                          <td>{row.previousMono}</td>
-                          <td>{row.currentMono}</td>
-                          <td>{row.monoUsage}</td>
-                          <td>{row.amount.toFixed(2)}</td>
-                          <td>{row.submittedBy || "-"}</td>
-                        </tr>
-                      )) : <tr><td colSpan={11}>No rental counter records for this month.</td></tr>}
-                    </tbody>
-                  </table>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                    gap: 16,
+                    marginBottom: 12,
+                  }}
+                >
+                  {rentalCampusReportBlocks.length ? rentalCampusReportBlocks.map((block, index) => (
+                    <div key={`rental-campus-report-${block.campus}`} className="table-wrap" style={{ marginTop: 0 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th
+                              colSpan={4}
+                              style={{
+                                background:
+                                  index % 4 === 0 ? "#6f63c7" :
+                                  index % 4 === 1 ? "#86b93b" :
+                                  index % 4 === 2 ? "#48bcd2" : "#f26a21",
+                                color: "#fff",
+                                textAlign: "center",
+                                fontSize: 20,
+                              }}
+                            >
+                              {campusLabel(block.campus)}
+                            </th>
+                          </tr>
+                          <tr>
+                            <th>Month</th>
+                            <th>New Meter</th>
+                            <th>Old Meter</th>
+                            <th>Consumption</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {block.rows.map((row) => (
+                            <tr key={`rental-campus-report-row-${block.campus}-${row.month}`}>
+                              <td><strong>{row.monthLabel}</strong></td>
+                              <td>{row.currentMono.toLocaleString()}</td>
+                              <td>{row.previousMono.toLocaleString()}</td>
+                              <td>{row.monoUsage.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )) : (
+                    <div className="panel-note">No rental counter records up to this month yet.</div>
+                  )}
                 </div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
                   <table>
