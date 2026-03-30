@@ -45665,7 +45665,7 @@ export default function App() {
           {tab === "setup" && setupView === "backup" && canAccessMenu("setup.backup", "setup") && (
           <section className="panel">
             <h2>Backup & Audit</h2>
-            <p className="backup-subline">Backup database to file, restore when needed, and track user actions.</p>
+            <p className="backup-subline">Backup database to file, restore when needed, and keep local data aligned with the live web server.</p>
             <div className="asset-actions">
               <div className="backup-action-row">
                 <button className="btn-primary backup-action-btn" disabled={!isAdmin || busy} onClick={createServerBackup}>
@@ -45675,7 +45675,7 @@ export default function App() {
                   Download Backup
                 </button>
                 <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
-                  Sync From Live Web
+                  Use Live Web Data
                 </button>
                 <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
                   Restore Backup
