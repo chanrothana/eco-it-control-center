@@ -4964,6 +4964,15 @@ function isAirconAsset(category: string, type: string) {
   return String(category || "").toUpperCase() === "FACILITY" && String(type || "").toUpperCase() === "AC";
 }
 
+function hidesAssignmentHistory(category: string, type: string) {
+  const normalizedCategory = String(category || "").trim().toUpperCase();
+  const normalizedType = String(type || "").trim().toUpperCase();
+  return (
+    (normalizedCategory === "FACILITY" && normalizedType === "AC") ||
+    (normalizedCategory === "IT" && normalizedType === TV_TYPE_CODE)
+  );
+}
+
 function showsIncludedComponentCards(category: string, type: string) {
   const normalizedCategory = String(category || "").trim().toUpperCase();
   const normalizedType = String(type || "").trim().toUpperCase();
@@ -14745,8 +14754,10 @@ export default function App() {
 
   async function saveRentalPrinter() {
     if (!requireAdminAction()) return;
-    if (!rentalPrinterForm.machineName.trim() || !rentalPrinterForm.location.trim()) {
-      setError("Machine name and location are required.");
+    const machineName = rentalPrinterForm.machineName.trim();
+    const location = rentalPrinterForm.location.trim() || machineName;
+    if (!machineName) {
+      setError("Machine name is required.");
       return;
     }
     const autoMachineCode = (editingRentalPrinterId ? rentalPrinterForm.machineCode : "") || rentalPrinterAutoMachineCode;
@@ -14754,13 +14765,13 @@ export default function App() {
       id: editingRentalPrinterId || Date.now(),
       vendor: rentalPrinterForm.vendor.trim() || "LA",
       machineCode: autoMachineCode.trim().toUpperCase(),
-      machineName: rentalPrinterForm.machineName.trim(),
+      machineName,
       model: rentalPrinterForm.model.trim(),
       serialNumber: rentalPrinterForm.serialNumber.trim(),
       ipAddress: rentalPrinterForm.ipAddress.trim(),
       photo: rentalPrinterForm.photo.trim(),
       campus: rentalPrinterForm.campus,
-      location: rentalPrinterForm.location.trim(),
+      location,
       monoRate: 0,
       colorRate: Math.max(0, Number(rentalPrinterForm.colorRate) || 0),
       openingMono: Math.max(0, Number(rentalPrinterForm.openingMono) || 0),
@@ -14808,6 +14819,7 @@ export default function App() {
       fixingHistory: "",
       note: "",
     });
+    setError("");
     setRentalPrinterMessage(`Rental printer ${row.machineCode} saved.`);
     try {
       await saveRentalPrinterSettingsToServer(nextPrinters, rentalPrinterCounters);
@@ -33517,10 +33529,10 @@ export default function App() {
                               <div className="asset-detail-transfer-soft-meta">
                                 <span><strong>From:</strong> {campusLabel(h.fromCampus)} | {h.fromLocation || "-"}</span>
                                 <span><strong>To:</strong> {campusLabel(h.toCampus)} | {h.toLocation || "-"}</span>
-                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                                   <span><strong>Staff:</strong> {custody?.fromUser || "-"} {"->"} {custody?.toUser || "-"}</span>
                                 ) : null}
-                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                                   <span><strong>Ack:</strong> {custody?.responsibilityAck ? "Yes" : "No"}</span>
                                 ) : null}
                                 <span><strong>By:</strong> {h.by || "-"}</span>
@@ -33545,9 +33557,9 @@ export default function App() {
                             <th>From Location</th>
                             <th>To Campus</th>
                             <th>To Location</th>
-                            {!isAirconAsset(detailAsset.category, detailAsset.type) ? <th>From Staff</th> : null}
-                            {!isAirconAsset(detailAsset.category, detailAsset.type) ? <th>To Staff</th> : null}
-                            {!isAirconAsset(detailAsset.category, detailAsset.type) ? <th>Ack</th> : null}
+                            {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? <th>From Staff</th> : null}
+                            {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? <th>To Staff</th> : null}
+                            {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? <th>Ack</th> : null}
                             <th>Reason</th>
                             <th>By</th>
                           </tr>
@@ -33568,13 +33580,13 @@ export default function App() {
                                 <td data-label="From Location">{h.fromLocation || "-"}</td>
                                 <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
                                 <td data-label="To Location">{h.toLocation || "-"}</td>
-                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                                   <td data-label="From Staff">{custody?.fromUser || "-"}</td>
                                 ) : null}
-                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                                   <td data-label="To Staff">{custody?.toUser || "-"}</td>
                                 ) : null}
-                                {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                                   <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
                                 ) : null}
                                 <td data-label="Reason">{h.reason || "-"}</td>
@@ -33584,7 +33596,7 @@ export default function App() {
                             })
                           ) : (
                             <tr className="asset-detail-empty-row">
-                              <td colSpan={isAirconAsset(detailAsset.category, detailAsset.type) ? 7 : 10}>No transfer location history yet.</td>
+                              <td colSpan={hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? 7 : 10}>No transfer location history yet.</td>
                             </tr>
                           )}
                         </tbody>
@@ -33592,7 +33604,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                  {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                     <>
                       <h3 className="section-title">Assigned to History</h3>
                       <div className="table-wrap asset-detail-history-wrap">
@@ -47737,7 +47749,7 @@ export default function App() {
                 </table>
               </div>
 
-              {!isAirconAsset(detailAsset.category, detailAsset.type) ? (
+              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                 <>
                   <h3 className="section-title">Assigned to History</h3>
                   <div className="table-wrap asset-detail-history-wrap">
