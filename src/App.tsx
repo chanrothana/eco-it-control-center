@@ -14497,6 +14497,7 @@ export default function App() {
         body: JSON.stringify({
           machineCode: selectedRentalPrinter.machineCode || "",
           ipAddress: selectedRentalPrinter.ipAddress || "",
+          campus: selectedRentalPrinter.campus || "",
         }),
       });
       const extracted = res.extracted || {};

@@ -118,6 +118,14 @@ const DEFAULT_VIEWER_PASSWORD = String(
   process.env.BOOTSTRAP_VIEWER_PASSWORD || (!IS_PROD ? "EcoViewer@2026!" : "")
 );
 const TELEGRAM_ALERT_ENABLED = String(process.env.TELEGRAM_ALERT_ENABLED || "false").toLowerCase() === "true";
+const PRINTER_LOGIN_CAMPUS1_USERNAME = String(process.env.PRINTER_LOGIN_CAMPUS1_USERNAME || "").trim();
+const PRINTER_LOGIN_CAMPUS1_PASSWORD = String(process.env.PRINTER_LOGIN_CAMPUS1_PASSWORD || "").trim();
+const PRINTER_LOGIN_CAMPUS21_USERNAME = String(process.env.PRINTER_LOGIN_CAMPUS21_USERNAME || "").trim();
+const PRINTER_LOGIN_CAMPUS21_PASSWORD = String(process.env.PRINTER_LOGIN_CAMPUS21_PASSWORD || "").trim();
+const PRINTER_LOGIN_CAMPUS22_USERNAME = String(process.env.PRINTER_LOGIN_CAMPUS22_USERNAME || "").trim();
+const PRINTER_LOGIN_CAMPUS22_PASSWORD = String(process.env.PRINTER_LOGIN_CAMPUS22_PASSWORD || "").trim();
+const PRINTER_LOGIN_CAMPUS3_USERNAME = String(process.env.PRINTER_LOGIN_CAMPUS3_USERNAME || "").trim();
+const PRINTER_LOGIN_CAMPUS3_PASSWORD = String(process.env.PRINTER_LOGIN_CAMPUS3_PASSWORD || "").trim();
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_MAINTENANCE_BOT_TOKEN = String(
   process.env.TELEGRAM_MAINTENANCE_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ""
@@ -3612,71 +3620,292 @@ function parsePrinterCounterFromHtml(html) {
   };
 }
 
-async function fetchTextUrl(rawUrl, redirectCount = 0) {
+function decodeHtmlEntities(text) {
+  return toText(text)
+    .replace(/&#13;/gi, "\n")
+    .replace(/&#10;/gi, "\n")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&");
+}
+
+function parseInputFields(html) {
+  const out = {};
+  const source = toText(html);
+  const regex = /<input\b([^>]+)>/gi;
+  let match;
+  while ((match = regex.exec(source))) {
+    const attrs = match[1];
+    const nameMatch = attrs.match(/\bname\s*=\s*"([^"]+)"/i) || attrs.match(/\bname\s*=\s*'([^']+)'/i);
+    if (!nameMatch || !nameMatch[1]) continue;
+    const valueMatch = attrs.match(/\bvalue\s*=\s*"([\s\S]*?)"/i) || attrs.match(/\bvalue\s*=\s*'([\s\S]*?)'/i);
+    out[nameMatch[1]] = decodeHtmlEntities(valueMatch && valueMatch[1] ? valueMatch[1] : "");
+  }
+  return out;
+}
+
+function getCookieHeader(cookieJar) {
+  if (!cookieJar || !(cookieJar instanceof Map) || !cookieJar.size) return "";
+  return Array.from(cookieJar.entries())
+    .map(([key, value]) => `${key}=${value}`)
+    .join("; ");
+}
+
+function storeResponseCookies(cookieJar, setCookieHeader) {
+  if (!cookieJar || !(cookieJar instanceof Map)) return;
+  const cookieRows = Array.isArray(setCookieHeader)
+    ? setCookieHeader
+    : (setCookieHeader ? [setCookieHeader] : []);
+  for (const row of cookieRows) {
+    const firstPart = String(row || "").split(";")[0];
+    const eqIndex = firstPart.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const key = firstPart.slice(0, eqIndex).trim();
+    const value = firstPart.slice(eqIndex + 1).trim();
+    if (!key) continue;
+    cookieJar.set(key, value);
+  }
+}
+
+async function requestTextUrl(rawUrl, options = {}) {
+  const {
+    method = "GET",
+    headers = {},
+    body = "",
+    cookieJar = null,
+    redirectCount = 0,
+    referer = "",
+  } = options;
   const parsed = new URL(rawUrl);
   const transport = parsed.protocol === "https:" ? https : http;
+  const requestHeaders = {
+    "User-Agent": "ECO-IT-Control-Center/1.0",
+    Accept: "text/html,application/xhtml+xml",
+    ...headers,
+  };
+  const cookieHeader = getCookieHeader(cookieJar);
+  if (cookieHeader && !requestHeaders.Cookie) requestHeaders.Cookie = cookieHeader;
+  if (referer && !requestHeaders.Referer) requestHeaders.Referer = referer;
+
   return new Promise((resolve, reject) => {
     const req = transport.request(
       parsed,
       {
-        method: "GET",
+        method,
         timeout: 8000,
-        headers: {
-          "User-Agent": "ECO-IT-Control-Center/1.0",
-          Accept: "text/html,application/xhtml+xml",
-        },
+        headers: requestHeaders,
       },
       (res) => {
+        storeResponseCookies(cookieJar, res.headers["set-cookie"]);
         const status = Number(res.statusCode || 0);
-        if ([301, 302, 303, 307, 308].includes(status) && res.headers.location && redirectCount < 3) {
+        if ([301, 302, 303, 307, 308].includes(status) && res.headers.location && redirectCount < 5) {
           const nextUrl = new URL(res.headers.location, parsed).toString();
           res.resume();
-          fetchTextUrl(nextUrl, redirectCount + 1).then(resolve).catch(reject);
-          return;
-        }
-        if (status >= 400) {
-          res.resume();
-          reject(new Error(`Printer page returned HTTP ${status}.`));
+          requestTextUrl(nextUrl, {
+            method: status === 303 ? "GET" : method,
+            headers,
+            body: status === 303 ? "" : body,
+            cookieJar,
+            redirectCount: redirectCount + 1,
+            referer: rawUrl,
+          }).then(resolve).catch(reject);
           return;
         }
         const chunks = [];
         res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-        res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+        res.on("end", () => resolve({
+          status,
+          url: rawUrl,
+          body: Buffer.concat(chunks).toString("utf8"),
+          headers: res.headers,
+        }));
       }
     );
     req.on("timeout", () => req.destroy(new Error("Printer page request timed out.")));
     req.on("error", reject);
+    if (body) req.write(body);
     req.end();
   });
 }
 
-async function fetchPrinterCounterFromIp(rawIpAddress) {
+function resolvePrinterCredentialProfile(context) {
+  const campus = toText(context && context.campus);
+  if (campus === "Samdach Pan Campus" || campus === "C1") {
+    return {
+      username: PRINTER_LOGIN_CAMPUS1_USERNAME,
+      password: PRINTER_LOGIN_CAMPUS1_PASSWORD,
+      loginType: "rsa",
+    };
+  }
+  if (campus === "Chaktomuk Campus" || campus === "C2" || campus === "C2.1") {
+    return {
+      username: PRINTER_LOGIN_CAMPUS21_USERNAME,
+      password: PRINTER_LOGIN_CAMPUS21_PASSWORD,
+      loginType: "rsa",
+    };
+  }
+  if (campus === "Chaktomuk Campus (C2.2)" || campus === "C2.2") {
+    return {
+      username: PRINTER_LOGIN_CAMPUS22_USERNAME,
+      password: PRINTER_LOGIN_CAMPUS22_PASSWORD,
+      loginType: "rsa",
+    };
+  }
+  if (campus === "Boeung Snor Campus" || campus === "C3") {
+    return {
+      username: PRINTER_LOGIN_CAMPUS3_USERNAME,
+      password: PRINTER_LOGIN_CAMPUS3_PASSWORD,
+      loginType: "dept",
+    };
+  }
+  return { username: "", password: "", loginType: "" };
+}
+
+function encryptCanonLoginPassword(password, challenge, publicKeyPem) {
+  const normalizedKey = toText(publicKeyPem).replace(/\r\n/g, "\n").trim();
+  if (!normalizedKey || !challenge) return "";
+  return crypto.publicEncrypt(
+    {
+      key: normalizedKey,
+      padding: crypto.constants.RSA_PKCS1_PADDING,
+    },
+    Buffer.from(`${password}${challenge}`, "utf8")
+  ).toString("base64");
+}
+
+async function loginPrinterSession(baseUrl, context, cookieJar) {
+  const credentials = resolvePrinterCredentialProfile(context);
+  if (!credentials.username || !credentials.password) return null;
+  const targetUrl = new URL("/rps/dcounter.cgi", baseUrl).toString();
+  const loginPage = await requestTextUrl(targetUrl, { cookieJar });
+  const loginHtml = toText(loginPage.body);
+  const fields = parseInputFields(loginHtml);
+
+  if (/name\s*=\s*"deptid"/i.test(loginHtml) || /DepartmentID Authentication/i.test(loginHtml) || credentials.loginType === "dept") {
+    const body = new URLSearchParams({
+      uri: fields.uri || "/rps/dcounter.cgi",
+      user_type_generic: "",
+      deptid: credentials.username,
+      password: credentials.password,
+    }).toString();
+    await requestTextUrl(new URL("/login", baseUrl).toString(), {
+      method: "POST",
+      cookieJar,
+      body,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(body),
+      },
+      referer: targetUrl,
+    });
+    await requestTextUrl(new URL("/", baseUrl).toString(), { cookieJar, referer: targetUrl });
+    return { loginType: "dept" };
+  }
+
+  if (/name\s*=\s*"USERNAME"/i.test(loginHtml) || /User Authentication/i.test(loginHtml) || credentials.loginType === "rsa") {
+    const encryptedPassword = encryptCanonLoginPassword(
+      credentials.password,
+      fields.CHALLENGE || "",
+      fields.PK || ""
+    );
+    const body = new URLSearchParams({
+      CHALLENGE: fields.CHALLENGE || "",
+      URI: fields.URI || "/rps/dcounter.cgi",
+      policy: fields.policy || "",
+      DOMAIN: fields.DOMAIN || "",
+      admin: fields.admin || "",
+      GUEST: "",
+      PASSWORD: encryptedPassword,
+      USERNAME: credentials.username,
+    }).toString();
+    await requestTextUrl(new URL("/login", baseUrl).toString(), {
+      method: "POST",
+      cookieJar,
+      body,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(body),
+      },
+      referer: targetUrl,
+    });
+    await requestTextUrl(new URL("/", baseUrl).toString(), { cookieJar, referer: targetUrl });
+    return { loginType: "rsa" };
+  }
+
+  return null;
+}
+
+async function tryReadCounterPage(baseUrl, cookieJar) {
+  const directCandidates = [
+    new URL("/rps/dcounter.cgi", baseUrl).toString(),
+    new URL(`/rps/dcounter.cgi?CorePGTAG=14&Dummy=${Date.now()}`, baseUrl).toString(),
+  ];
+  let sysmonitorUrl = "";
+  try {
+    const sysmonitorRes = await requestTextUrl(new URL("/sysmonitor", baseUrl).toString(), { cookieJar });
+    sysmonitorUrl = toText(sysmonitorRes.url);
+    const cgiMatch = toText(sysmonitorRes.body).match(/cgi_str\s*:\s*"\.\/dcounter\.cgi\?CorePGTAG=14"/i);
+    if (cgiMatch) {
+      directCandidates.unshift(new URL(`/rps/dcounter.cgi?CorePGTAG=14&Dummy=${Date.now()}`, baseUrl).toString());
+    }
+  } catch {
+    // Ignore. We'll still try direct URLs.
+  }
+
+  let lastParsed = null;
+  for (const candidateUrl of Array.from(new Set(directCandidates))) {
+    const response = await requestTextUrl(candidateUrl, {
+      cookieJar,
+      referer: sysmonitorUrl || new URL("/", baseUrl).toString(),
+    });
+    const parsed = parsePrinterCounterFromHtml(response.body);
+    if (parsed.currentMono) {
+      return { ...parsed, sourceUrl: candidateUrl };
+    }
+    lastParsed = { ...parsed, sourceUrl: candidateUrl };
+  }
+  return lastParsed;
+}
+
+async function fetchPrinterCounterFromIp(rawIpAddress, context = {}) {
   const normalized = String(rawIpAddress || "").trim();
   if (!normalized) {
     throw new Error("Printer IP / Web Address is required.");
   }
   const baseUrl = /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
   const parsedBase = new URL(baseUrl);
-  const candidateUrls = [];
-  candidateUrls.push(parsedBase.toString());
-  if (!/dcounter\.cgi/i.test(parsedBase.pathname)) {
-    candidateUrls.push(new URL("/rps/dcounter.cgi", parsedBase).toString());
+  const cookieJar = new Map();
+  const directRead = await tryReadCounterPage(parsedBase, cookieJar).catch(() => null);
+  if (directRead && directRead.currentMono) {
+    return directRead;
   }
 
-  let lastError = null;
-  for (const candidateUrl of candidateUrls) {
-    try {
-      const html = await fetchTextUrl(candidateUrl);
-      const extracted = parsePrinterCounterFromHtml(html);
-      if (extracted.currentMono || !extracted.warnings.length) {
-        return { ...extracted, sourceUrl: candidateUrl };
-      }
-      lastError = new Error(extracted.warnings.join(" "));
-    } catch (err) {
-      lastError = err;
-    }
+  let loginAttempted = false;
+  try {
+    const loginResult = await loginPrinterSession(parsedBase, context, cookieJar);
+    loginAttempted = Boolean(loginResult);
+  } catch {
+    loginAttempted = true;
   }
-  throw lastError instanceof Error ? lastError : new Error("Could not read printer counter from IP.");
+
+  const authenticatedRead = await tryReadCounterPage(parsedBase, cookieJar).catch(() => null);
+  if (authenticatedRead && authenticatedRead.currentMono) {
+    return authenticatedRead;
+  }
+
+  const warnings = Array.isArray(authenticatedRead && authenticatedRead.warnings)
+    ? authenticatedRead.warnings.slice()
+    : [];
+  if (loginAttempted) {
+    warnings.push("Stored printer login was tried, but Canon still did not return 102 : Total 2.");
+  } else {
+    warnings.push("No stored printer login is configured for this campus.");
+  }
+  throw new Error(
+    warnings.filter(Boolean).join(" ") || "Could not read printer counter from IP."
+  );
 }
 
 async function runUtilityInvoiceOcr(imagePath) {
@@ -5303,8 +5532,15 @@ const server = http.createServer(async (req, res) => {
       if (!admin) return;
       const body = await parseBody(req);
       try {
-        const extracted = await fetchPrinterCounterFromIp(body.ipAddress || body.url || "");
         const db = await readDb();
+        const rentalPrinters = Array.isArray(db.rentalPrinters) ? db.rentalPrinters : [];
+        const matchingPrinter = rentalPrinters.find(
+          (row) => toText(row.machineCode) === toText(body.machineCode)
+        ) || null;
+        const extracted = await fetchPrinterCounterFromIp(body.ipAddress || body.url || "", {
+          campus: body.campus || (matchingPrinter ? matchingPrinter.campus : ""),
+          machineCode: body.machineCode || (matchingPrinter ? matchingPrinter.machineCode : ""),
+        });
         appendAuditLog(
           db,
           admin,
