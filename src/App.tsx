@@ -7932,6 +7932,7 @@ export default function App() {
     rentalPrinterId: "",
     billingMonth: toYmd(new Date()).slice(0, 7),
     readingDate: toYmd(new Date()),
+    previousMono: "",
     currentMono: "",
     currentColor: "",
     amount: "",
@@ -9142,14 +9143,22 @@ export default function App() {
       : { previousMono: selectedRentalPrinter.openingMono, previousColor: 0 };
   }, [rentalCounterForm.billingMonth, rentalPrinterCounters, selectedRentalPrinter]);
   const rentalCounterPreview = useMemo(() => {
-    const previousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? 0;
+    const defaultPreviousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? 0;
+    const previousMono = Math.max(0, Number(rentalCounterForm.previousMono) || defaultPreviousMono);
     const currentMono = Math.max(previousMono, Number(rentalCounterForm.currentMono) || 0);
     const monoUsage = Math.max(0, currentMono - previousMono);
     const autoAmount = selectedRentalPrinter
       ? monoUsage * Number(selectedRentalPrinter.monoRate || 0)
       : 0;
     return { previousMono, currentMono, monoUsage, autoAmount };
-  }, [rentalCounterForm.currentMono, selectedRentalPrinter, selectedRentalPrinterPreviousCounter]);
+  }, [rentalCounterForm.currentMono, rentalCounterForm.previousMono, selectedRentalPrinter, selectedRentalPrinterPreviousCounter]);
+  useEffect(() => {
+    setRentalCounterForm((prev) => {
+      const nextPreviousMono = String(selectedRentalPrinterPreviousCounter?.previousMono ?? 0);
+      if (prev.previousMono === nextPreviousMono) return prev;
+      return { ...prev, previousMono: nextPreviousMono };
+    });
+  }, [selectedRentalPrinterPreviousCounter, rentalCounterForm.rentalPrinterId, rentalCounterForm.billingMonth]);
   const rentalReportRows = useMemo(() => {
     return rentalPrinterCounters
       .filter((row) => row.billingMonth === rentalReportMonth)
@@ -14878,7 +14887,7 @@ export default function App() {
       return;
     }
     if (!rentalCounterForm.billingMonth || !rentalCounterForm.readingDate) {
-      setError("Billing month and reading date are required.");
+      setError("Record month and counter date are required.");
       return;
     }
     const duplicate = rentalPrinterCounters.find(
@@ -14890,10 +14899,10 @@ export default function App() {
       setError(`Counter for ${printer.machineCode} in ${rentalCounterForm.billingMonth} already exists.`);
       return;
     }
-    const previousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? printer.openingMono;
+    const previousMono = Math.max(0, Number(rentalCounterForm.previousMono) || selectedRentalPrinterPreviousCounter?.previousMono || printer.openingMono);
     const currentMono = Number(rentalCounterForm.currentMono);
     if (!Number.isFinite(currentMono) || currentMono < previousMono) {
-      setError(`Mono counter must be ${previousMono} or higher.`);
+      setError(`Current monthly counter must be ${previousMono} or higher.`);
       return;
     }
     const monoUsage = currentMono - previousMono;
@@ -14930,6 +14939,7 @@ export default function App() {
       rentalPrinterId: prev.rentalPrinterId,
       billingMonth: toYmd(new Date()).slice(0, 7),
       readingDate: toYmd(new Date()),
+      previousMono: "",
       currentMono: "",
       currentColor: "",
       amount: "",
@@ -42352,6 +42362,9 @@ export default function App() {
                 <p className="tiny" style={{ marginBottom: 12 }}>
                   Use this section to record monthly printer counters for campus comparison. No invoice data is required.
                 </p>
+                <p className="tiny" style={{ marginBottom: 12 }}>
+                  Use printer `Total 1` as the monthly counter. You can change Previous Monthly manually if needed.
+                </p>
                 <div className="form-grid inventory-item-grid">
                   <label className="field">
                     <span>Rental Printer</span>
@@ -42375,15 +42388,20 @@ export default function App() {
                     <input className="input" type="date" value={rentalCounterForm.readingDate} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, readingDate: e.target.value }))} />
                   </label>
                   <label className="field">
-                    <span>Previous Mono</span>
-                    <input className="input" value={selectedRentalPrinterPreviousCounter ? String(selectedRentalPrinterPreviousCounter.previousMono) : ""} readOnly />
+                    <span>Previous Monthly</span>
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={rentalCounterForm.previousMono}
+                      onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, previousMono: e.target.value.replace(/[^0-9]/g, "") }))}
+                    />
                   </label>
                   <label className="field">
-                    <span>Current Mono</span>
+                    <span>Current Monthly</span>
                     <input className="input" inputMode="numeric" value={rentalCounterForm.currentMono} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, currentMono: e.target.value.replace(/[^0-9]/g, "") }))} />
                   </label>
                   <label className="field">
-                    <span>Mono Usage</span>
+                    <span>Monthly Usage</span>
                     <input className="input" value={String(rentalCounterPreview.monoUsage)} readOnly />
                   </label>
                   <label className="field">
