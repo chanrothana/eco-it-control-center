@@ -1720,8 +1720,11 @@ function normalizeImportedDb(input) {
   const maintenanceReminderOffsets = normalizeMaintenanceReminderOffsets(settings.maintenanceReminderOffsets);
   const inventoryApprovalRouting = normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting);
   const telegramChatIds = normalizeTelegramChatIds(settings.telegramChatIds);
+  const telegramMaintenanceChatIds = normalizeTelegramChatIds(settings.telegramMaintenanceChatIds);
   const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
   const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
+  const rentalPrinters = normalizeRentalPrinters(settings.rentalPrinters);
+  const rentalPrinterCounters = normalizeRentalPrinterCounters(settings.rentalPrinterCounters);
   const vaultAccounts = normalizeVaultAccounts(settings.vaultAccounts);
   const vaultCredentials = normalizeVaultCredentials(settings.vaultCredentials);
   const vaultDesignLinks = normalizeVaultDesignLinks(settings.vaultDesignLinks);
@@ -1765,8 +1768,11 @@ function normalizeImportedDb(input) {
       maintenanceReminderOffsets,
       inventoryApprovalRouting,
       telegramChatIds,
+      telegramMaintenanceChatIds,
       inventoryItems,
       inventoryTxns,
+      rentalPrinters,
+      rentalPrinterCounters,
       poolCleaningSchedules,
       poolEquipmentChecks,
       poolChemicalRecords,
