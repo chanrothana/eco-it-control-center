@@ -1266,6 +1266,10 @@ h2 {
   text-align: center;
 }
 
+.printer-campus-report-mobile-list {
+  display: none;
+}
+
 .printer-campus-report-table-wrap,
 .printer-report-missing-table-wrap {
   border-radius: 0 0 16px 16px;
@@ -1275,6 +1279,28 @@ h2 {
 .printer-campus-report-table thead th,
 .printer-report-missing-table thead th {
   background: #f1f4fb;
+}
+
+.printer-report-missing-mobile-list {
+  display: none;
+}
+
+.printer-report-missing-mobile-title {
+  color: #6f84ad;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.printer-report-campus-filter-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.printer-report-campus-filter-field .asset-picker {
+  width: 100%;
 }
 
 @media print {
@@ -1309,6 +1335,229 @@ h2 {
 
 @media (max-width: 1100px) {
   .printer-campus-report-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .printer-report-card {
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .printer-report-meta,
+  .printer-report-note {
+    display: none;
+  }
+
+  .printer-report-header {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: start;
+    padding-bottom: 12px;
+  }
+
+  .printer-report-head-left {
+    display: grid;
+    gap: 6px;
+  }
+
+  .printer-report-kicker {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+  }
+
+  .printer-report-title {
+    font-size: clamp(28px, 7.5vw, 38px);
+    line-height: 0.98;
+    max-width: 8ch;
+  }
+
+  .printer-report-subtitle {
+    margin-top: 2px;
+    font-size: 13px;
+    max-width: 24ch;
+  }
+
+  .printer-report-logo {
+    width: 122px;
+    max-width: 44vw;
+    justify-self: end;
+  }
+
+  .printer-report-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .printer-report-meta-card {
+    padding: 10px 12px;
+    min-height: 84px;
+    display: grid;
+    align-content: start;
+  }
+
+  .printer-report-meta-label {
+    font-size: 10px;
+    letter-spacing: 0.11em;
+  }
+
+  .printer-report-meta-value {
+    margin-top: 8px;
+    font-size: 15px;
+    line-height: 1.2;
+    word-break: break-word;
+  }
+
+  .printer-report-note {
+    font-size: 12px;
+    padding: 10px;
+  }
+
+  .printer-campus-report-grid {
+    gap: 12px;
+  }
+
+  .printer-campus-report-card {
+    border-radius: 18px;
+  }
+
+  .printer-campus-report-head {
+    font-size: 16px;
+    line-height: 1.2;
+    text-align: center;
+    padding: 12px 14px;
+  }
+
+  .printer-campus-report-mobile-list {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .printer-campus-report-mobile-item {
+    border: 1px solid #ead7bb;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 249, 239, 0.98) 100%);
+    padding: 12px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  }
+
+  .printer-campus-report-mobile-month {
+    color: #564029;
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+
+  .printer-campus-report-mobile-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .printer-campus-report-mobile-metric {
+    border: 1px solid #e7d5b9;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 10px;
+    display: grid;
+    gap: 4px;
+  }
+
+  .printer-campus-report-mobile-metric span {
+    color: #8d6a40;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .printer-campus-report-mobile-metric strong {
+    color: #2f2417;
+    font-size: 18px;
+    line-height: 1.15;
+    word-break: break-word;
+  }
+
+  .printer-campus-report-mobile-metric-usage {
+    grid-column: 1 / -1;
+    background: linear-gradient(180deg, #fff5e5 0%, #ffe9c4 100%);
+    border-color: #e2c18d;
+  }
+
+  .printer-campus-report-table-wrap {
+    display: none;
+  }
+
+  .printer-report-missing-table-wrap {
+    overflow-x: auto;
+  }
+
+  .printer-report-missing-table {
+    min-width: 520px;
+  }
+
+  .printer-report-missing-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .printer-report-missing-mobile-item {
+    border: 1px solid #e3cfb1;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 248, 234, 0.98) 100%);
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .printer-report-missing-mobile-machine {
+    color: #2f2417;
+    line-height: 1.35;
+    word-break: break-word;
+    text-align: left;
+  }
+
+  .printer-report-missing-mobile-detail {
+    display: grid;
+    gap: 3px;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .printer-report-missing-mobile-detail span {
+    color: #8d6a40;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .printer-report-missing-mobile-detail strong {
+    color: #3b2a18;
+    font-size: 14px;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .printer-report-missing-table-wrap table {
+    display: none;
+  }
+
+  .printer-report-card .printer-report-header {
+    display: none;
+  }
+
+  .printer-report-campus-filter-row {
+    margin-bottom: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .printer-report-filter-row {
     grid-template-columns: 1fr;
   }
 }
@@ -1683,6 +1932,25 @@ h2 {
   padding-bottom: 2px;
   scrollbar-width: thin;
   gap: 8px;
+  width: 100%;
+}
+
+.printer-report-filter-row {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  justify-content: start;
+  gap: 18px;
+}
+
+.printer-report-filter-field {
+  min-width: 220px;
+  max-width: 340px;
+}
+
+.printer-report-campus-filter-field {
+  max-width: none;
+}
+
+.printer-report-filter-field .input {
   width: 100%;
 }
 
@@ -9477,6 +9745,10 @@ tr.row-maint-maintenance:hover td {
 
   .report-title-row {
     margin-bottom: 0;
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
   }
 
   .report-filter-row {
@@ -9484,6 +9756,17 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: 8px;
     gap: 8px;
+  }
+
+  .printer-report-filter-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+  }
+
+  .printer-report-filter-field {
+    min-width: 0;
+    max-width: none;
   }
 
   .report-filters {
@@ -9502,7 +9785,34 @@ tr.row-maint-maintenance:hover td {
   }
 
   .report-print-btn {
-    width: 100%;
+    width: auto;
+  }
+
+  .report-title-row .report-title-print-btn {
+    width: 46px;
+    min-width: 46px;
+    height: 46px;
+    min-height: 46px;
+    margin-left: 0;
+    justify-content: center;
+    padding: 0;
+    border-radius: 14px;
+    align-self: start;
+  }
+
+  .report-title-row .report-title-print-btn span {
+    display: none;
+  }
+
+  .report-title-row h2 {
+    margin: 0;
+    font-size: clamp(16px, 5.1vw, 22px);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: none;
+    text-align: center;
   }
 
   .report-builder-top {
@@ -9873,6 +10183,10 @@ tr.row-maint-maintenance:hover td {
   .report-filter-row {
     justify-content: flex-end;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .printer-report-filter-row {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
   }
 
   .report-builder-top {
@@ -11438,6 +11752,15 @@ tr.row-maint-maintenance:hover td {
   .report-quick-count-controls,
   .inventory-daily-type-switch {
     grid-template-columns: 1fr !important;
+  }
+
+  .workspace-main .printer-report-filter-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .workspace-main .printer-report-campus-filter-field {
+    grid-column: 1 / -1;
   }
 
   .workspace-main .form-grid.asset-detail-grid {

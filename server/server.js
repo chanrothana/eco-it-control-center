@@ -3533,34 +3533,72 @@ function parseUtilityInvoiceFromOcrText(utilityType, text) {
   };
 }
 
-function parsePrinterCounterFromOcrText(text) {
+function parsePrinterCounterFromOcrText(text, lineInput = []) {
   const normalizedText = toText(text);
-  const lines = normalizedText
-    .split(/\r?\n/)
+  const lines = (Array.isArray(lineInput) && lineInput.length ? lineInput : normalizedText.split(/\r?\n/))
     .map((line) => toText(line).replace(/\s+/g, " ").trim())
     .filter(Boolean);
   const flat = lines.join(" ");
   const warnings = [];
+  const printerTypeCodes = new Set(["101", "102", "106", "109"]);
+  const lowerFlat = flat.toLowerCase();
+
+  function extractCounterValue(line) {
+    const values = String(line || "").match(/\d[\d,]*/g) || [];
+    const normalized = values
+      .map((value) => value.replace(/,/g, "").trim())
+      .filter(Boolean)
+      .filter((value) => !printerTypeCodes.has(value))
+      .filter((value) => value.length >= 4);
+    return normalized.length ? normalized[normalized.length - 1] : "";
+  }
 
   const total2Patterns = [
-    /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,30}(\d{2,})/i,
-    /\btotal\s*2\b[^0-9]{0,30}(\d{2,})/i,
+    /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,30}(\d[\d,]{3,})/i,
+    /\btotal\s*2\b[^0-9]{0,30}(\d[\d,]{3,})/i,
   ];
   let currentMono = "";
   for (const pattern of total2Patterns) {
     const match = flat.match(pattern);
     if (match && match[1]) {
-      currentMono = match[1];
+      currentMono = match[1].replace(/,/g, "");
       break;
     }
   }
 
   if (!currentMono) {
-    const candidateLine = lines.find((line) => /\btotal\s*2\b/i.test(line) || /\b102\b/i.test(line)) || "";
-    const candidateMatch = candidateLine.match(/(\d{2,})/g);
-    if (candidateMatch?.length) {
-      currentMono = candidateMatch[candidateMatch.length - 1];
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (!/\btotal\s*2\b/i.test(line) && !/\b102\b/i.test(line)) continue;
+
+      const sameLineValue = extractCounterValue(line);
+      if (sameLineValue) {
+        currentMono = sameLineValue;
+        break;
+      }
+
+      for (let offset = 1; offset <= 2; offset += 1) {
+        const nearby = lines[i + offset] || "";
+        const nearbyValue = extractCounterValue(nearby);
+        if (nearbyValue) {
+          currentMono = nearbyValue;
+          break;
+        }
+      }
+      if (currentMono) break;
     }
+  }
+
+  if (
+    !currentMono &&
+    (
+      lowerFlat.includes("it and facility control center") ||
+      lowerFlat.includes("read counter image") ||
+      lowerFlat.includes("save monthly counter") ||
+      lowerFlat.includes("rental printer")
+    )
+  ) {
+    warnings.push("Uploaded image looks like the IT Control Center screen, not the Canon Check Counter page. Please upload the printer counter screenshot itself.");
   }
 
   if (!currentMono) {
@@ -5493,7 +5531,7 @@ const server = http.createServer(async (req, res) => {
       }
       try {
         const ocr = await runPrinterCounterOcr(imagePath);
-        const extracted = parsePrinterCounterFromOcrText(ocr.text);
+        const extracted = parsePrinterCounterFromOcrText(ocr.text, ocr.lines);
         const db = await readDb();
         appendAuditLog(
           db,

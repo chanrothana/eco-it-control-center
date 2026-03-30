@@ -4596,6 +4596,62 @@ async function optimizePhotoDataUrl(file: File, options?: { timestampText?: stri
   return compressImageDataUrl(source, 1280, 1280, 0.75, String(options?.timestampText || "").trim());
 }
 
+async function cropImageDataUrl(
+  dataUrl: string,
+  crop: { x: number; y: number; width: number; height: number }
+): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const sx = Math.max(0, Math.round(img.width * crop.x));
+      const sy = Math.max(0, Math.round(img.height * crop.y));
+      const sw = Math.max(1, Math.round(img.width * crop.width));
+      const sh = Math.max(1, Math.round(img.height * crop.height));
+      const safeWidth = Math.min(sw, Math.max(1, img.width - sx));
+      const safeHeight = Math.min(sh, Math.max(1, img.height - sy));
+      const canvas = document.createElement("canvas");
+      canvas.width = safeWidth;
+      canvas.height = safeHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.drawImage(img, sx, sy, safeWidth, safeHeight, 0, 0, safeWidth, safeHeight);
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+async function buildPrinterCounterOcrCandidates(photo: string): Promise<Array<{ photo: string; label: string }>> {
+  const full = String(photo || "").trim();
+  if (!full) return [];
+  const candidates = [
+    { photo: full, label: "full screenshot" },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.14, y: 0.16, width: 0.76, height: 0.30 }),
+      label: "main counter table",
+    },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.16, y: 0.18, width: 0.62, height: 0.17 }),
+      label: "Total 1/2 rows",
+    },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.55, y: 0.16, width: 0.30, height: 0.16 }),
+      label: "counter values column",
+    },
+  ];
+  const seen = new Set<string>();
+  return candidates.filter((entry) => {
+    const key = normalizePhotoUsageKey(entry.photo);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function normalizePhotoUsageKey(input: string) {
   const value = String(input || "").trim();
   if (!value) return "";
@@ -7941,7 +7997,9 @@ export default function App() {
     photo: "",
     note: "",
   });
-  const [rentalReportMonth, setRentalReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [rentalReportFromMonth, setRentalReportFromMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [rentalReportToMonth, setRentalReportToMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [rentalReportCampuses, setRentalReportCampuses] = useState<string[]>(["ALL"]);
   const [transferFilterCampus, setTransferFilterCampus] = useState("ALL");
   const [transferFilterLocation, setTransferFilterLocation] = useState("ALL");
   const [transferFilterCategory, setTransferFilterCategory] = useState("ALL");
@@ -9160,10 +9218,47 @@ export default function App() {
       return { ...prev, previousMono: nextPreviousMono };
     });
   }, [selectedRentalPrinterPreviousCounter, rentalCounterForm.rentalPrinterId, rentalCounterForm.billingMonth]);
+  const rentalReportRange = useMemo(() => {
+    const from = String(rentalReportFromMonth || "").trim();
+    const to = String(rentalReportToMonth || "").trim();
+    if (!from && !to) return { from: "", to: "" };
+    if (!from) return { from: to, to };
+    if (!to) return { from, to: from };
+    return from <= to ? { from, to } : { from: to, to: from };
+  }, [rentalReportFromMonth, rentalReportToMonth]);
+  const rentalReportCampusFilterOptions = useMemo(() => {
+    const campusSet = new Set<string>();
+    for (const row of rentalPrinters) {
+      const campus = String(row.campus || "").trim();
+      if (campus) campusSet.add(campus);
+    }
+    for (const row of rentalPrinterCounters) {
+      const campus = String(row.campus || "").trim();
+      if (campus) campusSet.add(campus);
+    }
+    const options = Array.from(campusSet).sort(compareCampusByCode);
+    return options.length ? options : campusOptions;
+  }, [campusOptions, rentalPrinterCounters, rentalPrinters]);
+  const rentalReportSelectedCampuses = useMemo(() => {
+    if (rentalReportCampuses.includes("ALL") || !rentalReportCampuses.length) {
+      return rentalReportCampusFilterOptions;
+    }
+    return rentalReportCampuses.filter((campus) => rentalReportCampusFilterOptions.includes(campus));
+  }, [rentalReportCampusFilterOptions, rentalReportCampuses]);
   const rentalReportRows = useMemo(() => {
     return rentalPrinterCounters
-      .filter((row) => row.billingMonth === rentalReportMonth)
+      .filter((row) => {
+        const month = String(row.billingMonth || "").trim();
+        const campus = String(row.campus || "").trim();
+        if (!month) return false;
+        if (rentalReportRange.from && month < rentalReportRange.from) return false;
+        if (rentalReportRange.to && month > rentalReportRange.to) return false;
+        if (rentalReportSelectedCampuses.length && !rentalReportSelectedCampuses.includes(campus)) return false;
+        return true;
+      })
       .sort((a, b) => {
+        const monthCompare = String(a.billingMonth || "").localeCompare(String(b.billingMonth || ""));
+        if (monthCompare !== 0) return monthCompare;
         const campusCompare = compareCampusByCode(a.campus, b.campus);
         if (campusCompare !== 0) return campusCompare;
         return `${a.vendor} ${a.machineCode}`.localeCompare(`${b.vendor} ${b.machineCode}`, undefined, {
@@ -9171,11 +9266,16 @@ export default function App() {
           sensitivity: "base",
         });
       });
-  }, [rentalPrinterCounters, rentalReportMonth]);
+  }, [rentalPrinterCounters, rentalReportRange, rentalReportSelectedCampuses]);
   const rentalReportSummary = useMemo(() => {
+    const printerIds = new Set<string>();
     return rentalReportRows.reduce(
       (acc, row) => {
-        acc.printers += 1;
+        const printerKey = String(row.rentalPrinterId || row.machineCode || row.id || "");
+        if (printerKey && !printerIds.has(printerKey)) {
+          printerIds.add(printerKey);
+          acc.printers += 1;
+        }
         acc.monoUsage += Number(row.monoUsage) || 0;
         acc.amount += Number(row.amount) || 0;
         return acc;
@@ -9183,13 +9283,17 @@ export default function App() {
       { printers: 0, monoUsage: 0, amount: 0 }
     );
   }, [rentalReportRows]);
-  const rentalReportMonthLabel = useMemo(() => {
-    if (!rentalReportMonth) return "Selected Month";
-    const monthDate = new Date(`${rentalReportMonth}-01T00:00:00`);
-    return Number.isNaN(monthDate.getTime())
-      ? rentalReportMonth
-      : monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  }, [rentalReportMonth]);
+  const rentalReportRangeLabel = useMemo(() => {
+    const formatMonth = (value: string) => {
+      const monthDate = new Date(`${value}-01T00:00:00`);
+      return Number.isNaN(monthDate.getTime())
+        ? value
+        : monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    };
+    if (!rentalReportRange.from && !rentalReportRange.to) return "Selected Range";
+    if (rentalReportRange.from === rentalReportRange.to) return formatMonth(rentalReportRange.from);
+    return `${formatMonth(rentalReportRange.from)} - ${formatMonth(rentalReportRange.to)}`;
+  }, [rentalReportRange]);
   const rentalCampusReportBlocks = useMemo(() => {
     const monthSet = new Set<string>();
     const campusMap = new Map<
@@ -9200,7 +9304,9 @@ export default function App() {
       const month = String(row.billingMonth || "").trim();
       const campus = String(row.campus || "").trim();
       if (!month || !campus) continue;
-      if (month > rentalReportMonth) continue;
+      if (rentalReportRange.from && month < rentalReportRange.from) continue;
+      if (rentalReportRange.to && month > rentalReportRange.to) continue;
+      if (rentalReportSelectedCampuses.length && !rentalReportSelectedCampuses.includes(campus)) continue;
       monthSet.add(month);
       const campusRows = campusMap.get(campus) || new Map<string, { previousMono: number; currentMono: number; monoUsage: number }>();
       const current = campusRows.get(month) || { previousMono: 0, currentMono: 0, monoUsage: 0 };
@@ -9233,13 +9339,23 @@ export default function App() {
           }),
       }))
       .filter((block) => block.rows.length > 0);
-  }, [rentalPrinterCounters, rentalReportMonth]);
+  }, [rentalPrinterCounters, rentalReportRange, rentalReportSelectedCampuses]);
   const rentalMissingPrinterRows = useMemo(() => {
-    const reportSet = new Set(rentalReportRows.map((row) => Number(row.rentalPrinterId)));
+    const targetMonth = rentalReportRange.to;
+    if (!targetMonth) return [];
+    const reportSet = new Set(
+      rentalPrinterCounters
+        .filter((row) => String(row.billingMonth || "").trim() === targetMonth)
+        .map((row) => Number(row.rentalPrinterId))
+    );
     return rentalPrinters
-      .filter((row) => row.status === "Active" && !reportSet.has(Number(row.id)))
+      .filter((row) =>
+        row.status === "Active" &&
+        !reportSet.has(Number(row.id)) &&
+        (!rentalReportSelectedCampuses.length || rentalReportSelectedCampuses.includes(String(row.campus || "").trim()))
+      )
       .sort((a, b) => compareCampusByCode(a.campus, b.campus));
-  }, [rentalPrinters, rentalReportRows]);
+  }, [rentalPrinters, rentalPrinterCounters, rentalReportRange, rentalReportSelectedCampuses]);
   const rentalPrinterAutoMachineCode = useMemo(
     () =>
       buildRentalPrinterMachineCode(
@@ -14437,33 +14553,55 @@ export default function App() {
     setRentalCounterAutofillBusy(true);
     setRentalPrinterMessage("");
     try {
-      const res = await requestJson<{
-        ok: boolean;
-        extracted?: {
-          currentMono?: string;
-          rawText?: string;
-          warnings?: string[];
-        };
-      }>("/api/printers/counter-autofill", {
-        method: "POST",
-        body: JSON.stringify({
-          machineCode: selectedRentalPrinter?.machineCode || "",
-          photo,
-        }),
-      });
-      const extracted = res.extracted || {};
+      const candidates = await buildPrinterCounterOcrCandidates(photo);
+      let extracted: {
+        currentMono?: string;
+        rawText?: string;
+        warnings?: string[];
+      } = {};
+      let successfulCandidateLabel = "";
+
+      for (const candidate of candidates) {
+        const res = await requestJson<{
+          ok: boolean;
+          extracted?: {
+            currentMono?: string;
+            rawText?: string;
+            warnings?: string[];
+          };
+        }>("/api/printers/counter-autofill", {
+          method: "POST",
+          body: JSON.stringify({
+            machineCode: selectedRentalPrinter?.machineCode || "",
+            photo: candidate.photo,
+          }),
+        });
+        extracted = res.extracted || {};
+        if (extracted.currentMono) {
+          successfulCandidateLabel = candidate.label;
+          break;
+        }
+      }
+
       setRentalCounterForm((prev) => ({
         ...prev,
         photo,
         currentMono: extracted.currentMono || prev.currentMono,
         note:
           prev.note ||
-          (Array.isArray(extracted.warnings) && extracted.warnings.length
-            ? `OCR note: ${extracted.warnings.join(" ")}`
-            : prev.note),
+          [
+            successfulCandidateLabel ? `OCR source: ${successfulCandidateLabel}` : "",
+            Array.isArray(extracted.warnings) && extracted.warnings.length
+              ? `OCR note: ${extracted.warnings.join(" ")}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" | "),
       }));
       setRentalPrinterMessage(
-        Array.isArray(extracted.warnings) && extracted.warnings.length
+        extracted.currentMono
+          ? `Printer auto fill completed from ${successfulCandidateLabel || "screenshot"}. Please review the counter before saving.`
+          : Array.isArray(extracted.warnings) && extracted.warnings.length
           ? `Printer auto fill completed with checks needed: ${extracted.warnings.join(" ")}`
           : "Printer auto fill completed. Please review the counter before saving."
       );
@@ -42567,20 +42705,64 @@ export default function App() {
             {printerView === "report" && (
               <>
                 <div className="report-title-row">
-                  <h2>Official Counter Report</h2>
+                  <h2>Printer Counter Report</h2>
                   <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
                     <Printer size={16} aria-hidden={true} />
                     <span>Print Report</span>
                   </button>
                 </div>
-                <div className="panel-filters report-filters report-filter-row" style={{ marginBottom: 12 }}>
-                  <input className="input" type="month" value={rentalReportMonth} onChange={(e) => setRentalReportMonth(e.target.value)} />
+                <div className="panel-filters report-filters report-filter-row printer-report-filter-row" style={{ marginBottom: 12 }}>
+                  <label className="field printer-report-filter-field">
+                    <span>From Month</span>
+                    <input
+                      className="input"
+                      type="month"
+                      aria-label="From month"
+                      value={rentalReportFromMonth}
+                      onChange={(e) => setRentalReportFromMonth(e.target.value)}
+                    />
+                  </label>
+                  <label className="field printer-report-filter-field">
+                    <span>To Month</span>
+                    <input
+                      className="input"
+                      type="month"
+                      aria-label="To month"
+                      value={rentalReportToMonth}
+                      onChange={(e) => setRentalReportToMonth(e.target.value)}
+                    />
+                  </label>
+                  <label className="field printer-report-campus-filter-field">
+                    <span>Campuses</span>
+                    <SearchableMultiSelectPicker
+                      summary={summarizeMultiFilter(rentalReportCampuses, t.allCampuses, rentalPrinterCampusLabel)}
+                      options={rentalReportCampusFilterOptions.map((campus) => ({
+                        value: campus,
+                        label: rentalPrinterCampusLabel(campus),
+                      }))}
+                      selectedValues={rentalReportCampuses}
+                      allOptionLabel={t.allCampuses}
+                      allOptionChecked={rentalReportCampuses.includes("ALL")}
+                      onToggleAllOption={(checked) =>
+                        setRentalReportCampuses((prev) =>
+                          applyMultiFilterSelection(prev, checked, "ALL", rentalReportCampusFilterOptions)
+                        )
+                      }
+                      onToggleValue={(value, checked) =>
+                        setRentalReportCampuses((prev) =>
+                          applyMultiFilterSelection(prev, checked, value, rentalReportCampusFilterOptions)
+                        )
+                      }
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
+                  </label>
                 </div>
                 <section className="printer-report-card">
                   <header className="printer-report-header">
                     <div className="printer-report-head-left">
                       <div className="printer-report-kicker">Eco International School</div>
-                      <h2 className="printer-report-title">Printer Counter Usage Comparison Report</h2>
+                      <h2 className="printer-report-title">Printer Counter Report</h2>
                       <p className="printer-report-subtitle">Official monthly comparison by campus using Canon 102 : Total 2 counter values.</p>
                     </div>
                     <img
@@ -42594,8 +42776,8 @@ export default function App() {
 
                   <div className="printer-report-meta">
                     <div className="printer-report-meta-card">
-                      <div className="printer-report-meta-label">Report Month</div>
-                      <div className="printer-report-meta-value">{rentalReportMonthLabel}</div>
+                      <div className="printer-report-meta-label">Report Range</div>
+                      <div className="printer-report-meta-value">{rentalReportRangeLabel}</div>
                     </div>
                     <div className="printer-report-meta-card">
                       <div className="printer-report-meta-label">Generated On</div>
@@ -42629,6 +42811,27 @@ export default function App() {
                       >
                         {rentalPrinterCampusLabel(block.campus)}
                       </div>
+                      <div className="printer-campus-report-mobile-list">
+                        {block.rows.map((row) => (
+                          <article key={`rental-campus-report-mobile-${block.campus}-${row.month}`} className="printer-campus-report-mobile-item">
+                            <div className="printer-campus-report-mobile-month">{row.monthLabel}</div>
+                            <div className="printer-campus-report-mobile-metrics">
+                              <div className="printer-campus-report-mobile-metric">
+                                <span>Current</span>
+                                <strong>{row.currentMono.toLocaleString()}</strong>
+                              </div>
+                              <div className="printer-campus-report-mobile-metric">
+                                <span>Previous</span>
+                                <strong>{row.previousMono.toLocaleString()}</strong>
+                              </div>
+                              <div className="printer-campus-report-mobile-metric printer-campus-report-mobile-metric-usage">
+                                <span>Usage</span>
+                                <strong>{row.monoUsage.toLocaleString()}</strong>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
                       <div className="table-wrap printer-campus-report-table-wrap" style={{ marginTop: 0 }}>
                         <table className="printer-campus-report-table">
                         <thead>
@@ -42658,10 +42861,30 @@ export default function App() {
                   </div>
 
                   <div className="table-wrap printer-report-missing-table-wrap" style={{ marginTop: 12 }}>
+                    <div className="printer-report-missing-mobile-list">
+                      <div className="printer-report-missing-mobile-title">
+                        Printers Missing Record For {rentalReportRange.to || "Selected Month"}
+                      </div>
+                      {rentalMissingPrinterRows.length ? rentalMissingPrinterRows.map((row) => (
+                        <article key={`rental-missing-mobile-row-${row.id}`} className="printer-report-missing-mobile-item">
+                          <div className="printer-report-missing-mobile-machine">
+                            <strong>{row.machineCode}</strong> | {row.machineName}
+                          </div>
+                          <div className="printer-report-missing-mobile-detail">
+                            <span>{t.campus}</span>
+                            <strong>{rentalPrinterCampusLabel(row.campus)}</strong>
+                          </div>
+                          <div className="printer-report-missing-mobile-detail">
+                            <span>Location</span>
+                            <strong>{row.location || "-"}</strong>
+                          </div>
+                        </article>
+                      )) : <div className="panel-note">All active rental printers have records for this month.</div>}
+                    </div>
                     <table className="printer-report-missing-table">
                     <thead>
                       <tr>
-                        <th>Printers Missing Record For {rentalReportMonth || "Selected Month"}</th>
+                        <th>Printers Missing Record For {rentalReportRange.to || "Selected Month"}</th>
                         <th>{t.campus}</th>
                         <th>Location</th>
                       </tr>
