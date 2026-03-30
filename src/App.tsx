@@ -1232,7 +1232,7 @@ const MENU_ACCESS_TREE: Array<{
     children: [
       { key: "printer.setup", labelEn: "Printer Setup", labelKm: "កំណត់ម៉ាស៊ីនបោះពុម្ព" },
       { key: "printer.entry", labelEn: "Counter Entry", labelKm: "បញ្ចូលកុងទ័រ" },
-      { key: "printer.report", labelEn: "LA Report", labelKm: "របាយការណ៍ LA" },
+      { key: "printer.report", labelEn: "Campus Comparison", labelKm: "ប្រៀបធៀបតាមសាខា" },
     ],
   },
   {
@@ -6764,7 +6764,7 @@ export default function App() {
             },
             {
               key: "printer.report",
-              label: lang === "km" ? "របាយការណ៍ LA" : "LA Report",
+              label: lang === "km" ? "ប្រៀបធៀបតាមសាខា" : "Campus Comparison",
               active: printerView === "report",
               onSelect: () =>
                 startTabTransition(() => {
@@ -42348,7 +42348,10 @@ export default function App() {
 
             {printerView === "entry" && (
               <>
-                <h2>Rental Printer Monthly Counter Entry</h2>
+                <h2>Rental Printer Monthly Counter Tracking</h2>
+                <p className="tiny" style={{ marginBottom: 12 }}>
+                  Use this section to record monthly printer counters for campus comparison. No invoice data is required.
+                </p>
                 <div className="form-grid inventory-item-grid">
                   <label className="field">
                     <span>Rental Printer</span>
@@ -42364,11 +42367,11 @@ export default function App() {
                     </select>
                   </label>
                   <label className="field">
-                    <span>Billing Month</span>
+                    <span>Record Month</span>
                     <input className="input" type="month" value={rentalCounterForm.billingMonth} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, billingMonth: e.target.value }))} />
                   </label>
                   <label className="field">
-                    <span>Reading Date</span>
+                    <span>Counter Date</span>
                     <input className="input" type="date" value={rentalCounterForm.readingDate} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, readingDate: e.target.value }))} />
                   </label>
                   <label className="field">
@@ -42384,16 +42387,16 @@ export default function App() {
                     <input className="input" value={String(rentalCounterPreview.monoUsage)} readOnly />
                   </label>
                   <label className="field">
-                    <span>Submitted By</span>
+                    <span>Recorded By</span>
                     <input className="input" value={rentalCounterForm.submittedBy} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, submittedBy: e.target.value }))} />
                   </label>
                   <label className="field">
-                    <span>Printer Screenshot (Optional)</span>
+                    <span>Counter Screenshot (Optional)</span>
                     <input key={rentalCounterFileKey} type="file" accept="image/*" className="input" onChange={onRentalCounterPhotoFile} />
                     <span className="tiny">
                       {canUseUtilityInvoiceOcr
-                        ? "Optional. Upload a screenshot only if you want auto fill in the local macOS app."
-                        : "Optional. Phone/web entry is manual. Upload only if you want to keep proof."}
+                        ? "Optional. Upload a counter image only if you want help reading it in the local macOS app."
+                        : "Optional. Phone/web entry is manual. Upload only if you want to keep a reference image."}
                     </span>
                     {rentalCounterForm.photo ? <img loading="lazy" decoding="async" src={rentalCounterForm.photo} alt="rental counter" className="table-photo" style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }} /> : null}
                   </label>
@@ -42418,10 +42421,10 @@ export default function App() {
                     title={canUseUtilityInvoiceOcr ? "" : "Available only in the local macOS app"}
                     onClick={() => void autofillRentalCounterFromPhoto()}
                   >
-                    {rentalCounterAutofillBusy ? "Reading Screenshot..." : "Auto Fill Total 2"}
+                    {rentalCounterAutofillBusy ? "Reading Counter..." : "Read Counter Image"}
                   </button>
                   <button className="btn-primary" disabled={!isAdmin || !rentalCounterForm.rentalPrinterId} onClick={() => void saveRentalPrinterCounter()}>
-                    Save Rental Counter
+                    Save Monthly Counter
                   </button>
                 </div>
                 <div className="table-wrap" style={{ marginTop: 12 }}>
@@ -42446,7 +42449,7 @@ export default function App() {
                           <td>{row.submittedBy || "-"}</td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>X</button></td>
                         </tr>
-                      )) : <tr><td colSpan={6}>No rental counter records yet.</td></tr>}
+                      )) : <tr><td colSpan={6}>No monthly counter records yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -42456,14 +42459,14 @@ export default function App() {
             {printerView === "report" && (
               <>
                 <div className="report-title-row">
-                  <h2>Canon Counter Report All Campuses</h2>
+                  <h2>Rental Printer Counter Comparison</h2>
                   <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
                     <Printer size={16} aria-hidden={true} />
                     <span>Print Report</span>
                   </button>
                 </div>
                 <div className="tiny" style={{ marginBottom: 10, fontSize: 16, fontWeight: 700, textAlign: "center" }}>
-                  Provider Company LA
+                  Monthly campus comparison
                 </div>
                 <div className="panel-filters report-filters report-filter-row" style={{ marginBottom: 12 }}>
                   <input className="input" type="month" value={rentalReportMonth} onChange={(e) => setRentalReportMonth(e.target.value)} />
@@ -42502,9 +42505,9 @@ export default function App() {
                           </tr>
                           <tr>
                             <th>Month</th>
-                            <th>New Meter</th>
-                            <th>Old Meter</th>
-                            <th>Consumption</th>
+                            <th>Current Counter</th>
+                            <th>Previous Counter</th>
+                            <th>Usage</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -42527,7 +42530,7 @@ export default function App() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Missing Active Printers For {rentalReportMonth || "Selected Month"}</th>
+                        <th>Printers Missing Record For {rentalReportMonth || "Selected Month"}</th>
                         <th>{t.campus}</th>
                         <th>Location</th>
                       </tr>
