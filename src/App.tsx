@@ -7893,6 +7893,7 @@ export default function App() {
   const [utilityMessage, setUtilityMessage] = useState("");
   const [utilityAutofillBusy, setUtilityAutofillBusy] = useState(false);
   const [rentalCounterAutofillBusy, setRentalCounterAutofillBusy] = useState(false);
+  const [rentalCounterIpReadBusy, setRentalCounterIpReadBusy] = useState(false);
   const [utilityInvoiceForm, setUtilityInvoiceForm] = useState({
     utilityType: "EDC" as "EDC" | "PPWS",
     campus: CAMPUS_LIST[0],
@@ -9182,6 +9183,13 @@ export default function App() {
       { printers: 0, monoUsage: 0, amount: 0 }
     );
   }, [rentalReportRows]);
+  const rentalReportMonthLabel = useMemo(() => {
+    if (!rentalReportMonth) return "Selected Month";
+    const monthDate = new Date(`${rentalReportMonth}-01T00:00:00`);
+    return Number.isNaN(monthDate.getTime())
+      ? rentalReportMonth
+      : monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  }, [rentalReportMonth]);
   const rentalCampusReportBlocks = useMemo(() => {
     const monthSet = new Set<string>();
     const campusMap = new Map<
@@ -9272,6 +9280,19 @@ export default function App() {
       if (raw === "C2" || raw === "C2.1") return campusLabel("Chaktomuk Campus");
       if (raw === "C2.2") return campusLabel("Chaktomuk Campus (C2.2)");
       if (CODE_TO_CAMPUS[raw]) return campusLabel(CODE_TO_CAMPUS[raw]);
+      return campusLabel(raw);
+    },
+    [campusLabel]
+  );
+  const rentalPrinterCampusLabel = useCallback(
+    (campus: string) => {
+      const raw = String(campus || "").trim();
+      if (!raw) return "-";
+      if (raw === "Samdach Pan Campus" || raw === "C1") return "Campus 1 | Samdach Pan Campus";
+      if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return "Campus 2.1 | Chaktomuk Campus";
+      if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") return "Campus 2.2 | Chaktomuk Campus (C2.2)";
+      if (raw === "Boeung Snor Campus" || raw === "C3") return "Campus 3 | Boeung Snor Campus";
+      if (raw === "Veng Sreng Campus" || raw === "C4") return "Campus 4 | Veng Sreng Campus";
       return campusLabel(raw);
     },
     [campusLabel]
@@ -14450,6 +14471,64 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Printer auto fill failed.");
     } finally {
       setRentalCounterAutofillBusy(false);
+    }
+  }
+
+  async function readRentalCounterFromPrinterIp() {
+    if (!requireAdminAction()) return;
+    if (!selectedRentalPrinter?.ipAddress?.trim()) {
+      setError("Printer IP / Web Address is required.");
+      return;
+    }
+    setError("");
+    setRentalCounterIpReadBusy(true);
+    setRentalPrinterMessage("");
+    try {
+      const res = await requestJson<{
+        ok: boolean;
+        extracted?: {
+          currentMono?: string;
+          updatedAt?: string;
+          warnings?: string[];
+          sourceUrl?: string;
+        };
+      }>("/api/printers/counter-from-ip", {
+        method: "POST",
+        body: JSON.stringify({
+          machineCode: selectedRentalPrinter.machineCode || "",
+          ipAddress: selectedRentalPrinter.ipAddress || "",
+        }),
+      });
+      const extracted = res.extracted || {};
+      setRentalCounterForm((prev) => ({
+        ...prev,
+        currentMono: extracted.currentMono || prev.currentMono,
+        note:
+          prev.note ||
+          [
+            extracted.updatedAt ? `Printer page updated: ${extracted.updatedAt}` : "",
+            Array.isArray(extracted.warnings) && extracted.warnings.length
+              ? `IP read note: ${extracted.warnings.join(" ")}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" | "),
+      }));
+      setRentalPrinterMessage(
+        extracted.currentMono
+          ? `Counter read from printer IP${extracted.updatedAt ? ` (${extracted.updatedAt})` : ""}. Please review before saving.`
+          : "Could not detect Total 2 from printer IP. Please review the printer page or use screenshot read."
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Printer IP read failed.";
+      setError(message);
+      setRentalPrinterMessage(
+        message.includes("require login")
+          ? "Read From Printer IP could not read 102 : Total 2 because the Canon page likely needs login first. Open Printer Web and use screenshot/manual entry for now."
+          : `Read From Printer IP failed: ${message}`
+      );
+    } finally {
+      setRentalCounterIpReadBusy(false);
     }
   }
 
@@ -42070,7 +42149,7 @@ export default function App() {
                           <td>{formatDate(row.invoiceDate)}</td>
                           <td>{row.billingMonth || "-"}</td>
                           <td>{row.utilityType || "-"}</td>
-                          <td>{campusLabel(row.campus)}</td>
+                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.usage} {row.unit}</td>
                           <td>{row.amount || "-"}</td>
                           <td>{row.invoiceNumber || "-"}</td>
@@ -42176,7 +42255,7 @@ export default function App() {
                     <tbody>
                       {utilityCampusSummary.length ? utilityCampusSummary.map((row) => (
                         <tr key={`utility-campus-summary-${row.campus}`}>
-                          <td>{campusLabel(row.campus)}</td>
+                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.edc.toFixed(2)}</td>
                           <td>{row.ppws.toFixed(2)}</td>
                           <td>{row.amount.toFixed(2)}</td>
@@ -42342,7 +42421,7 @@ export default function App() {
                           <td>{row.machineName}</td>
                           <td>{row.model || "-"}</td>
                           <td>{row.ipAddress || "-"}</td>
-                          <td>{campusLabel(row.campus)}</td>
+                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.location || "-"}</td>
                           <td>{row.fixingHistory || "-"}</td>
                           <td>{row.status}</td>
@@ -42363,7 +42442,10 @@ export default function App() {
                   Use this section to record monthly printer counters for campus comparison. No invoice data is required.
                 </p>
                 <p className="tiny" style={{ marginBottom: 12 }}>
-                  Use printer `Total 1` as the monthly counter. You can change Previous Monthly manually if needed.
+                  Use printer `102 : Total 2` as the monthly counter. You can change Previous Monthly manually if needed.
+                </p>
+                <p className="tiny" style={{ marginBottom: 12 }}>
+                  Direct IP read works only when this app server can reach the printer page on your local network. If not, use screenshot read.
                 </p>
                 <div className="form-grid inventory-item-grid">
                   <label className="field">
@@ -42435,6 +42517,13 @@ export default function App() {
                   ) : null}
                   <button
                     className="tab"
+                    disabled={!selectedRentalPrinter?.ipAddress || rentalCounterIpReadBusy}
+                    onClick={() => void readRentalCounterFromPrinterIp()}
+                  >
+                    {rentalCounterIpReadBusy ? "Reading From IP..." : "Read From Printer IP"}
+                  </button>
+                  <button
+                    className="tab"
                     disabled={!canUseUtilityInvoiceOcr || rentalCounterAutofillBusy || !rentalCounterForm.photo}
                     title={canUseUtilityInvoiceOcr ? "" : "Available only in the local macOS app"}
                     onClick={() => void autofillRentalCounterFromPhoto()}
@@ -42462,7 +42551,7 @@ export default function App() {
                         <tr key={`rental-counter-row-${row.id}`}>
                           <td>{row.billingMonth}</td>
                           <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
-                          <td>{campusLabel(row.campus)}</td>
+                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.monoUsage}</td>
                           <td>{row.submittedBy || "-"}</td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>X</button></td>
@@ -42477,55 +42566,76 @@ export default function App() {
             {printerView === "report" && (
               <>
                 <div className="report-title-row">
-                  <h2>Rental Printer Counter Comparison</h2>
+                  <h2>Official Counter Report</h2>
                   <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
                     <Printer size={16} aria-hidden={true} />
                     <span>Print Report</span>
                   </button>
                 </div>
-                <div className="tiny" style={{ marginBottom: 10, fontSize: 16, fontWeight: 700, textAlign: "center" }}>
-                  Monthly campus comparison
-                </div>
                 <div className="panel-filters report-filters report-filter-row" style={{ marginBottom: 12 }}>
                   <input className="input" type="month" value={rentalReportMonth} onChange={(e) => setRentalReportMonth(e.target.value)} />
                 </div>
-                <div className="stats-grid" style={{ marginBottom: 12 }}>
-                  <article className="stat-card"><div className="stat-label">Printers Reported</div><div className="stat-value">{rentalReportSummary.printers}</div></article>
-                  <article className="stat-card"><div className="stat-label">Mono Usage</div><div className="stat-value">{rentalReportSummary.monoUsage}</div></article>
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                    gap: 16,
-                    marginBottom: 12,
-                  }}
-                >
+                <section className="printer-report-card">
+                  <header className="printer-report-header">
+                    <div className="printer-report-head-left">
+                      <div className="printer-report-kicker">Eco International School</div>
+                      <h2 className="printer-report-title">Printer Counter Usage Comparison Report</h2>
+                      <p className="printer-report-subtitle">Official monthly comparison by campus using Canon 102 : Total 2 counter values.</p>
+                    </div>
+                    <img
+                      loading="lazy"
+                      decoding="async"
+                      className="printer-report-logo"
+                      src={ECO_LOGO_URL}
+                      alt="Eco International School logo"
+                    />
+                  </header>
+
+                  <div className="printer-report-meta">
+                    <div className="printer-report-meta-card">
+                      <div className="printer-report-meta-label">Report Month</div>
+                      <div className="printer-report-meta-value">{rentalReportMonthLabel}</div>
+                    </div>
+                    <div className="printer-report-meta-card">
+                      <div className="printer-report-meta-label">Generated On</div>
+                      <div className="printer-report-meta-value">{new Date().toLocaleDateString("en-GB")}</div>
+                    </div>
+                    <div className="printer-report-meta-card">
+                      <div className="printer-report-meta-label">Printers Reported</div>
+                      <div className="printer-report-meta-value">{rentalReportSummary.printers}</div>
+                    </div>
+                    <div className="printer-report-meta-card">
+                      <div className="printer-report-meta-label">Total Monthly Usage</div>
+                      <div className="printer-report-meta-value">{rentalReportSummary.monoUsage.toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  <div className="printer-report-note">
+                    Reference counter: Canon `102 : Total 2`. Values below compare previous monthly counter, current monthly counter, and monthly usage for each campus.
+                  </div>
+
+                  <div className="printer-campus-report-grid">
                   {rentalCampusReportBlocks.length ? rentalCampusReportBlocks.map((block, index) => (
-                    <div key={`rental-campus-report-${block.campus}`} className="table-wrap" style={{ marginTop: 0 }}>
-                      <table>
+                    <article key={`rental-campus-report-${block.campus}`} className="printer-campus-report-card">
+                      <div
+                        className="printer-campus-report-head"
+                        style={{
+                          background:
+                            index % 4 === 0 ? "#6f63c7" :
+                            index % 4 === 1 ? "#86b93b" :
+                            index % 4 === 2 ? "#48bcd2" : "#f26a21",
+                        }}
+                      >
+                        {rentalPrinterCampusLabel(block.campus)}
+                      </div>
+                      <div className="table-wrap printer-campus-report-table-wrap" style={{ marginTop: 0 }}>
+                        <table className="printer-campus-report-table">
                         <thead>
-                          <tr>
-                            <th
-                              colSpan={4}
-                              style={{
-                                background:
-                                  index % 4 === 0 ? "#6f63c7" :
-                                  index % 4 === 1 ? "#86b93b" :
-                                  index % 4 === 2 ? "#48bcd2" : "#f26a21",
-                                color: "#fff",
-                                textAlign: "center",
-                                fontSize: 20,
-                              }}
-                            >
-                              {campusLabel(block.campus)}
-                            </th>
-                          </tr>
                           <tr>
                             <th>Month</th>
                             <th>Current Counter</th>
                             <th>Previous Counter</th>
-                            <th>Usage</th>
+                            <th>Monthly Usage</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -42538,14 +42648,16 @@ export default function App() {
                             </tr>
                           ))}
                         </tbody>
-                      </table>
-                    </div>
+                        </table>
+                      </div>
+                    </article>
                   )) : (
                     <div className="panel-note">No rental counter records up to this month yet.</div>
                   )}
-                </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
+                  </div>
+
+                  <div className="table-wrap printer-report-missing-table-wrap" style={{ marginTop: 12 }}>
+                    <table className="printer-report-missing-table">
                     <thead>
                       <tr>
                         <th>Printers Missing Record For {rentalReportMonth || "Selected Month"}</th>
@@ -42557,13 +42669,14 @@ export default function App() {
                       {rentalMissingPrinterRows.length ? rentalMissingPrinterRows.map((row) => (
                         <tr key={`rental-missing-row-${row.id}`}>
                           <td><strong>{row.machineCode}</strong> | {row.machineName}</td>
-                          <td>{campusLabel(row.campus)}</td>
+                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.location || "-"}</td>
                         </tr>
                       )) : <tr><td colSpan={3}>All active rental printers have records for this month.</td></tr>}
                     </tbody>
                   </table>
-                </div>
+                  </div>
+                </section>
               </>
             )}
           </section>
@@ -47982,7 +48095,7 @@ export default function App() {
                             <td>{formatDate(row.date || "-")}</td>
                             <td><strong>{row.assetId}</strong></td>
                             <td>{renderAssetPhoto(row.assetPhoto || "", row.assetId)}</td>
-                            <td>{campusLabel(row.campus)}</td>
+                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
                             <td>{row.category}</td>
                             <td>{row.type || "-"}</td>
                             <td>{maintenanceCompletionText(row.completion || "-")}</td>

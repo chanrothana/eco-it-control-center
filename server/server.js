@@ -3566,6 +3566,119 @@ function parsePrinterCounterFromOcrText(text) {
   };
 }
 
+function stripHtmlToText(html) {
+  return toText(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parsePrinterCounterFromHtml(html) {
+  const rawHtml = toText(html);
+  const text = stripHtmlToText(rawHtml);
+  const warnings = [];
+
+  const total2Patterns = [
+    /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,30}(\d{2,})/i,
+    /\btotal\s*2\b[^0-9]{0,30}(\d{2,})/i,
+  ];
+  let currentMono = "";
+  for (const pattern of total2Patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      currentMono = match[1];
+      break;
+    }
+  }
+
+  if (!currentMono) {
+    warnings.push("Total 2 could not be detected from the printer page.");
+  }
+  if (/login user|login|log out/i.test(text) && !/check counter/i.test(text)) {
+    warnings.push("Printer page may require login before the counter can be read.");
+  }
+
+  const updatedMatch = text.match(/last updated\s*[:\-]?\s*([0-9/: ]+(?:AM|PM)?)/i);
+
+  return {
+    currentMono: currentMono ? String(Number(currentMono)) : "",
+    updatedAt: updatedMatch ? updatedMatch[1].trim() : "",
+    rawText: text,
+    warnings,
+  };
+}
+
+async function fetchTextUrl(rawUrl, redirectCount = 0) {
+  const parsed = new URL(rawUrl);
+  const transport = parsed.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const req = transport.request(
+      parsed,
+      {
+        method: "GET",
+        timeout: 8000,
+        headers: {
+          "User-Agent": "ECO-IT-Control-Center/1.0",
+          Accept: "text/html,application/xhtml+xml",
+        },
+      },
+      (res) => {
+        const status = Number(res.statusCode || 0);
+        if ([301, 302, 303, 307, 308].includes(status) && res.headers.location && redirectCount < 3) {
+          const nextUrl = new URL(res.headers.location, parsed).toString();
+          res.resume();
+          fetchTextUrl(nextUrl, redirectCount + 1).then(resolve).catch(reject);
+          return;
+        }
+        if (status >= 400) {
+          res.resume();
+          reject(new Error(`Printer page returned HTTP ${status}.`));
+          return;
+        }
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+        res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("Printer page request timed out.")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+async function fetchPrinterCounterFromIp(rawIpAddress) {
+  const normalized = String(rawIpAddress || "").trim();
+  if (!normalized) {
+    throw new Error("Printer IP / Web Address is required.");
+  }
+  const baseUrl = /^https?:\/\//i.test(normalized) ? normalized : `http://${normalized}`;
+  const parsedBase = new URL(baseUrl);
+  const candidateUrls = [];
+  candidateUrls.push(parsedBase.toString());
+  if (!/dcounter\.cgi/i.test(parsedBase.pathname)) {
+    candidateUrls.push(new URL("/rps/dcounter.cgi", parsedBase).toString());
+  }
+
+  let lastError = null;
+  for (const candidateUrl of candidateUrls) {
+    try {
+      const html = await fetchTextUrl(candidateUrl);
+      const extracted = parsePrinterCounterFromHtml(html);
+      if (extracted.currentMono || !extracted.warnings.length) {
+        return { ...extracted, sourceUrl: candidateUrl };
+      }
+      lastError = new Error(extracted.warnings.join(" "));
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Could not read printer counter from IP.");
+}
+
 async function runUtilityInvoiceOcr(imagePath) {
   if (process.platform !== "darwin") {
     throw new Error("Invoice OCR is available only on macOS in the local app.");
@@ -5181,6 +5294,34 @@ const server = http.createServer(async (req, res) => {
             // Ignore temp cleanup failures.
           }
         }
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/printers/counter-from-ip") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      try {
+        const extracted = await fetchPrinterCounterFromIp(body.ipAddress || body.url || "");
+        const db = await readDb();
+        appendAuditLog(
+          db,
+          admin,
+          "PRINTER_COUNTER_IP_READ",
+          "rental_printer_counter",
+          String(body.machineCode || "printer"),
+          `warnings=${Array.isArray(extracted.warnings) ? extracted.warnings.length : 0}`
+        );
+        await writeDb(db);
+        sendJson(res, 200, { ok: true, extracted });
+      } catch (err) {
+        sendJson(res, 503, {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Printer counter could not be read from the printer IP.",
+        });
       }
       return;
     }
