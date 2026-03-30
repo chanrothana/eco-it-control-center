@@ -16269,6 +16269,82 @@ export default function App() {
     }
   }
 
+  async function pushLocalDataToLiveWeb() {
+    if (!requireAdminAction()) return;
+    const confirmed = window.confirm(
+      "This will replace the live web database with your current local data. Continue?"
+    );
+    if (!confirmed) return;
+
+    const baseInput = window.prompt("Live server URL", DEFAULT_CLOUD_API_BASE);
+    const liveBase = String(baseInput || "").trim().replace(/\/+$/, "");
+    if (!liveBase) return;
+
+    const username = window.prompt("Live admin username", "admin");
+    if (!username || !username.trim()) return;
+    const password = window.prompt("Live admin password");
+    if (!password || !password.trim()) return;
+
+    setBusy(true);
+    setError("");
+    setSetupMessage("Pushing local data to live web...");
+    try {
+      const localExport = await requestJson<{ generatedAt?: string; db?: unknown }>("/api/backup/export");
+      if (!localExport.db || typeof localExport.db !== "object") {
+        throw new Error("Cannot export local backup data.");
+      }
+
+      const loginRes = await fetch(`${liveBase}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: username.trim(),
+          password,
+        }),
+      });
+      const loginData = (await loginRes.json().catch(() => ({}))) as { token?: string; error?: string };
+      if (!loginRes.ok || !loginData.token) {
+        throw new Error(loginData.error || "Cannot login to live server.");
+      }
+
+      const liveBackupRes = await fetch(`${liveBase}/api/backup/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${loginData.token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      if (!liveBackupRes.ok) {
+        const backupData = (await liveBackupRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(backupData.error || "Cannot create backup on live server before import.");
+      }
+
+      const importRes = await fetch(`${liveBase}/api/backup/import`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${loginData.token}`,
+        },
+        body: JSON.stringify({ db: localExport.db }),
+      });
+      const importData = (await importRes.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!importRes.ok || !importData.ok) {
+        throw new Error(importData.error || "Cannot import local data to live server.");
+      }
+
+      setSetupMessage("Local data pushed to live web successfully.");
+      appendUiAudit("BACKUP_EXPORT_REMOTE", "system", "db", `Pushed local database to ${liveBase}`);
+      await loadAuditLogs();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Push to live web failed";
+      setError("");
+      setSetupMessage(`Push to live web failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function factoryResetSystem() {
     if (!requireSuperAdminAction()) return;
     const confirmed = window.confirm(
@@ -45676,6 +45752,9 @@ export default function App() {
                 </button>
                 <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
                   Use Live Web Data
+                </button>
+                <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={pushLocalDataToLiveWeb}>
+                  Push Local Data To Live Web
                 </button>
                 <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
                   Restore Backup
