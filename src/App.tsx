@@ -24,6 +24,7 @@ import {
   Printer,
   Puzzle,
   Radio,
+  RotateCcw,
   Search,
   Settings,
   Shield,
@@ -9246,6 +9247,13 @@ export default function App() {
     }
     return rentalReportCampuses.filter((campus) => rentalReportCampusFilterOptions.includes(campus));
   }, [rentalReportCampusFilterOptions, rentalReportCampuses]);
+  const rentalReportLatestMonth = useMemo(() => {
+    const months = rentalPrinterCounters
+      .map((row) => String(row.billingMonth || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    return months[months.length - 1] || toYmd(new Date()).slice(0, 7);
+  }, [rentalPrinterCounters]);
   const rentalReportRows = useMemo(() => {
     return rentalPrinterCounters
       .filter((row) => {
@@ -9414,6 +9422,40 @@ export default function App() {
     },
     [campusLabel]
   );
+  const rentalPrintSummaryRows = useMemo(
+    () =>
+      rentalCampusReportBlocks.flatMap((block) =>
+        block.rows.map((row) => ({
+          campus: block.campus,
+          campusLabel: rentalPrinterCampusLabel(block.campus),
+          monthLabel: row.monthLabel,
+          previousMono: row.previousMono,
+          currentMono: row.currentMono,
+          monoUsage: row.monoUsage,
+        }))
+      ),
+    [rentalCampusReportBlocks, rentalPrinterCampusLabel]
+  );
+  const resetRentalReportFilters = useCallback(() => {
+    setRentalReportFromMonth(rentalReportLatestMonth);
+    setRentalReportToMonth(rentalReportLatestMonth);
+    setRentalReportCampuses(["ALL"]);
+  }, [rentalReportLatestMonth]);
+  const rentalCampusUsageChart = useMemo(() => {
+    const rows = rentalCampusReportBlocks.map((block, index) => ({
+      campus: block.campus,
+      label: rentalPrinterCampusLabel(block.campus),
+      totalUsage: block.rows.reduce((sum, row) => sum + (Number(row.monoUsage) || 0), 0),
+      color:
+        index % 4 === 0 ? "#6f63c7" :
+        index % 4 === 1 ? "#86b93b" :
+        index % 4 === 2 ? "#48bcd2" : "#f26a21",
+    }));
+    return {
+      rows,
+      maxUsage: Math.max(1, ...rows.map((row) => row.totalUsage)),
+    };
+  }, [rentalCampusReportBlocks, rentalPrinterCampusLabel]);
   const assetStatusLabel = useCallback(
     (statusRaw: string) => {
       const status = String(statusRaw || "").trim();
@@ -42780,13 +42822,15 @@ export default function App() {
             )}
 
             {printerView === "report" && (
-              <>
+              <div className="printer-report-print-area">
                 <div className="report-title-row">
                   <h2>Printer Counter Report</h2>
-                  <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
-                    <Printer size={16} aria-hidden={true} />
-                    <span>Print Report</span>
-                  </button>
+                  <div className="report-title-actions">
+                    <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
+                      <Printer size={16} aria-hidden={true} />
+                      <span>Print Report</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="panel-filters report-filters report-filter-row printer-report-filter-row" style={{ marginBottom: 12 }}>
                   <label className="field printer-report-filter-field">
@@ -42834,8 +42878,48 @@ export default function App() {
                       emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                     />
                   </label>
+                  <div className="field printer-report-filter-action-field">
+                    <span>Reset</span>
+                    <button className="tab printer-report-filter-reset-btn" type="button" onClick={resetRentalReportFilters}>
+                      <RotateCcw size={16} aria-hidden={true} />
+                      <span>Latest Filter</span>
+                    </button>
+                  </div>
                 </div>
                 <section className="printer-report-card">
+                  <div className="printer-report-print-masthead">
+                    <div className="printer-report-print-brand">
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        className="printer-report-print-logo"
+                        src={ECO_LOGO_URL}
+                        alt="Eco International School logo"
+                      />
+                      <div className="printer-report-print-school">Eco International School</div>
+                      <div className="printer-report-print-center">IT and Facility Control Center</div>
+                      <div className="printer-report-print-document">Printer Counter Report</div>
+                    </div>
+                    <div className="printer-report-print-meta">
+                      <div className="printer-report-print-meta-item">
+                        <span>Report Range</span>
+                        <strong>{rentalReportRangeLabel}</strong>
+                      </div>
+                      <div className="printer-report-print-meta-item">
+                        <span>Generated On</span>
+                        <strong>{new Date().toLocaleDateString("en-GB")}</strong>
+                      </div>
+                      <div className="printer-report-print-meta-item">
+                        <span>Campuses Covered</span>
+                        <strong>{rentalReportSelectedCampuses.length || rentalReportCampusFilterOptions.length}</strong>
+                      </div>
+                      <div className="printer-report-print-meta-item">
+                        <span>Total Monthly Usage</span>
+                        <strong>{rentalReportSummary.monoUsage.toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+
                   <header className="printer-report-header">
                     <div className="printer-report-head-left">
                       <div className="printer-report-kicker">Eco International School</div>
@@ -42873,6 +42957,61 @@ export default function App() {
                   <div className="printer-report-note">
                     Reference counter: Canon `102 : Total 2`. Values below compare previous monthly counter, current monthly counter, and monthly usage for each campus.
                   </div>
+
+                  <div className="table-wrap printer-report-print-summary-wrap">
+                    <table className="printer-report-print-summary-table">
+                      <thead>
+                        <tr>
+                          <th>Campus</th>
+                          <th>Month</th>
+                          <th>Previous Counter</th>
+                          <th>Current Counter</th>
+                          <th>Monthly Usage</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rentalPrintSummaryRows.length ? rentalPrintSummaryRows.map((row, index) => (
+                          <tr key={`rental-print-summary-${row.campus}-${row.monthLabel}-${index}`}>
+                            <td><strong>{row.campusLabel}</strong></td>
+                            <td>{row.monthLabel}</td>
+                            <td>{row.previousMono.toLocaleString()}</td>
+                            <td>{row.currentMono.toLocaleString()}</td>
+                            <td>{row.monoUsage.toLocaleString()}</td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan={5}>No rental counter records in the selected range.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {rentalCampusUsageChart.rows.length ? (
+                    <section className="printer-report-chart-card">
+                      <div className="printer-report-chart-head">
+                        <div className="printer-report-chart-title">Campus Usage Comparison</div>
+                        <div className="printer-report-chart-subtitle">Total monthly usage in the selected range</div>
+                      </div>
+                      <div className="printer-report-bar-chart">
+                        {rentalCampusUsageChart.rows.map((row) => (
+                          <article key={`rental-campus-usage-chart-${row.campus}`} className="printer-report-bar-chart-row">
+                            <div className="printer-report-bar-chart-label">{row.label}</div>
+                            <div className="printer-report-bar-chart-track">
+                              <div
+                                className="printer-report-bar-chart-fill"
+                                style={{
+                                  width: `${(row.totalUsage / rentalCampusUsageChart.maxUsage) * 100}%`,
+                                  background: row.color,
+                                }}
+                              />
+                            </div>
+                            <div className="printer-report-bar-chart-value">{row.totalUsage.toLocaleString()}</div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
 
                   <div className="printer-campus-report-grid">
                   {rentalCampusReportBlocks.length ? rentalCampusReportBlocks.map((block, index) => (
@@ -42978,7 +43117,7 @@ export default function App() {
                   </table>
                   </div>
                 </section>
-              </>
+              </div>
             )}
           </section>
         )}
