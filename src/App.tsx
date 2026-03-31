@@ -7402,8 +7402,11 @@ export default function App() {
   const [assetAssignedToMultiFilter, setAssetAssignedToMultiFilter] = useState<string[]>(["ALL"]);
   const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
+  const [maintenanceCampusFilter, setMaintenanceCampusFilter] = useState("ALL");
   const [maintenanceDateFrom, setMaintenanceDateFrom] = useState("");
   const [maintenanceDateTo, setMaintenanceDateTo] = useState("");
+  const [maintenanceSearchInput, setMaintenanceSearchInput] = useState("");
+  const [maintenanceSearchQuery, setMaintenanceSearchQuery] = useState("");
   const [verificationCategoryFilter, setVerificationCategoryFilter] = useState("ALL");
   const [verificationResultFilter, setVerificationResultFilter] = useState("ALL");
   const [verificationDateFrom, setVerificationDateFrom] = useState("");
@@ -24146,8 +24149,15 @@ export default function App() {
     if (maintenanceCategoryFilter !== "ALL") {
       rows = rows.filter((r) => r.category === maintenanceCategoryFilter);
     }
+    if (maintenanceCampusFilter !== "ALL") {
+      rows = rows.filter((r) => r.campus === maintenanceCampusFilter);
+    }
     return Array.from(new Set(rows.map((r) => r.type).filter(Boolean))).sort();
-  }, [allMaintenanceRows, maintenanceCategoryFilter]);
+  }, [allMaintenanceRows, maintenanceCategoryFilter, maintenanceCampusFilter]);
+  const maintenanceCampusOptions = useMemo(
+    () => Array.from(new Set(allMaintenanceRows.map((r) => r.campus).filter(Boolean))).sort(compareCampusByCode),
+    [allMaintenanceRows]
+  );
   const filteredMaintenanceRows = useMemo(() => {
     let rows = [...allMaintenanceRows];
     if (maintenanceCategoryFilter !== "ALL") {
@@ -24156,14 +24166,47 @@ export default function App() {
     if (maintenanceTypeFilter !== "ALL") {
       rows = rows.filter((r) => r.type === maintenanceTypeFilter);
     }
+    if (maintenanceCampusFilter !== "ALL") {
+      rows = rows.filter((r) => r.campus === maintenanceCampusFilter);
+    }
     if (maintenanceDateFrom) {
       rows = rows.filter((r) => r.date && r.date >= maintenanceDateFrom);
     }
     if (maintenanceDateTo) {
       rows = rows.filter((r) => r.date && r.date <= maintenanceDateTo);
     }
+    if (maintenanceSearchQuery.trim()) {
+      const query = maintenanceSearchQuery.trim().toLowerCase();
+      rows = rows.filter((r) => {
+        const haystack = [
+          r.assetId,
+          r.itemName,
+          campusLabel(r.campus),
+          r.location,
+          r.type,
+          r.condition,
+          r.note,
+          r.by,
+          r.category,
+          r.assetType,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+    }
     return rows;
-  }, [allMaintenanceRows, maintenanceCategoryFilter, maintenanceTypeFilter, maintenanceDateFrom, maintenanceDateTo]);
+  }, [
+    allMaintenanceRows,
+    maintenanceCategoryFilter,
+    maintenanceTypeFilter,
+    maintenanceCampusFilter,
+    maintenanceDateFrom,
+    maintenanceDateTo,
+    maintenanceSearchQuery,
+    campusLabel,
+  ]);
   const sortedMaintenanceRows = useMemo(() => {
     const rows = [...filteredMaintenanceRows];
     const { key, direction } = maintenanceSort;
@@ -41566,6 +41609,18 @@ export default function App() {
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <select
                 className="input"
+                value={maintenanceCampusFilter}
+                onChange={(e) => setMaintenanceCampusFilter(e.target.value)}
+              >
+                <option value="ALL">{t.allCampuses}</option>
+                {maintenanceCampusOptions.map((campus) => (
+                  <option key={`maintenance-campus-filter-${campus}`} value={campus}>
+                    {campusLabel(campus)}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
                 value={maintenanceCategoryFilter}
                 onChange={(e) => setMaintenanceCategoryFilter(e.target.value)}
               >
@@ -41600,6 +41655,25 @@ export default function App() {
                 value={maintenanceDateTo}
                 onChange={(e) => setMaintenanceDateTo(e.target.value)}
               />
+              <div className="maintenance-history-search-row">
+                <input
+                  className="input"
+                  type="search"
+                  placeholder="Search asset, campus, note, by..."
+                  value={maintenanceSearchInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setMaintenanceSearchInput(value);
+                    setMaintenanceSearchQuery(value.trim());
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      setMaintenanceSearchQuery(maintenanceSearchInput.trim());
+                    }
+                  }}
+                />
+              </div>
             </div>
             {isPhoneView ? (
               <div className="report-mobile-only report-card-list">
@@ -41676,111 +41750,89 @@ export default function App() {
                 )}
               </div>
             ) : (
-              <div className="maintenance-history-grid">
-                {sortedMaintenanceRows.length ? (
-                  sortedMaintenanceRows.map((row) => (
-                    <article
-                      key={row.rowId}
-                      className={`maintenance-history-card maintenance-history-card-simple ${maintenanceHistoryRowClass(
-                        row.type || "",
-                        row.completion || "",
-                        row.status || "",
-                        row.condition || "",
-                        row.note || ""
-                      )}`}
-                    >
-                      <div className="maintenance-history-simple-top">
-                        <div className="maintenance-history-simple-id">
-                          <button
-                            className="tab"
-                            onClick={() => {
-                              setMaintenanceDetailAssetId(row.assetDbId);
-                              cancelMaintenanceEntryEdit();
-                            }}
-                          >
+              <div className="table-wrap maintenance-history-desktop-wrap">
+                <table className="maintenance-history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Asset</th>
+                      <th>Campus</th>
+                      <th>Loc</th>
+                      <th>Type</th>
+                      <th>Done</th>
+                      <th>Cond</th>
+                      <th>Note</th>
+                      <th>By</th>
+                      <th>Edit</th>
+                      <th>Del</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedMaintenanceRows.length ? (
+                      sortedMaintenanceRows.map((row) => (
+                        <tr
+                          key={`maint-history-desktop-${row.rowId}`}
+                          className={maintenanceHistoryRowClass(
+                            row.type || "",
+                            row.completion || "",
+                            row.status || "",
+                            row.condition || "",
+                            row.note || ""
+                          )}
+                        >
+                          <td>{formatDate(row.date || "-")}</td>
+                          <td>
                             <strong>{row.assetId}</strong>
-                          </button>
-                          <span>{campusLabel(row.campus)} | {row.location || "-"}</span>
-                        </div>
-                        <div className="maintenance-history-simple-status">
-                          <strong>{row.type || "-"}</strong>
-                          <span>{maintenanceCompletionText(row.completion || "-")}</span>
-                        </div>
-                      </div>
-                      <div className="maintenance-history-simple-body">
-                        <div className="maintenance-history-simple-info">
-                          <div className="maintenance-history-simple-asset-photo">
-                            {renderAssetPhoto(row.assetPhoto || "", row.assetId)}
-                          </div>
-                          <div className="maintenance-history-simple-line">
-                            <strong>{lang === "km" ? "Category" : "Category"}:</strong> {row.category}
-                            <span className="maintenance-history-inline-sep">|</span>
-                            <strong>{lang === "km" ? "Type" : "Type"}:</strong> {row.assetType || "-"}
-                            <span className="maintenance-history-inline-sep">|</span>
-                            <strong>{lang === "km" ? "Status" : "Status"}:</strong> {assetStatusLabel(row.status)}
-                          </div>
-                          <div className="maintenance-history-simple-line">
-                            <strong>{lang === "km" ? "Date" : "Date"}:</strong> {formatDate(row.date || "-")}
-                            <span className="maintenance-history-inline-sep">|</span>
-                            <strong>{lang === "km" ? "Condition" : "Condition"}:</strong> {row.condition || "-"}
-                            <span className="maintenance-history-inline-sep">|</span>
-                            <strong>{lang === "km" ? "By" : "By"}:</strong> {row.by || "-"}
-                            <span className="maintenance-history-inline-sep">|</span>
-                            <strong>{lang === "km" ? "Cost" : "Cost"}:</strong> {row.cost || "-"}
-                          </div>
-                          <div className="maintenance-history-simple-note">
-                            <strong>{lang === "km" ? "Note" : "Note"}:</strong> {row.note || "-"}
-                          </div>
-                          {renderSavedMaintenanceWorkflow(row)}
-                          <div className="maintenance-history-simple-note">
-                            <strong>{lang === "km" ? "Report File" : "Report File"}:</strong>{" "}
-                            {renderMaintenanceReportFileLink(
-                              normalizeMaintenanceReportFile({
-                                url: row.reportFile || "",
-                                name: row.reportFileName || "",
-                                mimeType: row.reportFileType || "",
-                              }),
-                              `maintenance-card-report-${row.rowId}`
-                            )}
-                          </div>
-                        </div>
-                        <div className="maintenance-history-simple-photos">
-                          <strong>{lang === "km" ? "Maintenance Photos" : "Maintenance Photos"}:</strong>
-                          <div>{renderMaintenancePhotoGroups(row, `maintenance-card-${row.rowId}`, undefined, {
-                            className: "maintenance-history-photo-groups-two-col",
-                          })}</div>
-                        </div>
-                      </div>
-                      <div className="asset-actions maintenance-history-card-actions">
-                        <button
-                          className="tab"
-                          onClick={() => {
-                            setMaintenanceDetailAssetId(row.assetDbId);
-                            cancelMaintenanceEntryEdit();
-                          }}
-                        >
-                          Open Detail
-                        </button>
-                        <button
-                          className="tab"
-                          disabled={!isAdmin}
-                          onClick={() => editMaintenanceEntryFromHistoryRow(row)}
-                        >
-                          {t.edit}
-                        </button>
-                        <button
-                          className="btn-danger"
-                          disabled={busy || !isAdmin}
-                          onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
-                        >
-                          X
-                        </button>
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <div className="panel-note">No maintenance records yet.</div>
-                )}
+                            <div className="tiny">{row.itemName}</div>
+                          </td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.location || "-"}</td>
+                          <td>{row.type || "-"}</td>
+                          <td>
+                            <span
+                              className={`maintenance-history-done-icon ${
+                                String(row.completion || "").trim().toLowerCase() === "done"
+                                  ? "is-done"
+                                  : "is-pending"
+                              }`}
+                              title={maintenanceCompletionText(row.completion || "-")}
+                              aria-label={maintenanceCompletionText(row.completion || "-")}
+                            >
+                              {String(row.completion || "").trim().toLowerCase() === "done" ? "✅" : "❌"}
+                            </span>
+                          </td>
+                          <td>{row.condition || "-"}</td>
+                          <td>{row.note || "-"}</td>
+                          <td>{row.by || "-"}</td>
+                          <td>
+                            <button
+                              className="btn-icon-edit"
+                              disabled={!isAdmin}
+                              title={t.edit}
+                              aria-label={t.edit}
+                              onClick={() => editMaintenanceEntryFromHistoryRow(row)}
+                            >
+                              ✎
+                            </button>
+                          </td>
+                          <td>
+                            <button
+                              className="btn-danger"
+                              disabled={busy || !isAdmin}
+                              onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
+                            >
+                              X
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={11}>No maintenance records yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
             </>

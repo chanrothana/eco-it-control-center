@@ -3466,7 +3466,7 @@ h2 {
 
 .maintenance-filter-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1.1fr 1.15fr 1.1fr 1fr 1fr 1.5fr;
   align-items: center;
   width: 100%;
   gap: 10px;
@@ -3487,6 +3487,10 @@ h2 {
 .maintenance-filters .input {
   width: 100%;
   min-width: 0;
+}
+
+.maintenance-history-search-row {
+  display: block;
 }
 
 .asset-list-toolbar {
@@ -6143,6 +6147,127 @@ label.backup-action-btn {
 .maintenance-history-inline-sep {
   margin: 0 8px;
   color: #c3a06d;
+}
+
+.maintenance-history-desktop-wrap {
+  border: 1px solid #d7c4a2;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 249, 238, 0.98) 0%, rgba(255, 242, 221, 0.98) 100%);
+  box-shadow: 0 10px 24px rgba(76, 46, 15, 0.06);
+  overflow: hidden;
+}
+
+.maintenance-history-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.maintenance-history-table th {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6f5470;
+  white-space: nowrap;
+}
+
+.maintenance-history-table th,
+.maintenance-history-table td {
+  vertical-align: top;
+}
+
+.maintenance-history-table td {
+  color: #4c2e0f;
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.maintenance-history-table td .row-actions {
+  justify-content: flex-start;
+}
+
+.maintenance-history-done-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.maintenance-history-table td:nth-child(1) {
+  width: 8%;
+  white-space: nowrap;
+}
+
+.maintenance-history-table td:nth-child(2) {
+  width: 12%;
+}
+
+.maintenance-history-table td:nth-child(3) {
+  width: 14%;
+}
+
+.maintenance-history-table td:nth-child(4) {
+  width: 9%;
+}
+
+.maintenance-history-table td:nth-child(5) {
+  width: 7%;
+}
+
+.maintenance-history-table td:nth-child(6) {
+  width: 10%;
+}
+
+.maintenance-history-table td:nth-child(7) {
+  width: 4%;
+}
+
+.maintenance-history-table td:nth-child(9) {
+  width: 7%;
+}
+
+.maintenance-history-table td:nth-child(10) {
+  width: 4.5%;
+}
+
+.maintenance-history-table td:nth-child(11) {
+  width: 3.5%;
+}
+
+.maintenance-history-table td:nth-child(8) {
+  white-space: normal;
+  width: 20%;
+  min-width: 260px;
+}
+
+.maintenance-history-table td:nth-child(2) .tiny,
+.maintenance-history-table td:nth-child(8) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.maintenance-history-table td:nth-child(2) .tiny {
+  -webkit-line-clamp: 2;
+}
+
+.maintenance-history-table td:nth-child(8) {
+  -webkit-line-clamp: 3;
+}
+
+.maintenance-history-table td:nth-child(3),
+.maintenance-history-table td:nth-child(4),
+.maintenance-history-table td:nth-child(6) {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.maintenance-history-table td:nth-child(8),
+.maintenance-history-table th:nth-child(8) {
+  padding-left: 18px;
+  padding-right: 18px;
 }
 
 .inventory-campus-monthly-compare-wrap {
