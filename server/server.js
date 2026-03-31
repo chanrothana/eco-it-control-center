@@ -7331,12 +7331,6 @@ const server = http.createServer(async (req, res) => {
       const hasNextBeforePhotos = Array.isArray(body.beforePhotos);
       const hasNextAfterPhotos = Array.isArray(body.afterPhotos);
       const nextMedia = await normalizeMaintenanceMediaPayload(body);
-      const hasNextWorkflow = Object.prototype.hasOwnProperty.call(body, "workflow");
-      const nextWorkflow = hasNextWorkflow
-        ? normalizeMaintenanceWorkflowPayload(body.workflow)
-        : normalizeMaintenanceWorkflowPayload(current.workflow);
-      const nextCompletion = normalizeCompletion(body.completion);
-      const nextCondition = toText(body.condition);
       const db = await readDb();
       const idx = db.assets.findIndex((a) => a.id === assetId);
       if (idx === -1) {
@@ -7354,6 +7348,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       const current = history[hIdx] || {};
+      const hasNextWorkflow = Object.prototype.hasOwnProperty.call(body, "workflow");
+      const nextWorkflow = hasNextWorkflow
+        ? normalizeMaintenanceWorkflowPayload(body.workflow)
+        : normalizeMaintenanceWorkflowPayload(current.workflow);
+      const nextCompletion = normalizeCompletion(body.completion);
+      const nextCondition = toText(body.condition);
       const hasNextReportFile = Object.prototype.hasOwnProperty.call(body, "reportFile");
       const nextReportFile = hasNextReportFile
         ? await normalizeAttachmentValue(body.reportFile || {
