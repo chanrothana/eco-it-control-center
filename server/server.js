@@ -3562,10 +3562,29 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
   const printerTypeCodes = new Set(["101", "102", "106", "109"]);
   const lowerFlat = flat.toLowerCase();
 
+  function normalizeCounterOcrLine(line) {
+    return toText(line)
+      .replace(/\s+/g, " ")
+      .replace(/[|]/g, "1")
+      .replace(/tota[!i1l]/gi, "total")
+      .replace(/tota\b/gi, "total")
+      .replace(/\btofal\b/gi, "total")
+      .replace(/\b10z\b/gi, "102")
+      .replace(/\b1o2\b/gi, "102")
+      .replace(/\bl02\b/gi, "102")
+      .replace(/\b2o\b/gi, "20")
+      .trim();
+  }
+
+  const normalizedLines = lines.map((line) => normalizeCounterOcrLine(line));
+
   function extractCounterValue(line) {
-    const values = String(line || "").match(/\d[\d,]*/g) || [];
+    const source = String(line || "");
+    const values = [
+      ...(source.match(/\d(?:[\d,\s]{2,}\d)/g) || []).map((value) => value.replace(/[,\s]/g, "").trim()),
+      ...(source.match(/\d[\d,]*/g) || []).map((value) => value.replace(/,/g, "").trim()),
+    ];
     const normalized = values
-      .map((value) => value.replace(/,/g, "").trim())
       .filter(Boolean)
       .filter((value) => !printerTypeCodes.has(value))
       .filter((value) => value.length >= 4);
@@ -3586,9 +3605,12 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
   }
 
   if (!currentMono) {
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i];
-      if (!/\btotal\s*2\b/i.test(line) && !/\b102\b/i.test(line)) continue;
+    const targetLinePattern = /\b102\b.*\btotal\s*2\b|\btotal\s*2\b.*\b102\b|\b102\b|\btotal\s*2\b/i;
+    const otherTypePattern = /\b(?:101|106|109)\b.*\btotal\b/i;
+
+    for (let i = 0; i < normalizedLines.length; i += 1) {
+      const line = normalizedLines[i];
+      if (!targetLinePattern.test(line)) continue;
 
       const sameLineValue = extractCounterValue(line);
       if (sameLineValue) {
@@ -3596,8 +3618,10 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
         break;
       }
 
-      for (let offset = 1; offset <= 2; offset += 1) {
-        const nearby = lines[i + offset] || "";
+      for (let offset = 1; offset <= 3; offset += 1) {
+        const nearby = normalizedLines[i + offset] || "";
+        if (!nearby) continue;
+        if (otherTypePattern.test(nearby)) break;
         const nearbyValue = extractCounterValue(nearby);
         if (nearbyValue) {
           currentMono = nearbyValue;
@@ -3605,6 +3629,18 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
         }
       }
       if (currentMono) break;
+    }
+  }
+
+  if (!currentMono) {
+    for (let i = 0; i < normalizedLines.length - 1; i += 1) {
+      const joined = `${normalizedLines[i]} ${normalizedLines[i + 1]}`.trim();
+      if (!/\b102\b.*\btotal\s*2\b|\btotal\s*2\b.*\b102\b|\btotal\s*2\b/i.test(joined)) continue;
+      const joinedValue = extractCounterValue(joined);
+      if (joinedValue) {
+        currentMono = joinedValue;
+        break;
+      }
     }
   }
 
