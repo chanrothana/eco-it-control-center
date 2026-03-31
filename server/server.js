@@ -2812,6 +2812,15 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   const recordedBy = toText(txn.by) || toText(txn.approvalRequestedBy) || "staff";
   const status = formatInventoryOutTelegramStatus(txn.approvalStatus || "APPROVED");
   const reason = toText(txn.note);
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const items = normalizeInventoryItems(settings.inventoryItems);
+  const txns = normalizeInventoryTxns(settings.inventoryTxns);
+  const item = items.find((row) => Number(row.id) === Number(txn.itemId));
+  const remainingStock = item ? calcInventoryCurrentStock(item, txns) : null;
+  const stockUnit = toText(item && item.unit) || "";
   const lines = [
     "ជូនដំណឹង ECO IT - ស្តុក",
     "ចេញសម្ភារៈ (Item Out)",
@@ -2821,6 +2830,9 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
     `កត់ត្រាដោយ: ${recordedBy}`,
     `ស្ថានភាព: ${status}`,
   ];
+  if (remainingStock !== null) {
+    lines.push(`ស្តុកនៅសល់: ${remainingStock}${stockUnit ? ` ${stockUnit}` : ""}`);
+  }
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
