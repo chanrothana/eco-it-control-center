@@ -4644,6 +4644,22 @@ async function buildPrinterCounterOcrCandidates(photo: string): Promise<Array<{ 
       photo: await cropImageDataUrl(full, { x: 0.55, y: 0.16, width: 0.30, height: 0.16 }),
       label: "counter values column",
     },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.12, y: 0.15, width: 0.80, height: 0.22 }),
+      label: "main counter rows tight",
+    },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.14, y: 0.19, width: 0.74, height: 0.11 }),
+      label: "102 total 2 row area",
+    },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.48, y: 0.18, width: 0.40, height: 0.13 }),
+      label: "102 value focus",
+    },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.18, y: 0.16, width: 0.68, height: 0.14 }),
+      label: "counter rows cropped wide",
+    },
   ];
   const seen = new Set<string>();
   return candidates.filter((entry) => {
@@ -6809,6 +6825,7 @@ export default function App() {
                 startTabTransition(() => {
                   setPrinterView("setup");
                   setTab("printer");
+                  scrollWorkspaceToTop();
                 }),
             },
             {
@@ -6819,6 +6836,7 @@ export default function App() {
                 startTabTransition(() => {
                   setPrinterView("entry");
                   setTab("printer");
+                  scrollWorkspaceToTop();
                 }),
             },
             {
@@ -6829,6 +6847,7 @@ export default function App() {
                 startTabTransition(() => {
                   setPrinterView("report");
                   setTab("printer");
+                  scrollWorkspaceToTop();
                 }),
             },
             {
@@ -6839,6 +6858,7 @@ export default function App() {
                 startTabTransition(() => {
                   setPrinterView("graph");
                   setTab("printer");
+                  scrollWorkspaceToTop();
                 }),
             },
           ];
@@ -7805,6 +7825,7 @@ export default function App() {
   const [verificationEditFileKey, setVerificationEditFileKey] = useState(0);
   const [maintenanceDetailAssetId, setMaintenanceDetailAssetId] = useState<number | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const workspaceMainRef = useRef<HTMLElement | null>(null);
   const [maintenanceEditingEntryId, setMaintenanceEditingEntryId] = useState<number | null>(null);
   const [maintenanceEditFileKey, setMaintenanceEditFileKey] = useState(0);
   const [maintenanceEditForm, setMaintenanceEditForm] = useState({
@@ -23159,6 +23180,14 @@ export default function App() {
     setMobileNotificationOpen(false);
   }
 
+  function scrollWorkspaceToTop() {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      workspaceMainRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+
   const filterLabel = useMemo(
     () => (campusFilter === "ALL" ? t.allCampuses : campusLabel(campusFilter)),
     [campusFilter, t.allCampuses, campusLabel]
@@ -29874,7 +29903,7 @@ export default function App() {
             ))}
           </aside>
 
-          <section className="workspace-main">
+          <section className="workspace-main" ref={workspaceMainRef}>
             <div className="mobile-nav-hud" ref={mobileNavRef}>
               {mobileMenuOpen ? (
                 <button
@@ -42779,13 +42808,24 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Counter Screenshot (Optional)</span>
-                    <input key={rentalCounterFileKey} type="file" accept="image/*" className="input" onChange={onRentalCounterPhotoFile} />
+                    <div className="printer-counter-upload-row">
+                      <input key={rentalCounterFileKey} type="file" accept="image/*" className="input printer-counter-upload-input" onChange={onRentalCounterPhotoFile} />
+                      {rentalCounterForm.photo ? (
+                        <button
+                          type="button"
+                          className="printer-counter-upload-preview-btn"
+                          onClick={() => setPreviewImage(rentalCounterForm.photo)}
+                          aria-label="Preview counter screenshot"
+                        >
+                          <img loading="lazy" decoding="async" src={rentalCounterForm.photo} alt="rental counter" className="printer-counter-upload-thumb" />
+                        </button>
+                      ) : null}
+                    </div>
                     <span className="tiny">
                       {canUsePrinterCounterOcr
                         ? "Optional. Upload a counter image if you want the system to read the counter for you."
                         : "Optional. Upload only if you want to keep a reference image."}
                     </span>
-                    {rentalCounterForm.photo ? <img loading="lazy" decoding="async" src={rentalCounterForm.photo} alt="rental counter" className="table-photo" style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }} /> : null}
                   </label>
                   <label className="field field-wide">
                     <span>{t.notes}</span>
@@ -43162,9 +43202,15 @@ export default function App() {
             )}
 
             {printerView === "graph" && (
-              <>
+              <div className="printer-graph-print-area">
                 <div className="report-title-row">
                   <h2>Monthly Graph Comparison</h2>
+                  <div className="report-title-actions">
+                    <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
+                      <Printer size={16} aria-hidden={true} />
+                      <span>Print Report</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="panel-filters report-filters report-filter-row printer-report-filter-row" style={{ marginBottom: 12 }}>
                   <label className="field printer-report-filter-field">
@@ -43255,7 +43301,7 @@ export default function App() {
                     )}
                   </div>
                 </section>
-              </>
+              </div>
             )}
           </section>
         )}

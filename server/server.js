@@ -3644,6 +3644,28 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
     }
   }
 
+  if (!currentMono) {
+    const possibleValues = normalizedLines
+      .flatMap((line, index) => {
+        const value = extractCounterValue(line);
+        if (!value) return [];
+        return [{ value, index, line }];
+      })
+      .filter((entry) => Number(entry.value) > 999);
+
+    const total2Indexes = normalizedLines
+      .map((line, index) => (/\b102\b.*\btotal\s*2\b|\btotal\s*2\b.*\b102\b|\btotal\s*2\b/i.test(line) ? index : -1))
+      .filter((index) => index >= 0);
+
+    for (const targetIndex of total2Indexes) {
+      const nearest = possibleValues.find((entry) => Math.abs(entry.index - targetIndex) <= 2);
+      if (nearest) {
+        currentMono = nearest.value;
+        break;
+      }
+    }
+  }
+
   if (
     !currentMono &&
     (

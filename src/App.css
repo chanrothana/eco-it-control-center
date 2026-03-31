@@ -1586,6 +1586,10 @@ h2 {
     display: block !important;
   }
 
+  .workspace-main > .panel > .printer-graph-print-area {
+    display: block !important;
+  }
+
   html,
   body {
     background: #fff !important;
@@ -1604,6 +1608,8 @@ h2 {
 
   .printer-report-print-area > .report-title-row,
   .printer-report-print-area > .panel-filters.report-filters,
+  .printer-graph-print-area > .report-title-row,
+  .printer-graph-print-area > .panel-filters.report-filters,
   .report-print-btn {
     display: none !important;
   }
@@ -1624,6 +1630,73 @@ h2 {
   .printer-report-print-summary-wrap,
   .printer-report-missing-table-wrap {
     display: none !important;
+  }
+
+  .printer-graph-print-area {
+    display: block !important;
+  }
+
+  .printer-graph-print-area .printer-trend-panel {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .printer-graph-print-area .printer-trend-panel-head {
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #d7b27b;
+  }
+
+  .printer-graph-print-area .printer-trend-panel-head h3 {
+    font-size: 22px;
+  }
+
+  .printer-graph-print-area .printer-trend-panel-head p {
+    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .printer-graph-print-area .printer-trend-range-chip {
+    padding: 7px 12px;
+    font-size: 11px;
+  }
+
+  .printer-graph-print-area .printer-trend-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+  }
+
+  .printer-graph-print-area .printer-trend-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .printer-graph-print-area .printer-trend-card-head {
+    padding: 9px 10px;
+    font-size: 15px;
+  }
+
+  .printer-graph-print-area .printer-trend-card-body {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .printer-graph-print-area .printer-trend-row {
+    grid-template-columns: 78px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .printer-graph-print-area .printer-trend-month,
+  .printer-graph-print-area .printer-trend-value {
+    font-size: 12px;
+  }
+
+  .printer-graph-print-area .printer-trend-track {
+    height: 12px;
   }
 
   .printer-report-print-masthead {
@@ -7096,6 +7169,46 @@ label.backup-action-btn {
 .photo-preview-actions {
   display: flex;
   gap: 6px;
+}
+
+.printer-counter-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.printer-counter-upload-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.printer-counter-upload-preview-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 1px solid #d6e1f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(40, 63, 104, 0.1);
+  cursor: pointer;
+}
+
+.printer-counter-upload-preview-btn:hover {
+  border-color: #aabfdf;
+  box-shadow: 0 8px 18px rgba(40, 63, 104, 0.14);
+}
+
+.printer-counter-upload-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
 }
 
 .asset-photo-gallery {
@@ -13505,6 +13618,22 @@ tr.row-maint-maintenance:hover td {
   .photo-placeholder {
     width: 78px;
     height: 78px;
+  }
+
+  .printer-counter-upload-row {
+    gap: 8px;
+  }
+
+  .printer-counter-upload-preview-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+  }
+
+  .printer-counter-upload-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
   }
 
   .app-card-public-asset {
