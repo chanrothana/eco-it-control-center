@@ -445,6 +445,19 @@ body {
   padding-left: 12px;
 }
 
+.main-nav-subitem-group {
+  display: grid;
+  gap: 6px;
+}
+
+.main-nav-sublist-level-2 {
+  padding-left: 14px;
+}
+
+.main-nav-sublist-level-3 {
+  padding-left: 16px;
+}
+
 .main-nav-sub-btn {
   min-height: 34px;
   width: 100%;
@@ -458,6 +471,22 @@ body {
   text-align: left;
   padding: 0 10px;
   cursor: pointer;
+}
+
+.main-nav-sub-btn-parent {
+  font-weight: 700;
+}
+
+.main-nav-sublist-level-2 .main-nav-sub-btn {
+  background: #fff2e1;
+}
+
+.main-nav-sublist-level-3 .main-nav-sub-btn {
+  min-height: 32px;
+  border-style: dashed;
+  background: #fff8ee;
+  font-size: 12px;
+  padding-left: 14px;
 }
 
 .main-nav-sub-btn-active {
@@ -1273,6 +1302,15 @@ h2 {
   gap: 16px;
 }
 
+.documents-print-area {
+  display: grid;
+  gap: 16px;
+}
+
+.documents-title-row {
+  margin-bottom: 0;
+}
+
 .documents-hero {
   display: grid;
   gap: 14px;
@@ -1789,6 +1827,10 @@ h2 {
     display: block !important;
   }
 
+  .workspace-main > .panel.documents-shell > .documents-print-area {
+    display: grid !important;
+  }
+
   html,
   body {
     background: #fff !important;
@@ -1809,6 +1851,7 @@ h2 {
   .printer-report-print-area > .panel-filters.report-filters,
   .printer-graph-print-area > .report-title-row,
   .printer-graph-print-area > .panel-filters.report-filters,
+  .documents-print-area > .report-title-row,
   .report-print-btn {
     display: none !important;
   }
@@ -1833,6 +1876,27 @@ h2 {
 
   .printer-graph-print-area {
     display: block !important;
+  }
+
+  .documents-print-area,
+  .documents-print-area .documents-grid,
+  .documents-print-area .documents-overview-grid,
+  .documents-print-area .documents-mini-stats {
+    grid-template-columns: 1fr !important;
+  }
+
+  .documents-print-area .documents-hero,
+  .documents-print-area .documents-card,
+  .documents-print-area .documents-subcard,
+  .documents-print-area .stat-card {
+    box-shadow: none !important;
+    background: #fff !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .documents-print-area .table-wrap {
+    overflow: visible !important;
   }
 
   .printer-graph-print-area .printer-trend-panel {
@@ -3767,6 +3831,14 @@ h2 {
 }
 
 .field-wide {
+  grid-column: 1 / -1;
+}
+
+.inventory-item-create-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-item-create-grid .field-wide {
   grid-column: 1 / -1;
 }
 
@@ -12289,6 +12361,19 @@ tr.row-maint-maintenance:hover td {
   padding-left: 22px;
 }
 
+.mobile-menu-subitem-group {
+  display: grid;
+  gap: 6px;
+}
+
+.mobile-menu-sublist-level-2 {
+  padding-left: 18px;
+}
+
+.mobile-menu-sublist-level-3 {
+  padding-left: 16px;
+}
+
 .mobile-menu-sub-btn {
   min-height: 36px;
   border: 1px solid #c8d8f1;
@@ -12300,6 +12385,18 @@ tr.row-maint-maintenance:hover td {
   font-weight: 700;
   text-align: left;
   padding: 0 10px;
+}
+
+.mobile-menu-sub-btn-parent {
+  font-weight: 800;
+}
+
+.mobile-menu-sublist-level-3 .mobile-menu-sub-btn {
+  min-height: 34px;
+  border-style: dashed;
+  background: #f7fbff;
+  font-size: 11px;
+  padding-left: 12px;
 }
 
 .mobile-menu-sub-btn-active {
@@ -12910,7 +13007,16 @@ tr.row-maint-maintenance:hover td {
     gap: 10px;
   }
 
+  .workspace-main .form-grid.inventory-item-create-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px;
+  }
+
   .workspace-main .inventory-item-grid .field-wide {
+    grid-column: 1 / -1 !important;
+  }
+
+  .workspace-main .inventory-item-create-grid .field-wide {
     grid-column: 1 / -1 !important;
   }
 

@@ -1131,59 +1131,105 @@ const APP_UPDATE_NOTES: Array<{ version: string; date: string; notes: string[] }
   },
 ];
 const SERVER_ONLY_STORAGE = true;
-const DOCUMENT_PHASE_ONE_SOURCES = [
+const DOCUMENT_APP_STRUCTURE = [
   {
-    title: "Maintenance Documents",
-    note: "Create and update maintenance reports, service summaries, and completion sheets automatically from maintenance records.",
-    sources: ["Maintenance Record", "Maintenance History", "Asset Detail"],
+    title: "Core Operations Modules",
+    note: "Daily work starts from Utilities, Rental Printer, Pool Maintenance, Work Orders, Schedule, Transfer, Maintenance, and Verification.",
+    items: ["Utilities", "Rental Printer", "Work Orders", "Schedule", "Maintenance", "Transfer", "Verification"],
   },
   {
-    title: "Inventory Documents",
-    note: "Generate stock issue forms, request forms, item-out logs, and monthly stock summaries without writing the same data twice.",
-    sources: ["Inventory Transactions", "Stock Balance", "Approval Routing"],
+    title: "Document Source Modules",
+    note: "The Documents module should collect data from the app so staff can print official forms without typing the same information again.",
+    items: ["Maintenance History", "Asset Detail", "Inventory Transactions", "Printer Counter Entry", "Transfer Records"],
   },
   {
-    title: "Rental Printer Documents",
-    note: "Turn printer setup, monthly counter entry, campus comparison, and graph reports into ready-to-submit documents.",
-    sources: ["Printer Setup", "Counter Entry", "Campus Comparison", "Monthly Graph"],
-  },
-  {
-    title: "Work Order Documents",
-    note: "Support request forms, job completion reports, and campus service evidence should come directly from work order records.",
-    sources: ["Work Orders", "Schedule", "Maintenance Actions"],
-  },
-  {
-    title: "Asset Support Documents",
-    note: "Prepare handover, transfer, receive, and asset support forms from the existing asset and transfer data.",
-    sources: ["Assets", "Transfer", "Custody / Assignment"],
+    title: "Report and Control Modules",
+    note: "Reports, dashboards, approvals, and admin support help leaders review status, compare campuses, and file evidence.",
+    items: ["Dashboard", "Reports", "Admin Support", "Approvals", "Template Library"],
   },
 ] as const;
 
 const DOCUMENT_USER_SUPPORT_ITEMS = [
-  "IT support request form",
-  "Asset handover / receive form",
-  "Maintenance request form",
-  "Inventory request form",
-  "Classroom support record",
-  "Work completion acknowledgement",
+  "How to log in and choose campus / language",
+  "How to open the correct module for daily work",
+  "How to create support, maintenance, transfer, or printer records",
+  "How to find past records and open the source again",
+  "How to print or export a document to PDF for submission",
+  "How to use this app during new staff orientation",
 ] as const;
 
 const DOCUMENT_ADMIN_SUPPORT_ITEMS = [
-  "Approval sheet and routing log",
-  "Official maintenance report",
-  "Inventory stock-out and monthly summary",
-  "Rental printer report and graph export",
-  "Transfer / disposal / inactive form",
-  "Audit-ready monthly administration report",
+  "Document control and official school format",
+  "Maintenance completion report follow-up",
+  "Inventory issue, receive, and monthly summary reports",
+  "Rental printer setup, counter, comparison, and graph reports",
+  "Transfer, handover, inactive, and disposal forms",
+  "Audit-ready PDF filing for admin orientation and review",
+] as const;
+
+const DOCUMENT_SETUP_GUIDE = [
+  "Log in with the correct role, then confirm Campus, Language, and Account at the top of the screen.",
+  "Open the working module first. Example: Rental Printer for counter work, Maintenance for service work, Transfer for handover work.",
+  "Enter the source data only once inside the correct module. The Documents area should reuse that same information.",
+  "Review the generated document, then choose Print and Save as PDF when you need an orientation handout or official file.",
+  "Keep the PDF together with the source record so staff can reopen, check, and reprint the same document later.",
+] as const;
+
+const DOCUMENT_REPORT_GUIDE = [
+  {
+    title: "How to find reports",
+    note: "Use the Reports module when you need filtered summaries, comparisons, graphs, and printable reporting pages.",
+    items: [
+      "Open Reports from the main menu.",
+      "Choose the report type you need.",
+      "Filter by campus, date, category, or status.",
+      "Review the live result before printing.",
+    ],
+  },
+  {
+    title: "How to print or export PDF",
+    note: "Every orientation document should be printable from the screen with the browser print dialog.",
+    items: [
+      "Click the Print / Export PDF button.",
+      "Choose the printer or select Save as PDF.",
+      "Check margins and page preview.",
+      "Save or print the final official copy.",
+    ],
+  },
+  {
+    title: "How to support staff orientation",
+    note: "Training documents should explain what the app has, what each section can do, and how staff can find and print reports quickly.",
+    items: [
+      "Overview of modules and responsibilities",
+      "Setup and login instructions",
+      "Record entry workflow",
+      "Report lookup and print workflow",
+    ],
+  },
 ] as const;
 
 const DOCUMENT_TEMPLATE_LIBRARY = [
-  { name: "User Support Request", owner: "User Support", status: "Phase 1", source: "Work Orders / Assets" },
+  { name: "Staff Orientation Overview", owner: "Documents", status: "Ready", source: "Document Center" },
+  { name: "Daily Setup Checklist", owner: "User Support", status: "Ready", source: "Document Center" },
   { name: "Maintenance Completion Report", owner: "Admin Support", status: "Live Auto", source: "Maintenance" },
-  { name: "Inventory Issue Form", owner: "Admin Support", status: "Phase 1", source: "Inventory" },
-  { name: "Printer Counter Report", owner: "Admin Support", status: "Live", source: "Rental Printer" },
-  { name: "Asset Transfer Sheet", owner: "Admin Support", status: "Phase 1", source: "Transfer / Assets" },
-  { name: "Verification Summary", owner: "Admin Support", status: "Phase 2", source: "Verification" },
+  { name: "Printer Counter and Comparison Report", owner: "Admin Support", status: "Live", source: "Rental Printer" },
+  { name: "Asset Transfer / Handover Form", owner: "Admin Support", status: "Phase 1", source: "Transfer / Assets" },
+  { name: "Monthly Admin Summary PDF", owner: "Admin Support", status: "Planned", source: "Reports / Documents" },
+] as const;
+
+const IMPORTED_C1_MAINT_NOTE_PREFIX = "Imported from Campus 1 maintenance tools report dated 2025-11-25.";
+const INVENTORY_BULK_TEMPLATE_HEADERS = [
+  "campus",
+  "category",
+  "item_code",
+  "item_name_km",
+  "item_name_en",
+  "unit",
+  "opening_qty",
+  "min_stock",
+  "location",
+  "vendor",
+  "notes",
 ] as const;
 
 const DEFAULT_VIEWER_MODULES: NavModule[] = [
@@ -1686,7 +1732,6 @@ const MAINTENANCE_COMPLETION_OPTIONS = [
   { value: "Not Yet", label: "Not Yet Done" },
 ];
 const MAX_MAINTENANCE_PHOTOS = 5;
-const MAX_MAINTENANCE_REPORT_FILE_SIZE = 15 * 1024 * 1024;
 const MAINTENANCE_TYPE_OPTIONS = [
   "Preventive",
   "Corrective",
@@ -1742,20 +1787,20 @@ const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
   CAB: ["Filing Cabinet", "Storage Cabinet", "Classroom Cabinet"],
 };
 const INVENTORY_MASTER_ITEMS = [
-  { key: "tissue", category: "SUPPLY", nameEn: "Tissue", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
-  { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", spec: "", unit: "pcs", aliases: ["hand tissue", "tissue", "ក្រដាសដៃ"] },
-  { key: "toilet_paper", category: "SUPPLY", nameEn: "Toilet Paper", spec: "", unit: "pcs", aliases: ["toilet paper", "paper roll"] },
-  { key: "hand_wash_15l", category: "SUPPLY", nameEn: "Washing Hand Shampoo", spec: "1.5L", unit: "pcs", aliases: ["hand wash", "shampoo", "soap"] },
-  { key: "alcohol_15l", category: "SUPPLY", nameEn: "Alcohol", spec: "1.5L", unit: "pcs", aliases: ["alcohol", "sanitizer"] },
-  { key: "floor_shampoo_15l", category: "SUPPLY", nameEn: "Floor Shampoo", spec: "1.5L", unit: "pcs", aliases: ["floor shampoo", "floor cleaner"] },
-  { key: "plastic_pack", category: "SUPPLY", nameEn: "Plastic", spec: "Pack (10 pcs)", unit: "unit", aliases: ["plastic", "plastic bag"] },
-  { key: "plastic_glove", category: "SUPPLY", nameEn: "Plastic Glove", spec: "Pack", unit: "unit", aliases: ["glove", "plastic glove"] },
-  { key: "mop", category: "CLEAN_TOOL", nameEn: "Mop", spec: "Head + Handle", unit: "set", aliases: ["mop", "ម៉ាប់"] },
-  { key: "broom", category: "CLEAN_TOOL", nameEn: "Broom", spec: "Soft", unit: "pcs", aliases: ["broom", "អំបោស"] },
-  { key: "vacuum", category: "CLEAN_TOOL", nameEn: "Vacuum Cleaner", spec: "Portable", unit: "unit", aliases: ["vacuum", "ម៉ាស៊ីនបូមធូលី"] },
-  { key: "drill", category: "MAINT_TOOL", nameEn: "Electric Drill", spec: "Portable", unit: "unit", aliases: ["drill", "ខួង"] },
-  { key: "multimeter", category: "MAINT_TOOL", nameEn: "Multimeter", spec: "Digital", unit: "unit", aliases: ["multimeter", "meter"] },
-  { key: "ladder", category: "MAINT_TOOL", nameEn: "Ladder", spec: "Foldable", unit: "pcs", aliases: ["ladder", "ជណ្ដើរ"] },
+  { key: "tissue", category: "SUPPLY", nameEn: "Tissue", nameKm: "ក្រដាស់ជូតមាត់", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
+  { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", nameKm: "ក្រដាស់ជូតដៃ", spec: "", unit: "pcs", aliases: ["hand tissue", "tissue", "ក្រដាសដៃ"] },
+  { key: "toilet_paper", category: "SUPPLY", nameEn: "Toilet Paper", nameKm: "ក្រដាស់បង្គន់", spec: "", unit: "pcs", aliases: ["toilet paper", "paper roll"] },
+  { key: "hand_wash_15l", category: "SUPPLY", nameEn: "Washing Hand Shampoo", nameKm: "សាប៊ូលាងដៃ", spec: "1.5L", unit: "pcs", aliases: ["hand wash", "shampoo", "soap"] },
+  { key: "alcohol_15l", category: "SUPPLY", nameEn: "Alcohol", nameKm: "អាល់កុល", spec: "1.5L", unit: "pcs", aliases: ["alcohol", "sanitizer"] },
+  { key: "floor_shampoo_15l", category: "SUPPLY", nameEn: "Floor Shampoo", nameKm: "សាប៊ូជូតឥដ្ឋ", spec: "1.5L", unit: "pcs", aliases: ["floor shampoo", "floor cleaner"] },
+  { key: "plastic_pack", category: "SUPPLY", nameEn: "Plastic", nameKm: "ថង់ប្លាស្ទិក", spec: "Pack (10 pcs)", unit: "unit", aliases: ["plastic", "plastic bag"] },
+  { key: "plastic_glove", category: "SUPPLY", nameEn: "Plastic Glove", nameKm: "ស្រោមដៃប្លាស្ទិក", spec: "Pack", unit: "unit", aliases: ["glove", "plastic glove"] },
+  { key: "mop", category: "CLEAN_TOOL", nameEn: "Mop", nameKm: "ម៉ាប់", spec: "Head + Handle", unit: "set", aliases: ["mop", "ម៉ាប់"] },
+  { key: "broom", category: "CLEAN_TOOL", nameEn: "Broom", nameKm: "អំបោស", spec: "Soft", unit: "pcs", aliases: ["broom", "អំបោស"] },
+  { key: "vacuum", category: "CLEAN_TOOL", nameEn: "Vacuum Cleaner", nameKm: "ម៉ាស៊ីនបូមធូលី", spec: "Portable", unit: "unit", aliases: ["vacuum", "ម៉ាស៊ីនបូមធូលី"] },
+  { key: "drill", category: "MAINT_TOOL", nameEn: "Electric Drill", nameKm: "ម៉ាស៊ីនខួង", spec: "Portable", unit: "unit", aliases: ["drill", "ខួង"] },
+  { key: "multimeter", category: "MAINT_TOOL", nameEn: "Multimeter", nameKm: "មាល់ទីមែត្រ", spec: "Digital", unit: "unit", aliases: ["multimeter", "meter"] },
+  { key: "ladder", category: "MAINT_TOOL", nameEn: "Ladder", nameKm: "ជណ្ដើរ", spec: "Foldable", unit: "pcs", aliases: ["ladder", "ជណ្ដើរ"] },
 ] as const;
 const CLEANING_SUPPLY_KEYWORDS = [
   "tissue",
@@ -3897,6 +3942,9 @@ function inventoryBusinessGroupThemeClass(value: InventoryBusinessGroup) {
   if (value === "MAINT_TOOL") return "inventory-theme-maint-tool";
   return "inventory-theme-toner";
 }
+function inventoryBusinessGroupHasDailyStockFlow(value: InventoryBusinessGroup) {
+  return value === "SUPPLY";
+}
 function tonerHistoryEntries(list: MaintenanceEntry[] | undefined) {
   return (Array.isArray(list) ? list : []).filter(
     (entry) =>
@@ -3955,16 +4003,58 @@ function inventoryAliasText(itemName: string) {
 const INVENTORY_KM_NAME_MAP: Record<string, string> = {
   tissue: "ក្រដាស់ជូតមាត់",
   "hand tissue": "ក្រដាស់ជូតដៃ",
-  "toilet paper": "ក្រដាស់កង",
+  "toilet paper": "ក្រដាស់បង្គន់",
   "washing hand shampoo": "សាប៊ូលាងដៃ",
   alcohol: "អាល់កុល",
   "floor shampoo": "សាប៊ូជូតឥដ្ឋ",
-  plastic: "ស្រោមដៃថង់",
-  "plastic glove": "ស្រោមដៃថង់",
+  plastic: "ថង់ប្លាស្ទិក",
+  "plastic glove": "ស្រោមដៃប្លាស្ទិក",
+  mop: "ម៉ាប់",
+  broom: "អំបោស",
+  "vacuum cleaner": "ម៉ាស៊ីនបូមធូលី",
+  "electric drill": "ម៉ាស៊ីនខួង",
+  multimeter: "មាល់ទីមែត្រ",
+  ladder: "ជណ្ដើរ",
+  "c1 report 01 - concrete trowel": "លេខ ១ - កៅវែកបេតុង",
+  "c1 report 02 - plywood board 20mm 1.22m x 200": "លេខ ២ - ក្តារបន្ទះ 20មម 1.22m x 200",
+  "c1 report 03 - plywood board 15mm 1.2m x 2.4m": "លេខ ៣ - ក្តារបន្ទះ 15មម 1.2m x 2.4m",
+  "c1 report 04 - mc board 15mm 122cm x 30cm": "លេខ ៤ - បន្ទះ MC 15មម 122cm x 30cm",
+  "c1 report 05 - white paint bucket (small)": "លេខ ៥ - ធុងថ្នាំពណ៌ស (តូច)",
+  "c1 report 06 - straight ladder": "លេខ ៦ - ជណ្ដើរត្រង់",
+  "c1 report 07 - ladder 2.5m": "លេខ ៧ - ជណ្ដើរ 2.5 ម៉ែត្រ",
+  "c1 report 08 - power strip / extension board": "លេខ ៨ - ព្រីបន្ថែម / ដុំភ្លើងបន្ត",
+  "c1 report 09 - pressure spray bottle": "លេខ ៩ - ដបបាញ់ទឹក",
+  "c1 report 10 - tool rack / storage basket": "លេខ ១០ - កន្ត្រកដាក់ឧបករណ៍",
+  "c1 report 11 - red plastic basket": "លេខ ១១ - កន្ត្រកប្លាស្ទិកក្រហម",
+  "c1 report 12 - door lock / handle set": "លេខ ១២ - សោទ្វារ / ដៃទ្វារ",
+  "c1 report 13 - screwdriver 8 inch": "លេខ ១៣ - ទួណឺវីស 8 អ៊ីញ",
+  "c1 report 14 - test pen / voltage tester": "លេខ ១៤ - តេស្តភ្លើង",
+  "c1 report 15 - ladder no.6": "លេខ ១៥ - ជណ្ដើរលេខ ៦",
+  "c1 report 16 - ladder no.7": "លេខ ១៦ - ជណ្ដើរលេខ ៧",
+  "c1 report 17 - broom / brush": "លេខ ១៧ - អំបោស / ជក់",
+  "c1 report 18 - dustpan set": "លេខ ១៨ - ប្រដាប់ចូកសំរាម",
+  "c1 report 19 - crowbar / pry bar": "លេខ ១៩ - ដែកជើងក្អែក",
+  "c1 report 20 - wrench no.8": "លេខ ២០ - សោរបារ លេខ ៨",
+  "c1 report 21 - putty knife / scraper": "លេខ ២១ - កាំបិតកោស",
+  "c1 report 22 - wrench no.16": "លេខ ២២ - សោរបារ លេខ ១៦",
+  "c1 report 23 - hoe / flat shovel": "លេខ ២៣ - ចប",
+  "c1 report 24 - cutter knife": "លេខ ២៤ - កាំបិតកាត់",
+  "c1 report 25 - tape measure 5m": "លេខ ២៥ - ម៉ែត្រវាស់ ៥ម",
+  "c1 report 26 - spirit level (large)": "លេខ ២៦ - ម៉ែត្រទឹក (ធំ)",
+  "c1 report 27 - spirit level (small)": "លេខ ២៧ - ម៉ែត្រទឹក (តូច)",
+  "c1 report 28 - adjustable wrench": "លេខ ២៨ - សោរអាចលៃតម្រូវ",
+  "c1 report 29 - hand tool (photo row 29)": "លេខ ២៩ - ឧបករណ៍ដៃ",
+  "c1 report 30 - screwdriver set": "លេខ ៣០ - សំណុំទួណឺវីស",
+  "c1 report 31 - wire stripper / crimping tool": "លេខ ៣១ - ដង្កាប់កាត់ខ្សែ / កៀបខ្សែ",
+  "c1 report 32 - electrical hand tool (photo row 32)": "លេខ ៣២ - ឧបករណ៍អគ្គិសនីដៃ",
+  "c1 report 33 - tool box": "លេខ ៣៣ - ប្រអប់ឧបករណ៍",
+  "c1 report 34 - pipe cutter": "លេខ ៣៤ - កន្ត្រៃកាត់បំពង់",
+  "c1 report 35 - combination pliers": "លេខ ៣៥ - ដង្កាប់",
+  "c1 report 36 - long nose pliers": "លេខ ៣៦ - ដង្កាប់មុខវែង",
 };
 function inventoryDisplayName(itemName: string, lang: Lang) {
   const raw = String(itemName || "").trim();
-  if (lang !== "km" || !raw) return raw;
+  if (!raw) return raw;
   const key = normalizeInventoryCompareText(raw);
   if (INVENTORY_KM_NAME_MAP[key]) return INVENTORY_KM_NAME_MAP[key];
   const base = normalizeInventoryCompareText(raw.replace(/\s*\([^)]*\)\s*$/, ""));
@@ -4046,6 +4136,14 @@ function normalizeInventoryCompareText(value: string) {
 }
 function inventoryMasterDisplayName(master: {
   nameEn: string;
+  nameKm?: string;
+  spec: string;
+}) {
+  const base = master.nameKm || master.nameEn;
+  return `${base}${master.spec ? ` (${master.spec})` : ""}`;
+}
+function inventoryMasterStorageName(master: {
+  nameEn: string;
   spec: string;
 }) {
   return `${master.nameEn}${master.spec ? ` (${master.spec})` : ""}`;
@@ -4061,7 +4159,7 @@ function inventoryItemMatchesMaster(
 ) {
   if (item.category !== master.category) return false;
   return (
-    normalizeInventoryCompareText(item.itemName) === normalizeInventoryCompareText(inventoryMasterDisplayName(master)) &&
+    normalizeInventoryCompareText(item.itemName) === normalizeInventoryCompareText(inventoryMasterStorageName(master)) &&
     normalizeInventoryCompareText(item.unit) === normalizeInventoryCompareText(master.unit)
   );
 }
@@ -4614,6 +4712,65 @@ async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function escapeCsvCell(value: string | number) {
+  const text = String(value ?? "");
+  if (!/[",\n]/.test(text)) return text;
+  return `"${text.replace(/"/g, "\"\"")}"`;
+}
+
+function downloadCsvFile(filename: string, lines: string[]) {
+  const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function parseCsvText(text: string) {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === "\"") {
+      if (inQuotes && next === "\"") {
+        currentCell += "\"";
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      currentRow.push(currentCell);
+      currentCell = "";
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      currentRow.push(currentCell);
+      if (currentRow.some((cell) => String(cell || "").trim() !== "")) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentCell = "";
+      continue;
+    }
+    currentCell += char;
+  }
+  currentRow.push(currentCell);
+  if (currentRow.some((cell) => String(cell || "").trim() !== "")) {
+    rows.push(currentRow);
+  }
+  return rows;
+}
+
 async function compressImageDataUrl(
   dataUrl: string,
   maxWidth = 1280,
@@ -4788,14 +4945,6 @@ function collectPhotoUsageKeys(out: Set<string>, input: unknown, seen = new Weak
       collectPhotoUsageKeys(out, value, seen);
     }
   }
-}
-
-async function fileToMaintenanceReportFile(file: File): Promise<MaintenanceReportFile> {
-  return {
-    url: await fileToDataUrl(file),
-    name: file.name || "maintenance-report",
-    mimeType: file.type || "",
-  };
 }
 
 function normalizeAssetPhotos(input: { photo?: string; photos?: string[] }) {
@@ -6559,11 +6708,13 @@ export default function App() {
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [, startTabTransition] = useTransition();
   const [expandedNavModule, setExpandedNavModule] = useState<NavModule | null>(null);
+  const [expandedNavSubKey, setExpandedNavSubKey] = useState<string | null>(null);
   type NavSubItem = {
     key: string;
     label: string;
     active: boolean;
     onSelect: () => void;
+    children?: NavSubItem[];
   };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
@@ -6758,6 +6909,19 @@ export default function App() {
     return isLocalHost && isMac;
   }, []);
   const canUsePrinterCounterOcr = true;
+  const openInventorySection = useCallback(
+    (
+      group: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL",
+      view: "dashboard" | "items" | "daily" | "stock" = "dashboard"
+    ) => {
+      startTabTransition(() => {
+        setInventoryDashboardGroup(group);
+        setInventoryView(view);
+        setTab("inventory");
+      });
+    },
+    []
+  );
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
@@ -6845,17 +7009,45 @@ export default function App() {
             CLEAN_TOOL: "ឧបករណ៍សម្អាត",
             MAINT_TOOL: "ឧបករណ៍ថែទាំ",
           };
-          return INVENTORY_OPERATIONAL_GROUP_ORDER.map((group) => ({
-            key: `inventory.group.${group}`,
-            label: lang === "km" ? inventoryNavLabelsKm[group as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL"] : inventoryBusinessGroupLabel(group),
-            active: inventoryDashboardGroup === group,
-            onSelect: () =>
-              startTabTransition(() => {
-                setInventoryDashboardGroup(group);
-                setInventoryView("dashboard");
-                setTab("inventory");
-              }),
-          }));
+          return INVENTORY_OPERATIONAL_GROUP_ORDER.map((group) => {
+            const hasDailyFlow = inventoryBusinessGroupHasDailyStockFlow(group);
+            return {
+              key: `inventory.group.${group}`,
+              label: lang === "km" ? inventoryNavLabelsKm[group as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL"] : inventoryBusinessGroupLabel(group),
+              active: tab === "inventory" && inventoryDashboardGroup === group,
+              onSelect: () => openInventorySection(group, "dashboard"),
+              children: [
+                {
+                  key: `inventory.group.${group}.dashboard`,
+                  label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
+                  active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "dashboard",
+                  onSelect: () => openInventorySection(group, "dashboard"),
+                },
+                {
+                  key: `inventory.group.${group}.items`,
+                  label: lang === "km" ? "រៀបចំមុខទំនិញ" : "Item Setup",
+                  active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "items",
+                  onSelect: () => openInventorySection(group, "items"),
+                },
+                ...(hasDailyFlow
+                  ? [
+                      {
+                        key: `inventory.group.${group}.daily`,
+                        label: lang === "km" ? "ចេញស្តុកប្រចាំថ្ងៃ" : "Daily Stock Out",
+                        active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "daily",
+                        onSelect: () => openInventorySection(group, "daily"),
+                      },
+                      {
+                        key: `inventory.group.${group}.stock`,
+                        label: lang === "km" ? "ស្តុកចូល/ចេញ" : "Stock In/Out",
+                        active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "stock",
+                        onSelect: () => openInventorySection(group, "stock"),
+                      },
+                    ]
+                  : []),
+              ],
+            };
+          });
         case "classroom":
           return [];
         case "documents":
@@ -7369,9 +7561,11 @@ export default function App() {
       canOpenAssetRegister,
       documentsView,
       inventoryView,
+      inventoryDashboardGroup,
       isAdmin,
       lang,
       maintenanceView,
+      openInventorySection,
       poolView,
       printerView,
       reportSection,
@@ -7385,6 +7579,67 @@ export default function App() {
       utilitiesView,
       verificationView,
     ]
+  );
+  const renderNavSubItems = useCallback(
+    (moduleId: NavModule, subItems: NavSubItem[], level = 1) =>
+      subItems.map((sub) => {
+        const hasChildren = Array.isArray(sub.children) && sub.children.length > 0;
+        const isExpanded = expandedNavSubKey === sub.key || sub.children?.some((child) => child.active);
+        return (
+          <div key={`main-nav-sub-${moduleId}-${sub.key}`} className={`main-nav-subitem-group main-nav-subitem-level-${level}`}>
+            <button
+              type="button"
+              className={`main-nav-sub-btn ${sub.active ? "main-nav-sub-btn-active" : ""} ${hasChildren ? "main-nav-sub-btn-parent" : ""}`}
+              onClick={() => {
+                if (hasChildren) {
+                  setExpandedNavSubKey((prev) => (prev === sub.key ? null : sub.key));
+                }
+                sub.onSelect();
+              }}
+            >
+              {sub.label}
+            </button>
+            {hasChildren && isExpanded ? (
+              <div className={`main-nav-sublist main-nav-sublist-level-${level + 1}`}>
+                {renderNavSubItems(moduleId, sub.children || [], level + 1)}
+              </div>
+            ) : null}
+          </div>
+        );
+      }),
+    [expandedNavSubKey]
+  );
+  const renderMobileNavSubItems = useCallback(
+    (moduleId: NavModule, subItems: NavSubItem[], level = 1) =>
+      subItems.map((sub) => {
+        const hasChildren = Array.isArray(sub.children) && sub.children.length > 0;
+        const isExpanded = expandedNavSubKey === sub.key || sub.children?.some((child) => child.active);
+        return (
+          <div key={`mobile-nav-sub-${moduleId}-${sub.key}`} className={`mobile-menu-subitem-group mobile-menu-subitem-level-${level}`}>
+            <button
+              type="button"
+              className={`mobile-menu-sub-btn ${sub.active ? "mobile-menu-sub-btn-active" : ""} ${hasChildren ? "mobile-menu-sub-btn-parent" : ""}`}
+              onClick={() => {
+                if (hasChildren) {
+                  setExpandedNavSubKey((prev) => (prev === sub.key ? null : sub.key));
+                } else {
+                  setMobileNotificationOpen(false);
+                  setMobileMenuOpen(false);
+                }
+                sub.onSelect();
+              }}
+            >
+              {sub.label}
+            </button>
+            {hasChildren && isExpanded ? (
+              <div className={`mobile-menu-sublist mobile-menu-sublist-level-${level + 1}`}>
+                {renderMobileNavSubItems(moduleId, sub.children || [], level + 1)}
+              </div>
+            ) : null}
+          </div>
+        );
+      }),
+    [expandedNavSubKey]
   );
   const handlePhoneLogoHome = useCallback(() => {
     setTab("dashboard");
@@ -8715,6 +8970,7 @@ export default function App() {
   const [editingInventoryItemId, setEditingInventoryItemId] = useState<number | null>(null);
   const [inventoryCodeManual, setInventoryCodeManual] = useState(false);
   const [inventoryItemFileKey, setInventoryItemFileKey] = useState(0);
+  const [inventoryBulkUploadFileKey, setInventoryBulkUploadFileKey] = useState(0);
   const [inventoryTxnForm, setInventoryTxnForm] = useState({
     itemId: "",
     date: toYmd(new Date()),
@@ -12731,6 +12987,14 @@ export default function App() {
       return { ...prev, category: inventoryDashboardGroup };
     });
   }, [inventoryDashboardGroup, editingInventoryItemId]);
+  useEffect(() => {
+    if (
+      !inventoryBusinessGroupHasDailyStockFlow(inventoryDashboardGroup) &&
+      (inventoryView === "daily" || inventoryView === "stock")
+    ) {
+      setInventoryView("dashboard");
+    }
+  }, [inventoryDashboardGroup, inventoryView]);
 
   useEffect(() => {
     if (!canOpenAssetRegister && assetsView === "register") {
@@ -17364,60 +17628,6 @@ export default function App() {
     }
   }
 
-  async function onMaintenanceRecordReportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_MAINTENANCE_REPORT_FILE_SIZE) {
-      alert("Maximum report file size is 15MB.");
-      e.target.value = "";
-      return;
-    }
-    try {
-      const reportFile = await fileToMaintenanceReportFile(file);
-      setMaintenanceRecordForm((f) => ({ ...f, reportFile }));
-    } catch {
-      alert("Failed to process maintenance report file.");
-    } finally {
-      e.target.value = "";
-    }
-  }
-
-  async function onMaintenanceEditReportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_MAINTENANCE_REPORT_FILE_SIZE) {
-      alert("Maximum report file size is 15MB.");
-      e.target.value = "";
-      return;
-    }
-    try {
-      const reportFile = await fileToMaintenanceReportFile(file);
-      setMaintenanceEditForm((f) => ({ ...f, reportFile }));
-    } catch {
-      alert("Failed to process maintenance report file.");
-    } finally {
-      e.target.value = "";
-    }
-  }
-
-  async function onTicketMaintenanceReportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > MAX_MAINTENANCE_REPORT_FILE_SIZE) {
-      alert("Maximum report file size is 15MB.");
-      e.target.value = "";
-      return;
-    }
-    try {
-      const reportFile = await fileToMaintenanceReportFile(file);
-      setTicketMaintenanceForm((f) => ({ ...f, reportFile }));
-    } catch {
-      alert("Failed to process maintenance report file.");
-    } finally {
-      e.target.value = "";
-    }
-  }
-
   async function updateTicketRow(ticket: Ticket, patch: Partial<Ticket>) {
     if (!requireAdminAction()) return;
     setBusy(true);
@@ -17750,6 +17960,191 @@ export default function App() {
     setInventoryItemFileKey((k) => k + 1);
     setBusy(false);
     setError("");
+  }
+
+  function downloadInventoryBulkTemplate() {
+    const templateCategory = inventoryItemForm.category;
+    const templateLines = [
+      INVENTORY_BULK_TEMPLATE_HEADERS.join(","),
+      [
+        inventoryItemForm.campus,
+        templateCategory,
+        "",
+        "",
+        "",
+        templateCategory === "SUPPLY" ? "bottle" : "pcs",
+        templateCategory === "SUPPLY" ? "0" : "1",
+        "0",
+        inventoryItemForm.location || inventoryLocations[0]?.name || "",
+        "",
+        "",
+      ]
+        .map(escapeCsvCell)
+        .join(","),
+    ];
+    downloadCsvFile(`inventory-template-${templateCategory.toLowerCase()}.csv`, templateLines);
+  }
+
+  function normalizeInventoryBulkCampus(value: string) {
+    const text = String(value || "").trim();
+    if (!text) return inventoryItemForm.campus;
+    const direct = CAMPUS_LIST.find((campus) => campus === text);
+    if (direct) return direct;
+    const codeMatch = CAMPUS_LIST.find((campus) => inventoryRecordCampusCode(campus) === text.toUpperCase());
+    if (codeMatch) return codeMatch;
+    return inventoryItemForm.campus;
+  }
+
+  function normalizeInventoryBulkCategory(value: string) {
+    const text = String(value || "").trim().toUpperCase();
+    if (!text) return inventoryItemForm.category;
+    if (text === "SUPPLY" || text === "CLEAN_TOOL" || text === "MAINT_TOOL") return text;
+    if (text === "CLEANING SUPPLIES") return "SUPPLY";
+    if (text === "CLEANING TOOLS") return "CLEAN_TOOL";
+    if (text === "MAINTENANCE TOOLS") return "MAINT_TOOL";
+    return inventoryItemForm.category;
+  }
+
+  async function clearImportedCampus1MaintenanceToolRows() {
+    if (!requireAdminAction()) return;
+    const importedRows = inventoryItems.filter(
+      (item) =>
+        item.category === "MAINT_TOOL" &&
+        inventoryRecordCampusCode(item.campus) === "C1" &&
+        String(item.notes || "").startsWith(IMPORTED_C1_MAINT_NOTE_PREFIX)
+    );
+    if (!importedRows.length) {
+      window.alert("No old imported Campus 1 maintenance-tool rows were found.");
+      return;
+    }
+    const blockedRows = importedRows.filter((item) => inventoryTxns.some((tx) => Number(tx.itemId) === Number(item.id)));
+    if (blockedRows.length) {
+      setError("Some imported rows already have transaction history, so they were not removed.");
+      return;
+    }
+    if (!window.confirm(`Delete ${importedRows.length} imported Campus 1 maintenance-tool rows?`)) return;
+    const removeIds = new Set(importedRows.map((item) => Number(item.id)));
+    const nextItems = inventoryItems.filter((item) => !removeIds.has(Number(item.id)));
+    setInventoryItems(nextItems);
+    await persistInventorySettings(nextItems, inventoryTxns);
+    appendUiAudit("DELETE", "inventory_item", "C1-MT-IMPORTED", `Removed ${importedRows.length} imported rows`);
+    window.alert(`Removed ${importedRows.length} imported Campus 1 maintenance-tool rows.`);
+  }
+
+  async function importInventoryItemsFromTemplateFile(file: File) {
+    if (!requireAdminAction()) return;
+    const rawText = await file.text();
+    const rows = parseCsvText(rawText);
+    if (rows.length < 2) {
+      setError("Template is empty. Add at least one item row before uploading.");
+      return;
+    }
+    const headerMap = rows[0].map((cell) => normalizeInventoryCompareText(cell));
+    const findIndex = (...aliases: string[]) =>
+      headerMap.findIndex((cell) => aliases.some((alias) => cell === normalizeInventoryCompareText(alias)));
+    const campusIndex = findIndex("campus");
+    const categoryIndex = findIndex("category", "group");
+    const itemCodeIndex = findIndex("item_code", "itemcode", "code");
+    const itemNameKmIndex = findIndex("item_name_km", "name_km", "khmer_name");
+    const itemNameEnIndex = findIndex("item_name_en", "name_en", "english_name");
+    const itemNameIndex = findIndex("item_name", "name");
+    const unitIndex = findIndex("unit");
+    const openingQtyIndex = findIndex("opening_qty", "opening", "openingqty");
+    const minStockIndex = findIndex("min_stock", "min", "minstock");
+    const locationIndex = findIndex("location");
+    const vendorIndex = findIndex("vendor");
+    const notesIndex = findIndex("notes", "note");
+    const defaultLocation =
+      String(inventoryItemForm.location || "").trim() || inventoryLocations[0]?.name || "Store";
+    let nextItems = [...inventoryItems];
+    let usedFallback = false;
+    let createdCount = 0;
+    let skippedCount = 0;
+    setBusy(true);
+    setError("");
+    try {
+      for (const rowCells of rows.slice(1)) {
+        const campus = normalizeInventoryBulkCampus(campusIndex >= 0 ? rowCells[campusIndex] || "" : "");
+        const category = normalizeInventoryBulkCategory(categoryIndex >= 0 ? rowCells[categoryIndex] || "" : "");
+        const itemName = String(
+          (itemNameKmIndex >= 0 ? rowCells[itemNameKmIndex] : "") ||
+          (itemNameIndex >= 0 ? rowCells[itemNameIndex] : "") ||
+          (itemNameEnIndex >= 0 ? rowCells[itemNameEnIndex] : "") ||
+          ""
+        ).trim();
+        if (!itemName) {
+          skippedCount += 1;
+          continue;
+        }
+        const unit = String((unitIndex >= 0 ? rowCells[unitIndex] : "") || "pcs").trim() || "pcs";
+        const location = String((locationIndex >= 0 ? rowCells[locationIndex] : "") || defaultLocation).trim() || defaultLocation;
+        const openingQty = Math.max(0, Number((openingQtyIndex >= 0 ? rowCells[openingQtyIndex] : "") || 0));
+        const minStock = Math.max(0, Number((minStockIndex >= 0 ? rowCells[minStockIndex] : "") || 0));
+        const vendor = String(vendorIndex >= 0 ? rowCells[vendorIndex] || "" : "").trim();
+        const notes = String(notesIndex >= 0 ? rowCells[notesIndex] || "" : "").trim();
+        const manualCode = String(itemCodeIndex >= 0 ? rowCells[itemCodeIndex] || "" : "").trim().toUpperCase();
+        const itemCode = manualCode || buildInventoryItemCode(nextItems, campus, category);
+        const duplicateCode = nextItems.some(
+          (item) =>
+            String(item.itemCode || "").trim().toUpperCase() === itemCode &&
+            inventoryRecordCampusCode(item.campus) === inventoryRecordCampusCode(campus)
+        );
+        if (duplicateCode) {
+          skippedCount += 1;
+          continue;
+        }
+        const newRow: InventoryItem = {
+          id: Date.now() + createdCount + 1,
+          campus,
+          category,
+          itemCode,
+          itemName,
+          unit,
+          openingQty: Math.round(openingQty),
+          minStock: Math.round(minStock),
+          location,
+          vendor,
+          notes,
+          photo: "",
+          created: new Date().toISOString(),
+        };
+        try {
+          const res = await requestJson<{ item: InventoryItem }>("/api/inventory/items", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: newRow.campus,
+              category: newRow.category,
+              itemCode: newRow.itemCode,
+              itemName: newRow.itemName,
+              unit: newRow.unit,
+              openingQty: newRow.openingQty,
+              minStock: newRow.minStock,
+              location: newRow.location,
+              vendor: newRow.vendor || "",
+              notes: newRow.notes || "",
+              photo: "",
+            }),
+          });
+          nextItems = [res.item, ...nextItems.filter((item) => item.id !== res.item.id)];
+        } catch (err) {
+          if (!isMissingRouteError(err)) throw err;
+          usedFallback = true;
+          nextItems = [newRow, ...nextItems];
+        }
+        createdCount += 1;
+      }
+      setInventoryItems(nextItems);
+      if (usedFallback) {
+        await persistInventorySettings(nextItems, inventoryTxns);
+      }
+      appendUiAudit("CREATE", "inventory_item", "CSV-UPLOAD", `${createdCount} inventory items uploaded`);
+      window.alert(`Uploaded ${createdCount} item(s).${skippedCount ? ` Skipped ${skippedCount} row(s).` : ""}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload inventory template.");
+    } finally {
+      setBusy(false);
+      setInventoryBulkUploadFileKey((key) => key + 1);
+    }
   }
 
   function startEditInventoryItem(row: InventoryItem) {
@@ -23407,15 +23802,6 @@ export default function App() {
     (maintenanceRecordForm.beforePhotos || []).length > 0 &&
     (maintenanceRecordForm.afterPhotos || []).length > 0
   ), [maintenanceRecordForm]);
-  const ticketMaintenanceAsset = useMemo(() => {
-    if (!ticketMaintenanceModal) return null;
-    if (ticketMaintenanceModal.assetDbId) {
-      const byId = assets.find((asset) => Number(asset.id) === Number(ticketMaintenanceModal.assetDbId));
-      if (byId) return byId;
-    }
-    const assetCode = String(ticketMaintenanceModal.assetId || "").trim();
-    return assetCode ? assets.find((asset) => String(asset.assetId || "").trim() === assetCode) || null : null;
-  }, [assets, ticketMaintenanceModal]);
   const detailAsset = useMemo(() => {
     if (assetDetailId == null) return null;
     return (
@@ -25565,87 +25951,6 @@ export default function App() {
     t.allCampuses,
     t.allCategories,
   ]);
-  const downloadMaintenanceReportTemplate = useCallback(
-    (input: {
-      asset?: Asset | null;
-      form: {
-        date?: string;
-        type?: string;
-        completion?: "Done" | "Not Yet" | string;
-        condition?: string;
-        note?: string;
-        cost?: string;
-        by?: string;
-      };
-      sourceTitle?: string;
-      requestTitle?: string;
-      requestSource?: string;
-    }) => {
-      const asset = input.asset || null;
-      const dateValue = String(input.form.date || toYmd(new Date())).trim();
-      const assetId = String(asset?.assetId || "-").trim() || "-";
-      const itemName = asset ? assetItemName(asset.category, asset.type, asset.pcType || "") : "-";
-      const campusName = asset ? campusLabel(asset.campus) : "-";
-      const locationName = String(asset?.location || "-").trim() || "-";
-      const categoryName = String(asset?.category || "-").trim() || "-";
-      const actorName = String(input.form.by || authUser?.displayName || authUser?.username || "").trim() || "-";
-      const lines = [
-        "Eco International School",
-        "Maintenance Report Template",
-        "",
-        "Use this template, update all fields below, then upload the final file back to Maintenance Report File.",
-        "Recommended final file format: PDF, DOCX, or TXT.",
-        "",
-        "Asset Information",
-        `Asset ID: ${assetId}`,
-        `Item: ${itemName}`,
-        `Category: ${categoryName}`,
-        `Campus: ${campusName}`,
-        `Location: ${locationName}`,
-        "",
-        "Maintenance Summary",
-        `Date: ${dateValue || "-"}`,
-        `Maintenance Type: ${String(input.form.type || "-").trim() || "-"}`,
-        `Work Status: ${maintenanceCompletionText((input.form.completion as "Done" | "Not Yet") || "Done")}`,
-        `Condition: ${String(input.form.condition || "-").trim() || "-"}`,
-        `Cost: ${String(input.form.cost || "-").trim() || "-"}`,
-        `By: ${actorName}`,
-        input.sourceTitle ? `Source: ${input.sourceTitle}` : "",
-        input.requestTitle ? `Work Order / Request: ${String(input.requestTitle || "").trim()}` : "",
-        input.requestSource ? `Request Source: ${String(input.requestSource || "").trim()}` : "",
-        "",
-        "Issue Found",
-        String(input.form.note || "").trim() || "Write problem description here...",
-        "",
-        "Root Cause / Finding",
-        "",
-        "Action Taken",
-        "",
-        "Parts / Materials Used",
-        "",
-        "Before Photo Reference",
-        "Attach the selected before photo(s) in the Before Photos field.",
-        "",
-        "After Photo Reference",
-        "Attach the selected after photo(s) in the After Photos field.",
-        "",
-        "Next Recommendation",
-        "",
-        `Generated On: ${formatDate(new Date().toISOString())}`,
-      ].filter(Boolean);
-      const blob = new Blob([`\uFEFF${lines.join("\n")}`], { type: "text/plain;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const safeAssetId = assetId === "-" ? "asset" : assetId.replace(/[^A-Za-z0-9_-]+/g, "-");
-      a.href = url;
-      a.download = `maintenance-report-template-${safeAssetId}-${dateValue || toYmd(new Date())}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    },
-    [assetItemName, authUser?.displayName, authUser?.username, campusLabel]
-  );
   const verificationSummaryRows = useMemo(() => {
     const year = Number(reportYear) || new Date().getFullYear();
     const range =
@@ -30106,8 +30411,14 @@ export default function App() {
                             if (navCollapsed && hasSubmenu) {
                               setNavCollapsed(false);
                               setExpandedNavModule(item.id);
+                              if (item.id === "inventory") {
+                                setExpandedNavSubKey(`inventory.group.${inventoryDashboardGroup}`);
+                              }
                             } else {
                               setExpandedNavModule((prev) => (hasSubmenu ? (prev === item.id ? null : item.id) : null));
+                              if (hasSubmenu && item.id === "inventory") {
+                                setExpandedNavSubKey(`inventory.group.${inventoryDashboardGroup}`);
+                              }
                             }
                             handleNavChange(item.id);
                           }}
@@ -30117,19 +30428,7 @@ export default function App() {
                         </button>
                         {showSubmenu ? (
                           <div className="main-nav-sublist">
-                            {subItems.map((sub) => (
-                              <button
-                                key={`main-nav-sub-${item.id}-${sub.key}`}
-                                type="button"
-                                className={`main-nav-sub-btn ${sub.active ? "main-nav-sub-btn-active" : ""}`}
-                                onClick={() => {
-                                  setExpandedNavModule(null);
-                                  sub.onSelect();
-                                }}
-                              >
-                                {sub.label}
-                              </button>
-                            ))}
+                            {renderNavSubItems(item.id, subItems)}
                           </div>
                         ) : null}
                       </div>
@@ -30180,6 +30479,9 @@ export default function App() {
                                 onClick={() => {
                                   if (hasSubmenu) {
                                     setExpandedNavModule((prev) => (prev === item.id ? null : item.id));
+                                    if (item.id === "inventory") {
+                                      setExpandedNavSubKey(`inventory.group.${inventoryDashboardGroup}`);
+                                    }
                                     return;
                                   }
                                   setExpandedNavModule(null);
@@ -30191,21 +30493,7 @@ export default function App() {
                               </button>
                               {showSubmenu ? (
                                 <div className="mobile-menu-sublist">
-                                  {subItems.map((sub) => (
-                                    <button
-                                      key={`mobile-sub-${item.id}-${sub.key}`}
-                                      type="button"
-                                      className={`mobile-menu-sub-btn ${sub.active ? "mobile-menu-sub-btn-active" : ""}`}
-                                      onClick={() => {
-                                        setMobileNotificationOpen(false);
-                                        setMobileMenuOpen(false);
-                                        setExpandedNavModule(null);
-                                        sub.onSelect();
-                                      }}
-                                    >
-                                      {sub.label}
-                                    </button>
-                                  ))}
+                                  {renderMobileNavSubItems(item.id, subItems)}
                                 </div>
                               ) : null}
                             </div>
@@ -34059,19 +34347,6 @@ export default function App() {
                             <p className="asset-detail-maint-soft-note">
                               <strong>{t.notes}:</strong> {h.note || h.condition || "-"}
                             </p>
-                            <div className="asset-detail-maint-soft-meta">
-                              <div>
-                                <strong>{lang === "km" ? "ឯកសារ" : "Report File"}:</strong>{" "}
-                                {renderMaintenanceReportFileLink(
-                                  normalizeMaintenanceReportFile({
-                                    url: h.reportFile || "",
-                                    name: h.reportFileName || "",
-                                    mimeType: h.reportFileType || "",
-                                  }),
-                                  `asset-detail-soft-report-${h.id}`
-                                )}
-                              </div>
-                            </div>
                             <div className="asset-detail-maint-soft-photo-row">
                               {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, undefined, {
                                 className: "maintenance-history-photo-groups-two-col",
@@ -34095,7 +34370,6 @@ export default function App() {
                             <th>Note</th>
                             <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
                             <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
-                            <th>{lang === "km" ? "ឯកសារ" : "Report File"}</th>
                             <th>Cost</th>
                             <th>By</th>
                           </tr>
@@ -34111,16 +34385,6 @@ export default function App() {
                                 <td data-label="Noted">{h.note}</td>
                                 <td data-label="Before">{renderMaintenancePhotoColumn(h, "before", `asset-detail-history-${h.id}`)}</td>
                                 <td data-label="After">{renderMaintenancePhotoColumn(h, "after", `asset-detail-history-${h.id}`)}</td>
-                                <td data-label="Report File">
-                                  {renderMaintenanceReportFileLink(
-                                    normalizeMaintenanceReportFile({
-                                      url: h.reportFile || "",
-                                      name: h.reportFileName || "",
-                                      mimeType: h.reportFileType || "",
-                                    }),
-                                    `asset-detail-history-report-${h.id}`
-                                  )}
-                                </td>
                                 <td data-label="Cost">{h.cost || "-"}</td>
                                 <td data-label="By">{h.by || "-"}</td>
                               </tr>
@@ -35393,42 +35657,6 @@ export default function App() {
                         </div>
                       ) : null}
                     </label>
-                    <label className="field field-wide">
-                      <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
-                      <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                        <button
-                          type="button"
-                          className="tab btn-small"
-                          onClick={() =>
-                            downloadMaintenanceReportTemplate({
-                              asset: quickRecordAsset,
-                              form: maintenanceRecordForm,
-                              sourceTitle: "Quick Maintenance Record",
-                            })
-                          }
-                        >
-                          {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
-                        </button>
-                        <span className="tiny">
-                          {lang === "km"
-                            ? "ទាញយកទម្រង់នេះ កែប្រែព័ត៌មាន ហើយអាប់ឡូដឯកសារចុងក្រោយវិញ។"
-                            : "Download this template, update the content, then upload the final file back here."}
-                        </span>
-                      </div>
-                      <input
-                        key={`${maintenanceRecordFileKey}-quick-report`}
-                        className="file-input"
-                        type="file"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
-                        onChange={(e) => void onMaintenanceRecordReportFile(e)}
-                      />
-                      <div className="tiny">Upload service report, invoice, or technician sheet.</div>
-                      {maintenanceRecordForm.reportFile
-                        ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-quick-report", true, () =>
-                            setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
-                          )
-                        : null}
-                    </label>
                   </div>
                   <div className="asset-actions">
                     <div className="tiny">Save maintenance directly from the asset list with a simple problem-cause-action flow and photo proof.</div>
@@ -36040,42 +36268,6 @@ export default function App() {
                     </div>
                   ) : null}
                 </label>
-                <label className="field field-wide">
-                  <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
-                  <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                    <button
-                      type="button"
-                      className="tab btn-small"
-                      onClick={() =>
-                        downloadMaintenanceReportTemplate({
-                          asset: ticketMaintenanceAsset,
-                          form: ticketMaintenanceForm,
-                          sourceTitle: "Complete Work Order",
-                          requestTitle: ticketMaintenanceModal?.title || "",
-                          requestSource: formatTicketRequestSource(ticketMaintenanceModal?.requestSource),
-                        })
-                      }
-                    >
-                      {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
-                    </button>
-                    <span className="tiny">
-                      {lang === "km"
-                        ? "ប្រើទម្រង់នេះ ដើម្បីបំពេញរបាយការណ៍ឲ្យស្របតាមស្តង់ដារប្រព័ន្ធ។"
-                        : "Use this template so the uploaded maintenance report matches the system structure."}
-                    </span>
-                  </div>
-                  <input
-                    key={`${ticketMaintenanceFileKey}-report`}
-                    type="file"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
-                    onChange={(e) => void onTicketMaintenanceReportFile(e)}
-                  />
-                  {ticketMaintenanceForm.reportFile
-                    ? renderMaintenanceReportFileLink(ticketMaintenanceForm.reportFile, "ticket-maintenance-report", true, () =>
-                        setTicketMaintenanceForm((f) => ({ ...f, reportFile: null }))
-                      )
-                    : <div className="tiny">Optional: attach vendor report, invoice, or service sheet.</div>}
-                </label>
               </div>
               <div className="asset-actions">
                 <button className="btn-primary" disabled={busy} onClick={() => void completeTicketWithMaintenance()}>
@@ -36390,21 +36582,13 @@ export default function App() {
                     />
                   </div>
                 </div>
-                <div className="tabs">
-                  <button className={`tab ${inventoryView === "dashboard" ? "tab-active" : ""}`} onClick={() => setInventoryView("dashboard")}>Dashboard</button>
-                  <button className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>Item Setup</button>
-                  <button className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
-                    {lang === "km" ? "កត់ត្រាចេញស្តុកប្រចាំថ្ងៃ" : "Daily Stock Out"}
-                  </button>
-                  <button className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>Stock In/Out</button>
-                </div>
               </section>
             ) : null}
 
             {!maintenanceQuickMode && inventoryView === "items" && (
               <section className="panel">
                 <h2>Create Inventory Item</h2>
-                <div className="form-grid">
+                <div className="form-grid inventory-item-create-grid">
                   <label className="field">
                     <span>Campus</span>
                     <select className="input" value={inventoryItemForm.campus} onChange={(e) => setInventoryItemForm((f) => ({ ...f, campus: e.target.value }))}>
@@ -36425,7 +36609,7 @@ export default function App() {
                       ))}
                     </select>
                   </label>
-                  <label className="field field-wide">
+                  <label className="field">
                     <span>Item Master</span>
                     <select
                       className="input"
@@ -36435,7 +36619,7 @@ export default function App() {
                       <option value="">Select item master</option>
                       {inventoryMasterOptions.map((item) => (
                         <option key={`inv-master-${item.key}`} value={item.key}>
-                          {item.nameEn}{item.spec ? ` (${item.spec})` : ""} - {item.unit}
+                          {inventoryMasterDisplayName(item)} - {item.unit}
                         </option>
                       ))}
                     </select>
@@ -36474,7 +36658,7 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Item Name</span>
-                    <input className="input" value={inventoryItemForm.itemName} readOnly />
+                    <input className="input" value={inventoryDisplayName(inventoryItemForm.itemName, lang)} readOnly />
                   </label>
                   <label className="field">
                     <span>Unit</span>
@@ -36524,6 +36708,23 @@ export default function App() {
                 <div className="asset-actions">
                   <div className="tiny">Add consumable supplies and tools for cleaning/maintenance operation.</div>
                   <div style={{ display: "flex", gap: 8 }}>
+                    {editingInventoryItemId === null ? (
+                      <button className="tab" disabled={!isAdmin || busy} onClick={downloadInventoryBulkTemplate} type="button">
+                        Download CSV Template
+                      </button>
+                    ) : null}
+                    {editingInventoryItemId === null &&
+                    inventoryItemForm.category === "MAINT_TOOL" &&
+                    inventoryRecordCampusCode(inventoryItemForm.campus) === "C1" ? (
+                      <button
+                        className="tab"
+                        disabled={!isAdmin || busy}
+                        onClick={clearImportedCampus1MaintenanceToolRows}
+                        type="button"
+                      >
+                        Clear Imported C1 Rows
+                      </button>
+                    ) : null}
                     {editingInventoryItemId !== null ? (
                       <button className="tab" disabled={!isAdmin || busy} onClick={cancelInventoryItemEdit}>Cancel</button>
                     ) : null}
@@ -36536,6 +36737,30 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+                {editingInventoryItemId === null ? (
+                  <div className="panel-note" style={{ marginTop: 10 }}>
+                    Download the Excel-ready CSV template, fill it with Khmer or English item names, then upload it here for bulk creation.
+                  </div>
+                ) : null}
+                {editingInventoryItemId === null ? (
+                  <label className="field field-wide" style={{ marginTop: 12 }}>
+                    <span>Upload Filled CSV Template</span>
+                    <input
+                      key={`inventory-bulk-upload-${inventoryBulkUploadFileKey}`}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="input"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        void importInventoryItemsFromTemplateFile(file);
+                      }}
+                    />
+                    <small className="tiny">
+                      Required columns: {INVENTORY_BULK_TEMPLATE_HEADERS.join(", ")}. If `item_code` is blank, the app will auto-generate it.
+                    </small>
+                  </label>
+                ) : null}
 
                 <div className="panel-filters inventory-item-filter-bar" style={{ marginTop: 12 }}>
                   <label className="field">
@@ -36704,6 +36929,7 @@ export default function App() {
                   </table>
                 </div>
 
+                {inventoryDashboardGroup !== "MAINT_TOOL" && inventoryItemForm.category !== "MAINT_TOOL" ? (
                 <article className="panel" style={{ marginTop: 12 }}>
                   <div className="panel-row">
                     <h3 className="section-title">Printer Toner Stock Setup</h3>
@@ -36799,7 +37025,9 @@ export default function App() {
                     </table>
                   </div>
                 </article>
+                ) : null}
 
+                {inventoryDashboardGroup !== "MAINT_TOOL" && inventoryItemForm.category !== "MAINT_TOOL" ? (
                 <article className="panel" style={{ marginTop: 12 }}>
                   <div className="panel-row">
                     <h3 className="section-title">Toner Purchase Records</h3>
@@ -36888,10 +37116,11 @@ export default function App() {
                     </table>
                   </div>
                 </article>
+                ) : null}
               </section>
             )}
 
-            {!maintenanceQuickMode && inventoryView === "stock" && (
+            {!maintenanceQuickMode && inventoryBusinessGroupHasDailyStockFlow(inventoryDashboardGroup) && inventoryView === "stock" && (
               <section className="panel">
                 <div className="panel-head panel-head-compact">
                   <h2>Stock In / Out</h2>
@@ -37423,7 +37652,7 @@ export default function App() {
               </section>
             )}
 
-            {(inventoryView === "daily" || inventoryView === "dashboard") && (
+            {((inventoryBusinessGroupHasDailyStockFlow(inventoryDashboardGroup) && inventoryView === "daily") || inventoryView === "dashboard") && (
               <section
                 className={`panel inventory-daily-panel ${inventoryView === "dashboard" ? "inventory-dashboard-panel" : ""} ${maintenanceQuickMode ? "inventory-daily-panel-quick" : ""} ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}
               >
@@ -41543,43 +41772,6 @@ export default function App() {
                         onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
                       />
                     </label>
-                    {!isPhoneView ? (
-                      <label className="field field-wide">
-                        <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
-                        <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                          <button
-                            type="button"
-                            className="tab btn-small"
-                            onClick={() =>
-                              downloadMaintenanceReportTemplate({
-                                asset: maintenanceRecordSelectedAsset,
-                                form: maintenanceRecordForm,
-                                sourceTitle: "Maintenance Record",
-                              })
-                            }
-                          >
-                            {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
-                          </button>
-                          <span className="tiny">
-                            {lang === "km"
-                              ? "បើចង់ អាចភ្ជាប់ឯកសាររបាយការណ៍បន្ថែមបាន។"
-                              : "Attach a report file only if you need extra documentation."}
-                          </span>
-                        </div>
-                        <input
-                          key={`${maintenanceRecordFileKey}-report`}
-                          className="file-input"
-                          type="file"
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
-                          onChange={(e) => void onMaintenanceRecordReportFile(e)}
-                        />
-                        {maintenanceRecordForm.reportFile
-                          ? renderMaintenanceReportFileLink(maintenanceRecordForm.reportFile, "maintenance-record-report", true, () =>
-                              setMaintenanceRecordForm((f) => ({ ...f, reportFile: null }))
-                            )
-                          : null}
-                      </label>
-                    ) : null}
                   </div>
                 </details>
               </div>
@@ -42038,43 +42230,6 @@ export default function App() {
                           )}
                         </div>
                       </label>
-                      <label className="field field-wide">
-                        <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
-                        <div className="row-actions" style={{ marginTop: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                          <button
-                            type="button"
-                            className="tab btn-small"
-                            onClick={() =>
-                              downloadMaintenanceReportTemplate({
-                                asset: maintenanceDetailAsset,
-                                form: maintenanceEditForm,
-                                sourceTitle: "Edit Maintenance Record",
-                              })
-                            }
-                          >
-                            {lang === "km" ? "ទាញយកទម្រង់" : "Download Template"}
-                          </button>
-                          <span className="tiny">
-                            {lang === "km"
-                              ? "ទាញយកទម្រង់ កែប្រែឯកសារ ហើយអាប់ឡូដត្រឡប់មកវិញ។"
-                              : "Download the template, update the document, then upload the final version here."}
-                          </span>
-                        </div>
-                        <input
-                          key={`${maintenanceEditFileKey}-${maintenanceEditingEntry.id}-report`}
-                          className="file-input"
-                          type="file"
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*"
-                          onChange={(e) => void onMaintenanceEditReportFile(e)}
-                        />
-                        <div style={{ marginTop: 8 }}>
-                          {maintenanceEditForm.reportFile
-                            ? renderMaintenanceReportFileLink(maintenanceEditForm.reportFile, `maintenance-edit-report-${maintenanceEditingEntry.id}`, true, () =>
-                                setMaintenanceEditForm((f) => ({ ...f, reportFile: null }))
-                              )
-                            : <span className="photo-empty">No file</span>}
-                        </div>
-                      </label>
                     </div>
                     <div className="asset-actions" style={{ justifyContent: "flex-end", marginTop: 14 }}>
                       <button className="tab" type="button" onClick={cancelMaintenanceEntryEdit}>
@@ -42101,7 +42256,6 @@ export default function App() {
                         <th>Note</th>
                         <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
                         <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
-                        <th>{lang === "km" ? "ឯកសារ" : "Report File"}</th>
                         <th>Cost</th>
                         <th>By</th>
                         <th>{t.edit}</th>
@@ -42131,16 +42285,6 @@ export default function App() {
                             </td>
                             <td>{renderMaintenancePhotoColumn(entry, "before", `maintenance-detail-${entry.id}`)}</td>
                             <td>{renderMaintenancePhotoColumn(entry, "after", `maintenance-detail-${entry.id}`)}</td>
-                            <td>
-                              {renderMaintenanceReportFileLink(
-                                normalizeMaintenanceReportFile({
-                                  url: entry.reportFile || "",
-                                  name: entry.reportFileName || "",
-                                  mimeType: entry.reportFileType || "",
-                                }),
-                                `maintenance-detail-report-${entry.id}`
-                              )}
-                            </td>
                             <td>{entry.cost || "-"}</td>
                             <td>{entry.by || "-"}</td>
                             <td>
@@ -42157,7 +42301,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={10}>No maintenance records yet.</td>
+                          <td colSpan={11}>No maintenance records yet.</td>
                         </tr>
                       )}
                     </tbody>
@@ -43588,379 +43732,424 @@ export default function App() {
 
         {tab === "documents" && (
           <section className="panel documents-shell">
-            <div className="documents-hero">
-              <div className="documents-hero-copy">
-                <div className="printer-report-kicker">Eco International School</div>
-                <h2>Document Center</h2>
-                <p>
-                  Build official school documents automatically from the records you already create in this web application.
-                  The goal is one data entry, then ready-to-submit forms, reports, approvals, and archives.
-                </p>
+            <div className="documents-print-area">
+              <div className="report-title-row documents-title-row">
+                <h2>{documentsView === "overview" ? "Document Center Orientation Guide" : "Document Center"}</h2>
+                <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
+                  <Printer size={16} aria-hidden={true} />
+                  <span>Print / Export PDF</span>
+                </button>
               </div>
-              <div className="documents-pill-row">
-                <div className="documents-pill">Phase 1 Ready Structure</div>
-                <div className="documents-pill">User Support + Admin Support</div>
-                <div className="documents-pill">Auto Generate From Existing Modules</div>
-              </div>
-            </div>
 
-            {documentsView === "overview" && (
-              <>
-                <div className="stats-grid documents-stats-grid">
-                  <article className="stat-card">
-                    <div className="stat-label">Support Sections</div>
-                    <div className="stat-value">2</div>
-                    <div className="tiny">User Support and Admin Support</div>
-                  </article>
-                  <article className="stat-card">
-                    <div className="stat-label">Live Maintenance Docs</div>
-                    <div className="stat-value">{maintenanceDocumentSummary.total}</div>
-                    <div className="tiny">Auto generated from maintenance history</div>
-                  </article>
-                  <article className="stat-card">
-                    <div className="stat-label">Ready To Submit</div>
-                    <div className="stat-value">{maintenanceDocumentSummary.ready}</div>
-                    <div className="tiny">Completed records without attached report file</div>
-                  </article>
-                  <article className="stat-card">
-                    <div className="stat-label">Filed Documents</div>
-                    <div className="stat-value">{maintenanceDocumentSummary.filed}</div>
-                    <div className="tiny">Maintenance records already carrying a report file</div>
-                  </article>
-                </div>
-
-                <div className="documents-grid documents-overview-grid">
-                  <article className="documents-card">
-                    <h3>User Support</h3>
-                    <p>Documents made for daily requests, handover, support evidence, and completion records.</p>
-                    <ul className="documents-list">
-                      {DOCUMENT_USER_SUPPORT_ITEMS.map((item) => (
-                        <li key={`document-user-item-${item}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </article>
-                  <article className="documents-card">
-                    <h3>Admin Support</h3>
-                    <p>Documents used for review, official reporting, approvals, and management control.</p>
-                    <ul className="documents-list">
-                      {DOCUMENT_ADMIN_SUPPORT_ITEMS.map((item) => (
-                        <li key={`document-admin-item-${item}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </article>
-                </div>
-
-                <section className="documents-card">
-                  <div className="documents-section-head">
-                    <h3>Phase 1 Auto Document Sources</h3>
-                    <span className="documents-section-badge">Build from current app structure</span>
-                  </div>
-                  <div className="documents-grid">
-                    {DOCUMENT_PHASE_ONE_SOURCES.map((source) => (
-                      <article key={source.title} className="documents-subcard">
-                        <h4>{source.title}</h4>
-                        <p>{source.note}</p>
-                        <div className="documents-tag-row">
-                          {source.sources.map((item) => (
-                            <span key={`${source.title}-${item}`} className="documents-tag">{item}</span>
-                          ))}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="documents-card">
-                  <div className="documents-section-head">
-                    <h3>Live Maintenance Documents</h3>
-                    <span className="documents-section-badge">Updates automatically from Maintenance History</span>
-                  </div>
-                  <p className="documents-source-note">
-                    Every create or update inside the Maintenance module now appears here as a live document record. No second data entry is needed.
-                  </p>
-                  <div className="documents-mini-stats">
-                    <article className="stat-card mini">
-                      <div className="stat-label">Draft</div>
-                      <div className="stat-value">{maintenanceDocumentSummary.draft}</div>
-                      <div className="tiny">Still waiting for completion</div>
-                    </article>
-                    <article className="stat-card mini">
-                      <div className="stat-label">Ready</div>
-                      <div className="stat-value">{maintenanceDocumentSummary.ready}</div>
-                      <div className="tiny">Can be submitted now</div>
-                    </article>
-                    <article className="stat-card mini">
-                      <div className="stat-label">Filed</div>
-                      <div className="stat-value">{maintenanceDocumentSummary.filed}</div>
-                      <div className="tiny">Report file already attached</div>
-                    </article>
-                  </div>
-                  {latestMaintenanceDocumentRows.length ? (
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Document No</th>
-                            <th>Title</th>
-                            <th>Date</th>
-                            <th>Asset</th>
-                            <th>Campus</th>
-                            <th>Status</th>
-                            <th>File</th>
-                            <th>Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {latestMaintenanceDocumentRows.map((row) => (
-                            <tr key={`documents-overview-maintenance-${row.rowId}`}>
-                              <td><strong>{row.documentNo}</strong></td>
-                              <td>{row.documentTitle}</td>
-                              <td>{row.formattedDate}</td>
-                              <td>
-                                <strong>{row.assetId}</strong>
-                                <div className="tiny">{row.itemName}</div>
-                              </td>
-                              <td>{row.campusName}</td>
-                              <td>
-                                <span className={`documents-status-badge documents-status-${row.documentState.toLowerCase()}`}>
-                                  {row.documentState}
-                                </span>
-                              </td>
-                              <td>{renderMaintenanceReportFileLink(row.reportFile, `documents-overview-file-${row.rowId}`)}</td>
-                              <td>
-                                <div className="row-actions">
-                                  <button
-                                    className="tab btn-small"
-                                    type="button"
-                                    onClick={() => {
-                                      setTab("maintenance");
-                                      setMaintenanceView("history");
-                                      setMaintenanceDetailAssetId(row.assetDbId);
-                                      cancelMaintenanceEntryEdit();
-                                    }}
-                                  >
-                                    Open Source
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="panel-note">No maintenance documents have been generated yet.</div>
-                  )}
-                </section>
-              </>
-            )}
-
-            {documentsView === "user" && (
-              <div className="documents-grid">
-                <article className="documents-card">
-                  <h3>User Support Scope</h3>
+              <div className="documents-hero">
+                <div className="documents-hero-copy">
+                  <div className="printer-report-kicker">Eco International School</div>
+                  <h2>Document Center</h2>
                   <p>
-                    This section should generate clean forms from the same user actions already recorded in the system,
-                    so staff do not need to write separate Word files by hand.
+                    This page is now a simple orientation guide for staff and users. It explains what this web application
+                    has, what each section can do, how to set it up, and how to find, print, or export reports to PDF.
                   </p>
-                  <ul className="documents-list">
-                    {DOCUMENT_USER_SUPPORT_ITEMS.map((item) => (
-                      <li key={`document-user-support-${item}`}>{item}</li>
-                    ))}
-                  </ul>
-                </article>
-                <article className="documents-card">
-                  <h3>User Support Workflow</h3>
-                  <div className="documents-flow">
-                    <div className="documents-flow-step"><strong>1.</strong><span>User creates request or transaction in the app.</span></div>
-                    <div className="documents-flow-step"><strong>2.</strong><span>System fills campus, date, requester, asset, or item automatically.</span></div>
-                    <div className="documents-flow-step"><strong>3.</strong><span>Document becomes printable, exportable, and linked back to the record.</span></div>
-                  </div>
-                </article>
-              </div>
-            )}
-
-            {documentsView === "admin" && (
-              <>
-                <div className="documents-grid">
-                  <article className="documents-card">
-                    <h3>Admin Support Scope</h3>
-                    <p>Use this section for official management documents, submission reports, approvals, and audit-ready records.</p>
-                    <ul className="documents-list">
-                      {DOCUMENT_ADMIN_SUPPORT_ITEMS.map((item) => (
-                        <li key={`document-admin-support-${item}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </article>
-                  <article className="documents-card">
-                    <h3>Currently Live</h3>
-                    <p>
-                      Maintenance is the first real auto-generated source. When a maintenance record is added or edited,
-                      the document entry below updates automatically.
-                    </p>
-                    <div className="documents-flow">
-                      <div className="documents-flow-step"><strong>Live Now</strong><span>Maintenance Completion Report / Service Update</span></div>
-                      <div className="documents-flow-step"><strong>Next</strong><span>Inventory Issue Form and Rental Printer documents</span></div>
-                      <div className="documents-flow-step"><strong>Control</strong><span>Admin can open source records and Super Admin can finalize official files.</span></div>
-                    </div>
-                  </article>
                 </div>
+                <div className="documents-pill-row">
+                  <div className="documents-pill">Orientation Ready</div>
+                  <div className="documents-pill">Printable for Staff / User Training</div>
+                  <div className="documents-pill">Browser Print + Save as PDF</div>
+                </div>
+              </div>
 
-                <section className="documents-card">
-                  <div className="documents-section-head">
-                    <h3>Auto Generated Maintenance Documents</h3>
-                    <span className="documents-section-badge">Live from the Maintenance module</span>
+              {documentsView === "overview" && (
+                <>
+                  <div className="stats-grid documents-stats-grid">
+                    <article className="stat-card">
+                      <div className="stat-label">Guide Sections</div>
+                      <div className="stat-value">4</div>
+                      <div className="tiny">Overview, setup, report, print</div>
+                    </article>
+                    <article className="stat-card">
+                      <div className="stat-label">Live Maintenance Docs</div>
+                      <div className="stat-value">{maintenanceDocumentSummary.total}</div>
+                      <div className="tiny">Auto generated from maintenance history</div>
+                    </article>
+                    <article className="stat-card">
+                      <div className="stat-label">Ready To Submit</div>
+                      <div className="stat-value">{maintenanceDocumentSummary.ready}</div>
+                      <div className="tiny">Completed records without attached report file</div>
+                    </article>
+                    <article className="stat-card">
+                      <div className="stat-label">Filed Documents</div>
+                      <div className="stat-value">{maintenanceDocumentSummary.filed}</div>
+                      <div className="tiny">Maintenance records already carrying a report file</div>
+                    </article>
                   </div>
-                  {maintenanceDocumentRows.length ? (
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Document No</th>
-                            <th>Title</th>
-                            <th>Date</th>
-                            <th>Asset / Item</th>
-                            <th>Campus</th>
-                            <th>Status</th>
-                            <th>Operator</th>
-                            <th>File</th>
-                            <th>Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {maintenanceDocumentRows.map((row) => (
-                            <tr key={`documents-admin-maintenance-${row.rowId}`}>
-                              <td><strong>{row.documentNo}</strong></td>
-                              <td>
-                                <div>{row.documentTitle}</div>
-                                <div className="tiny">{row.type || "-"}</div>
-                              </td>
-                              <td>{row.formattedDate}</td>
-                              <td>
-                                <strong>{row.assetId}</strong>
-                                <div className="tiny">{row.itemName}</div>
-                                <div className="tiny">{row.location || "-"}</div>
-                              </td>
-                              <td>{row.campusName}</td>
-                              <td>
-                                <span className={`documents-status-badge documents-status-${row.documentState.toLowerCase()}`}>
-                                  {row.documentState}
-                                </span>
-                              </td>
-                              <td>{row.by || "-"}</td>
-                              <td>{renderMaintenanceReportFileLink(row.reportFile, `documents-admin-file-${row.rowId}`)}</td>
-                              <td>
-                                <div className="row-actions">
-                                  <button
-                                    className="tab btn-small"
-                                    type="button"
-                                    onClick={() => {
-                                      setTab("maintenance");
-                                      setMaintenanceView("history");
-                                      setMaintenanceDetailAssetId(row.assetDbId);
-                                      cancelMaintenanceEntryEdit();
-                                    }}
-                                  >
-                                    Open Source
-                                  </button>
-                                  {isAdmin ? (
+
+                  <div className="documents-grid documents-overview-grid">
+                    <article className="documents-card">
+                      <h3>What this web application has</h3>
+                      <p>Use this as the first page during orientation so staff understand the main structure before they start working.</p>
+                      <ul className="documents-list">
+                        {DOCUMENT_USER_SUPPORT_ITEMS.map((item) => (
+                          <li key={`document-user-item-${item}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </article>
+                    <article className="documents-card">
+                      <h3>What this web application can do</h3>
+                      <p>The system should help both users and admins work from one source, then print or export official documents when needed.</p>
+                      <ul className="documents-list">
+                        {DOCUMENT_ADMIN_SUPPORT_ITEMS.map((item) => (
+                          <li key={`document-admin-item-${item}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </article>
+                  </div>
+
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Web Application Structure</h3>
+                      <span className="documents-section-badge">What is inside this system</span>
+                    </div>
+                    <div className="documents-grid">
+                      {DOCUMENT_APP_STRUCTURE.map((section) => (
+                        <article key={section.title} className="documents-subcard">
+                          <h4>{section.title}</h4>
+                          <p>{section.note}</p>
+                          <div className="documents-tag-row">
+                            {section.items.map((item) => (
+                              <span key={`${section.title}-${item}`} className="documents-tag">{item}</span>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Setup Guide</h3>
+                      <span className="documents-section-badge">How staff should start</span>
+                    </div>
+                    <div className="documents-flow">
+                      {DOCUMENT_SETUP_GUIDE.map((step, index) => (
+                        <div key={`document-setup-${step}`} className="documents-flow-step">
+                          <strong>{index + 1}.</strong>
+                          <span>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Reports and Printing</h3>
+                      <span className="documents-section-badge">How to find reports and export PDF</span>
+                    </div>
+                    <div className="documents-grid">
+                      {DOCUMENT_REPORT_GUIDE.map((guide) => (
+                        <article key={guide.title} className="documents-subcard">
+                          <h4>{guide.title}</h4>
+                          <p>{guide.note}</p>
+                          <ul className="documents-list">
+                            {guide.items.map((item) => (
+                              <li key={`${guide.title}-${item}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Live Maintenance Documents</h3>
+                      <span className="documents-section-badge">Updates automatically from Maintenance History</span>
+                    </div>
+                    <p className="documents-source-note">
+                      Every create or update inside the Maintenance module now appears here as a live document record. No second data entry is needed.
+                    </p>
+                    <div className="documents-mini-stats">
+                      <article className="stat-card mini">
+                        <div className="stat-label">Draft</div>
+                        <div className="stat-value">{maintenanceDocumentSummary.draft}</div>
+                        <div className="tiny">Still waiting for completion</div>
+                      </article>
+                      <article className="stat-card mini">
+                        <div className="stat-label">Ready</div>
+                        <div className="stat-value">{maintenanceDocumentSummary.ready}</div>
+                        <div className="tiny">Can be submitted now</div>
+                      </article>
+                      <article className="stat-card mini">
+                        <div className="stat-label">Filed</div>
+                        <div className="stat-value">{maintenanceDocumentSummary.filed}</div>
+                        <div className="tiny">Report file already attached</div>
+                      </article>
+                    </div>
+                    {latestMaintenanceDocumentRows.length ? (
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Document No</th>
+                              <th>Title</th>
+                              <th>Date</th>
+                              <th>Asset</th>
+                              <th>Campus</th>
+                              <th>Status</th>
+                              <th>File</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {latestMaintenanceDocumentRows.map((row) => (
+                              <tr key={`documents-overview-maintenance-${row.rowId}`}>
+                                <td><strong>{row.documentNo}</strong></td>
+                                <td>{row.documentTitle}</td>
+                                <td>{row.formattedDate}</td>
+                                <td>
+                                  <strong>{row.assetId}</strong>
+                                  <div className="tiny">{row.itemName}</div>
+                                </td>
+                                <td>{row.campusName}</td>
+                                <td>
+                                  <span className={`documents-status-badge documents-status-${row.documentState.toLowerCase()}`}>
+                                    {row.documentState}
+                                  </span>
+                                </td>
+                                <td>{renderMaintenanceReportFileLink(row.reportFile, `documents-overview-file-${row.rowId}`)}</td>
+                                <td>
+                                  <div className="row-actions">
                                     <button
                                       className="tab btn-small"
                                       type="button"
                                       onClick={() => {
                                         setTab("maintenance");
                                         setMaintenanceView("history");
-                                        editMaintenanceEntryFromHistoryRow({
-                                          assetDbId: row.assetDbId,
-                                          entryId: row.entryId,
-                                          date: row.date,
-                                          type: row.type,
-                                          completion: row.completion,
-                                          condition: row.condition,
-                                          note: row.note,
-                                          cost: row.cost,
-                                          by: row.by,
-                                          photo: row.photo,
-                                          photos: row.photos,
-                                          beforePhotos: row.beforePhotos,
-                                          afterPhotos: row.afterPhotos,
-                                          reportFile: row.reportFile?.url || "",
-                                          reportFileName: row.reportFile?.name || "",
-                                          reportFileType: row.reportFile?.mimeType || "",
-                                        });
+                                        setMaintenanceDetailAssetId(row.assetDbId);
+                                        cancelMaintenanceEntryEdit();
                                       }}
                                     >
-                                      Edit Source
+                                      Open Source
                                     </button>
-                                  ) : null}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="panel-note">No maintenance documents have been generated yet.</div>
-                  )}
-                </section>
-              </>
-            )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="panel-note">No maintenance documents have been generated yet.</div>
+                    )}
+                  </section>
+                </>
+              )}
 
-            {documentsView === "templates" && (
-              <section className="documents-card">
-                <div className="documents-section-head">
-                  <h3>Template Library</h3>
-                  <span className="documents-section-badge">Start with reusable official formats</span>
-                </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Template</th>
-                        <th>Owner</th>
-                        <th>Status</th>
-                        <th>Data Source</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {DOCUMENT_TEMPLATE_LIBRARY.map((row) => (
-                        <tr key={`document-template-${row.name}`}>
-                          <td><strong>{row.name}</strong></td>
-                          <td>{row.owner}</td>
-                          <td>{row.status}</td>
-                          <td>{row.source}</td>
-                        </tr>
+              {documentsView === "user" && (
+                <div className="documents-grid">
+                  <article className="documents-card">
+                    <h3>User Support Orientation</h3>
+                    <p>
+                      This section is for normal staff users. It should explain where to click, what to enter, and how
+                      to print a clean document without making a separate file outside the app.
+                    </p>
+                    <ul className="documents-list">
+                      {DOCUMENT_USER_SUPPORT_ITEMS.map((item) => (
+                        <li key={`document-user-support-${item}`}>{item}</li>
                       ))}
-                    </tbody>
-                  </table>
+                    </ul>
+                  </article>
+                  <article className="documents-card">
+                    <h3>User Workflow</h3>
+                    <div className="documents-flow">
+                      <div className="documents-flow-step"><strong>1.</strong><span>User opens the correct module and enters the source record.</span></div>
+                      <div className="documents-flow-step"><strong>2.</strong><span>System keeps campus, date, requester, asset, and operator details together.</span></div>
+                      <div className="documents-flow-step"><strong>3.</strong><span>User opens Documents or Reports, reviews the page, then prints or saves PDF.</span></div>
+                    </div>
+                  </article>
                 </div>
-              </section>
-            )}
+              )}
 
-            {documentsView === "approvals" && (
-              <div className="documents-grid">
-                <article className="documents-card">
-                  <h3>Approval Structure</h3>
-                  <div className="documents-flow">
-                    <div className="documents-flow-step"><strong>Draft</strong><span>Document is created from source data but still editable.</span></div>
-                    <div className="documents-flow-step"><strong>Submitted</strong><span>Admin reviews content, attachments, and school formatting.</span></div>
-                    <div className="documents-flow-step"><strong>Approved</strong><span>Super Admin approves the final official version.</span></div>
-                    <div className="documents-flow-step"><strong>Archived</strong><span>Approved PDF and source record stay linked for audit.</span></div>
+              {documentsView === "admin" && (
+                <>
+                  <div className="documents-grid">
+                    <article className="documents-card">
+                      <h3>Admin Support Orientation</h3>
+                      <p>Use this section for official management documents, submission reports, approvals, and audit-ready records.</p>
+                      <ul className="documents-list">
+                        {DOCUMENT_ADMIN_SUPPORT_ITEMS.map((item) => (
+                          <li key={`document-admin-support-${item}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </article>
+                    <article className="documents-card">
+                      <h3>Currently Live</h3>
+                      <p>
+                        Maintenance is the first real auto-generated source. When a maintenance record is added or edited,
+                        the document entry below updates automatically.
+                      </p>
+                      <div className="documents-flow">
+                        <div className="documents-flow-step"><strong>Live Now</strong><span>Maintenance Completion Report / Service Update</span></div>
+                        <div className="documents-flow-step"><strong>Next</strong><span>Inventory Issue Form and Rental Printer documents</span></div>
+                        <div className="documents-flow-step"><strong>Control</strong><span>Admin can open source records and Super Admin can finalize official files.</span></div>
+                      </div>
+                    </article>
                   </div>
-                </article>
-                <article className="documents-card">
-                  <h3>What Should Be Automatic</h3>
-                  <ul className="documents-list">
-                    <li>Document number</li>
-                    <li>School logo and official header</li>
-                    <li>Campus, date, requester, and operator details</li>
-                    <li>Prepared by / checked by / approved by lines</li>
-                    <li>PDF export and print layout</li>
-                  </ul>
-                </article>
-              </div>
-            )}
+
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Auto Generated Maintenance Documents</h3>
+                      <span className="documents-section-badge">Live from the Maintenance module</span>
+                    </div>
+                    {maintenanceDocumentRows.length ? (
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Document No</th>
+                              <th>Title</th>
+                              <th>Date</th>
+                              <th>Asset / Item</th>
+                              <th>Campus</th>
+                              <th>Status</th>
+                              <th>Operator</th>
+                              <th>File</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {maintenanceDocumentRows.map((row) => (
+                              <tr key={`documents-admin-maintenance-${row.rowId}`}>
+                                <td><strong>{row.documentNo}</strong></td>
+                                <td>
+                                  <div>{row.documentTitle}</div>
+                                  <div className="tiny">{row.type || "-"}</div>
+                                </td>
+                                <td>{row.formattedDate}</td>
+                                <td>
+                                  <strong>{row.assetId}</strong>
+                                  <div className="tiny">{row.itemName}</div>
+                                  <div className="tiny">{row.location || "-"}</div>
+                                </td>
+                                <td>{row.campusName}</td>
+                                <td>
+                                  <span className={`documents-status-badge documents-status-${row.documentState.toLowerCase()}`}>
+                                    {row.documentState}
+                                  </span>
+                                </td>
+                                <td>{row.by || "-"}</td>
+                                <td>{renderMaintenanceReportFileLink(row.reportFile, `documents-admin-file-${row.rowId}`)}</td>
+                                <td>
+                                  <div className="row-actions">
+                                    <button
+                                      className="tab btn-small"
+                                      type="button"
+                                      onClick={() => {
+                                        setTab("maintenance");
+                                        setMaintenanceView("history");
+                                        setMaintenanceDetailAssetId(row.assetDbId);
+                                        cancelMaintenanceEntryEdit();
+                                      }}
+                                    >
+                                      Open Source
+                                    </button>
+                                    {isAdmin ? (
+                                      <button
+                                        className="tab btn-small"
+                                        type="button"
+                                        onClick={() => {
+                                          setTab("maintenance");
+                                          setMaintenanceView("history");
+                                          editMaintenanceEntryFromHistoryRow({
+                                            assetDbId: row.assetDbId,
+                                            entryId: row.entryId,
+                                            date: row.date,
+                                            type: row.type,
+                                            completion: row.completion,
+                                            condition: row.condition,
+                                            note: row.note,
+                                            cost: row.cost,
+                                            by: row.by,
+                                            photo: row.photo,
+                                            photos: row.photos,
+                                            beforePhotos: row.beforePhotos,
+                                            afterPhotos: row.afterPhotos,
+                                            reportFile: row.reportFile?.url || "",
+                                            reportFileName: row.reportFile?.name || "",
+                                            reportFileType: row.reportFile?.mimeType || "",
+                                          });
+                                        }}
+                                      >
+                                        Edit Source
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="panel-note">No maintenance documents have been generated yet.</div>
+                    )}
+                  </section>
+                </>
+              )}
+
+              {documentsView === "templates" && (
+                <section className="documents-card">
+                  <div className="documents-section-head">
+                    <h3>Template Library</h3>
+                    <span className="documents-section-badge">Start with reusable official formats</span>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Template</th>
+                          <th>Owner</th>
+                          <th>Status</th>
+                          <th>Data Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {DOCUMENT_TEMPLATE_LIBRARY.map((row) => (
+                          <tr key={`document-template-${row.name}`}>
+                            <td><strong>{row.name}</strong></td>
+                            <td>{row.owner}</td>
+                            <td>{row.status}</td>
+                            <td>{row.source}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {documentsView === "approvals" && (
+                <div className="documents-grid">
+                  <article className="documents-card">
+                    <h3>Approval Structure</h3>
+                    <div className="documents-flow">
+                      <div className="documents-flow-step"><strong>Draft</strong><span>Document is created from source data but still editable.</span></div>
+                      <div className="documents-flow-step"><strong>Submitted</strong><span>Admin reviews content, attachments, and school formatting.</span></div>
+                      <div className="documents-flow-step"><strong>Approved</strong><span>Super Admin approves the final official version.</span></div>
+                      <div className="documents-flow-step"><strong>Archived</strong><span>Approved PDF and source record stay linked for audit.</span></div>
+                    </div>
+                  </article>
+                  <article className="documents-card">
+                    <h3>What Should Be Automatic</h3>
+                    <ul className="documents-list">
+                      <li>Document number</li>
+                      <li>School logo and official header</li>
+                      <li>Campus, date, requester, and operator details</li>
+                      <li>Prepared by / checked by / approved by lines</li>
+                      <li>PDF export and print layout</li>
+                    </ul>
+                  </article>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
@@ -49469,19 +49658,6 @@ export default function App() {
                 <div className="field"><span>{lang === "km" ? "លក្ខខណ្ឌ" : "Condition"}</span><div className="detail-value">{latestMaintenanceDetailRow.condition || "-"}</div></div>
                 <div className="field"><span>{lang === "km" ? "ចំណាយ" : "Cost"}</span><div className="detail-value">{latestMaintenanceDetailRow.cost || "-"}</div></div>
                 <div className="field"><span>{t.by}</span><div className="detail-value">{latestMaintenanceDetailRow.by || "-"}</div></div>
-                <div className="field field-wide">
-                  <span>{lang === "km" ? "ឯកសាររបាយការណ៍ថែទាំ" : "Maintenance Report File"}</span>
-                  <div className="detail-value">
-                    {renderMaintenanceReportFileLink(
-                      normalizeMaintenanceReportFile({
-                        url: latestMaintenanceDetailRow.reportFile || "",
-                        name: latestMaintenanceDetailRow.reportFileName || "",
-                        mimeType: latestMaintenanceDetailRow.reportFileType || "",
-                      }),
-                      `latest-maintenance-report-${latestMaintenanceDetailRow.rowId}`
-                    )}
-                  </div>
-                </div>
                 <div className="field field-wide"><span>{t.notes}</span><div className="detail-value latest-maint-detail-note">{latestMaintenanceDetailRow.note || "-"}</div></div>
               </div>
             </section>
