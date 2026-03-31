@@ -1700,28 +1700,29 @@ h2 {
   }
 
   .printer-report-print-masthead {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
-    gap: 8px;
-    align-items: end;
+    display: block !important;
     margin-bottom: 8px;
-    padding: 0 0 6px;
+  }
+
+  .printer-report-print-top {
+    margin-bottom: 8px;
+    padding: 0 0 8px;
     border-bottom: 2px solid #d7b27b;
   }
 
   .printer-report-print-brand {
     display: grid;
-    gap: 3px;
+    gap: 4px;
   }
 
   .printer-report-print-logo {
-    width: 120px;
+    width: 160px;
     height: auto;
   }
 
   .printer-report-print-school {
     color: #9a7341;
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -1729,20 +1730,21 @@ h2 {
 
   .printer-report-print-center {
     color: #3f2b18;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 800;
     line-height: 1.04;
   }
 
   .printer-report-print-document {
-    color: #6e5232;
-    font-size: 10px;
-    font-weight: 700;
+    color: #52381d;
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.1;
   }
 
   .printer-report-print-meta {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
   }
 
@@ -1768,6 +1770,7 @@ h2 {
     color: #352719;
     font-size: 11px;
     font-weight: 800;
+    line-height: 1.2;
   }
 
   .printer-report-chart-card {
@@ -7211,6 +7214,103 @@ label.backup-action-btn {
   display: block;
 }
 
+.printer-entry-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.printer-entry-intro {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #ead4b4;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 253, 249, 0.98) 0%, rgba(255, 247, 234, 0.98) 100%);
+}
+
+.printer-entry-intro .tiny {
+  margin: 0 !important;
+  color: #7a5d3b;
+  line-height: 1.45;
+}
+
+.printer-entry-grid {
+  gap: 12px;
+}
+
+.printer-entry-actions {
+  gap: 10px;
+}
+
+.printer-counter-mobile-list {
+  display: grid;
+  gap: 10px;
+}
+
+.printer-counter-mobile-card {
+  border: 1px solid #ead4b4;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 248, 236, 0.98) 100%);
+  padding: 12px;
+  box-shadow: 0 8px 20px rgba(121, 82, 33, 0.08);
+}
+
+.printer-counter-mobile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.printer-counter-mobile-head strong {
+  color: #3d2a18;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.printer-counter-mobile-head span {
+  color: #875726;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #fff2de;
+  border: 1px solid #eccb97;
+  white-space: nowrap;
+}
+
+.printer-counter-mobile-body {
+  display: grid;
+  gap: 8px;
+}
+
+.printer-counter-mobile-item {
+  display: grid;
+  gap: 3px;
+}
+
+.printer-counter-mobile-item span {
+  color: #8d6a40;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.printer-counter-mobile-item strong {
+  color: #2f2417;
+  font-size: 14px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.printer-counter-mobile-foot {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .asset-photo-gallery {
   display: flex;
   flex-wrap: wrap;
@@ -12494,6 +12594,20 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
+  .workspace-main .printer-entry-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .workspace-main .printer-entry-actions .tab,
+  .workspace-main .printer-entry-actions .btn-primary {
+    width: 100%;
+    justify-content: center;
+    min-width: 0;
+  }
+
   .inventory-daily-gallery-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -13620,8 +13734,40 @@ tr.row-maint-maintenance:hover td {
     height: 78px;
   }
 
+  .printer-entry-panel h2 {
+    margin: 0;
+    font-size: clamp(20px, 6.2vw, 28px);
+    line-height: 1.05;
+  }
+
+  .printer-entry-intro {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .printer-entry-intro .tiny {
+    font-size: 12px !important;
+  }
+
+  .printer-entry-grid {
+    gap: 10px;
+  }
+
+  .printer-entry-grid .field > span {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .printer-entry-grid .input,
+  .printer-entry-grid textarea {
+    min-height: 42px;
+    padding: 9px 10px;
+    font-size: 14px;
+  }
+
   .printer-counter-upload-row {
     gap: 8px;
+    align-items: center;
   }
 
   .printer-counter-upload-preview-btn {
@@ -13634,6 +13780,42 @@ tr.row-maint-maintenance:hover td {
     width: 40px;
     height: 40px;
     border-radius: 8px;
+  }
+
+  .workspace-main .printer-entry-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .workspace-main .printer-entry-actions > .btn-primary {
+    grid-column: 1 / -1;
+  }
+
+  .printer-counter-mobile-card {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .printer-counter-mobile-head {
+    align-items: flex-start;
+  }
+
+  .printer-counter-mobile-head strong {
+    font-size: 15px;
+  }
+
+  .printer-counter-mobile-head span {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  .printer-counter-mobile-item strong {
+    font-size: 13px;
+  }
+
+  .printer-counter-mobile-foot .btn-danger {
+    width: 100%;
+    justify-content: center;
   }
 
   .app-card-public-asset {

@@ -3736,6 +3736,15 @@ function formatDate(value: string) {
   return `${day}-${month}-${year}`;
 }
 
+function formatReportSlashLongDate(value: string | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return typeof value === "string" ? value : "-";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 function formatDateTime(value: string) {
   if (!value || value === "-") return "-";
   const date = new Date(value);
@@ -9335,6 +9344,10 @@ export default function App() {
     if (rentalReportRange.from === rentalReportRange.to) return formatMonth(rentalReportRange.from);
     return `${formatMonth(rentalReportRange.from)} - ${formatMonth(rentalReportRange.to)}`;
   }, [rentalReportRange]);
+  const rentalReportGeneratedOnLabel = useMemo(
+    () => formatReportSlashLongDate(new Date()),
+    []
+  );
   const rentalCampusReportBlocks = useMemo(() => {
     const monthSet = new Set<string>();
     const campusMap = new Map<
@@ -15246,8 +15259,8 @@ export default function App() {
       `${b.billingMonth}-${b.readingDate}`.localeCompare(`${a.billingMonth}-${a.readingDate}`)
     );
     setRentalPrinterCounters(nextCounters);
-    setRentalCounterForm((prev) => ({
-      rentalPrinterId: prev.rentalPrinterId,
+    setRentalCounterForm(() => ({
+      rentalPrinterId: "",
       billingMonth: toYmd(new Date()).slice(0, 7),
       readingDate: toYmd(new Date()),
       previousMono: "",
@@ -41630,7 +41643,7 @@ export default function App() {
                         <input
                           type="date"
                           className="input"
-                          min={todayYmd}
+                          min={isSuperAdmin ? undefined : todayYmd}
                           value={maintenanceEditForm.date}
                           onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, date: e.target.value }))}
                         />
@@ -42752,18 +42765,20 @@ export default function App() {
             )}
 
             {printerView === "entry" && (
-              <>
+              <div className="printer-entry-panel">
                 <h2>Rental Printer Monthly Counter Tracking</h2>
-                <p className="tiny" style={{ marginBottom: 12 }}>
-                  Use this section to record monthly printer counters for campus comparison. No invoice data is required.
-                </p>
-                <p className="tiny" style={{ marginBottom: 12 }}>
-                  Use printer `102 : Total 2` as the monthly counter. You can change Previous Monthly manually if needed.
-                </p>
-                <p className="tiny" style={{ marginBottom: 12 }}>
-                  Direct IP read works only when this app server can reach the printer page on your local network. If not, use screenshot read.
-                </p>
-                <div className="form-grid inventory-item-grid">
+                <div className="printer-entry-intro">
+                  <p className="tiny" style={{ marginBottom: 12 }}>
+                    Use this section to record monthly printer counters for campus comparison. No invoice data is required.
+                  </p>
+                  <p className="tiny" style={{ marginBottom: 12 }}>
+                    Use printer `102 : Total 2` as the monthly counter. You can change Previous Monthly manually if needed.
+                  </p>
+                  <p className="tiny" style={{ marginBottom: 12 }}>
+                    Direct IP read works only when this app server can reach the printer page on your local network. If not, use screenshot read.
+                  </p>
+                </div>
+                <div className="form-grid inventory-item-grid printer-entry-grid">
                   <label className="field">
                     <span>Rental Printer</span>
                     <select className="input" value={rentalCounterForm.rentalPrinterId} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, rentalPrinterId: e.target.value }))}>
@@ -42832,7 +42847,7 @@ export default function App() {
                     <textarea className="input" value={rentalCounterForm.note} onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, note: e.target.value }))} />
                   </label>
                 </div>
-                <div className="row-actions">
+                <div className="row-actions printer-entry-actions">
                   {selectedRentalPrinterWebUrl ? (
                     <button
                       className="tab"
@@ -42861,33 +42876,63 @@ export default function App() {
                     Save Monthly Counter
                   </button>
                 </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Month</th>
-                        <th>Machine</th>
-                        <th>{t.campus}</th>
-                        <th>Mono Usage</th>
-                        <th>By</th>
-                        <th>{t.delete}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
-                        <tr key={`rental-counter-row-${row.id}`}>
-                          <td>{row.billingMonth}</td>
-                          <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
-                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
-                          <td>{row.monoUsage}</td>
-                          <td>{row.submittedBy || "-"}</td>
-                          <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>X</button></td>
+                {isPhoneView ? (
+                  <div className="printer-counter-mobile-list" style={{ marginTop: 12 }}>
+                    {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
+                      <article key={`rental-counter-mobile-${row.id}`} className="printer-counter-mobile-card">
+                        <div className="printer-counter-mobile-head">
+                          <strong>{row.billingMonth}</strong>
+                          <span>{row.monoUsage} Mono</span>
+                        </div>
+                        <div className="printer-counter-mobile-body">
+                          <div className="printer-counter-mobile-item">
+                            <span>Machine</span>
+                            <strong>{row.machineCode}{row.machineName ? ` | ${row.machineName}` : ""}</strong>
+                          </div>
+                          <div className="printer-counter-mobile-item">
+                            <span>{t.campus}</span>
+                            <strong>{rentalPrinterCampusLabel(row.campus)}</strong>
+                          </div>
+                          <div className="printer-counter-mobile-item">
+                            <span>Recorded By</span>
+                            <strong>{row.submittedBy || "-"}</strong>
+                          </div>
+                        </div>
+                        <div className="printer-counter-mobile-foot">
+                          <button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>Delete</button>
+                        </div>
+                      </article>
+                    )) : <div className="panel-note">No monthly counter records yet.</div>}
+                  </div>
+                ) : (
+                  <div className="table-wrap" style={{ marginTop: 12 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th>Machine</th>
+                          <th>{t.campus}</th>
+                          <th>Mono Usage</th>
+                          <th>By</th>
+                          <th>{t.delete}</th>
                         </tr>
-                      )) : <tr><td colSpan={6}>No monthly counter records yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                      </thead>
+                      <tbody>
+                        {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
+                          <tr key={`rental-counter-row-${row.id}`}>
+                            <td>{row.billingMonth}</td>
+                            <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
+                            <td>{rentalPrinterCampusLabel(row.campus)}</td>
+                            <td>{row.monoUsage}</td>
+                            <td>{row.submittedBy || "-"}</td>
+                            <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounter(row.id)}>X</button></td>
+                          </tr>
+                        )) : <tr><td colSpan={6}>No monthly counter records yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
 
             {printerView === "report" && (
@@ -42957,17 +43002,19 @@ export default function App() {
                 </div>
                 <section className="printer-report-card">
                   <div className="printer-report-print-masthead">
-                    <div className="printer-report-print-brand">
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        className="printer-report-print-logo"
-                        src={ECO_LOGO_URL}
-                        alt="Eco International School logo"
-                      />
-                      <div className="printer-report-print-school">Eco International School</div>
-                      <div className="printer-report-print-center">IT and Facility Control Center</div>
-                      <div className="printer-report-print-document">Printer Counter Report</div>
+                    <div className="printer-report-print-top">
+                      <div className="printer-report-print-brand">
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          className="printer-report-print-logo"
+                          src={ECO_LOGO_URL}
+                          alt="Eco International School logo"
+                        />
+                        <div className="printer-report-print-school">Eco International School</div>
+                        <div className="printer-report-print-center">IT and Facility Control Center</div>
+                        <div className="printer-report-print-document">Printer Counter Report</div>
+                      </div>
                     </div>
                     <div className="printer-report-print-meta">
                       <div className="printer-report-print-meta-item">
@@ -42976,7 +43023,7 @@ export default function App() {
                       </div>
                       <div className="printer-report-print-meta-item">
                         <span>Generated On</span>
-                        <strong>{new Date().toLocaleDateString("en-GB")}</strong>
+                        <strong>{rentalReportGeneratedOnLabel}</strong>
                       </div>
                       <div className="printer-report-print-meta-item">
                         <span>Campuses Covered</span>
@@ -43011,7 +43058,7 @@ export default function App() {
                     </div>
                     <div className="printer-report-meta-card">
                       <div className="printer-report-meta-label">Generated On</div>
-                      <div className="printer-report-meta-value">{new Date().toLocaleDateString("en-GB")}</div>
+                      <div className="printer-report-meta-value">{rentalReportGeneratedOnLabel}</div>
                     </div>
                     <div className="printer-report-meta-card">
                       <div className="printer-report-meta-label">Printers Reported</div>
