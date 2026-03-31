@@ -659,6 +659,7 @@ type NavModule =
   | "transfer"
   | "maintenance"
   | "verification"
+  | "documents"
   | "reports"
   | "vault"
   | "setup";
@@ -1130,6 +1131,61 @@ const APP_UPDATE_NOTES: Array<{ version: string; date: string; notes: string[] }
   },
 ];
 const SERVER_ONLY_STORAGE = true;
+const DOCUMENT_PHASE_ONE_SOURCES = [
+  {
+    title: "Maintenance Documents",
+    note: "Create and update maintenance reports, service summaries, and completion sheets automatically from maintenance records.",
+    sources: ["Maintenance Record", "Maintenance History", "Asset Detail"],
+  },
+  {
+    title: "Inventory Documents",
+    note: "Generate stock issue forms, request forms, item-out logs, and monthly stock summaries without writing the same data twice.",
+    sources: ["Inventory Transactions", "Stock Balance", "Approval Routing"],
+  },
+  {
+    title: "Rental Printer Documents",
+    note: "Turn printer setup, monthly counter entry, campus comparison, and graph reports into ready-to-submit documents.",
+    sources: ["Printer Setup", "Counter Entry", "Campus Comparison", "Monthly Graph"],
+  },
+  {
+    title: "Work Order Documents",
+    note: "Support request forms, job completion reports, and campus service evidence should come directly from work order records.",
+    sources: ["Work Orders", "Schedule", "Maintenance Actions"],
+  },
+  {
+    title: "Asset Support Documents",
+    note: "Prepare handover, transfer, receive, and asset support forms from the existing asset and transfer data.",
+    sources: ["Assets", "Transfer", "Custody / Assignment"],
+  },
+] as const;
+
+const DOCUMENT_USER_SUPPORT_ITEMS = [
+  "IT support request form",
+  "Asset handover / receive form",
+  "Maintenance request form",
+  "Inventory request form",
+  "Classroom support record",
+  "Work completion acknowledgement",
+] as const;
+
+const DOCUMENT_ADMIN_SUPPORT_ITEMS = [
+  "Approval sheet and routing log",
+  "Official maintenance report",
+  "Inventory stock-out and monthly summary",
+  "Rental printer report and graph export",
+  "Transfer / disposal / inactive form",
+  "Audit-ready monthly administration report",
+] as const;
+
+const DOCUMENT_TEMPLATE_LIBRARY = [
+  { name: "User Support Request", owner: "User Support", status: "Phase 1", source: "Work Orders / Assets" },
+  { name: "Maintenance Completion Report", owner: "Admin Support", status: "Live Auto", source: "Maintenance" },
+  { name: "Inventory Issue Form", owner: "Admin Support", status: "Phase 1", source: "Inventory" },
+  { name: "Printer Counter Report", owner: "Admin Support", status: "Live", source: "Rental Printer" },
+  { name: "Asset Transfer Sheet", owner: "Admin Support", status: "Phase 1", source: "Transfer / Assets" },
+  { name: "Verification Summary", owner: "Admin Support", status: "Phase 2", source: "Verification" },
+] as const;
+
 const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "dashboard",
   "assets",
@@ -1141,6 +1197,7 @@ const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "transfer",
   "maintenance",
   "verification",
+  "documents",
   "reports",
 ];
 const ALL_NAV_MODULES: NavModule[] = [
@@ -1156,6 +1213,7 @@ const ALL_NAV_MODULES: NavModule[] = [
   "transfer",
   "maintenance",
   "verification",
+  "documents",
   "reports",
   "vault",
   "setup",
@@ -1174,6 +1232,7 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   transfer: "operations",
   maintenance: "operations",
   verification: "operations",
+  documents: "operations",
   reports: "operations",
   vault: "admin",
   setup: "admin",
@@ -1277,6 +1336,18 @@ const MENU_ACCESS_TREE: Array<{
     children: [
       { key: "verification.record", labelEn: "Record Verification", labelKm: "កត់ត្រាត្រួតពិនិត្យ" },
       { key: "verification.history", labelEn: "Verification History", labelKm: "ប្រវត្តិត្រួតពិនិត្យ" },
+    ],
+  },
+  {
+    module: "documents",
+    labelEn: "Documents",
+    labelKm: "ឯកសារ",
+    children: [
+      { key: "documents.overview", labelEn: "Document Dashboard", labelKm: "ផ្ទាំងឯកសារ" },
+      { key: "documents.user", labelEn: "User Support", labelKm: "គាំទ្រអ្នកប្រើ" },
+      { key: "documents.admin", labelEn: "Admin Support", labelKm: "គាំទ្រអ្នកគ្រប់គ្រង" },
+      { key: "documents.templates", labelEn: "Templates", labelKm: "គំរូឯកសារ" },
+      { key: "documents.approvals", labelEn: "Approvals", labelKm: "ការអនុម័ត" },
     ],
   },
   {
@@ -6521,6 +6592,7 @@ export default function App() {
       { id: "transfer", label: t.transfer },
       { id: "maintenance", label: t.maintenance },
       { id: "verification", label: t.verification },
+      { id: "documents", label: lang === "km" ? "ឯកសារ" : "Documents" },
       { id: "reports", label: t.reports },
       ...(isAdmin ? [{ id: "vault" as NavModule, label: "IT Vault" }] : []),
       ...(isAdmin ? [{ id: "setup" as NavModule, label: t.setup }] : []),
@@ -6553,6 +6625,8 @@ export default function App() {
         return <Wrench size={16} aria-hidden={true} />;
       case "verification":
         return <CheckCircle2 size={16} aria-hidden={true} />;
+      case "documents":
+        return <FileText size={16} aria-hidden={true} />;
       case "reports":
         return <FileText size={16} aria-hidden={true} />;
       case "vault":
@@ -6667,6 +6741,7 @@ export default function App() {
     "entry" | "history" | "monthly" | "yearly"
   >("entry");
   const [printerView, setPrinterView] = useState<"setup" | "entry" | "report" | "graph">("entry");
+  const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("overview");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
@@ -6686,6 +6761,7 @@ export default function App() {
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
+      if (nextTab === "documents") setDocumentsView("overview");
       if (nextTab === "vault") setVaultTab("dashboard");
       setTab(nextTab);
     });
@@ -6712,6 +6788,7 @@ export default function App() {
           setAssetsView("list");
         }
         if (nextTab === "classroom") setClassroomView("gallery");
+        if (nextTab === "documents") setDocumentsView("overview");
         if (nextTab === "vault") setVaultTab("dashboard");
         setTab(nextTab);
       });
@@ -6781,6 +6858,69 @@ export default function App() {
           }));
         case "classroom":
           return [];
+        case "documents":
+          return [
+            ...(canAccessMenu("documents.overview", "documents")
+              ? [{
+                  key: "documents.overview",
+                  label: lang === "km" ? "ផ្ទាំងឯកសារ" : "Dashboard",
+                  active: documentsView === "overview",
+                  onSelect: () =>
+                    startTabTransition(() => {
+                      setDocumentsView("overview");
+                      setTab("documents");
+                    }),
+                }]
+              : []),
+            ...(canAccessMenu("documents.user", "documents")
+              ? [{
+                  key: "documents.user",
+                  label: lang === "km" ? "គាំទ្រអ្នកប្រើ" : "User Support",
+                  active: documentsView === "user",
+                  onSelect: () =>
+                    startTabTransition(() => {
+                      setDocumentsView("user");
+                      setTab("documents");
+                    }),
+                }]
+              : []),
+            ...(canAccessMenu("documents.admin", "documents")
+              ? [{
+                  key: "documents.admin",
+                  label: lang === "km" ? "គាំទ្រអ្នកគ្រប់គ្រង" : "Admin Support",
+                  active: documentsView === "admin",
+                  onSelect: () =>
+                    startTabTransition(() => {
+                      setDocumentsView("admin");
+                      setTab("documents");
+                    }),
+                }]
+              : []),
+            ...(canAccessMenu("documents.templates", "documents")
+              ? [{
+                  key: "documents.templates",
+                  label: lang === "km" ? "គំរូ" : "Templates",
+                  active: documentsView === "templates",
+                  onSelect: () =>
+                    startTabTransition(() => {
+                      setDocumentsView("templates");
+                      setTab("documents");
+                    }),
+                }]
+              : []),
+            ...(canAccessMenu("documents.approvals", "documents")
+              ? [{
+                  key: "documents.approvals",
+                  label: lang === "km" ? "អនុម័ត" : "Approvals",
+                  active: documentsView === "approvals",
+                  onSelect: () =>
+                    startTabTransition(() => {
+                      setDocumentsView("approvals");
+                      setTab("documents");
+                    }),
+                }]
+              : []),
+          ];
         case "utilities":
           return [
             {
@@ -7227,6 +7367,7 @@ export default function App() {
       assetsView,
       canAccessMenu,
       canOpenAssetRegister,
+      documentsView,
       inventoryView,
       isAdmin,
       lang,
@@ -24083,6 +24224,46 @@ export default function App() {
       }))
       .sort((a, b) => b.rate - a.rate || b.total - a.total || a.campus.localeCompare(b.campus));
   }, [allMaintenanceRows]);
+  const maintenanceDocumentRows = useMemo(() => {
+    return allMaintenanceRows.map((row) => {
+      const isDone = String(row.completion || "").trim().toLowerCase() === "done";
+      const reportFile = normalizeMaintenanceReportFile({
+        url: row.reportFile || "",
+        name: row.reportFileName || "",
+        mimeType: row.reportFileType || "",
+      });
+      const documentDateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(row.date || ""))
+        ? String(row.date).replace(/-/g, "")
+        : "UNDATED";
+      const safeAssetId = String(row.assetId || "ASSET").replace(/[^A-Z0-9-]/gi, "").toUpperCase() || "ASSET";
+      return {
+        ...row,
+        campusName: campusLabel(row.campus),
+        formattedDate: formatDate(row.date || "-"),
+        reportFile,
+        hasReportFile: Boolean(reportFile?.url),
+        documentNo: `DOC-MNT-${documentDateKey}-${safeAssetId}-${row.entryId}`,
+        documentTitle: isDone ? "Maintenance Completion Report" : "Maintenance Service Update",
+        documentState: reportFile?.url ? "Filed" : isDone ? "Ready" : "Draft",
+      };
+    });
+  }, [allMaintenanceRows, campusLabel]);
+  const maintenanceDocumentSummary = useMemo(() => {
+    return maintenanceDocumentRows.reduce(
+      (acc, row) => {
+        acc.total += 1;
+        if (row.documentState === "Filed") acc.filed += 1;
+        else if (row.documentState === "Ready") acc.ready += 1;
+        else acc.draft += 1;
+        return acc;
+      },
+      { total: 0, ready: 0, filed: 0, draft: 0 }
+    );
+  }, [maintenanceDocumentRows]);
+  const latestMaintenanceDocumentRows = useMemo(
+    () => maintenanceDocumentRows.slice(0, 8),
+    [maintenanceDocumentRows]
+  );
   const allVerificationRows = useMemo(() => {
     const rows: Array<{
       rowId: string;
@@ -43348,6 +43529,384 @@ export default function App() {
                     )}
                   </div>
                 </section>
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === "documents" && (
+          <section className="panel documents-shell">
+            <div className="documents-hero">
+              <div className="documents-hero-copy">
+                <div className="printer-report-kicker">Eco International School</div>
+                <h2>Document Center</h2>
+                <p>
+                  Build official school documents automatically from the records you already create in this web application.
+                  The goal is one data entry, then ready-to-submit forms, reports, approvals, and archives.
+                </p>
+              </div>
+              <div className="documents-pill-row">
+                <div className="documents-pill">Phase 1 Ready Structure</div>
+                <div className="documents-pill">User Support + Admin Support</div>
+                <div className="documents-pill">Auto Generate From Existing Modules</div>
+              </div>
+            </div>
+
+            {documentsView === "overview" && (
+              <>
+                <div className="stats-grid documents-stats-grid">
+                  <article className="stat-card">
+                    <div className="stat-label">Support Sections</div>
+                    <div className="stat-value">2</div>
+                    <div className="tiny">User Support and Admin Support</div>
+                  </article>
+                  <article className="stat-card">
+                    <div className="stat-label">Live Maintenance Docs</div>
+                    <div className="stat-value">{maintenanceDocumentSummary.total}</div>
+                    <div className="tiny">Auto generated from maintenance history</div>
+                  </article>
+                  <article className="stat-card">
+                    <div className="stat-label">Ready To Submit</div>
+                    <div className="stat-value">{maintenanceDocumentSummary.ready}</div>
+                    <div className="tiny">Completed records without attached report file</div>
+                  </article>
+                  <article className="stat-card">
+                    <div className="stat-label">Filed Documents</div>
+                    <div className="stat-value">{maintenanceDocumentSummary.filed}</div>
+                    <div className="tiny">Maintenance records already carrying a report file</div>
+                  </article>
+                </div>
+
+                <div className="documents-grid documents-overview-grid">
+                  <article className="documents-card">
+                    <h3>User Support</h3>
+                    <p>Documents made for daily requests, handover, support evidence, and completion records.</p>
+                    <ul className="documents-list">
+                      {DOCUMENT_USER_SUPPORT_ITEMS.map((item) => (
+                        <li key={`document-user-item-${item}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </article>
+                  <article className="documents-card">
+                    <h3>Admin Support</h3>
+                    <p>Documents used for review, official reporting, approvals, and management control.</p>
+                    <ul className="documents-list">
+                      {DOCUMENT_ADMIN_SUPPORT_ITEMS.map((item) => (
+                        <li key={`document-admin-item-${item}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </article>
+                </div>
+
+                <section className="documents-card">
+                  <div className="documents-section-head">
+                    <h3>Phase 1 Auto Document Sources</h3>
+                    <span className="documents-section-badge">Build from current app structure</span>
+                  </div>
+                  <div className="documents-grid">
+                    {DOCUMENT_PHASE_ONE_SOURCES.map((source) => (
+                      <article key={source.title} className="documents-subcard">
+                        <h4>{source.title}</h4>
+                        <p>{source.note}</p>
+                        <div className="documents-tag-row">
+                          {source.sources.map((item) => (
+                            <span key={`${source.title}-${item}`} className="documents-tag">{item}</span>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="documents-card">
+                  <div className="documents-section-head">
+                    <h3>Live Maintenance Documents</h3>
+                    <span className="documents-section-badge">Updates automatically from Maintenance History</span>
+                  </div>
+                  <p className="documents-source-note">
+                    Every create or update inside the Maintenance module now appears here as a live document record. No second data entry is needed.
+                  </p>
+                  <div className="documents-mini-stats">
+                    <article className="stat-card mini">
+                      <div className="stat-label">Draft</div>
+                      <div className="stat-value">{maintenanceDocumentSummary.draft}</div>
+                      <div className="tiny">Still waiting for completion</div>
+                    </article>
+                    <article className="stat-card mini">
+                      <div className="stat-label">Ready</div>
+                      <div className="stat-value">{maintenanceDocumentSummary.ready}</div>
+                      <div className="tiny">Can be submitted now</div>
+                    </article>
+                    <article className="stat-card mini">
+                      <div className="stat-label">Filed</div>
+                      <div className="stat-value">{maintenanceDocumentSummary.filed}</div>
+                      <div className="tiny">Report file already attached</div>
+                    </article>
+                  </div>
+                  {latestMaintenanceDocumentRows.length ? (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Document No</th>
+                            <th>Title</th>
+                            <th>Date</th>
+                            <th>Asset</th>
+                            <th>Campus</th>
+                            <th>Status</th>
+                            <th>File</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {latestMaintenanceDocumentRows.map((row) => (
+                            <tr key={`documents-overview-maintenance-${row.rowId}`}>
+                              <td><strong>{row.documentNo}</strong></td>
+                              <td>{row.documentTitle}</td>
+                              <td>{row.formattedDate}</td>
+                              <td>
+                                <strong>{row.assetId}</strong>
+                                <div className="tiny">{row.itemName}</div>
+                              </td>
+                              <td>{row.campusName}</td>
+                              <td>
+                                <span className={`documents-status-badge documents-status-${row.documentState.toLowerCase()}`}>
+                                  {row.documentState}
+                                </span>
+                              </td>
+                              <td>{renderMaintenanceReportFileLink(row.reportFile, `documents-overview-file-${row.rowId}`)}</td>
+                              <td>
+                                <div className="row-actions">
+                                  <button
+                                    className="tab btn-small"
+                                    type="button"
+                                    onClick={() => {
+                                      setTab("maintenance");
+                                      setMaintenanceView("history");
+                                      setMaintenanceDetailAssetId(row.assetDbId);
+                                      cancelMaintenanceEntryEdit();
+                                    }}
+                                  >
+                                    Open Source
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="panel-note">No maintenance documents have been generated yet.</div>
+                  )}
+                </section>
+              </>
+            )}
+
+            {documentsView === "user" && (
+              <div className="documents-grid">
+                <article className="documents-card">
+                  <h3>User Support Scope</h3>
+                  <p>
+                    This section should generate clean forms from the same user actions already recorded in the system,
+                    so staff do not need to write separate Word files by hand.
+                  </p>
+                  <ul className="documents-list">
+                    {DOCUMENT_USER_SUPPORT_ITEMS.map((item) => (
+                      <li key={`document-user-support-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                </article>
+                <article className="documents-card">
+                  <h3>User Support Workflow</h3>
+                  <div className="documents-flow">
+                    <div className="documents-flow-step"><strong>1.</strong><span>User creates request or transaction in the app.</span></div>
+                    <div className="documents-flow-step"><strong>2.</strong><span>System fills campus, date, requester, asset, or item automatically.</span></div>
+                    <div className="documents-flow-step"><strong>3.</strong><span>Document becomes printable, exportable, and linked back to the record.</span></div>
+                  </div>
+                </article>
+              </div>
+            )}
+
+            {documentsView === "admin" && (
+              <>
+                <div className="documents-grid">
+                  <article className="documents-card">
+                    <h3>Admin Support Scope</h3>
+                    <p>Use this section for official management documents, submission reports, approvals, and audit-ready records.</p>
+                    <ul className="documents-list">
+                      {DOCUMENT_ADMIN_SUPPORT_ITEMS.map((item) => (
+                        <li key={`document-admin-support-${item}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </article>
+                  <article className="documents-card">
+                    <h3>Currently Live</h3>
+                    <p>
+                      Maintenance is the first real auto-generated source. When a maintenance record is added or edited,
+                      the document entry below updates automatically.
+                    </p>
+                    <div className="documents-flow">
+                      <div className="documents-flow-step"><strong>Live Now</strong><span>Maintenance Completion Report / Service Update</span></div>
+                      <div className="documents-flow-step"><strong>Next</strong><span>Inventory Issue Form and Rental Printer documents</span></div>
+                      <div className="documents-flow-step"><strong>Control</strong><span>Admin can open source records and Super Admin can finalize official files.</span></div>
+                    </div>
+                  </article>
+                </div>
+
+                <section className="documents-card">
+                  <div className="documents-section-head">
+                    <h3>Auto Generated Maintenance Documents</h3>
+                    <span className="documents-section-badge">Live from the Maintenance module</span>
+                  </div>
+                  {maintenanceDocumentRows.length ? (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Document No</th>
+                            <th>Title</th>
+                            <th>Date</th>
+                            <th>Asset / Item</th>
+                            <th>Campus</th>
+                            <th>Status</th>
+                            <th>Operator</th>
+                            <th>File</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {maintenanceDocumentRows.map((row) => (
+                            <tr key={`documents-admin-maintenance-${row.rowId}`}>
+                              <td><strong>{row.documentNo}</strong></td>
+                              <td>
+                                <div>{row.documentTitle}</div>
+                                <div className="tiny">{row.type || "-"}</div>
+                              </td>
+                              <td>{row.formattedDate}</td>
+                              <td>
+                                <strong>{row.assetId}</strong>
+                                <div className="tiny">{row.itemName}</div>
+                                <div className="tiny">{row.location || "-"}</div>
+                              </td>
+                              <td>{row.campusName}</td>
+                              <td>
+                                <span className={`documents-status-badge documents-status-${row.documentState.toLowerCase()}`}>
+                                  {row.documentState}
+                                </span>
+                              </td>
+                              <td>{row.by || "-"}</td>
+                              <td>{renderMaintenanceReportFileLink(row.reportFile, `documents-admin-file-${row.rowId}`)}</td>
+                              <td>
+                                <div className="row-actions">
+                                  <button
+                                    className="tab btn-small"
+                                    type="button"
+                                    onClick={() => {
+                                      setTab("maintenance");
+                                      setMaintenanceView("history");
+                                      setMaintenanceDetailAssetId(row.assetDbId);
+                                      cancelMaintenanceEntryEdit();
+                                    }}
+                                  >
+                                    Open Source
+                                  </button>
+                                  {isAdmin ? (
+                                    <button
+                                      className="tab btn-small"
+                                      type="button"
+                                      onClick={() => {
+                                        setTab("maintenance");
+                                        setMaintenanceView("history");
+                                        editMaintenanceEntryFromHistoryRow({
+                                          assetDbId: row.assetDbId,
+                                          entryId: row.entryId,
+                                          date: row.date,
+                                          type: row.type,
+                                          completion: row.completion,
+                                          condition: row.condition,
+                                          note: row.note,
+                                          cost: row.cost,
+                                          by: row.by,
+                                          photo: row.photo,
+                                          photos: row.photos,
+                                          beforePhotos: row.beforePhotos,
+                                          afterPhotos: row.afterPhotos,
+                                          reportFile: row.reportFile?.url || "",
+                                          reportFileName: row.reportFile?.name || "",
+                                          reportFileType: row.reportFile?.mimeType || "",
+                                        });
+                                      }}
+                                    >
+                                      Edit Source
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="panel-note">No maintenance documents have been generated yet.</div>
+                  )}
+                </section>
+              </>
+            )}
+
+            {documentsView === "templates" && (
+              <section className="documents-card">
+                <div className="documents-section-head">
+                  <h3>Template Library</h3>
+                  <span className="documents-section-badge">Start with reusable official formats</span>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Template</th>
+                        <th>Owner</th>
+                        <th>Status</th>
+                        <th>Data Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {DOCUMENT_TEMPLATE_LIBRARY.map((row) => (
+                        <tr key={`document-template-${row.name}`}>
+                          <td><strong>{row.name}</strong></td>
+                          <td>{row.owner}</td>
+                          <td>{row.status}</td>
+                          <td>{row.source}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {documentsView === "approvals" && (
+              <div className="documents-grid">
+                <article className="documents-card">
+                  <h3>Approval Structure</h3>
+                  <div className="documents-flow">
+                    <div className="documents-flow-step"><strong>Draft</strong><span>Document is created from source data but still editable.</span></div>
+                    <div className="documents-flow-step"><strong>Submitted</strong><span>Admin reviews content, attachments, and school formatting.</span></div>
+                    <div className="documents-flow-step"><strong>Approved</strong><span>Super Admin approves the final official version.</span></div>
+                    <div className="documents-flow-step"><strong>Archived</strong><span>Approved PDF and source record stay linked for audit.</span></div>
+                  </div>
+                </article>
+                <article className="documents-card">
+                  <h3>What Should Be Automatic</h3>
+                  <ul className="documents-list">
+                    <li>Document number</li>
+                    <li>School logo and official header</li>
+                    <li>Campus, date, requester, and operator details</li>
+                    <li>Prepared by / checked by / approved by lines</li>
+                    <li>PDF export and print layout</li>
+                  </ul>
+                </article>
               </div>
             )}
           </section>
