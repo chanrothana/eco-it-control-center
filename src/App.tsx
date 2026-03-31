@@ -6655,6 +6655,7 @@ export default function App() {
     const isMac = /mac/i.test(platformText);
     return isLocalHost && isMac;
   }, []);
+  const canUsePrinterCounterOcr = true;
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
@@ -14512,10 +14513,10 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setRentalCounterForm((prev) => ({ ...prev, photo }));
-      if (canUseUtilityInvoiceOcr) {
+      if (canUsePrinterCounterOcr) {
         await autofillRentalCounterFromPhoto(photo);
       } else {
-        setRentalPrinterMessage("Printer screenshot uploaded. Auto fill is available only in the local macOS app.");
+        setRentalPrinterMessage("Printer screenshot uploaded.");
       }
     } catch (err) {
       handlePhotoUploadError(err);
@@ -42709,9 +42710,9 @@ export default function App() {
                     <span>Counter Screenshot (Optional)</span>
                     <input key={rentalCounterFileKey} type="file" accept="image/*" className="input" onChange={onRentalCounterPhotoFile} />
                     <span className="tiny">
-                      {canUseUtilityInvoiceOcr
-                        ? "Optional. Upload a counter image only if you want help reading it in the local macOS app."
-                        : "Optional. Phone/web entry is manual. Upload only if you want to keep a reference image."}
+                      {canUsePrinterCounterOcr
+                        ? "Optional. Upload a counter image if you want the system to read the counter for you."
+                        : "Optional. Upload only if you want to keep a reference image."}
                     </span>
                     {rentalCounterForm.photo ? <img loading="lazy" decoding="async" src={rentalCounterForm.photo} alt="rental counter" className="table-photo" style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }} /> : null}
                   </label>
@@ -42739,8 +42740,8 @@ export default function App() {
                   </button>
                   <button
                     className="tab"
-                    disabled={!canUseUtilityInvoiceOcr || rentalCounterAutofillBusy || !rentalCounterForm.photo}
-                    title={canUseUtilityInvoiceOcr ? "" : "Available only in the local macOS app"}
+                    disabled={!canUsePrinterCounterOcr || rentalCounterAutofillBusy || !rentalCounterForm.photo}
+                    title={canUsePrinterCounterOcr ? "" : "Printer counter OCR is not available"}
                     onClick={() => void autofillRentalCounterFromPhoto()}
                   >
                     {rentalCounterAutofillBusy ? "Reading Counter..." : "Read Counter Image"}

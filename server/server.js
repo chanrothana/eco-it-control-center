@@ -54,6 +54,13 @@ try {
   DatabaseSync = null;
 }
 
+let Tesseract;
+try {
+  Tesseract = require("tesseract.js");
+} catch {
+  Tesseract = null;
+}
+
 function readPackageVersion() {
   try {
     const pkgPath = path.join(__dirname, "..", "package.json");
@@ -3967,22 +3974,34 @@ async function runUtilityInvoiceOcr(imagePath) {
 }
 
 async function runPrinterCounterOcr(imagePath) {
-  if (process.platform !== "darwin") {
-    throw new Error("Printer counter OCR is available only on macOS in the local app.");
+  const canUseSwiftOcr =
+    process.platform === "darwin" &&
+    (await fileExists(UTILITY_INVOICE_OCR_SCRIPT));
+  if (canUseSwiftOcr) {
+    const { stdout, stderr } = await execFileAsync("swift", [UTILITY_INVOICE_OCR_SCRIPT, imagePath], {
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    if (stderr && stderr.trim()) {
+      console.warn("[printer-counter-ocr]", stderr.trim());
+    }
+    const parsed = JSON.parse(stdout || "{}");
+    return {
+      text: toText(parsed.text),
+      lines: Array.isArray(parsed.lines) ? parsed.lines.map((line) => toText(line)).filter(Boolean) : [],
+    };
   }
-  if (!(await fileExists(UTILITY_INVOICE_OCR_SCRIPT))) {
-    throw new Error("Printer counter OCR helper is missing on the server.");
+
+  if (!Tesseract || typeof Tesseract.recognize !== "function") {
+    throw new Error("Printer counter OCR helper is not available on this server.");
   }
-  const { stdout, stderr } = await execFileAsync("swift", [UTILITY_INVOICE_OCR_SCRIPT, imagePath], {
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  if (stderr && stderr.trim()) {
-    console.warn("[printer-counter-ocr]", stderr.trim());
-  }
-  const parsed = JSON.parse(stdout || "{}");
+
+  const result = await Tesseract.recognize(imagePath, "eng");
+  const data = result && result.data && typeof result.data === "object" ? result.data : {};
   return {
-    text: toText(parsed.text),
-    lines: Array.isArray(parsed.lines) ? parsed.lines.map((line) => toText(line)).filter(Boolean) : [],
+    text: toText(data.text),
+    lines: Array.isArray(data.lines)
+      ? data.lines.map((line) => toText(line && typeof line === "object" ? line.text : line)).filter(Boolean)
+      : [],
   };
 }
 
