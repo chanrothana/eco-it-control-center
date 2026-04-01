@@ -39110,10 +39110,10 @@ export default function App() {
                 ) : null}
                 {inventoryView === "dashboard" && inventoryDashboardGroup === "SUPPLY" && !maintenanceQuickMode ? (
                 <article className="panel" style={{ marginTop: 12 }}>
-                  <div className="panel-row">
+                  <div className="panel-row inventory-purchase-summary-head">
                     <h3 className="section-title">{lang === "km" ? "សង្ខេបទិញសម្ភារៈ (ថ្ងៃ 27)" : "Purchase Summary (27th Cutoff)"}</h3>
-                    <div className="row-actions">
-                      <span className="tiny">{inventoryPurchaseWindow.label}</span>
+                    <div className="row-actions inventory-purchase-summary-actions">
+                      <span className="tiny inventory-purchase-summary-window">{inventoryPurchaseWindow.label}</span>
                       <button type="button" className="tab btn-small" onClick={exportPurchaseRequestCsv}>
                         {lang === "km" ? "ទាញយក CSV" : "Export CSV"}
                       </button>
@@ -39122,12 +39122,12 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <div className="tiny" style={{ marginBottom: 8 }}>
+                  <div className="tiny inventory-purchase-summary-help" style={{ marginBottom: 8 }}>
                     {lang === "km"
                       ? "ប្រើសម្រាប់រៀបចំសំណើទិញប្រចាំខែ (ពិនិត្យ Used Qty និង Suggested Qty)"
                       : "Use this on the 27th to prepare monthly purchase request."}
                   </div>
-                  <div className="form-grid" style={{ marginBottom: 10 }}>
+                  <div className="form-grid inventory-purchase-summary-filters" style={{ marginBottom: 10 }}>
                     <label className="field">
                       <span>{t.campus}</span>
                       <LocationPicker
@@ -39151,81 +39151,155 @@ export default function App() {
                       />
                     </label>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Code</th>
-                          <th>Name</th>
-                          <th>{t.campus}</th>
-                          <th>{lang === "km" ? "ប្រើក្នុងរយៈពេល" : "Used Qty"}</th>
-                          <th>{lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current"}</th>
-                          <th>{lang === "km" ? "អប្បបរមា" : "Min"}</th>
-                          <th>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredInventoryPurchaseRows.length ? (
-                          filteredInventoryPurchaseRows.map((row) => (
-                            <tr key={`purchase-row-${row.id}`}>
-                              <td><strong>{row.itemCode}</strong></td>
-                              <td>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                  {isRenderablePhotoSource(String(row.photo || "").trim()) ? (
-                                    <img
-                                      loading="lazy"
-                                      decoding="async"
-                                      src={String(row.photo || "").trim()}
-                                      alt={inventoryDisplayName(row.itemName, lang)}
-                                      className="inventory-admin-matrix-item-photo"
-                                    />
-                                  ) : (
-                                    <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
-                                  )}
-                                  <div className="inventory-admin-matrix-item-text">
-                                    <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
-                                  </div>
+                  {isPhoneView ? (
+                    <div className="inventory-purchase-mobile-list">
+                      {filteredInventoryPurchaseRows.length ? (
+                        filteredInventoryPurchaseRows.map((row) => (
+                          <article key={`purchase-mobile-row-${row.id}`} className="inventory-purchase-mobile-card">
+                            <div className="inventory-purchase-mobile-head">
+                              {isRenderablePhotoSource(String(row.photo || "").trim()) ? (
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={String(row.photo || "").trim()}
+                                  alt={inventoryDisplayName(row.itemName, lang)}
+                                  className="inventory-purchase-mobile-photo"
+                                />
+                              ) : (
+                                <span className="inventory-purchase-mobile-photo inventory-purchase-mobile-photo-empty" aria-hidden={true}>-</span>
+                              )}
+                                <div className="inventory-purchase-mobile-copy">
+                                  <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                  <span>{row.itemCode}</span>
                                 </div>
-                              </td>
-                              <td>{inventoryCampusLabel(row.campus)}</td>
-                              <td>{row.usedQty}</td>
-                              <td>{row.currentStock}</td>
-                              <td>{row.minStock}</td>
-                              <td>
-                                <div style={{ display: "grid", gap: 4 }}>
-                                  <input
-                                    className="input"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    value={purchaseRequestQtyOverrides[String(row.id)] ?? String(row.suggestedQty ?? 0)}
-                                    onChange={(e) =>
-                                      setPurchaseRequestQtyOverrides((prev) => ({
-                                        ...prev,
-                                        [String(row.id)]: e.target.value,
-                                      }))
-                                    }
-                                    style={{ minWidth: 88, fontWeight: 700 }}
-                                  />
-                                  {Number(row.packSize || 0) > 0 ? (
-                                    <span className="tiny">
-                                      {String(row.itemName || "").toLowerCase().includes("shampoo") || String(row.itemName || "").toLowerCase().includes("alcohol")
-                                        ? `1 box = ${row.packSize} bottles`
-                                        : `1 box = ${row.packSize} units`}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
+                              </div>
+                              <div className="inventory-purchase-mobile-campus">
+                                <span>{t.campus}</span>
+                                <strong>{inventoryCampusLabel(row.campus)}</strong>
+                              </div>
+                              <div className="inventory-purchase-mobile-metrics">
+                                <div>
+                                  <span>{lang === "km" ? "ប្រើ" : "Used"}</span>
+                                <strong>{row.usedQty}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "បច្ចុប្បន្ន" : "Current"}</span>
+                                <strong>{row.currentStock}</strong>
+                              </div>
+                              <div>
+                                <span>{lang === "km" ? "អប្បបរមា" : "Min"}</span>
+                                <strong>{row.minStock}</strong>
+                              </div>
+                            </div>
+                            <div className="inventory-purchase-mobile-suggest">
+                              <label className="field">
+                                <span>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</span>
+                                <input
+                                  className="input"
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={purchaseRequestQtyOverrides[String(row.id)] ?? String(row.suggestedQty ?? 0)}
+                                  onChange={(e) =>
+                                    setPurchaseRequestQtyOverrides((prev) => ({
+                                      ...prev,
+                                      [String(row.id)]: e.target.value,
+                                    }))
+                                  }
+                                  style={{ fontWeight: 700 }}
+                                />
+                              </label>
+                              {Number(row.packSize || 0) > 0 ? (
+                                <span className="tiny">
+                                  {String(row.itemName || "").toLowerCase().includes("shampoo") || String(row.itemName || "").toLowerCase().includes("alcohol")
+                                    ? `1 box = ${row.packSize} bottles`
+                                    : `1 box = ${row.packSize} units`}
+                                </span>
+                              ) : null}
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់តម្រងនេះ" : "No purchase summary rows for this filter."}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
                           <tr>
-                            <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់តម្រងនេះ" : "No purchase summary rows for this filter."}</td>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>{t.campus}</th>
+                            <th>{lang === "km" ? "ប្រើក្នុងរយៈពេល" : "Used Qty"}</th>
+                            <th>{lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current"}</th>
+                            <th>{lang === "km" ? "អប្បបរមា" : "Min"}</th>
+                            <th>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {filteredInventoryPurchaseRows.length ? (
+                            filteredInventoryPurchaseRows.map((row) => (
+                              <tr key={`purchase-row-${row.id}`}>
+                                <td><strong>{row.itemCode}</strong></td>
+                                <td>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    {isRenderablePhotoSource(String(row.photo || "").trim()) ? (
+                                      <img
+                                        loading="lazy"
+                                        decoding="async"
+                                        src={String(row.photo || "").trim()}
+                                        alt={inventoryDisplayName(row.itemName, lang)}
+                                        className="inventory-admin-matrix-item-photo"
+                                      />
+                                    ) : (
+                                      <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
+                                    )}
+                                    <div className="inventory-admin-matrix-item-text">
+                                      <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td>{inventoryCampusLabel(row.campus)}</td>
+                                <td>{row.usedQty}</td>
+                                <td>{row.currentStock}</td>
+                                <td>{row.minStock}</td>
+                                <td>
+                                  <div style={{ display: "grid", gap: 4 }}>
+                                    <input
+                                      className="input"
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={purchaseRequestQtyOverrides[String(row.id)] ?? String(row.suggestedQty ?? 0)}
+                                      onChange={(e) =>
+                                        setPurchaseRequestQtyOverrides((prev) => ({
+                                          ...prev,
+                                          [String(row.id)]: e.target.value,
+                                        }))
+                                      }
+                                      style={{ minWidth: 88, fontWeight: 700 }}
+                                    />
+                                    {Number(row.packSize || 0) > 0 ? (
+                                      <span className="tiny">
+                                        {String(row.itemName || "").toLowerCase().includes("shampoo") || String(row.itemName || "").toLowerCase().includes("alcohol")
+                                          ? `1 box = ${row.packSize} bottles`
+                                          : `1 box = ${row.packSize} units`}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7}>{lang === "km" ? "មិនមានទិន្នន័យសម្រាប់តម្រងនេះ" : "No purchase summary rows for this filter."}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </article>
                 ) : null}
                 {inventoryView === "daily" ? (
