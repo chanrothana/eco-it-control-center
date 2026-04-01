@@ -3084,6 +3084,58 @@ h2 {
   color: #5f7398;
 }
 
+.asset-check-room-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.asset-check-room-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.asset-check-room-photo .table-photo,
+.asset-check-room-photo .photo-placeholder {
+  width: 58px;
+  height: 58px;
+  border-radius: 12px;
+}
+
+.asset-check-room-photo .photo-placeholder,
+.asset-check-room-photo-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.asset-check-room-location-cell {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+}
+
+.asset-check-room-modal-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.asset-check-room-photo-large .table-photo,
+.asset-check-room-photo-large .photo-placeholder {
+  width: 74px;
+  height: 74px;
+  border-radius: 14px;
+}
+
 .report-card-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

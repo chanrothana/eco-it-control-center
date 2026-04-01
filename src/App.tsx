@@ -20873,7 +20873,8 @@ export default function App() {
   function openMonthlyClassroomCheckRoom(roomId: number) {
     setPendingClassroomCheckRoomId(roomId);
     setClassroomDetailRoomId(roomId);
-    setTab("classroom");
+    setVerificationView("classroom");
+    setTab("verification");
   }
 
   function saveClassroomVerification(openNextRoom = false) {
@@ -27179,11 +27180,11 @@ export default function App() {
   );
   useEffect(() => {
     if (pendingClassroomCheckRoomId === null) return;
-    if (tab !== "classroom") return;
+    if (tab !== "verification" || verificationView !== "classroom") return;
     if (!classroomDetailRoom || classroomDetailRoom.id !== pendingClassroomCheckRoomId) return;
     openClassroomVerification();
     setPendingClassroomCheckRoomId(null);
-  }, [pendingClassroomCheckRoomId, tab, classroomDetailRoom, openClassroomVerification]);
+  }, [pendingClassroomCheckRoomId, tab, verificationView, classroomDetailRoom, openClassroomVerification]);
   const furnitureModelBreakdownText = useCallback((models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     if (!entries.length) return "-";
@@ -43547,10 +43548,27 @@ export default function App() {
                       classroomAssetCheckRows.map((row) => (
                         <article key={`asset-check-classroom-mobile-${row.id}`} className="report-card">
                           <div className="report-card-head">
-                            <div className="report-card-title">
-                              <strong>{row.location}</strong>
-                              <div className="tiny report-card-sub">
-                                {campusLabel(row.campus)} | {lang === "km" ? `ទ្រព្យ ${row.totalAssets}` : `${row.totalAssets} assets`}
+                            <div className="asset-check-room-head">
+                              <div className="asset-check-room-photo">
+                                {isRenderablePhotoSource(row.roomPhoto || "") ? (
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={row.roomPhoto || ""}
+                                    alt={row.location}
+                                    className="table-photo"
+                                  />
+                                ) : (
+                                  <div className="photo-placeholder" aria-hidden={true}>
+                                    {lang === "km" ? "បន្ទប់" : "Room"}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="report-card-title">
+                                <strong>{row.location}</strong>
+                                <div className="tiny report-card-sub">
+                                  {campusLabel(row.campus)} | {lang === "km" ? `ទ្រព្យ ${row.totalAssets}` : `${row.totalAssets} assets`}
+                                </div>
                               </div>
                             </div>
                             <span className={`report-pill ${row.checked ? "" : "report-pill-alert"}`}>
@@ -43601,6 +43619,7 @@ export default function App() {
                     <table>
                       <thead>
                         <tr>
+                          <th>{lang === "km" ? "រូបបន្ទប់" : "Room Photo"}</th>
                           <th>{t.campus}</th>
                           <th>{t.location}</th>
                           <th>{lang === "km" ? "ទ្រព្យក្នុងបន្ទប់" : "Assets In Room"}</th>
@@ -43615,8 +43634,21 @@ export default function App() {
                         {classroomAssetCheckRows.length ? (
                           classroomAssetCheckRows.map((row) => (
                             <tr key={`asset-check-classroom-row-${row.id}`}>
+                              <td>
+                                {isRenderablePhotoSource(row.roomPhoto || "") ? (
+                                  <img loading="lazy" decoding="async" src={row.roomPhoto || ""} alt={row.location} className="table-photo" />
+                                ) : (
+                                  <div className="photo-placeholder asset-check-room-photo-placeholder">
+                                    {lang === "km" ? "បន្ទប់" : "Room"}
+                                  </div>
+                                )}
+                              </td>
                               <td>{campusLabel(row.campus)}</td>
-                              <td><strong>{row.location}</strong></td>
+                              <td>
+                                <div className="asset-check-room-location-cell">
+                                  <strong>{row.location}</strong>
+                                </div>
+                              </td>
                               <td>{row.totalAssets}</td>
                               <td>{row.checked ? (lang === "km" ? "បានពិនិត្យ" : "Checked") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</td>
                               <td>{row.record?.checkedDate || "-"}</td>
@@ -43633,7 +43665,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={8}>
+                            <td colSpan={9}>
                               {lang === "km"
                                 ? "មិនទាន់មានបន្ទប់ថ្នាក់រៀនសម្រាប់ពិនិត្យទេ។"
                                 : "No classroom rooms are ready for monthly check yet."}
@@ -49908,10 +49940,27 @@ export default function App() {
           <div className="modal-backdrop" onClick={() => setClassroomDetailRoomId(null)}>
             <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
-                <div>
-                  <h2>{classroomDetailRoom.location}</h2>
-                  <div className="tiny">
-                    {campusLabel(classroomDetailRoom.campus)} | {lang === "km" ? "សិស្ស" : "Students"}: {classroomDetailRoom.currentStudents} | {classroomDetailRoom.status}
+                <div className="asset-check-room-modal-head">
+                  <div className="asset-check-room-photo asset-check-room-photo-large">
+                    {isRenderablePhotoSource(classroomDetailRoom.roomPhoto || "") ? (
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={classroomDetailRoom.roomPhoto || ""}
+                        alt={classroomDetailRoom.location}
+                        className="table-photo"
+                      />
+                    ) : (
+                      <div className="photo-placeholder" aria-hidden={true}>
+                        {lang === "km" ? "បន្ទប់" : "Room"}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h2>{classroomDetailRoom.location}</h2>
+                    <div className="tiny">
+                      {campusLabel(classroomDetailRoom.campus)} | {lang === "km" ? "សិស្ស" : "Students"}: {classroomDetailRoom.currentStudents} | {classroomDetailRoom.status}
+                    </div>
                   </div>
                 </div>
                 <div
