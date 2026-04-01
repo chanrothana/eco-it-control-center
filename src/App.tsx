@@ -10785,49 +10785,89 @@ export default function App() {
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
   );
-  const dashboardStockCampusMatrix = useMemo(() => {
+  const dashboardCleaningSupplyCampusMatrix = useMemo(() => {
     const campusSet = new Set<string>();
+    const inventoryItemSequence = (code: string) => {
+      const match = String(code || "").trim().match(/(\d+)\s*$/);
+      return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+    };
     const itemMap = new Map<
       string,
       {
         key: string;
+        itemCode: string;
         itemName: string;
-        byCampus: Map<string, { stock: number; low: boolean }>;
+        photo?: string;
         totalStock: number;
+        sortOrder: number;
         lowCampusCount: number;
       }
     >();
+    const campusRows = new Map<
+      string,
+      {
+        campus: string;
+        byItem: Map<string, { stock: number; low: boolean }>;
+        totalStock: number;
+        lowItemCount: number;
+      }
+    >();
     for (const row of inventoryBalanceRows) {
+      if (inventoryBusinessGroupValue(row) !== "SUPPLY") continue;
       const campus = String(row.campus || "");
       if (!campus) continue;
       campusSet.add(campus);
       const itemKey = normalizeInventoryCompareText(row.itemName);
+      const itemCode = String(row.itemCode || "").trim();
       if (!itemMap.has(itemKey)) {
         itemMap.set(itemKey, {
           key: itemKey,
+          itemCode,
           itemName: row.itemName,
-          byCampus: new Map(),
+          photo: row.photo || "",
           totalStock: 0,
+          sortOrder: inventoryItemSequence(itemCode),
           lowCampusCount: 0,
         });
       }
-      const itemRow = itemMap.get(itemKey)!;
-      const current = itemRow.byCampus.get(campus) || { stock: 0, low: false };
+      const itemMeta = itemMap.get(itemKey)!;
+      if (!itemMeta.itemCode && itemCode) itemMeta.itemCode = itemCode;
+      if (!itemMeta.photo && row.photo) itemMeta.photo = row.photo;
+      itemMeta.totalStock += Number(row.currentStock || 0);
+      itemMeta.sortOrder = Math.min(itemMeta.sortOrder, inventoryItemSequence(itemCode));
+      const campusRow = campusRows.get(campus) || {
+        campus,
+        byItem: new Map(),
+        totalStock: 0,
+        lowItemCount: 0,
+      };
+      const current = campusRow.byItem.get(itemKey) || { stock: 0, low: false };
       current.stock += Number(row.currentStock || 0);
       current.low = current.low || Boolean(row.lowStock);
-      itemRow.byCampus.set(campus, current);
-      itemRow.totalStock += Number(row.currentStock || 0);
+      campusRow.byItem.set(itemKey, current);
+      campusRow.totalStock += Number(row.currentStock || 0);
+      campusRows.set(campus, campusRow);
     }
     const campuses = Array.from(campusSet).sort(compareCampusByCode);
-    const rows = Array.from(itemMap.values())
+    const items = Array.from(itemMap.values())
       .map((row) => {
         row.lowCampusCount = campuses.reduce((count, campus) => {
-          return count + (row.byCampus.get(campus)?.low ? 1 : 0);
+          return count + (campusRows.get(campus)?.byItem.get(row.key)?.low ? 1 : 0);
         }, 0);
         return row;
       })
-      .sort((a, b) => a.itemName.localeCompare(b.itemName));
-    return { campuses, rows };
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.itemName.localeCompare(b.itemName));
+    const rows = campuses.map((campus) => {
+      const campusRow = campusRows.get(campus) || {
+        campus,
+        byItem: new Map(),
+        totalStock: 0,
+        lowItemCount: 0,
+      };
+      campusRow.lowItemCount = items.reduce((count, item) => count + (campusRow.byItem.get(item.key)?.low ? 1 : 0), 0);
+      return campusRow;
+    });
+    return { campuses, items, rows };
   }, [inventoryBalanceRows]);
   const inventoryBalanceDisplayRows = useMemo(
     () => (inventoryBalanceMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
@@ -31597,10 +31637,7 @@ export default function App() {
 
                 {renderQuickCountPanel("dashboard")}
 
-                <div
-                  className={`dashboard-clean-grid dashboard-calendar-stock-grid ${isPhoneView ? "dashboard-calendar-stock-grid-phone" : ""}`}
-                  style={{ marginTop: 12 }}
-                >
+                <div style={{ marginTop: 12 }}>
                   <article className="panel dashboard-widget dashboard-calendar-panel">
                     <div className="dashboard-widget-head">
                       <h3 className="section-title">Eco Calendar View</h3>
@@ -31656,70 +31693,128 @@ export default function App() {
                       />
                     </div>
                   </article>
-
-                  <article className="panel dashboard-widget">
-                    <div className="dashboard-widget-head">
-                      <h3 className="section-title">Stock Balance & Low Stock Alerts</h3>
+                </div>
+                <article className="panel dashboard-widget" style={{ marginTop: 12 }}>
+                  <div className="dashboard-widget-head">
+                    <div>
+                      <h3 className="section-title">Cleaning Supplies by Campus</h3>
+                      <div className="tiny">Stock item amount by campus for quick dashboard review.</div>
                     </div>
-                    <div
-                      className={`stats-grid dashboard-stock-stats ${isPhoneView ? "dashboard-stock-stats-phone-single" : ""}`}
-                      style={{ marginBottom: 10 }}
-                    >
-                      <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryBalanceView("all")}>
-                        <div className="stat-label">Total Inventory Items</div>
-                        <div className="stat-value">{inventoryBalanceRows.length}</div>
-                      </button>
-                      <button
-                        type="button"
-                        className="stat-card stat-card-button stat-card-overdue"
-                        onClick={() => openInventoryBalanceView("low")}
-                      >
-                        <div className="stat-label">Low Stock Alerts</div>
-                        <div className="stat-value">{inventoryLowStockRows.length}</div>
-                      </button>
+                  </div>
+                  {isPhoneView ? (
+                    <div className="dashboard-supply-campus-mobile-list">
+                      {dashboardCleaningSupplyCampusMatrix.rows.length ? (
+                        dashboardCleaningSupplyCampusMatrix.rows.map((row) => (
+                          <article key={`dash-stock-mobile-campus-${row.campus}`} className="dashboard-supply-campus-mobile-card">
+                            <div className="dashboard-supply-campus-mobile-head">
+                              <strong>
+                                {row.campus === "C2"
+                                  ? inventoryCampusLabel(row.campus).replace(/\s*\((?:2\.1|C2\.1)\)\s*$/, "")
+                                  : inventoryCampusLabel(row.campus)}
+                              </strong>
+                            </div>
+                            <div className="dashboard-supply-campus-mobile-grid">
+                              {dashboardCleaningSupplyCampusMatrix.items.map((item) => {
+                                const value = row.byItem.get(item.key);
+                                return (
+                                  <div
+                                    key={`dash-stock-mobile-item-${row.campus}-${item.key}`}
+                                    className={`dashboard-supply-campus-mobile-item ${value?.low ? "dashboard-supply-campus-mobile-item-low" : ""}`}
+                                  >
+                                    {item.photo ? (
+                                      <img
+                                        src={item.photo}
+                                        alt={item.itemName}
+                                        className="dashboard-supply-campus-mobile-photo"
+                                        loading="lazy"
+                                        decoding="async"
+                                      />
+                                    ) : (
+                                      <span className="dashboard-supply-campus-mobile-photo dashboard-supply-campus-mobile-photo-empty">
+                                        {item.itemName.slice(0, 2).toUpperCase()}
+                                      </span>
+                                    )}
+                                    <span className="dashboard-supply-campus-mobile-name">{item.itemName}</span>
+                                    <strong className={value?.low ? "dashboard-stock-value-low" : undefined}>
+                                      {value ? value.stock : "-"}
+                                    </strong>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="tiny">No cleaning supply stock data.</div>
+                      )}
                     </div>
+                  ) : (
                     <div className="table-wrap">
                       <table className="dashboard-stock-campus-matrix">
                         <thead>
                           <tr>
-                            <th>Item</th>
-                            {dashboardStockCampusMatrix.campuses.map((campus) => (
-                              <th key={`dash-stock-campus-head-${campus}`}>{inventoryCampusLabel(campus)}</th>
-                            ))}
-                            <th>Total</th>
-                            <th>Alert</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {dashboardStockCampusMatrix.rows.length ? (
-                            dashboardStockCampusMatrix.rows.map((row) => (
-                              <tr key={`dash-stock-item-row-${row.key}`}>
-                                <td><strong>{row.itemName}</strong></td>
-                                {dashboardStockCampusMatrix.campuses.map((campus) => {
-                                  const value = row.byCampus.get(campus);
-                                  return (
-                                    <td
-                                      key={`dash-stock-item-cell-${row.key}-${campus}`}
-                                      className={value?.low ? "dashboard-stock-cell-low" : ""}
-                                    >
+                          <th>Campus</th>
+                          {dashboardCleaningSupplyCampusMatrix.items.map((item) => (
+                            <th
+                              key={`dash-stock-item-head-${item.key}`}
+                              title={`${item.itemName} | Total: ${item.totalStock}`}
+                              className="dashboard-stock-item-head"
+                            >
+                              {item.photo ? (
+                                <img
+                                  src={item.photo}
+                                  alt={item.itemName}
+                                  className="dashboard-stock-item-head-photo"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              ) : (
+                                <span className="dashboard-stock-item-head-photo dashboard-stock-item-head-photo-empty">
+                                  {item.itemName.slice(0, 2).toUpperCase()}
+                                </span>
+                              )}
+                              <span className="dashboard-stock-item-head-label">{item.itemName}</span>
+                              <span className="dashboard-stock-item-head-total">{item.totalStock}</span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dashboardCleaningSupplyCampusMatrix.rows.length ? (
+                          dashboardCleaningSupplyCampusMatrix.rows.map((row) => (
+                            <tr key={`dash-stock-campus-row-${row.campus}`}>
+                              <td>
+                                <strong>
+                                  {row.campus === "C2"
+                                    ? inventoryCampusLabel(row.campus).replace(/\s*\((?:2\.1|C2\.1)\)\s*$/, "")
+                                    : inventoryCampusLabel(row.campus)}
+                                </strong>
+                              </td>
+                              {dashboardCleaningSupplyCampusMatrix.items.map((item) => {
+                                const value = row.byItem.get(item.key);
+                                return (
+                                  <td
+                                    key={`dash-stock-campus-cell-${row.campus}-${item.key}`}
+                                    className={value?.low ? "dashboard-stock-cell-low" : ""}
+                                  >
+                                    <span className={value?.low ? "dashboard-stock-value-low" : undefined}>
                                       {value ? value.stock : "-"}
-                                    </td>
-                                  );
-                                })}
-                                <td><strong>{row.totalStock}</strong></td>
-                                <td>{row.lowCampusCount ? `Low (${row.lowCampusCount})` : "OK"}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={Math.max(3, dashboardStockCampusMatrix.campuses.length + 3)}>No stock balance data.</td>
+                                    </span>
+                                  </td>
+                                );
+                              })}
                             </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </article>
-                </div>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={Math.max(2, dashboardCleaningSupplyCampusMatrix.items.length + 1)}>No cleaning supply stock data.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  )}
+                </article>
               </>
             )}
 
