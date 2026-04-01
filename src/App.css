@@ -6691,6 +6691,17 @@ label.backup-action-btn {
   margin-top: 8px;
 }
 
+.inventory-admin-campus-balance-tools {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  min-width: min(280px, 100%);
+}
+
+.inventory-admin-campus-balance-tools .input {
+  width: min(320px, 100%);
+}
+
 .inventory-admin-campus-mobile-filter {
   max-width: 260px;
 }
@@ -6951,6 +6962,89 @@ label.backup-action-btn {
   padding: 12px;
   display: grid;
   gap: 10px;
+}
+
+.inventory-admin-matrix-mobile-list {
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-admin-matrix-mobile-card {
+  border: 1px solid #d9e4f3;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-admin-matrix-mobile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inventory-admin-matrix-mobile-total {
+  color: #274d87;
+  font-size: 28px;
+  line-height: 1;
+  min-width: 40px;
+  text-align: right;
+}
+
+.inventory-admin-matrix-mobile-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inventory-admin-matrix-mobile-summary > div {
+  border: 1px solid #dfe8f7;
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.inventory-admin-matrix-mobile-summary span {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6c7fa2;
+}
+
+.inventory-admin-matrix-mobile-summary strong {
+  color: #345f2a;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.inventory-admin-matrix-mobile-entries {
+  display: grid;
+  gap: 6px;
+}
+
+.inventory-admin-matrix-mobile-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e4ecf8;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fff;
+}
+
+.inventory-admin-matrix-mobile-entry span {
+  color: #4f668f;
+  font-size: 12px;
+}
+
+.inventory-admin-matrix-mobile-entry strong {
+  color: #2f456d;
+  font-size: 18px;
 }
 
 .inventory-admin-matrix-head-tools {
@@ -13564,6 +13658,16 @@ tr.row-maint-maintenance:hover td {
     border-radius: 16px;
     gap: 10px;
     padding: 14px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-tools {
+    justify-items: stretch;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-tools .input {
+    width: 100%;
   }
 
   .inventory-dashboard-panel .inventory-admin-campus-mobile-filter {

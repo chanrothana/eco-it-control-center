@@ -11945,6 +11945,54 @@ export default function App() {
     inventoryVisibleItems,
     inventoryVisibleTxns,
   ]);
+  const inventoryAdminMatrixMobileRows = useMemo(
+    () =>
+      inventoryAdminOutDayMatrix.rows.map((row) => {
+        const entries = inventoryAdminOutDayMatrix.splitByCampus
+          ? inventoryAdminOutDayMatrix.days.flatMap((day) =>
+              inventoryAdminOutDayMatrix.campuses
+                .map((campus) => {
+                  const qty = Number(row.dayCampusQty[`${day.ymd}::${campus}`] || 0);
+                  if (!qty) return null;
+                  return {
+                    key: `${day.ymd}-${campus}`,
+                    dayLabel: day.dayLabel,
+                    weekdayLabel: day.weekdayLabel,
+                    campus,
+                    qty,
+                  };
+                })
+                .filter(Boolean) as Array<{
+                key: string;
+                dayLabel: string;
+                weekdayLabel: string;
+                campus: string;
+                qty: number;
+              }>
+            )
+          : inventoryAdminOutDayMatrix.days
+              .map((day) => {
+                const qty = Number(row.dayQty[day.ymd] || 0);
+                if (!qty) return null;
+                return {
+                  key: day.ymd,
+                  dayLabel: day.dayLabel,
+                  weekdayLabel: day.weekdayLabel,
+                  campus: "",
+                  qty,
+                };
+              })
+              .filter(Boolean) as Array<{
+              key: string;
+              dayLabel: string;
+              weekdayLabel: string;
+              campus: string;
+              qty: number;
+            }>;
+        return { ...row, entries };
+      }),
+    [inventoryAdminOutDayMatrix]
+  );
   const inventoryVisibleItemById = useMemo(() => {
     const map = new Map<number, InventoryItem>();
     for (const row of inventoryVisibleItems) map.set(Number(row.id), row);
@@ -38210,14 +38258,6 @@ export default function App() {
                     {inventoryDashboardGroup === "SUPPLY" ? (
                       <div className="panel-row">
                         <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
-                        <div className="panel-filters">
-                          <input
-                            className="input"
-                            placeholder={`Search ${inventoryBusinessGroupLabel(inventoryDashboardGroup)}...`}
-                            value={inventorySearch}
-                            onChange={(e) => setInventorySearch(e.target.value)}
-                          />
-                        </div>
                       </div>
                     ) : null}
                     <div className="panel-row">
@@ -38315,12 +38355,20 @@ export default function App() {
                                 : "Quick view of each campus stock balance and items needing attention."}
                             </div>
                           </div>
-                          <span className="tiny">
-                            {new Date(`${inventoryDashboardAdminSummary.month}-01T00:00:00`).toLocaleString(undefined, {
-                              month: "long",
-                              year: "numeric",
-                            })}
-                          </span>
+                          <div className="inventory-admin-campus-balance-tools">
+                            <input
+                              className="input"
+                              placeholder={lang === "km" ? "ស្វែងរក Item ក្នុងស្តុកតាមសាខា..." : "Search item in campus stock balance..."}
+                              value={inventorySearch}
+                              onChange={(e) => setInventorySearch(e.target.value)}
+                            />
+                            <span className="tiny">
+                              {new Date(`${inventoryDashboardAdminSummary.month}-01T00:00:00`).toLocaleString(undefined, {
+                                month: "long",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </div>
                         </div>
                         {isPhoneView && inventoryDashboardCampusBalanceOptions.length > 1 ? (
                           <label className="field inventory-admin-campus-mobile-filter">
@@ -38818,180 +38866,244 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                      <div className="table-wrap inventory-admin-matrix-scroll">
-                        <table className="inventory-admin-matrix">
-                          <thead>
-                            <tr>
-                              <th
-                                className="inventory-admin-matrix-item-head"
-                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
-                              >
-                                {lang === "km" ? "Item" : "Item"}
-                              </th>
-                              <th
-                                className="inventory-admin-matrix-total-head"
-                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
-                              >
-                                {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}
-                              </th>
-                              <th
-                                className="inventory-admin-matrix-total-head"
-                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
-                              >
-                                {lang === "km" ? "ស្តុកមុនបន្ថែម" : "Stock Before Refill"}
-                              </th>
-                              <th
-                                className="inventory-admin-matrix-total-head"
-                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
-                              >
-                                {lang === "km" ? "បន្ថែមប្រចាំខែ" : "Monthly Refill"}
-                              </th>
-                              {inventoryAdminOutDayMatrix.days.map((day) => (
-                                inventoryAdminOutDayMatrix.splitByCampus ? (
-                                  <th
-                                    key={`inventory-admin-matrix-head-day-${day.ymd}`}
-                                    className={`inventory-admin-matrix-day-head ${day.holidayType ? `inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday" : ""}`}
-                                    colSpan={inventoryAdminOutDayMatrix.campuses.length}
-                                    title={day.holidayName || undefined}
-                                  >
-                                    <span className="inventory-admin-matrix-day-head-main">{day.dayLabel}</span>
-                                    <span className="inventory-admin-matrix-day-head-sub">{day.weekdayLabel}</span>
-                                  </th>
-                                ) : (
-                                  <th
-                                    key={`inventory-admin-matrix-head-${day.ymd}`}
-                                    className={`inventory-admin-matrix-day-head ${day.holidayType ? `inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday" : ""}`}
-                                    title={day.holidayName || undefined}
-                                  >
-                                    <span className="inventory-admin-matrix-day-head-main">{day.dayLabel}</span>
-                                    <span className="inventory-admin-matrix-day-head-sub">{day.weekdayLabel}</span>
-                                  </th>
-                                )
-                              ))}
-                              <th
-                                className="inventory-admin-matrix-total-head"
-                                rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
-                              >
-                                {lang === "km" ? "សរុប" : "Total"}
-                              </th>
-                            </tr>
-                            {inventoryAdminOutDayMatrix.splitByCampus ? (
-                              <tr>
-                                {inventoryAdminOutDayMatrix.days.flatMap((day) =>
-                                  inventoryAdminOutDayMatrix.campuses.map((campus) => (
-                                    <th
-                                      key={`inventory-admin-matrix-head-campus-${day.ymd}-${campus}`}
-                                      className={`inventory-admin-matrix-campus-head inventory-admin-matrix-campus-${campus.toLowerCase()} ${
-                                        campus === inventoryAdminOutDayMatrix.campuses[0] ? "inventory-admin-matrix-campus-day-start" : ""
-                                      } ${
-                                        campus === inventoryAdminOutDayMatrix.campuses[inventoryAdminOutDayMatrix.campuses.length - 1]
-                                          ? "inventory-admin-matrix-campus-day-end"
-                                          : ""
-                                      }`}
-                                      title={inventoryCampusLabel(campus)}
-                                    >
-                                      {campus}
-                                    </th>
-                                  ))
-                                )}
-                              </tr>
-                            ) : null}
-                          </thead>
-                          <tbody>
-                            {inventoryAdminOutDayMatrix.rows.length ? (
-                              inventoryAdminOutDayMatrix.rows.map((row, index) => (
-                                <tr
-                                  key={`inventory-admin-matrix-row-${row.itemCode}-${row.itemName}`}
-                                  className={`inventory-admin-matrix-row inventory-admin-matrix-row-${index % 6}`}
-                                >
-                                  <th className="inventory-admin-matrix-item-cell">
-                                      <div className="inventory-admin-matrix-item">
-                                        {row.photo ? (
-                                          <img
-                                            loading="lazy"
-                                            decoding="async"
-                                          src={row.photo}
-                                          alt={inventoryDisplayName(row.itemName, lang)}
-                                          className="inventory-admin-matrix-item-photo"
-                                        />
-                                        ) : (
-                                          <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
-                                        )}
-                                        <div className="inventory-admin-matrix-item-text">
-                                        {!inventoryAdminOutDayMatrix.splitByCampus ? <strong>{row.itemCode}</strong> : null}
-                                        <span>{inventoryDisplayName(row.itemName, lang)}</span>
-                                        </div>
-                                      </div>
-                                    </th>
-                                  <td className="inventory-admin-matrix-total-cell inventory-admin-matrix-current-stock-cell"><strong>{row.currentStock}</strong></td>
-                                  <td className="inventory-admin-matrix-total-cell">
-                                    {row.stockBeforeRefill ?? ""}
-                                  </td>
-                                  <td className="inventory-admin-matrix-total-cell">
-                                    {row.firstRefillDate || row.monthlyRefill ? (
-                                      <div className="inventory-admin-matrix-refill-cell">
-                                        {row.firstRefillDate ? (
-                                          <span className="inventory-admin-matrix-refill-date">
-                                            {formatDate(row.firstRefillDate)}
-                                          </span>
-                                        ) : null}
-                                        {row.monthlyRefill ? (
-                                          <strong className="inventory-admin-matrix-refill-qty">{row.monthlyRefill}</strong>
-                                        ) : null}
-                                      </div>
+                      {isPhoneView ? (
+                        <div className="inventory-admin-matrix-mobile-list">
+                          {inventoryAdminMatrixMobileRows.length ? (
+                            inventoryAdminMatrixMobileRows.map((row) => (
+                              <article key={`inventory-admin-matrix-mobile-${row.itemCode}-${row.itemName}`} className="inventory-admin-matrix-mobile-card">
+                                <div className="inventory-admin-matrix-mobile-head">
+                                  <div className="inventory-admin-matrix-item">
+                                    {row.photo ? (
+                                      <img
+                                        loading="lazy"
+                                        decoding="async"
+                                        src={row.photo}
+                                        alt={inventoryDisplayName(row.itemName, lang)}
+                                        className="inventory-admin-matrix-item-photo"
+                                      />
                                     ) : (
-                                      ""
+                                      <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
                                     )}
-                                  </td>
-                                  {inventoryAdminOutDayMatrix.days.map((day) =>
-                                    inventoryAdminOutDayMatrix.splitByCampus
-                                      ? inventoryAdminOutDayMatrix.campuses.map((campus) => (
-                                          <td
-                                            key={`inventory-admin-matrix-cell-${row.itemCode}-${day.ymd}-${campus}`}
-                                            className={`inventory-admin-matrix-campus-cell inventory-admin-matrix-campus-${campus.toLowerCase()} ${
-                                              campus === inventoryAdminOutDayMatrix.campuses[0]
-                                                ? "inventory-admin-matrix-campus-day-start"
-                                                : ""
-                                            } ${
-                                              campus === inventoryAdminOutDayMatrix.campuses[inventoryAdminOutDayMatrix.campuses.length - 1]
-                                                ? "inventory-admin-matrix-campus-day-end"
-                                                : ""
-                                            } ${day.holidayType ? `inventory-admin-matrix-day-event-cell inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday-cell" : ""}`}
-                                          >
-                                            {row.dayCampusQty[`${day.ymd}::${campus}`] || ""}
-                                          </td>
-                                        ))
-                                      : (
-                                          <td
-                                            key={`inventory-admin-matrix-cell-${row.itemCode}-${day.ymd}`}
-                                            className={`${day.holidayType ? `inventory-admin-matrix-day-event-cell inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday-cell" : ""}`}
-                                          >
-                                            {row.dayQty[day.ymd] || ""}
-                                          </td>
-                                        )
+                                    <div className="inventory-admin-matrix-item-text">
+                                      <strong>{row.itemCode}</strong>
+                                      <span>{inventoryDisplayName(row.itemName, lang)}</span>
+                                    </div>
+                                  </div>
+                                  <strong className="inventory-admin-matrix-mobile-total">{row.total}</strong>
+                                </div>
+                                <div className="inventory-admin-matrix-mobile-summary">
+                                  <div>
+                                    <span>{lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current"}</span>
+                                    <strong>{row.currentStock}</strong>
+                                  </div>
+                                  <div>
+                                    <span>{lang === "km" ? "មុនបន្ថែម" : "Before Refill"}</span>
+                                    <strong>{row.stockBeforeRefill ?? "-"}</strong>
+                                  </div>
+                                  <div>
+                                    <span>{lang === "km" ? "បន្ថែមប្រចាំខែ" : "Monthly Refill"}</span>
+                                    <strong>{row.monthlyRefill || "-"}</strong>
+                                  </div>
+                                </div>
+                                <div className="inventory-admin-matrix-mobile-entries">
+                                  {row.entries.length ? (
+                                    row.entries.map((entry) => (
+                                      <div key={`inventory-admin-matrix-mobile-entry-${row.itemCode}-${entry.key}`} className="inventory-admin-matrix-mobile-entry">
+                                        <span>
+                                          {entry.dayLabel} {entry.weekdayLabel}
+                                          {entry.campus ? ` • ${entry.campus}` : ""}
+                                        </span>
+                                        <strong>{entry.qty}</strong>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="tiny">{lang === "km" ? "មិនមានចលនាស្តុកក្នុងរយៈពេលនេះ" : "No stock movement in this range."}</div>
                                   )}
-                                  <td><strong>{row.total}</strong></td>
-                                </tr>
-                              ))
-                            ) : (
+                                </div>
+                              </article>
+                            ))
+                          ) : (
+                            <div className="tiny">
+                              {lang === "km" ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់តម្រងបច្ចុប្បន្ន" : "No stock-out data for current filters."}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="table-wrap inventory-admin-matrix-scroll">
+                          <table className="inventory-admin-matrix">
+                            <thead>
                               <tr>
-                                <td
-                                  colSpan={Math.max(
-                                    5,
-                                    4 +
-                                      inventoryAdminOutDayMatrix.days.length *
-                                        (inventoryAdminOutDayMatrix.splitByCampus
-                                          ? Math.max(1, inventoryAdminOutDayMatrix.campuses.length)
-                                          : 1)
-                                  )}
+                                <th
+                                  className="inventory-admin-matrix-item-head"
+                                  rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
                                 >
-                                  {lang === "km" ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់តម្រងបច្ចុប្បន្ន" : "No stock-out data for current filters."}
-                                </td>
+                                  {lang === "km" ? "Item" : "Item"}
+                                </th>
+                                <th
+                                  className="inventory-admin-matrix-total-head"
+                                  rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                                >
+                                  {lang === "km" ? "ស្តុកបច្ចុប្បន្ន" : "Current Stock"}
+                                </th>
+                                <th
+                                  className="inventory-admin-matrix-total-head"
+                                  rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                                >
+                                  {lang === "km" ? "ស្តុកមុនបន្ថែម" : "Stock Before Refill"}
+                                </th>
+                                <th
+                                  className="inventory-admin-matrix-total-head"
+                                  rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                                >
+                                  {lang === "km" ? "បន្ថែមប្រចាំខែ" : "Monthly Refill"}
+                                </th>
+                                {inventoryAdminOutDayMatrix.days.map((day) => (
+                                  inventoryAdminOutDayMatrix.splitByCampus ? (
+                                    <th
+                                      key={`inventory-admin-matrix-head-day-${day.ymd}`}
+                                      className={`inventory-admin-matrix-day-head ${day.holidayType ? `inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday" : ""}`}
+                                      colSpan={inventoryAdminOutDayMatrix.campuses.length}
+                                      title={day.holidayName || undefined}
+                                    >
+                                      <span className="inventory-admin-matrix-day-head-main">{day.dayLabel}</span>
+                                      <span className="inventory-admin-matrix-day-head-sub">{day.weekdayLabel}</span>
+                                    </th>
+                                  ) : (
+                                    <th
+                                      key={`inventory-admin-matrix-head-${day.ymd}`}
+                                      className={`inventory-admin-matrix-day-head ${day.holidayType ? `inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday" : ""}`}
+                                      title={day.holidayName || undefined}
+                                    >
+                                      <span className="inventory-admin-matrix-day-head-main">{day.dayLabel}</span>
+                                      <span className="inventory-admin-matrix-day-head-sub">{day.weekdayLabel}</span>
+                                    </th>
+                                  )
+                                ))}
+                                <th
+                                  className="inventory-admin-matrix-total-head"
+                                  rowSpan={inventoryAdminOutDayMatrix.splitByCampus ? 2 : 1}
+                                >
+                                  {lang === "km" ? "សរុប" : "Total"}
+                                </th>
                               </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
+                              {inventoryAdminOutDayMatrix.splitByCampus ? (
+                                <tr>
+                                  {inventoryAdminOutDayMatrix.days.flatMap((day) =>
+                                    inventoryAdminOutDayMatrix.campuses.map((campus) => (
+                                      <th
+                                        key={`inventory-admin-matrix-head-campus-${day.ymd}-${campus}`}
+                                        className={`inventory-admin-matrix-campus-head inventory-admin-matrix-campus-${campus.toLowerCase()} ${
+                                          campus === inventoryAdminOutDayMatrix.campuses[0] ? "inventory-admin-matrix-campus-day-start" : ""
+                                        } ${
+                                          campus === inventoryAdminOutDayMatrix.campuses[inventoryAdminOutDayMatrix.campuses.length - 1]
+                                            ? "inventory-admin-matrix-campus-day-end"
+                                            : ""
+                                        }`}
+                                        title={inventoryCampusLabel(campus)}
+                                      >
+                                        {campus}
+                                      </th>
+                                    ))
+                                  )}
+                                </tr>
+                              ) : null}
+                            </thead>
+                            <tbody>
+                              {inventoryAdminOutDayMatrix.rows.length ? (
+                                inventoryAdminOutDayMatrix.rows.map((row, index) => (
+                                  <tr
+                                    key={`inventory-admin-matrix-row-${row.itemCode}-${row.itemName}`}
+                                    className={`inventory-admin-matrix-row inventory-admin-matrix-row-${index % 6}`}
+                                  >
+                                    <th className="inventory-admin-matrix-item-cell">
+                                        <div className="inventory-admin-matrix-item">
+                                          {row.photo ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                            src={row.photo}
+                                            alt={inventoryDisplayName(row.itemName, lang)}
+                                            className="inventory-admin-matrix-item-photo"
+                                          />
+                                          ) : (
+                                            <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
+                                          )}
+                                          <div className="inventory-admin-matrix-item-text">
+                                          {!inventoryAdminOutDayMatrix.splitByCampus ? <strong>{row.itemCode}</strong> : null}
+                                          <span>{inventoryDisplayName(row.itemName, lang)}</span>
+                                          </div>
+                                        </div>
+                                      </th>
+                                    <td className="inventory-admin-matrix-total-cell inventory-admin-matrix-current-stock-cell"><strong>{row.currentStock}</strong></td>
+                                    <td className="inventory-admin-matrix-total-cell">
+                                      {row.stockBeforeRefill ?? ""}
+                                    </td>
+                                    <td className="inventory-admin-matrix-total-cell">
+                                      {row.firstRefillDate || row.monthlyRefill ? (
+                                        <div className="inventory-admin-matrix-refill-cell">
+                                          {row.firstRefillDate ? (
+                                            <span className="inventory-admin-matrix-refill-date">
+                                              {formatDate(row.firstRefillDate)}
+                                            </span>
+                                          ) : null}
+                                          {row.monthlyRefill ? (
+                                            <strong className="inventory-admin-matrix-refill-qty">{row.monthlyRefill}</strong>
+                                          ) : null}
+                                        </div>
+                                      ) : (
+                                        ""
+                                      )}
+                                    </td>
+                                    {inventoryAdminOutDayMatrix.days.map((day) =>
+                                      inventoryAdminOutDayMatrix.splitByCampus
+                                        ? inventoryAdminOutDayMatrix.campuses.map((campus) => (
+                                            <td
+                                              key={`inventory-admin-matrix-cell-${row.itemCode}-${day.ymd}-${campus}`}
+                                              className={`inventory-admin-matrix-campus-cell inventory-admin-matrix-campus-${campus.toLowerCase()} ${
+                                                campus === inventoryAdminOutDayMatrix.campuses[0]
+                                                  ? "inventory-admin-matrix-campus-day-start"
+                                                  : ""
+                                              } ${
+                                                campus === inventoryAdminOutDayMatrix.campuses[inventoryAdminOutDayMatrix.campuses.length - 1]
+                                                  ? "inventory-admin-matrix-campus-day-end"
+                                                  : ""
+                                              } ${day.holidayType ? `inventory-admin-matrix-day-event-cell inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday-cell" : ""}`}
+                                            >
+                                              {row.dayCampusQty[`${day.ymd}::${campus}`] || ""}
+                                            </td>
+                                          ))
+                                        : (
+                                            <td
+                                              key={`inventory-admin-matrix-cell-${row.itemCode}-${day.ymd}`}
+                                              className={`${day.holidayType ? `inventory-admin-matrix-day-event-cell inventory-admin-matrix-day-event-${day.holidayType}` : ""} ${day.weekday === 0 ? "inventory-admin-matrix-day-sunday-cell" : ""}`}
+                                            >
+                                              {row.dayQty[day.ymd] || ""}
+                                            </td>
+                                          )
+                                    )}
+                                    <td><strong>{row.total}</strong></td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td
+                                    colSpan={Math.max(
+                                      5,
+                                      4 +
+                                        inventoryAdminOutDayMatrix.days.length *
+                                          (inventoryAdminOutDayMatrix.splitByCampus
+                                            ? Math.max(1, inventoryAdminOutDayMatrix.campuses.length)
+                                            : 1)
+                                    )}
+                                  >
+                                    {lang === "km" ? "មិនមានទិន្នន័យចេញស្តុកសម្រាប់តម្រងបច្ចុប្បន្ន" : "No stock-out data for current filters."}
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                     ) : null}
                   </article>
