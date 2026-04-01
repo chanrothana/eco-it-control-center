@@ -7022,12 +7022,14 @@ export default function App() {
               active: tab === "inventory" && inventoryDashboardGroup === group,
               onSelect: () => openInventorySection(group, "dashboard"),
               children: [
-                {
-                  key: `inventory.group.${group}.dashboard`,
-                  label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
-                  active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "dashboard",
-                  onSelect: () => openInventorySection(group, "dashboard"),
-                },
+                ...(group === "SUPPLY"
+                  ? []
+                  : [{
+                      key: `inventory.group.${group}.dashboard`,
+                      label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
+                      active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "dashboard",
+                      onSelect: () => openInventorySection(group, "dashboard"),
+                    }]),
                 {
                   key: `inventory.group.${group}.items`,
                   label: lang === "km" ? "រៀបចំមុខទំនិញ" : "Item Setup",
@@ -11444,6 +11446,77 @@ export default function App() {
       atRiskRows: atRiskRows.slice(0, 6),
     };
   }, [inventoryDashboardScopedRows, inventoryDashboardScopedLowStockRows, inventoryDashboardScopedTxns]);
+  const inventoryDashboardCampusBalanceRows = useMemo(() => {
+    const map = new Map<string, {
+      campus: string;
+      items: number;
+      onHand: number;
+      lowStockItems: number;
+      zeroStockItems: number;
+      itemRows: Array<{
+        itemCode: string;
+        itemName: string;
+        photo?: string;
+        qty: number;
+        minStock: number;
+        isLow: boolean;
+        isOut: boolean;
+      }>;
+    }>();
+    const itemMaps = new Map<string, Map<string, {
+      itemCode: string;
+      itemName: string;
+      photo?: string;
+      qty: number;
+      minStock: number;
+    }>>();
+    for (const row of inventoryDashboardScopedRows) {
+      const campus = inventoryRecordCampusCode(row.campus) || String(row.campus || "").trim() || "-";
+      const current = map.get(campus) || { campus, items: 0, onHand: 0, lowStockItems: 0, zeroStockItems: 0, itemRows: [] };
+      const stock = Number(row.currentStock || 0);
+      const min = Number(row.minStock || 0);
+      current.items += 1;
+      current.onHand += stock;
+      if (stock < min) current.lowStockItems += 1;
+      if (stock <= 0) current.zeroStockItems += 1;
+      map.set(campus, current);
+
+      const campusItems = itemMaps.get(campus) || new Map<string, {
+        itemCode: string;
+        itemName: string;
+        photo?: string;
+        qty: number;
+        minStock: number;
+      }>();
+      const itemCode = String(row.itemCode || "-");
+      const itemName = String(row.itemName || "-");
+      const itemKey = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
+      const itemRow = campusItems.get(itemKey) || {
+        itemCode,
+        itemName,
+        photo: row.photo,
+        qty: 0,
+        minStock: 0,
+      };
+      itemRow.qty += stock;
+      itemRow.minStock += min;
+      if (!itemRow.photo && row.photo) itemRow.photo = row.photo;
+      campusItems.set(itemKey, itemRow);
+      itemMaps.set(campus, campusItems);
+    }
+    return Array.from(map.values())
+      .map((row) => {
+        const itemRows = Array.from(itemMaps.get(row.campus)?.values() || [])
+          .map((item) => ({
+            ...item,
+            isLow: item.qty < item.minStock,
+            isOut: item.qty <= 0,
+          }))
+          .sort((a, b) => a.itemCode.localeCompare(b.itemCode) || inventoryDisplayName(a.itemName, lang).localeCompare(inventoryDisplayName(b.itemName, lang)));
+        return { ...row, itemRows };
+      })
+      .sort((a, b) => b.onHand - a.onHand || inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
+  }, [inventoryDashboardScopedRows, inventoryCampusLabel, inventoryDisplayName, lang]);
   const inventoryDashboardLocationControlRows = useMemo(() => {
     const map = new Map<string, { location: string; items: number; onHand: number; lowStockItems: number }>();
     for (const row of inventoryDashboardScopedRows) {
@@ -30758,14 +30831,8 @@ export default function App() {
                             if (navCollapsed && hasSubmenu) {
                               setNavCollapsed(false);
                               setExpandedNavModule(item.id);
-                              if (item.id === "inventory") {
-                                setExpandedNavSubKey(`inventory.group.${inventoryDashboardGroup}`);
-                              }
                             } else {
                               setExpandedNavModule((prev) => (hasSubmenu ? (prev === item.id ? null : item.id) : null));
-                              if (hasSubmenu && item.id === "inventory") {
-                                setExpandedNavSubKey(`inventory.group.${inventoryDashboardGroup}`);
-                              }
                             }
                             handleNavChange(item.id);
                           }}
@@ -30826,9 +30893,6 @@ export default function App() {
                                 onClick={() => {
                                   if (hasSubmenu) {
                                     setExpandedNavModule((prev) => (prev === item.id ? null : item.id));
-                                    if (item.id === "inventory") {
-                                      setExpandedNavSubKey(`inventory.group.${inventoryDashboardGroup}`);
-                                    }
                                     return;
                                   }
                                   setExpandedNavModule(null);
@@ -36917,7 +36981,7 @@ export default function App() {
 
         {tab === "inventory" && (
           <div className={`inventory-shell ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
-            {!maintenanceQuickMode ? (
+            {!maintenanceQuickMode && !(inventoryView === "dashboard" && inventoryDashboardGroup === "SUPPLY") ? (
               <section className={`panel ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
                 <div className="panel-row">
                   <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
@@ -37976,38 +38040,55 @@ export default function App() {
               <section
                 className={`panel inventory-daily-panel ${inventoryView === "dashboard" ? "inventory-dashboard-panel" : ""} ${maintenanceQuickMode ? "inventory-daily-panel-quick" : ""} ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}
               >
-                <div className="inventory-daily-head">
-                  <h2>
-                    {inventoryView === "dashboard"
-                      ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} ${lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard"}`
-                      : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)")}
-                  </h2>
-                  <p className="tiny">
-                    {inventoryView === "dashboard"
-                      ? (lang === "km"
-                        ? inventoryDashboardGroup === "SUPPLY"
-                          ? "ផ្ទាំងសម្រាប់តាមដានសម្ភារៈសម្អាត ការប្រើប្រាស់ប្រចាំខែ និងហានិភ័យស្តុក។"
-                          : inventoryDashboardGroup === "CLEAN_TOOL"
-                            ? "ផ្ទាំងសម្រាប់គ្រប់គ្រងឧបករណ៍សម្អាតតាមសាខា និងទីតាំងរក្សាទុក។"
-                            : inventoryDashboardGroup === "MAINT_TOOL"
-                              ? "ផ្ទាំងសម្រាប់តាមដានឧបករណ៍ថែទាំ ភាពរួចរាល់ប្រើ និងចំណុចខ្វះស្តុក។"
-                              : "ផ្ទាំងសម្រាប់គ្រប់គ្រងទឹកថ្នាំ Printer និងស្ថានភាពស្តុក។"
-                        : inventoryDashboardGroup === "SUPPLY"
-                          ? "Dedicated dashboard for cleaning supplies with monthly usage, campus demand, and stock risk."
-                          : inventoryDashboardGroup === "CLEAN_TOOL"
-                            ? "Dedicated dashboard for cleaning tools with campus control and storage-location visibility."
-                            : inventoryDashboardGroup === "MAINT_TOOL"
-                              ? "Dedicated dashboard for maintenance tools with readiness, usage, and low-stock control."
-                              : "Dedicated dashboard for printer toner stock health, approvals, and usage trends.")
-                      : (lang === "km"
-                        ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
-                        : "Phone-friendly daily Stock-Out record for maintenance staff.")}
-                  </p>
-                </div>
+                {!(inventoryView === "dashboard" && inventoryDashboardGroup === "SUPPLY") ? (
+                  <div className="inventory-daily-head">
+                    <h2>
+                      {inventoryView === "dashboard"
+                        ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} ${lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard"}`
+                        : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)")}
+                    </h2>
+                    <p className="tiny">
+                      {inventoryView === "dashboard"
+                        ? (lang === "km"
+                          ? inventoryDashboardGroup === "SUPPLY"
+                            ? "ផ្ទាំងសម្រាប់តាមដានសម្ភារៈសម្អាត ការប្រើប្រាស់ប្រចាំខែ និងហានិភ័យស្តុក។"
+                            : inventoryDashboardGroup === "CLEAN_TOOL"
+                              ? "ផ្ទាំងសម្រាប់គ្រប់គ្រងឧបករណ៍សម្អាតតាមសាខា និងទីតាំងរក្សាទុក។"
+                              : inventoryDashboardGroup === "MAINT_TOOL"
+                                ? "ផ្ទាំងសម្រាប់តាមដានឧបករណ៍ថែទាំ ភាពរួចរាល់ប្រើ និងចំណុចខ្វះស្តុក។"
+                                : "ផ្ទាំងសម្រាប់គ្រប់គ្រងទឹកថ្នាំ Printer និងស្ថានភាពស្តុក។"
+                          : inventoryDashboardGroup === "SUPPLY"
+                            ? "Dedicated dashboard for cleaning supplies with monthly usage, campus demand, and stock risk."
+                            : inventoryDashboardGroup === "CLEAN_TOOL"
+                              ? "Dedicated dashboard for cleaning tools with campus control and storage-location visibility."
+                              : inventoryDashboardGroup === "MAINT_TOOL"
+                                ? "Dedicated dashboard for maintenance tools with readiness, usage, and low-stock control."
+                                : "Dedicated dashboard for printer toner stock health, approvals, and usage trends.")
+                        : (lang === "km"
+                          ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
+                          : "Phone-friendly daily Stock-Out record for maintenance staff.")}
+                    </p>
+                  </div>
+                ) : null}
                 {inventoryView === "dashboard" && !maintenanceQuickMode && isAdmin ? (
-                  <article className="panel inventory-admin-control-panel">
+                  <article className={`${inventoryDashboardGroup === "SUPPLY" ? "inventory-admin-control-panel inventory-admin-control-panel-supply" : "panel inventory-admin-control-panel"}`}>
+                    {inventoryDashboardGroup === "SUPPLY" ? (
+                      <div className="panel-row">
+                        <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
+                        <div className="panel-filters">
+                          <input
+                            className="input"
+                            placeholder={`Search ${inventoryBusinessGroupLabel(inventoryDashboardGroup)}...`}
+                            value={inventorySearch}
+                            onChange={(e) => setInventorySearch(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="panel-row">
-                      <h3 className="section-title">{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard Snapshot"}</h3>
+                      {inventoryDashboardGroup !== "SUPPLY" ? (
+                        <h3 className="section-title">{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard Snapshot"}</h3>
+                      ) : <span />}
                       <span className="tiny">
                         {new Date(`${inventoryDashboardAdminSummary.month}-01T00:00:00`).toLocaleString(undefined, {
                           month: "long",
@@ -38015,90 +38096,142 @@ export default function App() {
                         })}
                       </span>
                     </div>
+                    {inventoryDashboardGroup !== "SUPPLY" ? (
                     <div className="stats-grid inventory-admin-control-stats">
-                      {inventoryDashboardGroup === "SUPPLY" ? (
+                      {inventoryDashboardGroup === "CLEAN_TOOL" ? (
                         <>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
-                            <div className="stat-label">{lang === "km" ? "មុខទំនិញសរុប" : "Total Items"}</div>
-                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
-                          </button>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("balance_all")}>
-                            <div className="stat-label">{lang === "km" ? "ស្តុកសរុប (On Hand)" : "Total On Hand"}</div>
-                            <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
-                          </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
-                            <div className="stat-label">{lang === "km" ? "ទាបជាង Min" : "Low Stock Items"}</div>
-                            <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
-                          </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
-                            <div className="stat-label">{lang === "km" ? "អស់ស្តុក" : "Out of Stock Items"}</div>
-                            <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
-                          </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
-                            <div className="stat-label">{lang === "km" ? "ខ្វះពីកម្រិត Min" : "Units Below Min"}</div>
-                            <div className="stat-value">{inventoryDashboardGroupSnapshot.belowMinUnits}</div>
-                          </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("pending")}>
-                            <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំអនុម័ត" : "Pending Approvals"}</div>
-                            <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
-                          </button>
-                        </>
-                      ) : inventoryDashboardGroup === "CLEAN_TOOL" ? (
-                        <>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
+                          <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-neutral" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ប្រភេទឧបករណ៍សម្អាត" : "Total Tool Types"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ចំនួនប្រភេទឧបករណ៍សម្អាតដែលបានកត់ត្រា" : "Number of cleaning tool types recorded in the system."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("balance_all")}>
+                          <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-primary" onClick={() => openInventoryDashboardStat("balance_all")}>
                             <div className="stat-label">{lang === "km" ? "ឧបករណ៍អាចប្រើបាន" : "Units Available"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលនៅស្ថានភាពអាចប្រើបានឥឡូវនេះ" : "Tools currently available and ready to use."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-alert" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "ឧបករណ៍ខ្វះ" : "Low Coverage Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលចំនួននៅសល់តិច ឬមិនគ្រប់តាមតម្រូវការ" : "Tools with low available quantity or weak coverage."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-danger" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "គ្មានស្តុក" : "Zero Available Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលមិនមានស្រាប់សម្រាប់ប្រើនៅពេលនេះ" : "Tools that are not available for use right now."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
+                          <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-secondary" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ទីតាំងគ្រប់គ្រង" : "Storage Locations"}</div>
                             <div className="stat-value">{inventoryDashboardLocationControlRows.length}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ចំនួនទីតាំងសម្រាប់រក្សាទុក និងគ្រប់គ្រងឧបករណ៍" : "Number of storage locations being used for these tools."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("pending")}>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-muted" onClick={() => openInventoryDashboardStat("pending")}>
                             <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំ" : "Pending Requests"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "សំណើដែលនៅរង់ចាំចាត់ចែង ឬអនុម័ត" : "Requests still waiting for follow-up or approval."}</div>
                           </button>
                         </>
                       ) : (
                         <>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
+                          <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-neutral" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ប្រភេទឧបករណ៍ថែទាំ" : "Total Tool Types"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ចំនួនប្រភេទឧបករណ៍ថែទាំដែលបានកត់ត្រា" : "Number of maintenance tool types recorded in the system."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("balance_all")}>
+                          <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-primary" onClick={() => openInventoryDashboardStat("balance_all")}>
                             <div className="stat-label">{lang === "km" ? "ឧបករណ៍រួចរាល់" : "Ready Units"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលរួចរាល់សម្រាប់ចេញប្រើ ឬយកទៅធ្វើការ" : "Tools currently ready for use or deployment."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-alert" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "ត្រូវតាមដាន" : "Low Readiness Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលត្រូវតាមដានព្រោះចំនួន ឬស្ថានភាពមិនល្អ" : "Tools needing attention because quantity or readiness is low."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("balance_low")}>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-danger" onClick={() => openInventoryDashboardStat("balance_low")}>
                             <div className="stat-label">{lang === "km" ? "គ្មានស្តុក" : "Zero Available Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលមិនមានស្រាប់សម្រាប់ប្រើនៅពេលនេះ" : "Tools with no available stock for current work."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button" onClick={() => openInventoryDashboardStat("items")}>
+                          <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-secondary" onClick={() => openInventoryDashboardStat("items")}>
                             <div className="stat-label">{lang === "km" ? "ទីតាំងគ្រប់គ្រង" : "Work Locations"}</div>
                             <div className="stat-value">{inventoryDashboardLocationControlRows.length}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "ចំនួនទីតាំងធ្វើការ ឬទីតាំងរក្សាទុកដែលកំពុងគ្រប់គ្រង" : "Number of work or storage locations being controlled."}</div>
                           </button>
-                          <button type="button" className="stat-card stat-card-button stat-card-overdue" onClick={() => openInventoryDashboardStat("pending")}>
+                          <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-muted" onClick={() => openInventoryDashboardStat("pending")}>
                             <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំ" : "Pending Requests"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
+                            <div className="inventory-admin-stat-help">{lang === "km" ? "សំណើដែលនៅរង់ចាំចាត់ចែង ឬអនុម័ត" : "Requests still waiting for follow-up or approval."}</div>
                           </button>
                         </>
                       )}
                     </div>
+                    ) : null}
+                    {inventoryDashboardGroup === "SUPPLY" ? (
+                      <div className="panel inventory-admin-campus-balance-panel">
+                        <div className="panel-row">
+                          <div>
+                            <strong className="section-title">{lang === "km" ? "ស្តុកតាមសាខា" : "Campus Stock Balance"}</strong>
+                            <div className="tiny">
+                              {lang === "km"
+                                ? "មើលស្តុកសរុប និងចំណុចត្រូវតាមដានរបស់សាខានីមួយៗ"
+                                : "Quick view of each campus stock balance and items needing attention."}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="inventory-admin-campus-balance-grid">
+                          {inventoryDashboardCampusBalanceRows.map((row) => (
+                            <article key={`inventory-dashboard-campus-balance-${row.campus}`} className="inventory-admin-campus-balance-card">
+                              <div className="inventory-admin-campus-balance-head">
+                                <strong>{inventoryCampusLabel(row.campus)}</strong>
+                                <span className={`inventory-admin-campus-balance-badge ${row.zeroStockItems > 0 ? "inventory-admin-campus-balance-badge-danger" : row.lowStockItems > 0 ? "inventory-admin-campus-balance-badge-watch" : "inventory-admin-campus-balance-badge-ok"}`}>
+                                  {row.zeroStockItems > 0
+                                    ? (lang === "km" ? "ត្រូវដោះស្រាយ" : "Need Action")
+                                    : row.lowStockItems > 0
+                                      ? (lang === "km" ? "ត្រូវតាមដាន" : "Watch")
+                                      : (lang === "km" ? "ល្អ" : "OK")}
+                                </span>
+                              </div>
+                              <div className="inventory-admin-campus-balance-meta">
+                                <span>{lang === "km" ? `ប្រភេទ ${row.itemRows.length}` : `${row.itemRows.length} item types`}</span>
+                                <span>{lang === "km" ? `ត្រូវតាមដាន ${row.lowStockItems}` : `${row.lowStockItems} low stock`}</span>
+                                <span>{lang === "km" ? `អស់ស្តុក ${row.zeroStockItems}` : `${row.zeroStockItems} out of stock`}</span>
+                              </div>
+                              <div className="inventory-admin-campus-item-grid">
+                                {row.itemRows.map((item) => (
+                                  <div
+                                    key={`inventory-dashboard-campus-item-${row.campus}-${item.itemCode}-${item.itemName}`}
+                                    className={`inventory-admin-campus-item-card ${item.isOut ? "inventory-admin-campus-item-card-out" : item.isLow ? "inventory-admin-campus-item-card-low" : ""}`}
+                                  >
+                                    {item.photo ? (
+                                      <img
+                                        src={item.photo}
+                                        alt={inventoryDisplayName(item.itemName, lang)}
+                                        className="inventory-admin-campus-item-photo"
+                                        loading="lazy"
+                                        decoding="async"
+                                      />
+                                    ) : (
+                                      <div className="inventory-admin-campus-item-photo inventory-admin-campus-item-photo-empty">
+                                        {item.itemCode.slice(0, 2) || "IT"}
+                                      </div>
+                                    )}
+                                    <div className="inventory-admin-campus-item-copy">
+                                      <strong>{inventoryDisplayName(item.itemName, lang)}</strong>
+                                      <span>{item.itemCode}</span>
+                                    </div>
+                                    <div className="inventory-admin-campus-item-qty">
+                                      <span>{lang === "km" ? "ចំនួន" : "Qty"}</span>
+                                      <strong>{item.qty}</strong>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {inventoryDashboardGroup !== "SUPPLY" ? (
                       <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
                         <div className="inventory-admin-control-card">
@@ -38609,24 +38742,24 @@ export default function App() {
                                   className={`inventory-admin-matrix-row inventory-admin-matrix-row-${index % 6}`}
                                 >
                                   <th className="inventory-admin-matrix-item-cell">
-                                    <div className="inventory-admin-matrix-item">
-                                      {row.photo ? (
-                                        <img
-                                          loading="lazy"
-                                          decoding="async"
+                                      <div className="inventory-admin-matrix-item">
+                                        {row.photo ? (
+                                          <img
+                                            loading="lazy"
+                                            decoding="async"
                                           src={row.photo}
                                           alt={inventoryDisplayName(row.itemName, lang)}
                                           className="inventory-admin-matrix-item-photo"
                                         />
-                                      ) : (
-                                        <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
-                                      )}
-                                      <div className="inventory-admin-matrix-item-text">
+                                        ) : (
+                                          <span className="inventory-admin-matrix-item-photo inventory-admin-matrix-item-photo-empty" aria-hidden={true}>-</span>
+                                        )}
+                                        <div className="inventory-admin-matrix-item-text">
                                         {!inventoryAdminOutDayMatrix.splitByCampus ? <strong>{row.itemCode}</strong> : null}
                                         <span>{inventoryDisplayName(row.itemName, lang)}</span>
+                                        </div>
                                       </div>
-                                    </div>
-                                  </th>
+                                    </th>
                                   <td className="inventory-admin-matrix-total-cell inventory-admin-matrix-current-stock-cell"><strong>{row.currentStock}</strong></td>
                                   <td className="inventory-admin-matrix-total-cell">
                                     {row.stockBeforeRefill ?? ""}

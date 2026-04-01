@@ -6395,6 +6395,12 @@ label.backup-action-btn {
   margin-bottom: 8px;
 }
 
+.inventory-admin-control-panel-supply {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .inventory-admin-control-filters {
   align-items: end;
 }
@@ -6403,10 +6409,311 @@ label.backup-action-btn {
   margin-bottom: 0;
 }
 
+.inventory-admin-control-stats .inventory-admin-stat-card {
+  position: relative;
+  align-content: start;
+  align-items: start;
+  background: linear-gradient(180deg, #fffdf9 0%, #fff9ef 100%);
+  border: 1px solid #e3cfaf;
+  border-radius: 18px;
+  box-shadow: 0 8px 20px rgba(133, 82, 29, 0.06);
+  gap: 10px;
+  grid-template-columns: 1fr;
+  justify-items: start;
+  min-height: 148px;
+  overflow: hidden;
+  padding: 16px 16px 14px;
+  text-align: left;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease, background 0.14s ease;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  border-radius: 18px 0 0 18px;
+  background: #d2b48c;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card:hover {
+  background: linear-gradient(180deg, #fffefb 0%, #fff5e6 100%);
+  border-color: #d4af7d;
+  box-shadow: 0 10px 24px rgba(133, 82, 29, 0.09);
+  transform: translateY(-1px);
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card .stat-label,
+.inventory-admin-control-stats .inventory-admin-stat-card .stat-value {
+  position: relative;
+  z-index: 1;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card .stat-label {
+  color: #6d7da0;
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  max-width: 100%;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card .stat-value {
+  color: #3c2b18;
+  font-family: var(--font-head);
+  font-size: clamp(34px, 2.8vw, 44px);
+  font-weight: 700;
+  line-height: 0.95;
+  margin-top: 2px;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-help {
+  color: #7d6a50;
+  font-size: 12px;
+  line-height: 1.35;
+  min-height: 32px;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card .inventory-admin-stat-help {
+  position: relative;
+  z-index: 1;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-neutral::before {
+  background: linear-gradient(180deg, #7b91bd 0%, #5e78aa 100%);
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-primary::before {
+  background: linear-gradient(180deg, #4f87b7 0%, #2f6d9f 100%);
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-secondary::before {
+  background: linear-gradient(180deg, #6a9b7f 0%, #427457 100%);
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-alert::before {
+  background: linear-gradient(180deg, #f0b24e 0%, #d98a16 100%);
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-danger::before {
+  background: linear-gradient(180deg, #ea7d72 0%, #cf4a3e 100%);
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-muted::before {
+  background: linear-gradient(180deg, #b78fa4 0%, #8d6077 100%);
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-primary .stat-value {
+  color: #204f79;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-secondary .stat-value {
+  color: #2f6846;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-alert .stat-label,
+.inventory-admin-control-stats .inventory-admin-stat-card-alert .stat-value {
+  color: #b15f11;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-danger .stat-label,
+.inventory-admin-control-stats .inventory-admin-stat-card-danger .stat-value {
+  color: #c24036;
+}
+
+.inventory-admin-control-stats .inventory-admin-stat-card-muted .stat-label,
+.inventory-admin-control-stats .inventory-admin-stat-card-muted .stat-value {
+  color: #87596f;
+}
+
 .inventory-admin-control-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
+}
+
+.inventory-admin-campus-balance-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.inventory-admin-campus-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.inventory-admin-campus-balance-card {
+  border: 1px solid #e3cfaf;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fffdf9 0%, #fff7ea 100%);
+  box-shadow: 0 8px 18px rgba(133, 82, 29, 0.06);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  align-content: start;
+  align-self: start;
+  position: relative;
+}
+
+.inventory-admin-campus-balance-head {
+  display: flex;
+  justify-content: center;
+  padding-right: 56px;
+  text-align: center;
+}
+
+.inventory-admin-campus-balance-head strong {
+  color: #3d2c18;
+  font-family: var(--font-head);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.inventory-admin-campus-balance-badge {
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  white-space: nowrap;
+  position: absolute;
+  right: 14px;
+  top: 14px;
+}
+
+.inventory-admin-campus-balance-badge-ok {
+  background: #edf8f0;
+  color: #2f7a59;
+}
+
+.inventory-admin-campus-balance-badge-watch {
+  background: #fff6e8;
+  color: #b26a18;
+}
+
+.inventory-admin-campus-balance-badge-danger {
+  background: #fff0ef;
+  color: #c34b42;
+}
+
+.inventory-admin-campus-balance-main {
+  display: grid;
+  gap: 4px;
+}
+
+.inventory-admin-campus-balance-label {
+  color: #7d6a50;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inventory-admin-campus-balance-main strong {
+  color: #244f78;
+  font-family: var(--font-head);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.inventory-admin-campus-balance-meta {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-admin-campus-balance-meta span {
+  color: #6e5c43;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.inventory-admin-campus-item-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-admin-campus-item-card {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #ead8bc;
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 50px minmax(0, 1fr) auto;
+  padding: 9px;
+}
+
+.inventory-admin-campus-item-card-low {
+  border-color: #efc27f;
+  background: #fff8ec;
+}
+
+.inventory-admin-campus-item-card-out {
+  border-color: #efb1ac;
+  background: #fff4f2;
+}
+
+.inventory-admin-campus-item-photo {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid #d9e4f5;
+  background: #f4f7fc;
+}
+
+.inventory-admin-campus-item-photo-empty {
+  align-items: center;
+  color: #6d7da0;
+  display: flex;
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: center;
+}
+
+.inventory-admin-campus-item-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.inventory-admin-campus-item-copy strong {
+  color: #3a2916;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.inventory-admin-campus-item-copy span {
+  color: #867055;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.inventory-admin-campus-item-qty {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  text-align: right;
+}
+
+.inventory-admin-campus-item-qty span {
+  color: #866f52;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.inventory-admin-campus-item-qty strong {
+  color: #244f78;
+  font-family: var(--font-head);
+  font-size: 24px;
+  line-height: 1;
 }
 
 .inventory-admin-control-card {
@@ -6490,11 +6797,11 @@ label.backup-action-btn {
 }
 
 .inventory-admin-matrix-head-tools {
-  margin-left: auto;
   display: flex;
   align-items: flex-end;
   flex-wrap: nowrap;
   gap: 10px;
+  margin-left: auto;
 }
 
 .inventory-admin-matrix-title-block {
@@ -13056,14 +13363,91 @@ tr.row-maint-maintenance:hover td {
     padding: 10px 8px;
   }
 
+  .inventory-dashboard-panel .inventory-admin-control-stats .inventory-admin-stat-card {
+    border-radius: 16px;
+    gap: 8px;
+    min-height: 126px;
+    padding: 14px 12px 12px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-stats .inventory-admin-stat-card::before {
+    width: 6px;
+    border-radius: 16px 0 0 16px;
+  }
+
   .inventory-dashboard-panel .inventory-admin-control-stats .stat-label {
     font-size: 12px;
     line-height: 1.2;
   }
 
+  .inventory-dashboard-panel .inventory-admin-control-stats .inventory-admin-stat-card .stat-label {
+    font-size: 12px;
+  }
+
   .inventory-dashboard-panel .inventory-admin-control-stats .stat-value {
     font-size: 24px;
     line-height: 1;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-stats .inventory-admin-stat-card .stat-value {
+    font-size: 28px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-control-stats .inventory-admin-stat-help {
+    font-size: 11px;
+    min-height: 28px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-card {
+    border-radius: 16px;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-head strong {
+    font-size: 16px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-head {
+    padding-right: 54px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-badge {
+    right: 14px;
+    top: 14px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-main strong {
+    font-size: 28px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-meta {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-item-card {
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-item-photo {
+    width: 42px;
+    height: 42px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-item-copy strong {
+    font-size: 13px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-item-qty strong {
+    font-size: 20px;
   }
 
   .inventory-dashboard-panel .inventory-admin-control-filters {
