@@ -9460,11 +9460,11 @@ export default function App() {
     setClassroomVerificationOpen(false);
   }, [classroomDetailRoomId]);
   useEffect(() => {
-    if (tab === "classroom" || tab === "assets") return;
+    if (tab === "classroom" || tab === "assets" || (tab === "verification" && verificationView === "classroom")) return;
     if (classroomDetailRoomId === null && assetDetailId === null) return;
     setClassroomDetailRoomId(null);
     setAssetDetailId(null);
-  }, [tab, classroomDetailRoomId, assetDetailId]);
+  }, [tab, verificationView, classroomDetailRoomId, assetDetailId]);
 
   function requireAdminAction() {
     if (isAdmin) return true;
