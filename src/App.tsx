@@ -11447,6 +11447,7 @@ export default function App() {
     };
   }, [inventoryDashboardScopedRows, inventoryDashboardScopedLowStockRows, inventoryDashboardScopedTxns]);
   const inventoryDashboardCampusBalanceRows = useMemo(() => {
+    const q = inventorySearch.trim().toLowerCase();
     const map = new Map<string, {
       campus: string;
       items: number;
@@ -11512,11 +11513,26 @@ export default function App() {
             isLow: item.qty < item.minStock,
             isOut: item.qty <= 0,
           }))
+          .filter((item) =>
+            !q
+              ? true
+              : `${item.itemCode} ${item.itemName} ${inventoryAliasText(item.itemName)} ${inventoryDisplayName(item.itemName, lang)}`
+                  .toLowerCase()
+                  .includes(q)
+          )
           .sort((a, b) => a.itemCode.localeCompare(b.itemCode) || inventoryDisplayName(a.itemName, lang).localeCompare(inventoryDisplayName(b.itemName, lang)));
-        return { ...row, itemRows };
+        return {
+          ...row,
+          items: itemRows.length,
+          onHand: itemRows.reduce((sum, item) => sum + Number(item.qty || 0), 0),
+          lowStockItems: itemRows.filter((item) => item.isLow).length,
+          zeroStockItems: itemRows.filter((item) => item.isOut).length,
+          itemRows,
+        };
       })
+      .filter((row) => row.itemRows.length > 0)
       .sort((a, b) => b.onHand - a.onHand || inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
-  }, [inventoryDashboardScopedRows, inventoryCampusLabel, inventoryDisplayName, lang]);
+  }, [inventoryDashboardScopedRows, inventoryCampusLabel, inventoryDisplayName, inventorySearch, lang]);
   const inventoryDashboardLocationControlRows = useMemo(() => {
     const map = new Map<string, { location: string; items: number; onHand: number; lowStockItems: number }>();
     for (const row of inventoryDashboardScopedRows) {
@@ -38087,14 +38103,16 @@ export default function App() {
                     ) : null}
                     <div className="panel-row">
                       {inventoryDashboardGroup !== "SUPPLY" ? (
-                        <h3 className="section-title">{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard Snapshot"}</h3>
-                      ) : <span />}
-                      <span className="tiny">
-                        {new Date(`${inventoryDashboardAdminSummary.month}-01T00:00:00`).toLocaleString(undefined, {
-                          month: "long",
-                          year: "numeric",
-                        })}
-                      </span>
+                        <>
+                          <h3 className="section-title">{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard Snapshot"}</h3>
+                          <span className="tiny">
+                            {new Date(`${inventoryDashboardAdminSummary.month}-01T00:00:00`).toLocaleString(undefined, {
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </>
+                      ) : null}
                     </div>
                     {inventoryDashboardGroup !== "SUPPLY" ? (
                     <div className="stats-grid inventory-admin-control-stats">
@@ -38178,6 +38196,12 @@ export default function App() {
                                 : "Quick view of each campus stock balance and items needing attention."}
                             </div>
                           </div>
+                          <span className="tiny">
+                            {new Date(`${inventoryDashboardAdminSummary.month}-01T00:00:00`).toLocaleString(undefined, {
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </span>
                         </div>
                         <div className="inventory-admin-campus-balance-grid">
                           {inventoryDashboardCampusBalanceRows.map((row) => (

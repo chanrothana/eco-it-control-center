@@ -13427,8 +13427,12 @@ tr.row-maint-maintenance:hover td {
   }
 
   .inventory-dashboard-panel .inventory-admin-campus-balance-meta {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-meta span {
+    font-size: 11px;
   }
 
   .inventory-dashboard-panel .inventory-admin-campus-item-card {
