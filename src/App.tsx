@@ -7783,6 +7783,7 @@ export default function App() {
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [inventorySupplyCampusQuickFilter, setInventorySupplyCampusQuickFilter] = useState("ALL");
   const [purchaseRequestCampusFilter, setPurchaseRequestCampusFilter] = useState("ALL");
   const [purchaseRequestItemFilter, setPurchaseRequestItemFilter] = useState("ALL");
   const [purchaseRequestQtyOverrides, setPurchaseRequestQtyOverrides] = useState<Record<string, string>>({});
@@ -11533,6 +11534,29 @@ export default function App() {
       .filter((row) => row.itemRows.length > 0)
       .sort((a, b) => b.onHand - a.onHand || inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
   }, [inventoryDashboardScopedRows, inventoryCampusLabel, inventoryDisplayName, inventorySearch, lang]);
+  const inventoryDashboardCampusBalanceOptions = useMemo(
+    () => inventoryDashboardCampusBalanceRows.map((row) => ({
+      value: row.campus,
+      label: row.campus === "C2"
+        ? inventoryCampusLabel(row.campus).replace(/\s*\(2\.1\)\s*$/, "")
+        : inventoryCampusLabel(row.campus),
+    })),
+    [inventoryDashboardCampusBalanceRows, inventoryCampusLabel]
+  );
+  useEffect(() => {
+    if (inventorySupplyCampusQuickFilter === "ALL") return;
+    if (!inventoryDashboardCampusBalanceOptions.some((option) => option.value === inventorySupplyCampusQuickFilter)) {
+      setInventorySupplyCampusQuickFilter("ALL");
+    }
+  }, [inventoryDashboardCampusBalanceOptions, inventorySupplyCampusQuickFilter]);
+  const inventoryDashboardVisibleCampusBalanceRows = useMemo(
+    () => (
+      inventorySupplyCampusQuickFilter === "ALL"
+        ? inventoryDashboardCampusBalanceRows
+        : inventoryDashboardCampusBalanceRows.filter((row) => row.campus === inventorySupplyCampusQuickFilter)
+    ),
+    [inventoryDashboardCampusBalanceRows, inventorySupplyCampusQuickFilter]
+  );
   const inventoryDashboardLocationControlRows = useMemo(() => {
     const map = new Map<string, { location: string; items: number; onHand: number; lowStockItems: number }>();
     for (const row of inventoryDashboardScopedRows) {
@@ -38203,11 +38227,31 @@ export default function App() {
                             })}
                           </span>
                         </div>
+                        {isPhoneView && inventoryDashboardCampusBalanceOptions.length > 1 ? (
+                          <label className="field inventory-admin-campus-mobile-filter">
+                            <span>{lang === "km" ? "ជ្រើសសាខា" : "Campus Filter"}</span>
+                            <LocationPicker
+                              value={inventorySupplyCampusQuickFilter}
+                              onChange={setInventorySupplyCampusQuickFilter}
+                              options={[
+                                { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
+                                ...inventoryDashboardCampusBalanceOptions,
+                              ]}
+                              placeholder={lang === "km" ? "ជ្រើសសាខា" : "Select campus"}
+                              searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                              emptyText={lang === "km" ? "រកមិនឃើញសាខា" : "No campus found."}
+                            />
+                          </label>
+                        ) : null}
                         <div className="inventory-admin-campus-balance-grid">
-                          {inventoryDashboardCampusBalanceRows.map((row) => (
+                          {inventoryDashboardVisibleCampusBalanceRows.map((row) => (
                             <article key={`inventory-dashboard-campus-balance-${row.campus}`} className="inventory-admin-campus-balance-card">
                               <div className="inventory-admin-campus-balance-head">
-                                <strong>{inventoryCampusLabel(row.campus)}</strong>
+                                <strong>
+                                  {row.campus === "C2"
+                                    ? inventoryCampusLabel(row.campus).replace(/\s*\(2\.1\)\s*$/, "")
+                                    : inventoryCampusLabel(row.campus)}
+                                </strong>
                                 <span className={`inventory-admin-campus-balance-badge ${row.zeroStockItems > 0 ? "inventory-admin-campus-balance-badge-danger" : row.lowStockItems > 0 ? "inventory-admin-campus-balance-badge-watch" : "inventory-admin-campus-balance-badge-ok"}`}>
                                   {row.zeroStockItems > 0
                                     ? (lang === "km" ? "ត្រូវដោះស្រាយ" : "Need Action")

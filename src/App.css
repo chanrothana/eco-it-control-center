@@ -6538,6 +6538,10 @@ label.backup-action-btn {
   margin-top: 8px;
 }
 
+.inventory-admin-campus-mobile-filter {
+  max-width: 260px;
+}
+
 .inventory-admin-campus-balance-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -13407,6 +13411,10 @@ tr.row-maint-maintenance:hover td {
     border-radius: 16px;
     gap: 10px;
     padding: 14px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-mobile-filter {
+    max-width: none;
   }
 
   .inventory-dashboard-panel .inventory-admin-campus-balance-head strong {
