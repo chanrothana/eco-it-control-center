@@ -1377,11 +1377,11 @@ const MENU_ACCESS_TREE: Array<{
   },
   {
     module: "verification",
-    labelEn: "Verification",
-    labelKm: "ត្រួតពិនិត្យ",
+    labelEn: "Asset Check",
+    labelKm: "ពិនិត្យទ្រព្យ",
     children: [
-      { key: "verification.record", labelEn: "Record Verification", labelKm: "កត់ត្រាត្រួតពិនិត្យ" },
-      { key: "verification.history", labelEn: "Verification History", labelKm: "ប្រវត្តិត្រួតពិនិត្យ" },
+      { key: "verification.record", labelEn: "Record Asset Check", labelKm: "កត់ត្រាពិនិត្យទ្រព្យ" },
+      { key: "verification.history", labelEn: "Asset Check History", labelKm: "ប្រវត្តិពិនិត្យទ្រព្យ" },
     ],
   },
   {
@@ -1410,7 +1410,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
       { key: "reports.staff_borrowing", labelEn: "Staff Asset Assignment List", labelKm: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
       { key: "reports.maintenance_completion", labelEn: "Maintenance Completion", labelKm: "លទ្ធផលបញ្ចប់ការថែទាំ" },
-      { key: "reports.verification_summary", labelEn: "Verification Summary", labelKm: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
+      { key: "reports.verification_summary", labelEn: "Asset Check Summary", labelKm: "សង្ខេបលទ្ធផលពិនិត្យទ្រព្យ" },
       { key: "reports.qr_labels", labelEn: "Asset ID + QR Labels", labelKm: "លេខទ្រព្យ + QR" },
     ],
   },
@@ -2217,7 +2217,7 @@ const TEXT = {
     addChemicalRecord: "Add Chemical Record",
     operationRecord: "Operation Record",
     poolComplaints: "Pool Complaints",
-    verification: "Verification",
+    verification: "Asset Check",
     reports: "Reports",
     viewerMode: "Viewer mode: read-only access.",
     maintenanceScheduleAlerts: "Maintenance Schedule Alerts",
@@ -2231,11 +2231,11 @@ const TEXT = {
     openAssetList: "Open Asset List",
     openSchedule: "Open Schedule",
     recordMaintenance: "Record Maintenance",
-    verificationAlerts: "Verification Alerts",
-    recordVerification: "Record Verification",
-    verificationHistory: "Verification History",
-    verificationResult: "Verification Result",
-    verificationFrequency: "Verification Frequency",
+    verificationAlerts: "Asset Check Alerts",
+    recordVerification: "Record Asset Check",
+    verificationHistory: "Asset Check History",
+    verificationResult: "Check Result",
+    verificationFrequency: "Check Frequency",
     dueNext30Days: "Due Next 30 Days",
     nextScheduledAssets: "Next Scheduled Assets",
     nextScheduleHint: "Click Asset ID to open maintenance record form.",
@@ -2451,7 +2451,7 @@ const TEXT = {
     addChemicalRecord: "កត់ត្រាគីមី",
     operationRecord: "កំណត់ត្រាប្រតិបត្តិការ",
     poolComplaints: "បញ្ហាអាងហែលទឹក",
-    verification: "ត្រួតពិនិត្យ",
+    verification: "ពិនិត្យទ្រព្យ",
     reports: "របាយការណ៍",
     viewerMode: "របៀបអ្នកមើល: អាចមើលបានតែប៉ុណ្ណោះ។",
     maintenanceScheduleAlerts: "ការជូនដំណឹងកាលវិភាគថែទាំ",
@@ -2465,11 +2465,11 @@ const TEXT = {
     openAssetList: "បើកបញ្ជីទ្រព្យសម្បត្តិ",
     openSchedule: "បើកកាលវិភាគ",
     recordMaintenance: "កត់ត្រាការថែទាំ",
-    verificationAlerts: "ការជូនដំណឹងត្រួតពិនិត្យ",
-    recordVerification: "កត់ត្រាការត្រួតពិនិត្យ",
-    verificationHistory: "ប្រវត្តិត្រួតពិនិត្យ",
-    verificationResult: "លទ្ធផលត្រួតពិនិត្យ",
-    verificationFrequency: "ប្រេកង់ត្រួតពិនិត្យ",
+    verificationAlerts: "ការជូនដំណឹងពិនិត្យទ្រព្យ",
+    recordVerification: "កត់ត្រាពិនិត្យទ្រព្យ",
+    verificationHistory: "ប្រវត្តិពិនិត្យទ្រព្យ",
+    verificationResult: "លទ្ធផលពិនិត្យ",
+    verificationFrequency: "ប្រេកង់ពិនិត្យ",
     dueNext30Days: "ដល់កំណត់ក្នុង 30 ថ្ងៃ",
     nextScheduledAssets: "ទ្រព្យកំណត់ពេលថែទាំបន្ទាប់",
     nextScheduleHint: "ចុចលេខសម្គាល់ទ្រព្យ ដើម្បីទៅកាន់ការកត់ត្រាថែទាំ។",
@@ -6865,6 +6865,9 @@ export default function App() {
     readClassroomVerificationFallback()
   );
   const [classroomVerificationOpen, setClassroomVerificationOpen] = useState(false);
+  const [classroomAssetCheckMonth, setClassroomAssetCheckMonth] = useState(toYmd(new Date()).slice(0, 7));
+  const [classroomAssetCheckCampusFilter, setClassroomAssetCheckCampusFilter] = useState("ALL");
+  const [classroomAssetCheckStatusFilter, setClassroomAssetCheckStatusFilter] = useState<"ALL" | "PENDING" | "CHECKED" | "ISSUE">("ALL");
   const [classroomVerificationForm, setClassroomVerificationForm] = useState<{
     verificationMonth: string;
     checkedDate: string;
@@ -6901,7 +6904,8 @@ export default function App() {
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
-  const [verificationView, setVerificationView] = useState<"record" | "history">("record");
+  const [verificationView, setVerificationView] = useState<"record" | "classroom" | "history">("record");
+  const [pendingClassroomCheckRoomId, setPendingClassroomCheckRoomId] = useState<number | null>(null);
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
@@ -6927,6 +6931,21 @@ export default function App() {
     },
     []
   );
+  const openMaintenanceQuickSupplies = useCallback(() => {
+    startTabTransition(() => {
+      setInventoryDashboardGroup("SUPPLY");
+      setInventoryView("daily");
+      setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", date: toYmd(new Date()) }));
+      setMaintenanceStockOutViewDate(toYmd(new Date()));
+      setTab("inventory");
+    });
+  }, []);
+  const openMaintenanceQuickAssetCheck = useCallback(() => {
+    startTabTransition(() => {
+      setVerificationView("classroom");
+      setTab("verification");
+    });
+  }, []);
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
@@ -6935,6 +6954,23 @@ export default function App() {
       setTab(nextTab);
     });
   }, []);
+  const maintenanceQuickNavItems = useMemo(
+    () => [
+      {
+        id: "inventory" as const,
+        label: lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies",
+        active: tab === "inventory",
+        onSelect: () => openMaintenanceQuickSupplies(),
+      },
+      {
+        id: "verification" as const,
+        label: lang === "km" ? "ពិនិត្យទ្រព្យ" : "Asset Check",
+        active: tab === "verification",
+        onSelect: () => openMaintenanceQuickAssetCheck(),
+      },
+    ],
+    [lang, openMaintenanceQuickAssetCheck, openMaintenanceQuickSupplies, tab]
+  );
   const handleMobileNavChange = useCallback(
     (nextTab: NavModule, options?: { closeMenu?: boolean }) => {
       const shouldCloseMenu = options?.closeMenu ?? true;
@@ -7380,7 +7416,7 @@ export default function App() {
               ? [
                   {
                     key: "verification.record",
-                    label: lang === "km" ? "កត់ត្រា" : "Record",
+                    label: lang === "km" ? "ពិនិត្យមួយមុខ" : "Single Check",
                     active: verificationView === "record",
                     onSelect: () =>
                       startTabTransition(() => {
@@ -7390,6 +7426,16 @@ export default function App() {
                   },
                 ]
               : []),
+            {
+              key: "verification.classroom",
+              label: lang === "km" ? "ពិនិត្យថ្នាក់រៀនប្រចាំខែ" : "Monthly Classroom Check",
+              active: verificationView === "classroom",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setVerificationView("classroom");
+                  setTab("verification");
+                }),
+            },
             ...(canAccessMenu("verification.history", "verification")
               ? [
                   {
@@ -7798,7 +7844,7 @@ export default function App() {
 
   useEffect(() => {
     if (maintenanceQuickMode) {
-      if (tab !== "inventory") setTab("inventory");
+      if (tab !== "inventory" && tab !== "verification") setTab("inventory");
       return;
     }
     if (!navMenuItems.some((item) => item.id === tab)) {
@@ -9211,11 +9257,8 @@ export default function App() {
   }, [inventoryAdminMatrixDatePickerOpen]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
-    setTab("inventory");
-    setInventoryView("daily");
-    setInventoryDailyForm((prev) => ({ ...prev, type: "OUT", date: toYmd(new Date()) }));
-    setMaintenanceStockOutViewDate(toYmd(new Date()));
-  }, [maintenanceQuickMode]);
+    openMaintenanceQuickSupplies();
+  }, [maintenanceQuickMode, openMaintenanceQuickSupplies]);
 
   useEffect(() => {
     if (authUser) {
@@ -11574,14 +11617,16 @@ export default function App() {
       .filter((row) => row.itemRows.length > 0)
       .sort((a, b) => b.onHand - a.onHand || inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
   }, [inventoryDashboardScopedRows, inventoryCampusLabel, inventoryDisplayName, inventorySearch, lang]);
+  const cleaningSupplyCampusLabel = useCallback(
+    (campus: string) => inventoryCampusLabel(campus).replace(/\s*\((?:2\.1|C2\.1)\)\s*$/, ""),
+    [inventoryCampusLabel]
+  );
   const inventoryDashboardCampusBalanceOptions = useMemo(
     () => inventoryDashboardCampusBalanceRows.map((row) => ({
       value: row.campus,
-      label: row.campus === "C2"
-        ? inventoryCampusLabel(row.campus).replace(/\s*\(2\.1\)\s*$/, "")
-        : inventoryCampusLabel(row.campus),
+      label: cleaningSupplyCampusLabel(row.campus),
     })),
-    [inventoryDashboardCampusBalanceRows, inventoryCampusLabel]
+    [cleaningSupplyCampusLabel, inventoryDashboardCampusBalanceRows]
   );
   useEffect(() => {
     if (inventorySupplyCampusQuickFilter === "ALL") return;
@@ -12749,10 +12794,10 @@ export default function App() {
       { value: "ALL", label: t.allCampuses },
       ...inventoryPurchaseCampusOptions.map((campus) => ({
         value: campus,
-        label: inventoryCampusLabel(campus),
+        label: cleaningSupplyCampusLabel(campus),
       })),
     ],
-    [inventoryPurchaseCampusOptions, inventoryCampusLabel, t.allCampuses]
+    [cleaningSupplyCampusLabel, inventoryPurchaseCampusOptions, t.allCampuses]
   );
   const inventoryPurchaseItemOptions = useMemo(
     () =>
@@ -12762,12 +12807,12 @@ export default function App() {
           label: String(row.itemCode || "").trim(),
           description: inventoryDisplayName(row.itemName, lang),
           photo: String(row.photo || "").trim(),
-          searchText: `${String(row.itemCode || "").trim()} ${inventoryDisplayName(row.itemName, lang)} ${inventoryCampusLabel(row.campus)}`,
+          searchText: `${String(row.itemCode || "").trim()} ${inventoryDisplayName(row.itemName, lang)} ${cleaningSupplyCampusLabel(String(row.campus || ""))}`,
         }))
         .filter((row) => row.value)
         .filter((row, index, list) => list.findIndex((entry) => entry.value === row.value) === index)
         .sort((a, b) => a.value.localeCompare(b.value)),
-    [inventoryPurchaseRows, lang, inventoryCampusLabel]
+    [cleaningSupplyCampusLabel, inventoryPurchaseRows, lang]
   );
   const inventoryPurchaseItemPickerOptions = useMemo(
     () => [
@@ -13595,10 +13640,10 @@ export default function App() {
   useEffect(() => {
     if (tab === "verification") {
       if (verificationView === "record" && !canAccessMenu("verification.record", "verification")) {
-        setVerificationView("history");
+        setVerificationView(canAccessMenu("verification.history", "verification") ? "history" : "classroom");
       }
       if (verificationView === "history" && !canAccessMenu("verification.history", "verification")) {
-        setVerificationView("record");
+        setVerificationView(canAccessMenu("verification.record", "verification") ? "record" : "classroom");
       }
     }
   }, [tab, verificationView, canAccessMenu]);
@@ -20814,39 +20859,6 @@ export default function App() {
     }
   }
 
-  function openClassroomVerification() {
-    if (!classroomDetailRoom) return;
-    const verificationMonth = toYmd(new Date()).slice(0, 7);
-    const existing =
-      classroomVerificationRecords.find(
-        (row) => row.classroomId === classroomDetailRoom.id && row.verificationMonth === verificationMonth
-      ) || null;
-    const existingItems = new Map<number, ClassroomVerificationItemCheck>(
-      (existing?.items || []).map((item) => [item.assetDbId, item])
-    );
-    setClassroomVerificationForm({
-      verificationMonth,
-      checkedDate: existing?.checkedDate || toYmd(new Date()),
-      checkedBy: existing?.checkedBy || authUser?.displayName || authUser?.username || "",
-      note: existing?.note || "",
-      items: classroomDetailItems.map((item) => {
-        const previous = existingItems.get(item.id);
-        return {
-          assetDbId: item.id,
-          assetId: item.assetId,
-          name: item.name,
-          photo: previous?.photo || item.photo || "",
-          expectedQty: item.qty,
-          actualQty: previous?.actualQty ?? item.qty,
-          condition: previous?.condition || "Good",
-          action: previous?.action || "OK",
-          note: previous?.note || "",
-        };
-      }),
-    });
-    setClassroomVerificationOpen(true);
-  }
-
   function cancelClassroomVerification() {
     setClassroomVerificationOpen(false);
     setClassroomVerificationForm({
@@ -20858,7 +20870,13 @@ export default function App() {
     });
   }
 
-  function saveClassroomVerification() {
+  function openMonthlyClassroomCheckRoom(roomId: number) {
+    setPendingClassroomCheckRoomId(roomId);
+    setClassroomDetailRoomId(roomId);
+    setTab("classroom");
+  }
+
+  function saveClassroomVerification(openNextRoom = false) {
     if (!classroomDetailRoom) return;
     const checkedBy = String(classroomVerificationForm.checkedBy || "").trim();
     const checkedDate = normalizeYmdInput(classroomVerificationForm.checkedDate);
@@ -20911,6 +20929,9 @@ export default function App() {
       `${classroomDetailRoom.location} | ${verificationMonth} | ${checkedBy}`
     );
     setClassroomVerificationOpen(false);
+    if (openNextRoom && classroomNextPendingRoom) {
+      openMonthlyClassroomCheckRoom(classroomNextPendingRoom.id);
+    }
   }
 
   async function removeAsset(id: number) {
@@ -27068,6 +27089,101 @@ export default function App() {
       ).length,
     [classroomVerificationForm.items]
   );
+  const openClassroomVerification = useCallback(() => {
+    if (!classroomDetailRoom) return;
+    const verificationMonth =
+      tab === "verification" && verificationView === "classroom"
+        ? String(classroomAssetCheckMonth || "").trim() || toYmd(new Date()).slice(0, 7)
+        : toYmd(new Date()).slice(0, 7);
+    const existing =
+      classroomVerificationRecords.find(
+        (row) => row.classroomId === classroomDetailRoom.id && row.verificationMonth === verificationMonth
+      ) || null;
+    const existingItems = new Map<number, ClassroomVerificationItemCheck>(
+      (existing?.items || []).map((item) => [item.assetDbId, item])
+    );
+    setClassroomVerificationForm({
+      verificationMonth,
+      checkedDate: existing?.checkedDate || toYmd(new Date()),
+      checkedBy: existing?.checkedBy || authUser?.displayName || authUser?.username || "",
+      note: existing?.note || "",
+      items: classroomDetailItems.map((item) => {
+        const previous = existingItems.get(item.id);
+        return {
+          assetDbId: item.id,
+          assetId: item.assetId,
+          name: item.name,
+          photo: previous?.photo || item.photo || "",
+          expectedQty: item.qty,
+          actualQty: previous?.actualQty ?? item.qty,
+          condition: previous?.condition || "Good",
+          action: previous?.action || "OK",
+          note: previous?.note || "",
+        };
+      }),
+    });
+    setClassroomVerificationOpen(true);
+  }, [authUser?.displayName, authUser?.username, classroomAssetCheckMonth, classroomDetailItems, classroomDetailRoom, classroomVerificationRecords, tab, verificationView]);
+  const classroomAssetCheckRows = useMemo(() => {
+    const statusOrder: Record<"PENDING" | "ISSUE" | "CHECKED", number> = {
+      PENDING: 0,
+      ISSUE: 1,
+      CHECKED: 2,
+    };
+    return classroomControlRoomRows
+      .map((row) => {
+        const record =
+          classroomVerificationRecords.find(
+            (entry) => entry.classroomId === row.id && entry.verificationMonth === classroomAssetCheckMonth
+          ) || null;
+        const issueCount = record
+          ? record.items.filter(
+              (item) =>
+                item.actualQty < item.expectedQty ||
+                item.condition === "Damaged" ||
+                item.condition === "Missing" ||
+                item.action !== "OK"
+            ).length
+          : 0;
+        const statusKey: "PENDING" | "ISSUE" | "CHECKED" = !record ? "PENDING" : issueCount > 0 ? "ISSUE" : "CHECKED";
+        return {
+          ...row,
+          record,
+          issueCount,
+          checked: Boolean(record),
+          statusKey,
+        };
+      })
+      .filter((row) => (classroomAssetCheckCampusFilter === "ALL" ? true : row.campus === classroomAssetCheckCampusFilter))
+      .filter((row) => (classroomAssetCheckStatusFilter === "ALL" ? true : row.statusKey === classroomAssetCheckStatusFilter))
+      .sort(
+        (a, b) =>
+          (statusOrder[a.statusKey] - statusOrder[b.statusKey]) ||
+          campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
+          a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
+      );
+  }, [classroomAssetCheckCampusFilter, classroomAssetCheckMonth, classroomAssetCheckStatusFilter, classroomControlRoomRows, classroomVerificationRecords, campusLabel]);
+  const classroomAssetCheckSummary = useMemo(() => {
+    const totalRooms = classroomAssetCheckRows.length;
+    const checkedRooms = classroomAssetCheckRows.filter((row) => row.checked).length;
+    const pendingRooms = totalRooms - checkedRooms;
+    const issueRooms = classroomAssetCheckRows.filter((row) => row.issueCount > 0).length;
+    return { totalRooms, checkedRooms, pendingRooms, issueRooms };
+  }, [classroomAssetCheckRows]);
+  const classroomNextPendingRoom = useMemo(
+    () =>
+      classroomDetailRoom
+        ? classroomAssetCheckRows.find((row) => row.id !== classroomDetailRoom.id && !row.checked) || null
+        : null,
+    [classroomAssetCheckRows, classroomDetailRoom]
+  );
+  useEffect(() => {
+    if (pendingClassroomCheckRoomId === null) return;
+    if (tab !== "classroom") return;
+    if (!classroomDetailRoom || classroomDetailRoom.id !== pendingClassroomCheckRoomId) return;
+    openClassroomVerification();
+    setPendingClassroomCheckRoomId(null);
+  }, [pendingClassroomCheckRoomId, tab, classroomDetailRoom, openClassroomVerification]);
   const furnitureModelBreakdownText = useCallback((models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     if (!entries.length) return "-";
@@ -31005,6 +31121,30 @@ export default function App() {
                   <span>{lang === "km" ? "ចុចប៊ូតុងម៉ឺនុយ ដើម្បីបើក/បិទ" : "Tap menu button to open/close"}</span>
                 </div>
                 <div className="mobile-menu-sections">
+                  {maintenanceQuickMode ? (
+                    <section className="mobile-menu-section">
+                      <p className="mobile-menu-section-label">{lang === "km" ? "ម៉ឺនុយបុគ្គលិក" : "Staff Menu"}</p>
+                      <div className="mobile-menu-grid">
+                        {maintenanceQuickNavItems.map((item) => (
+                          <div key={`mobile-quick-nav-${item.id}`} className="mobile-menu-item-group">
+                            <button
+                              type="button"
+                              className={`mobile-menu-nav-btn ${item.active ? "mobile-menu-nav-btn-active" : ""}`}
+                              onClick={() => {
+                                item.onSelect();
+                                setMobileMenuOpen(false);
+                              }}
+                            >
+                              <span className="mobile-menu-nav-icon" aria-hidden={true}>
+                                {item.id === "inventory" ? navIcon("inventory") : navIcon("verification")}
+                              </span>
+                              <span className="mobile-menu-nav-label">{item.label}</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
                   {navSections.map((section) => (
                     <section key={`mobile-nav-${section.section}`} className="mobile-menu-section">
                       <p className="mobile-menu-section-label">{section.label}</p>
@@ -31308,20 +31448,35 @@ export default function App() {
             </div>
             {!isPhoneView ? (
               <div className="mobile-module-panel">
-                <label className="field mobile-nav-field">
-                  <span>{t.menu}</span>
-                  <select
-                    className="input mobile-nav-select"
-                    value={tab}
-                    onChange={(e) => handleNavChange(e.target.value as NavModule)}
-                  >
-                    {navMenuItems.map((item) => (
-                      <option key={`mobile-module-${item.id}`} value={item.id}>
+                {maintenanceQuickMode ? (
+                  <div className="row-actions" style={{ gap: 10, flexWrap: "wrap" }}>
+                    {maintenanceQuickNavItems.map((item) => (
+                      <button
+                        key={`desktop-quick-nav-${item.id}`}
+                        type="button"
+                        className={`tab ${item.active ? "tab-active" : ""}`}
+                        onClick={item.onSelect}
+                      >
                         {item.label}
-                      </option>
+                      </button>
                     ))}
-                  </select>
-                </label>
+                  </div>
+                ) : (
+                  <label className="field mobile-nav-field">
+                    <span>{t.menu}</span>
+                    <select
+                      className="input mobile-nav-select"
+                      value={tab}
+                      onChange={(e) => handleNavChange(e.target.value as NavModule)}
+                    >
+                      {navMenuItems.map((item) => (
+                        <option key={`mobile-module-${item.id}`} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
             ) : null}
             {error ? <p className="alert alert-error">{error}</p> : null}
@@ -31755,11 +31910,7 @@ export default function App() {
                         dashboardCleaningSupplyCampusMatrix.rows.map((row) => (
                           <article key={`dash-stock-mobile-campus-${row.campus}`} className="dashboard-supply-campus-mobile-card">
                             <div className="dashboard-supply-campus-mobile-head">
-                              <strong>
-                                {row.campus === "C2"
-                                  ? inventoryCampusLabel(row.campus).replace(/\s*\((?:2\.1|C2\.1)\)\s*$/, "")
-                                  : inventoryCampusLabel(row.campus)}
-                              </strong>
+                              <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
                             </div>
                             <div className="dashboard-supply-campus-mobile-grid">
                               {dashboardCleaningSupplyCampusMatrix.items.map((item) => {
@@ -31832,11 +31983,7 @@ export default function App() {
                           dashboardCleaningSupplyCampusMatrix.rows.map((row) => (
                             <tr key={`dash-stock-campus-row-${row.campus}`}>
                               <td>
-                                <strong>
-                                  {row.campus === "C2"
-                                    ? inventoryCampusLabel(row.campus).replace(/\s*\((?:2\.1|C2\.1)\)\s*$/, "")
-                                    : inventoryCampusLabel(row.campus)}
-                                </strong>
+                                <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
                               </td>
                               {dashboardCleaningSupplyCampusMatrix.items.map((item) => {
                                 const value = row.byItem.get(item.key);
@@ -38390,11 +38537,7 @@ export default function App() {
                           {inventoryDashboardVisibleCampusBalanceRows.map((row) => (
                             <article key={`inventory-dashboard-campus-balance-${row.campus}`} className="inventory-admin-campus-balance-card">
                               <div className="inventory-admin-campus-balance-head">
-                                <strong>
-                                  {row.campus === "C2"
-                                    ? inventoryCampusLabel(row.campus).replace(/\s*\(2\.1\)\s*$/, "")
-                                    : inventoryCampusLabel(row.campus)}
-                                </strong>
+                                <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
                                 <span className={`inventory-admin-campus-balance-badge ${row.zeroStockItems > 0 ? "inventory-admin-campus-balance-badge-danger" : row.lowStockItems > 0 ? "inventory-admin-campus-balance-badge-watch" : "inventory-admin-campus-balance-badge-ok"}`}>
                                   {row.zeroStockItems > 0
                                     ? (lang === "km" ? "ត្រូវដោះស្រាយ" : "Need Action")
@@ -38693,7 +38836,7 @@ export default function App() {
                             >
                               {inventoryAdminMatrixCampusOptions.map((campus) => (
                                 <option key={`inventory-admin-matrix-campus-${campus}`} value={campus}>
-                                  {campus === "ALL" ? t.allCampuses : inventoryCampusLabel(campus)}
+                                  {campus === "ALL" ? t.allCampuses : cleaningSupplyCampusLabel(campus)}
                                 </option>
                               ))}
                             </select>
@@ -38999,7 +39142,7 @@ export default function App() {
                                             ? "inventory-admin-matrix-campus-day-end"
                                             : ""
                                         }`}
-                                        title={inventoryCampusLabel(campus)}
+                                        title={cleaningSupplyCampusLabel(campus)}
                                       >
                                         {campus}
                                       </th>
@@ -39175,7 +39318,7 @@ export default function App() {
                               </div>
                               <div className="inventory-purchase-mobile-campus">
                                 <span>{t.campus}</span>
-                                <strong>{inventoryCampusLabel(row.campus)}</strong>
+                                <strong>{cleaningSupplyCampusLabel(String(row.campus || ""))}</strong>
                               </div>
                               <div className="inventory-purchase-mobile-metrics">
                                 <div>
@@ -39260,7 +39403,7 @@ export default function App() {
                                     </div>
                                   </div>
                                 </td>
-                                <td>{inventoryCampusLabel(row.campus)}</td>
+                                <td>{cleaningSupplyCampusLabel(String(row.campus || ""))}</td>
                                 <td>{row.usedQty}</td>
                                 <td>{row.currentStock}</td>
                                 <td>{row.minStock}</td>
@@ -43128,9 +43271,15 @@ export default function App() {
                   className={`tab ${verificationView === "record" ? "tab-active" : ""}`}
                   onClick={() => setVerificationView("record")}
                 >
-                  {t.recordVerification}
+                  {lang === "km" ? "ពិនិត្យមួយមុខ" : "Single Check"}
                 </button>
               ) : null}
+              <button
+                className={`tab ${verificationView === "classroom" ? "tab-active" : ""}`}
+                onClick={() => setVerificationView("classroom")}
+              >
+                {lang === "km" ? "ពិនិត្យថ្នាក់រៀនប្រចាំខែ" : "Monthly Classroom Check"}
+              </button>
               {canAccessMenu("verification.history", "verification") ? (
                 <button
                   className={`tab ${verificationView === "history" ? "tab-active" : ""}`}
@@ -43250,7 +43399,7 @@ export default function App() {
                     </select>
                   </label>
                   <label className="field">
-                    <span>Next Verification Date</span>
+                    <span>Next Asset Check Date</span>
                     <input
                       type="date"
                       className="input"
@@ -43297,15 +43446,204 @@ export default function App() {
                   </label>
                 </div>
                 <div className="asset-actions">
-                  <div className="tiny">Use this to verify asset condition and keep monthly/term records.</div>
+                  <div className="tiny">Use this to check asset condition and keep monthly/term records.</div>
                   <button
                     className="btn-primary"
                     disabled={busy || !isAdmin || !verificationRecordForm.assetId || !verificationRecordForm.date || !verificationRecordForm.note.trim()}
                     onClick={addVerificationRecord}
                   >
-                    Add Verification Record
+                    Add Asset Check Record
                   </button>
                 </div>
+              </>
+            )}
+
+            {verificationView === "classroom" && (
+              <>
+                <div className="panel-row" style={{ alignItems: "flex-start" }}>
+                  <div>
+                    <h3 className="section-title" style={{ marginBottom: 4 }}>
+                      {lang === "km" ? "ការពិនិត្យថ្នាក់រៀនប្រចាំខែ" : "Monthly Classroom Check"}
+                    </h3>
+                    <div className="tiny">
+                      {lang === "km"
+                        ? "បើកបន្ទប់មួយ ដើម្បីពិនិត្យទ្រព្យក្នុងថ្នាក់តាមខែ បរិមាណ ស្ថានភាព និងសកម្មភាពត្រូវធ្វើ។"
+                        : "Open one classroom and complete the monthly asset check by qty, condition, and action."}
+                    </div>
+                  </div>
+                  <div className="row-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+                    <span className="tiny">{classroomAssetCheckMonth}</span>
+                    <button className="tab btn-small" onClick={() => setTab("classroom")}>
+                      {lang === "km" ? "បើក Classroom Control" : "Open Classroom Control"}
+                    </button>
+                  </div>
+                </div>
+                <div
+                  className="stats-grid"
+                  style={{
+                    gridTemplateColumns: isPhoneView ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+                    marginBottom: 12,
+                  }}
+                >
+                  <article className="stat-card">
+                    <div className="stat-label">{lang === "km" ? "បន្ទប់សរុប" : "Total Rooms"}</div>
+                    <div className="stat-value">{classroomAssetCheckSummary.totalRooms}</div>
+                  </article>
+                  <article className="stat-card">
+                    <div className="stat-label">{lang === "km" ? "បានពិនិត្យរួច" : "Checked This Month"}</div>
+                    <div className="stat-value">{classroomAssetCheckSummary.checkedRooms}</div>
+                  </article>
+                  <article className="stat-card stat-card-overdue">
+                    <div className="stat-label">{lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending Checks"}</div>
+                    <div className="stat-value">{classroomAssetCheckSummary.pendingRooms}</div>
+                  </article>
+                  <article className="stat-card stat-card-overdue">
+                    <div className="stat-label">{lang === "km" ? "បន្ទប់មានបញ្ហា" : "Rooms With Issues"}</div>
+                    <div className="stat-value">{classroomAssetCheckSummary.issueRooms}</div>
+                  </article>
+                </div>
+                <div className="form-grid" style={{ marginBottom: 12 }}>
+                  <label className="field">
+                    <span>{lang === "km" ? "ខែ" : "Month"}</span>
+                    <input
+                      className="input"
+                      type="month"
+                      value={classroomAssetCheckMonth}
+                      onChange={(e) => setClassroomAssetCheckMonth(e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select
+                      className="input"
+                      value={classroomAssetCheckCampusFilter}
+                      onChange={(e) => setClassroomAssetCheckCampusFilter(e.target.value)}
+                    >
+                      <option value="ALL">{t.allCampuses}</option>
+                      {allowedCampuses.map((campus) => (
+                        <option key={`asset-check-campus-${campus}`} value={campus}>
+                          {campusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "ស្ថានភាព" : "Status"}</span>
+                    <select
+                      className="input"
+                      value={classroomAssetCheckStatusFilter}
+                      onChange={(e) => setClassroomAssetCheckStatusFilter(e.target.value as "ALL" | "PENDING" | "CHECKED" | "ISSUE")}
+                    >
+                      <option value="ALL">{lang === "km" ? "ទាំងអស់" : "All"}</option>
+                      <option value="PENDING">{lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending"}</option>
+                      <option value="CHECKED">{lang === "km" ? "បានពិនិត្យ" : "Checked"}</option>
+                      <option value="ISSUE">{lang === "km" ? "មានបញ្ហា" : "Issue Found"}</option>
+                    </select>
+                  </label>
+                </div>
+                {isPhoneView ? (
+                  <div className="report-card-list">
+                    {classroomAssetCheckRows.length ? (
+                      classroomAssetCheckRows.map((row) => (
+                        <article key={`asset-check-classroom-mobile-${row.id}`} className="report-card">
+                          <div className="report-card-head">
+                            <div className="report-card-title">
+                              <strong>{row.location}</strong>
+                              <div className="tiny report-card-sub">
+                                {campusLabel(row.campus)} | {lang === "km" ? `ទ្រព្យ ${row.totalAssets}` : `${row.totalAssets} assets`}
+                              </div>
+                            </div>
+                            <span className={`report-pill ${row.checked ? "" : "report-pill-alert"}`}>
+                              {row.checked ? (lang === "km" ? "បានពិនិត្យ" : "Checked") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}
+                            </span>
+                          </div>
+                          <div className="furniture-report-mobile-metrics furniture-report-mobile-metrics-tight">
+                            <div>
+                              <span>{lang === "km" ? "ខែ" : "Month"}</span>
+                              <strong>{classroomAssetCheckMonth}</strong>
+                            </div>
+                            <div>
+                              <span>{lang === "km" ? "បញ្ហា" : "Issues"}</span>
+                              <strong>{row.issueCount}</strong>
+                            </div>
+                            <div>
+                              <span>{lang === "km" ? "ពិនិត្យដោយ" : "Checked By"}</span>
+                              <strong>{row.record?.checkedBy || "-"}</strong>
+                            </div>
+                            <div>
+                              <span>{lang === "km" ? "ថ្ងៃពិនិត្យ" : "Checked Date"}</span>
+                              <strong>{row.record?.checkedDate || "-"}</strong>
+                            </div>
+                          </div>
+                          <div className="furniture-report-mobile-detail">
+                            <small>{lang === "km" ? "ចំណាំបន្ទប់" : "Room Notes"}</small>
+                            <p>{row.record?.note || row.issueText}</p>
+                          </div>
+                          <div className="row-actions" style={{ gap: 8 }}>
+                            <button className="btn-primary btn-small" style={{ flex: 1 }} onClick={() => openMonthlyClassroomCheckRoom(row.id)}>
+                              {row.checked
+                                ? (lang === "km" ? "បើកពិនិត្យឡើងវិញ" : "Open Check")
+                                : (lang === "km" ? "ចាប់ផ្តើមពិនិត្យ" : "Start Check")}
+                            </button>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">
+                        {lang === "km"
+                          ? "មិនទាន់មានបន្ទប់ថ្នាក់រៀនសម្រាប់ពិនិត្យទេ។"
+                          : "No classroom rooms are ready for monthly check yet."}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{t.campus}</th>
+                          <th>{t.location}</th>
+                          <th>{lang === "km" ? "ទ្រព្យក្នុងបន្ទប់" : "Assets In Room"}</th>
+                          <th>{lang === "km" ? "ស្ថានភាពខែនេះ" : "This Month Status"}</th>
+                          <th>{lang === "km" ? "ថ្ងៃពិនិត្យ" : "Checked Date"}</th>
+                          <th>{lang === "km" ? "ពិនិត្យដោយ" : "Checked By"}</th>
+                          <th>{lang === "km" ? "បញ្ហា" : "Issues"}</th>
+                          <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {classroomAssetCheckRows.length ? (
+                          classroomAssetCheckRows.map((row) => (
+                            <tr key={`asset-check-classroom-row-${row.id}`}>
+                              <td>{campusLabel(row.campus)}</td>
+                              <td><strong>{row.location}</strong></td>
+                              <td>{row.totalAssets}</td>
+                              <td>{row.checked ? (lang === "km" ? "បានពិនិត្យ" : "Checked") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</td>
+                              <td>{row.record?.checkedDate || "-"}</td>
+                              <td>{row.record?.checkedBy || "-"}</td>
+                              <td>{row.issueCount}</td>
+                              <td>
+                                <button className="tab btn-small" onClick={() => openMonthlyClassroomCheckRoom(row.id)}>
+                                  {row.checked
+                                    ? (lang === "km" ? "បើកពិនិត្យ" : "Open Check")
+                                    : (lang === "km" ? "ចាប់ផ្តើម" : "Start")}
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={8}>
+                              {lang === "km"
+                                ? "មិនទាន់មានបន្ទប់ថ្នាក់រៀនសម្រាប់ពិនិត្យទេ។"
+                                : "No classroom rooms are ready for monthly check yet."}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </>
             )}
 
@@ -43514,7 +43852,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={13}>No verification records yet.</td>
+                          <td colSpan={13}>No asset check records yet.</td>
                         </tr>
                       )}
                     </tbody>
@@ -49585,7 +49923,7 @@ export default function App() {
                     style={isPhoneView ? { flex: 1 } : undefined}
                     onClick={classroomVerificationOpen ? cancelClassroomVerification : openClassroomVerification}
                   >
-                    {classroomVerificationOpen ? "Cancel Verify" : "Monthly Verify"}
+                    {classroomVerificationOpen ? "Cancel Check" : "Monthly Asset Check"}
                   </button>
                   <button
                     className="tab"
@@ -49603,18 +49941,25 @@ export default function App() {
                 <div className="tiny">
                   {classroomLatestVerification
                     ? `Last check: ${classroomLatestVerification.checkedDate} | ${classroomLatestVerification.checkedBy} | ${classroomLatestVerification.verificationMonth}`
-                    : "No monthly classroom verification yet."}
+                    : "No monthly classroom asset check yet."}
                 </div>
                 <div className="tiny">
                   {classroomCurrentMonthVerification
                     ? `This month saved: ${classroomCurrentMonthVerification.verificationMonth}`
-                    : `This month not checked yet: ${toYmd(new Date()).slice(0, 7)}`}
+                    : `This month not checked yet: ${String(classroomVerificationForm.verificationMonth || classroomAssetCheckMonth || toYmd(new Date()).slice(0, 7))}`}
                 </div>
+                {classroomNextPendingRoom ? (
+                  <div className="tiny">
+                    {lang === "km"
+                      ? `បន្ទប់បន្ទាប់: ${classroomNextPendingRoom.location}`
+                      : `Next room: ${classroomNextPendingRoom.location}`}
+                  </div>
+                ) : null}
               </div>
               {classroomVerificationOpen ? (
                 <section className="panel" style={{ marginBottom: 16, padding: 16 }}>
                   <div className="panel-row">
-                    <h3 className="section-title" style={{ margin: 0 }}>Monthly Classroom Verification</h3>
+                    <h3 className="section-title" style={{ margin: 0 }}>Monthly Classroom Asset Check</h3>
                     <span className="tiny">Issues found: {classroomVerificationIssueCount}</span>
                   </div>
                   <div className="form-grid" style={{ marginBottom: 12 }}>
@@ -49899,7 +50244,16 @@ export default function App() {
                     </div>
                     <div className="row-actions" style={{ gap: 8, width: isPhoneView ? "100%" : undefined }}>
                       <button className="tab" style={isPhoneView ? { flex: 1 } : undefined} onClick={cancelClassroomVerification}>Cancel</button>
-                      <button className="btn-primary" style={isPhoneView ? { flex: 1 } : undefined} onClick={saveClassroomVerification}>Save Monthly Check</button>
+                      {classroomNextPendingRoom ? (
+                        <button
+                          className="tab"
+                          style={isPhoneView ? { flex: 1 } : undefined}
+                          onClick={() => saveClassroomVerification(true)}
+                        >
+                          {lang === "km" ? "រក្សាទុក ហើយបន្ទាប់" : "Save & Next Room"}
+                        </button>
+                      ) : null}
+                      <button className="btn-primary" style={isPhoneView ? { flex: 1 } : undefined} onClick={() => saveClassroomVerification(false)}>Save Monthly Check</button>
                     </div>
                   </div>
                 </section>
