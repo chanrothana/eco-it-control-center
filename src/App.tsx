@@ -5164,7 +5164,11 @@ function normalizeMaintenanceWorkflow(input: unknown): MaintenanceWorkflow {
   };
 }
 
-function createMaintenanceRecordForm(asset?: Asset | null, preferredDate = toYmd(new Date())) {
+function createMaintenanceRecordForm(
+  asset?: Asset | null,
+  preferredDate = toYmd(new Date()),
+  preferredBy = ""
+) {
   const workflow = normalizeMaintenanceWorkflow({
     template: getMaintenanceTemplateKey(asset),
     priority: "Normal",
@@ -5177,7 +5181,7 @@ function createMaintenanceRecordForm(asset?: Asset | null, preferredDate = toYmd
     condition: "",
     note: "",
     cost: "",
-    by: "",
+    by: String(preferredBy || "").trim(),
     photo: "",
     photos: [] as string[],
     beforePhotos: [] as string[],
@@ -6669,6 +6673,7 @@ export default function App() {
   const t = TEXT[lang];
   const [authLoading, setAuthLoading] = useState(true);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const currentOperatorName = String(authUser?.displayName || authUser?.username || "").trim();
   const [loginForm, setLoginForm] = useState(() => {
     const remember = String(localStorage.getItem(LOGIN_REMEMBER_KEY) || "") === "1";
     return {
@@ -8202,7 +8207,9 @@ export default function App() {
   const [transferQuickAssetId, setTransferQuickAssetId] = useState<number | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
   const [maintenanceRecordFileKey, setMaintenanceRecordFileKey] = useState(0);
-  const [maintenanceRecordForm, setMaintenanceRecordForm] = useState(() => createMaintenanceRecordForm());
+  const [maintenanceRecordForm, setMaintenanceRecordForm] = useState(() =>
+    createMaintenanceRecordForm(undefined, toYmd(new Date()), "")
+  );
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
     const now = new Date();
@@ -8215,7 +8222,7 @@ export default function App() {
     result: "Verified" as VerificationEntry["result"],
     condition: "",
     note: "",
-    by: "",
+    by: currentOperatorName,
     photo: "",
     nextVerificationDate: "",
     verificationFrequency: "NONE" as "NONE" | "MONTHLY" | "TERMLY",
@@ -9918,6 +9925,419 @@ export default function App() {
       })),
     }));
   }, [rentalCampusReportBlocks, rentalPrinterCampusLabel]);
+  const printRentalComparisonReport = useCallback(() => {
+    const campusCardsHtml = rentalCampusReportBlocks.length
+      ? rentalCampusReportBlocks
+          .map((block, index) => {
+            const color =
+              index % 4 === 0 ? "#6f63c7" :
+              index % 4 === 1 ? "#86b93b" :
+              index % 4 === 2 ? "#48bcd2" : "#f26a21";
+            const rowsHtml = block.rows.length
+              ? block.rows
+                  .map(
+                    (row) => `
+                      <tr>
+                        <td><strong>${escapeHtml(row.monthLabel)}</strong></td>
+                        <td>${row.currentMono.toLocaleString()}</td>
+                        <td>${row.previousMono.toLocaleString()}</td>
+                        <td>${row.monoUsage.toLocaleString()}</td>
+                      </tr>
+                    `
+                  )
+                  .join("")
+              : `
+                <tr>
+                  <td colspan="4">No monthly records.</td>
+                </tr>
+              `;
+            return `
+              <article class="rental-print-campus-card">
+                <div class="rental-print-campus-head" style="background:${color};">
+                  ${escapeHtml(rentalPrinterCampusLabel(block.campus))}
+                </div>
+                <table class="rental-print-campus-table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Current</th>
+                      <th>Previous</th>
+                      <th>Usage</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rowsHtml}</tbody>
+                </table>
+              </article>
+            `;
+          })
+          .join("")
+      : `<div class="rental-print-empty">No rental counter records in the selected range.</div>`;
+
+    const usageChartHtml = rentalCampusUsageChart.rows.length
+      ? `
+        <section class="rental-print-chart-card">
+          <div class="rental-print-section-title">Campus Usage Comparison</div>
+          <div class="rental-print-section-note">Total monthly usage in the selected range</div>
+          <div class="rental-print-chart-list">
+            ${rentalCampusUsageChart.rows
+              .map(
+                (row) => `
+                  <div class="rental-print-chart-row">
+                    <div class="rental-print-chart-label">${escapeHtml(row.label)}</div>
+                    <div class="rental-print-chart-track">
+                      <div
+                        class="rental-print-chart-fill"
+                        style="width:${((row.totalUsage / rentalCampusUsageChart.maxUsage) * 100).toFixed(2)}%;background:${row.color};"
+                      ></div>
+                    </div>
+                    <div class="rental-print-chart-value">${row.totalUsage.toLocaleString()}</div>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        </section>
+      `
+      : "";
+
+    const missingRowsHtml = rentalMissingPrinterRows.length
+      ? rentalMissingPrinterRows
+          .map(
+            (row) => `
+              <tr>
+                <td><strong>${escapeHtml(row.machineCode)}</strong> | ${escapeHtml(row.machineName || "-")}</td>
+                <td>${escapeHtml(rentalPrinterCampusLabel(row.campus))}</td>
+                <td>${escapeHtml(row.location || "-")}</td>
+              </tr>
+            `
+          )
+          .join("")
+      : `
+        <tr>
+          <td colspan="3">All active rental printers have records for this month.</td>
+        </tr>
+      `;
+
+    const popup = window.open("", "_blank", "width=1200,height=900");
+    if (!popup) {
+      alert(lang === "km" ? "សូមអនុញ្ញាត pop-up សិន" : "Unable to open print window. Please allow pop-ups.");
+      return;
+    }
+
+    popup.document.open();
+    popup.document.write(`
+      <html>
+        <head>
+          <title>${escapeHtml(`Printer Counter Report - ${rentalReportRangeLabel}`)}</title>
+          <style>
+            :root { color-scheme: light; }
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              font-family: "Segoe UI", Arial, sans-serif;
+              color: #1f2937;
+              background: #f6efe1;
+            }
+            .print-toolbar {
+              position: sticky;
+              top: 0;
+              z-index: 5;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+              padding: 14px 18px;
+              background: rgba(250, 247, 240, 0.97);
+              border-bottom: 1px solid #e0c69b;
+            }
+            .print-toolbar-note {
+              font-size: 13px;
+              color: #7a6544;
+            }
+            .print-toolbar-actions {
+              display: flex;
+              gap: 10px;
+            }
+            .print-btn {
+              appearance: none;
+              border: 1px solid #dfb879;
+              border-radius: 999px;
+              background: #fff9ef;
+              color: #744b1e;
+              font-size: 14px;
+              font-weight: 700;
+              padding: 10px 16px;
+              cursor: pointer;
+            }
+            .print-btn.primary {
+              background: #d96b31;
+              border-color: #d96b31;
+              color: #fff;
+            }
+            .print-page {
+              width: 210mm;
+              min-height: 297mm;
+              margin: 0 auto;
+              padding: 10mm;
+              background: #fff;
+            }
+            .rental-print-header {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 18px;
+              padding-bottom: 8px;
+              border-bottom: 2px solid #d6b47d;
+            }
+            .rental-print-kicker {
+              font-size: 11px;
+              font-weight: 700;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+              color: #867258;
+            }
+            .rental-print-title {
+              margin: 4px 0 3px;
+              font-size: 26px;
+              line-height: 1.05;
+              color: #2d2417;
+            }
+            .rental-print-subtitle {
+              margin: 0;
+              font-size: 12px;
+              color: #62513b;
+            }
+            .rental-print-logo {
+              width: 160px;
+              height: auto;
+              object-fit: contain;
+            }
+            .rental-print-meta {
+              display: grid;
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              gap: 8px;
+              margin-top: 10px;
+            }
+            .rental-print-meta-card {
+              border: 1px solid #d8c7ab;
+              border-radius: 10px;
+              padding: 8px 10px;
+              background: #fff9f0;
+            }
+            .rental-print-meta-card span {
+              display: block;
+              font-size: 10px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+              color: #8a775e;
+            }
+            .rental-print-meta-card strong {
+              display: block;
+              margin-top: 3px;
+              font-size: 14px;
+              color: #2c2418;
+            }
+            .rental-print-chart-card,
+            .rental-print-missing-card {
+              margin-top: 10px;
+              border: 1px solid #d8c7ab;
+              border-radius: 12px;
+              padding: 10px 12px;
+              background: #fffdfa;
+            }
+            .rental-print-section-title {
+              font-size: 15px;
+              font-weight: 800;
+              color: #2c2418;
+            }
+            .rental-print-section-note {
+              margin-top: 2px;
+              font-size: 11px;
+              color: #7d6a53;
+            }
+            .rental-print-chart-list {
+              margin-top: 10px;
+              display: grid;
+              gap: 7px;
+            }
+            .rental-print-chart-row {
+              display: grid;
+              grid-template-columns: 185px minmax(0, 1fr) 70px;
+              gap: 8px;
+              align-items: center;
+            }
+            .rental-print-chart-label,
+            .rental-print-chart-value {
+              font-size: 12px;
+              font-weight: 700;
+            }
+            .rental-print-chart-track {
+              height: 12px;
+              border-radius: 999px;
+              background: #efe4cd;
+              overflow: hidden;
+            }
+            .rental-print-chart-fill {
+              height: 100%;
+              border-radius: inherit;
+            }
+            .rental-print-campus-grid {
+              margin-top: 10px;
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 8px;
+            }
+            .rental-print-campus-card {
+              border: 1px solid #d8c7ab;
+              border-radius: 12px;
+              overflow: hidden;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+            .rental-print-campus-head {
+              padding: 7px 10px;
+              color: #fff;
+              font-size: 13px;
+              font-weight: 800;
+            }
+            .rental-print-campus-table,
+            .rental-print-missing-table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+            }
+            .rental-print-campus-table th,
+            .rental-print-campus-table td,
+            .rental-print-missing-table th,
+            .rental-print-missing-table td {
+              border: 1px solid #e6d6bb;
+              padding: 6px 7px;
+              font-size: 11px;
+              vertical-align: top;
+              text-align: left;
+              word-break: break-word;
+            }
+            .rental-print-campus-table th,
+            .rental-print-missing-table th {
+              background: #f7efe0;
+              color: #6f5d46;
+              font-size: 10px;
+              text-transform: uppercase;
+              letter-spacing: 0.06em;
+            }
+            .rental-print-missing-table {
+              margin-top: 8px;
+            }
+            .rental-print-empty {
+              margin-top: 12px;
+              padding: 12px;
+              border: 1px dashed #d7c3a0;
+              border-radius: 12px;
+              font-size: 13px;
+              color: #7f6a50;
+              text-align: center;
+            }
+            @page {
+              size: A4 portrait;
+              margin: 8mm;
+            }
+            @media print {
+              body {
+                margin: 0;
+                background: #fff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              .print-toolbar {
+                display: none !important;
+              }
+              .print-page {
+                width: auto;
+                min-height: 0;
+                margin: 0;
+                padding: 0;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-toolbar">
+            <div class="print-toolbar-note">Clean print preview for Windows and Mac. Use Save as PDF or Print.</div>
+            <div class="print-toolbar-actions">
+              <button type="button" class="print-btn" onclick="window.close()">Close</button>
+              <button type="button" class="print-btn primary" onclick="window.print()">Print</button>
+            </div>
+          </div>
+          <main class="print-page">
+            <header class="rental-print-header">
+              <div>
+                <div class="rental-print-kicker">Eco International School</div>
+                <h1 class="rental-print-title">IT and Facility Control Center</h1>
+                <p class="rental-print-subtitle">Printer Counter Report</p>
+              </div>
+              <img class="rental-print-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
+            </header>
+            <section class="rental-print-meta">
+              <div class="rental-print-meta-card">
+                <span>Report Range</span>
+                <strong>${escapeHtml(rentalReportRangeLabel)}</strong>
+              </div>
+              <div class="rental-print-meta-card">
+                <span>Generated On</span>
+                <strong>${escapeHtml(rentalReportGeneratedOnLabel)}</strong>
+              </div>
+              <div class="rental-print-meta-card">
+                <span>Campuses Covered</span>
+                <strong>${String(rentalReportSelectedCampuses.length || rentalReportCampusFilterOptions.length)}</strong>
+              </div>
+              <div class="rental-print-meta-card">
+                <span>Total Monthly Usage</span>
+                <strong>${rentalReportSummary.monoUsage.toLocaleString()}</strong>
+              </div>
+            </section>
+            ${usageChartHtml}
+            <section class="rental-print-campus-grid">${campusCardsHtml}</section>
+            <section class="rental-print-missing-card">
+              <div class="rental-print-section-title">Printers Missing Record For ${escapeHtml(rentalReportRange.to || "Selected Month")}</div>
+              <table class="rental-print-missing-table">
+                <thead>
+                  <tr>
+                    <th>Printer</th>
+                    <th>Campus</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody>${missingRowsHtml}</tbody>
+              </table>
+            </section>
+          </main>
+          <script>
+            window.addEventListener("load", function () {
+              setTimeout(function () {
+                window.focus();
+                window.print();
+              }, 350);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+    popup.focus();
+  }, [
+    lang,
+    rentalCampusReportBlocks,
+    rentalCampusUsageChart,
+    rentalMissingPrinterRows,
+    rentalPrinterCampusLabel,
+    rentalReportCampusFilterOptions.length,
+    rentalReportGeneratedOnLabel,
+    rentalReportRange.to,
+    rentalReportRangeLabel,
+    rentalReportSelectedCampuses.length,
+    rentalReportSummary.monoUsage,
+  ]);
   const assetStatusLabel = useCallback(
     (statusRaw: string) => {
       const status = String(statusRaw || "").trim();
@@ -17690,7 +18110,7 @@ export default function App() {
       condition: "",
       note: ticket.description || ticket.title || "",
       cost: "",
-      by: authUser?.displayName || authUser?.username || "",
+      by: currentOperatorName,
       photo: "",
       photos: [],
       beforePhotos: [],
@@ -17710,7 +18130,7 @@ export default function App() {
       condition: "",
       note: "",
       cost: "",
-      by: authUser?.displayName || authUser?.username || "",
+      by: currentOperatorName,
       photo: "",
       photos: [],
       beforePhotos: [],
@@ -22047,7 +22467,7 @@ export default function App() {
       setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
-      setMaintenanceRecordForm(createMaintenanceRecordForm(savedAsset));
+      setMaintenanceRecordForm(createMaintenanceRecordForm(savedAsset, toYmd(new Date()), currentOperatorName));
       setMaintenanceRecordFileKey((k) => k + 1);
       setMaintenanceView("history");
       await loadData();
@@ -23558,7 +23978,7 @@ export default function App() {
   }
 
   function openQuickRecordModal(asset: Asset) {
-    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, toYmd(new Date())));
+    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, toYmd(new Date()), currentOperatorName));
     setMaintenanceRecordFileKey((k) => k + 1);
     setQuickRecordAssetId(asset.id);
   }
@@ -23568,7 +23988,7 @@ export default function App() {
     setTab("maintenance");
     setMaintenanceView("record");
     setMaintenanceRecordScheduleJumpMode(true);
-    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate));
+    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate, currentOperatorName));
   }
 
   const inventoryTxnById = useMemo(() => {
@@ -23653,7 +24073,7 @@ export default function App() {
     setMaintenanceView("record");
     setMaintenanceRecordScheduleJumpMode(true);
     setMaintenanceRecordForm(
-      createMaintenanceRecordForm(targetAsset, preferredDate || toYmd(new Date()))
+      createMaintenanceRecordForm(targetAsset, preferredDate || toYmd(new Date()), currentOperatorName)
     );
     setMobileNotificationOpen(false);
   }
@@ -25162,9 +25582,10 @@ export default function App() {
     setMaintenanceRecordForm((f) => ({ ...f, assetId: "" }));
   }, [maintenanceRecordForm.assetId, maintenanceRecordFilteredAssets]);
   useEffect(() => {
-    if (!authUser?.displayName) return;
-    setMaintenanceRecordForm((f) => ({ ...f, by: authUser.displayName }));
-  }, [authUser?.displayName]);
+    if (!currentOperatorName) return;
+    setMaintenanceRecordForm((f) => (f.by.trim() ? f : { ...f, by: currentOperatorName }));
+    setTicketMaintenanceForm((f) => (f.by.trim() ? f : { ...f, by: currentOperatorName }));
+  }, [currentOperatorName]);
   useEffect(() => {
     if (verificationRecordItemFilter === "ALL") return;
     if (!verificationRecordItemOptions.includes(verificationRecordItemFilter)) {
@@ -35523,8 +35944,9 @@ export default function App() {
                       <input
                         className="input"
                         value={maintenanceRecordForm.by}
-                        readOnly
+                        onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
                       />
+                      <div className="tiny">Auto-filled from login user. You can change it if needed.</div>
                     </label>
                     <label className="field">
                       <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
@@ -41556,8 +41978,13 @@ export default function App() {
                   <input
                     className="input"
                     value={maintenanceRecordForm.by}
-                    readOnly
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
                   />
+                  <div className="tiny">
+                    {lang === "km"
+                      ? "បំពេញស្វ័យប្រវត្តិតាមអ្នកចូលប្រើ ប៉ុន្តែអាចកែឈ្មោះបាន។"
+                      : "Auto-filled from login user, but you can change the name."}
+                  </div>
                 </label>
               </div>
               {renderMaintenanceWorkflowSection()}
@@ -43215,7 +43642,7 @@ export default function App() {
                 <div className="report-title-row">
                   <h2>Printer Counter Report</h2>
                   <div className="report-title-actions">
-                    <button className="btn-primary report-print-btn report-title-print-btn" onClick={() => window.print()}>
+                    <button className="btn-primary report-print-btn report-title-print-btn" onClick={printRentalComparisonReport}>
                       <Printer size={16} aria-hidden={true} />
                       <span>Print Report</span>
                     </button>
