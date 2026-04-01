@@ -13477,6 +13477,7 @@ export default function App() {
         prev.map((row) => (row.id === id ? { ...row, read: true } : row))
       );
       setMaintenanceNotificationUnread((prev) => Math.max(0, prev - 1));
+      await loadMaintenanceNotifications();
     } catch (err) {
       if (isUnauthorizedError(err)) return;
       setError(err instanceof Error ? err.message : "Failed to update notification");
@@ -13490,6 +13491,7 @@ export default function App() {
       });
       setMaintenanceNotifications((prev) => prev.map((row) => ({ ...row, read: true })));
       setMaintenanceNotificationUnread(0);
+      await loadMaintenanceNotifications();
     } catch (err) {
       if (isUnauthorizedError(err)) return;
       setError(err instanceof Error ? err.message : "Failed to update notifications");
@@ -13504,6 +13506,7 @@ export default function App() {
       });
       setMaintenanceNotifications((prev) => prev.filter((row) => Number(row.id) !== Number(id)));
       setMaintenanceNotificationUnread((prev) => Math.max(0, prev - 1));
+      await loadMaintenanceNotifications();
     } catch (err) {
       if (isUnauthorizedError(err)) return;
       setError(err instanceof Error ? err.message : "Failed to close notification");
@@ -30651,7 +30654,7 @@ export default function App() {
                                   type="button"
                                   className="tab btn-small"
                                   onClick={() => {
-                                    if (!row.read) void markMaintenanceNotificationRead(row.id);
+                                    void closeMaintenanceNotification(row.id);
                                   }}
                                 >
                                   {lang === "km" ? "បានកត់សម្គាល់" : "Noted"}

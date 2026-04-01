@@ -14382,3 +14382,98 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     flex-direction: column;
   }
 }
+
+@media print {
+  .app-top-controls-wrap,
+  .topbar,
+  .main-nav-rail,
+  .mobile-nav-hud,
+  .footer-row,
+  .footnote-row,
+  .bg-orb {
+    display: none !important;
+  }
+
+  .workspace-main > .panel > * {
+    display: none !important;
+  }
+
+  .workspace-main > .panel > .printer-report-print-area,
+  .workspace-main > .panel > .printer-graph-print-area,
+  .workspace-main > .panel.documents-shell > .documents-print-area {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  .printer-report-print-area,
+  .printer-report-print-area * {
+    box-sizing: border-box !important;
+  }
+
+  .printer-report-print-area > .report-title-row,
+  .printer-report-print-area > .panel-filters.report-filters,
+  .printer-graph-print-area > .report-title-row,
+  .printer-graph-print-area > .panel-filters.report-filters {
+    display: none !important;
+  }
+
+  .printer-report-card {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  .printer-report-print-masthead {
+    display: block !important;
+  }
+
+  .printer-report-header,
+  .printer-report-meta,
+  .printer-report-note,
+  .printer-report-print-summary-wrap,
+  .printer-report-missing-table-wrap {
+    display: none !important;
+  }
+
+  .printer-report-chart-card {
+    display: block !important;
+    margin-bottom: 8px !important;
+  }
+
+  .printer-report-print-meta {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .printer-campus-report-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .printer-campus-report-mobile-list,
+  .printer-report-missing-mobile-list {
+    display: none !important;
+  }
+
+  .printer-campus-report-table-wrap,
+  .printer-report-missing-table-wrap {
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .printer-campus-report-table,
+  .printer-report-missing-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+  }
+}

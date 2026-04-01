@@ -1896,7 +1896,7 @@ function normalizeNotificationEntries(input) {
       ? Array.from(
           new Set(
             row.readBy
-              .map((value) => toText(value))
+              .map((value) => toText(value).toLowerCase())
               .filter(Boolean)
           )
         )
@@ -2053,7 +2053,7 @@ function addMaintenanceDoneNotification(db, asset, entry) {
 }
 
 function markNotificationReadByUser(notification, username) {
-  const user = toText(username);
+  const user = toText(username).toLowerCase();
   if (!user) return false;
   const readBy = Array.isArray(notification.readBy) ? notification.readBy : [];
   if (readBy.includes(user)) return false;
@@ -2141,8 +2141,10 @@ function backfillInventoryApprovalNotificationTargets(db) {
 }
 
 function projectNotificationForUser(notification, user) {
-  const username = toText(user && user.username);
-  const readBy = Array.isArray(notification.readBy) ? notification.readBy : [];
+  const username = toText(user && user.username).toLowerCase();
+  const readBy = Array.isArray(notification.readBy)
+    ? notification.readBy.map((value) => toText(value).toLowerCase()).filter(Boolean)
+    : [];
   return {
     ...notification,
     read: Boolean(username && readBy.includes(username)),
