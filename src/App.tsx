@@ -26942,12 +26942,24 @@ export default function App() {
         cabinetQty < 1;
 
       const issueNotes: string[] = [];
-      if (chairGap < 0) issueNotes.push(`Need ${Math.abs(chairGap)} student chair${Math.abs(chairGap) > 1 ? "s" : ""}`);
-      if (tableGap < 0) issueNotes.push(`Need ${Math.abs(tableGap)} student table${Math.abs(tableGap) > 1 ? "s" : ""}`);
-      if (teacherDesk < 1) issueNotes.push("Missing teacher desk");
-      if (teacherChair < 1) issueNotes.push("Missing teacher chair");
-      if (tvQty < 1) issueNotes.push("Missing TV");
-      if (cabinetQty < 1) issueNotes.push("Missing cabinet");
+      if (chairGap < 0) {
+        issueNotes.push(
+          lang === "km"
+            ? `ខ្វះកៅអីសិស្ស ${Math.abs(chairGap)}`
+            : `Need ${Math.abs(chairGap)} student chair${Math.abs(chairGap) > 1 ? "s" : ""}`
+        );
+      }
+      if (tableGap < 0) {
+        issueNotes.push(
+          lang === "km"
+            ? `ខ្វះតុសិស្ស ${Math.abs(tableGap)}`
+            : `Need ${Math.abs(tableGap)} student table${Math.abs(tableGap) > 1 ? "s" : ""}`
+        );
+      }
+      if (teacherDesk < 1) issueNotes.push(lang === "km" ? "ខ្វះតុគ្រូ" : "Missing teacher desk");
+      if (teacherChair < 1) issueNotes.push(lang === "km" ? "ខ្វះកៅអីគ្រូ" : "Missing teacher chair");
+      if (tvQty < 1) issueNotes.push(lang === "km" ? "ខ្វះទូរទស្សន៍" : "Missing TV");
+      if (cabinetQty < 1) issueNotes.push(lang === "km" ? "ខ្វះទូដាក់ឯកសារ" : "Missing cabinet");
 
       return {
         id: room.id,
@@ -26971,7 +26983,7 @@ export default function App() {
         lightQty,
         totalAssets: matchingAssets.length,
         status: hasStandardGap ? "Need Action" : "Ready",
-        issueText: issueNotes.join(" | ") || "Standard setup looks ready",
+        issueText: issueNotes.join(" | ") || (lang === "km" ? "ការរៀបចំបន្ទប់ស្រេចរួច" : "Standard setup looks ready"),
       };
     });
 
@@ -26987,7 +26999,7 @@ export default function App() {
           campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
           a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
       );
-  }, [locations, allowedCampuses, classroomCampusFilter, classroomRoomFilter, classroomQuery, assets, campusLabel]);
+  }, [locations, allowedCampuses, classroomCampusFilter, classroomRoomFilter, classroomQuery, assets, campusLabel, lang]);
   const classroomControlSummary = useMemo(() => {
     const rooms = classroomControlRoomRows.length;
     const needActionRooms = classroomControlRoomRows.filter((row) => row.status === "Need Action").length;
@@ -43267,7 +43279,7 @@ export default function App() {
         {tab === "verification" && (
           <section className="panel">
             <div className="tabs">
-              {canAccessMenu("verification.record", "verification") ? (
+                  {canAccessMenu("verification.record", "verification") ? (
                 <button
                   className={`tab ${verificationView === "record" ? "tab-active" : ""}`}
                   onClick={() => setVerificationView("record")}
@@ -49989,13 +50001,19 @@ export default function App() {
               <div className="asset-actions" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
                 <div className="tiny">
                   {classroomLatestVerification
-                    ? `Last check: ${classroomLatestVerification.checkedDate} | ${classroomLatestVerification.checkedBy} | ${classroomLatestVerification.verificationMonth}`
-                    : "No monthly classroom asset check yet."}
+                    ? (lang === "km"
+                        ? `ពិនិត្យចុងក្រោយ: ${classroomLatestVerification.checkedDate} | ${classroomLatestVerification.checkedBy} | ${classroomLatestVerification.verificationMonth}`
+                        : `Last check: ${classroomLatestVerification.checkedDate} | ${classroomLatestVerification.checkedBy} | ${classroomLatestVerification.verificationMonth}`)
+                    : (lang === "km" ? "មិនទាន់មានការពិនិត្យទ្រព្យប្រចាំខែសម្រាប់បន្ទប់នេះទេ។" : "No monthly classroom asset check yet.")}
                 </div>
                 <div className="tiny">
                   {classroomCurrentMonthVerification
-                    ? `This month saved: ${classroomCurrentMonthVerification.verificationMonth}`
-                    : `This month not checked yet: ${String(classroomVerificationForm.verificationMonth || classroomAssetCheckMonth || toYmd(new Date()).slice(0, 7))}`}
+                    ? (lang === "km"
+                        ? `បានរក្សាទុកខែនេះ: ${classroomCurrentMonthVerification.verificationMonth}`
+                        : `This month saved: ${classroomCurrentMonthVerification.verificationMonth}`)
+                    : (lang === "km"
+                        ? `ខែនេះមិនទាន់បានពិនិត្យ: ${String(classroomVerificationForm.verificationMonth || classroomAssetCheckMonth || toYmd(new Date()).slice(0, 7))}`
+                        : `This month not checked yet: ${String(classroomVerificationForm.verificationMonth || classroomAssetCheckMonth || toYmd(new Date()).slice(0, 7))}`)}
                 </div>
                 {classroomNextPendingRoom ? (
                   <div className="tiny">
@@ -50008,12 +50026,12 @@ export default function App() {
               {classroomVerificationOpen ? (
                 <section className="panel" style={{ marginBottom: 16, padding: 16 }}>
                   <div className="panel-row">
-                    <h3 className="section-title" style={{ margin: 0 }}>Monthly Classroom Asset Check</h3>
-                    <span className="tiny">Issues found: {classroomVerificationIssueCount}</span>
+                    <h3 className="section-title" style={{ margin: 0 }}>{lang === "km" ? "ពិនិត្យទ្រព្យថ្នាក់រៀនប្រចាំខែ" : "Monthly Classroom Asset Check"}</h3>
+                    <span className="tiny">{lang === "km" ? `បញ្ហាដែលរកឃើញ: ${classroomVerificationIssueCount}` : `Issues found: ${classroomVerificationIssueCount}`}</span>
                   </div>
                   <div className="form-grid" style={{ marginBottom: 12 }}>
                     <label className="field">
-                      <span>Month</span>
+                      <span>{lang === "km" ? "ខែ" : "Month"}</span>
                       <input
                         className="input"
                         type="month"
@@ -50024,7 +50042,7 @@ export default function App() {
                       />
                     </label>
                     <label className="field">
-                      <span>Checked Date</span>
+                      <span>{lang === "km" ? "ថ្ងៃពិនិត្យ" : "Checked Date"}</span>
                       <input
                         className="input"
                         type="date"
@@ -50035,25 +50053,25 @@ export default function App() {
                       />
                     </label>
                     <label className="field">
-                      <span>Checked By</span>
+                      <span>{lang === "km" ? "ពិនិត្យដោយ" : "Checked By"}</span>
                       <input
                         className="input"
                         value={classroomVerificationForm.checkedBy}
                         onChange={(e) =>
                           setClassroomVerificationForm((prev) => ({ ...prev, checkedBy: e.target.value }))
                         }
-                        placeholder="Staff name"
+                        placeholder={lang === "km" ? "ឈ្មោះបុគ្គលិក" : "Staff name"}
                       />
                     </label>
                     <label className="field field-wide">
-                      <span>Summary Note</span>
+                      <span>{lang === "km" ? "ចំណាំសង្ខេប" : "Summary Note"}</span>
                       <input
                         className="input"
                         value={classroomVerificationForm.note}
                         onChange={(e) =>
                           setClassroomVerificationForm((prev) => ({ ...prev, note: e.target.value }))
                         }
-                        placeholder="Optional room summary note"
+                        placeholder={lang === "km" ? "ចំណាំសង្ខេបបន្ទប់ ប្រសិនបើមាន" : "Optional room summary note"}
                       />
                     </label>
                   </div>
@@ -50089,13 +50107,13 @@ export default function App() {
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                             <div className="field" style={{ minWidth: 0 }}>
-                              <span>Expected Qty</span>
+                              <span>{lang === "km" ? "ចំនួនត្រូវមាន" : "Expected Qty"}</span>
                               <div className="detail-value" style={{ minHeight: 46, display: "flex", alignItems: "center" }}>
                                 {item.expectedQty}
                               </div>
                             </div>
                             <label className="field" style={{ minWidth: 0 }}>
-                              <span>Actual Qty</span>
+                              <span>{lang === "km" ? "ចំនួនជាក់ស្តែង" : "Actual Qty"}</span>
                               <input
                                 className="input"
                                 type="number"
@@ -50116,7 +50134,7 @@ export default function App() {
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                             <label className="field" style={{ minWidth: 0 }}>
-                              <span>Condition</span>
+                              <span>{lang === "km" ? "ស្ថានភាព" : "Condition"}</span>
                               <select
                                 className="input"
                                 value={item.condition}
@@ -50131,14 +50149,14 @@ export default function App() {
                                   })
                                 }
                               >
-                                <option value="Good">Good</option>
-                                <option value="Fair">Fair</option>
-                                <option value="Damaged">Damaged</option>
-                                <option value="Missing">Missing</option>
+                                <option value="Good">{lang === "km" ? "ល្អ" : "Good"}</option>
+                                <option value="Fair">{lang === "km" ? "មធ្យម" : "Fair"}</option>
+                                <option value="Damaged">{lang === "km" ? "ខូច" : "Damaged"}</option>
+                                <option value="Missing">{lang === "km" ? "បាត់" : "Missing"}</option>
                               </select>
                             </label>
                             <label className="field" style={{ minWidth: 0 }}>
-                              <span>Action</span>
+                              <span>{lang === "km" ? "សកម្មភាព" : "Action"}</span>
                               <select
                                 className="input"
                                 value={item.action}
@@ -50153,16 +50171,16 @@ export default function App() {
                                   })
                                 }
                               >
-                                <option value="OK">OK</option>
-                                <option value="Repair">Repair</option>
-                                <option value="Replace">Replace</option>
-                                <option value="Add More">Add More</option>
-                                <option value="Missing">Missing</option>
+                                <option value="OK">{lang === "km" ? "មិនបាច់ធ្វើអ្វី" : "OK"}</option>
+                                <option value="Repair">{lang === "km" ? "ជួសជុល" : "Repair"}</option>
+                                <option value="Replace">{lang === "km" ? "ប្តូរ" : "Replace"}</option>
+                                <option value="Add More">{lang === "km" ? "បន្ថែម" : "Add More"}</option>
+                                <option value="Missing">{lang === "km" ? "បាត់" : "Missing"}</option>
                               </select>
                             </label>
                           </div>
                           <label className="field field-wide" style={{ minWidth: 0 }}>
-                            <span>Note</span>
+                            <span>{lang === "km" ? "ចំណាំ" : "Note"}</span>
                             <input
                               className="input"
                               value={item.note || ""}
@@ -50176,7 +50194,7 @@ export default function App() {
                                   return { ...prev, items: next };
                                 })
                               }
-                              placeholder="Optional item note"
+                              placeholder={lang === "km" ? "ចំណាំបន្ថែម ប្រសិនបើមាន" : "Optional item note"}
                             />
                           </label>
                         </article>
@@ -50187,12 +50205,12 @@ export default function App() {
                       <table>
                         <thead>
                           <tr>
-                            <th>Item</th>
-                            <th>Expected Qty</th>
-                            <th>Actual Qty</th>
-                            <th>Condition</th>
-                            <th>Action</th>
-                            <th>Note</th>
+                            <th>{lang === "km" ? "សម្ភារៈ" : "Item"}</th>
+                            <th>{lang === "km" ? "ចំនួនត្រូវមាន" : "Expected Qty"}</th>
+                            <th>{lang === "km" ? "ចំនួនជាក់ស្តែង" : "Actual Qty"}</th>
+                            <th>{lang === "km" ? "ស្ថានភាព" : "Condition"}</th>
+                            <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th>
+                            <th>{lang === "km" ? "ចំណាំ" : "Note"}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -50236,10 +50254,10 @@ export default function App() {
                                     })
                                   }
                                 >
-                                  <option value="Good">Good</option>
-                                  <option value="Fair">Fair</option>
-                                  <option value="Damaged">Damaged</option>
-                                  <option value="Missing">Missing</option>
+                                  <option value="Good">{lang === "km" ? "ល្អ" : "Good"}</option>
+                                  <option value="Fair">{lang === "km" ? "មធ្យម" : "Fair"}</option>
+                                  <option value="Damaged">{lang === "km" ? "ខូច" : "Damaged"}</option>
+                                  <option value="Missing">{lang === "km" ? "បាត់" : "Missing"}</option>
                                 </select>
                               </td>
                               <td>
@@ -50257,11 +50275,11 @@ export default function App() {
                                     })
                                   }
                                 >
-                                  <option value="OK">OK</option>
-                                  <option value="Repair">Repair</option>
-                                  <option value="Replace">Replace</option>
-                                  <option value="Add More">Add More</option>
-                                  <option value="Missing">Missing</option>
+                                  <option value="OK">{lang === "km" ? "មិនបាច់ធ្វើអ្វី" : "OK"}</option>
+                                  <option value="Repair">{lang === "km" ? "ជួសជុល" : "Repair"}</option>
+                                  <option value="Replace">{lang === "km" ? "ប្តូរ" : "Replace"}</option>
+                                  <option value="Add More">{lang === "km" ? "បន្ថែម" : "Add More"}</option>
+                                  <option value="Missing">{lang === "km" ? "បាត់" : "Missing"}</option>
                                 </select>
                               </td>
                               <td>
@@ -50278,7 +50296,7 @@ export default function App() {
                                       return { ...prev, items: next };
                                     })
                                   }
-                                  placeholder="Optional item note"
+                                  placeholder={lang === "km" ? "ចំណាំបន្ថែម ប្រសិនបើមាន" : "Optional item note"}
                                 />
                               </td>
                             </tr>
@@ -50289,10 +50307,12 @@ export default function App() {
                   )}
                   <div className="asset-actions" style={{ marginTop: 12 }}>
                     <div className="tiny">
-                      First version: verify current items in this classroom by month, qty, condition, and action.
+                      {lang === "km"
+                        ? "កំណែដំបូង៖ ពិនិត្យសម្ភារៈក្នុងថ្នាក់តាមខែ តាមចំនួន ស្ថានភាព និងសកម្មភាពដែលត្រូវធ្វើ។"
+                        : "First version: verify current items in this classroom by month, qty, condition, and action."}
                     </div>
                     <div className="row-actions" style={{ gap: 8, width: isPhoneView ? "100%" : undefined }}>
-                      <button className="tab" style={isPhoneView ? { flex: 1 } : undefined} onClick={cancelClassroomVerification}>Cancel</button>
+                      <button className="tab" style={isPhoneView ? { flex: 1 } : undefined} onClick={cancelClassroomVerification}>{lang === "km" ? "បោះបង់" : "Cancel"}</button>
                       {classroomNextPendingRoom ? (
                         <button
                           className="tab"
@@ -50302,7 +50322,9 @@ export default function App() {
                           {lang === "km" ? "រក្សាទុក ហើយបន្ទាប់" : "Save & Next Room"}
                         </button>
                       ) : null}
-                      <button className="btn-primary" style={isPhoneView ? { flex: 1 } : undefined} onClick={() => saveClassroomVerification(false)}>Save Monthly Check</button>
+                      <button className="btn-primary" style={isPhoneView ? { flex: 1 } : undefined} onClick={() => saveClassroomVerification(false)}>
+                        {lang === "km" ? "រក្សាទុកការពិនិត្យប្រចាំខែ" : "Save Monthly Check"}
+                      </button>
                     </div>
                   </div>
                 </section>
