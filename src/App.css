@@ -3835,11 +3835,15 @@ h2 {
 }
 
 .inventory-item-create-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.7fr) minmax(190px, 0.7fr);
 }
 
 .inventory-item-create-grid .field-wide {
   grid-column: 1 / -1;
+}
+
+.inventory-item-create-grid .field-code-compact {
+  min-width: 0;
 }
 
 .rental-printer-master-grid {

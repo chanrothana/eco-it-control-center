@@ -8956,7 +8956,6 @@ export default function App() {
   const [inventoryItemForm, setInventoryItemForm] = useState({
     campus: CAMPUS_LIST[0],
     category: "SUPPLY" as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL",
-    masterItemKey: "",
     itemCode: "",
     itemName: "",
     unit: "pcs",
@@ -10233,34 +10232,6 @@ export default function App() {
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
     return `${item.itemCode} - ${inventoryDisplayName(item.itemName, lang)} • ${inventoryCampusLabel(item.campus)}`;
   }, [inventoryCampusLabel, lang]);
-  const usedInventoryMasterKeysForCampus = useMemo(() => {
-    const out = new Set<string>();
-    if (inventoryItemForm.category !== "SUPPLY") return out;
-    const masters = INVENTORY_MASTER_ITEMS.filter((item) => item.category === inventoryItemForm.category);
-    for (const row of inventoryItems) {
-      if (editingInventoryItemId !== null && row.id === editingInventoryItemId) continue;
-      if (row.campus !== inventoryItemForm.campus || row.category !== inventoryItemForm.category) continue;
-      for (const master of masters) {
-        if (inventoryItemMatchesMaster(row, master)) out.add(master.key);
-      }
-    }
-    return out;
-  }, [editingInventoryItemId, inventoryItemForm.category, inventoryItemForm.campus, inventoryItems]);
-  const inventoryMasterOptions = useMemo(
-    () =>
-      INVENTORY_MASTER_ITEMS
-        .filter((item) => item.category === inventoryItemForm.category)
-        .filter((item) => !(inventoryItemForm.category === "SUPPLY" && usedInventoryMasterKeysForCampus.has(item.key))),
-    [inventoryItemForm.category, usedInventoryMasterKeysForCampus]
-  );
-  const inventorySupplyMasterLocked = useMemo(
-    () => inventoryItemForm.category === "SUPPLY" && inventoryMasterOptions.length === 0,
-    [inventoryItemForm.category, inventoryMasterOptions.length]
-  );
-  const selectedInventoryMaster = useMemo(
-    () => inventoryMasterOptions.find((item) => item.key === inventoryItemForm.masterItemKey) || null,
-    [inventoryMasterOptions, inventoryItemForm.masterItemKey]
-  );
   const inventoryTxnSelectedItem = useMemo(
     () => inventoryVisibleItems.find((item) => String(item.id) === String(inventoryTxnForm.itemId || "")) || null,
     [inventoryVisibleItems, inventoryTxnForm.itemId]
@@ -12932,23 +12903,6 @@ export default function App() {
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
   }, [autoInventoryItemCode, inventoryCodeManual]);
   useEffect(() => {
-    if (!inventoryMasterOptions.length) {
-      if (inventoryItemForm.masterItemKey || inventoryItemForm.itemName || inventoryItemForm.unit) {
-        setInventoryItemForm((f) => ({ ...f, masterItemKey: "", itemName: "", unit: "" }));
-      }
-      return;
-    }
-    const hasSelected = inventoryMasterOptions.some((item) => item.key === inventoryItemForm.masterItemKey);
-    if (hasSelected) return;
-    const first = inventoryMasterOptions[0];
-    setInventoryItemForm((f) => ({
-      ...f,
-      masterItemKey: first.key,
-      itemName: `${first.nameEn}${first.spec ? ` (${first.spec})` : ""}`,
-      unit: first.unit,
-    }));
-  }, [inventoryMasterOptions, inventoryItemForm.masterItemKey, inventoryItemForm.itemName, inventoryItemForm.unit]);
-  useEffect(() => {
     if (inventoryDailyForm.type !== "OUT") {
       setInventoryDailyForm((prev) => ({ ...prev, type: "OUT" }));
     }
@@ -12962,14 +12916,6 @@ export default function App() {
       setInventoryTxnEditForm((prev) => ({ ...prev, type: "IN" }));
     }
   }, [isSuperAdmin, inventoryTxnForm.type, inventoryTxnEditForm.type]);
-  useEffect(() => {
-    if (!selectedInventoryMaster) return;
-    setInventoryItemForm((f) => ({
-      ...f,
-      itemName: `${selectedInventoryMaster.nameEn}${selectedInventoryMaster.spec ? ` (${selectedInventoryMaster.spec})` : ""}`,
-      unit: selectedInventoryMaster.unit,
-    }));
-  }, [selectedInventoryMaster]);
   useEffect(() => {
     if (inventoryDashboardGroup === "TONER") {
       setInventoryItemFilterGroup("ALL");
@@ -17852,20 +17798,13 @@ export default function App() {
   async function createInventoryItem() {
     if (!requireAdminAction()) return;
     const itemCode = (inventoryItemForm.itemCode.trim().toUpperCase() || autoInventoryItemCode);
-    const masterItem = INVENTORY_MASTER_ITEMS.find((item) => item.key === inventoryItemForm.masterItemKey);
-    const itemName = masterItem
-      ? `${masterItem.nameEn}${masterItem.spec ? ` (${masterItem.spec})` : ""}`
-      : inventoryItemForm.itemName.trim();
+    const itemName = inventoryItemForm.itemName.trim();
     const location = inventoryItemForm.location.trim();
-    const unit = masterItem ? masterItem.unit : (inventoryItemForm.unit.trim() || "pcs");
+    const unit = inventoryItemForm.unit.trim() || "pcs";
     const openingQty = Number(inventoryItemForm.openingQty || 0);
     const minStock = Number(inventoryItemForm.minStock || 0);
-    if (!masterItem) {
-      setError("Please select item master.");
-      return;
-    }
     if (!itemCode || !itemName || !location) {
-      setError("Item code, item master, and location are required.");
+      setError("Item code, item name, and location are required.");
       return;
     }
     if (!Number.isFinite(openingQty) || openingQty < 0) {
@@ -17874,16 +17813,6 @@ export default function App() {
     }
     if (!Number.isFinite(minStock) || minStock < 0) {
       setError("Min Stock must be 0 or higher.");
-      return;
-    }
-    if (
-      masterItem &&
-      inventoryItemForm.category === "SUPPLY" &&
-      inventoryItems.some(
-        (i) => i.campus === inventoryItemForm.campus && inventoryItemMatchesMaster(i, masterItem)
-      )
-    ) {
-      setError("This cleaning supply already exists in this campus.");
       return;
     }
     if (
@@ -17948,8 +17877,8 @@ export default function App() {
     setInventoryItemForm((f) => ({
       ...f,
       itemCode: "",
-      masterItemKey: "",
       itemName: "",
+      unit: "pcs",
       openingQty: "0",
       minStock: "",
       location: inventoryLocations[0]?.name || "",
@@ -18148,13 +18077,11 @@ export default function App() {
   }
 
   function startEditInventoryItem(row: InventoryItem) {
-    const matchedMaster = INVENTORY_MASTER_ITEMS.find((master) => inventoryItemMatchesMaster(row, master));
     setEditingInventoryItemId(row.id);
     setInventoryCodeManual(true);
     setInventoryItemForm({
       campus: row.campus,
       category: row.category,
-      masterItemKey: matchedMaster?.key || "",
       itemCode: row.itemCode,
       itemName: row.itemName,
       unit: row.unit,
@@ -18173,7 +18100,6 @@ export default function App() {
     setInventoryItemForm({
       campus: CAMPUS_LIST[0],
       category: "SUPPLY",
-      masterItemKey: "",
       itemCode: "",
       itemName: "",
       unit: "pcs",
@@ -18194,11 +18120,8 @@ export default function App() {
       setError("Inventory item not found.");
       return;
     }
-    const masterItem = INVENTORY_MASTER_ITEMS.find((item) => item.key === inventoryItemForm.masterItemKey);
-    const itemName = masterItem
-      ? `${masterItem.nameEn}${masterItem.spec ? ` (${masterItem.spec})` : ""}`
-      : inventoryItemForm.itemName.trim() || current.itemName;
-    const unit = masterItem ? masterItem.unit : (inventoryItemForm.unit.trim() || current.unit || "pcs");
+    const itemName = inventoryItemForm.itemName.trim() || current.itemName;
+    const unit = inventoryItemForm.unit.trim() || current.unit || "pcs";
     const itemCode = (inventoryItemForm.itemCode.trim().toUpperCase() || current.itemCode);
     const location = inventoryItemForm.location.trim();
     const openingQty = Number(inventoryItemForm.openingQty || 0);
@@ -36609,60 +36532,32 @@ export default function App() {
                       ))}
                     </select>
                   </label>
-                  <label className="field">
-                    <span>Item Master</span>
-                    <select
-                      className="input"
-                      value={inventoryItemForm.masterItemKey}
-                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, masterItemKey: e.target.value }))}
-                    >
-                      <option value="">Select item master</option>
-                      {inventoryMasterOptions.map((item) => (
-                        <option key={`inv-master-${item.key}`} value={item.key}>
-                          {inventoryMasterDisplayName(item)} - {item.unit}
-                        </option>
-                      ))}
-                    </select>
-                    <small className="tiny">
-                      Standardized items only. Printer Toner is managed in the toner section below.
-                    </small>
-                    {inventorySupplyMasterLocked && (
-                      <small className="tiny" style={{ color: "#b03131" }}>
-                        All cleaning supplies are already created for this campus.
-                      </small>
-                    )}
-                  </label>
-                  <label className="field field-wide">
+                  <label className="field field-code-compact">
                     <span>Item Code</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input
-                        className="input"
-                        value={inventoryItemForm.itemCode}
-                        onChange={(e) => {
-                          setInventoryCodeManual(true);
-                          setInventoryItemForm((f) => ({ ...f, itemCode: e.target.value }));
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="tab"
-                        onClick={() => {
-                          setInventoryCodeManual(false);
-                          setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
-                        }}
-                      >
-                        Auto
-                      </button>
-                    </div>
-                    <small className="tiny">Auto format: Campus-Group-0001 (example: C2-CS-0001)</small>
+                    <input
+                      className="input"
+                      value={inventoryItemForm.itemCode}
+                      onChange={(e) => {
+                        setInventoryCodeManual(true);
+                        setInventoryItemForm((f) => ({ ...f, itemCode: e.target.value }));
+                      }}
+                    />
                   </label>
                   <label className="field">
                     <span>Item Name</span>
-                    <input className="input" value={inventoryDisplayName(inventoryItemForm.itemName, lang)} readOnly />
+                    <input
+                      className="input"
+                      value={inventoryItemForm.itemName}
+                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, itemName: e.target.value }))}
+                    />
                   </label>
                   <label className="field">
                     <span>Unit</span>
-                    <input className="input" value={inventoryItemForm.unit} readOnly />
+                    <input
+                      className="input"
+                      value={inventoryItemForm.unit}
+                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, unit: e.target.value }))}
+                    />
                   </label>
                   <label className="field">
                     <span>Location</span>
@@ -36730,7 +36625,7 @@ export default function App() {
                     ) : null}
                     <button
                       className="btn-primary"
-                      disabled={!isAdmin || inventorySupplyMasterLocked}
+                      disabled={!isAdmin}
                       onClick={editingInventoryItemId !== null ? updateInventoryItem : createInventoryItem}
                     >
                       {editingInventoryItemId !== null ? "Update Inventory Item" : "Add Inventory Item"}
