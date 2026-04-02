@@ -6917,6 +6917,9 @@ export default function App() {
     const isMac = /mac/i.test(platformText);
     return isLocalHost && isMac;
   }, []);
+  const utilityInvoiceUploadHelpText = canUseUtilityInvoiceOcr
+    ? "Upload invoice image to auto fill repeated EDC/PPWS template data."
+    : "Web/phone upload saves the invoice photo only. EDC/PPWS auto fill is available in the local macOS app; please enter usage, amount, invoice no., and date manually.";
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -15621,7 +15624,9 @@ export default function App() {
       if (canUseUtilityInvoiceOcr) {
         await autofillUtilityInvoiceFromPhoto(photo);
       } else {
-        setUtilityMessage("Invoice image uploaded. Auto fill is available only in the local macOS app.");
+        setUtilityMessage(
+          "Invoice image uploaded. Web/phone does not auto-read EDC/PPWS invoices yet, so please fill in usage, amount, invoice number, and date manually."
+        );
       }
     } catch (err) {
       handlePhotoUploadError(err);
@@ -44028,11 +44033,7 @@ export default function App() {
                   <label className="field">
                     <span>Invoice Upload</span>
                     <input type="file" accept="image/*" className="input" onChange={onUtilityInvoicePhotoFile} />
-                    <span className="tiny">
-                      {canUseUtilityInvoiceOcr
-                        ? "Upload invoice image to auto fill repeated EDC/PPWS template data."
-                        : "Upload invoice image here. Auto fill works only in the local macOS app; phone/web entry is manual."}
-                    </span>
+                    <span className="tiny">{utilityInvoiceUploadHelpText}</span>
                     {utilityInvoiceForm.photo ? (
                       <img
                         loading="lazy"
@@ -44050,14 +44051,19 @@ export default function App() {
                   </label>
                 </div>
                 <div className="row-actions">
-                  <button
-                    className="tab"
-                    disabled={!canUseUtilityInvoiceOcr || utilityAutofillBusy || !utilityInvoiceForm.photo}
-                    title={canUseUtilityInvoiceOcr ? "" : "Available only in the local macOS app"}
-                    onClick={() => void autofillUtilityInvoiceFromPhoto()}
-                  >
-                    {utilityAutofillBusy ? "Reading Invoice..." : "Auto Fill From Invoice"}
-                  </button>
+                  {canUseUtilityInvoiceOcr ? (
+                    <button
+                      className="tab"
+                      disabled={utilityAutofillBusy || !utilityInvoiceForm.photo}
+                      onClick={() => void autofillUtilityInvoiceFromPhoto()}
+                    >
+                      {utilityAutofillBusy ? "Reading Invoice..." : "Auto Fill From Invoice"}
+                    </button>
+                  ) : (
+                    <span className="tiny" style={{ maxWidth: 420 }}>
+                      Invoice auto fill is not available in the Render web app yet. Upload keeps the photo for record; monthly entry is manual here.
+                    </span>
+                  )}
                   <button className="btn-primary" onClick={() => void saveUtilityInvoiceEntry()}>Save Utility Invoice</button>
                 </div>
               </>
