@@ -3459,6 +3459,7 @@ function parseEdcInvoiceFields(text) {
     .filter(Boolean);
   const flat = lines.join(" ");
   const compact = flat.replace(/\s+/g, " ").trim();
+  const laterHalfIndex = Math.max(0, Math.floor(lines.length * 0.55));
 
   const invoiceNumberRaw =
     firstNonEmptyMatch(compact, [
@@ -3471,38 +3472,106 @@ function parseEdcInvoiceFields(text) {
     ]);
   const invoiceNumber = invoiceNumberRaw ? `INV/${invoiceNumberRaw.replace(/[^A-Z0-9]/gi, "")}` : "";
 
-  const allDates = Array.from(
-    flat.matchAll(/(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})/g)
-  ).map((match) => match[1]);
-  let invoiceDate = allDates.length ? parseDateValue(allDates[0]) : "";
+  const dateMatches = lines.flatMap((line, index) =>
+    Array.from(line.matchAll(/(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})/g))
+      .map((match) => ({
+        raw: match[1],
+        parsed: parseDateValue(match[1]),
+        index,
+      }))
+      .filter((entry) => entry.parsed)
+  );
+  const repeatedTailDateScores = new Map();
+  for (const entry of dateMatches) {
+    if (entry.index < laterHalfIndex) continue;
+    const current = repeatedTailDateScores.get(entry.parsed) || { count: 0, index: -1 };
+    repeatedTailDateScores.set(entry.parsed, {
+      count: current.count + 1,
+      index: Math.max(current.index, entry.index),
+    });
+  }
+  let invoiceDate = "";
+  const repeatedTailDates = Array.from(repeatedTailDateScores.entries())
+    .filter(([, meta]) => meta.count >= 2)
+    .sort((a, b) => b[1].count - a[1].count || b[1].index - a[1].index);
+  if (repeatedTailDates.length) {
+    invoiceDate = repeatedTailDates[0][0];
+  }
+  if (!invoiceDate) {
+    const tailDate = [...dateMatches].reverse().find((entry) => entry.index >= laterHalfIndex);
+    invoiceDate = tailDate ? tailDate.parsed : "";
+  }
+  if (!invoiceDate) {
+    invoiceDate = dateMatches.length ? dateMatches[dateMatches.length - 1].parsed : "";
+  }
 
   const periodMatch = flat.match(
     /(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})\s*(?:to|-|~|–)\s*(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})/i
   );
-  if (!invoiceDate && periodMatch) {
-    invoiceDate = parseDateValue(periodMatch[2]);
-  }
   const billingMonth = periodMatch
     ? parseBillingMonth(periodMatch[2], invoiceDate)
     : parseBillingMonth("", invoiceDate);
 
-  const kwhMatches = Array.from(flat.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi))
-    .map((match) => Number(match[1]))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  const usage = kwhMatches.length ? String(Math.max(...kwhMatches)) : "";
+  const kwhCandidates = lines.flatMap((line, index) =>
+    Array.from(line.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi))
+      .map((match) => ({
+        value: Number(match[1].replace(/,/g, "")),
+        index,
+      }))
+      .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
+  );
+  const likelyUsageCandidates = kwhCandidates.filter(
+    (entry) => entry.index >= laterHalfIndex && entry.value >= 100 && entry.value <= 1500
+  );
+  let usage = "";
+  if (likelyUsageCandidates.length) {
+    likelyUsageCandidates.sort((a, b) => b.index - a.index || a.value - b.value);
+    usage = String(likelyUsageCandidates[0].value);
+  }
 
-  const currencyCandidates = Array.from(flat.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g))
-    .map((match) => match[1].replace(/\s+/g, ""))
-    .filter(Boolean)
-    .map((raw) => ({
-      raw,
-      value: Number(raw.replace(/,/g, "")),
+  const tailLines = lines.slice(-14);
+  const tailAmountCandidates = tailLines
+    .flatMap((line, index) =>
+      Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g)).map((match) => ({
+        raw: match[1].replace(/\s+/g, ""),
+        index,
+      }))
+    )
+    .map((entry) => ({
+      ...entry,
+      value: Number(entry.raw.replace(/,/g, "")),
     }))
     .filter((entry) => Number.isFinite(entry.value) && entry.value >= 1000);
+  const amountCounts = new Map();
+  for (const candidate of tailAmountCandidates) {
+    const current = amountCounts.get(candidate.raw) || { count: 0, index: -1, value: candidate.value };
+    amountCounts.set(candidate.raw, {
+      count: current.count + 1,
+      index: Math.max(current.index, candidate.index),
+      value: candidate.value,
+    });
+  }
   let amount = "";
-  if (currencyCandidates.length) {
-    currencyCandidates.sort((a, b) => b.value - a.value);
-    amount = currencyCandidates[0].raw;
+  const rankedTailAmounts = Array.from(amountCounts.entries()).sort(
+    (a, b) => b[1].count - a[1].count || b[1].index - a[1].index || b[1].value - a[1].value
+  );
+  if (rankedTailAmounts.length) {
+    amount = rankedTailAmounts[0][0];
+  }
+  if (!amount) {
+    const currencyCandidates = Array.from(flat.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g))
+      .map((match) => match[1].replace(/\s+/g, ""))
+      .filter(Boolean)
+      .map((raw, index) => ({
+        raw,
+        index,
+        value: Number(raw.replace(/,/g, "")),
+      }))
+      .filter((entry) => Number.isFinite(entry.value) && entry.value >= 1000);
+    if (currencyCandidates.length) {
+      currencyCandidates.sort((a, b) => b.index - a.index || b.value - a.value);
+      amount = currencyCandidates[0].raw;
+    }
   }
 
   return {
@@ -4026,22 +4095,34 @@ async function fetchPrinterCounterFromIp(rawIpAddress, context = {}) {
 }
 
 async function runUtilityInvoiceOcr(imagePath) {
-  if (process.platform !== "darwin") {
-    throw new Error("Invoice OCR is available only on macOS in the local app.");
+  const canUseSwiftOcr =
+    process.platform === "darwin" &&
+    (await fileExists(UTILITY_INVOICE_OCR_SCRIPT));
+  if (canUseSwiftOcr) {
+    const { stdout, stderr } = await execFileAsync("swift", [UTILITY_INVOICE_OCR_SCRIPT, imagePath], {
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    if (stderr && stderr.trim()) {
+      console.warn("[utility-ocr]", stderr.trim());
+    }
+    const parsed = JSON.parse(stdout || "{}");
+    return {
+      text: toText(parsed.text),
+      lines: Array.isArray(parsed.lines) ? parsed.lines.map((line) => toText(line)).filter(Boolean) : [],
+    };
   }
-  if (!(await fileExists(UTILITY_INVOICE_OCR_SCRIPT))) {
-    throw new Error("Invoice OCR helper is missing on the server.");
+
+  if (!Tesseract || typeof Tesseract.recognize !== "function") {
+    throw new Error("Invoice OCR helper is not available on this server.");
   }
-  const { stdout, stderr } = await execFileAsync("swift", [UTILITY_INVOICE_OCR_SCRIPT, imagePath], {
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  if (stderr && stderr.trim()) {
-    console.warn("[utility-ocr]", stderr.trim());
-  }
-  const parsed = JSON.parse(stdout || "{}");
+
+  const result = await Tesseract.recognize(imagePath, "eng");
+  const data = result && result.data && typeof result.data === "object" ? result.data : {};
   return {
-    text: toText(parsed.text),
-    lines: Array.isArray(parsed.lines) ? parsed.lines.map((line) => toText(line)).filter(Boolean) : [],
+    text: toText(data.text),
+    lines: Array.isArray(data.lines)
+      ? data.lines.map((line) => toText(line && typeof line === "object" ? line.text : line)).filter(Boolean)
+      : toText(data.text).split(/\r?\n/).map((line) => toText(line)).filter(Boolean),
   };
 }
 
