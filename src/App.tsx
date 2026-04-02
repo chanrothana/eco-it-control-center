@@ -27102,6 +27102,45 @@ export default function App() {
       ).length,
     [classroomVerificationForm.items]
   );
+  const summarizeClassroomVerificationIssues = useCallback(
+    (record: ClassroomVerificationRecord | null) => {
+      if (!record) {
+        return lang === "km" ? "មិនទាន់បានពិនិត្យបន្ទប់នេះទេ។" : "This room has not been checked yet.";
+      }
+      const explicitNote = String(record.note || "").trim();
+      if (explicitNote) return explicitNote;
+      const notices = record.items.flatMap((item) => {
+        const parts: string[] = [];
+        if (item.actualQty < item.expectedQty) {
+          parts.push(
+            lang === "km"
+              ? `${item.name} ខ្វះ ${item.expectedQty - item.actualQty}`
+              : `${item.name} short ${item.expectedQty - item.actualQty}`
+          );
+        }
+        if (item.condition === "Damaged") {
+          parts.push(lang === "km" ? `${item.name} ខូច` : `${item.name} damaged`);
+        }
+        if (item.condition === "Missing") {
+          parts.push(lang === "km" ? `${item.name} បាត់` : `${item.name} missing`);
+        }
+        if (item.action === "Repair") {
+          parts.push(lang === "km" ? `${item.name} ត្រូវជួសជុល` : `${item.name} needs repair`);
+        }
+        if (item.action === "Replace") {
+          parts.push(lang === "km" ? `${item.name} ត្រូវប្តូរ` : `${item.name} needs replacement`);
+        }
+        if (item.action === "Add More") {
+          parts.push(lang === "km" ? `${item.name} ត្រូវបន្ថែម` : `${item.name} needs more units`);
+        }
+        return parts;
+      });
+      return notices.length
+        ? notices.join(" | ")
+        : (lang === "km" ? "មិនមានបញ្ហាដែលបានកត់ត្រា។" : "No issues were recorded.");
+    },
+    [lang]
+  );
   const openClassroomVerification = useCallback(() => {
     if (!classroomDetailRoom) return;
     const verificationMonth =
@@ -27165,6 +27204,7 @@ export default function App() {
           issueCount,
           checked: Boolean(record),
           statusKey,
+          noticeText: summarizeClassroomVerificationIssues(record),
         };
       })
       .filter((row) => (classroomAssetCheckCampusFilter === "ALL" ? true : row.campus === classroomAssetCheckCampusFilter))
@@ -27175,7 +27215,11 @@ export default function App() {
           campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
           a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
       );
-  }, [classroomAssetCheckCampusFilter, classroomAssetCheckMonth, classroomAssetCheckStatusFilter, classroomControlRoomRows, classroomVerificationRecords, campusLabel]);
+  }, [classroomAssetCheckCampusFilter, classroomAssetCheckMonth, classroomAssetCheckStatusFilter, classroomControlRoomRows, classroomVerificationRecords, campusLabel, summarizeClassroomVerificationIssues]);
+  const classroomCurrentMonthNotice = useMemo(
+    () => summarizeClassroomVerificationIssues(classroomCurrentMonthVerification),
+    [classroomCurrentMonthVerification, summarizeClassroomVerificationIssues]
+  );
   const classroomAssetCheckSummary = useMemo(() => {
     const totalRooms = classroomAssetCheckRows.length;
     const checkedRooms = classroomAssetCheckRows.filter((row) => row.checked).length;
@@ -43607,7 +43651,7 @@ export default function App() {
                           </div>
                           <div className="furniture-report-mobile-detail">
                             <small>{lang === "km" ? "ចំណាំបន្ទប់" : "Room Notes"}</small>
-                            <p>{row.record?.note || row.issueText}</p>
+                            <p>{row.noticeText}</p>
                           </div>
                           <div className="row-actions" style={{ gap: 8 }}>
                             <button className="btn-primary btn-small" style={{ flex: 1 }} onClick={() => openMonthlyClassroomCheckRoom(row.id)}>
@@ -49996,7 +50040,7 @@ export default function App() {
                 </div>
               </div>
               <div className="tiny" style={{ marginBottom: 12 }}>
-                {classroomDetailRoom.issueText}
+                {classroomCurrentMonthNotice}
               </div>
               <div className="asset-actions" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
                 <div className="tiny">
