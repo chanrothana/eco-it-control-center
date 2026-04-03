@@ -205,6 +205,8 @@ type TransferHistoryRow = {
   transferEntryId: number;
   custodyEntryId: number;
   assetId: string;
+  assetPhoto: string;
+  itemName: string;
   date: string;
   fromCampus: string;
   fromLocation: string;
@@ -16377,6 +16379,7 @@ export default function App() {
           invoiceDate?: string;
           billingMonth?: string;
           providerName?: string;
+          campus?: string;
           rawText?: string;
           warnings?: string[];
         };
@@ -16388,6 +16391,15 @@ export default function App() {
         }),
       });
       const extracted = res.extracted || {};
+      const derivedEdcBillingMonth =
+        utilityInvoiceForm.utilityType === "EDC" && extracted.invoiceDate
+          ? (() => {
+              const match = String(extracted.invoiceDate || "").match(/^(\d{4})-(\d{2})-\d{2}$/);
+              if (!match) return "";
+              const shifted = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 2, 1));
+              return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+            })()
+          : "";
       setUtilityInvoiceForm((prev) => ({
         ...prev,
         photo,
@@ -16395,8 +16407,9 @@ export default function App() {
         amount: extracted.amount || prev.amount,
         invoiceNumber: extracted.invoiceNumber || prev.invoiceNumber,
         invoiceDate: extracted.invoiceDate || prev.invoiceDate,
-        billingMonth: extracted.billingMonth || prev.billingMonth,
+        billingMonth: derivedEdcBillingMonth || extracted.billingMonth || prev.billingMonth,
         providerName: extracted.providerName || prev.providerName,
+        campus: extracted.campus || prev.campus,
         note:
           prev.note ||
           (Array.isArray(extracted.warnings) && extracted.warnings.length
@@ -27382,6 +27395,8 @@ export default function App() {
           transferEntryId: Number(entry.id || 0),
           custodyEntryId: Number(matchedCustody?.id || 0),
           assetId: asset.assetId,
+          assetPhoto: asset.photo || "",
+          itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           date: entry.date || "",
           fromCampus: entry.fromCampus || "",
           fromLocation: entry.fromLocation || "",
@@ -27398,7 +27413,7 @@ export default function App() {
       }
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date));
-  }, [assets]);
+  }, [assets, assetItemName]);
   const staffBorrowingRows = useMemo(() => {
     return assets
       .filter((asset) => String(asset.assignedTo || "").trim())
@@ -29517,6 +29532,304 @@ export default function App() {
   const renderQuickCountPanel = (source: "dashboard" | "reports") => {
     const isDashboard = source === "dashboard";
     const isVisible = isDashboard ? dashboardQuickCountOpen : true;
+    const activeFilterCount =
+      (quickCountCampusFilter.includes("ALL") ? 0 : 1) +
+      (quickCountLocationFilter.includes("ALL") ? 0 : 1) +
+      (quickCountCategoryFilter.includes("ALL") ? 0 : 1) +
+      (quickCountStatusFilter.includes("ALL") ? 0 : 1) +
+      (quickCountQuery.trim() ? 1 : 0);
+    const campusScopeCount = quickCountCampusFilter.includes("ALL")
+      ? quickCountCampusFilterOptions.length
+      : quickCountCampusFilter.length;
+
+    const controls = (
+      <div className="report-quick-count-controls">
+        <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+          <summary>{summarizeMultiFilter(quickCountCampusFilter, t.allCampuses, campusLabel)}</summary>
+          <div className="filter-menu-list">
+            <label className="filter-menu-item">
+              <input
+                type="checkbox"
+                checked={quickCountCampusFilter.includes("ALL")}
+                onChange={(e) =>
+                  setQuickCountCampusFilter((prev) =>
+                    applyMultiFilterSelection(prev, e.target.checked, "ALL", quickCountCampusFilterOptions)
+                  )
+                }
+              />
+              {t.allCampuses}
+            </label>
+            {quickCountCampusFilterOptions.map((campus) => (
+              <label key={`quick-campus-${campus}`} className="filter-menu-item">
+                <input
+                  type="checkbox"
+                  checked={quickCountCampusFilter.includes(campus)}
+                  onChange={(e) =>
+                    setQuickCountCampusFilter((prev) =>
+                      applyMultiFilterSelection(prev, e.target.checked, campus, quickCountCampusFilterOptions)
+                    )
+                  }
+                />
+                {campusLabel(campus)}
+              </label>
+            ))}
+          </div>
+        </details>
+        <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+          <summary>{summarizeMultiFilter(quickCountLocationFilter, lang === "km" ? "គ្រប់ទីតាំង" : "All Locations")}</summary>
+          <div className="filter-menu-list">
+            <label className="filter-menu-item">
+              <input
+                type="checkbox"
+                checked={quickCountLocationFilter.includes("ALL")}
+                onChange={(e) =>
+                  setQuickCountLocationFilter((prev) =>
+                    applyMultiFilterSelection(prev, e.target.checked, "ALL", quickCountLocationOptions)
+                  )
+                }
+              />
+              {lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
+            </label>
+            {quickCountLocationOptions.map((location) => (
+              <label key={`quick-location-${location}`} className="filter-menu-item">
+                <input
+                  type="checkbox"
+                  checked={quickCountLocationFilter.includes(location)}
+                  onChange={(e) =>
+                    setQuickCountLocationFilter((prev) =>
+                      applyMultiFilterSelection(prev, e.target.checked, location, quickCountLocationOptions)
+                    )
+                  }
+                />
+                {location}
+              </label>
+            ))}
+          </div>
+        </details>
+        <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+          <summary>
+            {summarizeMultiFilter(quickCountCategoryFilter, t.allCategories, (value) => {
+              const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+              return row ? (lang === "km" ? row.km : row.en) : value;
+            })}
+          </summary>
+          <div className="filter-menu-list">
+            <label className="filter-menu-item">
+              <input
+                type="checkbox"
+                checked={quickCountCategoryFilter.includes("ALL")}
+                onChange={(e) =>
+                  setQuickCountCategoryFilter((prev) =>
+                    applyMultiFilterSelection(prev, e.target.checked, "ALL", quickCountCategoryFilterOptions)
+                  )
+                }
+              />
+              {t.allCategories}
+            </label>
+            {quickCountCategoryFilterOptions.map((category) => (
+              <label key={`quick-category-${category}`} className="filter-menu-item">
+                <input
+                  type="checkbox"
+                  checked={quickCountCategoryFilter.includes(category)}
+                  onChange={(e) =>
+                    setQuickCountCategoryFilter((prev) =>
+                      applyMultiFilterSelection(prev, e.target.checked, category, quickCountCategoryFilterOptions)
+                    )
+                  }
+                />
+                {lang === "km"
+                  ? CATEGORY_OPTIONS.find((item) => item.value === category)?.km || category
+                  : CATEGORY_OPTIONS.find((item) => item.value === category)?.en || category}
+              </label>
+            ))}
+          </div>
+        </details>
+        <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
+          <summary>
+            {summarizeMultiFilter(
+              quickCountStatusFilter,
+              lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status",
+              (value) => assetStatusLabel(value)
+            )}
+          </summary>
+          <div className="filter-menu-list">
+            <label className="filter-menu-item">
+              <input
+                type="checkbox"
+                checked={quickCountStatusFilter.includes("ALL")}
+                onChange={(e) =>
+                  setQuickCountStatusFilter((prev) =>
+                    applyMultiFilterSelection(prev, e.target.checked, "ALL", quickCountStatusFilterOptions)
+                  )
+                }
+              />
+              {lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}
+            </label>
+            {quickCountStatusFilterOptions.map((status) => (
+              <label key={`quick-status-${status}`} className="filter-menu-item">
+                <input
+                  type="checkbox"
+                  checked={quickCountStatusFilter.includes(status)}
+                  onChange={(e) =>
+                    setQuickCountStatusFilter((prev) =>
+                      applyMultiFilterSelection(prev, e.target.checked, status, quickCountStatusFilterOptions)
+                    )
+                  }
+                />
+                {assetStatusLabel(status)}
+              </label>
+            ))}
+          </div>
+        </details>
+        <input
+          className="input report-quick-search"
+          value={quickCountQuery}
+          onChange={(e) => setQuickCountQuery(e.target.value)}
+          placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទ្រព្យ (ឧ. Monitor, Air Conditioner)" : "Search item name (e.g. Monitor, Air Conditioner)"}
+        />
+      </div>
+    );
+
+    const statusGrid = (
+      <div className="report-quick-status-grid">
+        <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-broken" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Broken Assets", quickCountStatusAssets.broken)}>
+          <span>{lang === "km" ? "ខូច" : "Broken"}</span>
+          <strong>{quickCountStatusSummary.broken}</strong>
+        </button>
+        <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-maintenance" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងជួសជុល" : "Under Maintenance Assets", quickCountStatusAssets.underMaintenance)}>
+          <span>{lang === "km" ? "កំពុងជួសជុល" : "Under Maintenance"}</span>
+          <strong>{quickCountStatusSummary.underMaintenance}</strong>
+        </button>
+        <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-active" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងប្រើ" : "Active Assets", quickCountStatusAssets.active)}>
+          <span>{lang === "km" ? "កំពុងប្រើ" : "Active"}</span>
+          <strong>{quickCountStatusSummary.active}</strong>
+        </button>
+        <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-inactive" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យមិនប្រើ" : "Inactive Assets", quickCountStatusAssets.inactive)}>
+          <span>{lang === "km" ? "មិនប្រើ" : "Inactive"}</span>
+          <strong>{quickCountStatusSummary.inactive}</strong>
+        </button>
+        <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-retired" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Defective Assets", quickCountStatusAssets.retired)}>
+          <span>{lang === "km" ? "ខូច" : "Defective"}</span>
+          <strong>{quickCountStatusSummary.retired}</strong>
+        </button>
+      </div>
+    );
+
+    const groupedItems = (
+      <div className="report-quick-count-groups">
+        {quickCountGroupedRows.length ? (
+          quickCountGroupedRows.map((group) => (
+            <section key={`quick-count-group-${group.category}`} className="report-quick-category-block">
+              <div className="report-quick-category-title">
+                {lang === "km" ? `ប្រភេទ: ${group.category}` : `${group.category} Items`}
+              </div>
+              <div className="report-quick-count-list">
+                {group.rows.map((row) => (
+                  <button
+                    key={`quick-count-row-${row.category}-${row.itemName}`}
+                    type="button"
+                    className="report-quick-count-item report-quick-count-item-btn"
+                    onClick={() =>
+                      openQuickCountAssetsModal(
+                        `${row.itemName} - ${quickCountCampusFilter.includes("ALL") ? t.allCampuses : `${quickCountCampusFilter.length} campuses`}`,
+                        quickCountBaseAssets.filter(
+                          (asset) =>
+                            asset.category === row.category &&
+                            assetItemName(asset.category, asset.type, asset.pcType || "") === row.itemName
+                        )
+                      )
+                    }
+                  >
+                    <span className="report-quick-item-label">
+                      <span className="report-quick-item-icon" aria-hidden={true}>{quickCountItemIcon(row.itemName)}</span>
+                      <span>{row.itemName}</span>
+                    </span>
+                    <strong className="report-quick-count-value">{row.count}</strong>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))
+        ) : (
+          <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យត្រូវគ្នា" : "No matched items"}</div>
+        )}
+      </div>
+    );
+
+    if (isDashboard) {
+      return (
+        <div className="report-quick-count dashboard-quick-count dashboard-quick-count-redesign">
+          <div className="dashboard-quick-overview">
+            <div className="dashboard-quick-overview-copy">
+              <span className="dashboard-quick-kicker">{lang === "km" ? "មជ្ឈមណ្ឌលស្វែងរកលឿន" : "Rapid Search Console"}</span>
+              <strong>{lang === "km" ? "ស្វែងរក និងតាមដានទ្រព្យភ្លាមៗ" : "Quick Count Intelligence"}</strong>
+              <p>
+                {lang === "km"
+                  ? "មើលស្ថានភាពទ្រព្យ ស្វែងរកតាមសាខា និងប្រភេទ ហើយបើកមើល Item ដែលចង់តាមដានបានភ្លាមៗ។"
+                  : "Scan asset condition, narrow scope by campus and category, and jump straight into the items that need attention."}
+              </p>
+            </div>
+            <div className="dashboard-quick-overview-rail">
+              <article className="dashboard-quick-rail-card">
+                <span>Matched Assets</span>
+                <strong>{quickCountFilteredTotal}</strong>
+                <small>{lang === "km" ? "ទ្រព្យត្រូវតាមលទ្ធផលតម្រងបច្ចុប្បន្ន" : "Assets in the current live filter scope."}</small>
+              </article>
+              <article className="dashboard-quick-rail-card">
+                <span>Visible Items</span>
+                <strong>{quickCountFilteredRows.length}</strong>
+                <small>{lang === "km" ? "Item ដែលបង្ហាញក្នុងផ្ទាំងនេះ" : "Item types currently exposed in this board."}</small>
+              </article>
+              <article className="dashboard-quick-rail-card">
+                <span>Campus Scope</span>
+                <strong>{campusScopeCount}</strong>
+                <small>{lang === "km" ? "សាខាដែលរួមនៅក្នុងការស្វែងរក" : "Campuses currently included in the search scope."}</small>
+              </article>
+              <article className="dashboard-quick-rail-card">
+                <span>Active Filters</span>
+                <strong>{activeFilterCount}</strong>
+                <small>{lang === "km" ? "តម្រងដែលកំពុងដំណើរការ" : "Filters currently refining the board."}</small>
+              </article>
+            </div>
+          </div>
+          <div className="dashboard-quick-toolbar-shell">
+            <div className="dashboard-quick-toolbar-head">
+              <div className="dashboard-quick-toolbar-copy">
+                <strong>{lang === "km" ? "ផ្ទាំងតម្រង" : "Filter Dock"}</strong>
+                <span>{lang === "km" ? "កំណត់សាខា ទីតាំង ប្រភេទ ស្ថានភាព និងស្វែងរកឈ្មោះ" : "Set campus, location, category, status, and live search keywords."}</span>
+              </div>
+              <button
+                type="button"
+                className="tab btn-small report-quick-toggle-btn"
+                onClick={() => setDashboardQuickCountOpen((open) => !open)}
+              >
+                {dashboardQuickCountOpen ? (lang === "km" ? "លាក់" : "Hide") : (lang === "km" ? "បង្ហាញ" : "View")}
+              </button>
+            </div>
+            {isVisible ? controls : null}
+          </div>
+          {isVisible ? (
+            <div className="dashboard-quick-main-grid">
+              <section className="dashboard-quick-status-shell">
+                <div className="dashboard-quick-section-head">
+                  <strong>{lang === "km" ? "ស្ថានភាពទ្រព្យសរុប" : "Condition Snapshot"}</strong>
+                  <span>{lang === "km" ? "ចុចលើស្ថានភាពណាមួយដើម្បីបើកមើល Asset" : "Click any state to inspect the matching asset list."}</span>
+                </div>
+                {statusGrid}
+              </section>
+              <section className="dashboard-quick-catalog-shell">
+                <div className="dashboard-quick-section-head">
+                  <strong>{lang === "km" ? "Item តាមប្រភេទ" : "Item Exposure Board"}</strong>
+                  <span>{lang === "km" ? "រៀបតាម Category ដើម្បីឲ្យ Item សំខាន់ៗឃើញភ្លាម" : "Grouped by category so important item families stand out at a glance."}</span>
+                </div>
+                {groupedItems}
+              </section>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
     return (
       <div className="report-quick-count">
         <div className="report-quick-count-head-row">
@@ -29533,288 +29846,12 @@ export default function App() {
                 : "Use filters (campus, location, category, status) and search item name"}
             </span>
           </div>
-          {isDashboard ? (
-            <button
-              type="button"
-              className="tab btn-small report-quick-toggle-btn"
-              onClick={() => setDashboardQuickCountOpen((open) => !open)}
-            >
-              {dashboardQuickCountOpen ? (lang === "km" ? "លាក់" : "Hide") : (lang === "km" ? "បង្ហាញ" : "View")}
-            </button>
-          ) : null}
         </div>
         {isVisible ? (
           <>
-            <div className="report-quick-count-controls">
-              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                <summary>{summarizeMultiFilter(quickCountCampusFilter, t.allCampuses, campusLabel)}</summary>
-                <div className="filter-menu-list">
-                  <label className="filter-menu-item">
-                    <input
-                      type="checkbox"
-                      checked={quickCountCampusFilter.includes("ALL")}
-                      onChange={(e) =>
-                        setQuickCountCampusFilter((prev) =>
-                          applyMultiFilterSelection(
-                            prev,
-                            e.target.checked,
-                            "ALL",
-                            quickCountCampusFilterOptions
-                          )
-                        )
-                      }
-                    />
-                    {t.allCampuses}
-                  </label>
-                  {quickCountCampusFilterOptions.map((campus) => (
-                    <label key={`quick-campus-${campus}`} className="filter-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={quickCountCampusFilter.includes(campus)}
-                        onChange={(e) =>
-                          setQuickCountCampusFilter((prev) =>
-                            applyMultiFilterSelection(
-                              prev,
-                              e.target.checked,
-                              campus,
-                              quickCountCampusFilterOptions
-                            )
-                          )
-                        }
-                      />
-                      {campusLabel(campus)}
-                    </label>
-                  ))}
-                </div>
-              </details>
-              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                <summary>{summarizeMultiFilter(quickCountLocationFilter, lang === "km" ? "គ្រប់ទីតាំង" : "All Locations")}</summary>
-                <div className="filter-menu-list">
-                  <label className="filter-menu-item">
-                    <input
-                      type="checkbox"
-                      checked={quickCountLocationFilter.includes("ALL")}
-                      onChange={(e) =>
-                        setQuickCountLocationFilter((prev) =>
-                          applyMultiFilterSelection(
-                            prev,
-                            e.target.checked,
-                            "ALL",
-                            quickCountLocationOptions
-                          )
-                        )
-                      }
-                    />
-                    {lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
-                  </label>
-                  {quickCountLocationOptions.map((location) => (
-                    <label key={`quick-location-${location}`} className="filter-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={quickCountLocationFilter.includes(location)}
-                        onChange={(e) =>
-                          setQuickCountLocationFilter((prev) =>
-                            applyMultiFilterSelection(
-                              prev,
-                              e.target.checked,
-                              location,
-                              quickCountLocationOptions
-                            )
-                          )
-                        }
-                      />
-                      {location}
-                    </label>
-                  ))}
-                </div>
-              </details>
-              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                <summary>
-                  {summarizeMultiFilter(quickCountCategoryFilter, t.allCategories, (value) => {
-                    const row = CATEGORY_OPTIONS.find((item) => item.value === value);
-                    return row ? (lang === "km" ? row.km : row.en) : value;
-                  })}
-                </summary>
-                <div className="filter-menu-list">
-                  <label className="filter-menu-item">
-                    <input
-                      type="checkbox"
-                      checked={quickCountCategoryFilter.includes("ALL")}
-                      onChange={(e) =>
-                        setQuickCountCategoryFilter((prev) =>
-                          applyMultiFilterSelection(
-                            prev,
-                            e.target.checked,
-                            "ALL",
-                            quickCountCategoryFilterOptions
-                          )
-                        )
-                      }
-                    />
-                    {t.allCategories}
-                  </label>
-                  {quickCountCategoryFilterOptions.map((category) => (
-                    <label key={`quick-category-${category}`} className="filter-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={quickCountCategoryFilter.includes(category)}
-                        onChange={(e) =>
-                          setQuickCountCategoryFilter((prev) =>
-                            applyMultiFilterSelection(
-                              prev,
-                              e.target.checked,
-                              category,
-                              quickCountCategoryFilterOptions
-                            )
-                          )
-                        }
-                      />
-                      {lang === "km"
-                        ? CATEGORY_OPTIONS.find((item) => item.value === category)?.km || category
-                        : CATEGORY_OPTIONS.find((item) => item.value === category)?.en || category}
-                    </label>
-                  ))}
-                </div>
-              </details>
-              <details className="filter-menu" onToggle={handleAssetMasterFilterMenuToggle}>
-                <summary>
-                  {summarizeMultiFilter(
-                    quickCountStatusFilter,
-                    lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status",
-                    (value) => assetStatusLabel(value)
-                  )}
-                </summary>
-                <div className="filter-menu-list">
-                  <label className="filter-menu-item">
-                    <input
-                      type="checkbox"
-                      checked={quickCountStatusFilter.includes("ALL")}
-                      onChange={(e) =>
-                        setQuickCountStatusFilter((prev) =>
-                          applyMultiFilterSelection(
-                            prev,
-                            e.target.checked,
-                            "ALL",
-                            quickCountStatusFilterOptions
-                          )
-                        )
-                      }
-                    />
-                    {lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}
-                  </label>
-                  {quickCountStatusFilterOptions.map((status) => (
-                    <label key={`quick-status-${status}`} className="filter-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={quickCountStatusFilter.includes(status)}
-                        onChange={(e) =>
-                          setQuickCountStatusFilter((prev) =>
-                            applyMultiFilterSelection(
-                              prev,
-                              e.target.checked,
-                              status,
-                              quickCountStatusFilterOptions
-                            )
-                          )
-                        }
-                      />
-                      {assetStatusLabel(status)}
-                    </label>
-                  ))}
-                </div>
-              </details>
-              <input
-                className="input report-quick-search"
-                value={quickCountQuery}
-                onChange={(e) => setQuickCountQuery(e.target.value)}
-                placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទ្រព្យ (ឧ. Monitor, Air Conditioner)" : "Search item name (e.g. Monitor, Air Conditioner)"}
-              />
-            </div>
-            <div className="report-quick-status-grid">
-              <button
-                type="button"
-                className="report-quick-status-pill report-quick-status-btn report-quick-status-broken"
-                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Broken Assets", quickCountStatusAssets.broken)}
-              >
-                <span>{lang === "km" ? "ខូច" : "Broken"}</span>
-                <strong>{quickCountStatusSummary.broken}</strong>
-              </button>
-              <button
-                type="button"
-                className="report-quick-status-pill report-quick-status-btn report-quick-status-maintenance"
-                onClick={() =>
-                  openQuickCountAssetsModal(
-                    lang === "km" ? "ទ្រព្យកំពុងជួសជុល" : "Under Maintenance Assets",
-                    quickCountStatusAssets.underMaintenance
-                  )
-                }
-              >
-                <span>{lang === "km" ? "កំពុងជួសជុល" : "Under Maintenance"}</span>
-                <strong>{quickCountStatusSummary.underMaintenance}</strong>
-              </button>
-              <button
-                type="button"
-                className="report-quick-status-pill report-quick-status-btn report-quick-status-active"
-                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងប្រើ" : "Active Assets", quickCountStatusAssets.active)}
-              >
-                <span>{lang === "km" ? "កំពុងប្រើ" : "Active"}</span>
-                <strong>{quickCountStatusSummary.active}</strong>
-              </button>
-              <button
-                type="button"
-                className="report-quick-status-pill report-quick-status-btn report-quick-status-inactive"
-                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យមិនប្រើ" : "Inactive Assets", quickCountStatusAssets.inactive)}
-              >
-                <span>{lang === "km" ? "មិនប្រើ" : "Inactive"}</span>
-                <strong>{quickCountStatusSummary.inactive}</strong>
-              </button>
-              <button
-                type="button"
-                className="report-quick-status-pill report-quick-status-btn report-quick-status-retired"
-                onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Defective Assets", quickCountStatusAssets.retired)}
-              >
-                <span>{lang === "km" ? "ខូច" : "Defective"}</span>
-                <strong>{quickCountStatusSummary.retired}</strong>
-              </button>
-            </div>
-            <div className="report-quick-count-groups">
-              {quickCountGroupedRows.length ? (
-                quickCountGroupedRows.map((group) => (
-                  <section key={`quick-count-group-${group.category}`} className="report-quick-category-block">
-                    <div className="report-quick-category-title">
-                      {lang === "km" ? `ប្រភេទ: ${group.category}` : `${group.category} Items`}
-                    </div>
-                    <div className="report-quick-count-list">
-                      {group.rows.map((row) => (
-                        <button
-                          key={`quick-count-row-${row.category}-${row.itemName}`}
-                          type="button"
-                          className="report-quick-count-item report-quick-count-item-btn"
-                          onClick={() =>
-                            openQuickCountAssetsModal(
-                              `${row.itemName} - ${quickCountCampusFilter.includes("ALL") ? t.allCampuses : `${quickCountCampusFilter.length} campuses`}`,
-                              quickCountBaseAssets.filter(
-                                (asset) =>
-                                  asset.category === row.category &&
-                                  assetItemName(asset.category, asset.type, asset.pcType || "") === row.itemName
-                              )
-                            )
-                          }
-                        >
-                          <span className="report-quick-item-label">
-                            <span className="report-quick-item-icon" aria-hidden={true}>{quickCountItemIcon(row.itemName)}</span>
-                            <span>{row.itemName}</span>
-                          </span>
-                          <strong className="report-quick-count-value">{row.count}</strong>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ))
-              ) : (
-                <div className="tiny">{lang === "km" ? "មិនមានទិន្នន័យត្រូវគ្នា" : "No matched items"}</div>
-              )}
-            </div>
+            {controls}
+            {statusGrid}
+            {groupedItems}
           </>
         ) : null}
       </div>
@@ -30255,10 +30292,11 @@ export default function App() {
       ]);
     } else if (reportType === "transfer") {
       title = "Asset Transfer Log Report";
-      columns = ["Date", "Asset ID", "From Campus", "From Location", "To Campus", "To Location", "From Staff", "To Staff", "Ack", "By", "Reason"];
+      columns = ["Date", "Asset ID", "Photo", "From Campus", "From Location", "To Campus", "To Location", "From Staff", "To Staff", "Ack", "By", "Reason"];
       rows = allTransferRows.map((r) => [
         r.date ? formatDate(r.date) : "-",
         r.assetId,
+        toPrintablePhotoUrl(r.assetPhoto || ""),
         reportCampusName(r.fromCampus),
         r.fromLocation || "-",
         reportCampusName(r.toCampus),
@@ -43221,6 +43259,16 @@ export default function App() {
                         <strong className="transfer-history-asset-pill">{row.assetId}</strong>
                       </div>
                       <div className="transfer-history-card-grid">
+                        <div className="transfer-history-asset">
+                          <div className="transfer-history-photo-frame">
+                            {renderAssetPhoto(row.assetPhoto || "", row.assetId)}
+                          </div>
+                          <div className="transfer-history-asset-meta">
+                            <span>Asset</span>
+                            <strong>{row.itemName || row.assetId}</strong>
+                            <small>{row.assetId}</small>
+                          </div>
+                        </div>
                         <div className="transfer-history-route">
                           <div className="transfer-history-stop">
                             <span>From</span>
@@ -45626,20 +45674,28 @@ export default function App() {
                     <span>Provider Name</span>
                     <input className="input" value={utilityInvoiceForm.providerName} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, providerName: e.target.value }))} />
                   </label>
-                  <label className="field">
+                  <label className="field field-wide">
                     <span>Invoice Upload</span>
-                    <input type="file" accept="image/*" className="input" onChange={onUtilityInvoicePhotoFile} />
+                    <div className="utility-invoice-upload-row">
+                      <input type="file" accept="image/*" className="input utility-invoice-upload-input" onChange={onUtilityInvoicePhotoFile} />
+                      {utilityInvoiceForm.photo ? (
+                        <button
+                          type="button"
+                          className="utility-invoice-thumb-btn"
+                          onClick={() => setPreviewImage(utilityInvoiceForm.photo)}
+                          title="Open invoice image"
+                        >
+                          <img
+                            loading="lazy"
+                            decoding="async"
+                            src={utilityInvoiceForm.photo}
+                            alt="utility invoice"
+                            className="utility-invoice-thumb"
+                          />
+                        </button>
+                      ) : null}
+                    </div>
                     <span className="tiny">{utilityInvoiceUploadHelpText}</span>
-                    {utilityInvoiceForm.photo ? (
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        src={utilityInvoiceForm.photo}
-                        alt="utility invoice"
-                        className="table-photo"
-                        style={{ marginTop: 8, width: 84, height: 84, objectFit: "cover" }}
-                      />
-                    ) : null}
                   </label>
                   <label className="field field-wide">
                     <span>{t.notes}</span>
@@ -48311,6 +48367,7 @@ export default function App() {
                     <tr>
                       <th>Date</th>
                       <th>{t.assetId}</th>
+                      <th>{t.photo}</th>
                       <th>From Campus</th>
                       <th>From Location</th>
                       <th>To Campus</th>
@@ -48328,6 +48385,7 @@ export default function App() {
                         <tr key={`report-transfer-${r.rowId}`}>
                           <td>{r.date ? formatDate(r.date) : "-"}</td>
                           <td><strong>{r.assetId}</strong></td>
+                          <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
                           <td>{reportCampusName(r.fromCampus)}</td>
                           <td>{r.fromLocation || "-"}</td>
                           <td>{reportCampusName(r.toCampus)}</td>
@@ -48341,7 +48399,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={11}>No transfer history.</td>
+                        <td colSpan={12}>No transfer history.</td>
                       </tr>
                     )}
                   </tbody>

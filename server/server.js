@@ -3391,6 +3391,17 @@ function parseBillingMonth(raw, fallbackDate = "") {
   return "";
 }
 
+function shiftBillingMonth(month, delta) {
+  const value = toText(month);
+  const match = value.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return "";
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex)) return "";
+  const shifted = new Date(Date.UTC(year, monthIndex + delta, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 function parsePpwsInvoiceFields(text) {
   const normalizedText = toText(text);
   const lines = normalizedText
@@ -3411,9 +3422,8 @@ function parsePpwsInvoiceFields(text) {
     /(\d{1,2}\/\d{1,2}\/\d{2})/,
   ]);
   const invoiceDate = parseDateValue(invoiceDateRaw);
-  const billingMonth = periodMatch
-    ? parseBillingMonth(periodMatch[2], invoiceDate)
-    : parseBillingMonth("", invoiceDate);
+  const periodBillingMonth = periodMatch ? parseBillingMonth(periodMatch[2], invoiceDate) : "";
+  const billingMonth = periodBillingMonth || shiftBillingMonth(parseBillingMonth("", invoiceDate), -1);
 
   const m3Matches = Array.from(flat.matchAll(/(\d+(?:\.\d+)?)\s*M3\b/gi))
     .map((match) => Number(match[1]))
@@ -3530,9 +3540,9 @@ function parseEdcInvoiceFields(text) {
   const periodMatch = flat.match(
     /(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})\s*(?:to|-|~|–)\s*(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})/i
   );
-  const billingMonth = periodMatch
-    ? parseBillingMonth(periodMatch[2], invoiceDate)
-    : parseBillingMonth("", invoiceDate);
+  const periodBillingMonth = periodMatch ? parseBillingMonth(periodMatch[2], invoiceDate) : "";
+  const invoiceMonth = parseBillingMonth("", invoiceDate);
+  const billingMonth = periodBillingMonth || shiftBillingMonth(invoiceMonth, -1);
 
   let usage = "";
   const labeledUsageCandidates = lines
@@ -3579,6 +3589,36 @@ function parseEdcInvoiceFields(text) {
     if (likelyUsageCandidates.length) {
       likelyUsageCandidates.sort((a, b) => b.index - a.index || a.value - b.value);
       usage = String(likelyUsageCandidates[0].value);
+    }
+  }
+  if (!usage) {
+    const numericUsageCandidates = lines
+      .flatMap((line, index) => {
+        const context = getLineContext(index);
+        if (!matchesAnyPattern(context, usageLinePatterns)) return [];
+        return Array.from(context.matchAll(/(\d+(?:\.\d+)?)/g)).map((match) => {
+          const value = Number(match[1].replace(/,/g, ""));
+          let score = 0;
+          if (!Number.isFinite(value) || value <= 0) return null;
+          if (value >= 10 && value <= 5000) score += 5;
+          else score -= 6;
+          if (index >= laterHalfIndex) score += 3;
+          if (index >= tailStartIndex) score += 2;
+          if (matchesAnyPattern(line, usageLinePatterns)) score += 4;
+          if (/\b(?:amount|riel|payable|invoice|inv)\b/i.test(context)) score -= 4;
+          return {
+            value,
+            index,
+            score,
+          };
+        });
+      })
+      .filter(Boolean);
+    if (numericUsageCandidates.length) {
+      numericUsageCandidates.sort((a, b) => b.score - a.score || b.index - a.index || a.value - b.value);
+      if (numericUsageCandidates[0].score >= 5) {
+        usage = String(numericUsageCandidates[0].value);
+      }
     }
   }
 
@@ -3685,10 +3725,88 @@ function parseEdcInvoiceFields(text) {
   };
 }
 
+function detectCampusFromUtilityInvoiceText(text) {
+  const normalizedText = toText(text);
+  if (!normalizedText) return "";
+  const flat = normalizedText.replace(/\s+/g, " ").trim();
+  const normalizedFlat = flat
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s./-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+  const campusMatchers = [
+    {
+      campus: "Chaktomuk Campus",
+      patterns: [
+        /\bc2\.?1\b/i,
+        /\bchaktomuk\b/i,
+        /\bdaun\s*penh\b/i,
+        /\bdoun\s*penh\b/i,
+        /\beo\s*[-/]?\s*71\b/i,
+        /\bstreet\s*242\b/i,
+        /\bpich\s*kong\s*kunthea\b/i,
+      ],
+      minScore: 2,
+    },
+    {
+      campus: "Chaktomuk Campus (C2.2)",
+      patterns: [
+        /\bc2\.?2\b/i,
+        /\bcampus\s*2\.?2\b/i,
+        /\bchaktomuk\s*campus\s*\(?c?2\.?2\)?\b/i,
+      ],
+      minScore: 1,
+    },
+    {
+      campus: "Samdach Pan Campus",
+      patterns: [
+        /\bc1\b/i,
+        /\bsamdach\s*pan\b/i,
+        /\bsamdech\s*pan\b/i,
+      ],
+      minScore: 1,
+    },
+    {
+      campus: "Boeung Snor Campus",
+      patterns: [
+        /\bc3\b/i,
+        /\bboeung\s*snor\b/i,
+      ],
+      minScore: 1,
+    },
+    {
+      campus: "Veng Sreng Campus",
+      patterns: [
+        /\bc4\b/i,
+        /\bveng\s*sreng\b/i,
+      ],
+      minScore: 1,
+    },
+  ];
+
+  let bestCampus = "";
+  let bestScore = 0;
+  for (const matcher of campusMatchers) {
+    const score = matcher.patterns.reduce(
+      (sum, pattern) => sum + (pattern.test(normalizedFlat) ? 1 : 0),
+      0
+    );
+    if (score >= matcher.minScore && score > bestScore) {
+      bestScore = score;
+      bestCampus = matcher.campus;
+    }
+  }
+  return bestCampus;
+}
+
 function parseUtilityInvoiceFromOcrText(utilityType, text) {
   const normalizedText = toText(text);
   const flat = normalizedText.replace(/\s+/g, " ").trim();
   const utility = toUpper(utilityType) === "PPWS" ? "PPWS" : "EDC";
+  const detectedCampus = detectCampusFromUtilityInvoiceText(normalizedText);
   if (utility === "PPWS") {
     const ppws = parsePpwsInvoiceFields(normalizedText);
     const warnings = [];
@@ -3703,6 +3821,7 @@ function parseUtilityInvoiceFromOcrText(utilityType, text) {
       invoiceNumber: ppws.invoiceNumber,
       invoiceDate: ppws.invoiceDate,
       billingMonth: ppws.billingMonth,
+      campus: detectedCampus,
       rawText: normalizedText,
       warnings,
     };
@@ -3720,6 +3839,7 @@ function parseUtilityInvoiceFromOcrText(utilityType, text) {
     invoiceNumber: edc.invoiceNumber,
     invoiceDate: edc.invoiceDate,
     billingMonth: edc.billingMonth,
+    campus: detectedCampus,
     rawText: normalizedText,
     warnings,
   };
