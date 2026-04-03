@@ -650,6 +650,7 @@ type NavModule =
   | "dashboard"
   | "assets"
   | "classroom"
+  | "cctv"
   | "inventory"
   | "utilities"
   | "printer"
@@ -786,6 +787,9 @@ type ServerSettings = {
   vaultDesignLinks?: VaultDesignLink[];
   vaultNetworkDocs?: VaultNetworkDoc[];
   vaultCctvRecords?: VaultCctvRecord[];
+  cctvCameraRecords?: CctvCameraRecord[];
+  cctvServiceHistory?: CctvServiceHistoryRecord[];
+  cctvChangeLogs?: CctvChangeLogRecord[];
 };
 type TonerPurchaseForm = {
   itemId: string;
@@ -906,6 +910,52 @@ type VaultCctvRecord = {
   retentionDays?: number;
   lastAngleReview?: string;
   note?: string;
+  created: string;
+};
+type CctvCameraRecord = {
+  id: number;
+  campus: string;
+  site: string;
+  cameraType?: "IP Camera" | "Analog Camera";
+  cameraName: string;
+  channelName: string;
+  channelNumber: string;
+  ipAddress: string;
+  httpPort?: string;
+  serverPort?: string;
+  username?: string;
+  nvrName: string;
+  liveUrl?: string;
+  snapshot?: string;
+  status: "Online" | "Offline" | "Issue" | "Under Repair";
+  arrange?: string;
+  remark?: string;
+  lastServiceDate?: string;
+  created: string;
+};
+type CctvServiceHistoryRecord = {
+  id: number;
+  cameraId: number;
+  date: string;
+  problem: string;
+  action: "Fix" | "Replace" | "Adjust Angle" | "Rotate Lens" | "Move Position" | "Clean" | "Inspection";
+  result: string;
+  cost?: string;
+  vendor?: string;
+  by?: string;
+  nextFollowUp?: string;
+  note?: string;
+  created: string;
+};
+type CctvChangeLogRecord = {
+  id: number;
+  cameraId: number;
+  date: string;
+  changeType: "Angle Rotation" | "Lens Zoom" | "Focus Adjust" | "IP Change" | "Channel Change" | "NVR Change" | "Move Position" | "Replace Camera";
+  oldValue?: string;
+  newValue?: string;
+  reason?: string;
+  by?: string;
   created: string;
 };
 type VaultSearchField = {
@@ -1067,6 +1117,9 @@ const VAULT_CREDENTIALS_FALLBACK_KEY = "it_vault_credentials_v1";
 const VAULT_DESIGN_LINKS_FALLBACK_KEY = "it_vault_design_links_v1";
 const VAULT_NETWORK_DOCS_FALLBACK_KEY = "it_vault_network_docs_v1";
 const VAULT_CCTV_FALLBACK_KEY = "it_vault_cctv_v1";
+const CCTV_CAMERA_FALLBACK_KEY = "it_cctv_cameras_v1";
+const CCTV_SERVICE_FALLBACK_KEY = "it_cctv_service_v1";
+const CCTV_CHANGELOG_FALLBACK_KEY = "it_cctv_change_logs_v1";
 const AUTH_TOKEN_KEY = "it_auth_token_v1";
 const AUTH_USER_KEY = "it_auth_user_v1";
 const LOGIN_REMEMBER_KEY = "it_login_remember_v1";
@@ -1231,10 +1284,29 @@ const INVENTORY_BULK_TEMPLATE_HEADERS = [
   "vendor",
   "notes",
 ] as const;
+const CCTV_CAMERA_CSV_TEMPLATE_HEADERS = [
+  "campus",
+  "site",
+  "camera_type",
+  "camera_name",
+  "channel_name",
+  "channel_no",
+  "ip_address",
+  "http_port",
+  "server_port",
+  "username",
+  "nvr_name",
+  "live_url",
+  "status",
+  "arrange",
+  "remark",
+  "last_service_date",
+] as const;
 
 const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "dashboard",
   "assets",
+  "cctv",
   "inventory",
   "utilities",
   "printer",
@@ -1250,6 +1322,7 @@ const ALL_NAV_MODULES: NavModule[] = [
   "dashboard",
   "assets",
   "classroom",
+  "cctv",
   "inventory",
   "utilities",
   "printer",
@@ -1269,6 +1342,7 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   dashboard: "core",
   assets: "core",
   classroom: "core",
+  cctv: "operations",
   inventory: "core",
   utilities: "operations",
   printer: "operations",
@@ -1313,6 +1387,19 @@ const MENU_ACCESS_TREE: Array<{
     labelEn: "Classroom Control",
     labelKm: "គ្រប់គ្រងថ្នាក់រៀន",
     children: [{ key: "classroom.main", labelEn: "Classroom Dashboard", labelKm: "ផ្ទាំងគ្រប់គ្រងថ្នាក់រៀន" }],
+  },
+  {
+    module: "cctv",
+    labelEn: "CCTV Control",
+    labelKm: "គ្រប់គ្រង CCTV",
+    children: [
+      { key: "cctv.dashboard", labelEn: "Dashboard", labelKm: "ផ្ទាំងសង្ខេប" },
+      { key: "cctv.cameras", labelEn: "Camera List", labelKm: "បញ្ជីកាមេរ៉ា" },
+      { key: "cctv.live", labelEn: "Live View", labelKm: "មើលបន្តផ្ទាល់" },
+      { key: "cctv.service", labelEn: "Service History", labelKm: "ប្រវត្តិជួសជុល" },
+      { key: "cctv.changes", labelEn: "Change Log", labelKm: "ប្រវត្តិបម្លែង" },
+      { key: "cctv.reports", labelEn: "Reports", labelKm: "របាយការណ៍" },
+    ],
   },
   {
     module: "inventory",
@@ -3720,6 +3807,100 @@ function normalizeVaultCctvRecords(input: unknown): VaultCctvRecord[] {
     }));
 }
 
+function normalizeCctvCameraRecords(input: unknown): CctvCameraRecord[] {
+  return normalizeArray<CctvCameraRecord>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      campus: String(row.campus || "").trim(),
+      site: String(row.site || "").trim(),
+      cameraType: (
+        String(row.cameraType || "").trim() === "Analog Camera"
+          ? "Analog Camera"
+          : String(row.cameraType || "").trim() === "IP Camera"
+          ? "IP Camera"
+          : String(row.ipAddress || "").trim()
+          ? "IP Camera"
+          : "Analog Camera") as CctvCameraRecord["cameraType"],
+      cameraName: String(row.cameraName || "").trim(),
+      channelName: String(row.channelName || "").trim(),
+      channelNumber: String(row.channelNumber || "").trim(),
+      ipAddress: String(row.ipAddress || "").trim(),
+      httpPort: String(row.httpPort || "").trim(),
+      serverPort: String(row.serverPort || "").trim(),
+      username: String(row.username || "").trim(),
+      nvrName: String(row.nvrName || "").trim(),
+      liveUrl: String(row.liveUrl || "").trim(),
+      snapshot: String(row.snapshot || "").trim(),
+      status: (["Online", "Offline", "Issue", "Under Repair"].includes(String(row.status || ""))
+        ? String(row.status)
+        : "Online") as CctvCameraRecord["status"],
+      arrange: String(row.arrange || "").trim(),
+      remark: String(row.remark || "").trim(),
+      lastServiceDate: String(row.lastServiceDate || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.campus && row.site && row.cameraName);
+}
+
+function normalizeCctvServiceHistory(input: unknown): CctvServiceHistoryRecord[] {
+  return normalizeArray<CctvServiceHistoryRecord>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      cameraId: Number(row.cameraId) || 0,
+      date: String(row.date || "").trim(),
+      problem: String(row.problem || "").trim(),
+      action: ([
+        "Fix",
+        "Replace",
+        "Adjust Angle",
+        "Rotate Lens",
+        "Move Position",
+        "Clean",
+        "Inspection",
+      ].includes(String(row.action || ""))
+        ? String(row.action)
+        : "Inspection") as CctvServiceHistoryRecord["action"],
+      result: String(row.result || "").trim(),
+      cost: String(row.cost || "").trim(),
+      vendor: String(row.vendor || "").trim(),
+      by: String(row.by || "").trim(),
+      nextFollowUp: String(row.nextFollowUp || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.cameraId > 0 && row.date);
+}
+
+function normalizeCctvChangeLogs(input: unknown): CctvChangeLogRecord[] {
+  return normalizeArray<CctvChangeLogRecord>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      cameraId: Number(row.cameraId) || 0,
+      date: String(row.date || "").trim(),
+      changeType: ([
+        "Angle Rotation",
+        "Lens Zoom",
+        "Focus Adjust",
+        "IP Change",
+        "Channel Change",
+        "NVR Change",
+        "Move Position",
+        "Replace Camera",
+      ].includes(String(row.changeType || ""))
+        ? String(row.changeType)
+        : "Angle Rotation") as CctvChangeLogRecord["changeType"],
+      oldValue: String(row.oldValue || "").trim(),
+      newValue: String(row.newValue || "").trim(),
+      reason: String(row.reason || "").trim(),
+      by: String(row.by || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.cameraId > 0 && row.date);
+}
+
 function readVaultAccountsFallback(): VaultAccount[] {
   try {
     const raw = localStorage.getItem(VAULT_ACCOUNTS_FALLBACK_KEY);
@@ -3788,6 +3969,48 @@ function readVaultCctvFallback(): VaultCctvRecord[] {
 
 function writeVaultCctvFallback(rows: VaultCctvRecord[]) {
   trySetLocalStorage(VAULT_CCTV_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readCctvCameraFallback(): CctvCameraRecord[] {
+  try {
+    const raw = localStorage.getItem(CCTV_CAMERA_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeCctvCameraRecords(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeCctvCameraFallback(rows: CctvCameraRecord[]) {
+  trySetLocalStorage(CCTV_CAMERA_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readCctvServiceFallback(): CctvServiceHistoryRecord[] {
+  try {
+    const raw = localStorage.getItem(CCTV_SERVICE_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeCctvServiceHistory(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeCctvServiceFallback(rows: CctvServiceHistoryRecord[]) {
+  trySetLocalStorage(CCTV_SERVICE_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readCctvChangeLogFallback(): CctvChangeLogRecord[] {
+  try {
+    const raw = localStorage.getItem(CCTV_CHANGELOG_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeCctvChangeLogs(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeCctvChangeLogFallback(rows: CctvChangeLogRecord[]) {
+  trySetLocalStorage(CCTV_CHANGELOG_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function sortLocationEntriesByName(rows: LocationEntry[]) {
@@ -6739,6 +6962,7 @@ export default function App() {
       { id: "dashboard", label: t.dashboard },
       { id: "assets", label: t.assets },
       { id: "classroom", label: lang === "km" ? "ថ្នាក់រៀន" : "Classroom Control" },
+      { id: "cctv", label: lang === "km" ? "គ្រប់គ្រង CCTV" : "CCTV Control" },
       { id: "inventory", label: t.inventory },
       { id: "utilities", label: lang === "km" ? "សេវាប្រើប្រាស់" : "Utilities" },
       { id: "printer", label: lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer" },
@@ -6763,6 +6987,8 @@ export default function App() {
         return <Boxes size={16} aria-hidden={true} />;
       case "classroom":
         return <Building2 size={16} aria-hidden={true} />;
+      case "cctv":
+        return <Camera size={16} aria-hidden={true} />;
       case "inventory":
         return <Package size={16} aria-hidden={true} />;
       case "utilities":
@@ -6860,6 +7086,58 @@ export default function App() {
   const [classroomRoomFilter, setClassroomRoomFilter] = useState("ALL");
   const [classroomQuery, setClassroomQuery] = useState("");
   const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
+  const [cctvView, setCctvView] = useState<"dashboard" | "cameras" | "live" | "service" | "changes" | "reports">("dashboard");
+  const [cctvCameraRecords, setCctvCameraRecords] = useState<CctvCameraRecord[]>(() => readCctvCameraFallback());
+  const [cctvServiceHistory, setCctvServiceHistory] = useState<CctvServiceHistoryRecord[]>(() => readCctvServiceFallback());
+  const [cctvChangeLogs, setCctvChangeLogs] = useState<CctvChangeLogRecord[]>(() => readCctvChangeLogFallback());
+  const [cctvSiteFilter, setCctvSiteFilter] = useState("ALL");
+  const [cctvStatusFilter, setCctvStatusFilter] = useState("ALL");
+  const [cctvQuery, setCctvQuery] = useState("");
+  const [editingCctvCameraId, setEditingCctvCameraId] = useState<number | null>(null);
+  const [editingCctvServiceId, setEditingCctvServiceId] = useState<number | null>(null);
+  const [editingCctvChangeId, setEditingCctvChangeId] = useState<number | null>(null);
+  const [cctvCameraPhotoFileKey, setCctvCameraPhotoFileKey] = useState(0);
+  const [cctvCameraImportFileKey, setCctvCameraImportFileKey] = useState(0);
+  const [cctvCameraForm, setCctvCameraForm] = useState({
+    campus: CAMPUS_LIST[0],
+    site: "",
+    cameraType: "IP Camera" as CctvCameraRecord["cameraType"],
+    cameraName: "",
+    channelName: "",
+    channelNumber: "",
+    ipAddress: "",
+    httpPort: "80",
+    serverPort: "8000",
+    username: "Admin",
+    nvrName: "",
+    liveUrl: "",
+    snapshot: "",
+    status: "Online" as CctvCameraRecord["status"],
+    arrange: "",
+    remark: "",
+    lastServiceDate: "",
+  });
+  const [cctvServiceForm, setCctvServiceForm] = useState({
+    cameraId: "",
+    date: toYmd(new Date()),
+    problem: "",
+    action: "Inspection" as CctvServiceHistoryRecord["action"],
+    result: "",
+    cost: "",
+    vendor: "",
+    by: "",
+    nextFollowUp: "",
+    note: "",
+  });
+  const [cctvChangeForm, setCctvChangeForm] = useState({
+    cameraId: "",
+    date: toYmd(new Date()),
+    changeType: "Angle Rotation" as CctvChangeLogRecord["changeType"],
+    oldValue: "",
+    newValue: "",
+    reason: "",
+    by: "",
+  });
   const [classroomDetailRoomId, setClassroomDetailRoomId] = useState<number | null>(null);
   const [classroomVerificationRecords, setClassroomVerificationRecords] = useState<ClassroomVerificationRecord[]>(() =>
     readClassroomVerificationFallback()
@@ -6909,17 +7187,8 @@ export default function App() {
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
-  const canUseUtilityInvoiceOcr = useMemo(() => {
-    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
-    const host = String(window.location.hostname || "").trim().toLowerCase();
-    const isLocalHost = host === "127.0.0.1" || host === "localhost";
-    const platformText = `${navigator.platform || ""} ${navigator.userAgent || ""}`;
-    const isMac = /mac/i.test(platformText);
-    return isLocalHost && isMac;
-  }, []);
-  const utilityInvoiceUploadHelpText = canUseUtilityInvoiceOcr
-    ? "Upload invoice image to auto fill repeated EDC/PPWS template data."
-    : "Web/phone upload saves the invoice photo only. EDC/PPWS auto fill is available in the local macOS app; please enter usage, amount, invoice no., and date manually.";
+  const utilityInvoiceUploadHelpText =
+    "Upload invoice image to auto fill usage, amount, invoice date, billing month, and invoice number. Please review the detected values before saving.";
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -6952,6 +7221,7 @@ export default function App() {
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
+      if (nextTab === "cctv") setCctvView("dashboard");
       if (nextTab === "documents") setDocumentsView("overview");
       if (nextTab === "vault") setVaultTab("dashboard");
       setTab(nextTab);
@@ -6996,6 +7266,7 @@ export default function App() {
           setAssetsView("list");
         }
         if (nextTab === "classroom") setClassroomView("gallery");
+        if (nextTab === "cctv") setCctvView("dashboard");
         if (nextTab === "documents") setDocumentsView("overview");
         if (nextTab === "vault") setVaultTab("dashboard");
         setTab(nextTab);
@@ -7096,6 +7367,69 @@ export default function App() {
           });
         case "classroom":
           return [];
+        case "cctv":
+          return [
+            {
+              key: "cctv.dashboard",
+              label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
+              active: cctvView === "dashboard",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setCctvView("dashboard");
+                  setTab("cctv");
+                }),
+            },
+            {
+              key: "cctv.cameras",
+              label: lang === "km" ? "បញ្ជីកាមេរ៉ា" : "Camera List",
+              active: cctvView === "cameras",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setCctvView("cameras");
+                  setTab("cctv");
+                }),
+            },
+            {
+              key: "cctv.live",
+              label: lang === "km" ? "មើលបន្តផ្ទាល់" : "Live View",
+              active: cctvView === "live",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setCctvView("live");
+                  setTab("cctv");
+                }),
+            },
+            {
+              key: "cctv.service",
+              label: lang === "km" ? "ប្រវត្តិជួសជុល" : "Service History",
+              active: cctvView === "service",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setCctvView("service");
+                  setTab("cctv");
+                }),
+            },
+            {
+              key: "cctv.changes",
+              label: lang === "km" ? "ប្រវត្តិបម្លែង" : "Change Log",
+              active: cctvView === "changes",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setCctvView("changes");
+                  setTab("cctv");
+                }),
+            },
+            {
+              key: "cctv.reports",
+              label: lang === "km" ? "របាយការណ៍" : "Reports",
+              active: cctvView === "reports",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setCctvView("reports");
+                  setTab("cctv");
+                }),
+            },
+          ];
         case "documents":
           return [
             ...(canAccessMenu("documents.overview", "documents")
@@ -7615,6 +7949,7 @@ export default function App() {
       assetsView,
       canAccessMenu,
       canOpenAssetRegister,
+      cctvView,
       documentsView,
       inventoryView,
       inventoryDashboardGroup,
@@ -8643,6 +8978,126 @@ export default function App() {
     lastAngleReview: "",
     note: "",
   });
+  const cctvSiteOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...vaultCctvRecords.map((row) => row.site), ...cctvCameraRecords.map((row) => row.site)]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })),
+    [vaultCctvRecords, cctvCameraRecords]
+  );
+  const cctvCampusFilterOptions = useMemo(() => [...CAMPUS_LIST].sort(compareCampusByCode), []);
+  const cctvCameraNameMap = useMemo(
+    () => new Map<number, CctvCameraRecord>(cctvCameraRecords.map((row) => [row.id, row])),
+    [cctvCameraRecords]
+  );
+  const cctvFilteredCameras = useMemo(() => {
+    const query = cctvQuery.trim().toLowerCase();
+    return [...cctvCameraRecords]
+      .filter((row) => (cctvSiteFilter === "ALL" ? true : row.site === cctvSiteFilter || row.campus === cctvSiteFilter))
+      .filter((row) => (cctvStatusFilter === "ALL" ? true : row.status === cctvStatusFilter))
+      .filter((row) =>
+        query
+          ? [
+              row.campus,
+              row.site,
+              row.cameraName,
+              row.channelName,
+              row.channelNumber,
+              row.ipAddress,
+              row.nvrName,
+              row.arrange,
+              row.remark,
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(query)
+          : true
+      )
+      .sort((a, b) => {
+        const siteCompare = a.site.localeCompare(b.site, undefined, { numeric: true, sensitivity: "base" });
+        if (siteCompare) return siteCompare;
+        const arrangeA = Number(a.arrange || 0);
+        const arrangeB = Number(b.arrange || 0);
+        if (arrangeA !== arrangeB) return arrangeA - arrangeB;
+        const channelA = Number(a.channelNumber || 0);
+        const channelB = Number(b.channelNumber || 0);
+        if (channelA !== channelB) return channelA - channelB;
+        return a.cameraName.localeCompare(b.cameraName, undefined, { numeric: true, sensitivity: "base" });
+      });
+  }, [cctvCameraRecords, cctvQuery, cctvSiteFilter, cctvStatusFilter]);
+  const cctvSummary = useMemo(() => {
+    const rows = cctvCameraRecords;
+    return {
+      total: rows.length,
+      online: rows.filter((row) => row.status === "Online").length,
+      offline: rows.filter((row) => row.status === "Offline").length,
+      issue: rows.filter((row) => row.status === "Issue" || row.status === "Under Repair").length,
+    };
+  }, [cctvCameraRecords]);
+  const cctvSiteDashboardRows = useMemo(
+    () =>
+      cctvSiteOptions.map((site) => {
+        const siteCameras = cctvCameraRecords.filter((row) => row.site === site);
+        const siteRecord = vaultCctvRecords.find((row) => row.site === site);
+        return {
+          site,
+          campus: siteCameras[0]?.campus || siteRecord?.site || site,
+          nvrName: siteRecord?.nvrName || siteCameras[0]?.nvrName || "",
+          loginUrl: siteRecord?.loginUrl || siteCameras.find((row) => row.liveUrl)?.liveUrl || "",
+          total: siteCameras.length,
+          online: siteCameras.filter((row) => row.status === "Online").length,
+          offline: siteCameras.filter((row) => row.status === "Offline").length,
+          issue: siteCameras.filter((row) => row.status === "Issue" || row.status === "Under Repair").length,
+          serviceCount: cctvServiceHistory.filter((entry) => siteCameras.some((camera) => camera.id === entry.cameraId)).length,
+          angleCount: cctvChangeLogs.filter(
+            (entry) =>
+              siteCameras.some((camera) => camera.id === entry.cameraId) &&
+              (entry.changeType === "Angle Rotation" || entry.changeType === "Lens Zoom" || entry.changeType === "Focus Adjust")
+          ).length,
+        };
+      }),
+    [cctvCameraRecords, cctvChangeLogs, cctvServiceHistory, cctvSiteOptions, vaultCctvRecords]
+  );
+  const cctvDashboardSnapshot = useMemo(() => {
+    const totalSites = cctvSiteDashboardRows.length;
+    const connectedSites = cctvSiteDashboardRows.filter((row) => Boolean(row.loginUrl)).length;
+    const stableSites = cctvSiteDashboardRows.filter(
+      (row) => row.offline === 0 && row.issue === 0 && row.serviceCount === 0 && row.angleCount === 0
+    ).length;
+    const watchSites = cctvSiteDashboardRows.filter(
+      (row) => row.offline > 0 || row.issue > 0 || row.serviceCount > 0 || row.angleCount > 0
+    ).length;
+    const readiness = cctvSummary.total > 0 ? Math.round((cctvSummary.online / cctvSummary.total) * 100) : 0;
+    return {
+      totalSites,
+      connectedSites,
+      stableSites,
+      watchSites,
+      readiness,
+    };
+  }, [cctvSiteDashboardRows, cctvSummary]);
+  const cctvFilteredServiceHistory = useMemo(() => {
+    return [...cctvServiceHistory]
+      .filter((entry) => {
+        const camera = cctvCameraNameMap.get(entry.cameraId);
+        if (!camera) return false;
+        return cctvSiteFilter === "ALL" ? true : camera.site === cctvSiteFilter || camera.campus === cctvSiteFilter;
+      })
+      .sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`));
+  }, [cctvCameraNameMap, cctvServiceHistory, cctvSiteFilter]);
+  const cctvFilteredChangeLogs = useMemo(() => {
+    return [...cctvChangeLogs]
+      .filter((entry) => {
+        const camera = cctvCameraNameMap.get(entry.cameraId);
+        if (!camera) return false;
+        return cctvSiteFilter === "ALL" ? true : camera.site === cctvSiteFilter || camera.campus === cctvSiteFilter;
+      })
+      .sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`));
+  }, [cctvCameraNameMap, cctvChangeLogs, cctvSiteFilter]);
   const deferredVaultSearchQuery = useDeferredValue(vaultSearchQuery.trim().toLowerCase());
   const vaultSearchEntries = useMemo<VaultSearchEntry[]>(() => {
     const entries: VaultSearchEntry[] = [];
@@ -8863,6 +9318,58 @@ export default function App() {
       note: "",
     });
     setEditingVaultCctvId(null);
+  }
+  function resetCctvCameraForm() {
+    setCctvCameraForm({
+      campus: CAMPUS_LIST[0],
+      site: "",
+      cameraType: "IP Camera",
+      cameraName: "",
+      channelName: "",
+      channelNumber: "",
+      ipAddress: "",
+      httpPort: "80",
+      serverPort: "8000",
+      username: "Admin",
+      nvrName: "",
+      liveUrl: "",
+      snapshot: "",
+      status: "Online",
+      arrange: "",
+      remark: "",
+      lastServiceDate: "",
+    });
+    setEditingCctvCameraId(null);
+    setCctvCameraPhotoFileKey((key) => key + 1);
+  }
+
+  function resetCctvServiceForm() {
+    setCctvServiceForm({
+      cameraId: "",
+      date: toYmd(new Date()),
+      problem: "",
+      action: "Inspection",
+      result: "",
+      cost: "",
+      vendor: "",
+      by: "",
+      nextFollowUp: "",
+      note: "",
+    });
+    setEditingCctvServiceId(null);
+  }
+
+  function resetCctvChangeForm() {
+    setCctvChangeForm({
+      cameraId: "",
+      date: toYmd(new Date()),
+      changeType: "Angle Rotation",
+      oldValue: "",
+      newValue: "",
+      reason: "",
+      by: "",
+    });
+    setEditingCctvChangeId(null);
   }
   const defaultCalendarEvents = useMemo(() => buildDefaultCalendarEvents(), []);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() =>
@@ -9577,6 +10084,15 @@ export default function App() {
   useEffect(() => {
     writeVaultCctvFallback(vaultCctvRecords);
   }, [vaultCctvRecords]);
+  useEffect(() => {
+    writeCctvCameraFallback(cctvCameraRecords);
+  }, [cctvCameraRecords]);
+  useEffect(() => {
+    writeCctvServiceFallback(cctvServiceHistory);
+  }, [cctvServiceHistory]);
+  useEffect(() => {
+    writeCctvChangeLogFallback(cctvChangeLogs);
+  }, [cctvChangeLogs]);
 
   const allTypeOptions = useMemo(() => {
     const out: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>> = {};
@@ -13651,6 +14167,24 @@ export default function App() {
     }
   }, [tab, verificationView, canAccessMenu]);
   useEffect(() => {
+    if (tab !== "cctv") return;
+    const allowedViews = ([
+      "dashboard",
+      "cameras",
+      "live",
+      "service",
+      "changes",
+      "reports",
+    ] as const).filter((view) => canAccessMenu(`cctv.${view}` as MenuAccessKey, "cctv"));
+    if (!allowedViews.length) {
+      setTab("dashboard");
+      return;
+    }
+    if (!allowedViews.includes(cctvView)) {
+      setCctvView(allowedViews[0]);
+    }
+  }, [tab, cctvView, canAccessMenu]);
+  useEffect(() => {
     if (tab === "setup" && setupView === "campus" && !canAccessMenu("setup.campus", "setup")) setSetupView("users");
     if (tab === "setup" && setupView === "users" && !canAccessMenu("setup.users", "setup")) setSetupView("permissions");
     if (tab === "setup" && setupView === "permissions" && !canAccessMenu("setup.permissions", "setup")) setSetupView("backup");
@@ -13859,6 +14393,9 @@ export default function App() {
         const fallbackPoolChemicalRecords = readPoolChemicalFallback();
         const fallbackPoolOperationRecords = readPoolOperationFallback();
         const fallbackPoolComplaints = readPoolComplaintFallback();
+        const fallbackCctvCameras = readCctvCameraFallback();
+        const fallbackCctvServiceHistory = readCctvServiceFallback();
+        const fallbackCctvChangeLogs = readCctvChangeLogFallback();
         const nextInventoryItems = serverInventoryItems.length ? serverInventoryItems : fallbackInventoryItems;
         const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
         const nextUtilityMeters = serverUtilityMeters.length ? serverUtilityMeters : fallbackUtilityMeters;
@@ -13896,6 +14433,9 @@ export default function App() {
         const nextVaultDesignLinks = normalizeVaultDesignLinks(settingsRes.settings?.vaultDesignLinks);
         const nextVaultNetworkDocs = normalizeVaultNetworkDocs(settingsRes.settings?.vaultNetworkDocs);
         const nextVaultCctvRecords = normalizeVaultCctvRecords(settingsRes.settings?.vaultCctvRecords);
+        const nextCctvCameraRecords = normalizeCctvCameraRecords(settingsRes.settings?.cctvCameraRecords);
+        const nextCctvServiceHistory = normalizeCctvServiceHistory(settingsRes.settings?.cctvServiceHistory);
+        const nextCctvChangeLogs = normalizeCctvChangeLogs(settingsRes.settings?.cctvChangeLogs);
         const serverItemTemplates = Array.isArray(settingsRes.settings?.itemTemplates)
           ? normalizeArray<ItemTemplate>(settingsRes.settings?.itemTemplates as unknown[])
           : [];
@@ -13949,6 +14489,21 @@ export default function App() {
             ? nextVaultCctvRecords
             : readVaultCctvFallback()
         );
+        setCctvCameraRecords(
+          Object.prototype.hasOwnProperty.call(settingsObj, "cctvCameraRecords")
+            ? nextCctvCameraRecords
+            : fallbackCctvCameras
+        );
+        setCctvServiceHistory(
+          Object.prototype.hasOwnProperty.call(settingsObj, "cctvServiceHistory")
+            ? nextCctvServiceHistory
+            : fallbackCctvServiceHistory
+        );
+        setCctvChangeLogs(
+          Object.prototype.hasOwnProperty.call(settingsObj, "cctvChangeLogs")
+            ? nextCctvChangeLogs
+            : fallbackCctvChangeLogs
+        );
         setItemTemplates(
           Object.prototype.hasOwnProperty.call(settingsObj, "itemTemplates")
             ? serverItemTemplates
@@ -13997,6 +14552,9 @@ export default function App() {
         setVaultDesignLinks(readVaultDesignLinksFallback());
         setVaultNetworkDocs(readVaultNetworkDocsFallback());
         setVaultCctvRecords(readVaultCctvFallback());
+        setCctvCameraRecords(readCctvCameraFallback());
+        setCctvServiceHistory(readCctvServiceFallback());
+        setCctvChangeLogs(readCctvChangeLogFallback());
         setItemTemplates(readItemTemplateFallback());
         setFurnitureModels(readFurnitureModelFallback());
       }
@@ -15621,13 +16179,7 @@ export default function App() {
     try {
       const photo = await optimizeUploadPhoto(file);
       setUtilityInvoiceForm((prev) => ({ ...prev, photo }));
-      if (canUseUtilityInvoiceOcr) {
-        await autofillUtilityInvoiceFromPhoto(photo);
-      } else {
-        setUtilityMessage(
-          "Invoice image uploaded. Web/phone does not auto-read EDC/PPWS invoices yet, so please fill in usage, amount, invoice number, and date manually."
-        );
-      }
+      await autofillUtilityInvoiceFromPhoto(photo);
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
@@ -16811,6 +17363,439 @@ export default function App() {
       setSetupMessage(editingVaultCctvId ? "Vault CCTV record updated." : "Vault CCTV record added.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault CCTV record");
+    }
+  }
+
+  async function onCctvCameraPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setCctvCameraForm((prev) => ({ ...prev, snapshot: photo }));
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  function normalizeCctvCameraCsvCampus(raw: string) {
+    const text = String(raw || "").trim();
+    if (!text) return "";
+    const normalized = normalizeInventoryCompareText(text).replace(/[().]/g, "");
+    for (const campus of CAMPUS_LIST) {
+      const campusName = normalizeInventoryCompareText(campus).replace(/[().]/g, "");
+      const campusCode = normalizeInventoryCompareText(CAMPUS_CODE[campus] || "").replace(/[().]/g, "");
+      const campusLabelKm = normalizeInventoryCompareText(CAMPUS_KM_LABEL[campus] || "").replace(/[().]/g, "");
+      if (
+        normalized === campusName ||
+        normalized === campusCode ||
+        normalized === campusLabelKm ||
+        normalized === normalizeInventoryCompareText(`${campus} ${CAMPUS_CODE[campus] || ""}`).replace(/[().]/g, "")
+      ) {
+        return campus;
+      }
+    }
+    const codeMatch = CODE_TO_CAMPUS[String(text || "").trim().toUpperCase()];
+    return codeMatch || "";
+  }
+
+  function normalizeCctvCameraCsvStatus(raw: string): CctvCameraRecord["status"] {
+    const normalized = normalizeInventoryCompareText(raw).replace(/[_-]+/g, " ");
+    if (normalized === "offline") return "Offline";
+    if (normalized === "issue" || normalized === "problem") return "Issue";
+    if (normalized === "under repair" || normalized === "repair" || normalized === "underrepair") return "Under Repair";
+    return "Online";
+  }
+
+  function normalizeCctvCameraType(raw: string): NonNullable<CctvCameraRecord["cameraType"]> {
+    const normalized = normalizeInventoryCompareText(raw).replace(/[_-]+/g, " ");
+    if (
+      normalized.includes("analog") ||
+      normalized.includes("analogue") ||
+      normalized.includes("dvr")
+    ) {
+      return "Analog Camera";
+    }
+    return "IP Camera";
+  }
+
+  function buildCctvCameraImportKey(
+    row: Pick<CctvCameraRecord, "site" | "cameraName" | "ipAddress" | "channelNumber" | "nvrName">
+  ) {
+    return [
+      normalizeInventoryCompareText(row.site),
+      normalizeInventoryCompareText(row.cameraName),
+      normalizeInventoryCompareText(row.ipAddress || row.channelNumber || row.nvrName || ""),
+    ].join("|");
+  }
+
+  function downloadCctvCameraCsvTemplate() {
+    const lines = [
+      CCTV_CAMERA_CSV_TEMPLATE_HEADERS.join(","),
+      [
+        escapeCsvCell("Samdach Pan Campus"),
+        escapeCsvCell("Campus 2.2 / Gate Area / Playground"),
+        escapeCsvCell("IP Camera"),
+        escapeCsvCell("Playground Camera 1"),
+        escapeCsvCell("Gate 1 / Playground 2"),
+        escapeCsvCell("CH-01"),
+        escapeCsvCell("192.168.1.120"),
+        escapeCsvCell("80"),
+        escapeCsvCell("8000"),
+        escapeCsvCell("Admin"),
+        escapeCsvCell("NVR-Front-Gate"),
+        escapeCsvCell("http://192.168.1.120:80"),
+        escapeCsvCell("Online"),
+        escapeCsvCell("1"),
+        escapeCsvCell("Main gate overview"),
+        escapeCsvCell("2026-04-02"),
+      ].join(","),
+    ];
+    downloadCsvFile("cctv-camera-template.csv", lines);
+  }
+
+  async function importCctvCameraCsvFile(file: File) {
+    if (!requireAdminAction()) return;
+    const rawText = await file.text();
+    const rows = parseCsvText(rawText);
+    if (rows.length < 2) {
+      setError("CSV is empty. Add at least one camera row before uploading.");
+      setCctvCameraImportFileKey((key) => key + 1);
+      return;
+    }
+    const headerMap = rows[0].map((cell) => normalizeInventoryCompareText(cell).replace(/[^a-z0-9]+/g, "_"));
+    const findIndex = (...aliases: string[]) =>
+      headerMap.findIndex((cell) =>
+        aliases.some((alias) => cell === normalizeInventoryCompareText(alias).replace(/[^a-z0-9]+/g, "_"))
+      );
+    const campusIndex = findIndex("campus", "campus_name", "campus_code");
+    const siteIndex = findIndex("site", "site_area", "site_name", "area", "location");
+    const cameraTypeIndex = findIndex("camera_type", "type", "camera_kind", "connection_type");
+    const cameraNameIndex = findIndex("camera_name", "camera", "camera_title", "name");
+    const channelNameIndex = findIndex("channel_name", "channel", "channel_label");
+    const channelNumberIndex = findIndex("channel_no", "channel_number", "channel_num", "channelid");
+    const ipAddressIndex = findIndex("ip_address", "ip", "camera_ip", "dvr_ip", "nvr_ip");
+    const httpPortIndex = findIndex("http_port", "port", "web_port");
+    const serverPortIndex = findIndex("server_port", "media_port", "sdk_port");
+    const usernameIndex = findIndex("username", "user", "login");
+    const nvrNameIndex = findIndex("nvr_name", "nvr", "controller", "recorder");
+    const liveUrlIndex = findIndex("live_url", "live", "url", "view_url");
+    const statusIndex = findIndex("status", "camera_status");
+    const arrangeIndex = findIndex("arrange", "order", "sort_order", "position");
+    const remarkIndex = findIndex("remark", "remarks", "note", "notes");
+    const lastServiceDateIndex = findIndex("last_service_date", "last_service", "service_date");
+    if (siteIndex < 0 || cameraNameIndex < 0) {
+      setError("CSV needs `site` and `camera_name` columns.");
+      setCctvCameraImportFileKey((key) => key + 1);
+      return;
+    }
+
+    const existingByKey = new Map(
+      cctvCameraRecords.map((row) => [buildCctvCameraImportKey(row), row] as const)
+    );
+    const nextRows = [...cctvCameraRecords];
+    let createdCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    setBusy(true);
+    setError("");
+    try {
+      for (const rowCells of rows.slice(1)) {
+        const site = String(siteIndex >= 0 ? rowCells[siteIndex] || "" : "").trim();
+        const cameraType = normalizeCctvCameraType(String(cameraTypeIndex >= 0 ? rowCells[cameraTypeIndex] || "" : ""));
+        const cameraName = String(cameraNameIndex >= 0 ? rowCells[cameraNameIndex] || "" : "").trim();
+        const ipAddress = String(ipAddressIndex >= 0 ? rowCells[ipAddressIndex] || "" : "").trim();
+        const channelNumber = String(channelNumberIndex >= 0 ? rowCells[channelNumberIndex] || "" : "").trim();
+        const nvrName = String(nvrNameIndex >= 0 ? rowCells[nvrNameIndex] || "" : "").trim();
+        const analogReady = Boolean(channelNumber || nvrName);
+        const ipReady = Boolean(ipAddress);
+        if (!site || !cameraName || (cameraType === "IP Camera" ? !ipReady : !analogReady)) {
+          skippedCount += 1;
+          continue;
+        }
+        const campus =
+          normalizeCctvCameraCsvCampus(campusIndex >= 0 ? rowCells[campusIndex] || "" : "") ||
+          cctvCameraForm.campus ||
+          CAMPUS_LIST[0];
+        const importKey = buildCctvCameraImportKey({ site, cameraName, ipAddress, channelNumber, nvrName });
+        const existing = existingByKey.get(importKey) || null;
+        const nextRow: CctvCameraRecord = {
+          id: existing?.id || Date.now() + createdCount + updatedCount + 1,
+          campus,
+          site,
+          cameraType,
+          cameraName,
+          channelName: String(channelNameIndex >= 0 ? rowCells[channelNameIndex] || "" : "").trim(),
+          channelNumber,
+          ipAddress,
+          httpPort: String(httpPortIndex >= 0 ? rowCells[httpPortIndex] || "" : "").trim() || "80",
+          serverPort: String(serverPortIndex >= 0 ? rowCells[serverPortIndex] || "" : "").trim() || "8000",
+          username: String(usernameIndex >= 0 ? rowCells[usernameIndex] || "" : "").trim() || "Admin",
+          nvrName,
+          liveUrl: String(liveUrlIndex >= 0 ? rowCells[liveUrlIndex] || "" : "").trim(),
+          snapshot: existing?.snapshot || "",
+          status: normalizeCctvCameraCsvStatus(statusIndex >= 0 ? rowCells[statusIndex] || "" : ""),
+          arrange: String(arrangeIndex >= 0 ? rowCells[arrangeIndex] || "" : "").trim(),
+          remark: String(remarkIndex >= 0 ? rowCells[remarkIndex] || "" : "").trim(),
+          lastServiceDate: normalizeLooseDateToYmd(String(lastServiceDateIndex >= 0 ? rowCells[lastServiceDateIndex] || "" : "").trim()),
+          created: existing?.created || new Date().toISOString(),
+        };
+        if (existing) {
+          const idx = nextRows.findIndex((row) => row.id === existing.id);
+          if (idx >= 0) nextRows[idx] = nextRow;
+          updatedCount += 1;
+        } else {
+          nextRows.push(nextRow);
+          createdCount += 1;
+        }
+        existingByKey.set(importKey, nextRow);
+      }
+
+      const sortedRows = [...nextRows].sort((a, b) => {
+        const campusCompare = compareCampusByCode(a.campus, b.campus);
+        if (campusCompare !== 0) return campusCompare;
+        const siteCompare = a.site.localeCompare(b.site);
+        if (siteCompare !== 0) return siteCompare;
+        const arrangeCompare = String(a.arrange || "").localeCompare(String(b.arrange || ""), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+        if (arrangeCompare !== 0) return arrangeCompare;
+        return a.cameraName.localeCompare(b.cameraName);
+      });
+      setCctvCameraRecords(sortedRows);
+      await saveVaultSettingsToServer({ cctvCameraRecords: sortedRows });
+      appendUiAudit(
+        "IMPORT",
+        "cctv_camera",
+        "CSV-UPLOAD",
+        `Created ${createdCount}, updated ${updatedCount}, skipped ${skippedCount}`
+      );
+      setSetupMessage(
+        `CCTV CSV uploaded. Created ${createdCount} camera(s), updated ${updatedCount}, skipped ${skippedCount}.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload CCTV camera CSV.");
+    } finally {
+      setBusy(false);
+      setCctvCameraImportFileKey((key) => key + 1);
+    }
+  }
+
+  async function saveCctvCameraRecord() {
+    if (!requireAdminAction()) return;
+    const isAnalogCamera = cctvCameraForm.cameraType === "Analog Camera";
+    if (!cctvCameraForm.site.trim() || !cctvCameraForm.cameraName.trim()) {
+      setError("Site and camera name are required.");
+      return;
+    }
+    if (!isAnalogCamera && !cctvCameraForm.ipAddress.trim()) {
+      setError("IP address is required for IP cameras.");
+      return;
+    }
+    if (isAnalogCamera && !cctvCameraForm.channelNumber.trim() && !cctvCameraForm.nvrName.trim()) {
+      setError("Channel No. or NVR / DVR name is required for analog cameras.");
+      return;
+    }
+    const row: CctvCameraRecord = {
+      id: editingCctvCameraId || Date.now(),
+      campus: cctvCameraForm.campus,
+      site: cctvCameraForm.site.trim(),
+      cameraType: cctvCameraForm.cameraType,
+      cameraName: cctvCameraForm.cameraName.trim(),
+      channelName: cctvCameraForm.channelName.trim(),
+      channelNumber: cctvCameraForm.channelNumber.trim(),
+      ipAddress: isAnalogCamera ? cctvCameraForm.ipAddress.trim() : cctvCameraForm.ipAddress.trim(),
+      httpPort: cctvCameraForm.httpPort.trim(),
+      serverPort: cctvCameraForm.serverPort.trim(),
+      username: cctvCameraForm.username.trim(),
+      nvrName: cctvCameraForm.nvrName.trim(),
+      liveUrl: cctvCameraForm.liveUrl.trim(),
+      snapshot: cctvCameraForm.snapshot.trim(),
+      status: cctvCameraForm.status,
+      arrange: cctvCameraForm.arrange.trim(),
+      remark: cctvCameraForm.remark.trim(),
+      lastServiceDate: cctvCameraForm.lastServiceDate.trim(),
+      created:
+        cctvCameraRecords.find((entry) => entry.id === editingCctvCameraId)?.created || new Date().toISOString(),
+    };
+    const baseRows = editingCctvCameraId ? cctvCameraRecords.filter((entry) => entry.id !== editingCctvCameraId) : cctvCameraRecords;
+    const nextRows = [...baseRows, row];
+    setCctvCameraRecords(nextRows);
+    try {
+      await saveVaultSettingsToServer({ cctvCameraRecords: nextRows });
+      resetCctvCameraForm();
+      setSetupMessage(editingCctvCameraId ? "CCTV camera updated." : "CCTV camera added.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save CCTV camera.");
+    }
+  }
+
+  async function saveCctvServiceRecord() {
+    if (!requireAdminAction()) return;
+    const cameraId = Number(cctvServiceForm.cameraId) || 0;
+    if (!cameraId || !cctvServiceForm.date || !cctvServiceForm.problem.trim()) {
+      setError("Camera, date, and problem are required.");
+      return;
+    }
+    const row: CctvServiceHistoryRecord = {
+      id: editingCctvServiceId || Date.now(),
+      cameraId,
+      date: cctvServiceForm.date,
+      problem: cctvServiceForm.problem.trim(),
+      action: cctvServiceForm.action,
+      result: cctvServiceForm.result.trim(),
+      cost: cctvServiceForm.cost.trim(),
+      vendor: cctvServiceForm.vendor.trim(),
+      by: cctvServiceForm.by.trim(),
+      nextFollowUp: cctvServiceForm.nextFollowUp.trim(),
+      note: cctvServiceForm.note.trim(),
+      created:
+        cctvServiceHistory.find((entry) => entry.id === editingCctvServiceId)?.created || new Date().toISOString(),
+    };
+    const baseRows = editingCctvServiceId ? cctvServiceHistory.filter((entry) => entry.id !== editingCctvServiceId) : cctvServiceHistory;
+    const nextRows = [row, ...baseRows].sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`));
+    const nextCameraRows = cctvCameraRecords.map((camera) =>
+      camera.id === cameraId ? { ...camera, lastServiceDate: row.date } : camera
+    );
+    setCctvServiceHistory(nextRows);
+    setCctvCameraRecords(nextCameraRows);
+    try {
+      await saveVaultSettingsToServer({
+        cctvServiceHistory: nextRows,
+        cctvCameraRecords: nextCameraRows,
+      });
+      resetCctvServiceForm();
+      setSetupMessage(editingCctvServiceId ? "CCTV service history updated." : "CCTV service history saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save CCTV service history.");
+    }
+  }
+
+  async function saveCctvChangeRecord() {
+    if (!requireAdminAction()) return;
+    const cameraId = Number(cctvChangeForm.cameraId) || 0;
+    if (!cameraId || !cctvChangeForm.date) {
+      setError("Camera and date are required.");
+      return;
+    }
+    const row: CctvChangeLogRecord = {
+      id: editingCctvChangeId || Date.now(),
+      cameraId,
+      date: cctvChangeForm.date,
+      changeType: cctvChangeForm.changeType,
+      oldValue: cctvChangeForm.oldValue.trim(),
+      newValue: cctvChangeForm.newValue.trim(),
+      reason: cctvChangeForm.reason.trim(),
+      by: cctvChangeForm.by.trim(),
+      created:
+        cctvChangeLogs.find((entry) => entry.id === editingCctvChangeId)?.created || new Date().toISOString(),
+    };
+    const baseRows = editingCctvChangeId ? cctvChangeLogs.filter((entry) => entry.id !== editingCctvChangeId) : cctvChangeLogs;
+    const nextRows = [row, ...baseRows].sort((a, b) => `${b.date}-${b.id}`.localeCompare(`${a.date}-${a.id}`));
+    setCctvChangeLogs(nextRows);
+    try {
+      await saveVaultSettingsToServer({ cctvChangeLogs: nextRows });
+      resetCctvChangeForm();
+      setSetupMessage(editingCctvChangeId ? "CCTV change log updated." : "CCTV change log saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save CCTV change log.");
+    }
+  }
+
+  function startEditCctvCamera(row: CctvCameraRecord) {
+    setEditingCctvCameraId(row.id);
+    setCctvCameraForm({
+      campus: row.campus || CAMPUS_LIST[0],
+      site: row.site || "",
+      cameraType: row.cameraType || (row.ipAddress ? "IP Camera" : "Analog Camera"),
+      cameraName: row.cameraName || "",
+      channelName: row.channelName || "",
+      channelNumber: row.channelNumber || "",
+      ipAddress: row.ipAddress || "",
+      httpPort: row.httpPort || "80",
+      serverPort: row.serverPort || "8000",
+      username: row.username || "Admin",
+      nvrName: row.nvrName || "",
+      liveUrl: row.liveUrl || "",
+      snapshot: row.snapshot || "",
+      status: row.status || "Online",
+      arrange: row.arrange || "",
+      remark: row.remark || "",
+      lastServiceDate: row.lastServiceDate || "",
+    });
+    setCctvView("cameras");
+    setTab("cctv");
+  }
+
+  function startEditCctvService(row: CctvServiceHistoryRecord) {
+    setEditingCctvServiceId(row.id);
+    setCctvServiceForm({
+      cameraId: String(row.cameraId || ""),
+      date: row.date || toYmd(new Date()),
+      problem: row.problem || "",
+      action: row.action || "Inspection",
+      result: row.result || "",
+      cost: row.cost || "",
+      vendor: row.vendor || "",
+      by: row.by || "",
+      nextFollowUp: row.nextFollowUp || "",
+      note: row.note || "",
+    });
+    setCctvView("service");
+    setTab("cctv");
+  }
+
+  function startEditCctvChange(row: CctvChangeLogRecord) {
+    setEditingCctvChangeId(row.id);
+    setCctvChangeForm({
+      cameraId: String(row.cameraId || ""),
+      date: row.date || toYmd(new Date()),
+      changeType: row.changeType || "Angle Rotation",
+      oldValue: row.oldValue || "",
+      newValue: row.newValue || "",
+      reason: row.reason || "",
+      by: row.by || "",
+    });
+    setCctvView("changes");
+    setTab("cctv");
+  }
+
+  async function removeCctvRecord(kind: "camera" | "service" | "change", id: number) {
+    if (!requireAdminAction()) return;
+    if (!window.confirm("Delete this record?")) return;
+    try {
+      if (kind === "camera") {
+        const nextCameras = cctvCameraRecords.filter((row) => row.id !== id);
+        const nextService = cctvServiceHistory.filter((row) => row.cameraId !== id);
+        const nextChanges = cctvChangeLogs.filter((row) => row.cameraId !== id);
+        setCctvCameraRecords(nextCameras);
+        setCctvServiceHistory(nextService);
+        setCctvChangeLogs(nextChanges);
+        await saveVaultSettingsToServer({
+          cctvCameraRecords: nextCameras,
+          cctvServiceHistory: nextService,
+          cctvChangeLogs: nextChanges,
+        });
+      } else if (kind === "service") {
+        const nextRows = cctvServiceHistory.filter((row) => row.id !== id);
+        setCctvServiceHistory(nextRows);
+        await saveVaultSettingsToServer({ cctvServiceHistory: nextRows });
+      } else {
+        const nextRows = cctvChangeLogs.filter((row) => row.id !== id);
+        setCctvChangeLogs(nextRows);
+        await saveVaultSettingsToServer({ cctvChangeLogs: nextRows });
+      }
+      setSetupMessage("CCTV record deleted.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete CCTV record.");
     }
   }
 
@@ -31859,48 +32844,87 @@ export default function App() {
                     </div>
                   </section>
                 ) : (
-                  <div className="dashboard-hero">
-                    <div>
-                      <h2>{filterLabel} {t.overview}</h2>
-                      <p className="tiny">
-                        {topCampusByAssets
-                          ? `${t.topCampus}: ${campusLabel(topCampusByAssets.campus)} (${topCampusByAssets.assets} ${t.assets.toLowerCase()})`
-                          : t.noCampusDataYet}
-                      </p>
+                  <section className="dashboard-command-hero">
+                    <div className="dashboard-command-main">
+                      <div className="dashboard-command-kicker">
+                        <BarChart3 size={14} strokeWidth={2.2} />
+                        <span>{t.overview}</span>
+                      </div>
+                      <div className="dashboard-command-title-row">
+                        <div>
+                          <h2>{filterLabel} {t.overview}</h2>
+                          <p>
+                            Asset visibility, maintenance action, and campus readiness in one executive control panel.
+                          </p>
+                        </div>
+                        <div className="dashboard-command-highlight">
+                          <span>{t.topCampus}</span>
+                          <strong>{topCampusByAssets ? campusLabel(topCampusByAssets.campus) : "-"}</strong>
+                          <small>
+                            {topCampusByAssets
+                              ? `${topCampusByAssets.assets} ${t.assets.toLowerCase()}`
+                              : t.noCampusDataYet}
+                          </small>
+                        </div>
+                      </div>
+
+                      <div className="dashboard-command-strip">
+                        <div className="dashboard-command-strip-card">
+                          <span>Total Assets</span>
+                          <strong>{stats.totalAssets}</strong>
+                          <small>All tracked items across the selected campus scope.</small>
+                        </div>
+                        <div className="dashboard-command-strip-card">
+                          <span>IT Core</span>
+                          <strong>{stats.itAssets}</strong>
+                          <small>Computing, network, and classroom technology inventory.</small>
+                        </div>
+                        <div className="dashboard-command-strip-card">
+                          <span>Open Work</span>
+                          <strong>{stats.openTickets}</strong>
+                          <small>Outstanding work orders still waiting for action or closeout.</small>
+                        </div>
+                      </div>
                     </div>
-                    <div className="dashboard-actions">
-                      <span className="tiny">Quick Access</span>
-                      <div className="row-actions">
+
+                    <aside className="dashboard-command-sidepanel">
+                      <div className="dashboard-command-sidepanel-head">
+                        <span>Quick Access</span>
+                        <strong>Actions</strong>
+                      </div>
+                      <div className="dashboard-command-action-grid">
                         <button className="tab" onClick={() => setTab("assets")}>{t.openAssetList}</button>
                         <button className="tab" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
                         <button className="tab" onClick={() => setTab("inventory")}>Inventory</button>
                         <button className="tab" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
                         <button className="tab" onClick={() => setTab("verification")}>{t.recordVerification}</button>
                       </div>
-                    </div>
-                  </div>
+                    </aside>
+                  </section>
                 )}
 
-                <div className={`stats-grid dashboard-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
-                  <button className="stat-card stat-card-button stat-card-total" onClick={() => setOverviewModal("total")}>
+                <div className={`stats-grid dashboard-stats dashboard-command-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
+                  <button className="stat-card stat-card-button stat-card-total dashboard-command-stat dashboard-command-stat-total" onClick={() => setOverviewModal("total")}>
                     <div className="stat-label">{t.totalAssets}</div>
                     <div className="stat-value">{stats.totalAssets}</div>
                   </button>
-                  <button className="stat-card stat-card-button stat-card-it" onClick={() => setOverviewModal("it")}>
+                  <button className="stat-card stat-card-button stat-card-it dashboard-command-stat dashboard-command-stat-it" onClick={() => setOverviewModal("it")}>
                     <div className="stat-label">{t.itAssets}</div>
                     <div className="stat-value">{stats.itAssets}</div>
                   </button>
-                  <button className="stat-card stat-card-button stat-card-safety" onClick={() => setOverviewModal("safety")}>
+                  <button className="stat-card stat-card-button stat-card-safety dashboard-command-stat dashboard-command-stat-safety" onClick={() => setOverviewModal("safety")}>
                     <div className="stat-label">{t.safetyAssets}</div>
                     <div className="stat-value">{stats.safetyAssets}</div>
                   </button>
-                  <button className="stat-card stat-card-button stat-card-ticket" onClick={() => setOverviewModal("tickets")}>
+                  <button className="stat-card stat-card-button stat-card-ticket dashboard-command-stat dashboard-command-stat-ticket" onClick={() => setOverviewModal("tickets")}>
                     <div className="stat-label">{t.openWorkOrders}</div>
                     <div className="stat-value">{stats.openTickets}</div>
                   </button>
                 </div>
 
-                {renderQuickCountPanel("dashboard")}
+                <section className="dashboard-command-section">
+                  {renderQuickCountPanel("dashboard")}
+                </section>
 
                 <div style={{ marginTop: 12 }}>
                   <article className="panel dashboard-widget dashboard-calendar-panel">
@@ -36670,6 +37694,573 @@ export default function App() {
               </div>
             )}
           </>
+        )}
+
+        {tab === "cctv" && (
+          <section className="panel">
+            <div className="tabs">
+              <button className={`tab ${cctvView === "dashboard" ? "tab-active" : ""}`} onClick={() => setCctvView("dashboard")}>Dashboard</button>
+              <button className={`tab ${cctvView === "cameras" ? "tab-active" : ""}`} onClick={() => setCctvView("cameras")}>Camera List</button>
+              <button className={`tab ${cctvView === "live" ? "tab-active" : ""}`} onClick={() => setCctvView("live")}>Live View</button>
+              <button className={`tab ${cctvView === "service" ? "tab-active" : ""}`} onClick={() => setCctvView("service")}>Service History</button>
+              <button className={`tab ${cctvView === "changes" ? "tab-active" : ""}`} onClick={() => setCctvView("changes")}>Change Log</button>
+              <button className={`tab ${cctvView === "reports" ? "tab-active" : ""}`} onClick={() => setCctvView("reports")}>Reports</button>
+            </div>
+
+            {cctvView === "dashboard" && (
+              <>
+                <section className="cctv-dashboard-shell">
+                  <section className="cctv-command-hero">
+                    <div className="cctv-command-hero-main">
+                      <div className="cctv-dashboard-kicker">
+                        <Shield size={14} strokeWidth={2.2} />
+                        <span>Security Operations</span>
+                      </div>
+                      <div className="cctv-command-title-row">
+                        <div>
+                          <h2>CCTV Control Dashboard</h2>
+                          <p>
+                            A clearer command center for live readiness, service risk, and campus coverage status.
+                          </p>
+                        </div>
+                        <div className="cctv-command-readiness-ring">
+                          <div className="cctv-command-readiness-ring-inner">
+                            <strong>{cctvDashboardSnapshot.readiness}%</strong>
+                            <span>ready</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="cctv-command-status-strip">
+                        <div className="cctv-command-status-card">
+                          <span>Sites Under Watch</span>
+                          <strong>{cctvDashboardSnapshot.watchSites}</strong>
+                          <small>Campus groups with offline, repair, or config follow-up.</small>
+                        </div>
+                        <div className="cctv-command-status-card">
+                          <span>Stable Sites</span>
+                          <strong>{cctvDashboardSnapshot.stableSites}</strong>
+                          <small>All cameras online with no pending service or angle changes.</small>
+                        </div>
+                        <div className="cctv-command-status-card">
+                          <span>Live Gateways</span>
+                          <strong>{cctvDashboardSnapshot.connectedSites}</strong>
+                          <small>Sites that already have a live login link configured.</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <aside className="cctv-command-sidepanel">
+                      <div className="cctv-command-sidepanel-head">
+                        <span>Mission Board</span>
+                        <strong>Today</strong>
+                      </div>
+                      <div className="cctv-command-sidepanel-grid">
+                        <article className="cctv-command-mini-card">
+                          <Camera size={18} strokeWidth={2.1} />
+                          <div>
+                            <span>Total Cameras</span>
+                            <strong>{cctvSummary.total}</strong>
+                          </div>
+                        </article>
+                        <article className="cctv-command-mini-card">
+                          <Radio size={18} strokeWidth={2.1} />
+                          <div>
+                            <span>Live Online</span>
+                            <strong>{cctvSummary.online}</strong>
+                          </div>
+                        </article>
+                        <article className="cctv-command-mini-card cctv-command-mini-card-alert">
+                          <Wrench size={18} strokeWidth={2.1} />
+                          <div>
+                            <span>Offline</span>
+                            <strong>{cctvSummary.offline}</strong>
+                          </div>
+                        </article>
+                        <article className="cctv-command-mini-card cctv-command-mini-card-warm">
+                          <RotateCcw size={18} strokeWidth={2.1} />
+                          <div>
+                            <span>Repair / Issue</span>
+                            <strong>{cctvSummary.issue}</strong>
+                          </div>
+                        </article>
+                      </div>
+
+                      <div className="cctv-dashboard-actions">
+                        <button className="tab" onClick={() => setCctvView("cameras")}>Manage Cameras</button>
+                        <button className="tab" onClick={() => setCctvView("live")}>Open Live View</button>
+                        <button className="tab" onClick={() => setCctvView("service")}>Service History</button>
+                      </div>
+                    </aside>
+                  </section>
+
+                  <div className="cctv-dashboard-stats cctv-command-metrics">
+                    <article className="cctv-summary-card cctv-summary-card-primary">
+                      <div className="cctv-summary-icon-wrap">
+                        <Camera size={18} strokeWidth={2.2} />
+                      </div>
+                      <span className="cctv-summary-label">Network Footprint</span>
+                      <strong className="cctv-summary-value">{cctvDashboardSnapshot.totalSites}</strong>
+                      <span className="cctv-summary-note">Campus or site groups currently tracked in the CCTV map.</span>
+                    </article>
+                    <article className="cctv-summary-card cctv-summary-card-good">
+                      <div className="cctv-summary-icon-wrap">
+                        <CheckCircle2 size={18} strokeWidth={2.2} />
+                      </div>
+                      <span className="cctv-summary-label">Live Ready</span>
+                      <strong className="cctv-summary-value cctv-summary-value-good">{cctvSummary.online}</strong>
+                      <span className="cctv-summary-note">Channels available for operators to view right now.</span>
+                    </article>
+                    <article className="cctv-summary-card cctv-summary-card-alert">
+                      <div className="cctv-summary-icon-wrap">
+                        <Radio size={18} strokeWidth={2.2} />
+                      </div>
+                      <span className="cctv-summary-label">Immediate Attention</span>
+                      <strong className="cctv-summary-value cctv-summary-value-alert">{cctvSummary.offline}</strong>
+                      <span className="cctv-summary-note">Power, switch, cable, or device investigation should come first.</span>
+                    </article>
+                    <article className="cctv-summary-card cctv-summary-card-warm">
+                      <div className="cctv-summary-icon-wrap">
+                        <Wrench size={18} strokeWidth={2.2} />
+                      </div>
+                      <span className="cctv-summary-label">Service Backlog</span>
+                      <strong className="cctv-summary-value cctv-summary-value-warm">{cctvSummary.issue}</strong>
+                      <span className="cctv-summary-note">Repair or issue records that still affect readiness and confidence.</span>
+                    </article>
+                  </div>
+
+                  <div className="cctv-dashboard-section-head">
+                    <div>
+                      <h3 className="section-title" style={{ margin: 0 }}>Campus Monitoring View</h3>
+                      <div className="tiny">Each card highlights readiness, live access, support load, and where technicians should look next.</div>
+                    </div>
+                  </div>
+
+                  <div className="cctv-site-grid cctv-dashboard-site-grid">
+                    {cctvSiteDashboardRows.length ? cctvSiteDashboardRows.map((row) => {
+                      const healthRatio = row.total > 0 ? Math.max(0, Math.min(100, Math.round((row.online / row.total) * 100))) : 0;
+                      const watchCount = row.offline + row.issue + row.serviceCount;
+                      const statusClass = row.offline > 0 ? "cctv-site-status-chip-alert" : watchCount > 0 || row.angleCount > 0 ? "cctv-site-status-chip-watch" : "cctv-site-status-chip-good";
+                      const statusLabel = row.offline > 0 ? `${row.offline} Offline` : watchCount > 0 || row.angleCount > 0 ? "Needs Review" : "Fully Stable";
+                      return (
+                        <article key={`cctv-dashboard-site-${row.site}`} className="cctv-site-card cctv-dashboard-site-card">
+                          <div className="cctv-site-card-top">
+                            <div className="cctv-site-card-identity">
+                              <div className="cctv-site-card-label">{campusLabel(row.campus)}</div>
+                              <h3 className="section-title" style={{ margin: 0 }}>{row.site}</h3>
+                              <div className="tiny">{row.nvrName || "No NVR configured yet"}</div>
+                            </div>
+                            <div className={`cctv-site-status-chip ${statusClass}`}>
+                              {statusLabel}
+                            </div>
+                          </div>
+
+                          <div className="cctv-site-health-shell">
+                            <div className="cctv-site-health">
+                              <div className="cctv-site-health-copy">
+                                <span>Live Readiness</span>
+                                <strong>{healthRatio}%</strong>
+                              </div>
+                              <div className="cctv-site-health-track">
+                                <div className="cctv-site-health-fill" style={{ width: `${healthRatio}%` }} />
+                              </div>
+                            </div>
+                            <div className="cctv-site-pulse-card">
+                              <span>Priority Queue</span>
+                              <strong>{watchCount + row.angleCount}</strong>
+                              <small>Offline, repair, and config items combined.</small>
+                            </div>
+                          </div>
+
+                          <div className="cctv-site-stats">
+                            <div>
+                              <span>Total Cameras</span>
+                              <strong>{row.total}</strong>
+                            </div>
+                            <div>
+                              <span>Online Feed</span>
+                              <strong>{row.online}</strong>
+                            </div>
+                            <div>
+                              <span>Service Tasks</span>
+                              <strong>{row.serviceCount}</strong>
+                            </div>
+                            <div>
+                              <span>Angle / Lens</span>
+                              <strong>{row.angleCount}</strong>
+                            </div>
+                          </div>
+
+                          <div className="cctv-site-alert-row">
+                            <div className="cctv-site-alert-card">
+                              <span>Immediate Checks</span>
+                              <strong>{row.offline + row.issue}</strong>
+                            </div>
+                            <div className="cctv-site-alert-card">
+                              <span>Config Updates</span>
+                              <strong>{row.angleCount}</strong>
+                            </div>
+                          </div>
+
+                          <div className="cctv-site-footer">
+                            <div className="tiny">
+                              {row.offline > 0
+                                ? "Offline cameras should be checked first for power, cable, or network."
+                                : row.serviceCount > 0 || row.angleCount > 0
+                                  ? "Service and configuration history is available for review."
+                                  : "Campus is stable with no service history recorded yet."}
+                            </div>
+                            <div className="cctv-site-footer-actions">
+                              {row.loginUrl ? <a className="btn-primary btn-small" href={row.loginUrl} target="_blank" rel="noreferrer">Open Live</a> : <span className="tiny">No live link</span>}
+                              <button className="tab btn-small" onClick={() => setCctvView("service")}>History</button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    }) : <div className="tiny">No CCTV campus/site records yet. Add site/NVR details in camera list first.</div>}
+                  </div>
+                </section>
+              </>
+            )}
+
+            {cctvView === "cameras" && (
+              <>
+                <div className="panel-row">
+                  <div>
+                    <h2>CCTV Camera List</h2>
+                    <p className="tiny">One row = one camera. Keep campus, channel name, IP, port, live URL, and current status here.</p>
+                  </div>
+                  {editingCctvCameraId === null ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="tab"
+                        disabled={!isAdmin || busy}
+                        onClick={downloadCctvCameraCsvTemplate}
+                        type="button"
+                      >
+                        Download CSV Template
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Campus</span>
+                    <select className="input" value={cctvSiteFilter} onChange={(e) => setCctvSiteFilter(e.target.value)}>
+                      <option value="ALL">All Sites</option>
+                      {cctvCampusFilterOptions.map((campus) => (
+                        <option key={`cctv-campus-filter-${campus}`} value={campus}>
+                          {campusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Status</span>
+                    <select className="input" value={cctvStatusFilter} onChange={(e) => setCctvStatusFilter(e.target.value)}>
+                      <option value="ALL">All Status</option>
+                      <option value="Online">Online</option>
+                      <option value="Offline">Offline</option>
+                      <option value="Issue">Issue</option>
+                      <option value="Under Repair">Under Repair</option>
+                    </select>
+                  </label>
+                  <label className="field field-wide">
+                    <span>Search Camera</span>
+                    <input className="input" value={cctvQuery} onChange={(e) => setCctvQuery(e.target.value)} placeholder="Search camera name, IP, channel, NVR, or remark" />
+                  </label>
+                </div>
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Campus</th>
+                        <th>Site</th>
+                        <th>Camera</th>
+                        <th>Channel</th>
+                        <th>IP</th>
+                        <th>NVR</th>
+                        <th>Status</th>
+                        <th>Arrange</th>
+                        <th>Live</th>
+                        <th>{t.edit}</th>
+                        <th>{t.delete}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cctvFilteredCameras.length ? cctvFilteredCameras.map((row) => (
+                        <tr key={`cctv-camera-row-${row.id}`}>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td>{row.site}</td>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              {row.snapshot ? <img loading="lazy" decoding="async" src={row.snapshot} alt={row.cameraName} className="table-photo" /> : <span className="photo-placeholder">No photo</span>}
+                              <div>
+                                <strong>{row.cameraName}</strong>
+                                <div className="tiny">{row.cameraType || "IP Camera"}{row.remark ? ` | ${row.remark}` : ""}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{row.channelName || row.channelNumber || "-"}</td>
+                          <td>{row.ipAddress}{row.httpPort ? `:${row.httpPort}` : ""}</td>
+                          <td>{row.nvrName || "-"}</td>
+                          <td>{row.status}</td>
+                          <td>{row.arrange || "-"}</td>
+                          <td>{row.liveUrl ? <a href={row.liveUrl} target="_blank" rel="noreferrer">Open</a> : "-"}</td>
+                          <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditCctvCamera(row)}>{t.edit}</button></td>
+                          <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeCctvRecord("camera", row.id)}>X</button></td>
+                        </tr>
+                      )) : <tr><td colSpan={11}>No CCTV cameras recorded yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="form-grid" style={{ marginTop: 12 }}>
+                  <label className="field"><span>{t.campus}</span><select className="input" value={cctvCameraForm.campus} onChange={(e) => setCctvCameraForm((f) => ({ ...f, campus: e.target.value }))}>{campusOptions.map((campus) => <option key={`cctv-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}</select></label>
+                  <label className="field"><span>Site / Area</span><input className="input" value={cctvCameraForm.site} onChange={(e) => setCctvCameraForm((f) => ({ ...f, site: e.target.value }))} placeholder="Campus 2.2 / Gate Area / Playground" /></label>
+                  <label className="field"><span>Camera Type</span><select className="input" value={cctvCameraForm.cameraType} onChange={(e) => setCctvCameraForm((f) => ({ ...f, cameraType: e.target.value as NonNullable<CctvCameraRecord["cameraType"]> }))}><option value="IP Camera">IP Camera</option><option value="Analog Camera">Analog Camera (DVR)</option></select></label>
+                  <label className="field"><span>Camera Name</span><input className="input" value={cctvCameraForm.cameraName} onChange={(e) => setCctvCameraForm((f) => ({ ...f, cameraName: e.target.value }))} /></label>
+                  <label className="field"><span>Channel Name</span><input className="input" value={cctvCameraForm.channelName} onChange={(e) => setCctvCameraForm((f) => ({ ...f, channelName: e.target.value }))} placeholder="Gate 1 / Playground 2" /></label>
+                  <label className="field"><span>{cctvCameraForm.cameraType === "Analog Camera" ? "DVR Channel No." : "Channel No."}</span><input className="input" value={cctvCameraForm.channelNumber} onChange={(e) => setCctvCameraForm((f) => ({ ...f, channelNumber: e.target.value }))} /></label>
+                  <label className="field"><span>{cctvCameraForm.cameraType === "Analog Camera" ? "Camera / DVR IP" : "IP Address"}</span><input className="input" value={cctvCameraForm.ipAddress} onChange={(e) => setCctvCameraForm((f) => ({ ...f, ipAddress: e.target.value }))} placeholder={cctvCameraForm.cameraType === "Analog Camera" ? "Optional for analog camera" : "Required for IP camera"} /></label>
+                  <label className="field"><span>HTTP Port</span><input className="input" value={cctvCameraForm.httpPort} onChange={(e) => setCctvCameraForm((f) => ({ ...f, httpPort: e.target.value }))} placeholder={cctvCameraForm.cameraType === "Analog Camera" ? "Optional DVR web port" : ""} /></label>
+                  <label className="field"><span>Server Port</span><input className="input" value={cctvCameraForm.serverPort} onChange={(e) => setCctvCameraForm((f) => ({ ...f, serverPort: e.target.value }))} placeholder={cctvCameraForm.cameraType === "Analog Camera" ? "Optional DVR media port" : ""} /></label>
+                  <label className="field"><span>{cctvCameraForm.cameraType === "Analog Camera" ? "DVR / NVR Name" : "NVR / Controller"}</span><input className="input" value={cctvCameraForm.nvrName} onChange={(e) => setCctvCameraForm((f) => ({ ...f, nvrName: e.target.value }))} placeholder={cctvCameraForm.cameraType === "Analog Camera" ? "Recommended for analog camera" : ""} /></label>
+                  <label className="field"><span>Username</span><input className="input" value={cctvCameraForm.username} onChange={(e) => setCctvCameraForm((f) => ({ ...f, username: e.target.value }))} /></label>
+                  <label className="field"><span>Status</span><select className="input" value={cctvCameraForm.status} onChange={(e) => setCctvCameraForm((f) => ({ ...f, status: e.target.value as CctvCameraRecord["status"] }))}><option value="Online">Online</option><option value="Offline">Offline</option><option value="Issue">Issue</option><option value="Under Repair">Under Repair</option></select></label>
+                  <label className="field"><span>Arrange / Order</span><input className="input" value={cctvCameraForm.arrange} onChange={(e) => setCctvCameraForm((f) => ({ ...f, arrange: e.target.value }))} /></label>
+                  <label className="field"><span>Live URL</span><input className="input" value={cctvCameraForm.liveUrl} onChange={(e) => setCctvCameraForm((f) => ({ ...f, liveUrl: e.target.value }))} placeholder="http://... or NVR live view link" /></label>
+                  <label className="field"><span>Last Service</span><input type="date" className="input" value={cctvCameraForm.lastServiceDate} onChange={(e) => setCctvCameraForm((f) => ({ ...f, lastServiceDate: e.target.value }))} /></label>
+                  <label className="field"><span>Snapshot / Room Photo</span><input key={cctvCameraPhotoFileKey} type="file" accept="image/*" className="input" onChange={onCctvCameraPhotoFile} />{cctvCameraForm.snapshot ? <img loading="lazy" decoding="async" src={cctvCameraForm.snapshot} alt="cctv snapshot" className="table-photo" style={{ marginTop: 8 }} /> : null}</label>
+                  <label className="field field-wide"><span>Remark</span><textarea className="textarea" value={cctvCameraForm.remark} onChange={(e) => setCctvCameraForm((f) => ({ ...f, remark: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={() => void saveCctvCameraRecord()}>{editingCctvCameraId ? "Update Camera" : "Add Camera"}</button>
+                  {editingCctvCameraId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetCctvCameraForm}>Cancel Edit</button> : null}
+                </div>
+                {editingCctvCameraId === null ? (
+                  <div className="panel-note" style={{ marginTop: 10 }}>
+                    Download the CSV template, fill the camera list in Excel, then upload it here. Existing rows with the same site, camera name, and IP will be updated.
+                  </div>
+                ) : null}
+                {editingCctvCameraId === null ? (
+                  <label className="field field-wide" style={{ marginTop: 12 }}>
+                    <span>Upload CCTV Camera CSV</span>
+                    <input
+                      key={`cctv-camera-import-${cctvCameraImportFileKey}`}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="input"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        void importCctvCameraCsvFile(file);
+                      }}
+                    />
+                    <small className="tiny">
+                      Required columns: `site`, `camera_name`, and `ip_address`. Recommended: {CCTV_CAMERA_CSV_TEMPLATE_HEADERS.join(", ")}.
+                    </small>
+                  </label>
+                ) : null}
+              </>
+            )}
+
+            {cctvView === "live" && (
+              <>
+                <div className="panel-row">
+                  <div>
+                    <h2>Live View & Site Control</h2>
+                    <p className="tiny">Open each campus live view quickly and keep camera snapshots, IP, and current status together.</p>
+                  </div>
+                </div>
+                <div className="cctv-site-grid">
+                  {cctvSiteDashboardRows.length ? cctvSiteDashboardRows.map((siteRow) => {
+                    const cameras = cctvFilteredCameras.filter((camera) => camera.site === siteRow.site);
+                    return (
+                      <article key={`cctv-live-site-${siteRow.site}`} className="cctv-site-card">
+                        <div className="panel-row">
+                          <div>
+                            <h3 className="section-title" style={{ margin: 0 }}>{siteRow.site}</h3>
+                            <div className="tiny">{siteRow.nvrName || "No NVR / controller set"}</div>
+                          </div>
+                          {siteRow.loginUrl ? <a className="btn-primary btn-small" href={siteRow.loginUrl} target="_blank" rel="noreferrer">Open Live</a> : null}
+                        </div>
+                        <div className="cctv-live-grid">
+                          {cameras.length ? cameras.map((camera) => (
+                            <div key={`cctv-live-camera-${camera.id}`} className="cctv-live-card">
+                              {camera.snapshot ? <img loading="lazy" decoding="async" src={camera.snapshot} alt={camera.cameraName} className="cctv-live-thumb" /> : <div className="cctv-live-thumb cctv-live-thumb-empty">No preview</div>}
+                              <strong>{camera.channelName || camera.cameraName}</strong>
+                              <span className="tiny">{camera.ipAddress}{camera.serverPort ? `:${camera.serverPort}` : ""}</span>
+                              <span className="tiny">{camera.status}</span>
+                            </div>
+                          )) : <div className="tiny">No cameras under this site yet.</div>}
+                        </div>
+                      </article>
+                    );
+                  }) : <div className="tiny">No campus live-view setup yet.</div>}
+                </div>
+              </>
+            )}
+
+            {cctvView === "service" && (
+              <>
+                <div className="panel-row">
+                  <div>
+                    <h2>CCTV Service History</h2>
+                    <p className="tiny">Use this for fix, replace, clean, angle adjust, cable issue, or inspection history.</p>
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Camera</th>
+                        <th>Problem</th>
+                        <th>Action</th>
+                        <th>Result</th>
+                        <th>By</th>
+                        <th>Next Follow-up</th>
+                        <th>{t.edit}</th>
+                        <th>{t.delete}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cctvFilteredServiceHistory.length ? cctvFilteredServiceHistory.map((row) => {
+                        const camera = cctvCameraNameMap.get(row.cameraId);
+                        return (
+                          <tr key={`cctv-service-row-${row.id}`}>
+                            <td>{formatDate(row.date)}</td>
+                            <td>{camera ? `${camera.site} | ${camera.cameraName}` : "-"}</td>
+                            <td>{row.problem}</td>
+                            <td>{row.action}</td>
+                            <td>{row.result || "-"}</td>
+                            <td>{row.by || "-"}</td>
+                            <td>{row.nextFollowUp ? formatDate(row.nextFollowUp) : "-"}</td>
+                            <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditCctvService(row)}>{t.edit}</button></td>
+                            <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeCctvRecord("service", row.id)}>X</button></td>
+                          </tr>
+                        );
+                      }) : <tr><td colSpan={9}>No CCTV service history yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="form-grid" style={{ marginTop: 12 }}>
+                  <label className="field"><span>Camera</span><select className="input" value={cctvServiceForm.cameraId} onChange={(e) => setCctvServiceForm((f) => ({ ...f, cameraId: e.target.value }))}><option value="">Select camera</option>{cctvCameraRecords.map((camera) => <option key={`cctv-service-camera-${camera.id}`} value={camera.id}>{`${camera.site} | ${camera.cameraName}`}</option>)}</select></label>
+                  <label className="field"><span>Date</span><input type="date" className="input" value={cctvServiceForm.date} onChange={(e) => setCctvServiceForm((f) => ({ ...f, date: e.target.value }))} /></label>
+                  <label className="field"><span>Action</span><select className="input" value={cctvServiceForm.action} onChange={(e) => setCctvServiceForm((f) => ({ ...f, action: e.target.value as CctvServiceHistoryRecord["action"] }))}><option value="Inspection">Inspection</option><option value="Fix">Fix</option><option value="Replace">Replace</option><option value="Adjust Angle">Adjust Angle</option><option value="Rotate Lens">Rotate Lens</option><option value="Move Position">Move Position</option><option value="Clean">Clean</option></select></label>
+                  <label className="field field-wide"><span>Problem</span><textarea className="textarea" value={cctvServiceForm.problem} onChange={(e) => setCctvServiceForm((f) => ({ ...f, problem: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Result</span><textarea className="textarea" value={cctvServiceForm.result} onChange={(e) => setCctvServiceForm((f) => ({ ...f, result: e.target.value }))} /></label>
+                  <label className="field"><span>Cost</span><input className="input" value={cctvServiceForm.cost} onChange={(e) => setCctvServiceForm((f) => ({ ...f, cost: e.target.value }))} /></label>
+                  <label className="field"><span>Vendor</span><input className="input" value={cctvServiceForm.vendor} onChange={(e) => setCctvServiceForm((f) => ({ ...f, vendor: e.target.value }))} /></label>
+                  <label className="field"><span>{t.by}</span><input className="input" value={cctvServiceForm.by} onChange={(e) => setCctvServiceForm((f) => ({ ...f, by: e.target.value }))} /></label>
+                  <label className="field"><span>Next Follow-up</span><input type="date" className="input" value={cctvServiceForm.nextFollowUp} onChange={(e) => setCctvServiceForm((f) => ({ ...f, nextFollowUp: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={cctvServiceForm.note} onChange={(e) => setCctvServiceForm((f) => ({ ...f, note: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={() => void saveCctvServiceRecord()}>{editingCctvServiceId ? "Update Service History" : "Save Service History"}</button>
+                  {editingCctvServiceId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetCctvServiceForm}>Cancel Edit</button> : null}
+                </div>
+              </>
+            )}
+
+            {cctvView === "changes" && (
+              <>
+                <div className="panel-row">
+                  <div>
+                    <h2>CCTV Change Log</h2>
+                    <p className="tiny">Track IP changes, channel changes, lens/angle updates, NVR changes, and moved camera positions.</p>
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Camera</th>
+                        <th>Change Type</th>
+                        <th>Old Value</th>
+                        <th>New Value</th>
+                        <th>Reason</th>
+                        <th>By</th>
+                        <th>{t.edit}</th>
+                        <th>{t.delete}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cctvFilteredChangeLogs.length ? cctvFilteredChangeLogs.map((row) => {
+                        const camera = cctvCameraNameMap.get(row.cameraId);
+                        return (
+                          <tr key={`cctv-change-row-${row.id}`}>
+                            <td>{formatDate(row.date)}</td>
+                            <td>{camera ? `${camera.site} | ${camera.cameraName}` : "-"}</td>
+                            <td>{row.changeType}</td>
+                            <td>{row.oldValue || "-"}</td>
+                            <td>{row.newValue || "-"}</td>
+                            <td>{row.reason || "-"}</td>
+                            <td>{row.by || "-"}</td>
+                            <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditCctvChange(row)}>{t.edit}</button></td>
+                            <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeCctvRecord("change", row.id)}>X</button></td>
+                          </tr>
+                        );
+                      }) : <tr><td colSpan={9}>No CCTV change log yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="form-grid" style={{ marginTop: 12 }}>
+                  <label className="field"><span>Camera</span><select className="input" value={cctvChangeForm.cameraId} onChange={(e) => setCctvChangeForm((f) => ({ ...f, cameraId: e.target.value }))}><option value="">Select camera</option>{cctvCameraRecords.map((camera) => <option key={`cctv-change-camera-${camera.id}`} value={camera.id}>{`${camera.site} | ${camera.cameraName}`}</option>)}</select></label>
+                  <label className="field"><span>Date</span><input type="date" className="input" value={cctvChangeForm.date} onChange={(e) => setCctvChangeForm((f) => ({ ...f, date: e.target.value }))} /></label>
+                  <label className="field"><span>Change Type</span><select className="input" value={cctvChangeForm.changeType} onChange={(e) => setCctvChangeForm((f) => ({ ...f, changeType: e.target.value as CctvChangeLogRecord["changeType"] }))}><option value="Angle Rotation">Angle Rotation</option><option value="Lens Zoom">Lens Zoom</option><option value="Focus Adjust">Focus Adjust</option><option value="IP Change">IP Change</option><option value="Channel Change">Channel Change</option><option value="NVR Change">NVR Change</option><option value="Move Position">Move Position</option><option value="Replace Camera">Replace Camera</option></select></label>
+                  <label className="field"><span>Old Value</span><input className="input" value={cctvChangeForm.oldValue} onChange={(e) => setCctvChangeForm((f) => ({ ...f, oldValue: e.target.value }))} /></label>
+                  <label className="field"><span>New Value</span><input className="input" value={cctvChangeForm.newValue} onChange={(e) => setCctvChangeForm((f) => ({ ...f, newValue: e.target.value }))} /></label>
+                  <label className="field"><span>{t.by}</span><input className="input" value={cctvChangeForm.by} onChange={(e) => setCctvChangeForm((f) => ({ ...f, by: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>Reason</span><textarea className="textarea" value={cctvChangeForm.reason} onChange={(e) => setCctvChangeForm((f) => ({ ...f, reason: e.target.value }))} /></label>
+                </div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={() => void saveCctvChangeRecord()}>{editingCctvChangeId ? "Update Change Log" : "Save Change Log"}</button>
+                  {editingCctvChangeId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetCctvChangeForm}>Cancel Edit</button> : null}
+                </div>
+              </>
+            )}
+
+            {cctvView === "reports" && (
+              <>
+                <div className="panel-row">
+                  <div>
+                    <h2>CCTV Reports</h2>
+                    <p className="tiny">Use this area to review fix/replace counts, angle/lens updates, and campus status summary.</p>
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Campus / Site</th>
+                        <th>Total Cameras</th>
+                        <th>Offline</th>
+                        <th>Issue / Repair</th>
+                        <th>Fix / Replace Count</th>
+                        <th>Angle / Lens Updates</th>
+                        <th>Live Link</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cctvSiteDashboardRows.length ? cctvSiteDashboardRows.map((row) => (
+                        <tr key={`cctv-report-site-${row.site}`}>
+                          <td><strong>{row.site}</strong><div className="tiny">{row.nvrName || "-"}</div></td>
+                          <td>{row.total}</td>
+                          <td>{row.offline}</td>
+                          <td>{row.issue}</td>
+                          <td>{row.serviceCount}</td>
+                          <td>{row.angleCount}</td>
+                          <td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open</a> : "-"}</td>
+                        </tr>
+                      )) : <tr><td colSpan={7}>No CCTV report data yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </section>
         )}
 
         {tab === "tickets" && (
@@ -44051,19 +45642,13 @@ export default function App() {
                   </label>
                 </div>
                 <div className="row-actions">
-                  {canUseUtilityInvoiceOcr ? (
-                    <button
-                      className="tab"
-                      disabled={utilityAutofillBusy || !utilityInvoiceForm.photo}
-                      onClick={() => void autofillUtilityInvoiceFromPhoto()}
-                    >
-                      {utilityAutofillBusy ? "Reading Invoice..." : "Auto Fill From Invoice"}
-                    </button>
-                  ) : (
-                    <span className="tiny" style={{ maxWidth: 420 }}>
-                      Invoice auto fill is not available in the Render web app yet. Upload keeps the photo for record; monthly entry is manual here.
-                    </span>
-                  )}
+                  <button
+                    className="tab"
+                    disabled={utilityAutofillBusy || !utilityInvoiceForm.photo}
+                    onClick={() => void autofillUtilityInvoiceFromPhoto()}
+                  >
+                    {utilityAutofillBusy ? "Reading Invoice..." : "Auto Fill From Invoice"}
+                  </button>
                   <button className="btn-primary" onClick={() => void saveUtilityInvoiceEntry()}>Save Utility Invoice</button>
                 </div>
               </>
