@@ -8123,6 +8123,7 @@ export default function App() {
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
+  const [dashboardSupplyHoveredItemKey, setDashboardSupplyHoveredItemKey] = useState<string | null>(null);
   const [furnitureControlCampusFilter, setFurnitureControlCampusFilter] = useState<string[]>(["ALL"]);
   const [furnitureControlLocationFilter, setFurnitureControlLocationFilter] = useState<string[]>(["ALL"]);
   const [quickCountCampusFilter, setQuickCountCampusFilter] = useState<string[]>(["ALL"]);
@@ -33043,7 +33044,9 @@ export default function App() {
                             <th
                               key={`dash-stock-item-head-${item.key}`}
                               title={`${item.itemName} | Total: ${item.totalStock}`}
-                              className="dashboard-stock-item-head"
+                              className={`dashboard-stock-item-head ${dashboardSupplyHoveredItemKey === item.key ? "dashboard-stock-item-head-hovered" : ""}`}
+                              onMouseEnter={() => setDashboardSupplyHoveredItemKey(item.key)}
+                              onMouseLeave={() => setDashboardSupplyHoveredItemKey((current) => (current === item.key ? null : current))}
                             >
                               {item.photo ? (
                                 <img
@@ -33076,7 +33079,9 @@ export default function App() {
                                 return (
                                   <td
                                     key={`dash-stock-campus-cell-${row.campus}-${item.key}`}
-                                    className={value?.low ? "dashboard-stock-cell-low" : ""}
+                                    className={`${value?.low ? "dashboard-stock-cell-low" : ""} ${dashboardSupplyHoveredItemKey === item.key ? "dashboard-stock-column-hovered" : ""}`.trim()}
+                                    onMouseEnter={() => setDashboardSupplyHoveredItemKey(item.key)}
+                                    onMouseLeave={() => setDashboardSupplyHoveredItemKey((current) => (current === item.key ? null : current))}
                                   >
                                     <span className={value?.low ? "dashboard-stock-value-low" : undefined}>
                                       {value ? value.stock : "-"}
