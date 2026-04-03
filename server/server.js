@@ -3460,6 +3460,28 @@ function parseEdcInvoiceFields(text) {
   const flat = lines.join(" ");
   const compact = flat.replace(/\s+/g, " ").trim();
   const laterHalfIndex = Math.max(0, Math.floor(lines.length * 0.55));
+  const tailStartIndex = Math.max(0, lines.length - 18);
+  const usageLinePatterns = [
+    /ថាមពល/i,
+    /ប្រើប្រាស់/i,
+    /\busage\b/i,
+    /\bconsumption\b/i,
+    /\benergy\b/i,
+    /\bkwh\b/i,
+  ];
+  const amountLinePatterns = [
+    /ទឹកប្រាក់/i,
+    /ត្រូវទូ/i,
+    /\bamount\b/i,
+    /\bamount\s*due\b/i,
+    /\btotal\s*due\b/i,
+    /\bpayable\b/i,
+    /\ba\s*payer\b/i,
+    /\briel\b/i,
+  ];
+  const moneyPattern = /(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{5,}(?:\.\d+)?)/g;
+  const matchesAnyPattern = (value, patterns) => patterns.some((pattern) => pattern.test(value));
+  const getLineContext = (index) => [lines[index - 1] || "", lines[index] || "", lines[index + 1] || ""].join(" ");
 
   const invoiceNumberRaw =
     firstNonEmptyMatch(compact, [
@@ -3512,51 +3534,131 @@ function parseEdcInvoiceFields(text) {
     ? parseBillingMonth(periodMatch[2], invoiceDate)
     : parseBillingMonth("", invoiceDate);
 
-  const kwhCandidates = lines.flatMap((line, index) =>
-    Array.from(line.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi))
-      .map((match) => ({
-        value: Number(match[1].replace(/,/g, "")),
-        index,
-      }))
-      .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
-  );
-  const likelyUsageCandidates = kwhCandidates.filter(
-    (entry) => entry.index >= laterHalfIndex && entry.value >= 100 && entry.value <= 1500
-  );
   let usage = "";
-  if (likelyUsageCandidates.length) {
-    likelyUsageCandidates.sort((a, b) => b.index - a.index || a.value - b.value);
-    usage = String(likelyUsageCandidates[0].value);
+  const labeledUsageCandidates = lines
+    .flatMap((line, index) =>
+      Array.from(line.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi)).map((match) => {
+        const value = Number(match[1].replace(/,/g, ""));
+        const context = getLineContext(index);
+        let score = 0;
+        if (!Number.isFinite(value) || value <= 0) return null;
+        if (value >= 100 && value <= 1500) score += 5;
+        else score -= 6;
+        if (index >= laterHalfIndex) score += 4;
+        if (index >= tailStartIndex) score += 3;
+        if (matchesAnyPattern(line, usageLinePatterns)) score += 5;
+        if (matchesAnyPattern(context, usageLinePatterns)) score += 3;
+        if (/\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}/.test(line) && !/kwh/i.test(line)) score -= 2;
+        return {
+          raw: match[1],
+          value,
+          index,
+          score,
+        };
+      })
+    )
+    .filter(Boolean);
+  if (labeledUsageCandidates.length) {
+    labeledUsageCandidates.sort((a, b) => b.score - a.score || b.index - a.index || a.value - b.value);
+    if (labeledUsageCandidates[0].score >= 6) {
+      usage = String(labeledUsageCandidates[0].value);
+    }
+  }
+  if (!usage) {
+    const kwhCandidates = lines.flatMap((line, index) =>
+      Array.from(line.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi))
+        .map((match) => ({
+          value: Number(match[1].replace(/,/g, "")),
+          index,
+        }))
+        .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
+    );
+    const likelyUsageCandidates = kwhCandidates.filter(
+      (entry) => entry.index >= laterHalfIndex && entry.value >= 100 && entry.value <= 1500
+    );
+    if (likelyUsageCandidates.length) {
+      likelyUsageCandidates.sort((a, b) => b.index - a.index || a.value - b.value);
+      usage = String(likelyUsageCandidates[0].value);
+    }
   }
 
-  const tailLines = lines.slice(-14);
-  const tailAmountCandidates = tailLines
-    .flatMap((line, index) =>
-      Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g)).map((match) => ({
-        raw: match[1].replace(/\s+/g, ""),
-        index,
-      }))
-    )
-    .map((entry) => ({
-      ...entry,
-      value: Number(entry.raw.replace(/,/g, "")),
-    }))
-    .filter((entry) => Number.isFinite(entry.value) && entry.value >= 1000);
-  const amountCounts = new Map();
-  for (const candidate of tailAmountCandidates) {
-    const current = amountCounts.get(candidate.raw) || { count: 0, index: -1, value: candidate.value };
-    amountCounts.set(candidate.raw, {
-      count: current.count + 1,
-      index: Math.max(current.index, candidate.index),
-      value: candidate.value,
-    });
-  }
   let amount = "";
-  const rankedTailAmounts = Array.from(amountCounts.entries()).sort(
-    (a, b) => b[1].count - a[1].count || b[1].index - a[1].index || b[1].value - a[1].value
-  );
-  if (rankedTailAmounts.length) {
-    amount = rankedTailAmounts[0][0];
+  const labeledAmountCandidates = lines
+    .flatMap((line, index) => {
+      const context = getLineContext(index);
+      return Array.from(line.matchAll(moneyPattern)).map((match) => {
+        const raw = match[1].replace(/\s+/g, "");
+        const value = Number(raw.replace(/,/g, ""));
+        let score = 0;
+        if (!Number.isFinite(value) || value < 10000) return null;
+        if (index >= laterHalfIndex) score += 3;
+        if (index >= tailStartIndex) score += 5;
+        if (matchesAnyPattern(line, amountLinePatterns)) score += 7;
+        if (matchesAnyPattern(context, amountLinePatterns)) score += 5;
+        if (value >= 100000) score += 2;
+        if (value > 50000000) score -= 3;
+        return {
+          raw,
+          value,
+          index,
+          score,
+        };
+      });
+    })
+    .filter(Boolean);
+  if (labeledAmountCandidates.length) {
+    const mergedAmountCandidates = new Map();
+    for (const candidate of labeledAmountCandidates) {
+      const current = mergedAmountCandidates.get(candidate.raw) || {
+        score: Number.NEGATIVE_INFINITY,
+        index: -1,
+        value: candidate.value,
+        count: 0,
+      };
+      mergedAmountCandidates.set(candidate.raw, {
+        score: Math.max(current.score, candidate.score),
+        index: Math.max(current.index, candidate.index),
+        value: candidate.value,
+        count: current.count + 1,
+      });
+    }
+    const rankedAmounts = Array.from(mergedAmountCandidates.entries()).sort(
+      (a, b) =>
+        b[1].score - a[1].score || b[1].count - a[1].count || b[1].index - a[1].index || b[1].value - a[1].value
+    );
+    if (rankedAmounts.length && rankedAmounts[0][1].score >= 8) {
+      amount = rankedAmounts[0][0];
+    }
+  }
+  if (!amount) {
+    const tailLines = lines.slice(-14);
+    const tailAmountCandidates = tailLines
+      .flatMap((line, index) =>
+        Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g)).map((match) => ({
+          raw: match[1].replace(/\s+/g, ""),
+          index,
+        }))
+      )
+      .map((entry) => ({
+        ...entry,
+        value: Number(entry.raw.replace(/,/g, "")),
+      }))
+      .filter((entry) => Number.isFinite(entry.value) && entry.value >= 1000);
+    const amountCounts = new Map();
+    for (const candidate of tailAmountCandidates) {
+      const current = amountCounts.get(candidate.raw) || { count: 0, index: -1, value: candidate.value };
+      amountCounts.set(candidate.raw, {
+        count: current.count + 1,
+        index: Math.max(current.index, candidate.index),
+        value: candidate.value,
+      });
+    }
+    const rankedTailAmounts = Array.from(amountCounts.entries()).sort(
+      (a, b) => b[1].count - a[1].count || b[1].index - a[1].index || b[1].value - a[1].value
+    );
+    if (rankedTailAmounts.length) {
+      amount = rankedTailAmounts[0][0];
+    }
   }
   if (!amount) {
     const currencyCandidates = Array.from(flat.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g))
