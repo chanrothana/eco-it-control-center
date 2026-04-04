@@ -646,6 +646,7 @@ type DashboardStats = {
 
 type ApiError = { error?: string };
 type Lang = "en" | "km";
+type UiTheme = "dark" | "light";
 type AssetSubviewAccess = "both" | "list_only";
 type AuthRole = "Super Admin" | "Admin" | "Viewer";
 type NavModule =
@@ -2166,12 +2167,15 @@ const TEXT = {
     subhead: "Centralized operations for assets, maintenance, and campus incidents.",
     view: "View",
     language: "Language",
+    theme: "Theme",
     menu: "Menu",
     more: "More",
     options: "Options",
     phoneHint: "Choose a module from the menu, then open Options for campus, language, and account settings.",
     english: "English",
     khmer: "Khmer",
+    themeDark: "Dark",
+    themeLight: "Light",
     allCampuses: "All Campuses",
     dashboard: "Dashboard",
     assets: "Assets",
@@ -2400,12 +2404,15 @@ const TEXT = {
     subhead: "គ្រប់គ្រងទ្រព្យសម្បត្តិ ការថែទាំ និងបញ្ហាតាមគ្រប់ Campus ជាកណ្តាល។",
     view: "មើល",
     language: "ភាសា",
+    theme: "រចនាប័ទ្ម",
     menu: "ម៉ឺនុយ",
     more: "បន្ថែម",
     options: "ជម្រើស",
     phoneHint: "ជ្រើសរើសមុខងារពីម៉ឺនុយ ហើយបើក ជម្រើស សម្រាប់ Campus, ភាសា និងគណនី។",
     english: "អង់គ្លេស",
     khmer: "ខ្មែរ",
+    themeDark: "ងងឹត",
+    themeLight: "ភ្លឺ",
     allCampuses: "គ្រប់ Campus",
     dashboard: "ផ្ទាំងសង្ខេប",
     assets: "ទ្រព្យសម្បត្តិ",
@@ -6895,6 +6902,10 @@ export default function App() {
     const saved = localStorage.getItem("ui_lang");
     return saved === "km" ? "km" : "en";
   });
+  const [uiTheme, setUiTheme] = useState<UiTheme>(() => {
+    const saved = localStorage.getItem("ui_theme");
+    return saved === "light" ? "light" : "dark";
+  });
   const t = TEXT[lang];
   const [authLoading, setAuthLoading] = useState(true);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -9628,6 +9639,9 @@ export default function App() {
   useEffect(() => {
     trySetLocalStorage("ui_lang", lang);
   }, [lang]);
+  useEffect(() => {
+    trySetLocalStorage("ui_theme", uiTheme);
+  }, [uiTheme]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
     if (lang !== "km") setLang("km");
@@ -29719,7 +29733,12 @@ export default function App() {
       <div className="report-quick-count-groups">
         {quickCountGroupedRows.length ? (
           quickCountGroupedRows.map((group) => (
-            <section key={`quick-count-group-${group.category}`} className="report-quick-category-block">
+            <section
+              key={`quick-count-group-${group.category}`}
+              className={`report-quick-category-block report-quick-category-${String(group.category || "")
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")}`}
+            >
               <div className="report-quick-category-title">
                 {lang === "km" ? `ប្រភេទ: ${group.category}` : `${group.category} Items`}
               </div>
@@ -32016,7 +32035,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${uiTheme === "light" ? "theme-light" : "theme-dark"}`}>
       <div className="bg-orb bg-orb-a" aria-hidden={true} />
       <div className="bg-orb bg-orb-b" aria-hidden={true} />
 
@@ -32055,6 +32074,21 @@ export default function App() {
                 searchPlaceholder={lang === "km" ? "ស្វែងរកភាសា..." : "Search language..."}
                 emptyText={lang === "km" ? "មិនមានភាសា" : "No language found."}
                 disabled={maintenanceQuickMode}
+              />
+            </label>
+
+            <label className="field campus-field">
+              <span>{t.theme}</span>
+              <LocationPicker
+                value={uiTheme}
+                onChange={(value) => setUiTheme(value as UiTheme)}
+                options={[
+                  { value: "dark", label: t.themeDark },
+                  { value: "light", label: t.themeLight },
+                ]}
+                placeholder={t.theme}
+                searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
+                emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
               />
             </label>
 
@@ -32306,6 +32340,23 @@ export default function App() {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកភាសា..." : "Search language..."}
                     emptyText={lang === "km" ? "មិនមានភាសា" : "No language found."}
                     disabled={maintenanceQuickMode}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>{t.theme}</span>
+                  <LocationPicker
+                    value={uiTheme}
+                    onChange={(value) => {
+                      setUiTheme(value as UiTheme);
+                    }}
+                    options={[
+                      { value: "dark", label: t.themeDark },
+                      { value: "light", label: t.themeLight },
+                    ]}
+                    placeholder={t.theme}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
+                    emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
                   />
                 </label>
 
@@ -33032,42 +33083,52 @@ export default function App() {
                   {isPhoneView ? (
                     <div className="dashboard-supply-campus-mobile-list">
                       {dashboardCleaningSupplyCampusMatrix.rows.length ? (
-                        dashboardCleaningSupplyCampusMatrix.rows.map((row) => (
-                          <article key={`dash-stock-mobile-campus-${row.campus}`} className="dashboard-supply-campus-mobile-card">
-                            <div className="dashboard-supply-campus-mobile-head">
-                              <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
-                            </div>
-                            <div className="dashboard-supply-campus-mobile-grid">
-                              {dashboardCleaningSupplyCampusMatrix.items.map((item) => {
-                                const value = row.byItem.get(item.key);
-                                return (
-                                  <div
-                                    key={`dash-stock-mobile-item-${row.campus}-${item.key}`}
-                                    className={`dashboard-supply-campus-mobile-item ${value?.low ? "dashboard-supply-campus-mobile-item-low" : ""}`}
-                                  >
-                                    {item.photo ? (
-                                      <img
-                                        src={item.photo}
-                                        alt={item.itemName}
-                                        className="dashboard-supply-campus-mobile-photo"
-                                        loading="lazy"
-                                        decoding="async"
-                                      />
-                                    ) : (
-                                      <span className="dashboard-supply-campus-mobile-photo dashboard-supply-campus-mobile-photo-empty">
-                                        {item.itemName.slice(0, 2).toUpperCase()}
-                                      </span>
-                                    )}
-                                    <span className="dashboard-supply-campus-mobile-name">{item.itemName}</span>
-                                    <strong className={value?.low ? "dashboard-stock-value-low" : undefined}>
-                                      {value ? value.stock : "-"}
-                                    </strong>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </article>
-                        ))
+                        dashboardCleaningSupplyCampusMatrix.rows.map((row) => {
+                          const visibleItems = dashboardCleaningSupplyCampusMatrix.items.filter((item) => {
+                            const value = row.byItem.get(item.key);
+                            return Boolean(value && Number(value.stock || 0) > 0);
+                          });
+                          return (
+                            <article key={`dash-stock-mobile-campus-${row.campus}`} className="dashboard-supply-campus-mobile-card">
+                              <div className="dashboard-supply-campus-mobile-head">
+                                <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
+                              </div>
+                              {visibleItems.length ? (
+                                <div className="dashboard-supply-campus-mobile-grid">
+                                  {visibleItems.map((item) => {
+                                    const value = row.byItem.get(item.key);
+                                    return (
+                                      <div
+                                        key={`dash-stock-mobile-item-${row.campus}-${item.key}`}
+                                        className={`dashboard-supply-campus-mobile-item ${value?.low ? "dashboard-supply-campus-mobile-item-low" : ""}`}
+                                      >
+                                        {item.photo ? (
+                                          <img
+                                            src={item.photo}
+                                            alt={item.itemName}
+                                            className="dashboard-supply-campus-mobile-photo"
+                                            loading="lazy"
+                                            decoding="async"
+                                          />
+                                        ) : (
+                                          <span className="dashboard-supply-campus-mobile-photo dashboard-supply-campus-mobile-photo-empty">
+                                            {item.itemName.slice(0, 2).toUpperCase()}
+                                          </span>
+                                        )}
+                                        <span className="dashboard-supply-campus-mobile-name">{item.itemName}</span>
+                                        <strong className={value?.low ? "dashboard-stock-value-low" : undefined}>
+                                          {value ? value.stock : "-"}
+                                        </strong>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="tiny dashboard-supply-campus-mobile-empty">No stocked cleaning items.</div>
+                              )}
+                            </article>
+                          );
+                        })
                       ) : (
                         <div className="tiny">No cleaning supply stock data.</div>
                       )}
@@ -35464,7 +35525,13 @@ export default function App() {
                               </div>
                               <div className="asset-mobile-meta">
                                 <div><strong>{t.campus}:</strong> {campusLabel(asset.campus)}</div>
-                                <div><strong>{t.category}:</strong> {asset.category}</div>
+                                <div
+                                  className={`asset-mobile-category asset-mobile-category-${String(asset.category || "")
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9]+/g, "-")}`}
+                                >
+                                  <strong>{t.category}:</strong> {asset.category}
+                                </div>
                                 <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
                                 {isFurnitureAsset(asset.category) ? (
                                   <div><strong>Qty:</strong> {furnitureAssetQuantity(asset) || 1}</div>
@@ -52361,14 +52428,14 @@ export default function App() {
         ) : null}
 
         {inventoryDashboardModal ? (
-          <div className="modal-backdrop" onClick={() => setInventoryDashboardModal(null)}>
-            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-backdrop inventory-dashboard-backdrop" onClick={() => setInventoryDashboardModal(null)}>
+            <section className="panel modal-panel inventory-dashboard-modal" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <h2>{inventoryDashboardModal.title}</h2>
                 <button className="tab" onClick={() => setInventoryDashboardModal(null)}>{t.close}</button>
               </div>
               <div
-                className="asset-gallery-grid"
+                className="asset-gallery-grid inventory-dashboard-gallery"
                 style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
               >
                 {inventoryDashboardModal.rows.length ? (
