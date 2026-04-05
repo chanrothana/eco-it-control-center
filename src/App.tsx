@@ -29777,6 +29777,59 @@ export default function App() {
       </div>
     );
 
+    if (isDashboard && isPhoneView) {
+      return (
+        <div className="report-quick-count dashboard-quick-count dashboard-quick-count-mobile">
+          <div className="dashboard-quick-mobile-head">
+            <div className="dashboard-quick-mobile-copy">
+              <span className="dashboard-quick-kicker">{lang === "km" ? "តាមដានរហ័ស" : "Quick Count"}</span>
+              <strong>{lang === "km" ? "ស្ថានភាពទ្រព្យសំខាន់" : "Priority Snapshot"}</strong>
+            </div>
+            <button
+              type="button"
+              className="tab btn-small report-quick-toggle-btn"
+              onClick={() => setDashboardQuickCountOpen((open) => !open)}
+            >
+              {dashboardQuickCountOpen ? (lang === "km" ? "លាក់" : "Hide") : (lang === "km" ? "បង្ហាញ" : "View")}
+            </button>
+          </div>
+          <div className="dashboard-quick-mobile-stats">
+            <article className="dashboard-quick-mobile-stat">
+              <span>{lang === "km" ? "ទ្រព្យត្រូវគ្នា" : "Matched"}</span>
+              <strong>{quickCountFilteredTotal}</strong>
+            </article>
+            <article className="dashboard-quick-mobile-stat">
+              <span>{lang === "km" ? "Item ឃើញ" : "Items"}</span>
+              <strong>{quickCountFilteredRows.length}</strong>
+            </article>
+            <article className="dashboard-quick-mobile-stat">
+              <span>{lang === "km" ? "តម្រង" : "Filters"}</span>
+              <strong>{activeFilterCount}</strong>
+            </article>
+          </div>
+          {dashboardQuickCountOpen ? (
+            <>
+              <section className="dashboard-quick-toolbar-shell dashboard-quick-toolbar-shell-mobile">
+                {controls}
+              </section>
+              <section className="dashboard-quick-status-shell">
+                <div className="dashboard-quick-section-head">
+                  <strong>{lang === "km" ? "ស្ថានភាព" : "Condition Snapshot"}</strong>
+                </div>
+                {statusGrid}
+              </section>
+              <section className="dashboard-quick-catalog-shell">
+                <div className="dashboard-quick-section-head">
+                  <strong>{lang === "km" ? "Item តាមប្រភេទ" : "Item Exposure Board"}</strong>
+                </div>
+                {groupedItems}
+              </section>
+            </>
+          ) : null}
+        </div>
+      );
+    }
+
     if (isDashboard) {
       return (
         <div className="report-quick-count dashboard-quick-count dashboard-quick-count-redesign">
@@ -32932,7 +32985,6 @@ export default function App() {
                       <button className="phone-quick-btn" onClick={() => setTab("assets")}>{t.openAssetList}</button>
                       <button className="phone-quick-btn" onClick={() => setTab("schedule")}>{t.openSchedule}</button>
                       <button className="phone-quick-btn" onClick={() => setTab("maintenance")}>{t.recordMaintenance}</button>
-                      <button className="phone-quick-btn" onClick={() => setTab("verification")}>Record Verification</button>
                     </div>
                   </section>
                 ) : (
@@ -33046,62 +33098,188 @@ export default function App() {
                 </section>
 
                 <div style={{ marginTop: 12 }}>
-                  <article className="panel dashboard-widget dashboard-calendar-panel">
-                    <div className="dashboard-widget-head">
-                      <h3 className="section-title">Eco Calendar View</h3>
-                      <div className="row-actions calendar-nav-row">
-                        <button
-                          className="tab btn-small"
-                          aria-label="Previous month"
-                          title="Previous month"
-                          onClick={() =>
-                            setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
-                          }
-                        >
-                          {calendarPrevLabel}
-                        </button>
-                        <button
-                          className="tab btn-small"
-                          aria-label="Next month"
-                          title="Next month"
-                          onClick={() =>
-                            setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
-                          }
-                        >
-                          {calendarNextLabel}
-                        </button>
+                  {isPhoneView ? (
+                    <details className="dashboard-mobile-fold">
+                      <summary>{lang === "km" ? "ប្រតិទិន និងកាលវិភាគ" : "Calendar & Schedule"}</summary>
+                      <article className="panel dashboard-widget dashboard-calendar-panel">
+                        <div className="dashboard-widget-head">
+                          <h3 className="section-title">Eco Calendar View</h3>
+                          <div className="row-actions calendar-nav-row">
+                            <button
+                              className="tab btn-small"
+                              aria-label="Previous month"
+                              title="Previous month"
+                              onClick={() =>
+                                setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                              }
+                            >
+                              {calendarPrevLabel}
+                            </button>
+                            <button
+                              className="tab btn-small"
+                              aria-label="Next month"
+                              title="Next month"
+                              onClick={() =>
+                                setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                              }
+                            >
+                              {calendarNextLabel}
+                            </button>
+                          </div>
+                        </div>
+                        <p className="tiny dashboard-calendar-month">
+                          {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
+                        </p>
+                        <div className="dashboard-calendar-grid">
+                          <CalendarGridTemplate
+                            weekdayLabels={calendarWeekdayLabels}
+                            days={calendarGridDays}
+                            selectedDate={selectedCalendarDate}
+                            todayYmd={todayYmd}
+                            isPhoneView={isPhoneView}
+                            onSelectDate={(ymd) => {
+                              setSelectedCalendarDate(ymd);
+                              if (scheduleByDate.get(ymd)?.length) {
+                                setScheduleAlertItemFilter("ALL");
+                                setScheduleAlertModal("selected");
+                              }
+                            }}
+                            renderHolidayTag={(d) =>
+                              d.holidayName ? (
+                                <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                                  {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                                </em>
+                              ) : null
+                            }
+                            headKeyPrefix="dash-cal-head"
+                            dayKeyPrefix="dash-cal-day"
+                          />
+                        </div>
+                      </article>
+                    </details>
+                  ) : (
+                    <article className="panel dashboard-widget dashboard-calendar-panel">
+                      <div className="dashboard-widget-head">
+                        <h3 className="section-title">Eco Calendar View</h3>
+                        <div className="row-actions calendar-nav-row">
+                          <button
+                            className="tab btn-small"
+                            aria-label="Previous month"
+                            title="Previous month"
+                            onClick={() =>
+                              setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                            }
+                          >
+                            {calendarPrevLabel}
+                          </button>
+                          <button
+                            className="tab btn-small"
+                            aria-label="Next month"
+                            title="Next month"
+                            onClick={() =>
+                              setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                            }
+                          >
+                            {calendarNextLabel}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <p className="tiny dashboard-calendar-month">
-                      {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
-                    </p>
-                    <div className="dashboard-calendar-grid">
-                      <CalendarGridTemplate
-                        weekdayLabels={calendarWeekdayLabels}
-                        days={calendarGridDays}
-                        selectedDate={selectedCalendarDate}
-                        todayYmd={todayYmd}
-                        isPhoneView={isPhoneView}
-                        onSelectDate={(ymd) => {
-                          setSelectedCalendarDate(ymd);
-                          if (scheduleByDate.get(ymd)?.length) {
-                            setScheduleAlertItemFilter("ALL");
-                            setScheduleAlertModal("selected");
+                      <p className="tiny dashboard-calendar-month">
+                        {calendarMonth.toLocaleString(undefined, { month: "long", year: "numeric" })}
+                      </p>
+                      <div className="dashboard-calendar-grid">
+                        <CalendarGridTemplate
+                          weekdayLabels={calendarWeekdayLabels}
+                          days={calendarGridDays}
+                          selectedDate={selectedCalendarDate}
+                          todayYmd={todayYmd}
+                          isPhoneView={isPhoneView}
+                          onSelectDate={(ymd) => {
+                            setSelectedCalendarDate(ymd);
+                            if (scheduleByDate.get(ymd)?.length) {
+                              setScheduleAlertItemFilter("ALL");
+                              setScheduleAlertModal("selected");
+                            }
+                          }}
+                          renderHolidayTag={(d) =>
+                            d.holidayName ? (
+                              <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                                {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                              </em>
+                            ) : null
                           }
-                        }}
-                        renderHolidayTag={(d) =>
-                          d.holidayName ? (
-                            <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
-                              {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
-                            </em>
-                          ) : null
-                        }
-                        headKeyPrefix="dash-cal-head"
-                        dayKeyPrefix="dash-cal-day"
-                      />
-                    </div>
-                  </article>
+                          headKeyPrefix="dash-cal-head"
+                          dayKeyPrefix="dash-cal-day"
+                        />
+                      </div>
+                    </article>
+                  )}
                 </div>
+                {isPhoneView ? (
+                  <details className="dashboard-mobile-fold" style={{ marginTop: 12 }}>
+                    <summary>{lang === "km" ? "សម្ភារៈសម្អាតតាមសាខា" : "Cleaning Supplies by Campus"}</summary>
+                    <article className="panel dashboard-widget">
+                      <div className="dashboard-widget-head">
+                        <div>
+                          <h3 className="section-title">Cleaning Supplies by Campus</h3>
+                          <div className="tiny">Stock item amount by campus for quick dashboard review.</div>
+                        </div>
+                      </div>
+                      <div className="dashboard-supply-campus-mobile-list">
+                        {dashboardCleaningSupplyCampusMatrix.rows.length ? (
+                          dashboardCleaningSupplyCampusMatrix.rows.map((row) => {
+                            const visibleItems = dashboardCleaningSupplyCampusMatrix.items.filter((item) => {
+                              const value = row.byItem.get(item.key);
+                              return Boolean(value && Number(value.stock || 0) > 0);
+                            });
+                            return (
+                              <article key={`dash-stock-mobile-campus-${row.campus}`} className="dashboard-supply-campus-mobile-card">
+                                <div className="dashboard-supply-campus-mobile-head">
+                                  <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
+                                </div>
+                                {visibleItems.length ? (
+                                  <div className="dashboard-supply-campus-mobile-grid">
+                                    {visibleItems.map((item) => {
+                                      const value = row.byItem.get(item.key);
+                                      return (
+                                        <div
+                                          key={`dash-stock-mobile-item-${row.campus}-${item.key}`}
+                                          className={`dashboard-supply-campus-mobile-item ${value?.low ? "dashboard-supply-campus-mobile-item-low" : ""}`}
+                                        >
+                                          {item.photo ? (
+                                            <img
+                                              src={item.photo}
+                                              alt={item.itemName}
+                                              className="dashboard-supply-campus-mobile-photo"
+                                              loading="lazy"
+                                              decoding="async"
+                                            />
+                                          ) : (
+                                            <span className="dashboard-supply-campus-mobile-photo dashboard-supply-campus-mobile-photo-empty">
+                                              {item.itemName.slice(0, 2).toUpperCase()}
+                                            </span>
+                                          )}
+                                          <span className="dashboard-supply-campus-mobile-name">{item.itemName}</span>
+                                          <strong className={value?.low ? "dashboard-stock-value-low" : undefined}>
+                                            {value ? value.stock : "-"}
+                                          </strong>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="tiny dashboard-supply-campus-mobile-empty">No stocked cleaning items.</div>
+                                )}
+                              </article>
+                            );
+                          })
+                        ) : (
+                          <div className="tiny">No cleaning supply stock data.</div>
+                        )}
+                      </div>
+                    </article>
+                  </details>
+                ) : (
                 <article className="panel dashboard-widget" style={{ marginTop: 12 }}>
                   <div className="dashboard-widget-head">
                     <div>
@@ -33226,9 +33404,10 @@ export default function App() {
                         )}
                       </tbody>
                     </table>
-                  </div>
+                    </div>
                   )}
                 </article>
+                )}
               </>
             )}
 
