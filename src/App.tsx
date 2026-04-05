@@ -14349,13 +14349,17 @@ export default function App() {
       const params = new URLSearchParams();
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
 
-      const [assetRes, ticketRes, statsRes] = await Promise.all([
+      const [assetRes, ticketRes, statsRes, settingsResult, locationRes] = await Promise.all([
         requestJson<{ assets: Asset[] }>(`/api/assets`),
         requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
         requestJson<{ stats: DashboardStats }>(`/api/dashboard?${params.toString()}`),
+        requestJson<{ settings?: ServerSettings }>("/api/settings")
+          .then((settings) => ({ ok: true as const, settings }))
+          .catch(() => ({ ok: false as const })),
+        requestJson<{ locations: LocationEntry[] }>("/api/locations"),
       ]);
-      try {
-        const settingsRes = await requestJson<{ settings?: ServerSettings }>("/api/settings");
+      if (settingsResult.ok) {
+        const settingsRes = settingsResult.settings;
         const fromServer = settingsRes.settings?.campusNames || {};
         if (fromServer && typeof fromServer === "object") {
           const mergedCampusNames: Record<string, string> = {};
@@ -14549,7 +14553,7 @@ export default function App() {
             ? nextFurnitureModels
             : fallbackFurnitureModels
         );
-      } catch {
+      } else {
         // Keep local settings if /api/settings is unavailable.
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
         setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
@@ -14576,7 +14580,6 @@ export default function App() {
         setFurnitureModels(readFurnitureModelFallback());
       }
 
-      const locationRes = await requestJson<{ locations: LocationEntry[] }>("/api/locations");
       const locationList = normalizeLocationEntries(locationRes.locations);
 
       const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
@@ -14596,7 +14599,6 @@ export default function App() {
       setStats(
         serverStats
       );
-      void loadMaintenanceNotifications();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cannot load data");
     } finally {
@@ -32994,15 +32996,42 @@ export default function App() {
                 )}
 
                 <div className={`stats-grid dashboard-stats dashboard-command-stats ${isPhoneView ? "dashboard-stats-phone" : ""}`}>
-                  <button className="stat-card stat-card-button stat-card-total dashboard-command-stat dashboard-command-stat-total" onClick={() => setOverviewModal("total")}>
+                  <button
+                    className="stat-card stat-card-button stat-card-total dashboard-command-stat dashboard-command-stat-total"
+                    onClick={() => {
+                      if (isPhoneView) {
+                        openQuickCountAssetsModal(t.totalAssets, assets);
+                        return;
+                      }
+                      setOverviewModal("total");
+                    }}
+                  >
                     <div className="stat-label">{t.totalAssets}</div>
                     <div className="stat-value">{stats.totalAssets}</div>
                   </button>
-                  <button className="stat-card stat-card-button stat-card-it dashboard-command-stat dashboard-command-stat-it" onClick={() => setOverviewModal("it")}>
+                  <button
+                    className="stat-card stat-card-button stat-card-it dashboard-command-stat dashboard-command-stat-it"
+                    onClick={() => {
+                      if (isPhoneView) {
+                        openQuickCountAssetsModal(t.itAssets, assets.filter((a) => a.category === "IT"));
+                        return;
+                      }
+                      setOverviewModal("it");
+                    }}
+                  >
                     <div className="stat-label">{t.itAssets}</div>
                     <div className="stat-value">{stats.itAssets}</div>
                   </button>
-                  <button className="stat-card stat-card-button stat-card-safety dashboard-command-stat dashboard-command-stat-safety" onClick={() => setOverviewModal("safety")}>
+                  <button
+                    className="stat-card stat-card-button stat-card-safety dashboard-command-stat dashboard-command-stat-safety"
+                    onClick={() => {
+                      if (isPhoneView) {
+                        openQuickCountAssetsModal(t.safetyAssets, assets.filter((a) => a.category === "SAFETY"));
+                        return;
+                      }
+                      setOverviewModal("safety");
+                    }}
+                  >
                     <div className="stat-label">{t.safetyAssets}</div>
                     <div className="stat-value">{stats.safetyAssets}</div>
                   </button>
@@ -52428,40 +52457,66 @@ export default function App() {
         ) : null}
 
         {inventoryDashboardModal ? (
-          <div className="modal-backdrop inventory-dashboard-backdrop" onClick={() => setInventoryDashboardModal(null)}>
-            <section className="panel modal-panel inventory-dashboard-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-backdrop inventory-dashboard-backdrop quick-count-assets-backdrop" onClick={() => setInventoryDashboardModal(null)}>
+            <section className="panel modal-panel inventory-dashboard-modal quick-count-assets-modal" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <h2>{inventoryDashboardModal.title}</h2>
                 <button className="tab" onClick={() => setInventoryDashboardModal(null)}>{t.close}</button>
               </div>
-              <div
-                className="asset-gallery-grid inventory-dashboard-gallery"
-                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
-              >
-                {inventoryDashboardModal.rows.length ? (
-                  inventoryDashboardModal.rows.map((row) => (
-                    <article key={row.key} className="asset-gallery-card">
-                      <div className="asset-gallery-photo-wrap">
-                        {row.photo ? (
-                          <img loading="lazy" decoding="async" src={row.photo} alt={row.title} className="asset-gallery-photo" />
-                        ) : (
-                          <div className="asset-gallery-photo-empty">{lang === "km" ? "គ្មានរូបថត" : "No photo"}</div>
-                        )}
-                      </div>
-                      <div className="asset-gallery-meta">
-                        <strong>{row.title}</strong>
-                        <div>{row.subtitle}</div>
-                        <div>{row.meta}</div>
-                        <div>{lang === "km" ? "ស្ថានភាព" : "Status"}: {row.badge}</div>
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <div className="panel-note">
-                    {lang === "km" ? "មិនមានទិន្នន័យទេ។" : "No records found."}
-                  </div>
-                )}
-              </div>
+              {isPhoneView ? (
+                <div className="quick-count-mobile-list inventory-dashboard-mobile-list">
+                  {inventoryDashboardModal.rows.length ? (
+                    inventoryDashboardModal.rows.map((row) => (
+                      <article key={row.key} className="quick-count-mobile-card">
+                        <div className="quick-count-mobile-head">
+                          <strong>{row.title}</strong>
+                          <span>{row.badge}</span>
+                        </div>
+                        <div className="quick-count-mobile-body">
+                          <div>{renderAssetPhoto(row.photo || "", row.title)}</div>
+                          <div className="quick-count-mobile-meta">
+                            <div>{row.subtitle}</div>
+                            <div>{row.meta}</div>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">
+                      {lang === "km" ? "មិនមានទិន្នន័យទេ។" : "No records found."}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className="asset-gallery-grid inventory-dashboard-gallery"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
+                >
+                  {inventoryDashboardModal.rows.length ? (
+                    inventoryDashboardModal.rows.map((row) => (
+                      <article key={row.key} className="asset-gallery-card">
+                        <div className="asset-gallery-photo-wrap">
+                          {row.photo ? (
+                            <img loading="lazy" decoding="async" src={row.photo} alt={row.title} className="asset-gallery-photo" />
+                          ) : (
+                            <div className="asset-gallery-photo-empty">{lang === "km" ? "គ្មានរូបថត" : "No photo"}</div>
+                          )}
+                        </div>
+                        <div className="asset-gallery-meta">
+                          <strong>{row.title}</strong>
+                          <div>{row.subtitle}</div>
+                          <div>{row.meta}</div>
+                          <div>{lang === "km" ? "ស្ថានភាព" : "Status"}: {row.badge}</div>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">
+                      {lang === "km" ? "មិនមានទិន្នន័យទេ។" : "No records found."}
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
           </div>
         ) : null}
@@ -52662,8 +52717,8 @@ export default function App() {
         ) : null}
 
         {quickCountModal && (
-          <div className="modal-backdrop" onClick={() => setQuickCountModal(null)}>
-            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-backdrop quick-count-assets-backdrop" onClick={() => setQuickCountModal(null)}>
+            <section className="panel modal-panel quick-count-assets-modal" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <h2>{quickCountModal.title}</h2>
                 <button className="tab" onClick={() => setQuickCountModal(null)}>{t.close}</button>
