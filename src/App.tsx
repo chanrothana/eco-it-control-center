@@ -1273,6 +1273,91 @@ const DOCUMENT_TEMPLATE_LIBRARY = [
   { name: "Monthly Admin Summary PDF", owner: "Admin Support", status: "Planned", source: "Reports / Documents" },
 ] as const;
 
+const DOCUMENT_USER_MODULE_GUIDE = [
+  {
+    title: "Dashboard",
+    note: "Open one campus overview, quick count, status cards, and daily inventory visibility from one screen.",
+    items: ["Campus overview", "Quick count", "Condition snapshot", "Item exposure board"],
+  },
+  {
+    title: "Assets",
+    note: "Register, update, search, and review school assets with photos, status, campus, user, and location details.",
+    items: ["Register asset", "List asset", "Gallery", "Status update"],
+  },
+  {
+    title: "Classroom Control",
+    note: "Check room setup, classroom items, and campus-by-campus room visibility for teaching spaces.",
+    items: ["Gallery", "Room items", "Classroom status", "Room view"],
+  },
+  {
+    title: "Inventory",
+    note: "Track stock, daily in and out movement, low stock, and cleaning supplies used by each campus.",
+    items: ["Dashboard", "Items", "Stock", "Daily transactions"],
+  },
+  {
+    title: "Utilities",
+    note: "Enter EDC and PPWS records, upload invoice photos, review history, and compare monthly usage.",
+    items: ["Monthly entry", "Invoice autofill", "History", "Monthly / yearly reports"],
+  },
+  {
+    title: "Rental Printer",
+    note: "Manage printer setup, enter counter records, compare campuses, and print graph or counter reports.",
+    items: ["Printer setup", "Counter entry", "Comparison", "Monthly graph"],
+  },
+  {
+    title: "Operations Modules",
+    note: "Support daily operations through Work Orders, Schedule, Transfer, Maintenance, and Asset Check.",
+    items: ["Work Orders", "Schedule", "Transfer", "Maintenance", "Asset Check"],
+  },
+  {
+    title: "Reports and Documents",
+    note: "Open printable reports, export PDF, and use generated documents for submission, orientation, and filing.",
+    items: ["Reports", "Document center", "Print / Export PDF", "Live maintenance documents"],
+  },
+] as const;
+
+const DOCUMENT_USER_TUTORIAL_STEPS = [
+  {
+    title: "1. Start with the top controls",
+    detail: "Choose the correct Campus, Language, Theme, and confirm the Account before you start entering data.",
+  },
+  {
+    title: "2. Open the correct working module",
+    detail: "Use Utilities for invoices, Rental Printer for counters, Maintenance for service work, Transfer for handover, and Inventory for stock work.",
+  },
+  {
+    title: "3. Enter the source record once",
+    detail: "The app should keep the main information inside the correct module so users do not need to type the same details again in a separate document file.",
+  },
+  {
+    title: "4. Review history or detail",
+    detail: "Open History, List, or Detail view to confirm the saved information before printing or sharing anything officially.",
+  },
+  {
+    title: "5. Print or export from Documents / Reports",
+    detail: "When the page is ready, open Documents or Reports, review the final layout, then use Print / Export PDF for the final output.",
+  },
+] as const;
+
+const DOCUMENT_USER_SUPPORT_FAQS = [
+  {
+    question: "Where should new staff start?",
+    answer: "Start with Dashboard for a quick view, then move into the one module that matches today’s job. Do not jump across many modules at once.",
+  },
+  {
+    question: "When should staff use Documents?",
+    answer: "Use Documents when you need a printable support guide, orientation page, or a document view that explains how the app works and where records come from.",
+  },
+  {
+    question: "When should staff use Reports?",
+    answer: "Use Reports when you need filtered summaries, formal lists, comparisons, graphs, or a PDF-ready reporting page.",
+  },
+  {
+    question: "What should be automatic?",
+    answer: "Campus, date, asset, item, and operator details should come from the source module whenever possible, so the document is faster and cleaner.",
+  },
+] as const;
+
 const IMPORTED_C1_MAINT_NOTE_PREFIX = "Imported from Campus 1 maintenance tools report dated 2025-11-25.";
 const INVENTORY_BULK_TEMPLATE_HEADERS = [
   "campus",
@@ -7191,7 +7276,7 @@ export default function App() {
     "entry" | "history" | "monthly" | "yearly"
   >("entry");
   const [printerView, setPrinterView] = useState<"setup" | "entry" | "report" | "graph">("entry");
-  const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("overview");
+  const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("user");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
@@ -7235,7 +7320,7 @@ export default function App() {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
       if (nextTab === "cctv") setCctvView("dashboard");
-      if (nextTab === "documents") setDocumentsView("overview");
+      if (nextTab === "documents") setDocumentsView("user");
       if (nextTab === "vault") setVaultTab("dashboard");
       setTab(nextTab);
     });
@@ -7280,7 +7365,7 @@ export default function App() {
         }
         if (nextTab === "classroom") setClassroomView("gallery");
         if (nextTab === "cctv") setCctvView("dashboard");
-        if (nextTab === "documents") setDocumentsView("overview");
+        if (nextTab === "documents") setDocumentsView("user");
         if (nextTab === "vault") setVaultTab("dashboard");
         setTab(nextTab);
       });
@@ -26281,6 +26366,119 @@ export default function App() {
   const latestMaintenanceDocumentRows = useMemo(
     () => maintenanceDocumentRows.slice(0, 8),
     [maintenanceDocumentRows]
+  );
+  const renderDocumentsUserGuide = useCallback(
+    (options?: { includeSnapshot?: boolean }) => (
+      <article className="documents-master-guide">
+        <div className="documents-master-header">
+          <div>
+            <div className="printer-report-kicker">User Support Document</div>
+            <h3>Eco IT Control Center Tutorial Guide</h3>
+            <p>
+              This is the main support document for staff orientation. It explains the structure of the web application,
+              where each task should be done, and how users can move from data entry to report or PDF output without
+              building a second file outside the system.
+            </p>
+          </div>
+          <div className="documents-pill-row">
+            <div className="documents-pill">One Printable Guide</div>
+            <div className="documents-pill">Full App Structure</div>
+            <div className="documents-pill">User Tutorial</div>
+          </div>
+        </div>
+
+        {options?.includeSnapshot ? (
+          <div className="documents-master-stats">
+            <article className="stat-card mini">
+              <div className="stat-label">Modules In Guide</div>
+              <div className="stat-value">{DOCUMENT_USER_MODULE_GUIDE.length}</div>
+              <div className="tiny">Main working areas explained</div>
+            </article>
+            <article className="stat-card mini">
+              <div className="stat-label">Live Documents</div>
+              <div className="stat-value">{maintenanceDocumentSummary.total}</div>
+              <div className="tiny">From maintenance history</div>
+            </article>
+            <article className="stat-card mini">
+              <div className="stat-label">Ready To Submit</div>
+              <div className="stat-value">{maintenanceDocumentSummary.ready}</div>
+              <div className="tiny">Waiting for export or file attach</div>
+            </article>
+          </div>
+        ) : null}
+
+        <section className="documents-guide-section">
+          <div className="documents-section-head">
+            <h3>How This Web Application Is Structured</h3>
+            <span className="documents-section-badge">Main modules and responsibilities</span>
+          </div>
+          <div className="documents-module-grid">
+            {DOCUMENT_USER_MODULE_GUIDE.map((section) => (
+              <article key={section.title} className="documents-module-card">
+                <h4>{section.title}</h4>
+                <p>{section.note}</p>
+                <div className="documents-tag-row">
+                  {section.items.map((item) => (
+                    <span key={`${section.title}-${item}`} className="documents-tag">{item}</span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="documents-guide-section">
+          <div className="documents-section-head">
+            <h3>How Staff Should Use The System</h3>
+            <span className="documents-section-badge">Simple tutorial flow</span>
+          </div>
+          <div className="documents-guide-steps">
+            {DOCUMENT_USER_TUTORIAL_STEPS.map((step) => (
+              <article key={step.title} className="documents-guide-step">
+                <h4>{step.title}</h4>
+                <p>{step.detail}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="documents-guide-section">
+          <div className="documents-section-head">
+            <h3>What Users Usually Need Help With</h3>
+            <span className="documents-section-badge">Support answers for orientation</span>
+          </div>
+          <div className="documents-guide-faq">
+            {DOCUMENT_USER_SUPPORT_FAQS.map((item) => (
+              <article key={item.question} className="documents-guide-faq-item">
+                <h4>{item.question}</h4>
+                <p>{item.answer}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="documents-guide-section">
+          <div className="documents-section-head">
+            <h3>Reports, Documents, and PDF Output</h3>
+            <span className="documents-section-badge">From source record to final file</span>
+          </div>
+          <div className="documents-grid">
+            {DOCUMENT_REPORT_GUIDE.map((guide) => (
+              <article key={guide.title} className="documents-subcard">
+                <h4>{guide.title}</h4>
+                <p>{guide.note}</p>
+                <ul className="documents-list">
+                  {guide.items.map((item) => (
+                    <li key={`${guide.title}-${item}`}>{item}</li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </section>
+      </article>
+    ),
+    [maintenanceDocumentSummary.ready, maintenanceDocumentSummary.total]
   );
   const allVerificationRows = useMemo(() => {
     const rows: Array<{
