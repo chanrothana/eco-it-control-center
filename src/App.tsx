@@ -46483,7 +46483,10 @@ export default function App() {
                   filteredUtilityReadings.length ? (
                     <div className="utility-history-mobile-list">
                       {filteredUtilityReadings.map((row) => (
-                        <article className="utility-history-mobile-card" key={`utility-history-mobile-${row.id}`}>
+                        <article
+                          className={`utility-history-mobile-card ${row.utilityType === "PPWS" ? "utility-history-mobile-card-ppws" : "utility-history-mobile-card-edc"}`}
+                          key={`utility-history-mobile-${row.id}`}
+                        >
                           <div className="utility-history-mobile-head">
                             <div className="utility-history-mobile-title">
                               <strong>{row.utilityType || "-"}</strong>
@@ -46510,7 +46513,10 @@ export default function App() {
                     {filteredUtilityReadings.length ? (
                       <div className="utility-history-desktop-grid">
                         {filteredUtilityReadings.map((row) => (
-                          <article className="utility-history-desktop-card" key={`utility-history-row-${row.id}`}>
+                          <article
+                            className={`utility-history-desktop-card ${row.utilityType === "PPWS" ? "utility-history-desktop-card-ppws" : "utility-history-desktop-card-edc"}`}
+                            key={`utility-history-row-${row.id}`}
+                          >
                             <div className="utility-history-desktop-head">
                               <div className="utility-history-desktop-title">
                                 <strong>{row.utilityType || "-"}</strong>
