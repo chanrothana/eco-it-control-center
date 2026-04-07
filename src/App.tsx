@@ -1081,6 +1081,12 @@ function formatNumericInputDisplay(value: string) {
   return `${formattedInt}.${decimalPartRaw.replace(/\./g, "")}`;
 }
 
+function formatRielAmount(value: unknown) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "-";
+  return `${formatNumericInputDisplay(String(amount))} Riel`;
+}
+
 function normalizeInventoryApprovalCampusValue(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -46198,7 +46204,7 @@ export default function App() {
                     />
                   </label>
                   <label className="field">
-                    <span>Amount</span>
+                    <span>Amount (Riel)</span>
                     <input
                       className="input"
                       inputMode="decimal"
@@ -46281,13 +46287,12 @@ export default function App() {
                     <tbody>
                       {utilityReadings.length ? utilityReadings.map((row) => (
                         <tr key={`utility-history-row-${row.id}`}>
-                          <td>{row.billingMonth || "-"}</td>
                           <td>{formatDate(row.invoiceDate)}</td>
                           <td>{row.billingMonth || "-"}</td>
                           <td>{row.utilityType || "-"}</td>
                           <td>{rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.usage} {row.unit}</td>
-                          <td>{row.amount || "-"}</td>
+                          <td>{formatRielAmount(row.amount)}</td>
                           <td>{row.invoiceNumber || "-"}</td>
                           <td>{row.providerName || "-"}</td>
                           <td><button className="danger-icon-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>X</button></td>
@@ -46305,7 +46310,7 @@ export default function App() {
                 <div className={`stats-grid ${isPhoneView ? "stats-grid-phone" : ""}`} style={{ marginBottom: 12 }}>
                   <article className="stat-card"><div className="stat-label">This Month EDC</div><div className="stat-value">{utilityUsageSummary.edcUsage.toFixed(2)} kWh</div></article>
                   <article className="stat-card"><div className="stat-label">This Month PPWS</div><div className="stat-value">{utilityUsageSummary.ppwsUsage.toFixed(2)} m3</div></article>
-                  <article className="stat-card"><div className="stat-label">This Month Cost</div><div className="stat-value">{utilityUsageSummary.totalAmount.toFixed(2)}</div></article>
+                  <article className="stat-card"><div className="stat-label">This Month Cost</div><div className="stat-value">{formatRielAmount(utilityUsageSummary.totalAmount)}</div></article>
                 </div>
                 <div className="table-wrap" style={{ marginBottom: 12 }}>
                   <table>
@@ -46323,7 +46328,7 @@ export default function App() {
                           <td>{row.month}</td>
                           <td>{row.edcUsage.toFixed(2)}</td>
                           <td>{row.ppwsUsage.toFixed(2)}</td>
-                          <td>{row.amount.toFixed(2)}</td>
+                          <td>{formatRielAmount(row.amount)}</td>
                         </tr>
                       )) : <tr><td colSpan={4}>No monthly utility data yet.</td></tr>}
                     </tbody>
@@ -46372,7 +46377,7 @@ export default function App() {
                           <td>{row.year}</td>
                           <td>{row.edcUsage.toFixed(2)}</td>
                           <td>{row.ppwsUsage.toFixed(2)}</td>
-                          <td>{row.amount.toFixed(2)}</td>
+                          <td>{formatRielAmount(row.amount)}</td>
                         </tr>
                       )) : <tr><td colSpan={4}>No yearly utility report data yet.</td></tr>}
                     </tbody>
@@ -46394,7 +46399,7 @@ export default function App() {
                           <td>{rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.edc.toFixed(2)}</td>
                           <td>{row.ppws.toFixed(2)}</td>
-                          <td>{row.amount.toFixed(2)}</td>
+                          <td>{formatRielAmount(row.amount)}</td>
                         </tr>
                       )) : <tr><td colSpan={4}>No campus utility report data yet.</td></tr>}
                     </tbody>

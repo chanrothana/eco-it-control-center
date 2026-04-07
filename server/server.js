@@ -3476,8 +3476,11 @@ function parseEdcInvoiceFields(text) {
     /ប្រើប្រាស់/i,
     /\busage\b/i,
     /\bconsumption\b/i,
+    /\bconsommation\b/i,
     /\benergy\b/i,
+    /\benergie\b/i,
     /\bkwh\b/i,
+    /\bkw\.?h?\b/i,
   ];
   const amountLinePatterns = [
     /ទឹកប្រាក់/i,
@@ -3618,6 +3621,60 @@ function parseEdcInvoiceFields(text) {
       numericUsageCandidates.sort((a, b) => b.score - a.score || b.index - a.index || a.value - b.value);
       if (numericUsageCandidates[0].score >= 5) {
         usage = String(numericUsageCandidates[0].value);
+      }
+    }
+  }
+  if (!usage) {
+    const broadUsageCandidates = lines
+      .flatMap((line, index) => {
+        const context = getLineContext(index);
+        return Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{2,4}(?:\.\d+)?)/g)).map((match) => {
+          const raw = match[1];
+          const value = Number(raw.replace(/,/g, ""));
+          let score = 0;
+          if (!Number.isFinite(value) || value < 30 || value > 5000) return null;
+          if (value >= 100 && value <= 2500) score += 4;
+          else score += 1;
+          if (index >= laterHalfIndex) score += 3;
+          if (index >= tailStartIndex) score += 2;
+          if (raw.includes(",")) score += 2;
+          if (matchesAnyPattern(line, usageLinePatterns)) score += 5;
+          if (matchesAnyPattern(context, usageLinePatterns)) score += 3;
+          if (/\b(?:amount|riel|payable|invoice|inv|total|tax|vat)\b/i.test(context)) score -= 5;
+          if (/\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}/.test(line)) score -= 6;
+          if (/\b20\d{2}\b/.test(raw)) score -= 4;
+          if (invoiceNumber && raw.replace(/\D/g, "").length >= 6) score -= 6;
+          return {
+            raw,
+            value,
+            index,
+            score,
+          };
+        });
+      })
+      .filter(Boolean);
+    if (broadUsageCandidates.length) {
+      const mergedUsageCandidates = new Map();
+      for (const candidate of broadUsageCandidates) {
+        const current = mergedUsageCandidates.get(candidate.raw) || {
+          score: Number.NEGATIVE_INFINITY,
+          index: -1,
+          value: candidate.value,
+          count: 0,
+        };
+        mergedUsageCandidates.set(candidate.raw, {
+          score: Math.max(current.score, candidate.score),
+          index: Math.max(current.index, candidate.index),
+          value: candidate.value,
+          count: current.count + 1,
+        });
+      }
+      const rankedUsageCandidates = Array.from(mergedUsageCandidates.entries()).sort(
+        (a, b) =>
+          b[1].score - a[1].score || b[1].count - a[1].count || b[1].index - a[1].index || a[1].value - b[1].value
+      );
+      if (rankedUsageCandidates.length && rankedUsageCandidates[0][1].score >= 6) {
+        usage = String(rankedUsageCandidates[0][1].value);
       }
     }
   }
