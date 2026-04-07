@@ -3794,6 +3794,40 @@ function detectCampusFromUtilityInvoiceText(text) {
     .trim()
     .toLowerCase();
 
+  const hasStreet242 = /\bstreet\s*242\b/i.test(normalizedFlat);
+  const hasDaunPenh = /\bdaun\s*penh\b/i.test(normalizedFlat) || /\bdoun\s*penh\b/i.test(normalizedFlat);
+  const hasC22AddressMarker =
+    /\b(?:#\s*)?63\s*(?:32p)?\b/i.test(normalizedFlat) ||
+    /\b(?:#\s*)?65\s*(?:63p)?\b/i.test(normalizedFlat) ||
+    /\beo\s*[-/]?\s*63\b/i.test(normalizedFlat) ||
+    /\beo\s*[-/]?\s*65\b/i.test(normalizedFlat) ||
+    /\b32p\b/i.test(normalizedFlat) ||
+    /\b63p\b/i.test(normalizedFlat);
+  if (hasStreet242 && hasDaunPenh && hasC22AddressMarker) {
+    return "Chaktomuk Campus (C2.2)";
+  }
+
+  const hasChbarAmpovLike =
+    /\bchbar\s*amp(?:a?u?v|ou?v|ul)\b/i.test(normalizedFlat) ||
+    /\bchba?r\s*amp(?:a?u?v|ou?v|ul)\b/i.test(normalizedFlat);
+  const hasPhlavLumLike =
+    /\bphla?u?v?\s*lum\b/i.test(normalizedFlat) ||
+    /\bphlu?v\s*lum\b/i.test(normalizedFlat);
+  const hasUnPhollaName =
+    /\bun\s*pholla\b/i.test(normalizedFlat) ||
+    /\bun\s*phola\b/i.test(normalizedFlat);
+  const hasC3LocationCode =
+    /\bp1421[-/.]?\s*2\s*001b\b/i.test(normalizedFlat) ||
+    /\bp14[-/.]?\s*2\s*001b\b/i.test(normalizedFlat) ||
+    /\bp14z?[-/.]?\s*001b\b/i.test(normalizedFlat);
+  if (
+    hasUnPhollaName ||
+    (hasChbarAmpovLike && hasPhlavLumLike) ||
+    (hasChbarAmpovLike && hasC3LocationCode)
+  ) {
+    return "Boeung Snor Campus";
+  }
+
   const campusMatchers = [
     {
       campus: "Chaktomuk Campus",
@@ -3831,6 +3865,16 @@ function detectCampusFromUtilityInvoiceText(text) {
       patterns: [
         /\bc3\b/i,
         /\bboeung\s*snor\b/i,
+        /\bbeung\s*snor\b/i,
+        /\bun\s*pholla\b/i,
+        /\bun\s*phola\b/i,
+        /\bchbar\s*amp(?:a?u?v|ou?v|ul)\b/i,
+        /\bchba?r\s*amp(?:a?u?v|ou?v|ul)\b/i,
+        /\bphla?u?v?\s*lum\b/i,
+        /\bphlu?v\s*lum\b/i,
+        /\bp1421[-/.]?\s*2\s*001b\b/i,
+        /\bp14[-/.]?\s*2\s*001b\b/i,
+        /\bp14z?[-/.]?\s*001b\b/i,
       ],
       minScore: 1,
     },
@@ -3859,11 +3903,42 @@ function detectCampusFromUtilityInvoiceText(text) {
   return bestCampus;
 }
 
+function detectUtilityInvoiceLocationDetail(text, campus = "") {
+  const normalizedText = toText(text);
+  if (!normalizedText) return "";
+  const flat = normalizedText
+    .replace(/\s+/g, " ")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (campus === "Chaktomuk Campus (C2.2)") {
+    if (
+      /\b(?:#\s*)?63\b/i.test(flat) ||
+      /\beo\s*[-/]?\s*63\b/i.test(flat) ||
+      /\b32p\b/i.test(flat)
+    ) {
+      return "#63 (32P)";
+    }
+    if (
+      /\b(?:#\s*)?65\b/i.test(flat) ||
+      /\beo\s*[-/]?\s*65\b/i.test(flat) ||
+      /\b63p\b/i.test(flat)
+    ) {
+      return "#65 (63P)";
+    }
+  }
+
+  return "";
+}
+
 function parseUtilityInvoiceFromOcrText(utilityType, text) {
   const normalizedText = toText(text);
   const flat = normalizedText.replace(/\s+/g, " ").trim();
   const utility = toUpper(utilityType) === "PPWS" ? "PPWS" : "EDC";
   const detectedCampus = detectCampusFromUtilityInvoiceText(normalizedText);
+  const detectedLocation = detectUtilityInvoiceLocationDetail(normalizedText, detectedCampus);
   if (utility === "PPWS") {
     const ppws = parsePpwsInvoiceFields(normalizedText);
     const warnings = [];
@@ -3879,6 +3954,7 @@ function parseUtilityInvoiceFromOcrText(utilityType, text) {
       invoiceDate: ppws.invoiceDate,
       billingMonth: ppws.billingMonth,
       campus: detectedCampus,
+      location: detectedLocation,
       rawText: normalizedText,
       warnings,
     };
@@ -3897,6 +3973,7 @@ function parseUtilityInvoiceFromOcrText(utilityType, text) {
     invoiceDate: edc.invoiceDate,
     billingMonth: edc.billingMonth,
     campus: detectedCampus,
+    location: detectedLocation,
     rawText: normalizedText,
     warnings,
   };

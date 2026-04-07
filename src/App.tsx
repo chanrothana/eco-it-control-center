@@ -1087,6 +1087,8 @@ function formatRielAmount(value: unknown) {
   return `${formatNumericInputDisplay(String(amount))} Riel`;
 }
 
+const UTILITY_C22_SITE_OPTIONS = ["#63 (32P)", "#65 (63P)"] as const;
+
 function normalizeInventoryApprovalCampusValue(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -8905,6 +8907,7 @@ export default function App() {
   const [utilityInvoiceForm, setUtilityInvoiceForm] = useState({
     utilityType: "EDC" as "EDC" | "PPWS",
     campus: CAMPUS_LIST[0],
+    location: "",
     billingMonth: toYmd(new Date()).slice(0, 7),
     invoiceDate: toYmd(new Date()),
     usage: "",
@@ -16498,6 +16501,7 @@ export default function App() {
           billingMonth?: string;
           providerName?: string;
           campus?: string;
+          location?: string;
           rawText?: string;
           warnings?: string[];
         };
@@ -16528,6 +16532,12 @@ export default function App() {
         billingMonth: derivedEdcBillingMonth || extracted.billingMonth || prev.billingMonth,
         providerName: extracted.providerName || prev.providerName,
         campus: extracted.campus || prev.campus,
+        location:
+          extracted.location !== undefined
+            ? extracted.location
+            : extracted.campus && extracted.campus !== prev.campus
+              ? ""
+              : prev.location,
         note:
           prev.note ||
           (Array.isArray(extracted.warnings) && extracted.warnings.length
@@ -16562,6 +16572,7 @@ export default function App() {
       id: Date.now(),
       utilityType: utilityInvoiceForm.utilityType,
       campus: utilityInvoiceForm.campus,
+      location: utilityInvoiceForm.location.trim(),
       unit: utilityInvoiceForm.utilityType === "PPWS" ? "m3" : "kWh",
       invoiceDate: utilityInvoiceForm.invoiceDate,
       billingMonth: utilityInvoiceForm.billingMonth,
@@ -16584,6 +16595,7 @@ export default function App() {
     setUtilityInvoiceForm({
       utilityType: utilityInvoiceForm.utilityType,
       campus: utilityInvoiceForm.campus,
+      location: utilityInvoiceForm.location,
       billingMonth: toYmd(new Date()).slice(0, 7),
       invoiceDate: toYmd(new Date()),
       usage: "",
@@ -46177,10 +46189,40 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select className="input" value={utilityInvoiceForm.campus} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, campus: e.target.value }))}>
+                    <select
+                      className="input"
+                      value={utilityInvoiceForm.campus}
+                      onChange={(e) =>
+                        setUtilityInvoiceForm((prev) => ({
+                          ...prev,
+                          campus: e.target.value,
+                          location: e.target.value === "Chaktomuk Campus (C2.2)" ? prev.location : "",
+                        }))
+                      }
+                    >
                       {campusOptions.map((campus) => <option key={`utility-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
                     </select>
                   </label>
+                  {utilityInvoiceForm.campus === "Chaktomuk Campus (C2.2)" ? (
+                    <label className="field">
+                      <span>Site</span>
+                      <select
+                        className="input"
+                        value={utilityInvoiceForm.location}
+                        onChange={(e) =>
+                          setUtilityInvoiceForm((prev) => ({
+                            ...prev,
+                            location: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Select site</option>
+                        {UTILITY_C22_SITE_OPTIONS.map((option) => (
+                          <option key={`utility-c22-site-${option}`} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <label className="field">
                     <span>Billing Month</span>
                     <input type="month" className="input" value={utilityInvoiceForm.billingMonth} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, billingMonth: e.target.value }))} />
@@ -46290,7 +46332,7 @@ export default function App() {
                           <td>{formatDate(row.invoiceDate)}</td>
                           <td>{row.billingMonth || "-"}</td>
                           <td>{row.utilityType || "-"}</td>
-                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
+                          <td>{row.location ? `${rentalPrinterCampusLabel(row.campus)} • ${row.location}` : rentalPrinterCampusLabel(row.campus)}</td>
                           <td>{row.usage} {row.unit}</td>
                           <td>{formatRielAmount(row.amount)}</td>
                           <td>{row.invoiceNumber || "-"}</td>
