@@ -7324,6 +7324,7 @@ export default function App() {
   const [utilitiesView, setUtilitiesView] = useState<
     "entry" | "history" | "monthly" | "yearly"
   >("entry");
+  const [utilityHistoryMonthFilter, setUtilityHistoryMonthFilter] = useState("ALL");
   const [printerView, setPrinterView] = useState<"setup" | "entry" | "report" | "graph">("entry");
   const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("user");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
@@ -9531,6 +9532,8 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [authSessionLogs, setAuthSessionLogs] = useState<AuthSessionLog[]>([]);
   const [backupImportKey, setBackupImportKey] = useState(0);
+  const [backupSessionMobileLimit, setBackupSessionMobileLimit] = useState(8);
+  const [backupAuditMobileLimit, setBackupAuditMobileLimit] = useState(8);
   const [userForm, setUserForm] = useState({
     fullName: "",
     position: "",
@@ -9582,6 +9585,14 @@ export default function App() {
     assetSubviewAccess: "both" as AssetSubviewAccess,
     menuAccess: defaultMenuAccessFor("Viewer", DEFAULT_VIEWER_MODULES, "both"),
   });
+  const visibleBackupSessionLogs = useMemo(
+    () => (isPhoneView ? authSessionLogs.slice(0, backupSessionMobileLimit) : authSessionLogs),
+    [authSessionLogs, backupSessionMobileLimit, isPhoneView]
+  );
+  const visibleBackupAuditLogs = useMemo(
+    () => (isPhoneView ? auditLogs.slice(0, backupAuditMobileLimit) : auditLogs),
+    [auditLogs, backupAuditMobileLimit, isPhoneView]
+  );
   const [editingAuthUserId, setEditingAuthUserId] = useState<number | null>(null);
   const [scheduleAlertModal, setScheduleAlertModal] = useState<null | "overdue" | "upcoming" | "scheduled" | "selected">(null);
   const [scheduleAlertItemFilter, setScheduleAlertItemFilter] = useState("ALL");
@@ -9825,6 +9836,13 @@ export default function App() {
   useEffect(() => {
     if (!isPhoneView) setReportMobileFiltersOpen(false);
   }, [isPhoneView]);
+
+  useEffect(() => {
+    if (tab === "setup" && setupView === "backup") {
+      setBackupSessionMobileLimit(8);
+      setBackupAuditMobileLimit(8);
+    }
+  }, [tab, setupView]);
   useEffect(() => {
     if (!quickOutEcoPickerOpen) return;
     const handleOutsideTap = (event: MouseEvent | TouchEvent) => {
@@ -10284,6 +10302,31 @@ export default function App() {
     }
     return { ppwsUsage, edcUsage, totalAmount };
   }, [utilityCurrentMonthKey, utilityReadings]);
+  const utilityHistoryMonthOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          utilityReadings
+            .map((row) => String(row.billingMonth || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => b.localeCompare(a)),
+    [utilityReadings]
+  );
+  const filteredUtilityReadings = useMemo(
+    () =>
+      utilityHistoryMonthFilter === "ALL"
+        ? utilityReadings
+        : utilityReadings.filter(
+            (row) => String(row.billingMonth || "").trim() === utilityHistoryMonthFilter
+          ),
+    [utilityHistoryMonthFilter, utilityReadings]
+  );
+  useEffect(() => {
+    if (utilityHistoryMonthFilter === "ALL") return;
+    if (utilityHistoryMonthOptions.includes(utilityHistoryMonthFilter)) return;
+    setUtilityHistoryMonthFilter("ALL");
+  }, [utilityHistoryMonthFilter, utilityHistoryMonthOptions]);
   const utilityCampusSummary = useMemo(() => {
     const map = new Map<string, { ppws: number; edc: number; amount: number }>();
     for (const row of utilityReadings) {
@@ -46197,17 +46240,19 @@ export default function App() {
 
         {tab === "utilities" && (
           <section className="panel">
-            <div className="tabs">
-              <button className={`tab ${utilitiesView === "entry" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("entry")}>Monthly Entry</button>
-              <button className={`tab ${utilitiesView === "history" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("history")}>History</button>
-              <button className={`tab ${utilitiesView === "monthly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("monthly")}>Monthly Comparison</button>
-              <button className={`tab ${utilitiesView === "yearly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("yearly")}>Yearly Report</button>
-            </div>
+            {!isPhoneView ? (
+              <div className="tabs">
+                <button className={`tab ${utilitiesView === "entry" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("entry")}>Monthly Entry</button>
+                <button className={`tab ${utilitiesView === "history" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("history")}>History</button>
+                <button className={`tab ${utilitiesView === "monthly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("monthly")}>Monthly Comparison</button>
+                <button className={`tab ${utilitiesView === "yearly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("yearly")}>Yearly Report</button>
+              </div>
+            ) : null}
             {utilityMessage ? <p className="tiny">{utilityMessage}</p> : null}
 
             {utilitiesView === "entry" && (
               <>
-                <h2>Utility Monthly Entry</h2>
+                <h2 className="utility-page-title">Utility Monthly Entry</h2>
                 <div
                   className="form-grid inventory-item-grid utility-invoice-entry-grid"
                   style={isPhoneView ? undefined : { gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
@@ -46313,7 +46358,7 @@ export default function App() {
                     <input className="input" value={utilityInvoiceForm.providerName} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, providerName: e.target.value }))} />
                   </label>
                   <label className="field">
-                    <span>Invoice Upload (Upload invoice image for auto fill.)</span>
+                    <span>{isPhoneView ? "Invoice Upload" : "Invoice Upload (Upload invoice image for auto fill.)"}</span>
                     <div className="utility-invoice-upload-row">
                       <input type="file" accept="image/*" className="input utility-invoice-upload-input" onChange={onUtilityInvoicePhotoFile} />
                       {utilityInvoiceForm.photo ? (
@@ -46339,7 +46384,7 @@ export default function App() {
                     <textarea className="input" value={utilityInvoiceForm.note} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, note: e.target.value }))} />
                   </label>
                 </div>
-                <div className="row-actions">
+                <div className="row-actions utility-entry-actions">
                   <button
                     className="tab"
                     disabled={utilityAutofillBusy || !utilityInvoiceForm.photo}
@@ -46354,72 +46399,144 @@ export default function App() {
 
             {utilitiesView === "history" && (
               <>
-                <h2>Utility Invoice History</h2>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Invoice Date</th>
-                        <th>Billing Month</th>
-                        <th>Utility</th>
-                        <th>{t.campus}</th>
-                        <th>Usage</th>
-                        <th>Amount</th>
-                        <th>Invoice No.</th>
-                        <th>Provider</th>
-                        <th>{t.actions}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {utilityReadings.length ? utilityReadings.map((row) => (
-                        <tr key={`utility-history-row-${row.id}`}>
-                          <td>{formatDate(row.invoiceDate)}</td>
-                          <td>{row.billingMonth || "-"}</td>
-                          <td>{row.utilityType || "-"}</td>
-                          <td>{row.location ? `${rentalPrinterCampusLabel(row.campus)} • ${row.location}` : rentalPrinterCampusLabel(row.campus)}</td>
-                          <td>{row.usage} {row.unit}</td>
-                          <td>{formatRielAmount(row.amount)}</td>
-                          <td>{row.invoiceNumber || "-"}</td>
-                          <td>{row.providerName || "-"}</td>
-                          <td><button className="danger-icon-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>X</button></td>
-                        </tr>
-                      )) : <tr><td colSpan={9}>No utility invoice history yet.</td></tr>}
-                    </tbody>
-                  </table>
+                <h2 className="utility-page-title">Utility Invoice History</h2>
+                <div className="utility-history-filter-row">
+                  <label className="field">
+                    <span>Billing Month</span>
+                    <select
+                      className="input"
+                      value={utilityHistoryMonthFilter}
+                      onChange={(e) => setUtilityHistoryMonthFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Months</option>
+                      {utilityHistoryMonthOptions.map((month) => {
+                        const monthDate = new Date(`${month}-01T00:00:00`);
+                        const label = Number.isNaN(monthDate.getTime())
+                          ? month
+                          : monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                        return (
+                          <option key={`utility-history-month-${month}`} value={month}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
                 </div>
+                {isPhoneView ? (
+                  filteredUtilityReadings.length ? (
+                    <div className="utility-history-mobile-list">
+                      {filteredUtilityReadings.map((row) => (
+                        <article className="utility-history-mobile-card" key={`utility-history-mobile-${row.id}`}>
+                          <div className="utility-history-mobile-head">
+                            <div className="utility-history-mobile-title">
+                              <strong>{row.utilityType || "-"}</strong>
+                              <span>{formatDate(row.invoiceDate)}</span>
+                            </div>
+                            <button className="danger-icon-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>X</button>
+                          </div>
+                          <div className="utility-history-mobile-grid">
+                            <div><small>Billing Month</small><strong>{row.billingMonth || "-"}</strong></div>
+                            <div><small>{t.campus}</small><strong>{row.location ? `${rentalPrinterCampusLabel(row.campus)} • ${row.location}` : rentalPrinterCampusLabel(row.campus)}</strong></div>
+                            <div><small>Usage</small><strong>{row.usage} {row.unit}</strong></div>
+                            <div><small>Amount</small><strong>{formatRielAmount(row.amount)}</strong></div>
+                            <div><small>Invoice No.</small><strong>{row.invoiceNumber || "-"}</strong></div>
+                            <div><small>Provider</small><strong>{row.providerName || "-"}</strong></div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="utility-history-mobile-empty">No utility invoice history yet.</div>
+                  )
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Invoice Date</th>
+                          <th>Billing Month</th>
+                          <th>Utility</th>
+                          <th>{t.campus}</th>
+                          <th>Usage</th>
+                          <th>Amount</th>
+                          <th>Invoice No.</th>
+                          <th>Provider</th>
+                          <th>{t.actions}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredUtilityReadings.length ? filteredUtilityReadings.map((row) => (
+                          <tr key={`utility-history-row-${row.id}`}>
+                            <td>{formatDate(row.invoiceDate)}</td>
+                            <td>{row.billingMonth || "-"}</td>
+                            <td>{row.utilityType || "-"}</td>
+                            <td>{row.location ? `${rentalPrinterCampusLabel(row.campus)} • ${row.location}` : rentalPrinterCampusLabel(row.campus)}</td>
+                            <td>{row.usage} {row.unit}</td>
+                            <td>{formatRielAmount(row.amount)}</td>
+                            <td>{row.invoiceNumber || "-"}</td>
+                            <td>{row.providerName || "-"}</td>
+                            <td><button className="danger-icon-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>X</button></td>
+                          </tr>
+                        )) : <tr><td colSpan={9}>No utility invoice history yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </>
             )}
 
             {utilitiesView === "monthly" && (
               <>
-                <h2>Monthly Comparison</h2>
+                <h2 className="utility-page-title">Monthly Comparison</h2>
                 <div className={`stats-grid ${isPhoneView ? "stats-grid-phone" : ""}`} style={{ marginBottom: 12 }}>
                   <article className="stat-card"><div className="stat-label">This Month EDC</div><div className="stat-value">{utilityUsageSummary.edcUsage.toFixed(2)} kWh</div></article>
                   <article className="stat-card"><div className="stat-label">This Month PPWS</div><div className="stat-value">{utilityUsageSummary.ppwsUsage.toFixed(2)} m3</div></article>
                   <article className="stat-card"><div className="stat-label">This Month Cost</div><div className="stat-value">{formatRielAmount(utilityUsageSummary.totalAmount)}</div></article>
                 </div>
-                <div className="table-wrap" style={{ marginBottom: 12 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Month</th>
-                        <th>EDC Usage (kWh)</th>
-                        <th>PPWS Usage (m3)</th>
-                        <th>Total Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {utilityMonthlyComparison.length ? utilityMonthlyComparison.map((row) => (
-                        <tr key={`utility-month-${row.month}`}>
-                          <td>{row.month}</td>
-                          <td>{row.edcUsage.toFixed(2)}</td>
-                          <td>{row.ppwsUsage.toFixed(2)}</td>
-                          <td>{formatRielAmount(row.amount)}</td>
+                {isPhoneView ? (
+                  utilityMonthlyComparison.length ? (
+                    <div className="utility-monthly-mobile-list" style={{ marginBottom: 12 }}>
+                      {utilityMonthlyComparison.map((row) => (
+                        <article className="utility-monthly-mobile-card" key={`utility-month-mobile-${row.month}`}>
+                          <div className="utility-monthly-mobile-head">
+                            <strong>{row.month}</strong>
+                          </div>
+                          <div className="utility-monthly-mobile-grid">
+                            <div><small>EDC Usage</small><strong>{row.edcUsage.toFixed(2)} kWh</strong></div>
+                            <div><small>PPWS Usage</small><strong>{row.ppwsUsage.toFixed(2)} m3</strong></div>
+                            <div><small>Total Amount</small><strong>{formatRielAmount(row.amount)}</strong></div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="utility-history-mobile-empty" style={{ marginBottom: 12 }}>No monthly utility data yet.</div>
+                  )
+                ) : (
+                  <div className="table-wrap" style={{ marginBottom: 12 }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th>EDC Usage (kWh)</th>
+                          <th>PPWS Usage (m3)</th>
+                          <th>Total Amount</th>
                         </tr>
-                      )) : <tr><td colSpan={4}>No monthly utility data yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {utilityMonthlyComparison.length ? utilityMonthlyComparison.map((row) => (
+                          <tr key={`utility-month-${row.month}`}>
+                            <td>{row.month}</td>
+                            <td>{row.edcUsage.toFixed(2)}</td>
+                            <td>{row.ppwsUsage.toFixed(2)}</td>
+                            <td>{formatRielAmount(row.amount)}</td>
+                          </tr>
+                        )) : <tr><td colSpan={4}>No monthly utility data yet.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div className="utility-chart-list">
                   {utilityMonthlyComparison.map((row) => {
                     const maxUsage = Math.max(
@@ -46446,51 +46563,97 @@ export default function App() {
 
             {utilitiesView === "yearly" && (
               <>
-                <h2>Yearly Utility Report</h2>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Year</th>
-                        <th>EDC Usage (kWh)</th>
-                        <th>PPWS Usage (m3)</th>
-                        <th>Total Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {utilityYearlySummary.length ? utilityYearlySummary.map((row) => (
-                        <tr key={`utility-year-summary-${row.year}`}>
-                          <td>{row.year}</td>
-                          <td>{row.edcUsage.toFixed(2)}</td>
-                          <td>{row.ppwsUsage.toFixed(2)}</td>
-                          <td>{formatRielAmount(row.amount)}</td>
-                        </tr>
-                      )) : <tr><td colSpan={4}>No yearly utility report data yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="table-wrap" style={{ marginTop: 12 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t.campus}</th>
-                        <th>EDC Usage (kWh)</th>
-                        <th>PPWS Usage (m3)</th>
-                        <th>Total Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {utilityCampusSummary.length ? utilityCampusSummary.map((row) => (
-                        <tr key={`utility-campus-summary-${row.campus}`}>
-                          <td>{rentalPrinterCampusLabel(row.campus)}</td>
-                          <td>{row.edc.toFixed(2)}</td>
-                          <td>{row.ppws.toFixed(2)}</td>
-                          <td>{formatRielAmount(row.amount)}</td>
-                        </tr>
-                      )) : <tr><td colSpan={4}>No campus utility report data yet.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                <h2 className="utility-page-title">Yearly Utility Report</h2>
+                {isPhoneView ? (
+                  <>
+                    <div className="utility-yearly-mobile-section-label">Year Summary</div>
+                    {utilityYearlySummary.length ? (
+                      <div className="utility-yearly-mobile-list">
+                        {utilityYearlySummary.map((row) => (
+                          <article className="utility-yearly-mobile-card" key={`utility-year-mobile-${row.year}`}>
+                            <div className="utility-yearly-mobile-head">
+                              <strong>{row.year}</strong>
+                            </div>
+                            <div className="utility-yearly-mobile-grid">
+                              <div className="utility-yearly-mobile-metric"><small>EDC Usage</small><strong>{row.edcUsage.toFixed(2)} kWh</strong></div>
+                              <div className="utility-yearly-mobile-metric"><small>PPWS Usage</small><strong>{row.ppwsUsage.toFixed(2)} m3</strong></div>
+                              <div className="utility-yearly-mobile-metric utility-yearly-mobile-metric-wide"><small>Total Amount</small><strong>{formatRielAmount(row.amount)}</strong></div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="utility-history-mobile-empty">No yearly utility report data yet.</div>
+                    )}
+                    <div style={{ height: 12 }} />
+                    <div className="utility-yearly-mobile-section-label">Campus Summary</div>
+                    {utilityCampusSummary.length ? (
+                      <div className="utility-yearly-mobile-list">
+                        {utilityCampusSummary.map((row) => (
+                          <article className="utility-yearly-mobile-card" key={`utility-campus-mobile-${row.campus}`}>
+                            <div className="utility-yearly-mobile-head">
+                              <strong>{rentalPrinterCampusLabel(row.campus)}</strong>
+                            </div>
+                            <div className="utility-yearly-mobile-grid">
+                              <div className="utility-yearly-mobile-metric"><small>EDC Usage</small><strong>{row.edc.toFixed(2)} kWh</strong></div>
+                              <div className="utility-yearly-mobile-metric"><small>PPWS Usage</small><strong>{row.ppws.toFixed(2)} m3</strong></div>
+                              <div className="utility-yearly-mobile-metric utility-yearly-mobile-metric-wide"><small>Total Amount</small><strong>{formatRielAmount(row.amount)}</strong></div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="utility-history-mobile-empty">No campus utility report data yet.</div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Year</th>
+                            <th>EDC Usage (kWh)</th>
+                            <th>PPWS Usage (m3)</th>
+                            <th>Total Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {utilityYearlySummary.length ? utilityYearlySummary.map((row) => (
+                            <tr key={`utility-year-summary-${row.year}`}>
+                              <td>{row.year}</td>
+                              <td>{row.edcUsage.toFixed(2)}</td>
+                              <td>{row.ppwsUsage.toFixed(2)}</td>
+                              <td>{formatRielAmount(row.amount)}</td>
+                            </tr>
+                          )) : <tr><td colSpan={4}>No yearly utility report data yet.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="table-wrap" style={{ marginTop: 12 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{t.campus}</th>
+                            <th>EDC Usage (kWh)</th>
+                            <th>PPWS Usage (m3)</th>
+                            <th>Total Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {utilityCampusSummary.length ? utilityCampusSummary.map((row) => (
+                            <tr key={`utility-campus-summary-${row.campus}`}>
+                              <td>{rentalPrinterCampusLabel(row.campus)}</td>
+                              <td>{row.edc.toFixed(2)}</td>
+                              <td>{row.ppws.toFixed(2)}</td>
+                              <td>{formatRielAmount(row.amount)}</td>
+                            </tr>
+                          )) : <tr><td colSpan={4}>No campus utility report data yet.</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </section>
@@ -49388,7 +49551,7 @@ export default function App() {
 
         {(tab === "setup" || tab === "vault") && (
           <>
-          {tab === "setup" && (
+          {tab === "setup" && !isPhoneView && (
           <section className="panel">
             <div className="row-actions setup-tabs-row">
               {canAccessMenu("setup.campus", "setup") ? (
@@ -49470,21 +49633,17 @@ export default function App() {
                 </button>
             </div>
             {setupMessage ? <p className="tiny">{setupMessage}</p> : null}
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.campusCode}</th>
-                    <th>{t.campusName}</th>
-                    <th>{t.edit}</th>
-                    <th>{t.save}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {campusOptions.map((campus) => (
-                    <tr key={campus}>
-                      <td><strong>{CAMPUS_CODE[campus] || "CX"}</strong></td>
-                      <td>
+            {isPhoneView ? (
+              <div className="setup-mobile-list">
+                {campusOptions.map((campus) => (
+                  <article className="setup-mobile-card" key={`campus-mobile-${campus}`}>
+                    <div className="setup-mobile-head">
+                      <strong>{CAMPUS_CODE[campus] || "CX"}</strong>
+                      <span>{campus}</span>
+                    </div>
+                    <div className="setup-mobile-grid">
+                      <div className="setup-mobile-wide">
+                        <small>{t.campusName}</small>
                         <input
                           className="input"
                           value={campusDraftNames[campus] || ""}
@@ -49495,28 +49654,75 @@ export default function App() {
                             }))
                           }
                         />
-                      </td>
-                      <td>
-                        <button
-                          className="tab"
-                          onClick={() => {
-                            setCampusEditCode(CAMPUS_CODE[campus] || "C1");
-                            setCampusEditName(campusDraftNames[campus] || campus);
-                          }}
-                        >
-                          {t.edit}
-                        </button>
-                      </td>
-                      <td>
-                        <button className="btn-primary" disabled={!isAdmin} onClick={() => saveCampusNameByRow(campus)}>
-                          Save
-                        </button>
-                      </td>
+                      </div>
+                    </div>
+                    <div className="setup-mobile-actions">
+                      <button
+                        className="btn-icon-edit"
+                        onClick={() => {
+                          setCampusEditCode(CAMPUS_CODE[campus] || "C1");
+                          setCampusEditName(campusDraftNames[campus] || campus);
+                        }}
+                        title={t.edit}
+                      >
+                        ✎
+                      </button>
+                      <button className="btn-primary btn-small" disabled={!isAdmin} onClick={() => saveCampusNameByRow(campus)}>
+                        Save
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.campusCode}</th>
+                      <th>{t.campusName}</th>
+                      <th>{t.edit}</th>
+                      <th>{t.save}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {campusOptions.map((campus) => (
+                      <tr key={campus}>
+                        <td><strong>{CAMPUS_CODE[campus] || "CX"}</strong></td>
+                        <td>
+                          <input
+                            className="input"
+                            value={campusDraftNames[campus] || ""}
+                            onChange={(e) =>
+                              setCampusDraftNames((prev) => ({
+                                ...prev,
+                                [campus]: e.target.value,
+                              }))
+                            }
+                          />
+                        </td>
+                        <td>
+                          <button
+                            className="tab"
+                            onClick={() => {
+                              setCampusEditCode(CAMPUS_CODE[campus] || "C1");
+                              setCampusEditName(campusDraftNames[campus] || campus);
+                            }}
+                          >
+                            {t.edit}
+                          </button>
+                        </td>
+                        <td>
+                          <button className="btn-primary" disabled={!isAdmin} onClick={() => saveCampusNameByRow(campus)}>
+                            Save
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <div className="panel" style={{ marginTop: 14 }}>
               <h3>Item Templates</h3>
               <div className="form-grid inventory-item-grid">
@@ -49807,36 +50013,60 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.staffFullName}</th>
-                    <th>{t.position}</th>
-                    <th>{t.email}</th>
-                    <th>{t.edit}</th>
-                    <th>{t.delete}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length ? (
-                    users.map((u) => (
-                      <tr key={u.id}>
-                        <td>{u.fullName}</td>
-                        <td>{u.position}</td>
-                        <td>{u.email || "-"}</td>
-                        <td><button className="tab" disabled={!isAdmin} onClick={() => startEditUser(u)}>{t.edit}</button></td>
-                        <td><button className="btn-danger" disabled={!isAdmin} onClick={() => deleteUser(u.id)}>X</button></td>
-                      </tr>
-                    ))
-                  ) : (
+            {isPhoneView ? (
+              users.length ? (
+                <div className="setup-mobile-list" style={{ marginTop: 12 }}>
+                  {users.map((u) => (
+                    <article className="setup-mobile-card" key={`user-mobile-${u.id}`}>
+                      <div className="setup-mobile-head">
+                        <strong>{u.fullName}</strong>
+                        <span>{u.position}</span>
+                      </div>
+                      <div className="setup-mobile-grid">
+                        <div className="setup-mobile-wide"><small>{t.email}</small><strong>{u.email || "-"}</strong></div>
+                      </div>
+                      <div className="setup-mobile-actions">
+                        <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startEditUser(u)} title={t.edit}>✎</button>
+                        <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteUser(u.id)} title={t.delete}>X</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>{t.noUsersYet}</div>
+              )
+            ) : (
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={5}>{t.noUsersYet}</td>
+                      <th>{t.staffFullName}</th>
+                      <th>{t.position}</th>
+                      <th>{t.email}</th>
+                      <th>{t.edit}</th>
+                      <th>{t.delete}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {users.length ? (
+                      users.map((u) => (
+                        <tr key={u.id}>
+                          <td>{u.fullName}</td>
+                          <td>{u.position}</td>
+                          <td>{u.email || "-"}</td>
+                          <td><button className="tab" disabled={!isAdmin} onClick={() => startEditUser(u)}>{t.edit}</button></td>
+                          <td><button className="btn-danger" disabled={!isAdmin} onClick={() => deleteUser(u.id)}>X</button></td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5}>{t.noUsersYet}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
           )}
 
@@ -50090,85 +50320,122 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table className="permission-user-table">
-                <thead>
-                  <tr>
-                    <th>{t.usernameLabel}</th>
-                    <th>{t.displayName}</th>
-                    <th>{t.role}</th>
-                    <th>{t.accessCampus}</th>
-                    <th>Assets Tab Access</th>
-                    <th>Menu Access</th>
-                    <th>{t.edit}</th>
-                    <th>{lang === "km" ? "កំណត់ពាក្យសម្ងាត់ឡើងវិញ" : "Reset Password"}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {authAccounts.length ? (
-                    authAccounts.map((u) => {
-                      const rowRole = normalizeRole(u.role);
-                      const rowCampuses = normalizeRoleCampuses(rowRole, u.campuses);
-                      const rowAssetAccess = normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess);
-                      const rowMenuAccess = normalizeMenuAccess(
-                        rowRole,
-                        Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(rowRole, []),
-                        rowAssetAccess,
-                        (u as { menuAccess?: unknown }).menuAccess
-                      );
-                      const campusText =
-                        rowRole === "Super Admin"
-                          ? t.allCampuses
-                          : rowCampuses.length
-                            ? rowCampuses.map((campus) => CAMPUS_CODE[campus] || campus).join(", ")
-                            : "0 campuses";
-                      return (
-                        <tr key={`auth-perm-${u.id}`}>
-                          <td><strong>{u.username}</strong></td>
-                          <td>{u.displayName}</td>
-                          <td>{rowRole}</td>
-                          <td>{campusText}</td>
-                          <td>{rowAssetAccess === "list_only" ? "List Only" : "Register + List"}</td>
-                          <td>{`Set Menu Access (${countEnabledMenuChildren(rowMenuAccess)})`}</td>
-                          <td>
-                            <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditAuthAccount(u)}>
-                              {t.edit}
-                            </button>
-                          </td>
-                          <td>
-                            <button className="tab" disabled={!isAdmin || busy} onClick={() => resetAuthAccountPassword(u)}>
-                              {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
+            {isPhoneView ? (
+              authAccounts.length ? (
+                <div className="setup-mobile-list" style={{ marginTop: 12 }}>
+                  {authAccounts.map((u) => {
+                    const rowRole = normalizeRole(u.role);
+                    const rowCampuses = normalizeRoleCampuses(rowRole, u.campuses);
+                    const rowAssetAccess = normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess);
+                    const rowMenuAccess = normalizeMenuAccess(
+                      rowRole,
+                      Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(rowRole, []),
+                      rowAssetAccess,
+                      (u as { menuAccess?: unknown }).menuAccess
+                    );
+                    const campusText =
+                      rowRole === "Super Admin"
+                        ? t.allCampuses
+                        : rowCampuses.length
+                          ? rowCampuses.map((campus) => CAMPUS_CODE[campus] || campus).join(", ")
+                          : "0 campuses";
+                    return (
+                      <article className="setup-mobile-card" key={`auth-mobile-${u.id}`}>
+                        <div className="setup-mobile-head">
+                          <strong>{u.username}</strong>
+                          <span>{u.displayName}</span>
+                        </div>
+                        <div className="setup-mobile-grid">
+                          <div><small>{t.role}</small><strong>{rowRole}</strong></div>
+                          <div><small>{t.accessCampus}</small><strong>{campusText}</strong></div>
+                          <div><small>Assets Tab Access</small><strong>{rowAssetAccess === "list_only" ? "List Only" : "Register + List"}</strong></div>
+                          <div><small>Menu Access</small><strong>{countEnabledMenuChildren(rowMenuAccess)} selected</strong></div>
+                        </div>
+                        <div className="setup-mobile-action-row">
+                          <button className="btn-icon-edit" disabled={!isAdmin || busy} onClick={() => startEditAuthAccount(u)} title={t.edit}>✎</button>
+                          <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => resetAuthAccountPassword(u)}>
+                            {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>{t.noLoginUsersFound}</div>
+              )
+            ) : (
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table className="permission-user-table">
+                  <thead>
                     <tr>
-                      <td colSpan={8}>{t.noLoginUsersFound}</td>
+                      <th>{t.usernameLabel}</th>
+                      <th>{t.displayName}</th>
+                      <th>{t.role}</th>
+                      <th>{t.accessCampus}</th>
+                      <th>Assets Tab Access</th>
+                      <th>Menu Access</th>
+                      <th>{t.edit}</th>
+                      <th>{lang === "km" ? "កំណត់ពាក្យសម្ងាត់ឡើងវិញ" : "Reset Password"}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {authAccounts.length ? (
+                      authAccounts.map((u) => {
+                        const rowRole = normalizeRole(u.role);
+                        const rowCampuses = normalizeRoleCampuses(rowRole, u.campuses);
+                        const rowAssetAccess = normalizeAssetSubviewAccess((u as { assetSubviewAccess?: unknown }).assetSubviewAccess);
+                        const rowMenuAccess = normalizeMenuAccess(
+                          rowRole,
+                          Array.isArray(u.modules) && u.modules.length ? u.modules : normalizeModulesByRole(rowRole, []),
+                          rowAssetAccess,
+                          (u as { menuAccess?: unknown }).menuAccess
+                        );
+                        const campusText =
+                          rowRole === "Super Admin"
+                            ? t.allCampuses
+                            : rowCampuses.length
+                              ? rowCampuses.map((campus) => CAMPUS_CODE[campus] || campus).join(", ")
+                              : "0 campuses";
+                        return (
+                          <tr key={`auth-perm-${u.id}`}>
+                            <td><strong>{u.username}</strong></td>
+                            <td>{u.displayName}</td>
+                            <td>{rowRole}</td>
+                            <td>{campusText}</td>
+                            <td>{rowAssetAccess === "list_only" ? "List Only" : "Register + List"}</td>
+                            <td>{`Set Menu Access (${countEnabledMenuChildren(rowMenuAccess)})`}</td>
+                            <td>
+                              <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditAuthAccount(u)}>
+                                {t.edit}
+                              </button>
+                            </td>
+                            <td>
+                              <button className="tab" disabled={!isAdmin || busy} onClick={() => resetAuthAccountPassword(u)}>
+                                {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8}>{t.noLoginUsersFound}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <article className="panel" style={{ marginTop: 12 }}>
               <div className="panel-row">
                 <h3 className="section-title">{lang === "km" ? "ខ្សែអនុម័តសំណើរចេញស្តុក" : "Stock Approval Line"}</h3>
                 <span className="tiny">{lang === "km" ? "កំណត់អ្នកគ្រប់គ្រងសម្រាប់បុគ្គលិកនីមួយៗ (Super Admin ប៉ុណ្ណោះ)" : "Assign manager approvers per staff account (Super Admin only)"}</span>
               </div>
-              <div className="table-wrap">
-                <table className="permission-user-table">
-                  <thead>
-                    <tr>
-                      <th>{lang === "km" ? "គណនីបុគ្គលិក" : "Staff Account"}</th>
-                      <th>{t.accessCampus}</th>
-                      <th>{lang === "km" ? "អ្នកអនុម័ត (Manager)" : "Approver Managers"}</th>
-                      <th>{lang === "km" ? "សកម្មភាព" : "Actions"}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {approvalRequesterAccounts.length ? (
-                      approvalRequesterAccounts.map((requester) => {
+              {isPhoneView ? (
+                approvalRequesterAccounts.length ? (
+                  <div className="setup-mobile-list">
+                    {approvalRequesterAccounts.map((requester) => {
                         const requesterRole = normalizeRole(requester.role);
                         const requesterCampuses = normalizeRoleCampuses(requesterRole, requester.campuses);
                         const requesterKey = String(requester.username || "").trim().toLowerCase();
@@ -50190,8 +50457,8 @@ export default function App() {
                           : (Array.isArray(routeEntry.approvers) ? routeEntry.approvers : []);
                         const candidateManagers = getApproverCandidatesForCampus(selectedCampus);
                         return (
-                          <tr key={`approval-routing-${requester.id}`}>
-                            <td>
+                          <article className="setup-mobile-card" key={`approval-routing-mobile-${requester.id}`}>
+                            <div className="setup-mobile-head">
                               {isEditingRow ? (
                                 <>
                                   <select
@@ -50214,11 +50481,13 @@ export default function App() {
                               ) : (
                                 <>
                                   <strong>{requester.username}</strong>
-                                  <div className="tiny">{requester.displayName}</div>
+                                  <span>{requester.displayName}</span>
                                 </>
                               )}
-                            </td>
-                            <td>
+                            </div>
+                            <div className="setup-mobile-grid">
+                              <div className="setup-mobile-wide">
+                                <small>{t.accessCampus}</small>
                               {isEditingRow ? (
                                 <select
                                   className="input"
@@ -50233,10 +50502,11 @@ export default function App() {
                                   ))}
                                 </select>
                               ) : (
-                                requesterCampusText
+                                <strong>{requesterCampusText}</strong>
                               )}
-                            </td>
-                            <td>
+                              </div>
+                              <div className="setup-mobile-wide">
+                                <small>{lang === "km" ? "អ្នកអនុម័ត (Manager)" : "Approver Managers"}</small>
                               {candidateManagers.length ? (
                                 <div className="approval-routing-list permission-scroll-box permission-scroll-box-sm" style={{ minWidth: 260 }}>
                                   {candidateManagers.map((manager) => {
@@ -50261,8 +50531,9 @@ export default function App() {
                               ) : (
                                 <span className="tiny">{lang === "km" ? "មិនមាន Manager ត្រូវ Campus នេះ" : "No matching manager for this campus"}</span>
                               )}
-                            </td>
-                            <td>
+                              </div>
+                            </div>
+                            <div className="setup-mobile-action-row">
                               {isSuperAdmin ? (
                                 <div className="row-actions">
                                   {isEditingRow ? (
@@ -50306,18 +50577,178 @@ export default function App() {
                               ) : (
                                 <span className="tiny">{t.readOnly}</span>
                               )}
-                            </td>
-                          </tr>
+                            </div>
+                          </article>
                         );
-                      })
-                    ) : (
+                      })}
+                  </div>
+                ) : (
+                  <div className="utility-history-mobile-empty">{lang === "km" ? "មិនមានគណនីបុគ្គលិក" : "No staff accounts found."}</div>
+                )
+              ) : (
+                <div className="table-wrap">
+                  <table className="permission-user-table">
+                    <thead>
                       <tr>
-                        <td colSpan={4}>{lang === "km" ? "មិនមានគណនីបុគ្គលិក" : "No staff accounts found."}</td>
+                        <th>{lang === "km" ? "គណនីបុគ្គលិក" : "Staff Account"}</th>
+                        <th>{t.accessCampus}</th>
+                        <th>{lang === "km" ? "អ្នកអនុម័ត (Manager)" : "Approver Managers"}</th>
+                        <th>{lang === "km" ? "សកម្មភាព" : "Actions"}</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {approvalRequesterAccounts.length ? (
+                        approvalRequesterAccounts.map((requester) => {
+                          const requesterRole = normalizeRole(requester.role);
+                          const requesterCampuses = normalizeRoleCampuses(requesterRole, requester.campuses);
+                          const requesterKey = String(requester.username || "").trim().toLowerCase();
+                          const routeEntry = inventoryApprovalRoutingMap[requesterKey] || { campus: "", approvers: [] };
+                          const isEditingRow = inventoryApprovalRoutingEditingRequester === requesterKey;
+                          const activeDraft = isEditingRow ? inventoryApprovalRoutingDraft : null;
+                          const selectedRequesterKey = activeDraft?.requester || requesterKey;
+                          const selectedRequesterAccount = approvalRequesterByUsername.get(selectedRequesterKey) || requester;
+                          const selectedRequesterCampuses = normalizeRoleCampuses(
+                            normalizeRole(selectedRequesterAccount.role),
+                            selectedRequesterAccount.campuses
+                          );
+                          const selectedCampus = isEditingRow
+                            ? (activeDraft?.campus || selectedRequesterCampuses[0] || "")
+                            : (normalizeInventoryApprovalCampusValue(routeEntry.campus) || requesterCampuses[0] || "");
+                          const requesterCampusText = selectedCampus ? (CAMPUS_CODE[selectedCampus] || selectedCampus) : "-";
+                          const selectedApprovers = isEditingRow
+                            ? (activeDraft?.approvers || [])
+                            : (Array.isArray(routeEntry.approvers) ? routeEntry.approvers : []);
+                          const candidateManagers = getApproverCandidatesForCampus(selectedCampus);
+                          return (
+                            <tr key={`approval-routing-${requester.id}`}>
+                              <td>
+                                {isEditingRow ? (
+                                  <>
+                                    <select
+                                      className="input"
+                                      disabled={!isSuperAdmin || busy}
+                                      value={selectedRequesterKey}
+                                      onChange={(e) => updateInventoryApprovalRoutingDraftRequester(e.target.value)}
+                                    >
+                                      {approvalRequesterAccounts.map((option) => {
+                                        const optionKey = String(option.username || "").trim().toLowerCase();
+                                        return (
+                                          <option key={`approval-requester-${option.id}`} value={optionKey}>
+                                            {option.username}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                    <div className="tiny" style={{ marginTop: 6 }}>{selectedRequesterAccount.displayName}</div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <strong>{requester.username}</strong>
+                                    <div className="tiny">{requester.displayName}</div>
+                                  </>
+                                )}
+                              </td>
+                              <td>
+                                {isEditingRow ? (
+                                  <select
+                                    className="input"
+                                    disabled={!isSuperAdmin || busy}
+                                    value={selectedCampus}
+                                    onChange={(e) => updateInventoryApprovalRoutingDraftCampus(e.target.value)}
+                                  >
+                                    {selectedRequesterCampuses.map((campus) => (
+                                      <option key={`approval-campus-${requester.id}-${campus}`} value={campus}>
+                                        {campusLabel(campus)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  requesterCampusText
+                                )}
+                              </td>
+                              <td>
+                                {candidateManagers.length ? (
+                                  <div className="approval-routing-list permission-scroll-box permission-scroll-box-sm" style={{ minWidth: 260 }}>
+                                    {candidateManagers.map((manager) => {
+                                      const managerKey = String(manager.username || "").trim().toLowerCase();
+                                      return (
+                                        <label key={`approval-route-${requesterKey}-${managerKey}`} className="filter-menu-item">
+                                          <input
+                                            type="checkbox"
+                                            disabled={!isSuperAdmin || busy || !isEditingRow}
+                                            checked={selectedApprovers.includes(managerKey)}
+                                            onChange={(e) => {
+                                              toggleInventoryApprovalRoutingDraft(managerKey, e.target.checked);
+                                            }}
+                                          />
+                                          <span>
+                                            {manager.displayName} ({manager.username})
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <span className="tiny">{lang === "km" ? "មិនមាន Manager ត្រូវ Campus នេះ" : "No matching manager for this campus"}</span>
+                                )}
+                              </td>
+                              <td>
+                                {isSuperAdmin ? (
+                                  <div className="row-actions">
+                                    {isEditingRow ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="btn-primary btn-small"
+                                          disabled={busy}
+                                          onClick={() => void saveInventoryApprovalRoutingRow()}
+                                        >
+                                          {lang === "km" ? "អាប់ដេត" : "Update"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="tab btn-small"
+                                          disabled={busy}
+                                          onClick={cancelEditInventoryApprovalRouting}
+                                        >
+                                          {lang === "km" ? "បោះបង់" : "Cancel"}
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="tab btn-small"
+                                        disabled={busy}
+                                        onClick={() => startEditInventoryApprovalRouting(requesterKey)}
+                                      >
+                                        {lang === "km" ? "កែប្រែ" : "Edit"}
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="btn-danger btn-small"
+                                      disabled={busy}
+                                      onClick={() => void clearInventoryApprovalRoutingRow(requesterKey)}
+                                    >
+                                      {lang === "km" ? "លុប" : "Delete"}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="tiny">{t.readOnly}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={4}>{lang === "km" ? "មិនមានគណនីបុគ្គលិក" : "No staff accounts found."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </article>
             <article className="panel" style={{ marginTop: 12 }}>
               <div className="panel-row">
@@ -50475,82 +50906,168 @@ export default function App() {
             </div>
             {setupMessage ? <p className="tiny" style={{ marginTop: 8 }}>{setupMessage}</p> : null}
 
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Login At</th>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>IP Address</th>
-                    <th>Device</th>
-                    <th>Last Seen</th>
-                    <th>Logout At</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {authSessionLogs.length ? (
-                    authSessionLogs.map((session) => (
-                      <tr key={`auth-session-${session.id}`}>
-                        <td>{formatDateTime(session.loginAt || "-")}</td>
-                        <td>
+            <article className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-row">
+                <h3 className="section-title">Login Sessions</h3>
+                <span className="tiny">Recent account access and device activity.</span>
+              </div>
+              {isPhoneView ? (
+                authSessionLogs.length ? (
+                  <div className="setup-mobile-list">
+                    {visibleBackupSessionLogs.map((session) => (
+                      <article className="setup-mobile-card" key={`auth-session-mobile-${session.id}`}>
+                        <div className="setup-mobile-head">
                           <strong>{session.displayName || session.username || "-"}</strong>
-                          <div className="tiny">{session.username || "-"}</div>
-                        </td>
-                        <td>{session.role || session.user?.role || "-"}</td>
-                        <td>{session.ipAddress || "-"}</td>
-                        <td title={session.userAgent || "-"}>
-                          {session.userAgent
-                            ? (session.userAgent.length > 80 ? `${session.userAgent.slice(0, 80)}...` : session.userAgent)
-                            : "-"}
-                        </td>
-                        <td>{formatDateTime(session.lastSeenAt || session.loginAt || "-")}</td>
-                        <td>{session.logoutAt ? formatDateTime(session.logoutAt) : "-"}</td>
-                        <td>{session.status === "active" ? "Active" : "Logged Out"}</td>
+                          <span>{session.username || "-"}</span>
+                        </div>
+                        <div className="setup-mobile-grid">
+                          <div><small>Login At</small><strong>{formatDateTime(session.loginAt || "-")}</strong></div>
+                          <div><small>Role</small><strong>{session.role || session.user?.role || "-"}</strong></div>
+                          <div><small>IP Address</small><strong>{session.ipAddress || "-"}</strong></div>
+                          <div><small>Status</small><strong>{session.status === "active" ? "Active" : "Logged Out"}</strong></div>
+                          <div><small>Last Seen</small><strong>{formatDateTime(session.lastSeenAt || session.loginAt || "-")}</strong></div>
+                          <div><small>Logout At</small><strong>{session.logoutAt ? formatDateTime(session.logoutAt) : "-"}</strong></div>
+                          <div className="setup-mobile-wide">
+                            <small>Device</small>
+                            <strong>
+                              {session.userAgent
+                                ? (session.userAgent.length > 120 ? `${session.userAgent.slice(0, 120)}...` : session.userAgent)
+                                : "-"}
+                            </strong>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                    {authSessionLogs.length > visibleBackupSessionLogs.length ? (
+                      <button
+                        type="button"
+                        className="tab btn-small"
+                        onClick={() => setBackupSessionMobileLimit((current) => current + 8)}
+                      >
+                        {lang === "km" ? "បង្ហាញបន្ថែម" : "Show more"}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="utility-history-mobile-empty">No login session records yet.</div>
+                )
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Login At</th>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>IP Address</th>
+                        <th>Device</th>
+                        <th>Last Seen</th>
+                        <th>Logout At</th>
+                        <th>Status</th>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={8}>No login session records yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {authSessionLogs.length ? (
+                        authSessionLogs.map((session) => (
+                          <tr key={`auth-session-${session.id}`}>
+                            <td>{formatDateTime(session.loginAt || "-")}</td>
+                            <td>
+                              <strong>{session.displayName || session.username || "-"}</strong>
+                              <div className="tiny">{session.username || "-"}</div>
+                            </td>
+                            <td>{session.role || session.user?.role || "-"}</td>
+                            <td>{session.ipAddress || "-"}</td>
+                            <td title={session.userAgent || "-"}>
+                              {session.userAgent
+                                ? (session.userAgent.length > 80 ? `${session.userAgent.slice(0, 80)}...` : session.userAgent)
+                                : "-"}
+                            </td>
+                            <td>{formatDateTime(session.lastSeenAt || session.loginAt || "-")}</td>
+                            <td>{session.logoutAt ? formatDateTime(session.logoutAt) : "-"}</td>
+                            <td>{session.status === "active" ? "Active" : "Logged Out"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8}>No login session records yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </article>
 
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Action</th>
-                    <th>Entity</th>
-                    <th>Entity ID</th>
-                    <th>By</th>
-                    <th>Summary</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditLogs.length ? (
-                    auditLogs.map((log) => (
-                      <tr key={`audit-${log.id}`}>
-                        <td>{formatDateTime(log.date || "-")}</td>
-                        <td>{log.action || "-"}</td>
-                        <td>{log.entity || "-"}</td>
-                        <td><strong>{log.entityId || "-"}</strong></td>
-                        <td>{log.actor?.displayName || log.actor?.username || "-"}</td>
-                        <td>{log.summary || "-"}</td>
+            <article className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-row">
+                <h3 className="section-title">Audit Log</h3>
+                <span className="tiny">Track who changed what and when.</span>
+              </div>
+              {isPhoneView ? (
+                auditLogs.length ? (
+                  <div className="setup-mobile-list">
+                    {visibleBackupAuditLogs.map((log) => (
+                      <article className="setup-mobile-card" key={`audit-mobile-${log.id}`}>
+                        <div className="setup-mobile-head">
+                          <strong>{log.action || "-"}</strong>
+                          <span>{formatDateTime(log.date || "-")}</span>
+                        </div>
+                        <div className="setup-mobile-grid">
+                          <div><small>Entity</small><strong>{log.entity || "-"}</strong></div>
+                          <div><small>Entity ID</small><strong>{log.entityId || "-"}</strong></div>
+                          <div><small>By</small><strong>{log.actor?.displayName || log.actor?.username || "-"}</strong></div>
+                          <div className="setup-mobile-wide"><small>Summary</small><strong>{log.summary || "-"}</strong></div>
+                        </div>
+                      </article>
+                    ))}
+                    {auditLogs.length > visibleBackupAuditLogs.length ? (
+                      <button
+                        type="button"
+                        className="tab btn-small"
+                        onClick={() => setBackupAuditMobileLimit((current) => current + 8)}
+                      >
+                        {lang === "km" ? "បង្ហាញបន្ថែម" : "Show more"}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="utility-history-mobile-empty">No audit logs yet.</div>
+                )
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Action</th>
+                        <th>Entity</th>
+                        <th>Entity ID</th>
+                        <th>By</th>
+                        <th>Summary</th>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6}>No audit logs yet.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {auditLogs.length ? (
+                        auditLogs.map((log) => (
+                          <tr key={`audit-${log.id}`}>
+                            <td>{formatDateTime(log.date || "-")}</td>
+                            <td>{log.action || "-"}</td>
+                            <td>{log.entity || "-"}</td>
+                            <td><strong>{log.entityId || "-"}</strong></td>
+                            <td>{log.actor?.displayName || log.actor?.username || "-"}</td>
+                            <td>{log.summary || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6}>No audit logs yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </article>
           </section>
           )}
 
@@ -50635,24 +51152,22 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.category}</th>
-                    <th>{t.typeCode}</th>
-                    <th>{t.assetCategory}</th>
-                    <th>{t.assetTypeCode}</th>
-                    <th>Icon</th>
-                    <th>{t.itemName}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {itemSetupRows.map((row) => (
-                    <tr key={row.key}>
-                      <td>{row.category}</td>
-                      <td><strong>{row.code}</strong></td>
-                      <td>
+            {isPhoneView ? (
+              <div className="item-setup-mobile-list">
+                {itemSetupRows.map((row) => (
+                  <article className="item-setup-mobile-card" key={`item-setup-mobile-${row.key}`}>
+                    <div className="item-setup-mobile-head">
+                      <div className="item-setup-mobile-icon" aria-hidden={true}>
+                        {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
+                      </div>
+                      <div className="item-setup-mobile-title">
+                        <strong>{itemNames[row.key] || "-"}</strong>
+                        <span>{row.category} • {row.code}</span>
+                      </div>
+                    </div>
+                    <div className="item-setup-mobile-grid">
+                      <div>
+                        <small>{t.assetCategory}</small>
                         <select
                           className="input"
                           value={(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
@@ -50662,31 +51177,83 @@ export default function App() {
                           disabled={!isAdmin}
                         >
                           {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
-                            <option key={`row-asset-category-${row.key}-${opt.value}`} value={opt.value}>
+                            <option key={`row-asset-category-mobile-${row.key}-${opt.value}`} value={opt.value}>
                               {opt.label}
                             </option>
                           ))}
                         </select>
-                      </td>
-                      <td><strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong></td>
-                      <td>
-                        <span className="item-setup-icon" aria-hidden={true}>
-                          {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
-                        </span>
-                      </td>
-                      <td>
+                      </div>
+                      <div>
+                        <small>{t.assetTypeCode}</small>
+                        <strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong>
+                      </div>
+                      <div className="item-setup-mobile-wide">
+                        <small>{t.itemName}</small>
                         <input
                           className="input"
                           value={itemNames[row.key] || ""}
                           onChange={(e) => setItemNames((prev) => ({ ...prev, [row.key]: e.target.value }))}
                           disabled={!isAdmin}
                         />
-                      </td>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.category}</th>
+                      <th>{t.typeCode}</th>
+                      <th>{t.assetCategory}</th>
+                      <th>{t.assetTypeCode}</th>
+                      <th>Icon</th>
+                      <th>{t.itemName}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {itemSetupRows.map((row) => (
+                      <tr key={row.key}>
+                        <td>{row.category}</td>
+                        <td><strong>{row.code}</strong></td>
+                        <td>
+                          <select
+                            className="input"
+                            value={(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
+                            onChange={(e) =>
+                              setItemAssetCategories((prev) => ({ ...prev, [row.key]: e.target.value }))
+                            }
+                            disabled={!isAdmin}
+                          >
+                            {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
+                              <option key={`row-asset-category-${row.key}-${opt.value}`} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td><strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong></td>
+                        <td>
+                          <span className="item-setup-icon" aria-hidden={true}>
+                            {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
+                          </span>
+                        </td>
+                        <td>
+                          <input
+                            className="input"
+                            value={itemNames[row.key] || ""}
+                            onChange={(e) => setItemNames((prev) => ({ ...prev, [row.key]: e.target.value }))}
+                            disabled={!isAdmin}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
           )}
 
@@ -50775,49 +51342,91 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Photo</th>
-                    <th>{t.typeCode}</th>
-                    <th>Model Name</th>
-                    <th>Display</th>
-                    <th>{t.edit}</th>
-                    <th>{t.delete}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {furnitureModels.length ? (
-                    furnitureModels
-                      .slice()
+            {isPhoneView ? (
+              furnitureModels.length ? (
+                <div className="furniture-model-mobile-list" style={{ marginTop: 12 }}>
+                  {furnitureModels
+                    .slice()
                       .sort((a, b) => a.type.localeCompare(b.type) || a.model.localeCompare(b.model))
                       .map((row) => (
-                        <tr key={`furniture-model-${row.id}`}>
-                          <td>{renderAssetPhoto(row.photo || "", `furniture-model-${row.id}`)}</td>
-                          <td>{row.type}</td>
-                          <td>{row.model}</td>
-                          <td>{furnitureModelLabel(row.type, row.model)}</td>
-                          <td>
-                            <button className="tab" disabled={!isAdmin} onClick={() => startEditFurnitureModelMaster(row)}>
-                              {t.edit}
+                        <article className="furniture-model-mobile-card" key={`furniture-model-mobile-${row.id}`}>
+                          <div className="furniture-model-mobile-main">
+                            <div className="furniture-model-mobile-head">
+                              <div className="furniture-model-mobile-photo">
+                                {row.photo ? (
+                                  <img loading="lazy" decoding="async" src={row.photo} alt={`furniture-model-${row.id}`} className="table-photo" />
+                                ) : (
+                                  <div className="photo-placeholder">No photo</div>
+                                )}
+                              </div>
+                              <div className="furniture-model-mobile-title">
+                                <strong>{row.model}</strong>
+                                <span>{row.type}</span>
+                              </div>
+                            </div>
+                            <div className="furniture-model-mobile-body">
+                              <div><small>Display</small><strong>{furnitureModelLabel(row.type, row.model)}</strong></div>
+                            </div>
+                          </div>
+                          <div className="furniture-model-mobile-actions">
+                            <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startEditFurnitureModelMaster(row)} title={t.edit}>
+                              ✎
                             </button>
-                          </td>
-                          <td>
-                            <button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteFurnitureModelMaster(row.id)}>
+                            <button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteFurnitureModelMaster(row.id)} title={t.delete}>
                               X
                             </button>
-                          </td>
-                        </tr>
-                      ))
-                  ) : (
+                          </div>
+                        </article>
+                    ))}
+                </div>
+              ) : (
+                <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>No furniture models yet.</div>
+              )
+            ) : (
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={6}>No furniture models yet.</td>
+                      <th>Photo</th>
+                      <th>{t.typeCode}</th>
+                      <th>Model Name</th>
+                      <th>Display</th>
+                      <th>{t.edit}</th>
+                      <th>{t.delete}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {furnitureModels.length ? (
+                      furnitureModels
+                        .slice()
+                        .sort((a, b) => a.type.localeCompare(b.type) || a.model.localeCompare(b.model))
+                        .map((row) => (
+                          <tr key={`furniture-model-${row.id}`}>
+                            <td>{renderAssetPhoto(row.photo || "", `furniture-model-${row.id}`)}</td>
+                            <td>{row.type}</td>
+                            <td>{row.model}</td>
+                            <td>{furnitureModelLabel(row.type, row.model)}</td>
+                            <td>
+                              <button className="tab" disabled={!isAdmin} onClick={() => startEditFurnitureModelMaster(row)}>
+                                {t.edit}
+                              </button>
+                            </td>
+                            <td>
+                              <button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteFurnitureModelMaster(row.id)}>
+                                X
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6}>No furniture models yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
           )}
 
@@ -50936,52 +51545,89 @@ export default function App() {
               </div>
             </div>
 
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.campus}</th>
-                    <th>{t.locationName}</th>
-                    <th>Type</th>
-                    <th>Photo</th>
-                    <th>Current Students</th>
-                    <th>Notes</th>
-                    <th>{t.edit}</th>
-                    <th>{t.delete}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {setupLocations.length ? (
-                    setupLocations.map((loc) => (
-                      <tr key={loc.id}>
-                        <td>{campusLabel(loc.campus)}</td>
-                        <td>{loc.name}</td>
-                        <td>{isClassroomLocationLike(loc) ? "Classroom" : "General"}</td>
-                        <td>
-                          {String(loc.photo || "").trim()
-                            ? renderAssetPhoto(String(loc.photo || "").trim(), `${loc.name}-location`)
-                            : isClassroomLocationLike(loc)
-                              ? renderAssetPhoto(DEFAULT_CLASSROOM_IMAGE_URL, `${loc.name}-classroom`)
-                              : "-"}
-                        </td>
-                        <td>{loc.currentStudents || "-"}</td>
-                        <td>{loc.notes || "-"}</td>
-                        <td>
-                          <button className="tab" disabled={!isAdmin} onClick={() => startEditLocation(loc)}>{t.edit}</button>
-                        </td>
-                        <td>
-                          <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteLocation(loc.id)}>X</button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+            {isPhoneView ? (
+              setupLocations.length ? (
+                <div className="location-mobile-list" style={{ marginTop: 12 }}>
+                  {setupLocations.map((loc) => (
+                    <article className="location-mobile-card" key={`location-mobile-${loc.id}`}>
+                      <div className="location-mobile-main">
+                        <div className="location-mobile-head">
+                          <div className="location-mobile-photo">
+                            {String(loc.photo || "").trim()
+                              ? renderAssetPhoto(String(loc.photo || "").trim(), `${loc.name}-location`)
+                              : isClassroomLocationLike(loc)
+                                ? renderAssetPhoto(DEFAULT_CLASSROOM_IMAGE_URL, `${loc.name}-classroom`)
+                                : <div className="photo-placeholder">No photo</div>}
+                          </div>
+                          <div className="location-mobile-title">
+                            <strong>{loc.name}</strong>
+                            <span>{campusLabel(loc.campus)}</span>
+                          </div>
+                        </div>
+                        <div className="location-mobile-grid">
+                          <div><small>Type</small><strong>{isClassroomLocationLike(loc) ? "Classroom" : "General"}</strong></div>
+                          <div><small>Current Students</small><strong>{loc.currentStudents || "-"}</strong></div>
+                          <div className="location-mobile-wide"><small>Notes</small><strong>{loc.notes || "-"}</strong></div>
+                        </div>
+                      </div>
+                      <div className="location-mobile-actions">
+                        <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startEditLocation(loc)} title={t.edit}>✎</button>
+                        <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteLocation(loc.id)} title={t.delete}>X</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>{t.noLocationsYet}</div>
+              )
+            ) : (
+              <div className="table-wrap" style={{ marginTop: 12 }}>
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={8}>{t.noLocationsYet}</td>
+                      <th>{t.campus}</th>
+                      <th>{t.locationName}</th>
+                      <th>Type</th>
+                      <th>Photo</th>
+                      <th>Current Students</th>
+                      <th>Notes</th>
+                      <th>{t.edit}</th>
+                      <th>{t.delete}</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {setupLocations.length ? (
+                      setupLocations.map((loc) => (
+                        <tr key={loc.id}>
+                          <td>{campusLabel(loc.campus)}</td>
+                          <td>{loc.name}</td>
+                          <td>{isClassroomLocationLike(loc) ? "Classroom" : "General"}</td>
+                          <td>
+                            {String(loc.photo || "").trim()
+                              ? renderAssetPhoto(String(loc.photo || "").trim(), `${loc.name}-location`)
+                              : isClassroomLocationLike(loc)
+                                ? renderAssetPhoto(DEFAULT_CLASSROOM_IMAGE_URL, `${loc.name}-classroom`)
+                                : "-"}
+                          </td>
+                          <td>{loc.currentStudents || "-"}</td>
+                          <td>{loc.notes || "-"}</td>
+                          <td>
+                            <button className="tab" disabled={!isAdmin} onClick={() => startEditLocation(loc)}>{t.edit}</button>
+                          </td>
+                          <td>
+                            <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteLocation(loc.id)}>X</button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8}>{t.noLocationsYet}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
           )}
 
