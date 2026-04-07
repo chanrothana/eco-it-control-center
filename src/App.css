@@ -5038,6 +5038,80 @@ label.backup-action-btn {
   color: #fff !important;
 }
 
+.backup-mobile-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.backup-mobile-group {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(103, 131, 171, 0.26);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(31, 51, 78, 0.94), rgba(24, 40, 62, 0.94));
+}
+
+.backup-mobile-group-danger {
+  border-color: rgba(211, 76, 92, 0.38);
+}
+
+.backup-mobile-group-head {
+  display: grid;
+  gap: 3px;
+}
+
+.backup-mobile-group-head strong {
+  color: #f3f7ff;
+  font-size: 15px;
+}
+
+.backup-mobile-group-head span {
+  color: #8ea6c7;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.backup-mobile-group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.backup-mobile-group-grid .backup-action-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.backup-mobile-record-card {
+  gap: 8px;
+}
+
+.backup-mobile-details {
+  border-top: 1px solid rgba(103, 131, 171, 0.2);
+  padding-top: 8px;
+}
+
+.backup-mobile-details summary {
+  cursor: pointer;
+  color: #8ea6c7;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.backup-mobile-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.backup-mobile-details-copy {
+  margin-top: 8px;
+  color: #d9e6f7;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 .row-actions {
   display: flex;
   gap: 8px;
@@ -11828,6 +11902,36 @@ table {
   gap: 10px;
 }
 
+.item-setup-mobile-group {
+  display: grid;
+  gap: 8px;
+}
+
+.item-setup-mobile-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 0;
+}
+
+.item-setup-mobile-group-head strong {
+  color: #f3f7ff;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.item-setup-mobile-group-head span {
+  color: #8ea6c7;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.item-setup-mobile-group-list {
+  display: grid;
+  gap: 10px;
+}
+
 .item-setup-mobile-card {
   display: grid;
   gap: 10px;
@@ -11901,6 +12005,33 @@ table {
   grid-column: 1 / -1;
 }
 
+.item-setup-mobile-details {
+  border-top: 1px solid rgba(103, 131, 171, 0.2);
+  padding-top: 8px;
+}
+
+.item-setup-mobile-details summary {
+  cursor: pointer;
+  color: #8ea6c7;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.item-setup-mobile-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.item-setup-mobile-detail-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.item-setup-mobile-field {
+  margin: 0;
+}
+
 @media (max-width: 768px) {
   .asset-actions {
     flex-direction: column;
@@ -11922,6 +12053,10 @@ table {
 
   .backup-subline {
     white-space: normal;
+  }
+
+  .backup-mobile-group-grid {
+    grid-template-columns: 1fr;
   }
 }
 

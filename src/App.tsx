@@ -14127,6 +14127,27 @@ export default function App() {
       return a.code.localeCompare(b.code);
     });
   }, [allTypeOptions, itemAssetCategories]);
+  const itemSetupRowsByCategory = useMemo(() => {
+    const grouped = new Map<string, typeof itemSetupRows>();
+    itemSetupRows.forEach((row) => {
+      if (!grouped.has(row.category)) grouped.set(row.category, []);
+      grouped.get(row.category)?.push(row);
+    });
+    const orderedCategories = [
+      ...CATEGORY_OPTIONS.map((category) => category.value),
+      ...Array.from(grouped.keys()).filter((category) => !CATEGORY_OPTIONS.some((option) => option.value === category)),
+    ];
+    return orderedCategories
+      .filter((category) => (grouped.get(category) || []).length > 0)
+      .map((category) => {
+        const labelRow = CATEGORY_OPTIONS.find((option) => option.value === category);
+        return {
+          category,
+          label: lang === "km" ? (labelRow?.km || category) : (labelRow?.en || category),
+          rows: grouped.get(category) || [],
+        };
+      });
+  }, [itemSetupRows, lang]);
   const setPackChildMeta = useMemo<Array<{ type: SetPackChildType; label: string }>>(
     () => [
       { type: "MON", label: t.includeMonitor },
@@ -50867,43 +50888,105 @@ export default function App() {
           <section className="panel">
             <h2>Backup & Audit</h2>
             <p className="backup-subline">Backup database to file, restore when needed, and keep local data aligned with the live web server.</p>
-            <div className="asset-actions">
-              <div className="backup-action-row">
-                <button className="btn-primary backup-action-btn" disabled={!isAdmin || busy} onClick={createServerBackup}>
-                  Create Server Backup
-                </button>
-                <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportBackupFile}>
-                  Download Backup
-                </button>
-                <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
-                  Use Live Web Data
-                </button>
-                <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={pushLocalDataToLiveWeb}>
-                  Push Local Data To Live Web
-                </button>
-                <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
-                  Restore Backup
-                  <input
-                    key={backupImportKey}
-                    type="file"
-                    accept=".json,application/json"
-                    disabled={!isAdmin || busy}
-                    onChange={importBackupFile}
-                    style={{ display: "none" }}
-                  />
-                </label>
+            {isPhoneView ? (
+              <div className="backup-mobile-actions">
+                <article className="backup-mobile-group">
+                  <div className="backup-mobile-group-head">
+                    <strong>Backup Files</strong>
+                    <span>Create, download, or restore a backup file.</span>
+                  </div>
+                  <div className="backup-mobile-group-grid">
+                    <button className="btn-primary backup-action-btn" disabled={!isAdmin || busy} onClick={createServerBackup}>
+                      Create Backup
+                    </button>
+                    <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportBackupFile}>
+                      Download
+                    </button>
+                    <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
+                      Restore
+                      <input
+                        key={backupImportKey}
+                        type="file"
+                        accept=".json,application/json"
+                        disabled={!isAdmin || busy}
+                        onChange={importBackupFile}
+                        style={{ display: "none" }}
+                      />
+                    </label>
+                  </div>
+                </article>
+                <article className="backup-mobile-group">
+                  <div className="backup-mobile-group-head">
+                    <strong>Live Web Sync</strong>
+                    <span>Pull from live web or push this local copy back up.</span>
+                  </div>
+                  <div className="backup-mobile-group-grid">
+                    <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
+                      Use Live Web Data
+                    </button>
+                    <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={pushLocalDataToLiveWeb}>
+                      Push Local Data
+                    </button>
+                  </div>
+                </article>
                 {isSuperAdmin ? (
-                  <button
-                    className="btn-danger backup-action-btn backup-action-btn-danger"
-                    disabled={busy}
-                    onClick={factoryResetSystem}
-                    title="Delete all records and restart from zero"
-                  >
-                    Factory Reset
-                  </button>
+                  <article className="backup-mobile-group backup-mobile-group-danger">
+                    <div className="backup-mobile-group-head">
+                      <strong>Danger Zone</strong>
+                      <span>Delete all records and restart from zero.</span>
+                    </div>
+                    <div className="backup-mobile-group-grid">
+                      <button
+                        className="btn-danger backup-action-btn backup-action-btn-danger"
+                        disabled={busy}
+                        onClick={factoryResetSystem}
+                        title="Delete all records and restart from zero"
+                      >
+                        Factory Reset
+                      </button>
+                    </div>
+                  </article>
                 ) : null}
               </div>
-            </div>
+            ) : (
+              <div className="asset-actions">
+                <div className="backup-action-row">
+                  <button className="btn-primary backup-action-btn" disabled={!isAdmin || busy} onClick={createServerBackup}>
+                    Create Server Backup
+                  </button>
+                  <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportBackupFile}>
+                    Download Backup
+                  </button>
+                  <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
+                    Use Live Web Data
+                  </button>
+                  <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={pushLocalDataToLiveWeb}>
+                    Push Local Data To Live Web
+                  </button>
+                  <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
+                    Restore Backup
+                    <input
+                      key={backupImportKey}
+                      type="file"
+                      accept=".json,application/json"
+                      disabled={!isAdmin || busy}
+                      onChange={importBackupFile}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  {isSuperAdmin ? (
+                    <button
+                      className="btn-danger backup-action-btn backup-action-btn-danger"
+                      disabled={busy}
+                      onClick={factoryResetSystem}
+                      title="Delete all records and restart from zero"
+                    >
+                      Factory Reset
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            )}
             {setupMessage ? <p className="tiny" style={{ marginTop: 8 }}>{setupMessage}</p> : null}
 
             <article className="panel" style={{ marginTop: 12 }}>
@@ -50915,27 +50998,27 @@ export default function App() {
                 authSessionLogs.length ? (
                   <div className="setup-mobile-list">
                     {visibleBackupSessionLogs.map((session) => (
-                      <article className="setup-mobile-card" key={`auth-session-mobile-${session.id}`}>
+                      <article className="setup-mobile-card backup-mobile-record-card" key={`auth-session-mobile-${session.id}`}>
                         <div className="setup-mobile-head">
                           <strong>{session.displayName || session.username || "-"}</strong>
                           <span>{session.username || "-"}</span>
                         </div>
                         <div className="setup-mobile-grid">
-                          <div><small>Login At</small><strong>{formatDateTime(session.loginAt || "-")}</strong></div>
                           <div><small>Role</small><strong>{session.role || session.user?.role || "-"}</strong></div>
-                          <div><small>IP Address</small><strong>{session.ipAddress || "-"}</strong></div>
                           <div><small>Status</small><strong>{session.status === "active" ? "Active" : "Logged Out"}</strong></div>
+                          <div><small>Login At</small><strong>{formatDateTime(session.loginAt || "-")}</strong></div>
                           <div><small>Last Seen</small><strong>{formatDateTime(session.lastSeenAt || session.loginAt || "-")}</strong></div>
-                          <div><small>Logout At</small><strong>{session.logoutAt ? formatDateTime(session.logoutAt) : "-"}</strong></div>
-                          <div className="setup-mobile-wide">
-                            <small>Device</small>
-                            <strong>
-                              {session.userAgent
-                                ? (session.userAgent.length > 120 ? `${session.userAgent.slice(0, 120)}...` : session.userAgent)
-                                : "-"}
-                            </strong>
-                          </div>
+                          <div><small>IP</small><strong>{session.ipAddress || "-"}</strong></div>
+                          <div><small>Logout</small><strong>{session.logoutAt ? formatDateTime(session.logoutAt) : "-"}</strong></div>
                         </div>
+                        <details className="backup-mobile-details">
+                          <summary>{lang === "km" ? "ព័ត៌មានឧបករណ៍" : "Device details"}</summary>
+                          <div className="backup-mobile-details-copy">
+                            {session.userAgent
+                              ? (session.userAgent.length > 180 ? `${session.userAgent.slice(0, 180)}...` : session.userAgent)
+                              : "-"}
+                          </div>
+                        </details>
                       </article>
                     ))}
                     {authSessionLogs.length > visibleBackupSessionLogs.length ? (
@@ -51007,7 +51090,7 @@ export default function App() {
                 auditLogs.length ? (
                   <div className="setup-mobile-list">
                     {visibleBackupAuditLogs.map((log) => (
-                      <article className="setup-mobile-card" key={`audit-mobile-${log.id}`}>
+                      <article className="setup-mobile-card backup-mobile-record-card" key={`audit-mobile-${log.id}`}>
                         <div className="setup-mobile-head">
                           <strong>{log.action || "-"}</strong>
                           <span>{formatDateTime(log.date || "-")}</span>
@@ -51154,50 +51237,73 @@ export default function App() {
             </div>
             {isPhoneView ? (
               <div className="item-setup-mobile-list">
-                {itemSetupRows.map((row) => (
-                  <article className="item-setup-mobile-card" key={`item-setup-mobile-${row.key}`}>
-                    <div className="item-setup-mobile-head">
-                      <div className="item-setup-mobile-icon" aria-hidden={true}>
-                        {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
-                      </div>
-                      <div className="item-setup-mobile-title">
-                        <strong>{itemNames[row.key] || "-"}</strong>
-                        <span>{row.category} • {row.code}</span>
-                      </div>
+                {itemSetupRowsByCategory.map((group) => (
+                  <section className="item-setup-mobile-group" key={`item-setup-group-${group.category}`}>
+                    <div className="item-setup-mobile-group-head">
+                      <strong>{group.label}</strong>
+                      <span>{group.rows.length} {group.rows.length === 1 ? "item" : "items"}</span>
                     </div>
-                    <div className="item-setup-mobile-grid">
-                      <div>
-                        <small>{t.assetCategory}</small>
-                        <select
-                          className="input"
-                          value={(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
-                          onChange={(e) =>
-                            setItemAssetCategories((prev) => ({ ...prev, [row.key]: e.target.value }))
-                          }
-                          disabled={!isAdmin}
-                        >
-                          {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
-                            <option key={`row-asset-category-mobile-${row.key}-${opt.value}`} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <small>{t.assetTypeCode}</small>
-                        <strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong>
-                      </div>
-                      <div className="item-setup-mobile-wide">
-                        <small>{t.itemName}</small>
-                        <input
-                          className="input"
-                          value={itemNames[row.key] || ""}
-                          onChange={(e) => setItemNames((prev) => ({ ...prev, [row.key]: e.target.value }))}
-                          disabled={!isAdmin}
-                        />
-                      </div>
+                    <div className="item-setup-mobile-group-list">
+                      {group.rows.map((row) => (
+                        <article className="item-setup-mobile-card" key={`item-setup-mobile-${row.key}`}>
+                          <div className="item-setup-mobile-head">
+                            <div className="item-setup-mobile-icon" aria-hidden={true}>
+                              {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
+                            </div>
+                            <div className="item-setup-mobile-title">
+                              <strong>{itemNames[row.key] || "-"}</strong>
+                              <span>{row.category} • {row.code}</span>
+                            </div>
+                          </div>
+                          <div className="item-setup-mobile-grid">
+                            <div>
+                              <small>{t.assetCategory}</small>
+                              <strong>
+                                {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.find(
+                                  (opt) => opt.value === (itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()
+                                )?.label || (itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
+                              </strong>
+                            </div>
+                            <div>
+                              <small>{t.assetTypeCode}</small>
+                              <strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong>
+                            </div>
+                          </div>
+                          <details className="item-setup-mobile-details">
+                            <summary>{lang === "km" ? "កែសម្រួល" : "Edit details"}</summary>
+                            <div className="item-setup-mobile-detail-grid">
+                              <label className="field item-setup-mobile-field">
+                                <span>{t.assetCategory}</span>
+                                <select
+                                  className="input"
+                                  value={(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
+                                  onChange={(e) =>
+                                    setItemAssetCategories((prev) => ({ ...prev, [row.key]: e.target.value }))
+                                  }
+                                  disabled={!isAdmin}
+                                >
+                                  {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
+                                    <option key={`row-asset-category-mobile-${row.key}-${opt.value}`} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="field item-setup-mobile-field">
+                                <span>{t.itemName}</span>
+                                <input
+                                  className="input"
+                                  value={itemNames[row.key] || ""}
+                                  onChange={(e) => setItemNames((prev) => ({ ...prev, [row.key]: e.target.value }))}
+                                  disabled={!isAdmin}
+                                />
+                              </label>
+                            </div>
+                          </details>
+                        </article>
+                      ))}
                     </div>
-                  </article>
+                  </section>
                 ))}
               </div>
             ) : (
