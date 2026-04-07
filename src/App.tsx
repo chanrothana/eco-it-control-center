@@ -14576,9 +14576,6 @@ export default function App() {
               }))
               .filter((row) => row.type && row.model)
           : [];
-        const nextFurnitureModels = serverFurnitureModels.length
-          ? serverFurnitureModels
-          : fallbackFurnitureModels;
         const settingsObj = settingsRes.settings || {};
         setRentalPrinters(
           Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinters")
@@ -14653,11 +14650,22 @@ export default function App() {
                 .filter((tpl) => tpl.name && tpl.type)
             : readItemTemplateFallback()
         );
-        setFurnitureModels(
-          Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels")
-            ? nextFurnitureModels
-            : fallbackFurnitureModels
-        );
+        const hasServerFurnitureModels = Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels");
+        if (hasServerFurnitureModels) {
+          setFurnitureModels(serverFurnitureModels);
+          if (
+            authUser &&
+            isAdminRole(authUser.role) &&
+            serverFurnitureModels.length === 0 &&
+            fallbackFurnitureModels.length > 0
+          ) {
+            void saveFurnitureModelsToServer(fallbackFurnitureModels).catch((err) => {
+              console.warn("Failed to backfill furniture models to server", err);
+            });
+          }
+        } else {
+          setFurnitureModels(fallbackFurnitureModels);
+        }
       } else {
         // Keep local settings if /api/settings is unavailable.
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));

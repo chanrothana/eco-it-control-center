@@ -3500,12 +3500,22 @@ function parseEdcInvoiceFields(text) {
     firstNonEmptyMatch(compact, [
       /\bINV\s*\/\s*([A-Z0-9]{5,})\b/i,
       /\bIN[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\b1N[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\bINV\s*[#:.-]?\s*([A-Z0-9]{5,})\b/i,
+    ]) ||
+    firstNonEmptyMatch(lines.slice(0, 3).join(" "), [
+      /\bINV[^A-Z0-9]{0,4}(\d{7,10})\b/i,
+      /\bIN[VY][^A-Z0-9]{0,4}(\d{7,10})\b/i,
+      /\b1N[VY][^A-Z0-9]{0,4}(\d{7,10})\b/i,
     ]) ||
     firstNonEmptyMatch(lines.slice(0, 8).join(" "), [
       /\bINV\s*\/\s*([A-Z0-9]{5,})\b/i,
       /\bIN[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\b1N[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\bINV\s*[#:.-]?\s*([A-Z0-9]{5,})\b/i,
     ]);
   const invoiceNumber = invoiceNumberRaw ? `INV/${invoiceNumberRaw.replace(/[^A-Z0-9]/gi, "")}` : "";
+  const invoiceDigits = invoiceNumber.replace(/\D/g, "");
 
   const dateMatches = lines.flatMap((line, index) =>
     Array.from(line.matchAll(/(\d{1,2}\s*[\/-]\s*\d{1,2}\s*[\/-]\s*\d{2,4})/g))
@@ -3548,6 +3558,22 @@ function parseEdcInvoiceFields(text) {
   const billingMonth = periodBillingMonth || shiftBillingMonth(invoiceMonth, -1);
 
   let usage = "";
+  const preciseKwhCandidates = lines.flatMap((line, index) =>
+    Array.from(line.matchAll(/\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*kwh\b/gi))
+      .map((match) => ({
+        raw: match[1],
+        value: Number(match[1].replace(/,/g, "")),
+        index,
+      }))
+      .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
+  );
+  const smallDecimalKwhCandidates = preciseKwhCandidates.filter(
+    (entry) => /\./.test(entry.raw) && entry.value >= 1 && entry.value <= 500
+  );
+  if (smallDecimalKwhCandidates.length) {
+    smallDecimalKwhCandidates.sort((a, b) => b.index - a.index || a.value - b.value);
+    usage = String(smallDecimalKwhCandidates[0].value);
+  }
   const labeledUsageCandidates = lines
     .flatMap((line, index) =>
       Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*kwh\b/gi)).map((match) => {
@@ -3555,8 +3581,9 @@ function parseEdcInvoiceFields(text) {
         const context = getLineContext(index);
         let score = 0;
         if (!Number.isFinite(value) || value <= 0) return null;
-        if (value >= 100 && value <= 1500) score += 5;
+        if (value >= 20 && value <= 5000) score += 5;
         else score -= 6;
+        if (/\./.test(match[1]) && value <= 500) score += 2;
         if (index >= laterHalfIndex) score += 4;
         if (index >= tailStartIndex) score += 3;
         if (matchesAnyPattern(line, usageLinePatterns)) score += 5;
@@ -3578,16 +3605,9 @@ function parseEdcInvoiceFields(text) {
     }
   }
   if (!usage) {
-    const kwhCandidates = lines.flatMap((line, index) =>
-      Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*kwh\b/gi))
-        .map((match) => ({
-          value: Number(match[1].replace(/,/g, "")),
-          index,
-        }))
-        .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
-    );
+    const kwhCandidates = preciseKwhCandidates;
     const likelyUsageCandidates = kwhCandidates.filter(
-      (entry) => entry.index >= laterHalfIndex && entry.value >= 100 && entry.value <= 1500
+      (entry) => entry.index >= laterHalfIndex && entry.value >= 20 && entry.value <= 5000
     );
     if (likelyUsageCandidates.length) {
       likelyUsageCandidates.sort((a, b) => b.index - a.index || a.value - b.value);
@@ -3599,7 +3619,7 @@ function parseEdcInvoiceFields(text) {
       .flatMap((line, index) => {
         const context = getLineContext(index);
         if (!matchesAnyPattern(context, usageLinePatterns)) return [];
-        return Array.from(context.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)/g)).map((match) => {
+        return Array.from(context.matchAll(/\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\b/g)).map((match) => {
           const value = Number(match[1].replace(/,/g, ""));
           let score = 0;
           if (!Number.isFinite(value) || value <= 0) return null;
@@ -3628,7 +3648,7 @@ function parseEdcInvoiceFields(text) {
     const broadUsageCandidates = lines
       .flatMap((line, index) => {
         const context = getLineContext(index);
-        return Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{2,4}(?:\.\d+)?)/g)).map((match) => {
+        return Array.from(line.matchAll(/\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{2,4}(?:\.\d+)?)\b/g)).map((match) => {
           const raw = match[1];
           const value = Number(raw.replace(/,/g, ""));
           let score = 0;
@@ -3694,6 +3714,9 @@ function parseEdcInvoiceFields(text) {
         if (matchesAnyPattern(context, amountLinePatterns)) score += 5;
         if (value >= 100000) score += 2;
         if (value > 50000000) score -= 3;
+        if (!raw.includes(",") && value >= 1000000) score -= 4;
+        if (invoiceDigits && raw.replace(/\D/g, "") === invoiceDigits) score -= 8;
+        if (/\bid\b/i.test(context) || /\brd\b/i.test(context)) score -= 4;
         return {
           raw,
           value,
@@ -3740,7 +3763,12 @@ function parseEdcInvoiceFields(text) {
         ...entry,
         value: Number(entry.raw.replace(/,/g, "")),
       }))
-      .filter((entry) => Number.isFinite(entry.value) && entry.value >= 1000);
+      .filter((entry) =>
+        Number.isFinite(entry.value) &&
+        entry.value >= 1000 &&
+        entry.raw.includes(",") &&
+        (!invoiceDigits || entry.raw.replace(/\D/g, "") !== invoiceDigits)
+      );
     const amountCounts = new Map();
     for (const candidate of tailAmountCandidates) {
       const current = amountCounts.get(candidate.raw) || { count: 0, index: -1, value: candidate.value };
@@ -3766,7 +3794,12 @@ function parseEdcInvoiceFields(text) {
         index,
         value: Number(raw.replace(/,/g, "")),
       }))
-      .filter((entry) => Number.isFinite(entry.value) && entry.value >= 1000);
+      .filter((entry) =>
+        Number.isFinite(entry.value) &&
+        entry.value >= 1000 &&
+        entry.raw.includes(",") &&
+        (!invoiceDigits || entry.raw.replace(/\D/g, "") !== invoiceDigits)
+      );
     if (currencyCandidates.length) {
       currencyCandidates.sort((a, b) => b.index - a.index || b.value - a.value);
       amount = currencyCandidates[0].raw;
@@ -4766,7 +4799,7 @@ async function validateLocation(body) {
   const currentStudents = Math.max(0, Number(body.currentStudents || 0));
   const tableSeatsPerTable = Math.max(1, Number(body.tableSeatsPerTable || 2));
   const notes = toText(body.notes);
-  const photo = isClassroom ? await normalizePhotoValue(body.photo, "locations") : "";
+  const photo = await normalizePhotoValue(body.photo, "locations");
 
   if (!campus) return "Campus is required";
   if (!name) return "Location name is required";
