@@ -3409,14 +3409,21 @@ function parsePpwsInvoiceFields(text) {
     .map((line) => toText(line))
     .filter(Boolean);
   const flat = lines.join(" ");
+  const normalizedFlat = flat.replace(/\s+/g, " ").trim();
+  const spacedMoneyPattern = /(\d{1,3}(?:,\s*\d{3})+(?:\.\d+)?|\d{5,}(?:\.\d+)?)/g;
 
-  const invoiceNumber = firstNonEmptyMatch(flat, [
+  const invoiceNumberRaw = firstNonEmptyMatch(normalizedFlat, [
     /\b(PPWSA?\d{8,})\b/i,
     /\b(PPWNSA?\d{8,})\b/i,
-  ]).replace(/^PPWNS/i, "PPWS");
+    /\b(PPMSA?\d{8,})\b/i,
+    /\b(PPWS[0-9]{8,})\b/i,
+  ]);
+  const invoiceNumber = toText(invoiceNumberRaw)
+    .replace(/^PPWNS/i, "PPWS")
+    .replace(/^PPMS/i, "PPWS");
 
-  const periodMatch = flat.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})\s*-\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-  const invoiceDateRaw = firstNonEmptyMatch(flat, [
+  const periodMatch = normalizedFlat.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})\s*-\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+  const invoiceDateRaw = firstNonEmptyMatch(normalizedFlat, [
     /(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2})/,
     /(\d{1,2}\/\d{1,2}\/\d{4})/,
     /(\d{1,2}\/\d{1,2}\/\d{2})/,
@@ -3425,31 +3432,47 @@ function parsePpwsInvoiceFields(text) {
   const periodBillingMonth = periodMatch ? parseBillingMonth(periodMatch[2], invoiceDate) : "";
   const billingMonth = periodBillingMonth || shiftBillingMonth(parseBillingMonth("", invoiceDate), -1);
 
-  const m3Matches = Array.from(flat.matchAll(/(\d+(?:\.\d+)?)\s*M3\b/gi))
+  const m3Matches = Array.from(normalizedFlat.matchAll(/(\d+(?:\.\d+)?)\s*M[38]\b/gi))
     .map((match) => Number(match[1]))
     .filter((value) => Number.isFinite(value) && value > 0);
-  const usage = m3Matches.length ? String(Math.max(...m3Matches)) : "";
+  const standaloneUsageCandidates = lines
+    .flatMap((line, index) => {
+      if (!/\bm[38]\b/i.test(line) && !/\bm[38]/i.test(lines[index + 1] || "")) return [];
+      return Array.from(line.matchAll(/\b(\d{1,3}(?:\.\d+)?)\b/g)).map((match) => Number(match[1]));
+    })
+    .filter((value) => Number.isFinite(value) && value > 0 && value <= 5000);
+  const usageCandidates = [...m3Matches, ...standaloneUsageCandidates];
+  const usage = usageCandidates.length ? String(Math.max(...usageCandidates)) : "";
 
   const tailLines = lines.slice(-12);
   const amountCandidates = tailLines
-    .flatMap((line) => Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/g)).map((match) => match[1]))
+    .flatMap((line) => Array.from(line.matchAll(spacedMoneyPattern)).map((match) => match[1]))
     .map((raw) => raw.replace(/\s+/g, ""))
-    .filter(Boolean);
+    .filter((raw) => Boolean(raw) && Number(raw.replace(/[, ]/g, "")) >= 1000);
   const amountCounts = new Map();
   for (const candidate of amountCandidates) {
-    amountCounts.set(candidate, (amountCounts.get(candidate) || 0) + 1);
+    const current = amountCounts.get(candidate) || { count: 0, value: 0 };
+    amountCounts.set(candidate, {
+      count: current.count + 1,
+      value: Number(candidate.replace(/[, ]/g, "")),
+    });
   }
   let amount = "";
   let bestCount = 0;
-  for (const [candidate, count] of amountCounts.entries()) {
-    if (count > bestCount) {
-      bestCount = count;
+  let bestValue = 0;
+  for (const [candidate, meta] of amountCounts.entries()) {
+    if (meta.count > bestCount || (meta.count === bestCount && meta.value > bestValue)) {
+      bestCount = meta.count;
+      bestValue = meta.value;
       amount = candidate;
     }
   }
   if (!amount) {
-    const fallbackAmount = flat.match(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?)/);
-    amount = toText(fallbackAmount && fallbackAmount[1]);
+    const fallbackAmounts = Array.from(normalizedFlat.matchAll(spacedMoneyPattern))
+      .map((match) => toText(match[1]).replace(/\s+/g, ""))
+      .filter((raw) => Boolean(raw) && Number(raw.replace(/[, ]/g, "")) >= 1000)
+      .sort((a, b) => Number(b.replace(/[, ]/g, "")) - Number(a.replace(/[, ]/g, "")));
+    amount = fallbackAmounts[0] || "";
   }
 
   return {

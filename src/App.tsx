@@ -1087,6 +1087,22 @@ function formatRielAmount(value: unknown) {
   return `${formatNumericInputDisplay(String(amount))} Riel`;
 }
 
+function formatCompactRiel(value: unknown) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "-";
+  if (amount >= 1000000) return `R ${formatNumericInputDisplay((amount / 1000000).toFixed(2))}M`;
+  if (amount >= 1000) return `R ${formatNumericInputDisplay((amount / 1000).toFixed(0))}K`;
+  return `R ${formatNumericInputDisplay(String(amount))}`;
+}
+
+function monthShortLabel(value: string) {
+  if (!value) return value;
+  const normalized = /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : value;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-US", { month: "short" });
+}
+
 const UTILITY_C22_SITE_OPTIONS = ["#63 (32P)", "#65 (63P)"] as const;
 
 function normalizeInventoryApprovalCampusValue(value: unknown) {
@@ -4186,6 +4202,16 @@ function formatDate(value: string) {
   const month = date.toLocaleString("en-US", { month: "short" });
   const year = date.getFullYear();
   return `${day}-${month}-${year}`;
+}
+
+function formatMonthYear(value: string) {
+  if (!value || value === "-") return "-";
+  const normalized = /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : value;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+  const month = date.toLocaleString("en-US", { month: "short" });
+  const year = date.getFullYear();
+  return `${month}-${year}`;
 }
 
 function formatReportSlashLongDate(value: string | Date) {
@@ -10291,16 +10317,15 @@ export default function App() {
   const utilityCurrentMonthKey = toYmd(new Date()).slice(0, 7);
   const utilityCurrentYear = utilityCurrentMonthKey.slice(0, 4);
   const utilityUsageSummary = useMemo(() => {
-    let ppwsUsage = 0;
     let edcUsage = 0;
-    let totalAmount = 0;
+    let edcAmount = 0;
     for (const row of utilityReadings) {
       if (row.billingMonth !== utilityCurrentMonthKey) continue;
-      if (row.utilityType === "PPWS") ppwsUsage += Number(row.usage) || 0;
-      else edcUsage += Number(row.usage) || 0;
-      totalAmount += Number(row.amount) || 0;
+      if (row.utilityType !== "EDC") continue;
+      edcUsage += Number(row.usage) || 0;
+      edcAmount += Number(row.amount) || 0;
     }
-    return { ppwsUsage, edcUsage, totalAmount };
+    return { edcUsage, edcAmount };
   }, [utilityCurrentMonthKey, utilityReadings]);
   const utilityHistoryMonthOptions = useMemo(
     () =>
@@ -10342,18 +10367,42 @@ export default function App() {
       .sort((a, b) => compareCampusByCode(a.campus, b.campus));
   }, [utilityReadings]);
   const utilityMonthlyComparison = useMemo(() => {
-    const map = new Map<string, { month: string; edcUsage: number; ppwsUsage: number; amount: number }>();
+    const monthKeys = Array.from({ length: 12 }, (_, index) => `${utilityCurrentYear}-${String(index + 1).padStart(2, "0")}`);
+    const years = Array.from(
+      new Set(
+        utilityReadings
+          .filter((row) => row.utilityType === "EDC")
+          .map((row) => String(row.billingMonth || "").slice(0, 4))
+          .filter(Boolean)
+      )
+    ).sort((a, b) => b.localeCompare(a)).slice(0, 2).sort((a, b) => a.localeCompare(b));
+    const totalsByYearMonth = new Map<string, number>();
     for (const row of utilityReadings) {
-      if (!row.billingMonth?.startsWith(utilityCurrentYear)) continue;
-      if (!map.has(row.billingMonth)) {
-        map.set(row.billingMonth, { month: row.billingMonth, edcUsage: 0, ppwsUsage: 0, amount: 0 });
-      }
-      const summary = map.get(row.billingMonth)!;
-      if (row.utilityType === "PPWS") summary.ppwsUsage += Number(row.usage) || 0;
-      else summary.edcUsage += Number(row.usage) || 0;
-      summary.amount += Number(row.amount) || 0;
+      if (row.utilityType !== "EDC") continue;
+      const year = String(row.billingMonth || "").slice(0, 4);
+      if (!years.includes(year)) continue;
+      const key = `${year}-${String(row.billingMonth || "").slice(5, 7)}`;
+      totalsByYearMonth.set(key, (totalsByYearMonth.get(key) || 0) + (Number(row.amount) || 0));
     }
-    return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
+    const palette = ["#4f86ff", "#f56b5c"];
+    const series = years.map((year, index) => ({
+      year,
+      color: palette[index % palette.length],
+      values: monthKeys.map((monthKey) => ({
+        month: monthKey,
+        label: monthShortLabel(monthKey),
+        amount: totalsByYearMonth.get(`${year}-${monthKey.slice(5, 7)}`) || 0,
+      })),
+    }));
+    const currentYearSeries = series.find((row) => row.year === utilityCurrentYear) || series[series.length - 1] || null;
+    const activeMonths = currentYearSeries ? currentYearSeries.values.filter((row) => row.amount > 0).length : 0;
+    const maxAmount = Math.max(1, ...series.flatMap((row) => row.values.map((value) => value.amount)));
+    return {
+      series,
+      months: monthKeys.map((monthKey) => ({ key: monthKey, label: monthShortLabel(monthKey) })),
+      activeMonths,
+      maxAmount,
+    };
   }, [utilityCurrentYear, utilityReadings]);
   const utilityYearlySummary = useMemo(() => {
     const map = new Map<string, { year: string; edcUsage: number; ppwsUsage: number; amount: number }>();
@@ -27993,22 +28042,53 @@ export default function App() {
         };
       });
   }, [assets]);
-  const furnitureControlClassroomRows = useMemo(() => {
-    const classroomLocations = locations
-      .filter((row) => isClassroomLocationLike(row))
-      .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)))
-      .filter((row) => (furnitureControlLocationFilter.includes("ALL") ? true : furnitureControlLocationFilter.includes(String(row.name || "").trim())));
-    const rows = classroomLocations.map((room) => {
+  const furnitureControlLocationRows = useMemo(() => {
+    const setupLocationMap = new Map(
+      locations
+        .map((row) => {
+          const name = String(row.name || "").trim();
+          const campus = String(row.campus || "").trim();
+          if (!name || !campus) return null;
+          return [`${campus}::${name}`, row] as const;
+        })
+        .filter(Boolean) as Array<readonly [string, (typeof locations)[number]]>
+    );
+    const furnitureLocationKeys = Array.from(
+      new Set(
+        furnitureControlAssetRows
+          .map((asset) => {
+            const campus = String(asset.campus || "").trim();
+            const location = String(asset.location || "").trim();
+            if (!campus || !location || location === "Unassigned") return "";
+            return `${campus}::${location}`;
+          })
+          .filter(Boolean)
+      )
+    );
+    const visibleLocationKeys = Array.from(
+      new Set([
+        ...Array.from(setupLocationMap.keys()),
+        ...furnitureLocationKeys,
+      ])
+    )
+      .filter((key) => {
+        const [campus, location] = key.split("::");
+        return (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(campus))
+          && (furnitureControlLocationFilter.includes("ALL") ? true : furnitureControlLocationFilter.includes(location));
+      });
+    const rows = visibleLocationKeys.map((key) => {
+      const [campus, location] = key.split("::");
+      const room = setupLocationMap.get(key);
       const matchingAssets = furnitureControlAssetRows.filter(
-        (asset) => asset.campus === room.campus && asset.location === room.name
+        (asset) => asset.campus === campus && asset.location === location
       );
       const matchingAssetPhoto =
         assets
-          .filter((asset) => asset.campus === room.campus && String(asset.location || "").trim() === room.name)
+          .filter((asset) => asset.campus === campus && String(asset.location || "").trim() === location)
           .map((asset) => normalizeAssetPhotos(asset)[0] || "")
           .find(Boolean) || "";
       const roomPhoto =
-        String(room.photo || "").trim() ||
+        String(room?.photo || "").trim() ||
         matchingAssetPhoto ||
         "";
       const chairs = matchingAssets
@@ -28039,13 +28119,13 @@ export default function App() {
       const napBeds = matchingAssets
         .filter((asset) => asset.type === "NBD")
         .reduce((sum, asset) => sum + asset.availableQty, 0);
-      const currentStudents = Math.max(0, Number(room.currentStudents || 0));
+      const currentStudents = Math.max(0, Number(room?.currentStudents || 0));
       const requiredChairs = currentStudents;
       const requiredTables = currentStudents > 0 ? Math.ceil(currentStudents / 2) : 0;
       return {
-        id: room.id,
-        campus: room.campus,
-        location: room.name,
+        id: Number(room?.id || `${campus}${location}`.split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0)),
+        campus,
+        location,
         photo: roomPhoto,
         currentStudents,
         chairs,
@@ -28058,7 +28138,7 @@ export default function App() {
         requiredTables,
         chairGap: chairs - requiredChairs,
         tableGap: tables - requiredTables,
-        notes: String(room.notes || "").trim(),
+        notes: String(room?.notes || "").trim(),
       };
     });
     return rows.sort(
@@ -28084,7 +28164,7 @@ export default function App() {
         napBedModels: Record<string, number>;
       }
     >();
-    for (const row of furnitureControlClassroomRows) {
+    for (const row of furnitureControlLocationRows) {
       if (!map.has(row.campus)) {
         map.set(row.campus, {
           campus: row.campus,
@@ -28153,7 +28233,7 @@ export default function App() {
       }
     );
     return { rows, totals };
-  }, [furnitureControlClassroomRows, campusLabel]);
+  }, [furnitureControlLocationRows, campusLabel]);
   const furnitureControlCampusFilterOptions = useMemo(() => {
     const options = Array.from(
       new Set(
@@ -28168,15 +28248,18 @@ export default function App() {
   const furnitureControlLocationFilterOptions = useMemo(() => {
     const options = Array.from(
       new Set(
-        locations
-          .filter((row) => isClassroomLocationLike(row))
-          .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)))
-          .map((row) => String(row.name || "").trim())
-          .filter(Boolean)
+        [
+          ...locations
+            .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)))
+            .map((row) => String(row.name || "").trim()),
+          ...furnitureControlAssetRows
+            .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)))
+            .map((row) => String(row.location || "").trim())
+        ].filter((name) => Boolean(name) && name !== "Unassigned")
       )
     );
     return options.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
-  }, [locations, furnitureControlCampusFilter]);
+  }, [locations, furnitureControlAssetRows, furnitureControlCampusFilter]);
   useEffect(() => {
     setFurnitureControlLocationFilter((prev) => {
       if (prev.includes("ALL")) return ["ALL"];
@@ -28186,9 +28269,9 @@ export default function App() {
   }, [furnitureControlLocationFilterOptions]);
   const furnitureControlGapSummary = useMemo(() => {
     return {
-      rooms: furnitureControlClassroomRows.length,
+      rooms: furnitureControlLocationRows.length,
     };
-  }, [furnitureControlClassroomRows]);
+  }, [furnitureControlLocationRows]);
   const classroomControlCampusOptions = useMemo(() => {
     const options = Array.from(
       new Set(
@@ -29881,15 +29964,6 @@ export default function App() {
   const renderQuickCountPanel = (source: "dashboard" | "reports") => {
     const isDashboard = source === "dashboard";
     const isVisible = isDashboard ? dashboardQuickCountOpen : true;
-    const activeFilterCount =
-      (quickCountCampusFilter.includes("ALL") ? 0 : 1) +
-      (quickCountLocationFilter.includes("ALL") ? 0 : 1) +
-      (quickCountCategoryFilter.includes("ALL") ? 0 : 1) +
-      (quickCountStatusFilter.includes("ALL") ? 0 : 1) +
-      (quickCountQuery.trim() ? 1 : 0);
-    const campusScopeCount = quickCountCampusFilter.includes("ALL")
-      ? quickCountCampusFilterOptions.length
-      : quickCountCampusFilter.length;
 
     const controls = (
       <div className="report-quick-count-controls">
@@ -30137,7 +30211,13 @@ export default function App() {
             </article>
             <article className="dashboard-quick-mobile-stat">
               <span>{lang === "km" ? "តម្រង" : "Filters"}</span>
-              <strong>{activeFilterCount}</strong>
+              <strong>{
+                (quickCountCampusFilter.includes("ALL") ? 0 : 1) +
+                (quickCountLocationFilter.includes("ALL") ? 0 : 1) +
+                (quickCountCategoryFilter.includes("ALL") ? 0 : 1) +
+                (quickCountStatusFilter.includes("ALL") ? 0 : 1) +
+                (quickCountQuery.trim() ? 1 : 0)
+              }</strong>
             </article>
           </div>
           {dashboardQuickCountOpen ? (
@@ -30166,40 +30246,7 @@ export default function App() {
     if (isDashboard) {
       return (
         <div className="report-quick-count dashboard-quick-count dashboard-quick-count-redesign">
-          <div className="dashboard-quick-overview">
-            <div className="dashboard-quick-overview-copy">
-              <span className="dashboard-quick-kicker">{lang === "km" ? "មជ្ឈមណ្ឌលស្វែងរកលឿន" : "Rapid Search Console"}</span>
-              <strong>{lang === "km" ? "ស្វែងរក និងតាមដានទ្រព្យភ្លាមៗ" : "Quick Count Intelligence"}</strong>
-              <p>
-                {lang === "km"
-                  ? "មើលស្ថានភាពទ្រព្យ ស្វែងរកតាមសាខា និងប្រភេទ ហើយបើកមើល Item ដែលចង់តាមដានបានភ្លាមៗ។"
-                  : "Scan asset condition, narrow scope by campus and category, and jump straight into the items that need attention."}
-              </p>
-            </div>
-            <div className="dashboard-quick-overview-rail">
-              <article className="dashboard-quick-rail-card">
-                <span>Matched Assets</span>
-                <strong>{quickCountFilteredTotal}</strong>
-                <small>{lang === "km" ? "ទ្រព្យត្រូវតាមលទ្ធផលតម្រងបច្ចុប្បន្ន" : "Assets in the current live filter scope."}</small>
-              </article>
-              <article className="dashboard-quick-rail-card">
-                <span>Visible Items</span>
-                <strong>{quickCountFilteredRows.length}</strong>
-                <small>{lang === "km" ? "Item ដែលបង្ហាញក្នុងផ្ទាំងនេះ" : "Item types currently exposed in this board."}</small>
-              </article>
-              <article className="dashboard-quick-rail-card">
-                <span>Campus Scope</span>
-                <strong>{campusScopeCount}</strong>
-                <small>{lang === "km" ? "សាខាដែលរួមនៅក្នុងការស្វែងរក" : "Campuses currently included in the search scope."}</small>
-              </article>
-              <article className="dashboard-quick-rail-card">
-                <span>Active Filters</span>
-                <strong>{activeFilterCount}</strong>
-                <small>{lang === "km" ? "តម្រងដែលកំពុងដំណើរការ" : "Filters currently refining the board."}</small>
-              </article>
-            </div>
-          </div>
-          <div className="dashboard-quick-toolbar-shell">
+          <div className="dashboard-quick-toolbar-shell dashboard-quick-toolbar-shell-lead">
             <div className="dashboard-quick-toolbar-head">
               <div className="dashboard-quick-toolbar-copy">
                 <strong>{lang === "km" ? "ផ្ទាំងតម្រង" : "Filter Dock"}</strong>
@@ -30654,14 +30701,14 @@ export default function App() {
       title = "Chair and Table Control Report";
       columns = [
         "Campus",
-        "Classroom",
+        "Location",
         "Current Students",
         "Chairs",
         "Tables",
         "Nap Beds",
         "Notes",
       ];
-      rows = furnitureControlClassroomRows.map((row) => [
+      rows = furnitureControlLocationRows.map((row) => [
         reportCampusName(row.campus),
         row.location,
         String(row.currentStudents || 0),
@@ -30873,7 +30920,7 @@ export default function App() {
         : reportType === "asset_by_location"
         ? `<p><strong>Locations:</strong> ${filteredLocationAssetSummaryRows.length} | <strong>Total Assets:</strong> ${filteredLocationAssetTotal}</p>`
         : reportType === "furniture_control"
-        ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Classrooms:</strong> ${furnitureControlGapSummary.rooms}</p>`
+        ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Locations:</strong> ${furnitureControlGapSummary.rooms}</p>`
         : reportType === "inventory_balance"
         ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${inventoryLowStockRows.length}</p>`
         : reportType === "staff_borrowing"
@@ -30999,13 +31046,13 @@ export default function App() {
                 }
               </tbody>
             </table>
-            <h2 style="margin-top:18px;">Classroom Analysis</h2>
+            <h2 style="margin-top:18px;">Location Analysis</h2>
             <table class="preview-report-table">
               <thead>
                 <tr>
                   <th>No.</th>
                   <th>Campus</th>
-                  <th>Classroom</th>
+                  <th>Location</th>
                   <th>Photo</th>
                   <th>Current Students</th>
                   <th>Chairs</th>
@@ -31016,8 +31063,8 @@ export default function App() {
               </thead>
               <tbody>
                 ${
-                  furnitureControlClassroomRows.length
-                    ? furnitureControlClassroomRows
+                  furnitureControlLocationRows.length
+                    ? furnitureControlLocationRows
                         .map(
                           (row, index) =>
                             `<tr>
@@ -31037,7 +31084,7 @@ export default function App() {
                             </tr>`
                         )
                         .join("")
-                    : `<tr><td colspan="9">No classroom records yet.</td></tr>`
+                    : `<tr><td colspan="9">No location records yet.</td></tr>`
                 }
               </tbody>
             </table>
@@ -32490,7 +32537,7 @@ export default function App() {
       ) : null}
 
       <section className={`app-card app-card-layout ${maintenanceQuickMode ? "app-card-maintenance-quick" : ""}`}>
-        <header className="topbar">
+        <header className={`topbar ${isPhoneView ? "topbar-phone" : ""}`}>
           <div className="brand-block">
             {isPhoneView ? (
               <button
@@ -32524,7 +32571,7 @@ export default function App() {
             {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
           </div>
 
-          <div className="top-right">
+          <div className={`top-right ${isPhoneView ? "top-right-phone" : ""}`}>
             <img loading="eager" fetchPriority="high" decoding="async" className="eco-header-logo"
               src={ECO_LOGO_URL}
               alt="ECO International School"
@@ -46261,14 +46308,6 @@ export default function App() {
 
         {tab === "utilities" && (
           <section className="panel">
-            {!isPhoneView ? (
-              <div className="tabs">
-                <button className={`tab ${utilitiesView === "entry" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("entry")}>Monthly Entry</button>
-                <button className={`tab ${utilitiesView === "history" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("history")}>History</button>
-                <button className={`tab ${utilitiesView === "monthly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("monthly")}>Monthly Comparison</button>
-                <button className={`tab ${utilitiesView === "yearly" ? "tab-active" : ""}`} onClick={() => setUtilitiesView("yearly")}>Yearly Report</button>
-              </div>
-            ) : null}
             {utilityMessage ? <p className="tiny">{utilityMessage}</p> : null}
 
             {utilitiesView === "entry" && (
@@ -46431,13 +46470,9 @@ export default function App() {
                     >
                       <option value="ALL">All Months</option>
                       {utilityHistoryMonthOptions.map((month) => {
-                        const monthDate = new Date(`${month}-01T00:00:00`);
-                        const label = Number.isNaN(monthDate.getTime())
-                          ? month
-                          : monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
                         return (
                           <option key={`utility-history-month-${month}`} value={month}>
-                            {label}
+                            {formatMonthYear(month)}
                           </option>
                         );
                       })}
@@ -46457,7 +46492,7 @@ export default function App() {
                             <button className="danger-icon-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>X</button>
                           </div>
                           <div className="utility-history-mobile-grid">
-                            <div><small>Billing Month</small><strong>{row.billingMonth || "-"}</strong></div>
+                            <div><small>Billing Month</small><strong>{formatMonthYear(row.billingMonth || "-")}</strong></div>
                             <div><small>{t.campus}</small><strong>{row.location ? `${rentalPrinterCampusLabel(row.campus)} • ${row.location}` : rentalPrinterCampusLabel(row.campus)}</strong></div>
                             <div><small>Usage</small><strong>{row.usage} {row.unit}</strong></div>
                             <div><small>Amount</small><strong>{formatRielAmount(row.amount)}</strong></div>
@@ -46471,37 +46506,34 @@ export default function App() {
                     <div className="utility-history-mobile-empty">No utility invoice history yet.</div>
                   )
                 ) : (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Invoice Date</th>
-                          <th>Billing Month</th>
-                          <th>Utility</th>
-                          <th>{t.campus}</th>
-                          <th>Usage</th>
-                          <th>Amount</th>
-                          <th>Invoice No.</th>
-                          <th>Provider</th>
-                          <th>{t.actions}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredUtilityReadings.length ? filteredUtilityReadings.map((row) => (
-                          <tr key={`utility-history-row-${row.id}`}>
-                            <td>{formatDate(row.invoiceDate)}</td>
-                            <td>{row.billingMonth || "-"}</td>
-                            <td>{row.utilityType || "-"}</td>
-                            <td>{row.location ? `${rentalPrinterCampusLabel(row.campus)} • ${row.location}` : rentalPrinterCampusLabel(row.campus)}</td>
-                            <td>{row.usage} {row.unit}</td>
-                            <td>{formatRielAmount(row.amount)}</td>
-                            <td>{row.invoiceNumber || "-"}</td>
-                            <td>{row.providerName || "-"}</td>
-                            <td><button className="danger-icon-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>X</button></td>
-                          </tr>
-                        )) : <tr><td colSpan={9}>No utility invoice history yet.</td></tr>}
-                      </tbody>
-                    </table>
+                  <div className="utility-history-desktop-shell">
+                    {filteredUtilityReadings.length ? (
+                      <div className="utility-history-desktop-grid">
+                        {filteredUtilityReadings.map((row) => (
+                          <article className="utility-history-desktop-card" key={`utility-history-row-${row.id}`}>
+                            <div className="utility-history-desktop-head">
+                              <div className="utility-history-desktop-title">
+                                <strong>{row.utilityType || "-"}</strong>
+                                <span>{row.invoiceNumber || "No Invoice No."}</span>
+                              </div>
+                              <button className="btn-danger btn-small utility-delete-btn" onClick={() => void deleteUtilityInvoiceEntry(row.id)}>
+                                Delete
+                              </button>
+                            </div>
+                            <div className="utility-history-desktop-meta">
+                              <div><span>Invoice Date</span><strong>{formatDate(row.invoiceDate)}</strong></div>
+                              <div><span>Billing Month</span><strong>{formatMonthYear(row.billingMonth || "-")}</strong></div>
+                              <div><span>{t.campus}</span><strong>{row.location ? `${rentalPrinterCampusLabel(row.campus)} • ${row.location}` : rentalPrinterCampusLabel(row.campus)}</strong></div>
+                              <div><span>Provider</span><strong>{row.providerName || "-"}</strong></div>
+                              <div><span>Usage</span><strong>{row.usage} {row.unit}</strong></div>
+                              <div><span>Amount</span><strong>{formatRielAmount(row.amount)}</strong></div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="utility-history-desktop-empty">No utility invoice history yet.</div>
+                    )}
                   </div>
                 )}
               </>
@@ -46511,74 +46543,128 @@ export default function App() {
               <>
                 <h2 className="utility-page-title">Monthly Comparison</h2>
                 <div className={`stats-grid ${isPhoneView ? "stats-grid-phone" : ""}`} style={{ marginBottom: 12 }}>
-                  <article className="stat-card"><div className="stat-label">This Month EDC</div><div className="stat-value">{utilityUsageSummary.edcUsage.toFixed(2)} kWh</div></article>
-                  <article className="stat-card"><div className="stat-label">This Month PPWS</div><div className="stat-value">{utilityUsageSummary.ppwsUsage.toFixed(2)} m3</div></article>
-                  <article className="stat-card"><div className="stat-label">This Month Cost</div><div className="stat-value">{formatRielAmount(utilityUsageSummary.totalAmount)}</div></article>
+                  <article className="stat-card"><div className="stat-label">This Month EDC Usage</div><div className="stat-value">{utilityUsageSummary.edcUsage.toFixed(2)} kWh</div></article>
+                  <article className="stat-card"><div className="stat-label">This Month EDC Cost</div><div className="stat-value">{formatRielAmount(utilityUsageSummary.edcAmount)}</div></article>
+                  <article className="stat-card"><div className="stat-label">Active Months</div><div className="stat-value">{utilityMonthlyComparison.activeMonths}</div></article>
                 </div>
-                {isPhoneView ? (
-                  utilityMonthlyComparison.length ? (
-                    <div className="utility-monthly-mobile-list" style={{ marginBottom: 12 }}>
-                      {utilityMonthlyComparison.map((row) => (
-                        <article className="utility-monthly-mobile-card" key={`utility-month-mobile-${row.month}`}>
-                          <div className="utility-monthly-mobile-head">
-                            <strong>{row.month}</strong>
+                {utilityMonthlyComparison.series.length ? (() => {
+                  const chartWidth = 920;
+                  const chartHeight = 320;
+                  const paddingLeft = 56;
+                  const paddingRight = 20;
+                  const paddingTop = 18;
+                  const paddingBottom = 34;
+                  const usableWidth = chartWidth - paddingLeft - paddingRight;
+                  const usableHeight = chartHeight - paddingTop - paddingBottom;
+                  const tickCount = 4;
+                  const maxAmount = utilityMonthlyComparison.maxAmount;
+                  const months = utilityMonthlyComparison.months;
+                  const pointX = (index: number) =>
+                    paddingLeft + (months.length <= 1 ? usableWidth / 2 : (usableWidth / (months.length - 1)) * index);
+                  const pointY = (amount: number) =>
+                    paddingTop + usableHeight - (amount / maxAmount) * usableHeight;
+                  const ticks = Array.from({ length: tickCount + 1 }, (_, index) => {
+                    const value = (maxAmount / tickCount) * index;
+                    return {
+                      value,
+                      y: pointY(value),
+                    };
+                  }).reverse();
+                  return (
+                    <>
+                      <section className="utility-edc-chart-card">
+                        <div className="utility-edc-chart-head">
+                          <div className="utility-edc-chart-copy">
+                            <strong>EDC Expense Comparison</strong>
+                            <span>Month-by-month electricity cost comparison by year.</span>
                           </div>
-                          <div className="utility-monthly-mobile-grid">
-                            <div><small>EDC Usage</small><strong>{row.edcUsage.toFixed(2)} kWh</strong></div>
-                            <div><small>PPWS Usage</small><strong>{row.ppwsUsage.toFixed(2)} m3</strong></div>
-                            <div><small>Total Amount</small><strong>{formatRielAmount(row.amount)}</strong></div>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="utility-history-mobile-empty" style={{ marginBottom: 12 }}>No monthly utility data yet.</div>
-                  )
-                ) : (
-                  <div className="table-wrap" style={{ marginBottom: 12 }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Month</th>
-                          <th>EDC Usage (kWh)</th>
-                          <th>PPWS Usage (m3)</th>
-                          <th>Total Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {utilityMonthlyComparison.length ? utilityMonthlyComparison.map((row) => (
-                          <tr key={`utility-month-${row.month}`}>
-                            <td>{row.month}</td>
-                            <td>{row.edcUsage.toFixed(2)}</td>
-                            <td>{row.ppwsUsage.toFixed(2)}</td>
-                            <td>{formatRielAmount(row.amount)}</td>
-                          </tr>
-                        )) : <tr><td colSpan={4}>No monthly utility data yet.</td></tr>}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                <div className="utility-chart-list">
-                  {utilityMonthlyComparison.map((row) => {
-                    const maxUsage = Math.max(
-                      1,
-                      ...utilityMonthlyComparison.map((entry) => Math.max(entry.edcUsage, entry.ppwsUsage))
-                    );
-                    return (
-                      <div key={`utility-month-chart-${row.month}`} className="utility-chart-row">
-                        <div className="utility-chart-label">{row.month}</div>
-                        <div className="utility-chart-bars">
-                          <div className="utility-chart-bar utility-chart-bar-edc" style={{ width: `${(row.edcUsage / maxUsage) * 100}%` }}>
-                            EDC {row.edcUsage.toFixed(0)}
-                          </div>
-                          <div className="utility-chart-bar utility-chart-bar-ppws" style={{ width: `${(row.ppwsUsage / maxUsage) * 100}%` }}>
-                            PPWS {row.ppwsUsage.toFixed(0)}
+                          <div className="utility-edc-chart-legend">
+                            {utilityMonthlyComparison.series.map((series) => (
+                              <div key={`utility-edc-legend-${series.year}`} className="utility-edc-chart-legend-item">
+                                <span className="utility-edc-chart-legend-swatch" style={{ "--legend-color": series.color } as React.CSSProperties} />
+                                <strong>{series.year}</strong>
+                              </div>
+                            ))}
                           </div>
                         </div>
+                        <div className="utility-edc-chart-wrap">
+                          <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="utility-edc-chart" role="img" aria-label="EDC monthly expense comparison chart">
+                            {ticks.map((tick) => (
+                              <g key={`utility-edc-tick-${tick.value}`}>
+                                <line x1={paddingLeft} y1={tick.y} x2={chartWidth - paddingRight} y2={tick.y} className="utility-edc-chart-grid" />
+                                <text x={paddingLeft - 10} y={tick.y + 4} textAnchor="end" className="utility-edc-chart-axis-label">
+                                  {formatCompactRiel(tick.value)}
+                                </text>
+                              </g>
+                            ))}
+                            {months.map((month, index) => (
+                              <text
+                                key={`utility-edc-month-${month.key}`}
+                                x={pointX(index)}
+                                y={chartHeight - 8}
+                                textAnchor="middle"
+                                className="utility-edc-chart-month-label"
+                              >
+                                {month.label}
+                              </text>
+                            ))}
+                            {utilityMonthlyComparison.series.map((series) => {
+                              const points = series.values.map((value, index) => `${pointX(index)},${pointY(value.amount)}`).join(" ");
+                              const areaPoints = [
+                                `${pointX(0)},${chartHeight - paddingBottom}`,
+                                ...series.values.map((value, index) => `${pointX(index)},${pointY(value.amount)}`),
+                                `${pointX(series.values.length - 1)},${chartHeight - paddingBottom}`,
+                              ].join(" ");
+                              return (
+                                <g key={`utility-edc-series-${series.year}`}>
+                                  <polygon points={areaPoints} fill={series.color} opacity={0.12} />
+                                  <polyline points={points} fill="none" stroke={series.color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                                  {series.values.map((value, index) => (
+                                    <g key={`utility-edc-point-${series.year}-${value.month}`}>
+                                      <circle cx={pointX(index)} cy={pointY(value.amount)} r="4.5" fill={series.color} />
+                                      <text
+                                        x={pointX(index)}
+                                        y={pointY(value.amount) - 10}
+                                        textAnchor="middle"
+                                        className="utility-edc-chart-point-label"
+                                      >
+                                        {value.amount > 0 ? formatCompactRiel(value.amount) : ""}
+                                      </text>
+                                    </g>
+                                  ))}
+                                </g>
+                              );
+                            })}
+                          </svg>
+                        </div>
+                      </section>
+                      <div className="utility-edc-summary-table">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Month</th>
+                              {utilityMonthlyComparison.series.map((series) => (
+                                <th key={`utility-edc-summary-head-${series.year}`}>{series.year}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {utilityMonthlyComparison.months.map((month, index) => (
+                              <tr key={`utility-edc-summary-${month.key}`}>
+                                <td>{month.label}</td>
+                                {utilityMonthlyComparison.series.map((series) => (
+                                  <td key={`utility-edc-summary-${series.year}-${month.key}`}>{formatRielAmount(series.values[index]?.amount || 0)}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    );
-                  })}
-                </div>
+                    </>
+                  );
+                })() : (
+                  <div className="utility-history-mobile-empty" style={{ marginBottom: 12 }}>No EDC monthly expense data yet.</div>
+                )}
               </>
             )}
 
@@ -48997,11 +49083,11 @@ export default function App() {
 
                     <div className="furniture-report-mobile-section">
                       <div className="furniture-report-mobile-section-head">
-                        <strong>{lang === "km" ? "វិភាគថ្នាក់រៀន" : "Classroom Analysis"}</strong>
-                        <span>{furnitureControlClassroomRows.length || 0} {lang === "km" ? "បន្ទប់" : "rooms"}</span>
+                        <strong>{lang === "km" ? "វិភាគទីតាំង" : "Location Analysis"}</strong>
+                        <span>{furnitureControlLocationRows.length || 0} {lang === "km" ? "ទីតាំង" : "locations"}</span>
                       </div>
-                      {furnitureControlClassroomRows.length ? (
-                        furnitureControlClassroomRows.map((row) => (
+                      {furnitureControlLocationRows.length ? (
+                        furnitureControlLocationRows.map((row) => (
                           <article key={`furniture-room-mobile-${row.id}`} className="report-card furniture-report-mobile-card furniture-report-room-card">
                             <div className="report-card-head furniture-report-mobile-head">
                               <div className="report-card-title">
@@ -49047,7 +49133,7 @@ export default function App() {
                           </article>
                         ))
                       ) : (
-                        <div className="panel-note">No classroom location records yet. Mark classroom locations in Setup.</div>
+                        <div className="panel-note">No furniture location records yet.</div>
                       )}
                     </div>
                   </div>
@@ -49105,8 +49191,8 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {furnitureControlClassroomRows.length ? (
-                            furnitureControlClassroomRows.map((row) => (
+                          {furnitureControlLocationRows.length ? (
+                            furnitureControlLocationRows.map((row) => (
                               <tr key={`furniture-room-${row.id}`}>
                                 <td>{reportCampusName(row.campus)}</td>
                                 <td>{row.location}</td>
@@ -49120,7 +49206,7 @@ export default function App() {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={8}>No classroom location records yet. Mark classroom locations in Setup.</td>
+                              <td colSpan={8}>No furniture location records yet.</td>
                             </tr>
                           )}
                         </tbody>
