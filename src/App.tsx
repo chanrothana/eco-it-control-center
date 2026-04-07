@@ -5950,6 +5950,36 @@ function furnitureMasterPhoto(models: FurnitureModelMaster[], type: string, mode
   return String(hit?.photo || "").trim();
 }
 
+function deriveFurnitureModelsFromAssets(assets: Asset[]) {
+  const byModel = new Map<string, FurnitureModelMaster>();
+  for (const asset of normalizeArray<Asset>(assets)) {
+    if (!isFurnitureAsset(asset.category)) continue;
+    const type = String(asset.type || "").trim().toUpperCase();
+    const model = String(asset.model || "").trim();
+    if (!type || !model) continue;
+    const key = `${type}::${model.toUpperCase()}`;
+    const details = parseFurnitureSpecs(asset.specs || "");
+    const photo = String(details.modelPhoto || "").trim() || normalizeAssetPhotos(asset)[0] || "";
+    const existing = byModel.get(key);
+    if (!existing) {
+      byModel.set(key, {
+        id: Number(asset.id) || Date.now() + byModel.size + 1,
+        type,
+        model,
+        photo,
+        created: String(asset.created || new Date().toISOString()),
+      });
+      continue;
+    }
+    if (!String(existing.photo || "").trim() && photo) {
+      existing.photo = photo;
+    }
+  }
+  return Array.from(byModel.values()).sort((a, b) =>
+    a.type.localeCompare(b.type) || a.model.localeCompare(b.model)
+  );
+}
+
 function updateGroupedFurnitureAssetQuantity(asset: Asset, quantity: number) {
   const details = parseFurnitureSpecs(asset.specs || "");
   return {
@@ -14461,6 +14491,7 @@ export default function App() {
           .catch(() => ({ ok: false as const })),
         requestJson<{ locations: LocationEntry[] }>("/api/locations"),
       ]);
+      const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
       if (settingsResult.ok) {
         const settingsRes = settingsResult.settings;
         const fromServer = settingsRes.settings?.campusNames || {};
@@ -14506,6 +14537,7 @@ export default function App() {
         const serverPoolOperationRecords = normalizePoolOperationRecords(settingsRes.settings?.poolOperationRecords);
         const serverPoolComplaints = normalizePoolComplaints(settingsRes.settings?.poolComplaints);
         const fallbackFurnitureModels = readFurnitureModelFallback();
+        const derivedFurnitureModels = deriveFurnitureModelsFromAssets(serverAssets);
         const fallbackInventoryItems = readInventoryItemFallback();
         const fallbackInventoryTxns = readInventoryTxnFallback();
         const fallbackUtilityMeters = readUtilityMeterFallback();
@@ -14650,19 +14682,24 @@ export default function App() {
         );
         const hasServerFurnitureModels = Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels");
         if (hasServerFurnitureModels) {
-          setFurnitureModels(serverFurnitureModels);
+          const nextFurnitureModels = serverFurnitureModels.length
+            ? serverFurnitureModels
+            : fallbackFurnitureModels.length
+              ? fallbackFurnitureModels
+              : derivedFurnitureModels;
+          setFurnitureModels(nextFurnitureModels);
           if (
             authUser &&
             isAdminRole(authUser.role) &&
             serverFurnitureModels.length === 0 &&
-            fallbackFurnitureModels.length > 0
+            nextFurnitureModels.length > 0
           ) {
-            void saveFurnitureModelsToServer(fallbackFurnitureModels).catch((err) => {
+            void saveFurnitureModelsToServer(nextFurnitureModels).catch((err) => {
               console.warn("Failed to backfill furniture models to server", err);
             });
           }
         } else {
-          setFurnitureModels(fallbackFurnitureModels);
+          setFurnitureModels(fallbackFurnitureModels.length ? fallbackFurnitureModels : derivedFurnitureModels);
         }
       } else {
         // Keep local settings if /api/settings is unavailable.
@@ -14693,7 +14730,6 @@ export default function App() {
 
       const locationList = normalizeLocationEntries(locationRes.locations);
 
-      const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
       // Server-first sync: when API is reachable, use server data as single source of truth.
       writeAssetFallback(serverAssets);
       setAssets(serverAssets);

@@ -12928,12 +12928,20 @@ tr.row-maint-maintenance:hover td {
 }
 
 .utility-invoice-entry-grid .utility-invoice-upload-row {
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.utility-invoice-entry-grid .utility-invoice-upload-input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .utility-invoice-entry-grid .utility-invoice-thumb-btn {
-  margin-top: -2px;
+  margin-top: 0;
+  flex: 0 0 auto;
+  padding: 3px;
 }
 
 .utility-invoice-entry-grid .field .tiny {
@@ -12963,6 +12971,11 @@ tr.row-maint-maintenance:hover td {
   border-radius: 12px;
   object-fit: cover;
   border: 1px solid #d2dded;
+}
+
+.utility-invoice-entry-grid .utility-invoice-thumb {
+  width: 56px;
+  height: 56px;
 }
 
 .photo-empty {
