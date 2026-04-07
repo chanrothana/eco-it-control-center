@@ -6701,6 +6701,7 @@ label.backup-action-btn {
 .dashboard-stock-campus-matrix th.dashboard-stock-item-head,
 .dashboard-stock-campus-matrix td:not(:first-child) {
   min-width: clamp(84px, 7vw, 110px);
+  width: clamp(84px, 7vw, 110px);
   text-align: center;
 }
 
@@ -6726,11 +6727,18 @@ label.backup-action-btn {
 }
 
 .dashboard-stock-item-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  height: 168px;
   vertical-align: middle;
   white-space: normal !important;
   padding: 12px 10px !important;
   background: linear-gradient(180deg, #edf4ff, #dce8fa);
   border-bottom: 1px solid #bfd1ea;
+  overflow: hidden;
 }
 
 .dashboard-stock-item-head-hovered {
@@ -6745,9 +6753,10 @@ label.backup-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 999px;
+  min-height: 38px;
+  width: 100%;
+  padding: 0 10px;
+  border-radius: 20px;
   background: linear-gradient(135deg, #3e79e8, #245fc7);
   box-shadow:
     0 10px 20px rgba(36, 95, 199, 0.28),
@@ -6785,17 +6794,19 @@ label.backup-action-btn {
   -webkit-box-orient: vertical;
   overflow: hidden;
   white-space: normal;
+  min-height: 38px;
   line-height: 1.2;
   font-weight: 800;
   color: #506b97;
   text-transform: uppercase;
   font-size: 10px;
   letter-spacing: 0.08em;
+  width: 100%;
 }
 
 .dashboard-stock-item-head-total {
   display: block;
-  margin-top: 4px;
+  margin-top: auto;
   color: #6f5a2d;
   font-size: 16px;
   font-weight: 800;

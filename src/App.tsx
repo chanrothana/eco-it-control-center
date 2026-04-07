@@ -46299,6 +46299,10 @@ export default function App() {
                     </select>
                   </label>
                   <label className="field">
+                    <span>Provider Name</span>
+                    <input className="input" value={utilityInvoiceForm.providerName} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, providerName: e.target.value }))} />
+                  </label>
+                  <label className="field">
                     <span>{t.campus}</span>
                     <select
                       className="input"
@@ -46373,10 +46377,6 @@ export default function App() {
                   <label className="field">
                     <span>Invoice Number</span>
                     <input className="input" value={utilityInvoiceForm.invoiceNumber} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Provider Name</span>
-                    <input className="input" value={utilityInvoiceForm.providerName} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, providerName: e.target.value }))} />
                   </label>
                   <label className="field">
                     <span>{isPhoneView ? "Invoice Upload" : "Invoice Upload (Upload invoice image for auto fill.)"}</span>

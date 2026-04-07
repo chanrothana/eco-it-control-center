@@ -3496,23 +3496,36 @@ function parseEdcInvoiceFields(text) {
   const matchesAnyPattern = (value, patterns) => patterns.some((pattern) => pattern.test(value));
   const getLineContext = (index) => [lines[index - 1] || "", lines[index] || "", lines[index + 1] || ""].join(" ");
   const topInvoiceLine = lines.slice(0, 4).join(" ");
+  const normalizeInvoiceDigits = (value) => {
+    const cleaned = toText(value).replace(/[^A-Z0-9]/gi, "");
+    return /\d{7,12}/.test(cleaned) ? cleaned : "";
+  };
 
   const invoiceNumberRaw =
     firstNonEmptyMatch(compact, [
       /\bINV\s*\/\s*([A-Z0-9]{5,})\b/i,
+      /\bINV\s*\/?\s*((?:[A-Z0-9]{2,}[\s\/-]*){2,6})\b/i,
       /\bIN[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\bIN[VY]\s*\/?\s*((?:[A-Z0-9]{2,}[\s\/-]*){2,6})\b/i,
       /\b1N[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\b1N[VY]\s*\/?\s*((?:[A-Z0-9]{2,}[\s\/-]*){2,6})\b/i,
       /\bINV\s*[#:.-]?\s*([A-Z0-9]{5,})\b/i,
     ]) ||
     firstNonEmptyMatch(lines.slice(0, 3).join(" "), [
       /\bINV[^A-Z0-9]{0,4}(\d{7,10})\b/i,
+      /\bINV[^A-Z0-9]{0,4}((?:\d{2,4}[\/\s-]*){2,4})\b/i,
       /\bIN[VY][^A-Z0-9]{0,4}(\d{7,10})\b/i,
+      /\bIN[VY][^A-Z0-9]{0,4}((?:\d{2,4}[\/\s-]*){2,4})\b/i,
       /\b1N[VY][^A-Z0-9]{0,4}(\d{7,10})\b/i,
+      /\b1N[VY][^A-Z0-9]{0,4}((?:\d{2,4}[\/\s-]*){2,4})\b/i,
     ]) ||
     firstNonEmptyMatch(lines.slice(0, 8).join(" "), [
       /\bINV\s*\/\s*([A-Z0-9]{5,})\b/i,
+      /\bINV\s*\/?\s*((?:[A-Z0-9]{2,}[\s\/-]*){2,6})\b/i,
       /\bIN[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\bIN[VY]\s*\/?\s*((?:[A-Z0-9]{2,}[\s\/-]*){2,6})\b/i,
       /\b1N[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
+      /\b1N[VY]\s*\/?\s*((?:[A-Z0-9]{2,}[\s\/-]*){2,6})\b/i,
       /\bINV\s*[#:.-]?\s*([A-Z0-9]{5,})\b/i,
     ]) ||
     (() => {
@@ -3520,11 +3533,13 @@ function parseEdcInvoiceFields(text) {
       if (!hasInvoicePrefix) return "";
       const digits = firstNonEmptyMatch(topInvoiceLine, [
         /\b(?:inv|iny|1nv|1ny)[^0-9]{0,6}(\d{7,10})\b/i,
+        /\b(?:inv|iny|1nv|1ny)[^0-9]{0,6}((?:\d{2,4}[\/\s-]*){2,4})\b/i,
         /\b(\d{7,10})\b/,
       ]);
       return digits;
     })();
-  const invoiceNumber = invoiceNumberRaw ? `INV/${invoiceNumberRaw.replace(/[^A-Z0-9]/gi, "")}` : "";
+  const invoiceNumberDigits = normalizeInvoiceDigits(invoiceNumberRaw);
+  const invoiceNumber = invoiceNumberDigits ? `INV/${invoiceNumberDigits}` : "";
   const invoiceDigits = invoiceNumber.replace(/\D/g, "");
 
   const dateMatches = lines.flatMap((line, index) =>
@@ -3577,10 +3592,80 @@ function parseEdcInvoiceFields(text) {
       }))
       .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
   );
+  const strongLabeledUsageCandidates = lines
+    .flatMap((line, index) => {
+      const context = getLineContext(index);
+      if (!matchesAnyPattern(context, usageLinePatterns)) return [];
+      return Array.from(context.matchAll(/\b(\d{1,3}(?:,\d{3})+|\d{3,4}(?:\.\d+)?)\b/g)).map((match) => {
+        const raw = match[1];
+        const value = Number(raw.replace(/,/g, ""));
+        let score = 0;
+        if (!Number.isFinite(value) || value <= 0) return null;
+        if (value >= 500 && value <= 10000) score += 8;
+        else if (value >= 100 && value < 500) score += 2;
+        else score -= 8;
+        if (raw.includes(",")) score += 4;
+        if (!raw.includes(".") && value >= 500) score += 3;
+        if (index >= laterHalfIndex) score += 3;
+        if (index >= tailStartIndex) score += 2;
+        if (matchesAnyPattern(line, usageLinePatterns)) score += 5;
+        if (matchesAnyPattern(context, usageLinePatterns)) score += 4;
+        if (/\./.test(raw) && value < 500 && index < laterHalfIndex) score -= 12;
+        if (/\b(?:amount|riel|payable|invoice|inv|total|tax|vat|id|rd)\b/i.test(context)) score -= 6;
+        if (invoiceDigits && raw.replace(/\D/g, "") === invoiceDigits) score -= 10;
+        if (/\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}/.test(context)) score -= 4;
+        return {
+          raw,
+          value,
+          index,
+          score,
+        };
+      });
+    })
+    .filter(Boolean);
+  if (strongLabeledUsageCandidates.length) {
+    strongLabeledUsageCandidates.sort((a, b) => b.score - a.score || b.index - a.index || b.value - a.value);
+    if (strongLabeledUsageCandidates[0].score >= 10) {
+      usage = String(strongLabeledUsageCandidates[0].value);
+    }
+  }
+  const commaUsageCandidates = lines
+    .flatMap((line, index) => {
+      const context = getLineContext(index);
+      return Array.from(line.matchAll(/\b(\d{1,3}(?:,\d{3})+)\b/g)).map((match) => {
+        const raw = match[1];
+        const value = Number(raw.replace(/,/g, ""));
+        let score = 0;
+        if (!Number.isFinite(value) || value < 500 || value > 10000) return null;
+        score += 8;
+        if (index >= laterHalfIndex) score += 4;
+        if (index >= tailStartIndex) score += 3;
+        if (matchesAnyPattern(line, usageLinePatterns)) score += 6;
+        if (matchesAnyPattern(context, usageLinePatterns)) score += 5;
+        if (!/\./.test(raw)) score += 2;
+        if (/\b(?:amount|riel|payable|invoice|inv|total|tax|vat)\b/i.test(context)) score -= 6;
+        if (/\b(?:id|location|rd|code|barcode|account)\b/i.test(context)) score -= 8;
+        if (/\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}/.test(context)) score -= 4;
+        if (invoiceDigits && raw.replace(/\D/g, "") === invoiceDigits) score -= 10;
+        return {
+          raw,
+          value,
+          index,
+          score,
+        };
+      });
+    })
+    .filter(Boolean);
+  if (!usage && commaUsageCandidates.length) {
+    commaUsageCandidates.sort((a, b) => b.score - a.score || b.index - a.index || b.value - a.value);
+    if (commaUsageCandidates[0].score >= 8) {
+      usage = String(commaUsageCandidates[0].value);
+    }
+  }
   const smallDecimalKwhCandidates = preciseKwhCandidates.filter(
-    (entry) => /\./.test(entry.raw) && entry.value >= 1 && entry.value <= 500
+    (entry) => /\./.test(entry.raw) && entry.value >= 1 && entry.value <= 500 && entry.index >= laterHalfIndex
   );
-  if (smallDecimalKwhCandidates.length) {
+  if (!usage && smallDecimalKwhCandidates.length) {
     smallDecimalKwhCandidates.sort((a, b) => b.index - a.index || a.value - b.value);
     usage = String(smallDecimalKwhCandidates[0].value);
   }
@@ -3598,6 +3683,7 @@ function parseEdcInvoiceFields(text) {
         if (index >= tailStartIndex) score += 3;
         if (matchesAnyPattern(line, usageLinePatterns)) score += 5;
         if (matchesAnyPattern(context, usageLinePatterns)) score += 3;
+        if (/\./.test(match[1]) && value < 500 && index < laterHalfIndex) score -= 10;
         if (/\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}/.test(line) && !/kwh/i.test(line)) score -= 2;
         return {
           raw: match[1],
@@ -3608,7 +3694,7 @@ function parseEdcInvoiceFields(text) {
       })
     )
     .filter(Boolean);
-  if (labeledUsageCandidates.length) {
+  if (!usage && labeledUsageCandidates.length) {
     labeledUsageCandidates.sort((a, b) => b.score - a.score || b.index - a.index || a.value - b.value);
     if (labeledUsageCandidates[0].score >= 6) {
       usage = String(labeledUsageCandidates[0].value);
@@ -3663,14 +3749,17 @@ function parseEdcInvoiceFields(text) {
           const value = Number(raw.replace(/,/g, ""));
           let score = 0;
           if (!Number.isFinite(value) || value < 30 || value > 5000) return null;
-          if (value >= 100 && value <= 2500) score += 4;
+          if (value >= 1000 && value <= 4000) score += 7;
+          else if (value >= 100 && value <= 2500) score += 4;
           else score += 1;
           if (index >= laterHalfIndex) score += 3;
           if (index >= tailStartIndex) score += 2;
-          if (raw.includes(",")) score += 2;
+          if (raw.includes(",")) score += 5;
+          if (!raw.includes(".") && value >= 500) score += 2;
           if (matchesAnyPattern(line, usageLinePatterns)) score += 5;
           if (matchesAnyPattern(context, usageLinePatterns)) score += 3;
           if (/\b(?:amount|riel|payable|invoice|inv|total|tax|vat)\b/i.test(context)) score -= 5;
+          if (/\b(?:id|location|rd|code|barcode|account)\b/i.test(context)) score -= 8;
           if (/\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}/.test(line)) score -= 6;
           if (/\b20\d{2}\b/.test(raw)) score -= 4;
           if (invoiceNumber && raw.replace(/\D/g, "").length >= 6) score -= 6;
