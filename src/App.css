@@ -1579,6 +1579,133 @@ h2 {
   color: #48649e;
 }
 
+.maintenance-quick-hero-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 16px;
+  border: 1px solid rgba(117, 151, 198, 0.28);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top right, rgba(82, 141, 235, 0.18) 0%, rgba(82, 141, 235, 0) 32%),
+    linear-gradient(180deg, rgba(28, 45, 70, 0.98), rgba(17, 31, 50, 0.96));
+  box-shadow: 0 18px 34px rgba(7, 16, 30, 0.18);
+}
+
+.maintenance-quick-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.maintenance-quick-hero-copy h2 {
+  margin: 4px 0 0;
+  color: #f5f9ff;
+  font-size: 28px;
+  line-height: 1.06;
+}
+
+.maintenance-quick-hero-copy p {
+  margin: 10px 0 0;
+  color: #aabbd3;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.maintenance-quick-kicker {
+  margin: 0;
+  color: #8fb4f5;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.maintenance-quick-campus-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(144, 177, 227, 0.34);
+  background: rgba(242, 247, 255, 0.08);
+  color: #eef5ff;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.maintenance-quick-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.maintenance-quick-fact {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(130, 164, 215, 0.24);
+  border-radius: 16px;
+  background: rgba(245, 249, 255, 0.06);
+}
+
+.maintenance-quick-fact span {
+  color: #8fa6c8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.maintenance-quick-fact strong {
+  color: #f4f8ff;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.maintenance-quick-nav-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.maintenance-quick-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid rgba(130, 164, 215, 0.24);
+  border-radius: 16px;
+  background: rgba(245, 249, 255, 0.05);
+  color: #dfeaff;
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 10px 18px rgba(6, 15, 29, 0.12);
+}
+
+.maintenance-quick-nav-btn-active {
+  border-color: rgba(114, 160, 240, 0.46);
+  background: linear-gradient(135deg, #3d7dff 0%, #2659bf 100%);
+  color: #ffffff;
+}
+
+.maintenance-quick-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.maintenance-quick-nav-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 .printer-report-chart-card {
   margin-bottom: 14px;
   border: 1px solid #e2cfb2;
@@ -12800,6 +12927,21 @@ tr.row-maint-maintenance:hover td {
   flex: 1 1 260px;
 }
 
+.utility-invoice-entry-grid .utility-invoice-upload-row {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.utility-invoice-entry-grid .utility-invoice-thumb-btn {
+  margin-top: -2px;
+}
+
+.utility-invoice-entry-grid .field .tiny {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .utility-invoice-thumb-btn {
   border: 1px solid #bcd0ea;
   border-radius: 16px;
@@ -15196,6 +15338,96 @@ tr.row-maint-maintenance:hover td {
     font-size: clamp(18px, 5.6vw, 22px) !important;
   }
 
+  .app-card-maintenance-quick {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .app-card-maintenance-quick .topbar {
+    padding: 8px 10px 10px;
+    border-radius: 0 0 16px 16px;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-top: 0 !important;
+    box-shadow: 0 14px 28px rgba(5, 11, 21, 0.2);
+  }
+
+  .app-card-maintenance-quick .brand-block {
+    padding: 0;
+  }
+
+  .app-card-maintenance-quick .mobile-brand-logo {
+    width: min(54vw, 220px);
+    max-height: 54px;
+  }
+
+  .app-card-maintenance-quick .workspace-main {
+    padding: 10px 8px 16px !important;
+  }
+
+  .maintenance-quick-hero-card {
+    margin-bottom: 10px;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .maintenance-quick-hero-top {
+    display: grid;
+    gap: 10px;
+  }
+
+  .maintenance-quick-hero-copy h2 {
+    font-size: clamp(22px, 7vw, 28px);
+    text-align: center;
+  }
+
+  .maintenance-quick-hero-copy p {
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .maintenance-quick-kicker {
+    text-align: center;
+  }
+
+  .maintenance-quick-campus-chip {
+    justify-self: center;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .maintenance-quick-facts {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .maintenance-quick-fact {
+    padding: 10px 12px;
+    border-radius: 14px;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .maintenance-quick-fact span {
+    letter-spacing: 0.08em;
+  }
+
+  .maintenance-quick-fact strong {
+    text-align: right;
+    font-size: 14px;
+  }
+
+  .maintenance-quick-nav-row {
+    gap: 8px;
+  }
+
+  .maintenance-quick-nav-btn {
+    min-height: 44px;
+    border-radius: 14px;
+    font-size: 13px;
+    padding: 0 10px;
+  }
+
   .subhead {
     font-size: 14px;
     line-height: 1.35;
@@ -16158,15 +16390,19 @@ tr.row-maint-maintenance:hover td {
     grid-column: 1 / -1 !important;
   }
 
-  .workspace-main .form-grid.inventory-item-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 10px;
-  }
+.workspace-main .form-grid.inventory-item-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px;
+}
 
-  .workspace-main .form-grid.inventory-item-create-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 10px;
-  }
+.workspace-main .form-grid.inventory-item-grid.utility-invoice-entry-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+.workspace-main .form-grid.inventory-item-create-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px;
+}
 
   .workspace-main .inventory-item-grid .field-wide {
     grid-column: 1 / -1 !important;

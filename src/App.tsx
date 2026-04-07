@@ -7304,8 +7304,6 @@ export default function App() {
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
-  const utilityInvoiceUploadHelpText =
-    "Upload invoice image to auto fill usage, amount, invoice date, billing month, and invoice number. Please review the detected values before saving.";
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -46174,7 +46172,10 @@ export default function App() {
             {utilitiesView === "entry" && (
               <>
                 <h2>Utility Monthly Entry</h2>
-                <div className="form-grid inventory-item-grid">
+                <div
+                  className="form-grid inventory-item-grid utility-invoice-entry-grid"
+                  style={isPhoneView ? undefined : { gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
+                >
                   <label className="field">
                     <span>Utility</span>
                     <select
@@ -46275,8 +46276,8 @@ export default function App() {
                     <span>Provider Name</span>
                     <input className="input" value={utilityInvoiceForm.providerName} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, providerName: e.target.value }))} />
                   </label>
-                  <label className="field field-wide">
-                    <span>Invoice Upload</span>
+                  <label className="field">
+                    <span>Invoice Upload (Upload invoice image for auto fill.)</span>
                     <div className="utility-invoice-upload-row">
                       <input type="file" accept="image/*" className="input utility-invoice-upload-input" onChange={onUtilityInvoicePhotoFile} />
                       {utilityInvoiceForm.photo ? (
@@ -46296,7 +46297,6 @@ export default function App() {
                         </button>
                       ) : null}
                     </div>
-                    <span className="tiny">{utilityInvoiceUploadHelpText}</span>
                   </label>
                   <label className="field field-wide">
                     <span>{t.notes}</span>

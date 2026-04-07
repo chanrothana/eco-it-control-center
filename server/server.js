@@ -3495,6 +3495,7 @@ function parseEdcInvoiceFields(text) {
   const moneyPattern = /(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{5,}(?:\.\d+)?)/g;
   const matchesAnyPattern = (value, patterns) => patterns.some((pattern) => pattern.test(value));
   const getLineContext = (index) => [lines[index - 1] || "", lines[index] || "", lines[index + 1] || ""].join(" ");
+  const topInvoiceLine = lines.slice(0, 4).join(" ");
 
   const invoiceNumberRaw =
     firstNonEmptyMatch(compact, [
@@ -3513,7 +3514,16 @@ function parseEdcInvoiceFields(text) {
       /\bIN[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
       /\b1N[VY]\s*\/?\s*([A-Z0-9]{5,})\b/i,
       /\bINV\s*[#:.-]?\s*([A-Z0-9]{5,})\b/i,
-    ]);
+    ]) ||
+    (() => {
+      const hasInvoicePrefix = /\b(?:inv|iny|1nv|1ny)\b/i.test(topInvoiceLine);
+      if (!hasInvoicePrefix) return "";
+      const digits = firstNonEmptyMatch(topInvoiceLine, [
+        /\b(?:inv|iny|1nv|1ny)[^0-9]{0,6}(\d{7,10})\b/i,
+        /\b(\d{7,10})\b/,
+      ]);
+      return digits;
+    })();
   const invoiceNumber = invoiceNumberRaw ? `INV/${invoiceNumberRaw.replace(/[^A-Z0-9]/gi, "")}` : "";
   const invoiceDigits = invoiceNumber.replace(/\D/g, "");
 
