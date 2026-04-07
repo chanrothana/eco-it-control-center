@@ -1070,6 +1070,17 @@ function comparePopupSortCellValues(aRaw: string, bRaw: string) {
   });
 }
 
+function formatNumericInputDisplay(value: string) {
+  const raw = String(value || "").replace(/[^0-9.,]/g, "").replace(/,/g, "");
+  if (!raw) return "";
+  const hasDecimal = raw.includes(".");
+  const [intPartRaw, decimalPartRaw = ""] = raw.split(".");
+  const intPart = intPartRaw.replace(/^0+(?=\d)/, "") || "0";
+  const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (!hasDecimal) return formattedInt;
+  return `${formattedInt}.${decimalPartRaw.replace(/\./g, "")}`;
+}
+
 function normalizeInventoryApprovalCampusValue(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -16504,8 +16515,8 @@ export default function App() {
       setUtilityInvoiceForm((prev) => ({
         ...prev,
         photo,
-        usage: extracted.usage || prev.usage,
-        amount: extracted.amount || prev.amount,
+        usage: extracted.usage ? formatNumericInputDisplay(extracted.usage) : prev.usage,
+        amount: extracted.amount ? formatNumericInputDisplay(extracted.amount) : prev.amount,
         invoiceNumber: extracted.invoiceNumber || prev.invoiceNumber,
         invoiceDate: extracted.invoiceDate || prev.invoiceDate,
         billingMonth: derivedEdcBillingMonth || extracted.billingMonth || prev.billingMonth,
@@ -16539,7 +16550,7 @@ export default function App() {
       setError("Usage and amount are required.");
       return;
     }
-    const usage = Math.max(0, Number(utilityInvoiceForm.usage) || 0);
+    const usage = Math.max(0, Number(String(utilityInvoiceForm.usage).replace(/,/g, "")) || 0);
     const amount = Math.max(0, Number(String(utilityInvoiceForm.amount).replace(/,/g, "")) || 0);
     const row: UtilityReading = {
       id: Date.now(),
@@ -32382,8 +32393,8 @@ export default function App() {
             ) : null}
             {isPhoneView ? null : <p className="eyebrow">{t.school}</p>}
             <h1 className={isPhoneView ? "brand-title-mobile" : ""}>
-              {isPhoneView && maintenanceQuickMode
-                ? (lang === "km" ? "របៀបថែទាំ" : "Maintenance Mode")
+              {maintenanceQuickMode
+                ? (lang === "km" ? "បុគ្គលិកថែទាំ" : "Maintenance Staff")
                 : t.title}
             </h1>
             {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
@@ -32471,6 +32482,7 @@ export default function App() {
           </aside>
 
           <section className="workspace-main" ref={workspaceMainRef}>
+            {!maintenanceQuickMode ? (
             <div className="mobile-nav-hud" ref={mobileNavRef}>
               {mobileMenuOpen ? (
                 <button
@@ -32836,6 +32848,56 @@ export default function App() {
                 </div>
               ) : null}
             </div>
+            ) : null}
+            {maintenanceQuickMode ? (
+              <section className="maintenance-quick-hero-card">
+                <div className="maintenance-quick-hero-top">
+                  <div className="maintenance-quick-hero-copy">
+                    <p className="maintenance-quick-kicker">
+                      {lang === "km" ? "តំណលឿនសម្រាប់បុគ្គលិកថែទាំ" : "Maintenance Staff Link"}
+                    </p>
+                    <h2>{lang === "km" ? "ធ្វើការងារប្រចាំថ្ងៃបានលឿន" : "Daily Work, Faster"}</h2>
+                    <p>
+                      {lang === "km"
+                        ? "មើលសម្ភារៈសម្អាត កត់ត្រាចេញស្តុក និងបើក Asset Check ដោយមិនចាំបាច់ឃើញម៉ឺនុយធំៗរបស់ប្រព័ន្ធទាំងមូល។"
+                        : "Open cleaning supplies, record stock out, and jump to Asset Check without the full system menu."}
+                    </p>
+                  </div>
+                  <span className="maintenance-quick-campus-chip">
+                    {campusLabel(maintenanceLockedCampus || campusFilter)}
+                  </span>
+                </div>
+                <div className="maintenance-quick-facts">
+                  <article className="maintenance-quick-fact">
+                    <span>{t.campus}</span>
+                    <strong>{campusLabel(maintenanceLockedCampus || campusFilter)}</strong>
+                  </article>
+                  <article className="maintenance-quick-fact">
+                    <span>{t.date}</span>
+                    <strong>{maintenanceStockOutLabel || (lang === "km" ? formatKhmerDateYmd(todayYmd) : formatDate(todayYmd))}</strong>
+                  </article>
+                  <article className="maintenance-quick-fact">
+                    <span>{lang === "km" ? "មុខងារ" : "Focus"}</span>
+                    <strong>{tab === "verification" ? (lang === "km" ? "ពិនិត្យទ្រព្យ" : "Asset Check") : (lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies")}</strong>
+                  </article>
+                </div>
+                <div className="maintenance-quick-nav-row">
+                  {maintenanceQuickNavItems.map((item) => (
+                    <button
+                      key={`maintenance-quick-hero-${item.id}`}
+                      type="button"
+                      className={`maintenance-quick-nav-btn ${item.active ? "maintenance-quick-nav-btn-active" : ""}`}
+                      onClick={item.onSelect}
+                    >
+                      <span className="maintenance-quick-nav-icon" aria-hidden={true}>
+                        {item.id === "inventory" ? navIcon("inventory") : navIcon("verification")}
+                      </span>
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
             {!isPhoneView ? (
               <div className="mobile-module-panel">
                 {maintenanceQuickMode ? (
@@ -46123,7 +46185,17 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Usage ({utilityInvoiceForm.utilityType === "PPWS" ? "m3" : "kWh"})</span>
-                    <input type="number" min="0" step="0.01" className="input" value={utilityInvoiceForm.usage} onChange={(e) => setUtilityInvoiceForm((prev) => ({ ...prev, usage: e.target.value }))} />
+                    <input
+                      className="input"
+                      inputMode="decimal"
+                      value={utilityInvoiceForm.usage}
+                      onChange={(e) =>
+                        setUtilityInvoiceForm((prev) => ({
+                          ...prev,
+                          usage: formatNumericInputDisplay(e.target.value),
+                        }))
+                      }
+                    />
                   </label>
                   <label className="field">
                     <span>Amount</span>
@@ -46134,7 +46206,7 @@ export default function App() {
                       onChange={(e) =>
                         setUtilityInvoiceForm((prev) => ({
                           ...prev,
-                          amount: e.target.value.replace(/[^0-9.,]/g, ""),
+                          amount: formatNumericInputDisplay(e.target.value),
                         }))
                       }
                     />

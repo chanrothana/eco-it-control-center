@@ -3547,7 +3547,7 @@ function parseEdcInvoiceFields(text) {
   let usage = "";
   const labeledUsageCandidates = lines
     .flatMap((line, index) =>
-      Array.from(line.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi)).map((match) => {
+      Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*kwh\b/gi)).map((match) => {
         const value = Number(match[1].replace(/,/g, ""));
         const context = getLineContext(index);
         let score = 0;
@@ -3576,7 +3576,7 @@ function parseEdcInvoiceFields(text) {
   }
   if (!usage) {
     const kwhCandidates = lines.flatMap((line, index) =>
-      Array.from(line.matchAll(/(\d+(?:\.\d+)?)\s*kwh\b/gi))
+      Array.from(line.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*kwh\b/gi))
         .map((match) => ({
           value: Number(match[1].replace(/,/g, "")),
           index,
@@ -3596,7 +3596,7 @@ function parseEdcInvoiceFields(text) {
       .flatMap((line, index) => {
         const context = getLineContext(index);
         if (!matchesAnyPattern(context, usageLinePatterns)) return [];
-        return Array.from(context.matchAll(/(\d+(?:\.\d+)?)/g)).map((match) => {
+        return Array.from(context.matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)/g)).map((match) => {
           const value = Number(match[1].replace(/,/g, ""));
           let score = 0;
           if (!Number.isFinite(value) || value <= 0) return null;
