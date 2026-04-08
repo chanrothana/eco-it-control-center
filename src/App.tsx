@@ -206,6 +206,7 @@ type TransferHistoryRow = {
   custodyEntryId: number;
   assetId: string;
   assetPhoto: string;
+  category: string;
   itemName: string;
   date: string;
   fromCampus: string;
@@ -9014,6 +9015,9 @@ export default function App() {
   const [transferFilterLocation, setTransferFilterLocation] = useState("ALL");
   const [transferFilterCategory, setTransferFilterCategory] = useState("ALL");
   const [transferFilterName, setTransferFilterName] = useState("ALL");
+  const [transferHistoryCampusFilter, setTransferHistoryCampusFilter] = useState("ALL");
+  const [transferHistoryCategoryFilter, setTransferHistoryCategoryFilter] = useState("ALL");
+  const [transferHistoryDateFilter, setTransferHistoryDateFilter] = useState("");
 
   const [ticketForm, setTicketForm] = useState({
     campus: CAMPUS_LIST[0],
@@ -27794,6 +27798,7 @@ export default function App() {
           custodyEntryId: Number(matchedCustody?.id || 0),
           assetId: asset.assetId,
           assetPhoto: asset.photo || "",
+          category: asset.category || "",
           itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           date: entry.date || "",
           fromCampus: entry.fromCampus || "",
@@ -27812,6 +27817,46 @@ export default function App() {
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date));
   }, [assets, assetItemName]);
+  const transferHistoryCampusOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          allTransferRows.flatMap((row) => [String(row.fromCampus || "").trim(), String(row.toCampus || "").trim()]).filter(Boolean)
+        )
+      ).sort(compareCampusByCode),
+    [allTransferRows]
+  );
+  const transferHistoryCategoryOptions = useMemo(
+    () => Array.from(new Set(allTransferRows.map((row) => String(row.category || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [allTransferRows]
+  );
+  const filteredTransferRows = useMemo(() => {
+    return allTransferRows.filter((row) => {
+      if (transferHistoryCampusFilter !== "ALL") {
+        const fromCampus = String(row.fromCampus || "").trim();
+        const toCampus = String(row.toCampus || "").trim();
+        if (fromCampus !== transferHistoryCampusFilter && toCampus !== transferHistoryCampusFilter) return false;
+      }
+      if (transferHistoryCategoryFilter !== "ALL" && String(row.category || "").trim() !== transferHistoryCategoryFilter) return false;
+      if (transferHistoryDateFilter) {
+        const date = normalizeYmdInput(row.date || "");
+        if (date !== transferHistoryDateFilter) return false;
+      }
+      return true;
+    });
+  }, [allTransferRows, transferHistoryCampusFilter, transferHistoryCategoryFilter, transferHistoryDateFilter]);
+  useEffect(() => {
+    if (transferHistoryCampusFilter === "ALL") return;
+    if (!transferHistoryCampusOptions.includes(transferHistoryCampusFilter)) {
+      setTransferHistoryCampusFilter("ALL");
+    }
+  }, [transferHistoryCampusFilter, transferHistoryCampusOptions]);
+  useEffect(() => {
+    if (transferHistoryCategoryFilter === "ALL") return;
+    if (!transferHistoryCategoryOptions.includes(transferHistoryCategoryFilter)) {
+      setTransferHistoryCategoryFilter("ALL");
+    }
+  }, [transferHistoryCategoryFilter, transferHistoryCategoryOptions]);
   const staffBorrowingRows = useMemo(() => {
     return assets
       .filter((asset) => String(asset.assignedTo || "").trim())
@@ -43557,21 +43602,6 @@ export default function App() {
 
         {tab === "transfer" && (
           <section className="panel">
-            <div className="tabs">
-              <button
-                className={`tab ${transferView === "history" ? "tab-active" : ""}`}
-                onClick={() => setTransferView("history")}
-              >
-                History View
-              </button>
-              <button
-                className={`tab ${transferView === "record" ? "tab-active" : ""}`}
-                onClick={() => setTransferView("record")}
-              >
-                Record Transfer
-              </button>
-            </div>
-
             {transferView === "record" && (
               <>
             <h3 className="section-title">Asset Transfer</h3>
@@ -43950,19 +43980,80 @@ export default function App() {
             {transferView === "history" && (
               <>
             <div className="transfer-history-header">
-              <h3 className="section-title">Transfer History</h3>
-              <p className="transfer-history-subhead">
-                Clear route view with staff handover and actions fixed at the end.
-              </p>
+              <div>
+                <h3 className="section-title">Transfer History</h3>
+                <p className="transfer-history-subhead">
+                  Compact log view for high-volume transfer tracking.
+                </p>
+              </div>
+              <div className="transfer-history-summary">
+                <strong>{filteredTransferRows.length}</strong>
+                <span>{filteredTransferRows.length === 1 ? "transfer" : "transfers"}</span>
+              </div>
+            </div>
+            <div className="transfer-history-filter-bar">
+              <label className="field">
+                <span>{t.campus}</span>
+                <select
+                  className="input"
+                  value={transferHistoryCampusFilter}
+                  onChange={(e) => setTransferHistoryCampusFilter(e.target.value)}
+                >
+                  <option value="ALL">{t.allCampuses}</option>
+                  {transferHistoryCampusOptions.map((campus) => (
+                    <option key={`transfer-history-campus-${campus}`} value={campus}>
+                      {campusLabel(campus)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{t.category}</span>
+                <select
+                  className="input"
+                  value={transferHistoryCategoryFilter}
+                  onChange={(e) => setTransferHistoryCategoryFilter(e.target.value)}
+                >
+                  <option value="ALL">{t.allCategories}</option>
+                  {transferHistoryCategoryOptions.map((category) => (
+                    <option key={`transfer-history-category-${category}`} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{t.date}</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={transferHistoryDateFilter}
+                  onChange={(e) => setTransferHistoryDateFilter(e.target.value)}
+                />
+              </label>
+              <div className="transfer-history-filter-actions">
+                <button
+                  type="button"
+                  className="tab"
+                  onClick={() => {
+                    setTransferHistoryCampusFilter("ALL");
+                    setTransferHistoryCategoryFilter("ALL");
+                    setTransferHistoryDateFilter("");
+                  }}
+                >
+                  Clear Filters
+                </button>
+              </div>
             </div>
             <div className="transfer-history-list">
-              {allTransferRows.length ? (
-                allTransferRows.map((row) => (
+              {filteredTransferRows.length ? (
+                filteredTransferRows.map((row) => (
                   <article key={`transfer-history-card-${row.rowId}`} className="transfer-history-card">
                     <div className="transfer-history-card-main">
                       <div className="transfer-history-card-head">
                         <span className="transfer-history-date-pill">{formatDate(row.date || "-")}</span>
                         <strong className="transfer-history-asset-pill">{row.assetId}</strong>
+                        <span className="transfer-history-category-pill">{row.category || "-"}</span>
                       </div>
                       <div className="transfer-history-card-grid">
                         <div className="transfer-history-asset">
@@ -44018,7 +44109,7 @@ export default function App() {
                   </article>
                 ))
               ) : (
-                <div className="panel-note">No transfer history yet.</div>
+                <div className="panel-note">No transfer history found for the current filters.</div>
               )}
             </div>
             {transferHistoryEdit ? (
@@ -44180,146 +44271,207 @@ export default function App() {
         {tab === "pool" && (
           <>
             <section className="panel">
-              <div className="tabs">
-                <button className={`tab ${poolView === "dashboard" ? "tab-active" : ""}`} onClick={() => setPoolView("dashboard")}>
-                  Dashboard
-                </button>
-                <button className={`tab ${poolView === "schedule" ? "tab-active" : ""}`} onClick={() => setPoolView("schedule")}>
-                  {t.cleaningSchedule}
-                </button>
-                <button className={`tab ${poolView === "equipment" ? "tab-active" : ""}`} onClick={() => setPoolView("equipment")}>
-                  {t.cleaningEquipment}
-                </button>
-                <button className={`tab ${poolView === "chemical" ? "tab-active" : ""}`} onClick={() => setPoolView("chemical")}>
-                  {t.addChemicalRecord}
-                </button>
-                <button className={`tab ${poolView === "operations" ? "tab-active" : ""}`} onClick={() => setPoolView("operations")}>
-                  {t.operationRecord}
-                </button>
-                <button className={`tab ${poolView === "complaints" ? "tab-active" : ""}`} onClick={() => setPoolView("complaints")}>
-                  {t.poolComplaints}
-                </button>
-              </div>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Pool Campus</span>
-                  <select
-                    className="input"
-                    value={poolInfo.campus}
-                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, campus: e.target.value }))}
-                  >
-                    <option value="Campus 2.2">Campus 2.2</option>
-                    <option value="Campus 4">Campus 4</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Pool Name</span>
-                  <input
-                    className="input"
-                    value={poolInfo.name}
-                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, name: e.target.value }))}
-                    placeholder="Main Pool"
-                  />
-                </label>
-                <label className="field">
-                  <span>Pool Size (m3)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    className="input"
-                    value={poolInfo.sizeM3}
-                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, sizeM3: e.target.value }))}
-                    placeholder="e.g. 450"
-                  />
-                </label>
-                <label className="field field-wide">
-                  <span>Pool Information Note</span>
-                  <input
-                    className="input"
-                    value={poolInfo.notes}
-                    onChange={(e) => setPoolInfo((prev) => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Depth, lane count, specific maintenance notes..."
-                  />
-                </label>
+              <div className="pool-shell">
+                <div className="pool-top-card">
+                  <div className="pool-top-copy">
+                    <div className="pool-top-kicker">Aquatic Care</div>
+                    <h2 className="pool-top-title">Pool Maintenance</h2>
+                    <p className="pool-top-note">Run pool cleaning, chemistry, operations, and staff remarks from one calmer workspace.</p>
+                  </div>
+                  <div className="pool-top-meta">
+                    <div className="pool-top-meta-item">
+                      <span>Active Pool</span>
+                      <strong>{activePoolLabel}</strong>
+                    </div>
+                    <div className="pool-top-meta-item">
+                      <span>Water Status</span>
+                      <strong>{poolDashboardData.waterQualityHealthy ? "Stable" : "Need Check"}</strong>
+                    </div>
+                    <div className="pool-top-meta-item">
+                      <span>Open Items</span>
+                      <strong>{poolDashboardData.openComplaints.length}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="tabs pool-view-tabs">
+                  <button className={`tab ${poolView === "dashboard" ? "tab-active" : ""}`} onClick={() => setPoolView("dashboard")}>
+                    Dashboard
+                  </button>
+                  <button className={`tab ${poolView === "schedule" ? "tab-active" : ""}`} onClick={() => setPoolView("schedule")}>
+                    {t.cleaningSchedule}
+                  </button>
+                  <button className={`tab ${poolView === "equipment" ? "tab-active" : ""}`} onClick={() => setPoolView("equipment")}>
+                    {t.cleaningEquipment}
+                  </button>
+                  <button className={`tab ${poolView === "chemical" ? "tab-active" : ""}`} onClick={() => setPoolView("chemical")}>
+                    {t.addChemicalRecord}
+                  </button>
+                  <button className={`tab ${poolView === "operations" ? "tab-active" : ""}`} onClick={() => setPoolView("operations")}>
+                    {t.operationRecord}
+                  </button>
+                  <button className={`tab ${poolView === "complaints" ? "tab-active" : ""}`} onClick={() => setPoolView("complaints")}>
+                    {t.poolComplaints}
+                  </button>
+                </div>
+
+                <div className="pool-setup-card">
+                  <div className="pool-setup-head">
+                    <div>
+                      <div className="pool-top-kicker">Pool Setup</div>
+                      <h3 className="section-title">Current Pool Context</h3>
+                    </div>
+                    <div className="tiny">Keep campus, name, and notes together so every record below stays anchored to the right pool.</div>
+                  </div>
+                  <div className="form-grid pool-setup-grid">
+                    <label className="field">
+                      <span>Pool Campus</span>
+                      <select
+                        className="input"
+                        value={poolInfo.campus}
+                        onChange={(e) => setPoolInfo((prev) => ({ ...prev, campus: e.target.value }))}
+                      >
+                        <option value="Campus 2.2">Campus 2.2</option>
+                        <option value="Campus 4">Campus 4</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Pool Name</span>
+                      <input
+                        className="input"
+                        value={poolInfo.name}
+                        onChange={(e) => setPoolInfo((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Main Pool"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Pool Size (m3)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        className="input"
+                        value={poolInfo.sizeM3}
+                        onChange={(e) => setPoolInfo((prev) => ({ ...prev, sizeM3: e.target.value }))}
+                        placeholder="e.g. 450"
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Pool Information Note</span>
+                      <input
+                        className="input"
+                        value={poolInfo.notes}
+                        onChange={(e) => setPoolInfo((prev) => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Depth, lane count, specific maintenance notes..."
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
               {poolView === "dashboard" ? (
                 <>
-                  <div className="pool-dashboard-hero">
-                    <div>
-                      <div className="pool-dashboard-kicker">Pool Live Board</div>
-                      <h3 className="section-title">Swimming Pool Operation Dashboard</h3>
-                      <div className="tiny">
-                        Track cleaning, water chemistry, pump status, and pool remarks from teachers or staff.
+                  <div className="pool-dashboard-layout">
+                    <section className="pool-dashboard-summary-card">
+                      <div className="pool-dashboard-headline">
+                        <div>
+                          <div className="pool-dashboard-kicker">Today Overview</div>
+                          <h3 className="section-title">Swimming Pool Operation Dashboard</h3>
+                          <div className="tiny">
+                            {activePoolLabel}{poolInfo.sizeM3 ? ` | Size ${poolInfo.sizeM3} m3` : ""}
+                          </div>
+                        </div>
+                        <div className="pool-dashboard-badges">
+                          <span className={`pool-badge ${poolDashboardData.waterQualityHealthy ? "pool-badge-good" : "pool-badge-alert"}`}>
+                            Water {poolDashboardData.waterQualityHealthy ? "Stable" : "Need Check"}
+                          </span>
+                          <span className={`pool-badge ${poolDashboardData.latestOperation?.pumpStatus === "On" ? "pool-badge-good" : "pool-badge-alert"}`}>
+                            Pump {poolDashboardData.latestOperation?.pumpStatus || "-"}
+                          </span>
+                          <span className={`pool-badge ${poolDashboardData.overdueCleaning.length ? "pool-badge-alert" : "pool-badge-good"}`}>
+                            Overdue Tasks {poolDashboardData.overdueCleaning.length}
+                          </span>
+                        </div>
                       </div>
-                      <div className="tiny">
-                        {activePoolLabel}{poolInfo.sizeM3 ? ` | Size ${poolInfo.sizeM3} m3` : ""}
+
+                      <div className="pool-dashboard-grid">
+                        <article className="pool-metric-card">
+                          <div className="pool-metric-label">Open Complaints</div>
+                          <div className="pool-metric-value">{poolDashboardData.openComplaints.length}</div>
+                          <div className="tiny">Waiting for resolution</div>
+                        </article>
+                        <article className="pool-metric-card">
+                          <div className="pool-metric-label">Critical / High</div>
+                          <div className="pool-metric-value">{poolDashboardData.criticalComplaints.length}</div>
+                          <div className="tiny">Immediate action items</div>
+                        </article>
+                        <article className="pool-metric-card">
+                          <div className="pool-metric-label">Pending Cleaning</div>
+                          <div className="pool-metric-value">{poolDashboardData.pendingCleaningToday.length}</div>
+                          <div className="tiny">Scheduled today but not done</div>
+                        </article>
+                        <article className="pool-metric-card">
+                          <div className="pool-metric-label">Positive Comments</div>
+                          <div className="pool-metric-value">{poolDashboardData.positiveComments.length}</div>
+                          <div className="tiny">Good condition remarks</div>
+                        </article>
                       </div>
-                    </div>
-                    <div className="pool-dashboard-badges">
-                      <span className={`pool-badge ${poolDashboardData.waterQualityHealthy ? "pool-badge-good" : "pool-badge-alert"}`}>
-                        Water {poolDashboardData.waterQualityHealthy ? "Stable" : "Need Check"}
-                      </span>
-                      <span className={`pool-badge ${poolDashboardData.latestOperation?.pumpStatus === "On" ? "pool-badge-good" : "pool-badge-alert"}`}>
-                        Pump {poolDashboardData.latestOperation?.pumpStatus || "-"}
-                      </span>
-                      <span className={`pool-badge ${poolDashboardData.overdueCleaning.length ? "pool-badge-alert" : "pool-badge-good"}`}>
-                        Overdue Tasks {poolDashboardData.overdueCleaning.length}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="pool-dashboard-grid">
-                    <article className="pool-metric-card">
-                      <div className="pool-metric-label">Open Complaints</div>
-                      <div className="pool-metric-value">{poolDashboardData.openComplaints.length}</div>
-                      <div className="tiny">Complaints from teachers or staff waiting for resolution</div>
-                    </article>
-                    <article className="pool-metric-card">
-                      <div className="pool-metric-label">Critical / High</div>
-                      <div className="pool-metric-value">{poolDashboardData.criticalComplaints.length}</div>
-                      <div className="tiny">Priority items that need immediate action</div>
-                    </article>
-                    <article className="pool-metric-card">
-                      <div className="pool-metric-label">Today Pending Cleaning</div>
-                      <div className="pool-metric-value">{poolDashboardData.pendingCleaningToday.length}</div>
-                      <div className="tiny">Tasks scheduled today but not done</div>
-                    </article>
-                    <article className="pool-metric-card">
-                      <div className="pool-metric-label">Positive Comments</div>
-                      <div className="pool-metric-value">{poolDashboardData.positiveComments.length}</div>
-                      <div className="tiny">Good condition comments from teachers or staff</div>
-                    </article>
-                  </div>
-                  <div className="pool-dashboard-health">
-                    <article className={`pool-health-tile ${poolDashboardData.phInRange ? "is-good" : "is-alert"}`}>
-                      <div className="pool-health-title">Latest pH</div>
-                      <div className="pool-health-value">{poolDashboardData.latestChemical?.ph ?? "-"}</div>
-                      <div className="tiny">Target 7.2 - 7.8</div>
-                    </article>
-                    <article className={`pool-health-tile ${poolDashboardData.chlorineInRange ? "is-good" : "is-alert"}`}>
-                      <div className="pool-health-title">Free Chlorine</div>
-                      <div className="pool-health-value">{poolDashboardData.latestChemical?.chlorineFree ?? "-"}</div>
-                      <div className="tiny">Target 1.0 - 3.0 ppm</div>
-                    </article>
-                    <article className={`pool-health-tile ${poolDashboardData.latestOperation?.pumpStatus === "On" ? "is-good" : "is-alert"}`}>
-                      <div className="pool-health-title">Pump Status</div>
-                      <div className="pool-health-value">{poolDashboardData.latestOperation?.pumpStatus || "-"}</div>
-                      <div className="tiny">Current operation record</div>
-                    </article>
-                    <article className={`pool-health-tile ${poolDashboardData.pressureHigh ? "is-alert" : "is-good"}`}>
-                      <div className="pool-health-title">Filter Pressure</div>
-                      <div className="pool-health-value">{poolDashboardData.latestOperation?.filterPressure ?? "-"}</div>
-                      <div className="tiny">Alert if above 2.2 bar</div>
-                    </article>
-                  </div>
-                  <div className="pool-dashboard-quick-actions">
-                    <button type="button" className="tab" onClick={() => setPoolView("complaints")}>Manage Complaints</button>
-                    <button type="button" className="tab" onClick={() => setPoolView("schedule")}>Update Cleaning</button>
-                    <button type="button" className="tab" onClick={() => setPoolView("chemical")}>Add Chemical Log</button>
-                    <button type="button" className="tab" onClick={() => setPoolView("operations")}>Add Operation Log</button>
-                  </div>
-                  <div className="pool-dashboard-bottom">
-                    <div className="pool-dashboard-list-card">
+
+                      <div className="pool-dashboard-health">
+                        <article className={`pool-health-tile ${poolDashboardData.phInRange ? "is-good" : "is-alert"}`}>
+                          <div className="pool-health-title">Latest pH</div>
+                          <div className="pool-health-value">{poolDashboardData.latestChemical?.ph ?? "-"}</div>
+                          <div className="tiny">Target 7.2 - 7.8</div>
+                        </article>
+                        <article className={`pool-health-tile ${poolDashboardData.chlorineInRange ? "is-good" : "is-alert"}`}>
+                          <div className="pool-health-title">Free Chlorine</div>
+                          <div className="pool-health-value">{poolDashboardData.latestChemical?.chlorineFree ?? "-"}</div>
+                          <div className="tiny">Target 1.0 - 3.0 ppm</div>
+                        </article>
+                        <article className={`pool-health-tile ${poolDashboardData.latestOperation?.pumpStatus === "On" ? "is-good" : "is-alert"}`}>
+                          <div className="pool-health-title">Pump Status</div>
+                          <div className="pool-health-value">{poolDashboardData.latestOperation?.pumpStatus || "-"}</div>
+                          <div className="tiny">Current operation record</div>
+                        </article>
+                        <article className={`pool-health-tile ${poolDashboardData.pressureHigh ? "is-alert" : "is-good"}`}>
+                          <div className="pool-health-title">Filter Pressure</div>
+                          <div className="pool-health-value">{poolDashboardData.latestOperation?.filterPressure ?? "-"}</div>
+                          <div className="tiny">Alert if above 2.2 bar</div>
+                        </article>
+                      </div>
+
+                      <div className="pool-dashboard-quick-actions">
+                        <button type="button" className="tab" onClick={() => setPoolView("complaints")}>Manage Complaints</button>
+                        <button type="button" className="tab" onClick={() => setPoolView("schedule")}>Update Cleaning</button>
+                        <button type="button" className="tab" onClick={() => setPoolView("chemical")}>Add Chemical Log</button>
+                        <button type="button" className="tab" onClick={() => setPoolView("operations")}>Add Operation Log</button>
+                      </div>
+                    </section>
+
+                    <section className="pool-dashboard-focus-card">
+                      <div className="pool-dashboard-kicker">At A Glance</div>
+                      <h3 className="section-title">Today&apos;s Focus</h3>
+                      <div className="pool-focus-list">
+                        <div className="pool-focus-item">
+                          <span>Water Chemistry</span>
+                          <strong>{poolDashboardData.waterQualityHealthy ? "Within standard range" : "Check chemical record"}</strong>
+                        </div>
+                        <div className="pool-focus-item">
+                          <span>Pump</span>
+                          <strong>{poolDashboardData.latestOperation?.pumpStatus || "No operation log yet"}</strong>
+                        </div>
+                        <div className="pool-focus-item">
+                          <span>Filter Pressure</span>
+                          <strong>{poolDashboardData.latestOperation?.filterPressure ?? "-"}</strong>
+                        </div>
+                        <div className="pool-focus-item">
+                          <span>Recent Positive Remarks</span>
+                          <strong>{poolDashboardData.positiveComments.length}</strong>
+                        </div>
+                      </div>
+                    </section>
+
+                    <div className="pool-dashboard-bottom">
+                      <div className="pool-dashboard-list-card">
                       <div className="panel-row">
                         <h3 className="section-title">Immediate Action Items</h3>
                         <button type="button" className="tab btn-small" onClick={() => setPoolView("complaints")}>
@@ -44350,8 +44502,8 @@ export default function App() {
                           <div className="pool-secondary-ok">Water chemistry within standard range.</div>
                         )}
                       </div>
-                    </div>
-                    <div className="pool-dashboard-list-card">
+                      </div>
+                      <div className="pool-dashboard-list-card">
                       <div className="panel-row">
                         <h3 className="section-title">Pool Remarks Feed (Teacher / Staff)</h3>
                         <button type="button" className="tab btn-small" onClick={() => setPoolView("complaints")}>
@@ -44375,6 +44527,7 @@ export default function App() {
                         ) : (
                           <div className="pool-empty-note">No remarks yet.</div>
                         )}
+                      </div>
                       </div>
                     </div>
                   </div>
@@ -46445,13 +46598,7 @@ export default function App() {
                   </label>
                 </div>
                 <div className="row-actions utility-entry-actions">
-                  <button
-                    className="tab"
-                    disabled={utilityAutofillBusy || !utilityInvoiceForm.photo}
-                    onClick={() => void autofillUtilityInvoiceFromPhoto()}
-                  >
-                    {utilityAutofillBusy ? "Reading Invoice..." : "Auto Fill From Invoice"}
-                  </button>
+                  {utilityAutofillBusy ? <span className="tiny">Reading invoice...</span> : <span className="tiny">Upload invoice image to auto fill the form.</span>}
                   <button className="btn-primary" onClick={() => void saveUtilityInvoiceEntry()}>Save Utility Invoice</button>
                 </div>
               </>
