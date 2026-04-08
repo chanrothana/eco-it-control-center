@@ -28409,6 +28409,16 @@ export default function App() {
     );
     return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
   }, [locations, furnitureControlAssetRows, campusLabel]);
+  const furnitureControlSelectedCampusCount = furnitureControlCampusFilter.includes("ALL")
+    ? furnitureControlCampusFilterOptions.length
+    : furnitureControlCampusFilter.length;
+  const showFurnitureControlTotalsRow = furnitureControlCampusFilter.includes("ALL") || furnitureControlSelectedCampusCount > 1;
+  const furnitureControlTotalsLabel = furnitureControlCampusFilter.includes("ALL")
+    ? (lang === "km" ? "សរុបសាលា" : "All School Total")
+    : (lang === "km" ? "សរុបសាខាដែលបានជ្រើស" : "Selected Campuses Total");
+  const furnitureControlTotalsSubLabel = furnitureControlCampusFilter.includes("ALL")
+    ? (lang === "km" ? "គ្រប់សាខា" : "Across all campuses")
+    : (lang === "km" ? "តាមតម្រងសាខា" : "Across selected campuses");
   const furnitureControlLocationFilterOptions = useMemo(() => {
     const options = Array.from(
       new Set(
@@ -28848,6 +28858,32 @@ export default function App() {
     if (!entries.length) return "-";
     return entries.map(([model, qty]) => `${model} x ${qty}`).join(", ");
   }, []);
+  const furnitureModelPhotoByLabel = useCallback((label: string) => {
+    const normalizedLabel = String(label || "").trim();
+    if (!normalizedLabel) return "";
+    const masterPhoto = furnitureModels.find(
+      (row) => furnitureModelLabel(row.type, row.model) === normalizedLabel && String(row.photo || "").trim()
+    );
+    if (masterPhoto) return String(masterPhoto.photo || "").trim();
+    const assetPhoto = assets.find((asset) => {
+      if (!isFurnitureAsset(asset.category)) return false;
+      if (furnitureModelLabel(asset.type, String(asset.model || "").trim()) !== normalizedLabel) return false;
+      const details = parseFurnitureSpecs(asset.specs || "");
+      return Boolean(String(details.modelPhoto || "").trim() || normalizeAssetPhotos(asset)[0] || "");
+    });
+    if (!assetPhoto) return "";
+    const details = parseFurnitureSpecs(assetPhoto.specs || "");
+    return String(details.modelPhoto || "").trim() || normalizeAssetPhotos(assetPhoto)[0] || "";
+  }, [assets, furnitureModels]);
+  const printableFurnitureModelPhotoByLabel = useCallback((label: string) => {
+    const photo = String(furnitureModelPhotoByLabel(label) || "").trim();
+    if (!photo) return "";
+    if (/^data:image/i.test(photo) || /^https?:\/\//i.test(photo)) return photo;
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}${photo.startsWith("/") ? "" : "/"}${photo}`;
+    }
+    return photo;
+  }, [furnitureModelPhotoByLabel]);
   const furnitureQuantitySummaryText = useCallback((total: number, models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     if (!entries.length) return `Total: ${total}`;
@@ -28864,7 +28900,23 @@ export default function App() {
             <div className="furniture-qty-label">Model:</div>
             {entries.map(([model, qty]) => (
               <div key={`furniture-qty-${model}`} className="furniture-qty-item">
-                - {model}: {qty}
+                {(() => {
+                  const photo = furnitureModelPhotoByLabel(model);
+                  return (
+                    <>
+                      {photo ? (
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={photo}
+                          alt={model}
+                          style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 6, border: "1px solid #d5deeb", marginRight: 6, verticalAlign: "middle" }}
+                        />
+                      ) : null}
+                      - {model}: {qty}
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </>
@@ -28873,16 +28925,22 @@ export default function App() {
         )}
       </div>
     );
-  }, []);
+  }, [furnitureModelPhotoByLabel]);
   const furnitureQuantitySummaryHtml = useCallback((total: number, models: Record<string, number>) => {
     const entries = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     const detailHtml = entries.length
       ? `<div class="preview-furniture-qty-label">Model:</div>${entries
-          .map(([model, qty]) => `<div class="preview-furniture-qty-item">- ${escapeHtml(model)}: ${qty}</div>`)
+          .map(([model, qty]) => {
+            const printablePhoto = printableFurnitureModelPhotoByLabel(model);
+            const thumb = printablePhoto
+              ? `<img loading="lazy" decoding="async" src="${printablePhoto}" alt="${escapeHtml(model)}" style="width:24px;height:24px;object-fit:cover;border-radius:6px;border:1px solid #d5deeb;margin-right:6px;vertical-align:middle;" />`
+              : "";
+            return `<div class="preview-furniture-qty-item">${thumb}- ${escapeHtml(model)}: ${qty}</div>`;
+          })
           .join("")}`
       : `<div class="preview-furniture-qty-empty">-</div>`;
     return `<div class="preview-furniture-qty"><div class="preview-furniture-qty-total">Total: ${total}</div><div class="preview-furniture-qty-divider"></div>${detailHtml}</div>`;
-  }, []);
+  }, [printableFurnitureModelPhotoByLabel]);
   const assetMasterSetRows = useMemo(() => {
     const toItemDescription = (asset: Asset) => {
       const chunks = [
@@ -31198,13 +31256,15 @@ export default function App() {
                               <td>${furnitureQuantitySummaryHtml(row.napBedQty, row.napBedModels)}</td>
                             </tr>`
                         ),
-                        `<tr>
+                        ...(showFurnitureControlTotalsRow
+                          ? [`<tr>
                           <td>-</td>
-                          <td><strong>${escapeHtml(lang === "km" ? "សរុបសាលា" : "All School Total")}</strong></td>
+                          <td><strong>${escapeHtml(furnitureControlTotalsLabel)}</strong></td>
                           <td>${furnitureQuantitySummaryHtml(furnitureControlCampusRows.totals.chairQty, furnitureControlCampusRows.totals.chairModels)}</td>
                           <td>${furnitureQuantitySummaryHtml(furnitureControlCampusRows.totals.tableQty, furnitureControlCampusRows.totals.tableModels)}</td>
                           <td>${furnitureQuantitySummaryHtml(furnitureControlCampusRows.totals.napBedQty, furnitureControlCampusRows.totals.napBedModels)}</td>
-                        </tr>`,
+                        </tr>`]
+                          : []),
                       ].join("")
                     : `<tr><td colspan="5">No furniture summary data.</td></tr>`
                 }
@@ -49315,11 +49375,12 @@ export default function App() {
                               </div>
                             </article>
                           ))}
+                          {showFurnitureControlTotalsRow ? (
                           <article className="report-card furniture-report-mobile-card furniture-report-mobile-total">
                             <div className="report-card-head furniture-report-mobile-head">
                               <div className="report-card-title">
-                                <strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong>
-                                <div className="tiny report-card-sub">{lang === "km" ? "គ្រប់សាខា" : "Across all campuses"}</div>
+                                <strong>{furnitureControlTotalsLabel}</strong>
+                                <div className="tiny report-card-sub">{furnitureControlTotalsSubLabel}</div>
                               </div>
                             </div>
                             <div className="furniture-report-mobile-metrics">
@@ -49361,6 +49422,7 @@ export default function App() {
                               <p>{furnitureModelBreakdownText(furnitureControlCampusRows.totals.tableModels)}</p>
                             </div>
                           </article>
+                          ) : null}
                         </>
                       ) : (
                         <div className="panel-note">No chair/table furniture data yet.</div>
@@ -49446,12 +49508,14 @@ export default function App() {
                                   <td>{renderFurnitureQuantityCell(row.napBedQty, row.napBedModels)}</td>
                                 </tr>
                               ))}
+                              {showFurnitureControlTotalsRow ? (
                               <tr>
-                                <td><strong>{lang === "km" ? "សរុបសាលា" : "All School Total"}</strong></td>
+                                <td><strong>{furnitureControlTotalsLabel}</strong></td>
                                 <td>{renderFurnitureQuantityCell(furnitureControlCampusRows.totals.chairQty, furnitureControlCampusRows.totals.chairModels)}</td>
                                 <td>{renderFurnitureQuantityCell(furnitureControlCampusRows.totals.tableQty, furnitureControlCampusRows.totals.tableModels)}</td>
                                 <td>{renderFurnitureQuantityCell(furnitureControlCampusRows.totals.napBedQty, furnitureControlCampusRows.totals.napBedModels)}</td>
                               </tr>
+                              ) : null}
                             </>
                           ) : (
                             <tr>
