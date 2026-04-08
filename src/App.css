@@ -6668,6 +6668,26 @@ label.backup-action-btn {
   padding: 22px;
 }
 
+.dashboard-stock-campus-table-wrap {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  max-height: none !important;
+}
+
+.dashboard-stock-campus-table-wrap table {
+  margin-top: 0 !important;
+}
+
+.dashboard-stock-campus-table-wrap thead th {
+  position: static !important;
+  top: auto !important;
+  z-index: auto !important;
+}
+
+.dashboard-stock-campus-table-wrap .dashboard-stock-campus-matrix th:first-child {
+  position: static;
+}
+
 .dashboard-widget.dashboard-calendar-panel {
   background:
     radial-gradient(circle at top right, rgba(91, 156, 255, 0.14) 0%, rgba(91, 156, 255, 0) 24%),
@@ -6712,18 +6732,21 @@ label.backup-action-btn {
 }
 
 .dashboard-stock-item-head {
+  vertical-align: middle;
+  padding: 10px 8px !important;
+  background: linear-gradient(180deg, #edf4ff, #dce8fa);
+  border-bottom: 1px solid #bfd1ea;
+  overflow: hidden;
+}
+
+.dashboard-stock-item-head-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
-  height: 168px;
-  vertical-align: middle;
-  white-space: normal !important;
-  padding: 12px 10px !important;
-  background: linear-gradient(180deg, #edf4ff, #dce8fa);
-  border-bottom: 1px solid #bfd1ea;
-  overflow: hidden;
+  gap: 4px;
+  min-height: 104px;
+  white-space: normal;
 }
 
 .dashboard-stock-item-head-hovered {
@@ -6779,7 +6802,7 @@ label.backup-action-btn {
   -webkit-box-orient: vertical;
   overflow: hidden;
   white-space: normal;
-  min-height: 38px;
+  min-height: 28px;
   line-height: 1.2;
   font-weight: 800;
   color: #506b97;
@@ -6791,7 +6814,7 @@ label.backup-action-btn {
 
 .dashboard-stock-item-head-total {
   display: block;
-  margin-top: auto;
+  margin-top: 2px;
   color: #6f5a2d;
   font-size: 16px;
   font-weight: 800;

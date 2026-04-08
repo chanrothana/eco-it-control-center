@@ -1759,7 +1759,7 @@ function getAutoApiBaseForHost() {
 }
 
 function getStoredApiBaseOverride() {
-  if (SERVER_ONLY_STORAGE || typeof window === "undefined") return "";
+  if (typeof window === "undefined") return "";
   try {
     return String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "").trim().replace(/\/+$/, "");
   } catch {
@@ -1997,6 +1997,10 @@ const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
   DSK: ["Student Primary Deskset", "Toy and Me Deskset"],
   CAB: ["Filing Cabinet", "Storage Cabinet", "Classroom Cabinet"],
 };
+const FURNITURE_MODEL_BASELINE_ROWS: Array<Pick<FurnitureModelMaster, "type" | "model">> = [
+  { type: "CHR", model: "IKEA" },
+  { type: "NBD", model: "Plastic Bed" },
+];
 const INVENTORY_MASTER_ITEMS = [
   { key: "tissue", category: "SUPPLY", nameEn: "Tissue", nameKm: "ក្រដាស់ជូតមាត់", spec: "", unit: "pcs", aliases: ["tissue", "paper tissue", "ក្រដាស"] },
   { key: "hand_tissue", category: "SUPPLY", nameEn: "Hand Tissue", nameKm: "ក្រដាស់ជូតដៃ", spec: "", unit: "pcs", aliases: ["hand tissue", "tissue", "ក្រដាសដៃ"] },
@@ -5810,8 +5814,16 @@ function defaultFurnitureSubtype(type: string) {
   return "";
 }
 
+function furnitureSubtypeLabel(type: string, model: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  const normalizedModel = String(model || "").trim().toLowerCase();
+  if (normalizedType === "CHR" && normalizedModel.includes("adult")) return "Adult Chair";
+  if (normalizedType === "TBL" && normalizedModel.includes("adult")) return "Adult Table";
+  return defaultFurnitureSubtype(type);
+}
+
 function furnitureModelLabel(type: string, model: string) {
-  const subtype = defaultFurnitureSubtype(type) || "Furniture";
+  const subtype = furnitureSubtypeLabel(type, model) || "Furniture";
   const normalizedModel = String(model || "").trim();
   if (!normalizedModel) return subtype;
   if (normalizedModel.toLowerCase().startsWith(`${subtype.toLowerCase()} (`)) return normalizedModel;
@@ -6005,6 +6017,45 @@ function deriveFurnitureModelsFromAssets(assets: Asset[]) {
   return Array.from(byModel.values()).sort((a, b) =>
     a.type.localeCompare(b.type) || a.model.localeCompare(b.model)
   );
+}
+
+function mergeFurnitureModelLists(...lists: FurnitureModelMaster[][]) {
+  const merged = new Map<string, FurnitureModelMaster>();
+  const baselineRows: FurnitureModelMaster[] = FURNITURE_MODEL_BASELINE_ROWS.map((row, index) => ({
+    id: 900000 + index,
+    type: row.type,
+    model: row.model,
+    photo: "",
+    created: "",
+  }));
+  for (const list of [baselineRows, ...lists]) {
+    for (const row of normalizeArray<FurnitureModelMaster>(list)) {
+      const type = String(row.type || "").trim().toUpperCase();
+      const model = String(row.model || "").trim();
+      if (!type || !model) continue;
+      const key = `${type}::${model.toUpperCase()}`;
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, {
+          id: Number(row.id) || Date.now() + merged.size + 1,
+          type,
+          model,
+          photo: String(row.photo || "").trim(),
+          created: String(row.created || new Date().toISOString()),
+        });
+        continue;
+      }
+      merged.set(key, {
+        ...existing,
+        ...row,
+        type,
+        model,
+        photo: String(row.photo || "").trim() || String(existing.photo || "").trim(),
+        created: String(row.created || "").trim() || String(existing.created || "").trim() || new Date().toISOString(),
+      });
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a.type.localeCompare(b.type) || a.model.localeCompare(b.model));
 }
 
 function updateGroupedFurnitureAssetQuantity(asset: Asset, quantity: number) {
@@ -7094,9 +7145,7 @@ export default function App() {
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState("");
   const [apiBaseInput] = useState(
     () =>
-      SERVER_ONLY_STORAGE
-        ? String(ENV_API_BASE_URL || getAutoApiBaseForHost())
-        : String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
+      String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || ENV_API_BASE_URL || getAutoApiBaseForHost())
   );
   const isAdmin = authUser ? isAdminRole(authUser.role) : false;
   const isSuperAdmin = authUser?.role === "Super Admin";
@@ -13807,17 +13856,32 @@ export default function App() {
   const furnitureModelChoices = useCallback(
     (type: string) => {
       const normalizedType = String(type || "").trim().toUpperCase();
-      const masterRows = furnitureModels
-        .filter((row) => String(row.type || "").trim().toUpperCase() === normalizedType)
-        .sort((a, b) => a.model.localeCompare(b.model));
-      if (masterRows.length) return masterRows;
-      return furnitureModelOptions(type).map((model, index) => ({
-        id: index + 1,
-        type: normalizedType,
-        model,
-        photo: "",
-        created: "",
-      }));
+      const masterRows = furnitureModels.filter((row) => String(row.type || "").trim().toUpperCase() === normalizedType);
+      const mergedByModel = new Map<string, FurnitureModelMaster>();
+
+      furnitureModelOptions(type).forEach((model, index) => {
+        const normalizedModel = String(model || "").trim();
+        if (!normalizedModel) return;
+        mergedByModel.set(normalizedModel.toLowerCase(), {
+          id: index + 1,
+          type: normalizedType,
+          model: normalizedModel,
+          photo: "",
+          created: "",
+        });
+      });
+
+      masterRows.forEach((row) => {
+        const normalizedModel = String(row.model || "").trim();
+        if (!normalizedModel) return;
+        mergedByModel.set(normalizedModel.toLowerCase(), {
+          ...row,
+          type: normalizedType,
+          model: normalizedModel,
+        });
+      });
+
+      return Array.from(mergedByModel.values()).sort((a, b) => a.model.localeCompare(b.model));
     },
     [furnitureModels]
   );
@@ -14797,13 +14861,10 @@ export default function App() {
                 .filter((tpl) => tpl.name && tpl.type)
             : readItemTemplateFallback()
         );
+        const mergedFurnitureModels = mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels, serverFurnitureModels);
         const hasServerFurnitureModels = Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels");
         if (hasServerFurnitureModels) {
-          const nextFurnitureModels = serverFurnitureModels.length
-            ? serverFurnitureModels
-            : fallbackFurnitureModels.length
-              ? fallbackFurnitureModels
-              : derivedFurnitureModels;
+          const nextFurnitureModels = mergedFurnitureModels;
           setFurnitureModels(nextFurnitureModels);
           if (
             authUser &&
@@ -14816,7 +14877,7 @@ export default function App() {
             });
           }
         } else {
-          setFurnitureModels(fallbackFurnitureModels.length ? fallbackFurnitureModels : derivedFurnitureModels);
+          setFurnitureModels(mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels));
         }
       } else {
         // Keep local settings if /api/settings is unavailable.
@@ -14842,7 +14903,7 @@ export default function App() {
         setCctvServiceHistory(readCctvServiceFallback());
         setCctvChangeLogs(readCctvChangeLogFallback());
         setItemTemplates(readItemTemplateFallback());
-        setFurnitureModels(readFurnitureModelFallback());
+        setFurnitureModels(mergeFurnitureModelLists(deriveFurnitureModelsFromAssets(readAssetFallback()), readFurnitureModelFallback()));
       }
 
       const locationList = normalizeLocationEntries(locationRes.locations);
@@ -18656,7 +18717,7 @@ export default function App() {
           password,
         }),
       });
-      const loginData = (await loginRes.json().catch(() => ({}))) as { token?: string; error?: string };
+      const loginData = (await loginRes.json().catch(() => ({}))) as { token?: string; user?: AuthUser; error?: string };
       if (!loginRes.ok || !loginData.token) {
         throw new Error(loginData.error || "Cannot login to live server.");
       }
@@ -18677,7 +18738,15 @@ export default function App() {
         body: JSON.stringify({ db: exportData.db }),
       });
 
-      setSetupMessage("Live sync completed. Local database updated.");
+      trySetLocalStorage(API_BASE_OVERRIDE_KEY, liveBase);
+      runtimeAuthToken = loginData.token;
+      trySetLocalStorage(AUTH_TOKEN_KEY, loginData.token);
+      if (loginData.user) {
+        trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(loginData.user));
+        setAuthUser(loginData.user);
+      }
+
+      setSetupMessage("Live sync completed. Local database updated and live web data is now active.");
       appendUiAudit("BACKUP_IMPORT_REMOTE", "system", "db", `Synced database from ${liveBase}`);
       await loadData();
       await loadAuthAccounts();
@@ -33817,7 +33886,7 @@ export default function App() {
                       )}
                     </div>
                   ) : (
-                    <div className="table-wrap">
+                    <div className="table-wrap dashboard-stock-campus-table-wrap">
                       <table className="dashboard-stock-campus-matrix">
                         <thead>
                           <tr>
@@ -33830,21 +33899,23 @@ export default function App() {
                               onMouseEnter={() => setDashboardSupplyHoveredItemKey(item.key)}
                               onMouseLeave={() => setDashboardSupplyHoveredItemKey((current) => (current === item.key ? null : current))}
                             >
-                              {item.photo ? (
-                                <img
-                                  src={item.photo}
-                                  alt={item.itemName}
-                                  className="dashboard-stock-item-head-photo"
-                                  loading="lazy"
-                                  decoding="async"
-                                />
-                              ) : (
-                                <span className="dashboard-stock-item-head-photo dashboard-stock-item-head-photo-empty">
-                                  {item.itemName.slice(0, 2).toUpperCase()}
-                                </span>
-                              )}
-                              <span className="dashboard-stock-item-head-label">{item.itemName}</span>
-                              <span className="dashboard-stock-item-head-total">{item.totalStock}</span>
+                              <div className="dashboard-stock-item-head-inner">
+                                {item.photo ? (
+                                  <img
+                                    src={item.photo}
+                                    alt={item.itemName}
+                                    className="dashboard-stock-item-head-photo"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                ) : (
+                                  <span className="dashboard-stock-item-head-photo dashboard-stock-item-head-photo-empty">
+                                    {item.itemName.slice(0, 2).toUpperCase()}
+                                  </span>
+                                )}
+                                <span className="dashboard-stock-item-head-label">{item.itemName}</span>
+                                <span className="dashboard-stock-item-head-total">{item.totalStock}</span>
+                              </div>
                             </th>
                           ))}
                         </tr>
