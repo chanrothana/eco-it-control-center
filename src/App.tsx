@@ -28864,17 +28864,8 @@ export default function App() {
     const masterPhoto = furnitureModels.find(
       (row) => furnitureModelLabel(row.type, row.model) === normalizedLabel && String(row.photo || "").trim()
     );
-    if (masterPhoto) return String(masterPhoto.photo || "").trim();
-    const assetPhoto = assets.find((asset) => {
-      if (!isFurnitureAsset(asset.category)) return false;
-      if (furnitureModelLabel(asset.type, String(asset.model || "").trim()) !== normalizedLabel) return false;
-      const details = parseFurnitureSpecs(asset.specs || "");
-      return Boolean(String(details.modelPhoto || "").trim() || normalizeAssetPhotos(asset)[0] || "");
-    });
-    if (!assetPhoto) return "";
-    const details = parseFurnitureSpecs(assetPhoto.specs || "");
-    return String(details.modelPhoto || "").trim() || normalizeAssetPhotos(assetPhoto)[0] || "";
-  }, [assets, furnitureModels]);
+    return masterPhoto ? String(masterPhoto.photo || "").trim() : "";
+  }, [furnitureModels]);
   const printableFurnitureModelPhotoByLabel = useCallback((label: string) => {
     const photo = String(furnitureModelPhotoByLabel(label) || "").trim();
     if (!photo) return "";
