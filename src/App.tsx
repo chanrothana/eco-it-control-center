@@ -49031,7 +49031,7 @@ export default function App() {
                                   if (column.key === "itemDescription") {
                                     return (
                                       <td key={`${row.key}-itemDescription`} className="report-item-description" title={row.itemDescription || "-"}>
-                                        {row.itemDescription || "-"}
+                                        <div className="report-item-description-text">{row.itemDescription || "-"}</div>
                                       </td>
                                     );
                                   }

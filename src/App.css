@@ -13412,6 +13412,13 @@ tr.row-maint-maintenance:hover td {
 .report-item-description {
   max-width: 360px;
   white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-align: left;
+}
+
+.report-item-description-text {
+  white-space: normal;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -13501,10 +13508,6 @@ tr.row-maint-maintenance:hover td {
 .report-table-wrap .report-item-description {
   min-width: 260px;
   max-width: 460px;
-  white-space: normal;
-  overflow-wrap: break-word;
-  word-break: normal;
-  text-align: left;
   margin: 0 auto;
 }
 
