@@ -28861,10 +28861,42 @@ export default function App() {
   const furnitureModelPhotoByLabel = useCallback((label: string) => {
     const normalizedLabel = String(label || "").trim();
     if (!normalizedLabel) return "";
-    const masterPhoto = furnitureModels.find(
-      (row) => furnitureModelLabel(row.type, row.model) === normalizedLabel && String(row.photo || "").trim()
+    const modelInParens = normalizedLabel.match(/\(([^)]+)\)\s*$/)?.[1]?.trim() || "";
+    const rowsWithPhotos = furnitureModels.filter((row) => String(row.photo || "").trim());
+    const exactLabelMatch = rowsWithPhotos.find(
+      (row) => furnitureModelLabel(row.type, row.model) === normalizedLabel
     );
-    return masterPhoto ? String(masterPhoto.photo || "").trim() : "";
+    if (exactLabelMatch) return String(exactLabelMatch.photo || "").trim();
+
+    const normalizedLabelLower = normalizedLabel.toLowerCase();
+    const inferredType =
+      normalizedLabelLower.includes("chair") ? "CHR"
+      : normalizedLabelLower.includes("table") ? "TBL"
+      : normalizedLabelLower.includes("deskset") ? "DSK"
+      : normalizedLabelLower.includes("cabinet") ? "CAB"
+      : normalizedLabelLower.includes("nap bed") ? "NBD"
+      : "";
+    const inferredSubtype = inferredType ? (furnitureSubtypeLabel(inferredType, modelInParens) || defaultFurnitureSubtype(inferredType)) : "";
+
+    if (inferredType && modelInParens) {
+      const exactModelMatch = rowsWithPhotos.find(
+        (row) =>
+          String(row.type || "").trim().toUpperCase() === inferredType &&
+          String(row.model || "").trim().toLowerCase() === modelInParens.toLowerCase()
+      );
+      if (exactModelMatch) return String(exactModelMatch.photo || "").trim();
+    }
+
+    if (inferredType) {
+      const subtypeMatch = rowsWithPhotos.find((row) => {
+        if (String(row.type || "").trim().toUpperCase() !== inferredType) return false;
+        const rowLabel = furnitureModelLabel(row.type, row.model).toLowerCase();
+        return inferredSubtype ? rowLabel.startsWith(inferredSubtype.toLowerCase()) : true;
+      });
+      if (subtypeMatch) return String(subtypeMatch.photo || "").trim();
+    }
+
+    return "";
   }, [furnitureModels]);
   const printableFurnitureModelPhotoByLabel = useCallback((label: string) => {
     const photo = String(furnitureModelPhotoByLabel(label) || "").trim();
