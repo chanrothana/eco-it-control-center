@@ -1992,8 +1992,8 @@ const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
 const FURNITURE_CONDITION_OPTIONS = ["Good", "Need Repair", "Broken", "Scrap"] as const;
 const FURNITURE_TRACKING_MODE_OPTIONS = ["Grouped", "Individual"] as const;
 const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
-  CHR: ["Toy and Me", "Primary Standard", "Office Standard"],
-  TBL: ["Toy and Me", "Primary Standard", "Office Standard"],
+  CHR: ["Toy and Me"],
+  TBL: ["Toy and Me"],
   DSK: ["Student Primary Deskset", "Toy and Me Deskset"],
   CAB: ["Filing Cabinet", "Storage Cabinet", "Classroom Cabinet"],
 };
@@ -6056,6 +6056,47 @@ function mergeFurnitureModelLists(...lists: FurnitureModelMaster[][]) {
     }
   }
   return Array.from(merged.values()).sort((a, b) => a.type.localeCompare(b.type) || a.model.localeCompare(b.model));
+}
+
+function furnitureModelPhotoFallbackFromAssets(assets: Asset[], type: string, model: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  const normalizedModel = String(model || "").trim().toUpperCase();
+  if (!normalizedType) return "";
+  const assetPhoto = (asset: Asset) => {
+    const details = parseFurnitureSpecs(asset.specs || "");
+    return String(details.modelPhoto || "").trim() || normalizeAssetPhotos(asset)[0] || "";
+  };
+  const sameTypeAssets = normalizeArray<Asset>(assets).filter((asset) => {
+    if (!isFurnitureAsset(asset.category)) return false;
+    return String(asset.type || "").trim().toUpperCase() === normalizedType;
+  });
+  const exactMatch = sameTypeAssets.find((asset) => {
+    if (String(asset.model || "").trim().toUpperCase() !== normalizedModel) return false;
+    return Boolean(assetPhoto(asset));
+  });
+  if (exactMatch) return assetPhoto(exactMatch);
+  if (!normalizedModel) return "";
+  const keywordParts = normalizedModel
+    .split(/[^A-Z0-9]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 3);
+  const partialMatch = sameTypeAssets.find((asset) => {
+    const assetModel = String(asset.model || "").trim().toUpperCase();
+    const photo = assetPhoto(asset);
+    if (!photo) return false;
+    if (!assetModel) return normalizedType === "NBD";
+    return keywordParts.some((part) => assetModel.includes(part));
+  });
+  if (partialMatch) return assetPhoto(partialMatch);
+  const typeFallback = sameTypeAssets.find((asset) => Boolean(assetPhoto(asset)));
+  return typeFallback ? assetPhoto(typeFallback) : "";
+}
+
+function enrichFurnitureModelsWithAssetPhotos(models: FurnitureModelMaster[], assets: Asset[]) {
+  return normalizeArray<FurnitureModelMaster>(models).map((row) => {
+    const photo = String(row.photo || "").trim() || furnitureModelPhotoFallbackFromAssets(assets, row.type, row.model);
+    return photo === String(row.photo || "").trim() ? row : { ...row, photo };
+  });
 }
 
 function updateGroupedFurnitureAssetQuantity(asset: Asset, quantity: number) {
@@ -14861,7 +14902,10 @@ export default function App() {
                 .filter((tpl) => tpl.name && tpl.type)
             : readItemTemplateFallback()
         );
-        const mergedFurnitureModels = mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels, serverFurnitureModels);
+        const mergedFurnitureModels = enrichFurnitureModelsWithAssetPhotos(
+          mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels, serverFurnitureModels),
+          serverAssets
+        );
         const hasServerFurnitureModels = Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels");
         if (hasServerFurnitureModels) {
           const nextFurnitureModels = mergedFurnitureModels;
@@ -14877,7 +14921,10 @@ export default function App() {
             });
           }
         } else {
-          setFurnitureModels(mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels));
+          setFurnitureModels(enrichFurnitureModelsWithAssetPhotos(
+            mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels),
+            serverAssets
+          ));
         }
       } else {
         // Keep local settings if /api/settings is unavailable.
@@ -14903,7 +14950,10 @@ export default function App() {
         setCctvServiceHistory(readCctvServiceFallback());
         setCctvChangeLogs(readCctvChangeLogFallback());
         setItemTemplates(readItemTemplateFallback());
-        setFurnitureModels(mergeFurnitureModelLists(deriveFurnitureModelsFromAssets(readAssetFallback()), readFurnitureModelFallback()));
+        setFurnitureModels(enrichFurnitureModelsWithAssetPhotos(
+          mergeFurnitureModelLists(deriveFurnitureModelsFromAssets(readAssetFallback()), readFurnitureModelFallback()),
+          readAssetFallback()
+        ));
       }
 
       const locationList = normalizeLocationEntries(locationRes.locations);
@@ -35924,7 +35974,13 @@ export default function App() {
                             <select
                               className="input"
                               value={assetForm.model}
-                              onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))}
+                              onChange={(e) =>
+                                setAssetForm((f) => ({
+                                  ...f,
+                                  model: e.target.value,
+                                  furnitureSubtype: furnitureSubtypeLabel(assetForm.type, e.target.value) || defaultFurnitureSubtype(assetForm.type),
+                                }))
+                              }
                             >
                               <option value="">Select model</option>
                               {furnitureModelChoices(assetForm.type).map((option) => (
@@ -37923,7 +37979,13 @@ export default function App() {
                               <select
                                 className="input"
                                 value={assetEditForm.model}
-                                onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))}
+                                onChange={(e) =>
+                                  setAssetEditForm((f) => ({
+                                    ...f,
+                                    model: e.target.value,
+                                    furnitureSubtype: furnitureSubtypeLabel(editingAsset?.type || "", e.target.value) || defaultFurnitureSubtype(editingAsset?.type || ""),
+                                  }))
+                                }
                               >
                                 <option value="">Select model</option>
                                 {furnitureModelChoices(editingAsset?.type || "").map((option) => (
