@@ -1538,7 +1538,7 @@ const MENU_ACCESS_TREE: Array<{
     children: [
       { key: "utilities.register", labelEn: "Monthly Entry", labelKm: "បញ្ចូលប្រចាំខែ" },
       { key: "utilities.reading", labelEn: "History", labelKm: "ប្រវត្តិ" },
-      { key: "utilities.history", labelEn: "Monthly Comparison", labelKm: "ប្រៀបធៀបប្រចាំខែ" },
+      { key: "utilities.history", labelEn: "Monthly Amount Comparison", labelKm: "ប្រៀបធៀបចំនួនទឹកប្រាក់ប្រចាំខែ" },
       { key: "utilities.reports", labelEn: "Yearly Report", labelKm: "របាយការណ៍ប្រចាំឆ្នាំ" },
     ],
   },
@@ -2136,6 +2136,8 @@ const PROJECTOR_COMPONENT_TYPES = ["PBG"] as const;
 const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set([
   "ADP",
   "RMT",
+  "BAT",
+  "MCD",
   "HDC",
   "CHB",
   "BAG",
@@ -7442,6 +7444,8 @@ export default function App() {
     "entry" | "history" | "monthly" | "yearly"
   >("entry");
   const [utilityHistoryMonthFilter, setUtilityHistoryMonthFilter] = useState("ALL");
+  const [utilityMonthlyTypeFilter, setUtilityMonthlyTypeFilter] = useState<"EDC" | "PPWS">("EDC");
+  const [utilityMonthlyCampusFilter, setUtilityMonthlyCampusFilter] = useState("ALL");
   const [printerView, setPrinterView] = useState<"setup" | "entry" | "report" | "graph">("entry");
   const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("user");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
@@ -7456,7 +7460,7 @@ export default function App() {
   const openInventorySection = useCallback(
     (
       group: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL",
-      view: "dashboard" | "items" | "daily" | "stock" = "dashboard"
+      view: "dashboard" | "items" | "daily" | "stock" | "balance" = "dashboard"
     ) => {
       startTabTransition(() => {
         setInventoryDashboardGroup(group);
@@ -7605,7 +7609,10 @@ export default function App() {
                     }]),
                 {
                   key: `inventory.group.${group}.items`,
-                  label: lang === "km" ? "រៀបចំមុខទំនិញ" : "Item Setup",
+                  label:
+                    group === "SUPPLY"
+                      ? (lang === "km" ? "រៀបចំមុខទំនិញ" : "Item Setup")
+                      : (lang === "km" ? "បញ្ជីឧបករណ៍បច្ចុប្បន្ន" : "Current Tools"),
                   active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "items",
                   onSelect: () => openInventorySection(group, "items"),
                 },
@@ -7613,16 +7620,30 @@ export default function App() {
                   ? [
                       {
                         key: `inventory.group.${group}.daily`,
-                        label: lang === "km" ? "ចេញស្តុកប្រចាំថ្ងៃ" : "Daily Stock Out",
+                        label:
+                          group === "SUPPLY"
+                            ? (lang === "km" ? "ចេញស្តុកប្រចាំថ្ងៃ" : "Daily Stock Out")
+                            : (lang === "km" ? "ពិនិត្យប្រចាំខែ" : "Monthly Check"),
                         active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "daily",
                         onSelect: () => openInventorySection(group, "daily"),
                       },
                       {
                         key: `inventory.group.${group}.stock`,
-                        label: lang === "km" ? "ស្តុកចូល/ចេញ" : "Stock In/Out",
+                        label:
+                          group === "SUPPLY"
+                            ? (lang === "km" ? "ស្តុកចូល/ចេញ" : "Stock In/Out")
+                            : (lang === "km" ? "បន្ថែម/ជំនួសស្តុក" : "Replace / Add Stock"),
                         active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "stock",
                         onSelect: () => openInventorySection(group, "stock"),
                       },
+                      ...(group === "SUPPLY"
+                        ? []
+                        : [{
+                            key: `inventory.group.${group}.balance`,
+                            label: lang === "km" ? "កំណត់ត្រាសាខា / ប្រវត្តិ" : "Campus / History",
+                            active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "balance",
+                            onSelect: () => openInventorySection(group, "balance"),
+                          }]),
                     ]
                   : []),
               ],
@@ -7780,7 +7801,7 @@ export default function App() {
             },
             {
               key: "utilities.history",
-              label: lang === "km" ? "ប្រៀបធៀបប្រចាំខែ" : "Monthly Comparison",
+              label: lang === "km" ? "ប្រៀបធៀបចំនួនទឹកប្រាក់ប្រចាំខែ" : "Monthly Amount Comparison",
               active: utilitiesView === "monthly",
               onSelect: () =>
                 startTabTransition(() => {
@@ -8432,6 +8453,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [inventorySupplyCampusQuickFilter, setInventorySupplyCampusQuickFilter] = useState("ALL");
+  const [inventoryToolRecordView, setInventoryToolRecordView] = useState<"campus" | "history">("campus");
   const [purchaseRequestCampusFilter, setPurchaseRequestCampusFilter] = useState("ALL");
   const [purchaseRequestItemFilter, setPurchaseRequestItemFilter] = useState("ALL");
   const [purchaseRequestQtyOverrides, setPurchaseRequestQtyOverrides] = useState<Record<string, string>>({});
@@ -10410,17 +10432,40 @@ export default function App() {
   );
   const utilityCurrentMonthKey = toYmd(new Date()).slice(0, 7);
   const utilityCurrentYear = utilityCurrentMonthKey.slice(0, 4);
+  const utilityMonthlyCampusOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(
+        utilityReadings
+          .map((row) => String(row.campus || "").trim())
+          .filter(Boolean)
+      )
+    ).sort(compareCampusByCode);
+    return options;
+  }, [utilityReadings]);
+  useEffect(() => {
+    if (utilityMonthlyCampusFilter === "ALL") return;
+    if (utilityMonthlyCampusOptions.includes(utilityMonthlyCampusFilter)) return;
+    setUtilityMonthlyCampusFilter("ALL");
+  }, [utilityMonthlyCampusFilter, utilityMonthlyCampusOptions]);
+  const utilityMonthlyScopedReadings = useMemo(
+    () =>
+      utilityReadings.filter((row) => {
+        if (String(row.utilityType || "").trim().toUpperCase() !== utilityMonthlyTypeFilter) return false;
+        if (utilityMonthlyCampusFilter !== "ALL" && String(row.campus || "").trim() !== utilityMonthlyCampusFilter) return false;
+        return true;
+      }),
+    [utilityMonthlyCampusFilter, utilityMonthlyTypeFilter, utilityReadings]
+  );
   const utilityUsageSummary = useMemo(() => {
-    let edcUsage = 0;
-    let edcAmount = 0;
-    for (const row of utilityReadings) {
+    let usage = 0;
+    let amount = 0;
+    for (const row of utilityMonthlyScopedReadings) {
       if (row.billingMonth !== utilityCurrentMonthKey) continue;
-      if (row.utilityType !== "EDC") continue;
-      edcUsage += Number(row.usage) || 0;
-      edcAmount += Number(row.amount) || 0;
+      usage += Number(row.usage) || 0;
+      amount += Number(row.amount) || 0;
     }
-    return { edcUsage, edcAmount };
-  }, [utilityCurrentMonthKey, utilityReadings]);
+    return { usage, amount };
+  }, [utilityCurrentMonthKey, utilityMonthlyScopedReadings]);
   const utilityHistoryMonthOptions = useMemo(
     () =>
       Array.from(
@@ -10464,15 +10509,13 @@ export default function App() {
     const monthKeys = Array.from({ length: 12 }, (_, index) => `${utilityCurrentYear}-${String(index + 1).padStart(2, "0")}`);
     const years = Array.from(
       new Set(
-        utilityReadings
-          .filter((row) => row.utilityType === "EDC")
+        utilityMonthlyScopedReadings
           .map((row) => String(row.billingMonth || "").slice(0, 4))
           .filter(Boolean)
       )
     ).sort((a, b) => b.localeCompare(a)).slice(0, 2).sort((a, b) => a.localeCompare(b));
     const totalsByYearMonth = new Map<string, number>();
-    for (const row of utilityReadings) {
-      if (row.utilityType !== "EDC") continue;
+    for (const row of utilityMonthlyScopedReadings) {
       const year = String(row.billingMonth || "").slice(0, 4);
       if (!years.includes(year)) continue;
       const key = `${year}-${String(row.billingMonth || "").slice(5, 7)}`;
@@ -10497,7 +10540,33 @@ export default function App() {
       activeMonths,
       maxAmount,
     };
-  }, [utilityCurrentYear, utilityReadings]);
+  }, [utilityCurrentYear, utilityMonthlyScopedReadings]);
+  const utilityMonthlyCampusCards = useMemo(() => {
+    return utilityMonthlyCampusOptions.map((campus) => {
+      const campusRows = utilityReadings.filter((row) => {
+        if (String(row.campus || "").trim() !== campus) return false;
+        return String(row.utilityType || "").trim().toUpperCase() === utilityMonthlyTypeFilter;
+      });
+      const thisMonthUsage = campusRows
+        .filter((row) => row.billingMonth === utilityCurrentMonthKey)
+        .reduce((sum, row) => sum + (Number(row.usage) || 0), 0);
+      const thisMonthAmount = campusRows
+        .filter((row) => row.billingMonth === utilityCurrentMonthKey)
+        .reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+      const activeMonths = new Set(
+        campusRows
+          .filter((row) => Number(row.amount || 0) > 0)
+          .map((row) => String(row.billingMonth || "").trim())
+          .filter(Boolean)
+      ).size;
+      return { campus, thisMonthUsage, thisMonthAmount, activeMonths };
+    }).sort((a, b) => compareCampusByCode(a.campus, b.campus));
+  }, [
+    utilityCurrentMonthKey,
+    utilityMonthlyCampusOptions,
+    utilityMonthlyTypeFilter,
+    utilityReadings,
+  ]);
   const utilityYearlySummary = useMemo(() => {
     const map = new Map<string, { year: string; edcUsage: number; ppwsUsage: number; amount: number }>();
     for (const row of utilityReadings) {
@@ -12399,6 +12468,7 @@ export default function App() {
         photo?: string;
         qty: number;
         minStock: number;
+        locations: string[];
         isLow: boolean;
         isOut: boolean;
       }>;
@@ -12409,6 +12479,7 @@ export default function App() {
       photo?: string;
       qty: number;
       minStock: number;
+      locations: string[];
     }>>();
     for (const row of inventoryDashboardScopedRows) {
       const campus = inventoryRecordCampusCode(row.campus) || String(row.campus || "").trim() || "-";
@@ -12427,6 +12498,7 @@ export default function App() {
         photo?: string;
         qty: number;
         minStock: number;
+        locations: string[];
       }>();
       const itemCode = String(row.itemCode || "-");
       const itemName = String(row.itemName || "-");
@@ -12437,10 +12509,15 @@ export default function App() {
         photo: row.photo,
         qty: 0,
         minStock: 0,
+        locations: [],
       };
       itemRow.qty += stock;
       itemRow.minStock += min;
       if (!itemRow.photo && row.photo) itemRow.photo = row.photo;
+      const locationName = String(row.location || "").trim();
+      if (locationName && !itemRow.locations.includes(locationName)) {
+        itemRow.locations.push(locationName);
+      }
       campusItems.set(itemKey, itemRow);
       itemMaps.set(campus, campusItems);
     }
@@ -12449,6 +12526,7 @@ export default function App() {
         const itemRows = Array.from(itemMaps.get(row.campus)?.values() || [])
           .map((item) => ({
             ...item,
+            locations: item.locations.slice().sort((a: string, b: string) => a.localeCompare(b)),
             isLow: item.qty < item.minStock,
             isOut: item.qty <= 0,
           }))
@@ -12568,6 +12646,8 @@ export default function App() {
         .slice(0, 8),
     [inventoryDashboardFilteredOutTxns]
   );
+  const inventoryIsToolControlGroup =
+    inventoryDashboardGroup === "CLEAN_TOOL" || inventoryDashboardGroup === "MAINT_TOOL";
   const inventoryDashboardAdminSummary = useMemo(() => {
     const today = toYmd(new Date());
     const yesterday = shiftYmd(today, -1);
@@ -14491,6 +14571,11 @@ export default function App() {
     });
   }, [inventoryDashboardGroup, editingInventoryItemId]);
   useEffect(() => {
+    if (!inventoryIsToolControlGroup && inventoryToolRecordView !== "campus") {
+      setInventoryToolRecordView("campus");
+    }
+  }, [inventoryIsToolControlGroup, inventoryToolRecordView]);
+  useEffect(() => {
     if (
       !inventoryBusinessGroupHasDailyStockFlow(inventoryDashboardGroup) &&
       (inventoryView === "daily" || inventoryView === "stock")
@@ -14703,17 +14788,41 @@ export default function App() {
     try {
       const params = new URLSearchParams();
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
+      const settingsPromise = requestJson<{ settings?: ServerSettings }>("/api/settings")
+        .then((settings) => ({ ok: true as const, settings }))
+        .catch(() => ({ ok: false as const }));
 
-      const [assetRes, ticketRes, statsRes, settingsResult, locationRes] = await Promise.all([
+      const [assetRes, ticketRes, statsRes, locationRes] = await Promise.all([
         requestJson<{ assets: Asset[] }>(`/api/assets`),
         requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
         requestJson<{ stats: DashboardStats }>(`/api/dashboard?${params.toString()}`),
-        requestJson<{ settings?: ServerSettings }>("/api/settings")
-          .then((settings) => ({ ok: true as const, settings }))
-          .catch(() => ({ ok: false as const })),
         requestJson<{ locations: LocationEntry[] }>("/api/locations"),
       ]);
       const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
+      const locationList = normalizeLocationEntries(locationRes.locations);
+
+      // Render core app state first so the page becomes interactive before the large settings blob finishes.
+      writeAssetFallback(serverAssets);
+      setAssets(serverAssets);
+      setTickets(normalizeArray<Ticket>(ticketRes.tickets));
+      setLocations(locationList);
+      const serverStats =
+        statsRes.stats || {
+          totalAssets: 0,
+          itAssets: 0,
+          safetyAssets: 0,
+          openTickets: 0,
+          byCampus: [],
+        };
+      setStats(serverStats);
+      setLoading(false);
+
+      // Yield one frame so the browser can paint before hydrating slower settings-heavy modules.
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 0);
+      });
+
+      const settingsResult = await settingsPromise;
       if (settingsResult.ok) {
         const settingsRes = settingsResult.settings;
         const fromServer = settingsRes.settings?.campusNames || {};
@@ -14955,28 +15064,8 @@ export default function App() {
           readAssetFallback()
         ));
       }
-
-      const locationList = normalizeLocationEntries(locationRes.locations);
-
-      // Server-first sync: when API is reachable, use server data as single source of truth.
-      writeAssetFallback(serverAssets);
-      setAssets(serverAssets);
-      setTickets(normalizeArray<Ticket>(ticketRes.tickets));
-      setLocations(locationList);
-      const serverStats =
-        statsRes.stats || {
-          totalAssets: 0,
-          itAssets: 0,
-          safetyAssets: 0,
-          openTickets: 0,
-          byCampus: [],
-        };
-      setStats(
-        serverStats
-      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cannot load data");
-    } finally {
       setLoading(false);
     }
   }, [
@@ -29923,6 +30012,7 @@ export default function App() {
     for (const asset of quickCountBaseAssets) {
       const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
       if (!itemName) continue;
+      if (REPORT_ITEM_FILTER_HIDDEN_NAMES.has(itemName)) continue;
       const category = String(asset.category || "OTHER");
       const quantity = isFurnitureAsset(asset.category) ? Math.max(1, furnitureAssetQuantity(asset) || 1) : 1;
       const key = `${category}::${itemName}`;
@@ -30035,10 +30125,10 @@ export default function App() {
   }, [quickCountModal, campusLabel]);
   const quickCountModalFurnitureLocationTotals = useMemo(() => {
     if (!quickCountModal?.assets?.length) {
-      return [] as Array<{ campus: string; location: string; count: number }>;
+      return [] as Array<{ campus: string; count: number; rooms: Array<{ location: string; count: number }> }>;
     }
     if (!quickCountModal.assets.every((asset) => isFurnitureAsset(asset.category))) {
-      return [] as Array<{ campus: string; location: string; count: number }>;
+      return [] as Array<{ campus: string; count: number; rooms: Array<{ location: string; count: number }> }>;
     }
 
     const byLocation = new Map<string, { campus: string; location: string; count: number }>();
@@ -30055,11 +30145,27 @@ export default function App() {
       }
     }
 
-    return Array.from(byLocation.values()).sort(
-      (a, b) =>
-        campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
-        a.location.localeCompare(b.location)
-    );
+    const byCampus = new Map<string, { campus: string; count: number; rooms: Array<{ location: string; count: number }> }>();
+    for (const row of Array.from(byLocation.values())) {
+      const existing = byCampus.get(row.campus);
+      if (existing) {
+        existing.count += row.count;
+        existing.rooms.push({ location: row.location, count: row.count });
+      } else {
+        byCampus.set(row.campus, {
+          campus: row.campus,
+          count: row.count,
+          rooms: [{ location: row.location, count: row.count }],
+        });
+      }
+    }
+
+    return Array.from(byCampus.values())
+      .map((row) => ({
+        ...row,
+        rooms: row.rooms.sort((a, b) => b.count - a.count || a.location.localeCompare(b.location)),
+      }))
+      .sort((a, b) => campusLabel(a.campus).localeCompare(campusLabel(b.campus)));
   }, [quickCountModal, campusLabel]);
   const quickCountModalShowsFurnitureQuantities = quickCountModalFurnitureLocationTotals.length > 0;
   const quickCountModalHidesUserColumn = quickCountModalShowsFurnitureQuantities;
@@ -30358,26 +30464,88 @@ export default function App() {
       </div>
     );
 
+    const renderQuickStatusIcon = (status: "broken" | "maintenance" | "active" | "inactive" | "retired") => {
+      switch (status) {
+        case "broken":
+          return (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M9 9l6 6M15 9l-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          );
+        case "maintenance":
+          return (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M14.6 6.4a3.4 3.4 0 0 0 3.9 3.9l-7.7 7.7a2 2 0 1 1-2.8-2.8l7.7-7.7a3.4 3.4 0 0 0-1.1-4.6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M14 4.5l5.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+            </svg>
+          );
+        case "active":
+          return (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M8.5 12.3l2.4 2.4 4.6-5.1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          );
+        case "inactive":
+          return (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M10 8.5v7M14 8.5v7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          );
+        default:
+          return (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 4.5l8 14H4l8-14z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M12 9v4.2M12 16.3h.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          );
+      }
+    };
+
     const statusGrid = (
       <div className="report-quick-status-grid">
         <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-broken" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Broken Assets", quickCountStatusAssets.broken)}>
-          <span>{lang === "km" ? "ខូច" : "Broken"}</span>
+          <div className="report-quick-status-label">
+            <span className="report-quick-status-icon">{renderQuickStatusIcon("broken")}</span>
+            <span>{lang === "km" ? "ខូច" : "Broken"}</span>
+          </div>
           <strong>{quickCountStatusSummary.broken}</strong>
         </button>
         <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-maintenance" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងជួសជុល" : "Under Maintenance Assets", quickCountStatusAssets.underMaintenance)}>
-          <span>{lang === "km" ? "កំពុងជួសជុល" : "Under Maintenance"}</span>
+          <div className="report-quick-status-label">
+            <span className="report-quick-status-icon">{renderQuickStatusIcon("maintenance")}</span>
+            <span>{lang === "km" ? "កំពុងជួសជុល" : "Under Maintenance"}</span>
+          </div>
           <strong>{quickCountStatusSummary.underMaintenance}</strong>
         </button>
         <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-active" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យកំពុងប្រើ" : "Active Assets", quickCountStatusAssets.active)}>
-          <span>{lang === "km" ? "កំពុងប្រើ" : "Active"}</span>
+          <div className="report-quick-status-label">
+            <span className="report-quick-status-icon">{renderQuickStatusIcon("active")}</span>
+            <span>{lang === "km" ? "កំពុងប្រើ" : "Active"}</span>
+          </div>
           <strong>{quickCountStatusSummary.active}</strong>
         </button>
         <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-inactive" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យមិនប្រើ" : "Inactive Assets", quickCountStatusAssets.inactive)}>
-          <span>{lang === "km" ? "មិនប្រើ" : "Inactive"}</span>
+          <div className="report-quick-status-label">
+            <span className="report-quick-status-icon">{renderQuickStatusIcon("inactive")}</span>
+            <span>{lang === "km" ? "មិនប្រើ" : "Inactive"}</span>
+          </div>
           <strong>{quickCountStatusSummary.inactive}</strong>
         </button>
         <button type="button" className="report-quick-status-pill report-quick-status-btn report-quick-status-retired" onClick={() => openQuickCountAssetsModal(lang === "km" ? "ទ្រព្យខូច" : "Defective Assets", quickCountStatusAssets.retired)}>
-          <span>{lang === "km" ? "ខូច" : "Defective"}</span>
+          <div className="report-quick-status-label">
+            <span className="report-quick-status-icon">{renderQuickStatusIcon("retired")}</span>
+            <span>{lang === "km" ? "ខូច" : "Defective"}</span>
+          </div>
           <strong>{quickCountStatusSummary.retired}</strong>
         </button>
       </div>
@@ -39975,24 +40143,121 @@ export default function App() {
         {tab === "inventory" && (
           <div className={`inventory-shell ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
             {!maintenanceQuickMode && !(inventoryView === "dashboard" && inventoryDashboardGroup === "SUPPLY") ? (
-              <section className={`panel ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
-                <div className="panel-row">
-                  <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
-                  <div className="panel-filters">
-                    <input
-                      className="input"
-                      placeholder={`Search ${inventoryBusinessGroupLabel(inventoryDashboardGroup)}...`}
-                      value={inventorySearch}
-                      onChange={(e) => setInventorySearch(e.target.value)}
-                    />
+              inventoryIsToolControlGroup ? (
+                <section className={`panel inventory-tool-workbench ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
+                  <div className="inventory-tool-workbench-head">
+                    <div className="inventory-tool-workbench-copy">
+                      <span className="inventory-tool-workbench-kicker">
+                        {inventoryDashboardGroup === "CLEAN_TOOL"
+                          ? (lang === "km" ? "គ្រប់គ្រងឧបករណ៍សម្អាត" : "Cleaning Tools Control")
+                          : (lang === "km" ? "គ្រប់គ្រងឧបករណ៍ថែទាំ" : "Maintenance Tools Control")}
+                      </span>
+                      <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
+                      <p>
+                        {inventoryDashboardGroup === "CLEAN_TOOL"
+                          ? (lang === "km"
+                            ? "កត់ត្រាឧបករណ៍ដែលសាលាមាន បច្ចុប្បន្នភាពស្ថានភាពប្រចាំខែ ទីតាំងរក្សាទុក និងការជំនួសស្តុក។"
+                            : "Record what the school has, update monthly condition, track storage location, and replace stock when needed.")
+                          : (lang === "km"
+                            ? "គ្រប់គ្រងឧបករណ៍ថែទាំឲ្យឃើញច្បាស់ តាមដានស្ថានភាពប្រចាំខែ ទីតាំង និងប្រវត្តិចេញប្រើ។"
+                            : "Control tool quantity, monthly condition updates, storage/work location, and issue history in one clear workflow.")}
+                      </p>
+                    </div>
+                    <div className="inventory-tool-workbench-actions">
+                      <input
+                        className="input"
+                        placeholder={`Search ${inventoryBusinessGroupLabel(inventoryDashboardGroup)}...`}
+                        value={inventorySearch}
+                        onChange={(e) => setInventorySearch(e.target.value)}
+                      />
+                    </div>
                   </div>
-                </div>
-              </section>
+                  <div className="inventory-tool-workbench-stats">
+                    <article className="inventory-tool-workbench-chip">
+                      <span>{lang === "km" ? "ប្រភេទឧបករណ៍" : "Tool Types"}</span>
+                      <strong>{inventoryDashboardGroupSnapshot.totalItems}</strong>
+                    </article>
+                    <article className="inventory-tool-workbench-chip">
+                      <span>{lang === "km" ? "ទីតាំង" : "Locations"}</span>
+                      <strong>{inventoryDashboardLocationControlRows.length}</strong>
+                    </article>
+                    <article className="inventory-tool-workbench-chip">
+                      <span>{lang === "km" ? "រួចរាល់" : "Ready"}</span>
+                      <strong>{inventoryDashboardGroupSnapshot.totalOnHand}</strong>
+                    </article>
+                    <article className="inventory-tool-workbench-chip inventory-tool-workbench-chip-alert">
+                      <span>{lang === "km" ? "ត្រូវតាមដាន" : "Need Attention"}</span>
+                      <strong>{inventoryDashboardGroupSnapshot.lowStockItems + inventoryDashboardGroupSnapshot.pendingApprovals}</strong>
+                    </article>
+                  </div>
+                  <div className="inventory-tool-workbench-tabs">
+                    <button type="button" className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>
+                      {lang === "km" ? "បញ្ជីឧបករណ៍បច្ចុប្បន្ន" : "Current Tools"}
+                    </button>
+                    <button type="button" className={`tab ${inventoryView === "daily" ? "tab-active" : ""}`} onClick={() => setInventoryView("daily")}>
+                      {lang === "km" ? "ពិនិត្យប្រចាំខែ" : "Monthly Check"}
+                    </button>
+                    <button type="button" className={`tab ${inventoryView === "stock" ? "tab-active" : ""}`} onClick={() => setInventoryView("stock")}>
+                      {lang === "km" ? "បន្ថែម/ជំនួសស្តុក" : "Replace / Add Stock"}
+                    </button>
+                    <button type="button" className={`tab ${inventoryView === "balance" ? "tab-active" : ""}`} onClick={() => setInventoryView("balance")}>
+                      {lang === "km" ? "កំណត់ត្រាសាខា / ប្រវត្តិ" : "Campus / History"}
+                    </button>
+                  </div>
+                </section>
+              ) : (
+                <section className={`panel ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
+                  <div className="panel-row">
+                    <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
+                    <div className="panel-filters">
+                      <input
+                        className="input"
+                        placeholder={`Search ${inventoryBusinessGroupLabel(inventoryDashboardGroup)}...`}
+                        value={inventorySearch}
+                        onChange={(e) => setInventorySearch(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </section>
+              )
             ) : null}
 
             {!maintenanceQuickMode && inventoryView === "items" && (
               <section className="panel">
-                <h2>Create Inventory Item</h2>
+                <h2>
+                  {inventoryIsToolControlGroup
+                    ? (lang === "km" ? "បញ្ជីឧបករណ៍បច្ចុប្បន្ន" : "Current Tools Register")
+                    : "Create Inventory Item"}
+                </h2>
+                {inventoryIsToolControlGroup ? (
+                  <div className="panel-note" style={{ marginBottom: 12 }}>
+                    {lang === "km"
+                      ? "កត់ត្រាឈ្មោះឧបករណ៍ ចំនួនស្តុក ទីតាំងរក្សាទុក និងចំណាំសម្រាប់ការគ្រប់គ្រងប្រចាំខែ។"
+                      : "Record the tool name, quantity, storage location, and notes so the school always knows what it has."}
+                  </div>
+                ) : null}
+                {inventoryIsToolControlGroup ? (
+                  <div className="stats-grid" style={{ marginBottom: 12 }}>
+                    <div className="stat-card">
+                      <div className="stat-label">{lang === "km" ? "បញ្ជីឧបករណ៍" : "Tool Record"}</div>
+                      <div className="stat-value">{lang === "km" ? "ច្បាស់" : "Clear"}</div>
+                      <div className="tiny">
+                        {lang === "km"
+                          ? "ឈ្មោះ កូដ រូបភាព និងចំនួនបច្ចុប្បន្ន"
+                          : "Keep the name, code, photo, and current quantity together."}
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-label">{lang === "km" ? "ទីតាំងរក្សាទុក" : "Keep At"}</div>
+                      <div className="stat-value">{lang === "km" ? "ត្រឹមត្រូវ" : "Exact"}</div>
+                      <div className="tiny">
+                        {lang === "km"
+                          ? "បញ្ជាក់សាខា និងកន្លែងរក្សាទុកឲ្យច្បាស់"
+                          : "Make the campus and storage place easy to confirm."}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="form-grid inventory-item-create-grid">
                   <label className="field">
                     <span>Campus</span>
@@ -40500,7 +40765,7 @@ export default function App() {
             {!maintenanceQuickMode && inventoryBusinessGroupHasDailyStockFlow(inventoryDashboardGroup) && inventoryView === "stock" && (
               <section className="panel">
                 <div className="panel-head panel-head-compact">
-                  <h2>Stock In / Out</h2>
+                  <h2>{inventoryIsToolControlGroup ? (lang === "km" ? "បន្ថែម / ជំនួសស្តុក" : "Replace / Add Stock") : "Stock In / Out"}</h2>
                   <div className="panel-head-actions">
                     <button
                       type="button"
@@ -40528,6 +40793,13 @@ export default function App() {
                   </div>
                 ) : (
                   <>
+                {inventoryIsToolControlGroup ? (
+                  <div className="panel-note" style={{ marginBottom: 12 }}>
+                    {lang === "km"
+                      ? "ប្រើផ្នែកនេះសម្រាប់បន្ថែមស្តុកថ្មី កត់ត្រាការជំនួសពេលឧបករណ៍ខូច ឬខាតបង់ និងរក្សាប្រវត្តិការកែប្រែស្តុកឲ្យច្បាស់។"
+                      : "Use this to add new stock, record replacements when tools are broken or missing, and keep a clean stock-change history."}
+                  </div>
+                ) : null}
                 <div className="form-grid">
                   <label className="field field-wide">
                     <span>Item</span>
@@ -40620,7 +40892,11 @@ export default function App() {
                   </p>
                 ) : null}
                 <div className="asset-actions">
-                  <div className="tiny">Track stock in/out and campus borrow flow in one register.</div>
+                  <div className="tiny">
+                    {inventoryIsToolControlGroup
+                      ? (lang === "km" ? "កត់ត្រាបន្ថែមស្តុក ជំនួសឧបករណ៍ខូច និងប្រវត្តិការចេញប្រើនៅកន្លែងតែមួយ។" : "Record added stock, broken-tool replacements, and issue movement in one clear register.")
+                      : "Track stock in/out and campus borrow flow in one register."}
+                  </div>
                   <button className="btn-primary" disabled={!isAdmin || inventoryTxnSaveBusy} onClick={createInventoryTxn}>Save Transaction</button>
                 </div>
 
@@ -41038,7 +41314,9 @@ export default function App() {
                     <h2>
                       {inventoryView === "dashboard"
                         ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} ${lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard"}`
-                        : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)")}
+                        : inventoryIsToolControlGroup
+                          ? (lang === "km" ? "ពិនិត្យស្ថានភាពឧបករណ៍ប្រចាំខែ" : "Monthly Tool Check")
+                          : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)")}
                     </h2>
                     <p className="tiny">
                       {inventoryView === "dashboard"
@@ -41057,18 +41335,65 @@ export default function App() {
                               : inventoryDashboardGroup === "MAINT_TOOL"
                                 ? "Dedicated dashboard for maintenance tools with readiness, usage, and low-stock control."
                                 : "Dedicated dashboard for printer toner stock health, approvals, and usage trends.")
-                        : (lang === "km"
-                          ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
-                          : "Phone-friendly daily Stock-Out record for maintenance staff.")}
+                        : inventoryIsToolControlGroup
+                          ? (lang === "km"
+                            ? "ប្រើសម្រាប់បច្ចុប្បន្នភាពស្ថានភាពឧបករណ៍ប្រចាំខែ និងកំណត់ចំណាំអ្នកពិនិត្យ។"
+                            : "Use this as the monthly check surface for tool status, quantity confirmation, and staff notes.")
+                          : (lang === "km"
+                            ? "សម្រាប់បុគ្គលិកថែទាំ កត់ត្រាចេញស្តុកប្រចាំថ្ងៃតាមទូរស័ព្ទបានលឿន។"
+                            : "Phone-friendly daily Stock-Out record for maintenance staff.")}
                     </p>
                   </div>
                 ) : null}
+                {inventoryIsToolControlGroup && inventoryView === "daily" ? (
+                  <div className="panel-note" style={{ marginBottom: 12 }}>
+                    {lang === "km"
+                      ? "ប្រើសម្រាប់ពិនិត្យប្រចាំខែ ដើម្បីបញ្ជាក់ចំនួនជាក់ស្តែង ស្ថានភាពឧបករណ៍ បញ្ហាខូច ឬបាត់ និងឈ្មោះបុគ្គលិកអ្នកពិនិត្យ។"
+                      : "Use this monthly check to confirm actual quantity, current condition, broken or missing tools, and the staff member who checked them."}
+                  </div>
+                ) : null}
                 {inventoryView === "dashboard" && !maintenanceQuickMode && isAdmin ? (
-                  <article className={`${inventoryDashboardGroup === "SUPPLY" ? "inventory-admin-control-panel inventory-admin-control-panel-supply" : "panel inventory-admin-control-panel"}`}>
+                  <article className={`${inventoryDashboardGroup === "SUPPLY" ? "inventory-admin-control-panel inventory-admin-control-panel-supply" : "panel inventory-admin-control-panel"} ${inventoryDashboardGroup === "MAINT_TOOL" ? "inventory-admin-control-panel-maint" : ""}`}>
                     {inventoryDashboardGroup === "SUPPLY" ? (
                       <div className="panel-row">
                         <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
                       </div>
+                    ) : null}
+                    {inventoryDashboardGroup === "MAINT_TOOL" ? (
+                      <section className="inventory-maint-hero">
+                        <div className="inventory-maint-hero-copy">
+                          <span className="inventory-maint-hero-kicker">{lang === "km" ? "ផ្ទាំងបញ្ជាឧបករណ៍ថែទាំ" : "Maintenance Command"}</span>
+                          <strong>{lang === "km" ? "គ្រប់គ្រងឧបករណ៍ថែទាំឲ្យឃើញច្បាស់ និងងាយចាត់ចែង" : "A clearer control surface for maintenance tools"}</strong>
+                          <span>
+                            {lang === "km"
+                              ? "មើលឧបករណ៍រួចរាល់ ទីតាំងការងារ សំណើររង់ចាំ និងឧបករណ៍ត្រូវតាមដានក្នុងកន្លែងតែមួយ។"
+                              : "See readiness, work locations, pending requests, and attention items from one cleaner dashboard."}
+                          </span>
+                        </div>
+                        <div className="inventory-maint-hero-metrics">
+                          <article className="inventory-maint-hero-chip">
+                            <span className="inventory-maint-hero-chip-icon"><Wrench size={18} aria-hidden={true} /></span>
+                            <div>
+                              <small>{lang === "km" ? "រួចរាល់ប្រើ" : "Ready Units"}</small>
+                              <strong>{inventoryDashboardGroupSnapshot.totalOnHand}</strong>
+                            </div>
+                          </article>
+                          <article className="inventory-maint-hero-chip">
+                            <span className="inventory-maint-hero-chip-icon"><Building2 size={18} aria-hidden={true} /></span>
+                            <div>
+                              <small>{lang === "km" ? "ទីតាំងការងារ" : "Work Locations"}</small>
+                              <strong>{inventoryDashboardLocationControlRows.length}</strong>
+                            </div>
+                          </article>
+                          <article className="inventory-maint-hero-chip inventory-maint-hero-chip-alert">
+                            <span className="inventory-maint-hero-chip-icon"><Bell size={18} aria-hidden={true} /></span>
+                            <div>
+                              <small>{lang === "km" ? "ត្រូវតាមដាន" : "Need Attention"}</small>
+                              <strong>{inventoryDashboardGroupSnapshot.lowStockItems + inventoryDashboardGroupSnapshot.pendingApprovals}</strong>
+                            </div>
+                          </article>
+                        </div>
+                      </section>
                     ) : null}
                     <div className="panel-row">
                       {inventoryDashboardGroup !== "SUPPLY" ? (
@@ -41121,31 +41446,37 @@ export default function App() {
                       ) : (
                         <>
                           <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-neutral" onClick={() => openInventoryDashboardStat("items")}>
+                            <span className="inventory-maint-stat-icon"><ClipboardList size={18} aria-hidden={true} /></span>
                             <div className="stat-label">{lang === "km" ? "ប្រភេទឧបករណ៍ថែទាំ" : "Total Tool Types"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalItems}</div>
                             <div className="inventory-admin-stat-help">{lang === "km" ? "ចំនួនប្រភេទឧបករណ៍ថែទាំដែលបានកត់ត្រា" : "Number of maintenance tool types recorded in the system."}</div>
                           </button>
                           <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-primary" onClick={() => openInventoryDashboardStat("balance_all")}>
+                            <span className="inventory-maint-stat-icon"><CheckCircle2 size={18} aria-hidden={true} /></span>
                             <div className="stat-label">{lang === "km" ? "ឧបករណ៍រួចរាល់" : "Ready Units"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.totalOnHand}</div>
                             <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលរួចរាល់សម្រាប់ចេញប្រើ ឬយកទៅធ្វើការ" : "Tools currently ready for use or deployment."}</div>
                           </button>
                           <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-alert" onClick={() => openInventoryDashboardStat("balance_low")}>
+                            <span className="inventory-maint-stat-icon"><Bell size={18} aria-hidden={true} /></span>
                             <div className="stat-label">{lang === "km" ? "ត្រូវតាមដាន" : "Low Readiness Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.lowStockItems}</div>
                             <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលត្រូវតាមដានព្រោះចំនួន ឬស្ថានភាពមិនល្អ" : "Tools needing attention because quantity or readiness is low."}</div>
                           </button>
                           <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-danger" onClick={() => openInventoryDashboardStat("balance_low")}>
+                            <span className="inventory-maint-stat-icon"><BarChart3 size={18} aria-hidden={true} /></span>
                             <div className="stat-label">{lang === "km" ? "គ្មានស្តុក" : "Zero Available Tools"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.zeroStockItems}</div>
                             <div className="inventory-admin-stat-help">{lang === "km" ? "ឧបករណ៍ដែលមិនមានស្រាប់សម្រាប់ប្រើនៅពេលនេះ" : "Tools with no available stock for current work."}</div>
                           </button>
                           <button type="button" className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-secondary" onClick={() => openInventoryDashboardStat("items")}>
+                            <span className="inventory-maint-stat-icon"><Building2 size={18} aria-hidden={true} /></span>
                             <div className="stat-label">{lang === "km" ? "ទីតាំងគ្រប់គ្រង" : "Work Locations"}</div>
                             <div className="stat-value">{inventoryDashboardLocationControlRows.length}</div>
                             <div className="inventory-admin-stat-help">{lang === "km" ? "ចំនួនទីតាំងធ្វើការ ឬទីតាំងរក្សាទុកដែលកំពុងគ្រប់គ្រង" : "Number of work or storage locations being controlled."}</div>
                           </button>
                           <button type="button" className="stat-card stat-card-button stat-card-overdue inventory-admin-stat-card inventory-admin-stat-card-muted" onClick={() => openInventoryDashboardStat("pending")}>
+                            <span className="inventory-maint-stat-icon"><Calendar size={18} aria-hidden={true} /></span>
                             <div className="stat-label">{lang === "km" ? "សំណើររង់ចាំ" : "Pending Requests"}</div>
                             <div className="stat-value">{inventoryDashboardGroupSnapshot.pendingApprovals}</div>
                             <div className="inventory-admin-stat-help">{lang === "km" ? "សំណើដែលនៅរង់ចាំចាត់ចែង ឬអនុម័ត" : "Requests still waiting for follow-up or approval."}</div>
@@ -41344,12 +41675,22 @@ export default function App() {
                           </label>
                         </div>
                         <div className="inventory-admin-control-grid">
-                        <div className="inventory-admin-control-card">
-                          <strong>
-                            {inventoryDashboardGroup === "CLEAN_TOOL"
-                              ? (lang === "km" ? "ការគ្រប់គ្រងតាមទីតាំងរក្សាទុក" : "Storage Location Control")
-                              : (lang === "km" ? "ការគ្រប់គ្រងតាមទីតាំងការងារ" : "Readiness by Location")}
-                          </strong>
+                        <div className={`inventory-admin-control-card ${inventoryDashboardGroup === "MAINT_TOOL" ? "inventory-maint-control-card" : ""}`}>
+                          {inventoryDashboardGroup === "MAINT_TOOL" ? (
+                            <div className="inventory-maint-card-head">
+                              <span className="inventory-maint-card-icon"><Building2 size={18} aria-hidden={true} /></span>
+                              <div>
+                                <strong>{lang === "km" ? "ការគ្រប់គ្រងតាមទីតាំងការងារ" : "Readiness by Location"}</strong>
+                                <span>{lang === "km" ? "មើលទីតាំងណាដែលរួចរាល់ និងទីតាំងណាត្រូវតាមដាន" : "See which locations are ready and where support is needed."}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <strong>
+                              {inventoryDashboardGroup === "CLEAN_TOOL"
+                                ? (lang === "km" ? "ការគ្រប់គ្រងតាមទីតាំងរក្សាទុក" : "Storage Location Control")
+                                : (lang === "km" ? "ការគ្រប់គ្រងតាមទីតាំងការងារ" : "Readiness by Location")}
+                            </strong>
+                          )}
                           {inventoryDashboardLocationControlRows.length ? (
                             <div className="table-wrap" style={{ marginTop: 10 }}>
                               <table>
@@ -41381,12 +41722,22 @@ export default function App() {
                             <div className="tiny" style={{ marginTop: 10 }}>{lang === "km" ? "មិនមានទិន្នន័យទីតាំង" : "No location data yet."}</div>
                           )}
                         </div>
-                        <div className="inventory-admin-control-card">
-                          <strong>
-                            {inventoryDashboardGroup === "CLEAN_TOOL"
-                              ? (lang === "km" ? "ឧបករណ៍សម្អាតត្រូវតាមដាន" : "Cleaning Tools Attention Needed")
-                              : (lang === "km" ? "ឧបករណ៍ថែទាំត្រូវតាមដាន" : "Maintenance Tools Attention Needed")}
-                          </strong>
+                        <div className={`inventory-admin-control-card ${inventoryDashboardGroup === "MAINT_TOOL" ? "inventory-maint-control-card" : ""}`}>
+                          {inventoryDashboardGroup === "MAINT_TOOL" ? (
+                            <div className="inventory-maint-card-head">
+                              <span className="inventory-maint-card-icon"><Bell size={18} aria-hidden={true} /></span>
+                              <div>
+                                <strong>{lang === "km" ? "ឧបករណ៍ថែទាំត្រូវតាមដាន" : "Maintenance Tools Attention Needed"}</strong>
+                                <span>{lang === "km" ? "ផ្តោតលើឧបករណ៍ដែលស្តុកទាប ឬមិនរួចរាល់ប្រើ" : "Focus first on tools with low stock or weak readiness."}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <strong>
+                              {inventoryDashboardGroup === "CLEAN_TOOL"
+                                ? (lang === "km" ? "ឧបករណ៍សម្អាតត្រូវតាមដាន" : "Cleaning Tools Attention Needed")
+                                : (lang === "km" ? "ឧបករណ៍ថែទាំត្រូវតាមដាន" : "Maintenance Tools Attention Needed")}
+                            </strong>
+                          )}
                           {inventoryDashboardGroupSnapshot.atRiskRows.length ? (
                             <div className="inventory-admin-control-list">
                               {inventoryDashboardGroupSnapshot.atRiskRows.map((row) => (
@@ -41408,12 +41759,22 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                        <div className="inventory-admin-control-card">
-                          <strong>
-                            {inventoryDashboardGroup === "CLEAN_TOOL"
-                              ? (lang === "km" ? "សកម្មភាពឧបករណ៍សម្អាតថ្មីៗ" : "Recent Cleaning Tools Activity")
-                              : (lang === "km" ? "សកម្មភាពឧបករណ៍ថែទាំថ្មីៗ" : "Recent Maintenance Tools Activity")}
-                          </strong>
+                        <div className={`inventory-admin-control-card ${inventoryDashboardGroup === "MAINT_TOOL" ? "inventory-maint-control-card" : ""}`}>
+                          {inventoryDashboardGroup === "MAINT_TOOL" ? (
+                            <div className="inventory-maint-card-head">
+                              <span className="inventory-maint-card-icon"><ClipboardList size={18} aria-hidden={true} /></span>
+                              <div>
+                                <strong>{lang === "km" ? "សកម្មភាពឧបករណ៍ថែទាំថ្មីៗ" : "Recent Maintenance Tools Activity"}</strong>
+                                <span>{lang === "km" ? "មើលចលនាចុងក្រោយតាមខែ សាខា និងអ្នកស្នើ" : "Review the latest monthly movements by campus and requester."}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <strong>
+                              {inventoryDashboardGroup === "CLEAN_TOOL"
+                                ? (lang === "km" ? "សកម្មភាពឧបករណ៍សម្អាតថ្មីៗ" : "Recent Cleaning Tools Activity")
+                                : (lang === "km" ? "សកម្មភាពឧបករណ៍ថែទាំថ្មីៗ" : "Recent Maintenance Tools Activity")}
+                            </strong>
+                          )}
                           {inventoryDashboardRecentActivityRows.length ? (
                             <div className="inventory-admin-control-list">
                               {inventoryDashboardRecentActivityRows.map((tx) => (
@@ -41461,8 +41822,14 @@ export default function App() {
                     ) : null}
                     {inventoryDashboardGroup === "MAINT_TOOL" ? (
                       <div className="inventory-admin-control-grid" style={{ marginTop: 12 }}>
-                        <div className="inventory-admin-control-card">
-                          <strong>{lang === "km" ? "ឧបករណ៍ថែទាំចេញច្រើនក្នុងខែនេះ" : "Most Issued Maintenance Tools This Month"}</strong>
+                        <div className="inventory-admin-control-card inventory-maint-control-card">
+                          <div className="inventory-maint-card-head">
+                            <span className="inventory-maint-card-icon"><BarChart3 size={18} aria-hidden={true} /></span>
+                            <div>
+                              <strong>{lang === "km" ? "ឧបករណ៍ថែទាំចេញច្រើនក្នុងខែនេះ" : "Most Issued Maintenance Tools This Month"}</strong>
+                              <span>{lang === "km" ? "ដឹងឧបករណ៍ណាដែលប្រើញឹកញាប់ ដើម្បីរៀបចំស្តុកឲ្យបានត្រឹមត្រូវ" : "Spot the highest-demand tools so stock planning stays ahead of work."}</span>
+                            </div>
+                          </div>
                           {inventoryDashboardTopUsageRows.length ? (
                             <div className="inventory-admin-control-list">
                               {inventoryDashboardTopUsageRows.map((row) => (
@@ -42804,7 +43171,37 @@ export default function App() {
 
             {!maintenanceQuickMode && inventoryView === "balance" && (
               <section className="panel" id="inventory-balance-section">
-                <h2>Stock Balance & Low Stock Alerts</h2>
+                <h2>{inventoryIsToolControlGroup ? (lang === "km" ? "កំណត់ត្រាសាខា និងប្រវត្តិឧបករណ៍" : "Campus Records & Tool History") : "Stock Balance & Low Stock Alerts"}</h2>
+                {inventoryIsToolControlGroup ? (
+                  <div className="inventory-tool-record-switch">
+                    <button
+                      type="button"
+                      className={`tab ${inventoryToolRecordView === "campus" ? "tab-active" : ""}`}
+                      onClick={() => setInventoryToolRecordView("campus")}
+                    >
+                      {lang === "km" ? "កំណត់ត្រាតាមសាខា" : "Campus Record"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`tab ${inventoryToolRecordView === "history" ? "tab-active" : ""}`}
+                      onClick={() => setInventoryToolRecordView("history")}
+                    >
+                      {lang === "km" ? "ប្រវត្តិឧបករណ៍" : "Tool History"}
+                    </button>
+                  </div>
+                ) : null}
+                {inventoryIsToolControlGroup ? (
+                  <div className="panel-note" style={{ marginBottom: 12 }}>
+                    {inventoryToolRecordView === "campus"
+                      ? (lang === "km"
+                        ? "មើលតាមសាខា ដើម្បីដឹងថាសាខានីមួយៗមានឧបករណ៍អ្វីខ្លះ ចំនួនប៉ុន្មាន និងទុកនៅទីណា។"
+                        : "Campus Record shows what each campus has now, how many units are on hand, and where they are kept.")
+                      : (lang === "km"
+                        ? "Tool History បង្ហាញចលនាស្តុក និងការកែប្រែដែលបានកត់ត្រា ដើម្បីតាមដានការប្រើប្រាស់ ការជំនួស និងការតាមដានបន្ត។"
+                        : "Tool History shows stock movements and recorded changes so you can track usage, replacement, and follow-up over time.")}
+                  </div>
+                ) : null}
+                {!inventoryIsToolControlGroup || inventoryToolRecordView === "history" ? (
                 <div className="stats-grid" style={{ marginBottom: 12 }}>
                   <button
                     type="button"
@@ -42823,6 +43220,8 @@ export default function App() {
                     <div className="stat-value">{inventoryLowStockRows.length}</div>
                   </button>
                 </div>
+                ) : null}
+                {!inventoryIsToolControlGroup ? (
                 <article className="panel inventory-supply-compare-panel" style={{ marginBottom: 12 }}>
                   <div className="panel-row inventory-supply-compare-head">
                     <h3 className="section-title">Monthly Cleaning Supplies Stock Out by Campus</h3>
@@ -42871,6 +43270,8 @@ export default function App() {
                     <p className="tiny">No cleaning-supply stock-out data for this month.</p>
                   )}
                 </article>
+                ) : null}
+                {!inventoryIsToolControlGroup ? (
                 <article className="panel inventory-supply-compare-panel" style={{ marginBottom: 12 }}>
                   <div className="panel-row">
                     <h3 className="section-title">Campus Usage Compare by Item (Selected Month)</h3>
@@ -42992,7 +43393,71 @@ export default function App() {
                     </div>
                   )}
                 </article>
-                {isPhoneView ? (
+                ) : null}
+                {inventoryIsToolControlGroup && inventoryToolRecordView === "campus" ? (
+                  <div className="inventory-admin-campus-balance-grid" style={{ marginTop: 12 }}>
+                    {inventoryDashboardVisibleCampusBalanceRows.length ? (
+                      inventoryDashboardVisibleCampusBalanceRows.map((row) => (
+                        <article key={`inventory-tool-campus-record-${row.campus}`} className="inventory-admin-campus-balance-card">
+                          <div className="inventory-admin-campus-balance-head">
+                            <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
+                            <span className={`inventory-admin-campus-balance-badge ${row.zeroStockItems > 0 ? "inventory-admin-campus-balance-badge-danger" : row.lowStockItems > 0 ? "inventory-admin-campus-balance-badge-watch" : "inventory-admin-campus-balance-badge-ok"}`}>
+                              {row.zeroStockItems > 0
+                                ? (lang === "km" ? "ត្រូវដោះស្រាយ" : "Need Action")
+                                : row.lowStockItems > 0
+                                  ? (lang === "km" ? "ត្រូវតាមដាន" : "Watch")
+                                  : (lang === "km" ? "ល្អ" : "OK")}
+                            </span>
+                          </div>
+                          <div className="inventory-admin-campus-balance-meta">
+                            <span>{lang === "km" ? `ប្រភេទ ${row.itemRows.length}` : `${row.itemRows.length} tool types`}</span>
+                            <span>{lang === "km" ? `រួចរាល់ ${row.onHand}` : `${row.onHand} ready`}</span>
+                            <span>{lang === "km" ? `ត្រូវតាមដាន ${row.lowStockItems}` : `${row.lowStockItems} watch`}</span>
+                          </div>
+                          <div className="inventory-admin-campus-item-grid">
+                            {row.itemRows.map((item) => (
+                              <div
+                                key={`inventory-tool-campus-item-${row.campus}-${item.itemCode}-${item.itemName}`}
+                                className={`inventory-admin-campus-item-card ${item.isOut ? "inventory-admin-campus-item-card-out" : item.isLow ? "inventory-admin-campus-item-card-low" : ""}`}
+                              >
+                                {item.photo ? (
+                                  <img
+                                    src={item.photo}
+                                    alt={inventoryDisplayName(item.itemName, lang)}
+                                    className="inventory-admin-campus-item-photo"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                ) : (
+                                  <div className="inventory-admin-campus-item-photo inventory-admin-campus-item-photo-empty">
+                                    {item.itemCode.slice(0, 2) || "TL"}
+                                  </div>
+                                )}
+                                <div className="inventory-admin-campus-item-copy">
+                                  <strong>{inventoryDisplayName(item.itemName, lang)}</strong>
+                                  <span>
+                                    {item.itemCode}
+                                    {item.locations.length
+                                      ? ` • ${lang === "km" ? "ទុកនៅ" : "Keep at"} ${item.locations.join(", ")}`
+                                      : ""}
+                                  </span>
+                                </div>
+                                <div className="inventory-admin-campus-item-qty">
+                                  <span>{lang === "km" ? "ចំនួន" : "Qty"}</span>
+                                  <strong>{item.qty}</strong>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">
+                        {lang === "km" ? "មិនមានទិន្នន័យឧបករណ៍តាមសាខាទេ។" : "No campus tool records yet."}
+                      </div>
+                    )}
+                  </div>
+                ) : isPhoneView ? (
                   <div className="inventory-balance-mobile-list">
                     {inventoryBalanceDisplayRows.length ? (
                       inventoryBalanceDisplayRows.map((row) => (
@@ -46910,10 +47375,88 @@ export default function App() {
 
             {utilitiesView === "monthly" && (
               <>
-                <h2 className="utility-page-title">Monthly Comparison</h2>
+                <h2 className="utility-page-title">Monthly Amount Comparison</h2>
+                <div className="utility-monthly-toolbar">
+                  <div className="utility-monthly-toolbar-copy">
+                    <strong>Track monthly utility payment and usage capacity by campus.</strong>
+                    <span>Pick a utility first, compare campuses in the boxes, then focus the chart on one campus when you need detail.</span>
+                  </div>
+                  <div className="utility-monthly-filter-grid">
+                    <div className="utility-monthly-filter-group">
+                      <small>Utility</small>
+                      <div className="utility-monthly-chip-row">
+                        {(["EDC", "PPWS"] as const).map((utilityType) => (
+                          <button
+                            key={`utility-monthly-type-${utilityType}`}
+                            type="button"
+                            className={`tab ${utilityMonthlyTypeFilter === utilityType ? "tab-active" : ""}`}
+                            onClick={() => setUtilityMonthlyTypeFilter(utilityType)}
+                          >
+                            {utilityType}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="utility-monthly-filter-group">
+                      <small>Chart Focus</small>
+                      <div className="utility-monthly-chip-row">
+                        <button
+                          type="button"
+                          className={`tab ${utilityMonthlyCampusFilter === "ALL" ? "tab-active" : ""}`}
+                          onClick={() => setUtilityMonthlyCampusFilter("ALL")}
+                        >
+                          All Campuses
+                        </button>
+                        {utilityMonthlyCampusOptions.map((campus) => (
+                          <button
+                            key={`utility-monthly-campus-${campus}`}
+                            type="button"
+                            className={`tab ${utilityMonthlyCampusFilter === campus ? "tab-active" : ""}`}
+                            onClick={() => setUtilityMonthlyCampusFilter(campus)}
+                          >
+                            {campusLabel(campus)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {utilityMonthlyCampusCards.length ? (
+                  <div className="utility-monthly-campus-grid">
+                    {utilityMonthlyCampusCards.map((row) => (
+                      <button
+                        key={`utility-monthly-campus-card-${row.campus}`}
+                        type="button"
+                        className={`utility-monthly-campus-card ${utilityMonthlyCampusFilter === row.campus ? "is-active" : ""}`}
+                        onClick={() =>
+                          setUtilityMonthlyCampusFilter((current) => (current === row.campus ? "ALL" : row.campus))
+                        }
+                      >
+                        <div className="utility-monthly-campus-card-head">
+                          <strong>{campusLabel(row.campus)}</strong>
+                          <span>{utilityMonthlyCampusFilter === row.campus ? "Focused" : "Click to focus"}</span>
+                        </div>
+                        <div className="utility-monthly-campus-card-metrics">
+                          <div>
+                            <small>This Month Usage</small>
+                            <strong>{row.thisMonthUsage.toFixed(2)} {utilityMonthlyTypeFilter === "PPWS" ? "m3" : "kWh"}</strong>
+                          </div>
+                          <div>
+                            <small>This Month Cost</small>
+                            <strong>{formatRielAmount(row.thisMonthAmount)}</strong>
+                          </div>
+                        </div>
+                        <div className="utility-monthly-campus-card-footer">
+                          <span>{row.activeMonths} active month{row.activeMonths === 1 ? "" : "s"}</span>
+                          <span>{utilityMonthlyTypeFilter === "PPWS" ? "Water" : "Electricity"} trend</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className={`stats-grid ${isPhoneView ? "stats-grid-phone" : ""}`} style={{ marginBottom: 12 }}>
-                  <article className="stat-card"><div className="stat-label">This Month EDC Usage</div><div className="stat-value">{utilityUsageSummary.edcUsage.toFixed(2)} kWh</div></article>
-                  <article className="stat-card"><div className="stat-label">This Month EDC Cost</div><div className="stat-value">{formatRielAmount(utilityUsageSummary.edcAmount)}</div></article>
+                  <article className="stat-card"><div className="stat-label">This Month {utilityMonthlyTypeFilter} Usage</div><div className="stat-value">{utilityUsageSummary.usage.toFixed(2)} {utilityMonthlyTypeFilter === "PPWS" ? "m3" : "kWh"}</div></article>
+                  <article className="stat-card"><div className="stat-label">This Month {utilityMonthlyTypeFilter} Cost</div><div className="stat-value">{formatRielAmount(utilityUsageSummary.amount)}</div></article>
                   <article className="stat-card"><div className="stat-label">Active Months</div><div className="stat-value">{utilityMonthlyComparison.activeMonths}</div></article>
                 </div>
                 {utilityMonthlyComparison.series.length ? (() => {
@@ -46944,8 +47487,16 @@ export default function App() {
                       <section className="utility-edc-chart-card">
                         <div className="utility-edc-chart-head">
                           <div className="utility-edc-chart-copy">
-                            <strong>EDC Expense Comparison</strong>
-                            <span>Month-by-month electricity cost comparison by year.</span>
+                            <strong>{utilityMonthlyTypeFilter} Expense Comparison{utilityMonthlyCampusFilter !== "ALL" ? ` - ${campusLabel(utilityMonthlyCampusFilter)}` : ""}</strong>
+                            <span>
+                              {utilityMonthlyCampusFilter === "ALL"
+                                ? utilityMonthlyTypeFilter === "PPWS"
+                                  ? "Combined month-by-month water cost comparison for the selected campuses."
+                                  : "Combined month-by-month electricity cost comparison for the selected campuses."
+                                : utilityMonthlyTypeFilter === "PPWS"
+                                  ? "Month-by-month water cost for the focused campus."
+                                  : "Month-by-month electricity cost for the focused campus."}
+                            </span>
                           </div>
                           <div className="utility-edc-chart-legend">
                             {utilityMonthlyComparison.series.map((series) => (
@@ -47032,7 +47583,7 @@ export default function App() {
                     </>
                   );
                 })() : (
-                  <div className="utility-history-mobile-empty" style={{ marginBottom: 12 }}>No EDC monthly expense data yet.</div>
+                  <div className="utility-history-mobile-empty" style={{ marginBottom: 12 }}>No {utilityMonthlyTypeFilter} monthly expense data yet.</div>
                 )}
               </>
             )}
@@ -54493,11 +55044,16 @@ export default function App() {
                         : "Easy view of how many furniture items are in each room."}
                     </span>
                   </div>
-                  <div className="tiny" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div className="tiny" style={{ display: "grid", gap: 8 }}>
                     {quickCountModalFurnitureLocationTotals.map((row) => (
-                      <span key={`quick-count-location-total-${row.campus}-${row.location}`} className="report-pill">
-                        <strong>{campusLabel(row.campus)}</strong> - {row.location}: {row.count}
-                      </span>
+                      <div key={`quick-count-location-total-${row.campus}`} className="report-pill" style={{ whiteSpace: "normal", lineHeight: 1.45 }}>
+                        <strong>{campusLabel(row.campus)}: {row.count}</strong>
+                        <span>
+                          {" "}(
+                          {row.rooms.map((room) => `${room.location}: ${room.count}`).join(", ")}
+                          )
+                        </span>
+                      </div>
                     ))}
                   </div>
                 </div>
