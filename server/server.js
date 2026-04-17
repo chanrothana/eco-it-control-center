@@ -88,6 +88,62 @@ const APP_BUILD_VERSION = SHORT_DEPLOY_COMMIT
 
 const HOST = process.env.API_HOST || process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 4000);
+
+function getLanIpv4Addresses() {
+  const interfaces = os.networkInterfaces();
+  const addresses = [];
+  for (const values of Object.values(interfaces)) {
+    for (const entry of values || []) {
+      if (!entry || entry.family !== "IPv4" || entry.internal) continue;
+      addresses.push(entry.address);
+    }
+  }
+  return Array.from(new Set(addresses));
+}
+
+function resolveFrontendShareBase(req) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  const originHeader = String(req.headers.origin || "").trim();
+  const refererHeader = String(req.headers.referer || "").trim();
+  const hostHeader = String(req.headers.host || "").trim();
+
+  const rawSource =
+    originHeader ||
+    refererHeader ||
+    (forwardedHost ? `${forwardedProto || "http"}://${forwardedHost}` : "") ||
+    (hostHeader ? `${forwardedProto || "http"}://${hostHeader}` : "");
+
+  let parsed;
+  try {
+    parsed = rawSource ? new URL(rawSource) : null;
+  } catch {
+    parsed = null;
+  }
+
+  const protocol = parsed?.protocol || (forwardedProto === "https" ? "https:" : "http:");
+  const hostname = String(parsed?.hostname || "").trim();
+  const port = parsed?.port ? `:${parsed.port}` : "";
+  const lanAddresses = getLanIpv4Addresses();
+  const bestLanIp = lanAddresses[0] || "";
+  const isLocalHost =
+    !hostname ||
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1";
+
+  const baseUrl = isLocalHost && bestLanIp
+    ? `${protocol}//${bestLanIp}${port}`
+    : parsed
+    ? `${parsed.protocol}//${parsed.host}`
+    : `${protocol}//${hostHeader || `${HOST}:${PORT}`}`;
+
+  return {
+    baseUrl,
+    lanAddresses,
+    hostSource: rawSource,
+  };
+}
 const NODE_ENV = String(process.env.NODE_ENV || "development").toLowerCase();
 const IS_PROD = NODE_ENV === "production";
 const DATA_ROOT = process.env.DATA_ROOT ? path.resolve(process.env.DATA_ROOT) : __dirname;
@@ -5631,6 +5687,16 @@ const server = http.createServer(async (req, res) => {
         version: APP_BUILD_VERSION,
         packageVersion: PACKAGE_VERSION,
         commit: SHORT_DEPLOY_COMMIT || "",
+      });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/system/share-link") {
+      const share = resolveFrontendShareBase(req);
+      sendJson(res, 200, {
+        ok: true,
+        baseUrl: share.baseUrl,
+        lanAddresses: share.lanAddresses,
       });
       return;
     }

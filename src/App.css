@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Sans+3:wght@400;600;700&family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap");
 
 :root {
   --bg: #0f1c2d;
@@ -28,6 +28,326 @@
   --font-size-xxl: clamp(38px, 4.8vw, 64px);
   --control-height: 44px;
   --container-w: 1460px;
+}
+
+.workspace-nila-tea {
+  background:
+    radial-gradient(circle at top left, rgba(168, 85, 247, 0.12), transparent 30%),
+    radial-gradient(circle at 90% 10%, rgba(236, 72, 153, 0.08), transparent 22%),
+    linear-gradient(180deg, #fffbff 0%, #f8f1ff 52%, #f5edff 100%);
+}
+
+.workspace-nila-tea .bg-orb,
+.workspace-nila-tea .bg-orb-a,
+.workspace-nila-tea .bg-orb-b {
+  display: none;
+}
+
+.workspace-nila-tea .app-top-controls-wrap-nila-tea {
+  background: transparent;
+}
+
+.workspace-nila-tea .app-top-controls-grid-nila-tea {
+  background: linear-gradient(180deg, #ffffff 0%, #faf3ff 100%);
+  border: 1px solid #eadbfb;
+  box-shadow: 0 12px 28px rgba(111, 76, 160, 0.08);
+}
+
+.workspace-nila-tea .app-top-controls-grid .input,
+.workspace-nila-tea .app-top-controls-grid .detail-value,
+.workspace-nila-tea .app-top-controls-grid .asset-picker-trigger.input {
+  background: #ffffff;
+  border: 1px solid #e8dcfa;
+  color: #42275f;
+}
+
+.workspace-nila-tea .app-top-controls-grid .field > span,
+.workspace-nila-tea .brand-block .eyebrow,
+.workspace-nila-tea .subhead {
+  color: #8668aa;
+}
+
+.workspace-nila-tea .app-card-workspace-nila-tea {
+  background: linear-gradient(180deg, #ffffff 0%, #f8f0ff 100%);
+  border: 1px solid #eadcf9;
+  box-shadow: 0 18px 42px rgba(98, 63, 146, 0.1);
+}
+
+.workspace-nila-tea .topbar-workspace-nila-tea {
+  background: linear-gradient(180deg, #fffdff 0%, #f8f0ff 100%);
+  border-bottom: 1px solid #efe2fb;
+}
+
+.workspace-nila-tea .brand-block h1 {
+  color: #4c2f68;
+}
+
+.workspace-nila-tea .nila-topmark {
+  border: 1px solid #eadcf8;
+  background: linear-gradient(180deg, #ffffff 0%, #f8efff 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.workspace-nila-tea .nila-topmark-button {
+  appearance: none;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.workspace-nila-tea .nila-topmark-button:focus-visible {
+  outline: 2px solid #9f67ff;
+  outline-offset: 3px;
+}
+
+.workspace-nila-tea .nila-topmark-logo {
+  filter: none;
+}
+
+.workspace-nila-tea .nila-tea-shell {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  gap: 14px;
+}
+
+.workspace-nila-tea .nila-tea-nav-rail {
+  border-color: rgba(214, 203, 228, 0.72);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 245, 252, 0.98));
+  box-shadow: 0 14px 28px rgba(86, 68, 112, 0.08);
+  padding: 12px;
+  gap: 12px;
+}
+
+.workspace-nila-tea .nila-tea-nav-head {
+  border-color: rgba(221, 212, 234, 0.9);
+  background: linear-gradient(180deg, #fbf9fd, #f5f0fa);
+  padding: 14px 14px 12px;
+}
+
+.workspace-nila-tea .nila-tea-nav-rail .main-nav-head h3,
+.workspace-nila-tea .nila-tea-nav-rail .main-nav-section-label,
+.workspace-nila-tea .nila-tea-nav-rail .main-nav-btn {
+  color: #4b3a62;
+}
+
+.workspace-nila-tea .nila-tea-nav-rail .main-nav-toggle-btn {
+  border-color: rgba(211, 200, 227, 0.9);
+  background: #ffffff;
+  color: #6c5d82;
+}
+
+.workspace-nila-tea .nila-tea-nav-rail .main-nav-btn {
+  border-color: rgba(220, 211, 233, 0.92);
+  background: #ffffff;
+  min-height: 44px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 14px;
+}
+
+.workspace-nila-tea .nila-tea-nav-rail .main-nav-btn:hover {
+  border-color: #bca7d7;
+  background: #f6f0fb;
+}
+
+.workspace-nila-tea .nila-tea-nav-rail .main-nav-btn-active {
+  color: #ffffff;
+  background: linear-gradient(135deg, #7a5aa6, #5d447f);
+  box-shadow: 0 10px 18px rgba(93, 68, 127, 0.18);
+}
+
+.workspace-nila-tea .nila-tea-hero {
+  background: linear-gradient(180deg, #fffaf2 0%, #fffef9 100%);
+  border: 1px solid #efc38f;
+  border-radius: 22px;
+  box-shadow: 0 14px 34px rgba(201, 106, 32, 0.08);
+}
+
+.workspace-nila-tea .nila-tea-hero::after {
+  background:
+    radial-gradient(circle at top right, rgba(201, 106, 32, 0.16), transparent 32%),
+    linear-gradient(135deg, rgba(255, 241, 220, 0.8) 0%, rgba(255, 255, 255, 0) 70%);
+}
+
+.workspace-nila-tea .nila-tea-panel h2,
+.workspace-nila-tea .nila-tea-panel h3,
+.workspace-nila-tea .nila-tea-panel h4,
+.workspace-nila-tea .nila-tea-panel strong,
+.workspace-nila-tea .nila-tea-panel th,
+.workspace-nila-tea .nila-tea-panel td {
+  color: #2b3d5d;
+}
+
+.workspace-nila-tea .nila-tea-panel p,
+.workspace-nila-tea .nila-tea-panel small,
+.workspace-nila-tea .nila-tea-panel .tiny,
+.workspace-nila-tea .nila-tea-panel .stat-label,
+.workspace-nila-tea .nila-tea-stock-item-head p {
+  color: #6b7c98;
+}
+
+.workspace-nila-tea .nila-tea-badge-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid #dce6f4;
+  box-shadow: 0 10px 24px rgba(34, 68, 120, 0.08);
+}
+
+.workspace-nila-tea .nila-tea-badge-card small {
+  color: #6b7c98;
+}
+
+.workspace-nila-tea .nila-tea-badge-card strong {
+  color: #20355a;
+}
+
+.workspace-nila-tea .nila-tea-badge-card-warm {
+  background: linear-gradient(180deg, #fff2de 0%, #fffaf2 100%);
+  border-color: #efc38f;
+}
+
+.workspace-nila-tea .nila-tea-message {
+  background: #fff7eb;
+  border: 1px solid #efc38f;
+  color: #8b4a17;
+}
+
+.workspace-nila-tea .nila-tea-view-tabs {
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f7fd 100%);
+  border: 1px solid #dbe6f5;
+  border-radius: 18px;
+  padding: 8px;
+}
+
+.workspace-nila-tea .nila-tea-view-tabs .tab,
+.workspace-nila-tea .nila-tea-panel .tab {
+  background: #ffffff;
+  border: 1px solid #dbe6f5;
+  color: #35557e;
+  gap: 8px;
+}
+
+.workspace-nila-tea .nila-tea-view-tabs .tab.tab-active,
+.workspace-nila-tea .nila-tea-panel .tab.tab-active,
+.workspace-nila-tea .nila-tea-panel .stat-card-selected {
+  border-color: #c96a20;
+  background: linear-gradient(135deg, #c96a20 0%, #8b4a17 100%);
+  color: #ffffff;
+}
+
+.workspace-nila-tea .nila-tea-card,
+.workspace-nila-tea .nila-tea-stock-item,
+.workspace-nila-tea .inventory-dashboard-panel,
+.workspace-nila-tea .inventory-admin-control-card {
+  border-radius: 18px;
+  border: 1px solid #efc38f;
+  background: linear-gradient(180deg, #fff6e8 0%, #fffdf8 100%);
+  box-shadow: 0 12px 28px rgba(201, 106, 32, 0.08);
+}
+
+.workspace-nila-tea .inventory-dashboard-panel,
+.workspace-nila-tea .inventory-admin-control-card {
+  border-color: #efc38f;
+}
+
+.workspace-nila-tea .nila-tea-top-grid,
+.workspace-nila-tea .nila-tea-stock-grid {
+  align-items: start;
+}
+
+.workspace-nila-tea .nila-tea-link-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-nila-tea .nila-tea-link-actions,
+.workspace-nila-tea .nila-tea-actions {
+  flex-wrap: wrap;
+}
+
+.workspace-nila-tea .nila-tea-link-btn {
+  text-decoration: none;
+}
+
+.workspace-nila-tea .nila-tea-alert-item {
+  border: 1px solid #ead8bc;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.workspace-nila-tea .nila-tea-alert-ok {
+  border: 1px dashed #d8e4f4;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  color: #486488;
+}
+
+.workspace-nila-tea .nila-tea-stock-item.is-low {
+  border-color: #efc38f;
+  background: linear-gradient(180deg, #fff1dc 0%, #fffaf1 100%);
+}
+
+.workspace-nila-tea .nila-tea-item-photo,
+.workspace-nila-tea .nila-tea-item-photo-large {
+  border: 1px solid #d9e4f5;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(33, 63, 109, 0.08);
+}
+
+.workspace-nila-tea .nila-tea-panel .input,
+.workspace-nila-tea .nila-tea-panel .detail-value,
+.workspace-nila-tea .nila-tea-panel .table-input,
+.workspace-nila-tea .nila-tea-panel .status-select {
+  background: #ffffff;
+  border: 1px solid #dbe6f5;
+  color: #223554;
+}
+
+.workspace-nila-tea .nila-tea-panel .input:focus,
+.workspace-nila-tea .nila-tea-panel .table-input:focus,
+.workspace-nila-tea .nila-tea-panel .status-select:focus {
+  border-color: #c96a20;
+  box-shadow: 0 0 0 3px rgba(201, 106, 32, 0.16);
+}
+
+.workspace-nila-tea .nila-tea-panel .btn-primary,
+.workspace-nila-tea .nila-tea-panel .tab.btn-primary {
+  background: linear-gradient(135deg, #c96a20 0%, #8b4a17 100%);
+  border: 1px solid #a95a1d;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(201, 106, 32, 0.22);
+}
+
+.workspace-nila-tea .nila-tea-panel .table-wrap {
+  border: 1px solid #ead8bc;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.workspace-nila-tea .nila-tea-panel th {
+  background: #fff4e3;
+  color: #8b4a17;
+}
+
+.workspace-nila-tea .nila-tea-panel td {
+  border-top: 1px solid #f1e2ca;
+}
+
+@media (max-width: 768px) {
+  .workspace-nila-tea .nila-tea-hero {
+    padding: 18px;
+  }
+
+  .workspace-nila-tea .nila-tea-view-tabs {
+    overflow-x: auto;
+  }
+
+  .workspace-nila-tea .nila-tea-actions .tab,
+  .workspace-nila-tea .nila-tea-actions .btn-primary,
+  .workspace-nila-tea .nila-tea-link-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 /* Performance mode: reduce paint/composite cost for smoother interaction */
@@ -99,6 +419,562 @@ body {
     radial-gradient(820px 440px at -10% -10%, rgba(84, 130, 214, 0.24), transparent 62%),
     radial-gradient(860px 460px at 110% 110%, rgba(54, 99, 171, 0.26), transparent 64%),
     linear-gradient(145deg, #0d1828 0%, #14253b 42%, #1b3150 100%);
+}
+
+.workspace-nila-tea {
+  background:
+    radial-gradient(900px 460px at 8% -10%, rgba(192, 132, 252, 0.24), transparent 62%),
+    radial-gradient(820px 420px at 100% 0%, rgba(236, 72, 153, 0.12), transparent 56%),
+    linear-gradient(180deg, #fffbff 0%, #f8f0ff 36%, #f4eaff 100%) !important;
+}
+
+.workspace-nila-tea .bg-orb {
+  display: block !important;
+}
+
+.workspace-nila-tea .bg-orb-a {
+  width: 420px;
+  height: 420px;
+  top: -120px;
+  right: -120px;
+  background: rgba(168, 85, 247, 0.14);
+}
+
+.workspace-nila-tea .bg-orb-b {
+  width: 360px;
+  height: 360px;
+  left: -100px;
+  bottom: -70px;
+  background: rgba(244, 114, 182, 0.14);
+}
+
+.workspace-nila-tea .field > span,
+.workspace-nila-tea .eyebrow,
+.workspace-nila-tea .subhead {
+  color: #8b6aa8;
+}
+
+.app-top-controls-wrap-nila-tea {
+  justify-content: center;
+}
+
+.app-top-controls-grid-nila-tea {
+  width: min(100%, 1160px);
+  padding: 14px;
+  border-radius: 28px;
+  border: 1px solid rgba(178, 145, 223, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 239, 255, 0.98)) !important;
+  box-shadow: 0 24px 44px rgba(118, 79, 166, 0.1) !important;
+}
+
+.workspace-nila-tea .app-top-controls-grid .input,
+.workspace-nila-tea .app-top-controls-grid .detail-value,
+.workspace-nila-tea .app-top-controls-grid .asset-picker-trigger.input {
+  border-radius: 18px;
+  border: 1px solid rgba(205, 183, 236, 0.42);
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #4d3268;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.workspace-nila-tea .app-top-controls-grid .tab {
+  border-radius: 18px;
+  border: 1px solid rgba(132, 92, 191, 0.18);
+  background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+  color: #fffaff;
+}
+
+.app-card-workspace-nila-tea {
+  border-color: rgba(196, 172, 232, 0.34);
+  background:
+    radial-gradient(620px 240px at top right, rgba(192, 132, 252, 0.18), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 238, 255, 0.98)) !important;
+  box-shadow: 0 32px 72px rgba(118, 79, 166, 0.12) !important;
+}
+
+.topbar-workspace-nila-tea {
+  border-radius: 26px;
+  border: 1px solid rgba(221, 212, 234, 0.86);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 245, 252, 0.96)) !important;
+  box-shadow: 0 10px 24px rgba(86, 68, 112, 0.06) !important;
+}
+
+.workspace-nila-tea .brand-block h1 {
+  font-family: "DM Serif Display", "Georgia", serif;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  color: #5c347d;
+  font-size: clamp(34px, 4vw, 56px);
+}
+
+.workspace-nila-tea .brand-block .eyebrow {
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #a07ac6;
+}
+
+.workspace-nila-tea .subhead {
+  color: #8a6ca8;
+}
+
+.nila-topmark-logo {
+  width: clamp(150px, 19vw, 240px);
+  filter: drop-shadow(0 10px 24px rgba(137, 98, 192, 0.14));
+}
+
+.workspace-nila-tea .workspace-main {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(249, 244, 252, 0.94)) !important;
+  border: 1px solid rgba(221, 212, 234, 0.72);
+  border-radius: 28px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  padding: 18px;
+}
+
+.nila-tea-panel {
+  --nila-bg: #fffbff;
+  --nila-ink: #553572;
+  --nila-ink-soft: #8c6ba7;
+  --nila-line: rgba(192, 167, 228, 0.22);
+  --nila-accent: #8b5cf6;
+  --nila-accent-deep: #6d28d9;
+  --nila-cream: #fdf9ff;
+  --nila-card: rgba(255, 252, 255, 0.9);
+  --nila-card-strong: rgba(249, 241, 255, 0.98);
+  margin-bottom: 0;
+  border-radius: 24px;
+  border: 0 !important;
+  background:
+    radial-gradient(780px 260px at 100% 0%, rgba(192, 132, 252, 0.1), transparent 56%),
+    radial-gradient(420px 220px at 0% 0%, rgba(250, 232, 255, 0.54), transparent 58%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 244, 252, 0.94)) !important;
+  box-shadow: none !important;
+  color: var(--nila-ink);
+}
+
+.nila-tea-panel .eyebrow,
+.nila-tea-panel .tiny,
+.nila-tea-panel .field > span,
+.nila-tea-panel p,
+.nila-tea-panel small,
+.nila-tea-panel .stat-label {
+  color: var(--nila-ink-soft);
+}
+
+.nila-tea-panel h2,
+.nila-tea-panel h3,
+.nila-tea-panel h4,
+.nila-tea-panel strong,
+.nila-tea-panel th,
+.nila-tea-panel td {
+  color: var(--nila-ink);
+}
+
+.nila-tea-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 239, 252, 0.92)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.06));
+  border: 1px solid rgba(219, 210, 232, 0.9);
+  position: relative;
+  overflow: hidden;
+}
+
+.nila-tea-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -80px -110px auto;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.18), transparent 68%);
+  pointer-events: none;
+}
+
+.nila-tea-hero-copy h2 {
+  margin: 8px 0 10px;
+  font-family: "DM Serif Display", "Georgia", serif;
+  font-size: clamp(28px, 3vw, 44px);
+  font-weight: 400;
+  line-height: 1.02;
+  color: #5b347d;
+}
+
+.nila-tea-hero-copy p,
+.nila-tea-card-head p,
+.nila-tea-stock-item-head p {
+  margin: 0;
+  color: var(--nila-ink-soft);
+  line-height: 1.5;
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+.nila-tea-hero-badges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.nila-tea-badge-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(198, 176, 232, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 237, 255, 0.98));
+  box-shadow: 0 10px 18px rgba(118, 79, 166, 0.06);
+}
+
+.nila-tea-badge-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1;
+  color: #5a337b;
+  font-family: "DM Serif Display", "Georgia", serif;
+}
+
+.nila-tea-badge-card-warm {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.96), rgba(192, 38, 211, 0.96));
+}
+
+.nila-tea-badge-card-warm small,
+.nila-tea-badge-card-warm strong {
+  color: #fff8f1;
+}
+
+.nila-tea-message {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(200, 176, 232, 0.2);
+  background: rgba(252, 245, 255, 0.9);
+  color: #764ca5;
+}
+
+.nila-tea-view-tabs {
+  margin-bottom: 16px;
+  padding: 6px;
+  border-radius: 18px;
+  border: 1px solid rgba(200, 176, 232, 0.22) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 237, 255, 0.92)) !important;
+}
+
+.nila-tea-view-tabs .tab {
+  min-width: 112px;
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #825da8;
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.nila-tea-view-tabs .tab.tab-active {
+  background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+  color: #fffaff;
+  box-shadow: 0 8px 16px rgba(109, 40, 217, 0.16);
+}
+
+.nila-tea-top-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.nila-tea-card {
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--nila-line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 239, 255, 0.88));
+  box-shadow: 0 12px 24px rgba(118, 79, 166, 0.06);
+}
+
+.nila-tea-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.nila-tea-card-head h3,
+.nila-tea-stock-item-head h4 {
+  margin: 0 0 6px;
+  color: #5b347d;
+  font-family: "DM Serif Display", "Georgia", serif;
+  font-weight: 400;
+  font-size: clamp(20px, 1.8vw, 28px);
+}
+
+.nila-tea-link-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.nila-tea-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.nila-tea-price-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.nila-tea-price-field {
+  margin-bottom: 0;
+}
+
+.nila-tea-alert-card {
+  margin-bottom: 18px;
+}
+
+.nila-tea-alert-list {
+  display: grid;
+  gap: 12px;
+}
+
+.nila-tea-alert-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 252, 255, 0.98), rgba(247, 238, 255, 0.94));
+  border: 1px solid rgba(199, 176, 232, 0.18);
+}
+
+.nila-tea-alert-copy strong,
+.nila-tea-alert-metrics strong {
+  color: #5a337b;
+}
+
+.nila-tea-alert-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.nila-tea-alert-ok {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(248, 241, 255, 0.92), rgba(243, 233, 255, 0.94));
+  border: 1px solid rgba(198, 176, 232, 0.18);
+  color: #7b59a2;
+}
+
+.nila-tea-saved-at {
+  margin-top: 12px;
+}
+
+.nila-tea-count-toolbar {
+  min-width: 160px;
+}
+
+.nila-tea-date-field {
+  margin-bottom: 0;
+}
+
+.nila-tea-stock-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.nila-tea-stock-item {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(199, 176, 232, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 239, 255, 0.88));
+}
+
+.nila-tea-stock-item.is-low {
+  border-color: rgba(192, 38, 211, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(192, 38, 211, 0.12), 0 16px 30px rgba(168, 85, 247, 0.08);
+}
+
+.nila-tea-stock-item-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.nila-tea-item-photo {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 1px solid rgba(204, 184, 236, 0.24);
+  background: #fffaff;
+}
+
+.nila-tea-item-photo-large {
+  width: 56px;
+  height: 56px;
+}
+
+.nila-tea-stock-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 10px;
+}
+
+.nila-tea-item-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nila-tea-actions {
+  margin-top: 18px;
+}
+
+.workspace-nila-tea .nila-tea-panel .stats-grid .stat-card {
+  border-radius: 18px;
+  border: 1px solid rgba(199, 176, 232, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 238, 255, 0.94));
+  box-shadow: 0 10px 20px rgba(118, 79, 166, 0.06);
+}
+
+.workspace-nila-tea .nila-tea-panel .stats-grid .stat-value {
+  font-family: "DM Serif Display", "Georgia", serif;
+  font-size: clamp(28px, 3vw, 42px);
+  color: #5b347d;
+}
+
+.workspace-nila-tea .nila-tea-panel .stats-grid .stat-label {
+  color: #9b79bd;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.workspace-nila-tea .nila-tea-panel .input,
+.workspace-nila-tea .nila-tea-panel .asset-picker-trigger.input,
+.workspace-nila-tea .nila-tea-panel .detail-value,
+.workspace-nila-tea .nila-tea-panel .table-input,
+.workspace-nila-tea .nila-tea-panel .status-select {
+  border-radius: 14px;
+  border: 1px solid rgba(205, 183, 236, 0.42);
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #553572;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.workspace-nila-tea .nila-tea-panel textarea.input {
+  min-height: 120px;
+}
+
+.workspace-nila-tea .nila-tea-panel .btn-primary,
+.workspace-nila-tea .nila-tea-panel .tab.btn-primary {
+  border-radius: 14px;
+  border: 1px solid rgba(109, 40, 217, 0.16);
+  background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+  color: #fffaff;
+  box-shadow: 0 10px 18px rgba(109, 40, 217, 0.16);
+}
+
+.workspace-nila-tea .nila-tea-panel .tab {
+  border-radius: 14px;
+  border: 1px solid rgba(205, 183, 236, 0.32);
+  background: rgba(255, 252, 255, 0.92);
+  color: #7953a6;
+}
+
+.workspace-nila-tea .nila-tea-panel .table-wrap {
+  border-radius: 18px;
+  border: 1px solid rgba(200, 176, 232, 0.18);
+  background: rgba(255, 252, 255, 0.84) !important;
+  box-shadow: none !important;
+}
+
+.workspace-nila-tea .nila-tea-panel .table-wrap table {
+  background: transparent !important;
+}
+
+.workspace-nila-tea .nila-tea-panel th {
+  background: rgba(241, 232, 255, 0.9);
+  color: #7d57aa;
+  border-bottom-color: rgba(205, 183, 236, 0.24);
+}
+
+.workspace-nila-tea .nila-tea-panel td {
+  border-bottom-color: rgba(214, 195, 240, 0.18);
+}
+
+@media (max-width: 900px) {
+  .nila-tea-hero,
+  .nila-tea-top-grid,
+  .nila-tea-stock-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nila-tea-hero-badges {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .nila-tea-panel,
+  .nila-tea-card,
+  .nila-tea-stock-item {
+    border-radius: 18px;
+  }
+
+  .nila-tea-hero {
+    padding: 20px 18px;
+  }
+
+  .nila-tea-hero-copy h2 {
+    font-size: clamp(34px, 11vw, 52px);
+  }
+
+  .nila-tea-hero-badges {
+    grid-template-columns: 1fr;
+  }
+
+  .nila-tea-alert-item {
+    grid-template-columns: auto 1fr;
+  }
+
+  .nila-tea-alert-metrics {
+    grid-column: 1 / -1;
+  }
+
+  .nila-tea-item-form {
+    grid-template-columns: 1fr;
+  }
+
+  .nila-tea-link-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea {
+    width: 100%;
+    border-radius: 22px;
+    padding: 10px;
+  }
 }
 
 .app-shell {
@@ -279,7 +1155,7 @@ body {
 
 .top-controls-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(148px, auto));
+  grid-template-columns: repeat(6, minmax(136px, auto));
   gap: 8px;
   align-items: end;
   margin-top: 0;
@@ -303,6 +1179,34 @@ body {
   filter: drop-shadow(0 8px 20px rgba(5, 12, 22, 0.3));
   display: block;
   order: 2;
+}
+
+.app-card-workspace-nila-tea {
+  border-color: rgba(201, 142, 90, 0.32);
+  background:
+    radial-gradient(760px 300px at top right, rgba(194, 127, 58, 0.12), transparent 56%),
+    linear-gradient(180deg, rgba(28, 22, 18, 0.98), rgba(35, 24, 18, 0.96));
+}
+
+.topbar-workspace-nila-tea {
+  border-color: rgba(201, 142, 90, 0.26);
+  background:
+    linear-gradient(180deg, rgba(53, 34, 24, 0.94), rgba(39, 26, 19, 0.92));
+}
+
+.nila-topmark {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.nila-topmark-logo {
+  width: clamp(140px, 18vw, 220px);
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 10px 22px rgba(34, 18, 9, 0.28));
 }
 
 @media (min-width: 769px) {
@@ -341,7 +1245,7 @@ body {
   }
 
   .top-controls-grid {
-    grid-template-columns: repeat(5, minmax(140px, auto));
+    grid-template-columns: repeat(6, minmax(128px, auto));
     gap: 6px;
   }
 
@@ -365,10 +1269,14 @@ body {
 
 .workspace-shell {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
   min-height: 0;
+}
+
+.workspace-shell.workspace-shell-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .main-nav-rail {
@@ -380,8 +1288,8 @@ body {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   display: grid;
-  gap: 10px;
-  padding: 10px 10px calc(40px + env(safe-area-inset-bottom, 0px));
+  gap: 8px;
+  padding: 10px 10px calc(28px + env(safe-area-inset-bottom, 0px));
   border: 1px solid rgba(95, 125, 168, 0.38);
   border-radius: var(--radius-md);
   background: linear-gradient(180deg, rgba(22, 37, 58, 0.98), rgba(17, 30, 47, 0.96));
@@ -393,7 +1301,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px 6px;
+  padding: 10px 12px 9px;
   border: 1px solid rgba(88, 118, 160, 0.28);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
@@ -410,7 +1318,7 @@ body {
 .main-nav-head h3 {
   margin: 0;
   font-family: var(--font-head);
-  font-size: 20px;
+  font-size: 18px;
   color: #f1f6ff;
 }
 
@@ -435,7 +1343,7 @@ body {
 
 .main-nav-section {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .main-nav-section:last-child {
@@ -446,7 +1354,7 @@ body {
   margin: 0;
   padding: 0 4px;
   color: #91a8cb;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -454,7 +1362,7 @@ body {
 
 .main-nav-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .main-nav-item-group {
@@ -466,17 +1374,17 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 42px;
+  min-height: 40px;
   width: 100%;
   border: 1px solid rgba(96, 125, 168, 0.22);
-  border-radius: 11px;
+  border-radius: 12px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
   color: #dce8fb;
   font-family: var(--font-head);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   text-align: left;
-  padding: 0 12px 0 14px;
+  padding: 0 12px;
   cursor: pointer;
   transition: 140ms ease;
 }
@@ -485,7 +1393,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 18px;
+  flex: 0 0 16px;
 }
 
 .main-nav-btn-label {
@@ -502,7 +1410,7 @@ body {
   color: #fff;
   border-color: transparent;
   background: linear-gradient(135deg, var(--brand), var(--brand-strong));
-  box-shadow: 0 10px 20px rgba(47, 124, 246, 0.3);
+  box-shadow: 0 8px 16px rgba(47, 124, 246, 0.2);
 }
 
 .main-nav-sublist {
@@ -565,8 +1473,8 @@ body {
   min-width: 0;
   background: linear-gradient(180deg, rgba(18, 31, 49, 0.92), rgba(15, 27, 43, 0.88));
   border: 1px solid rgba(88, 118, 160, 0.28);
-  border-radius: 24px;
-  padding: 14px;
+  border-radius: 20px;
+  padding: 16px;
   box-shadow: inset 0 1px 0 rgba(177, 201, 237, 0.06);
 }
 
@@ -20079,5 +20987,1774 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     min-width: 0 !important;
     max-width: 100% !important;
     table-layout: fixed !important;
+  }
+}
+.workspace-nila-tea .nila-tea-phone-shell {
+  background:
+    radial-gradient(circle at top left, rgba(126, 34, 206, 0.08), transparent 30%),
+    radial-gradient(circle at 92% 12%, rgba(217, 70, 239, 0.08), transparent 24%),
+    linear-gradient(180deg, #fffefd 0%, #f8f5ff 50%, #f4effb 100%);
+  border: 1px solid #e6deef;
+  box-shadow: 0 22px 44px rgba(67, 45, 97, 0.1);
+}
+
+.workspace-nila-tea .nila-tea-shell.nila-tea-phone-shell {
+  background: linear-gradient(180deg, #fffefd 0%, #f6f2fa 100%) !important;
+  border: 1px solid #e4dceb !important;
+  box-shadow: 0 16px 32px rgba(67, 45, 97, 0.08) !important;
+}
+
+.workspace-nila-tea .nila-tea-phone-hero {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, #fffdfd 0%, #f5efff 100%);
+  color: #2f2340;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #e7ddf2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.workspace-nila-tea .nila-tea-phone-note-bar {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid #e7ddf2;
+  background: linear-gradient(180deg, #fffefe 0%, #f7f2fb 100%);
+  box-shadow: 0 10px 22px rgba(67, 45, 97, 0.07);
+}
+
+.workspace-nila-tea .nila-tea-phone-note-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.workspace-nila-tea .nila-tea-phone-note-copy strong {
+  font-size: 14px;
+  color: #433053;
+}
+
+.workspace-nila-tea .nila-tea-phone-note-copy span {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #7c6891;
+}
+
+.workspace-nila-tea .nila-tea-phone-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -42px -52px auto;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(151, 71, 255, 0.1), rgba(151, 71, 255, 0));
+}
+
+.workspace-nila-tea .nila-tea-phone-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-nila-tea .nila-tea-phone-hero-copy h2 {
+  margin: 8px 0 10px;
+  font-size: clamp(28px, 6vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #433053;
+  text-shadow: none;
+}
+
+.workspace-nila-tea .nila-tea-phone-hero-copy p,
+.workspace-nila-tea .nila-tea-phone-hero-copy .eyebrow {
+  color: #7c6891;
+}
+
+.workspace-nila-tea .nila-tea-phone-hero-badges,
+.workspace-nila-tea .nila-tea-phone-overview-grid,
+.workspace-nila-tea .nila-tea-phone-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-nila-tea .nila-tea-phone-badge,
+.workspace-nila-tea .nila-tea-phone-metric,
+.workspace-nila-tea .nila-tea-phone-summary-card {
+  border-radius: 20px;
+  padding: 14px 15px;
+  background: #ffffff;
+  border: 1px solid #e7def1;
+  backdrop-filter: none;
+  box-shadow: 0 10px 20px rgba(83, 58, 117, 0.07);
+}
+
+.workspace-nila-tea .nila-tea-phone-badge small,
+.workspace-nila-tea .nila-tea-phone-metric span,
+.workspace-nila-tea .nila-tea-phone-summary-card small {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #8d78a3;
+}
+
+.workspace-nila-tea .nila-tea-phone-badge strong,
+.workspace-nila-tea .nila-tea-phone-metric strong,
+.workspace-nila-tea .nila-tea-phone-summary-card strong {
+  color: #402f52;
+  font-size: 20px;
+}
+
+.workspace-nila-tea .nila-tea-phone-top-tabs {
+  margin-top: 16px;
+  background: #f5f1f8;
+  border: 1px solid #e1d8ea;
+  border-radius: 22px;
+  padding: 6px;
+}
+
+.workspace-nila-tea .nila-tea-phone-toolbar {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.workspace-nila-tea .nila-tea-phone-report-toolbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.workspace-nila-tea .nila-tea-phone-segment-report .tab {
+  min-height: 40px;
+}
+
+.workspace-nila-tea .nila-tea-phone-shell .tabs .tab,
+.workspace-nila-tea .nila-tea-phone-shell .tab {
+  border-color: #ddd3e8 !important;
+  background: #ffffff !important;
+  color: #433053 !important;
+  box-shadow: none !important;
+}
+
+.workspace-nila-tea .nila-tea-phone-shell .tab.tab-active,
+.workspace-nila-tea .nila-tea-phone-shell .tab-active,
+.workspace-nila-tea .nila-tea-phone-shell .btn-primary {
+  border-color: transparent !important;
+  background: linear-gradient(180deg, #6d4a91 0%, #51356f 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 18px rgba(81, 53, 111, 0.16) !important;
+}
+
+.workspace-nila-tea .nila-tea-phone-controlbar {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8f4fc 100%);
+  border: 1px solid #e6deef;
+  box-shadow: 0 12px 24px rgba(67, 45, 97, 0.08);
+}
+
+.workspace-nila-tea .nila-tea-phone-control-group {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-nila-tea .nila-tea-phone-control-group > span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7a5b96;
+}
+
+.workspace-nila-tea .nila-tea-phone-switch-row,
+.workspace-nila-tea .nila-tea-phone-account-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-nila-tea .nila-tea-phone-account-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.workspace-nila-tea .nila-tea-phone-account-chip {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e7def1;
+  color: #49345c;
+}
+
+.workspace-nila-tea .nila-tea-phone-account-chip small {
+  color: #89749e;
+}
+
+.workspace-nila-tea .nila-tea-phone-segment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-nila-tea .nila-tea-phone-segment .tab {
+  min-height: 72px;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  text-align: center;
+  border-radius: 20px;
+  font-weight: 700;
+  border: 1px solid #d9d0e4;
+  background: #ffffff !important;
+  color: #4a375d !important;
+  box-shadow: none !important;
+}
+
+.workspace-nila-tea .nila-tea-phone-segment .tab.tab-active {
+  border-color: #6d4a91 !important;
+  background: linear-gradient(180deg, #6d4a91 0%, #51356f 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 18px rgba(81, 53, 111, 0.18) !important;
+}
+
+.workspace-nila-tea .nila-tea-phone-segment .tab span {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.88;
+}
+
+.workspace-nila-tea .nila-tea-item-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.workspace-nila-tea .nila-tea-item-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 24px;
+  border: 1px solid #e7def1;
+  background: linear-gradient(180deg, #ffffff 0%, #f8f4fc 100%);
+  box-shadow: 0 14px 26px rgba(67, 45, 97, 0.08);
+  text-align: left;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.workspace-nila-tea .nila-tea-item-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 30px rgba(67, 45, 97, 0.12);
+}
+
+.workspace-nila-tea .nila-tea-item-card.is-low {
+  border-color: #c27f24;
+  background: linear-gradient(180deg, #fff8ef 0%, #fffdf8 100%);
+}
+
+.workspace-nila-tea .nila-tea-item-card-photo-wrap {
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(109, 74, 145, 0.08) 0%, rgba(185, 165, 211, 0.12) 100%);
+  padding: 12px;
+  display: grid;
+  place-items: center;
+}
+
+.workspace-nila-tea .nila-tea-item-card-photo {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(232, 218, 248, 0.9);
+}
+
+.workspace-nila-tea .nila-tea-item-card-meta {
+  display: grid;
+  gap: 5px;
+}
+
+.workspace-nila-tea .nila-tea-item-card-meta strong {
+  color: #433053;
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.workspace-nila-tea .nila-tea-item-card-meta span {
+  color: #7f6a93;
+  font-size: 12px;
+}
+
+.workspace-nila-tea .nila-tea-item-card-meta b {
+  color: #916a22;
+}
+
+.workspace-nila-tea .nila-tea-staff-today-panel {
+  margin-top: 18px;
+  border-radius: 24px;
+  border: 1px solid #e7def1;
+  background: linear-gradient(180deg, #ffffff 0%, #f8f4fc 100%);
+  padding: 16px;
+  box-shadow: 0 14px 28px rgba(67, 45, 97, 0.08);
+}
+
+.workspace-nila-tea .nila-tea-alert-ok {
+  border: 1px dashed #d9cfdf;
+  background: #fffefd;
+  color: #6c5a7f;
+}
+
+.workspace-nila-tea .nila-tea-staff-today-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-nila-tea .nila-tea-staff-today-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #faf7fd 100%);
+  border: 1px solid #e8dff1;
+}
+
+.workspace-nila-tea .nila-tea-staff-today-item div {
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-nila-tea .nila-tea-staff-today-item span {
+  font-size: 12px;
+  color: #846f98;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal {
+  max-width: 560px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, #24314a 0%, #1f2940 100%);
+  border: 1px solid #34425f;
+  box-shadow: 0 24px 44px rgba(15, 20, 33, 0.34);
+}
+
+.workspace-nila-tea .modal-backdrop {
+  background: rgba(17, 23, 37, 0.36);
+}
+
+.workspace-nila-tea .modal-panel.nila-tea-entry-modal {
+  background: linear-gradient(180deg, #24314a 0%, #1f2940 100%) !important;
+  border: 1px solid #34425f !important;
+  box-shadow: 0 24px 44px rgba(15, 20, 33, 0.34) !important;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .panel-row {
+  align-items: center;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .panel-row h2 {
+  margin: 0;
+  font-size: 14px;
+  color: #f1f5ff;
+  text-align: left;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .field > span,
+.workspace-nila-tea .nila-tea-entry-modal small,
+.workspace-nila-tea .nila-tea-entry-modal .tiny {
+  color: #b9c4da;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .input {
+  background: #22304a !important;
+  border: 1px solid #5a6c8c !important;
+  color: #f3f6fd !important;
+  border-radius: 14px !important;
+  min-height: 44px;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .row-actions {
+  gap: 10px;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .row-actions .tab,
+.workspace-nila-tea .nila-tea-entry-modal .row-actions .btn-primary {
+  min-height: 46px;
+  border-radius: 14px;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal-head {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+  justify-items: center;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal-photo {
+  width: 108px;
+  height: 108px;
+  object-fit: cover;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 3px solid #9cc3ff;
+  box-shadow: 0 10px 24px rgba(18, 33, 61, 0.3);
+}
+
+.workspace-nila-tea .nila-tea-entry-modal-summary {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff5df 0%, #fffaf0 100%);
+  border: 1px solid #e8d1a4;
+  color: #5d4320;
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal-summary strong {
+  color: #5d4320;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal-summary div {
+  color: #86653c;
+  font-size: 13px;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal-grid {
+  gap: 14px;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .panel-row .tab {
+  width: 100%;
+  background: #ffffff !important;
+  color: #3d4a66 !important;
+  border: 1px solid #d8e1f0 !important;
+  box-shadow: none !important;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .btn-primary {
+  background: linear-gradient(180deg, #3f66dc 0%, #3558bf 100%) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: 0 12px 22px rgba(49, 84, 190, 0.28) !important;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .field > span {
+  color: #d8e1f0;
+}
+
+.workspace-nila-tea .nila-tea-entry-modal .inventory-quickout-photo-preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid #5a6c8c;
+}
+
+.workspace-nila-tea .nila-tea-mobile-drawer {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(247, 242, 252, 0.99) 100%);
+  border-right-color: #e4dceb;
+}
+
+.workspace-nila-tea .nila-tea-mobile-topline {
+  justify-content: flex-start;
+}
+
+.workspace-nila-tea .nila-tea-mobile-topline .mobile-hamburger-btn {
+  border-color: #ddd3e8;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f2fb 100%);
+  color: #4a375d;
+  box-shadow: 0 10px 18px rgba(67, 45, 97, 0.1);
+}
+
+@media (max-width: 768px) {
+  .app-shell.workspace-nila-tea {
+    --mobile-bg: #fffefd;
+    --mobile-bg-2: #f6f2fa;
+    --mobile-surface: #ffffff;
+    --mobile-surface-soft: #f8f4fc;
+    --mobile-line: #e2d9eb;
+    --mobile-line-strong: #baa8cf;
+    --mobile-text: #433053;
+    --mobile-text-soft: #836f97;
+    --mobile-brand: #6d4a91;
+    --mobile-brand-strong: #51356f;
+    --mobile-shadow: 0 16px 28px rgba(67, 45, 97, 0.1);
+    background:
+      radial-gradient(720px 380px at -8% -10%, rgba(126, 34, 206, 0.08), transparent 62%),
+      radial-gradient(760px 420px at 108% 108%, rgba(217, 70, 239, 0.06), transparent 64%),
+      linear-gradient(180deg, #fffefd 0%, #f6f2fa 100%);
+  }
+
+  .workspace-nila-tea .topbar,
+  .workspace-nila-tea .topbar-phone {
+    border-color: #e3dceb !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 243, 251, 0.96)) !important;
+    box-shadow: 0 10px 18px rgba(67, 45, 97, 0.06) !important;
+  }
+
+  .workspace-nila-tea .mobile-nav-hud {
+    background: transparent !important;
+  }
+
+  .workspace-nila-tea .mobile-side-backdrop {
+    background: rgba(67, 45, 97, 0.12);
+  }
+
+  .workspace-nila-tea .mobile-side-drawer {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(247, 243, 251, 0.98) 100%);
+    box-shadow: 12px 0 24px rgba(67, 45, 97, 0.1);
+  }
+
+  .workspace-nila-tea .mobile-menu-head strong {
+    color: #433053;
+  }
+
+  .workspace-nila-tea .mobile-menu-head span,
+  .workspace-nila-tea .mobile-menu-section-label {
+    color: #836f97;
+  }
+
+  .workspace-nila-tea .mobile-menu-close-btn {
+    border-color: #e3dceb;
+    background: #fbf8fd;
+    color: #51356f;
+  }
+
+  .workspace-nila-tea .mobile-menu-nav-btn {
+    border-color: #e3dceb;
+    background: #ffffff;
+    color: #433053;
+  }
+
+  .workspace-nila-tea .mobile-menu-nav-btn-active {
+    background: linear-gradient(180deg, #6d4a91, #51356f);
+    color: #ffffff;
+    box-shadow: 0 8px 16px rgba(81, 53, 111, 0.16);
+  }
+
+.workspace-nila-tea .topbar-workspace-nila-tea {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 243, 251, 0.96)) !important;
+  border-bottom: 1px solid #e3dceb;
+}
+
+  .workspace-nila-tea .app-card-workspace-nila-tea {
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+    background: linear-gradient(180deg, #fffefd 0%, #f5f1f9 100%) !important;
+  }
+
+  .workspace-nila-tea .workspace-main {
+    background: transparent !important;
+  }
+
+  .workspace-nila-tea .tabs .tab,
+  .workspace-nila-tea .tab {
+    border-color: #ddd3e8 !important;
+    background: #ffffff !important;
+    color: #433053 !important;
+    box-shadow: none !important;
+  }
+
+  .workspace-nila-tea .tab-active,
+  .workspace-nila-tea .btn-primary,
+  .workspace-nila-tea .report-title-print-btn {
+    background: linear-gradient(180deg, #6d4a91 0%, #51356f 100%) !important;
+    border-color: transparent !important;
+    color: #ffffff !important;
+    box-shadow: 0 10px 18px rgba(81, 53, 111, 0.16) !important;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-shell {
+    padding: 14px;
+    border-radius: 30px 30px 0 0;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-badges,
+  .workspace-nila-tea .nila-tea-phone-overview-grid,
+  .workspace-nila-tea .nila-tea-phone-summary,
+  .workspace-nila-tea .nila-tea-item-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-nila-tea .nila-tea-entry-modal-head {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-nila-tea .nila-tea-entry-modal-photo {
+    width: 100%;
+    height: 180px;
+  }
+}
+
+@media (min-width: 769px) {
+  .workspace-nila-tea .nila-tea-phone-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border-radius: 18px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-copy h2 {
+    margin: 4px 0 6px;
+    font-size: clamp(20px, 2vw, 30px);
+    line-height: 1.04;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-copy p {
+    font-size: 12px;
+    line-height: 1.45;
+    max-width: 54ch;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-copy .eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-badges {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 8px;
+    align-self: center;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-badge {
+    padding: 10px 12px;
+    border-radius: 14px;
+    min-height: auto;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-badge strong {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-badge small {
+    font-size: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-segment {
+    padding: 4px;
+    border-radius: 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-segment .tab {
+    min-height: 40px;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-segment .tab span {
+    font-size: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary-card {
+    padding: 10px 12px;
+    border-radius: 14px;
+    min-height: auto;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary-card small {
+    font-size: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary-card strong {
+    font-size: 22px;
+    line-height: 1.05;
+  }
+
+  .workspace-nila-tea .nila-tea-staff-today-panel {
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .workspace-nila-tea .nila-tea-staff-today-item {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .workspace-nila-tea {
+    background:
+      radial-gradient(900px 420px at 0% 0%, rgba(238, 230, 255, 0.9), transparent 58%),
+      radial-gradient(720px 360px at 100% 8%, rgba(244, 234, 255, 0.72), transparent 54%),
+      linear-gradient(180deg, #fcf9ff 0%, #f5effd 100%);
+  }
+
+  .workspace-nila-tea .app-top-controls-wrap-nila-tea {
+    margin-bottom: 14px;
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea {
+    width: min(100%, 1240px);
+    padding: 10px 12px;
+    border-radius: 22px;
+    border: 1px solid rgba(207, 190, 233, 0.88);
+    background: rgba(255, 255, 255, 0.88) !important;
+    box-shadow: 0 16px 30px rgba(123, 92, 164, 0.08) !important;
+    backdrop-filter: blur(18px);
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .field > span {
+    margin-bottom: 6px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8669a9;
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .input,
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .detail-value,
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .asset-picker-trigger.input {
+    min-height: 42px;
+    border-radius: 14px;
+    border-color: rgba(213, 196, 236, 0.86);
+    background: #ffffff !important;
+    color: #4f3968;
+    box-shadow: none;
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .tab {
+    min-height: 42px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #8d5cf6, #6f42c1) !important;
+    color: #ffffff;
+    box-shadow: 0 10px 22px rgba(111, 66, 193, 0.18) !important;
+  }
+
+  .workspace-nila-tea .app-card-workspace-nila-tea {
+    padding: 18px;
+    border-radius: 30px;
+    border: 1px solid rgba(214, 198, 236, 0.9);
+    background:
+      radial-gradient(640px 280px at top right, rgba(240, 228, 255, 0.65), transparent 56%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 243, 253, 0.98)) !important;
+    box-shadow: 0 28px 56px rgba(118, 90, 158, 0.09) !important;
+  }
+
+  .workspace-nila-tea .topbar-workspace-nila-tea {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 18px;
+    align-items: center;
+    padding: 20px 22px;
+    border-radius: 24px;
+    border: 1px solid rgba(217, 203, 237, 0.88);
+    background: rgba(255, 255, 255, 0.82) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
+    backdrop-filter: blur(16px);
+  }
+
+  .workspace-nila-tea .brand-block {
+    min-height: auto;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .workspace-nila-tea .brand-block h1 {
+    font-size: clamp(28px, 3vw, 46px);
+    line-height: 0.98;
+    color: #5a3476;
+  }
+
+  .workspace-nila-tea .brand-block .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    color: #9a7cbc;
+  }
+
+  .workspace-nila-tea .subhead {
+    max-width: 60ch;
+    font-size: 16px;
+    color: #8a74a4;
+  }
+
+  .workspace-nila-tea .nila-topmark {
+    padding: 10px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(218, 204, 238, 0.82);
+    background: rgba(255, 255, 255, 0.86);
+    box-shadow: 0 12px 24px rgba(123, 92, 164, 0.08);
+  }
+
+  .workspace-nila-tea .nila-topmark-logo {
+    width: clamp(128px, 15vw, 184px);
+    filter: none;
+  }
+
+  .workspace-nila-tea .workspace-shell {
+    grid-template-columns: 286px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    min-height: 0;
+  }
+
+  .workspace-nila-tea .workspace-shell.workspace-shell-nav-collapsed {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail {
+    position: sticky;
+    top: 14px;
+    align-self: start;
+    height: auto;
+    min-height: 0;
+    max-height: calc(100vh - 28px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    gap: 8px;
+    padding: 10px 10px calc(26px + env(safe-area-inset-bottom, 0px));
+    border: 1px solid rgba(216, 202, 237, 0.92);
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 239, 251, 0.98));
+    box-shadow: 0 18px 36px rgba(118, 90, 158, 0.08);
+  }
+
+  .workspace-nila-tea .nila-tea-nav-head {
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(221, 210, 239, 0.96);
+    background:
+      linear-gradient(180deg, rgba(250, 247, 255, 0.98), rgba(241, 234, 251, 0.98));
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-head h3 {
+    font-size: 14px;
+    line-height: 1.12;
+    color: #5a3475;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-section-label {
+    padding: 0 4px;
+    color: #9b80ba;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-list {
+    gap: 6px;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-btn {
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(223, 211, 241, 0.96);
+    background: rgba(255, 255, 255, 0.88);
+    color: #5e4578;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: none;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-btn-icon {
+    flex: 0 0 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-btn:hover {
+    transform: none;
+    border-color: rgba(162, 127, 211, 0.58);
+    background: rgba(244, 237, 251, 0.98);
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-btn-active {
+    border-color: transparent;
+    background: linear-gradient(135deg, #8d5cf6, #6f42c1);
+    color: #ffffff;
+    box-shadow: 0 12px 24px rgba(111, 66, 193, 0.2);
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-toggle-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid rgba(214, 198, 236, 0.96);
+    background: rgba(255, 255, 255, 0.9);
+    color: #7b5a9d;
+  }
+
+  .workspace-nila-tea .workspace-main {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .workspace-nila-tea .nila-tea-panel {
+    --nila-bg: #ffffff;
+    --nila-ink: #4f3668;
+    --nila-ink-soft: #8c77a3;
+    --nila-line: rgba(221, 209, 240, 0.92);
+    --nila-accent: #8d5cf6;
+    --nila-accent-deep: #6f42c1;
+    --nila-card: rgba(255, 255, 255, 0.96);
+    --nila-card-strong: rgba(250, 245, 255, 0.98);
+    padding: 16px;
+    border: 1px solid rgba(216, 202, 237, 0.92) !important;
+    border-radius: 30px;
+    background:
+      radial-gradient(540px 220px at top right, rgba(245, 233, 255, 0.7), transparent 58%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 243, 253, 0.98)) !important;
+    box-shadow: 0 20px 42px rgba(118, 90, 158, 0.08) !important;
+  }
+
+  .workspace-nila-tea .nila-tea-hero {
+    grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 16px;
+    border-radius: 24px;
+    border: 1px solid rgba(223, 211, 240, 0.96);
+    background:
+      radial-gradient(260px 180px at 100% 100%, rgba(234, 220, 255, 0.72), transparent 66%),
+      linear-gradient(180deg, #ffffff, #faf5ff);
+  }
+
+  .workspace-nila-tea .nila-tea-hero-copy h2 {
+    margin: 6px 0 8px;
+    font-size: clamp(22px, 2.4vw, 34px);
+    line-height: 1.02;
+    color: #4f3568;
+  }
+
+  .workspace-nila-tea .nila-tea-hero-copy p {
+    max-width: 56ch;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .workspace-nila-tea .nila-tea-hero-badges {
+    gap: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-badge-card {
+    padding: 11px 13px;
+    border-radius: 16px;
+    border: 1px solid rgba(226, 215, 242, 0.96);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: none;
+  }
+
+  .workspace-nila-tea .nila-tea-badge-card strong {
+    font-size: 18px;
+    font-family: "Manrope", "Segoe UI", sans-serif;
+    font-weight: 800;
+    line-height: 1.2;
+    color: #563874;
+  }
+
+  .workspace-nila-tea .nila-tea-badge-card-warm {
+    background: linear-gradient(135deg, #8d5cf6, #b66cff);
+  }
+
+  .workspace-nila-tea .nila-tea-view-tabs {
+    margin-bottom: 12px;
+    padding: 4px;
+    border-radius: 18px;
+    border-color: rgba(224, 212, 242, 0.96) !important;
+    background: rgba(255, 255, 255, 0.74) !important;
+  }
+
+  .workspace-nila-tea .nila-tea-view-tabs .tab {
+    min-width: 96px;
+    min-height: 38px;
+    font-size: 13px;
+    border-radius: 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-view-tabs .tab.tab-active {
+    background: linear-gradient(135deg, #8d5cf6, #6f42c1);
+    box-shadow: 0 10px 20px rgba(111, 66, 193, 0.16);
+  }
+
+  .workspace-nila-tea .nila-tea-top-grid,
+  .workspace-nila-tea .nila-tea-stock-grid,
+  .workspace-nila-tea .nila-tea-price-grid {
+    gap: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-stock-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-card,
+  .workspace-nila-tea .nila-tea-stock-item,
+  .workspace-nila-tea .nila-tea-alert-item,
+  .workspace-nila-tea .nila-tea-panel .stats-grid .stat-card {
+    border-radius: 20px;
+    border: 1px solid rgba(224, 212, 242, 0.96);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: none;
+  }
+
+  .workspace-nila-tea .nila-tea-card {
+    padding: 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-stock-item {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .workspace-nila-tea .nila-tea-stock-item-head {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-card-head h3,
+  .workspace-nila-tea .nila-tea-stock-item-head h4 {
+    font-size: 16px;
+    font-family: "Manrope", "Segoe UI", sans-serif;
+    font-weight: 800;
+    color: #563874;
+  }
+
+  .workspace-nila-tea .nila-tea-stock-item-head p {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .workspace-nila-tea .nila-tea-item-photo-large {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+  }
+
+  .workspace-nila-tea .nila-tea-stock-item-meta {
+    gap: 6px 10px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-stock-item .row-actions,
+  .workspace-nila-tea .nila-tea-stock-item .nila-tea-actions {
+    gap: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-stock-item .tab,
+  .workspace-nila-tea .nila-tea-stock-item .btn-primary {
+    min-height: 38px;
+    font-size: 12px;
+    padding: 0 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-panel .stats-grid {
+    gap: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-panel .stats-grid .stat-card {
+    min-height: 96px;
+    padding: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-panel .stats-grid .stat-value {
+    font-size: 26px;
+  }
+
+  .workspace-nila-tea .nila-tea-panel .input,
+  .workspace-nila-tea .nila-tea-panel .asset-picker-trigger.input,
+  .workspace-nila-tea .nila-tea-panel .detail-value,
+  .workspace-nila-tea .nila-tea-panel .table-input,
+  .workspace-nila-tea .nila-tea-panel .status-select {
+    min-height: 44px;
+    border-radius: 14px;
+    border-color: rgba(219, 205, 239, 0.96);
+    background: #ffffff !important;
+    box-shadow: none;
+  }
+
+  .workspace-nila-tea .nila-tea-panel .btn-primary,
+  .workspace-nila-tea .nila-tea-panel .tab.btn-primary {
+    min-height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #8d5cf6, #6f42c1) !important;
+    box-shadow: 0 12px 24px rgba(111, 66, 193, 0.18) !important;
+  }
+
+  .workspace-nila-tea .nila-tea-panel .tab {
+    min-height: 42px;
+    border-radius: 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-panel .table-wrap {
+    border-radius: 20px;
+    border-color: rgba(224, 212, 242, 0.96);
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .workspace-nila-tea .nila-tea-setup-tabs {
+    margin-bottom: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-shell {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-content {
+    min-width: 0;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav {
+    position: sticky;
+    top: 14px;
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(224, 212, 242, 0.96);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(247, 241, 253, 0.98));
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-head {
+    display: grid;
+    gap: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(226, 215, 242, 0.96);
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-head small {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #9b80ba;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-head strong {
+    font-size: 16px;
+    color: #563874;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-head span {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #81699b;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-btn {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    padding: 11px 12px;
+    text-align: left;
+    border: 1px solid rgba(223, 211, 241, 0.96);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.86);
+    color: #5e4578;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-btn strong {
+    font-size: 13px;
+    font-weight: 800;
+    color: inherit;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-btn span {
+    font-size: 11px;
+    line-height: 1.35;
+    color: inherit;
+    opacity: 0.84;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-btn:hover {
+    border-color: rgba(162, 127, 211, 0.58);
+    background: rgba(244, 237, 251, 0.98);
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-btn-active {
+    border-color: transparent;
+    background: linear-gradient(135deg, #8d5cf6, #6f42c1);
+    color: #ffffff;
+    box-shadow: 0 12px 24px rgba(111, 66, 193, 0.18);
+  }
+
+  .workspace-nila-tea .nila-tea-setup-card {
+    padding: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-card .nila-tea-card-head {
+    margin-bottom: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-card .nila-tea-card-head p {
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-stack,
+  .workspace-nila-tea .nila-tea-setup-price-grid {
+    gap: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid .field {
+    gap: 4px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid .field > span,
+  .workspace-nila-tea .nila-tea-user-permissions-grid .field > span {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid .input,
+  .workspace-nila-tea .nila-tea-setup-form-grid .detail-value {
+    min-height: 40px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid .inventory-quickout-photo-preview {
+    margin-top: 6px !important;
+    max-width: 88px !important;
+    max-height: 88px !important;
+    border-radius: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permissions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 8px;
+    padding: 10px 12px;
+    border: 1px solid rgba(224, 212, 242, 0.96);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.68);
+  }
+
+  .workspace-nila-tea .nila-tea-user-permissions-grid .field {
+    min-width: 0;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-actions {
+    margin-top: 10px;
+    gap: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-actions .tab,
+  .workspace-nila-tea .nila-tea-setup-actions .btn-primary {
+    min-height: 40px;
+    padding: 0 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-table-wrap {
+    margin-top: 10px;
+    max-height: min(40vh, 360px);
+    overflow: auto;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-table-wrap table {
+    min-width: 720px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-table-wrap th,
+  .workspace-nila-tea .nila-tea-setup-table-wrap td {
+    padding: 10px 10px;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-table-wrap .tab,
+  .workspace-nila-tea .nila-tea-setup-table-wrap .btn-danger {
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card {
+    gap: 5px;
+    padding: 5px;
+    border-radius: 14px;
+    box-shadow: none;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-photo-wrap {
+    padding: 4px;
+    border-radius: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-photo {
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-meta {
+    gap: 2px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-meta strong {
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-meta span {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1240px) {
+  .workspace-nila-tea .nila-tea-setup-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav {
+    position: relative;
+    top: auto;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid,
+  .workspace-nila-tea .nila-tea-user-permissions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .workspace-nila-tea .nila-tea-stock-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) and (max-height: 820px) {
+  .workspace-nila-tea .app-top-controls-wrap-nila-tea {
+    margin-bottom: 8px;
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea {
+    padding: 8px 10px;
+    border-radius: 18px;
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .field > span {
+    margin-bottom: 4px;
+    font-size: 9px;
+  }
+
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .input,
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .detail-value,
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .asset-picker-trigger.input,
+  .workspace-nila-tea .app-top-controls-grid-nila-tea .tab {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .workspace-nila-tea .app-card-workspace-nila-tea {
+    padding: 12px;
+    border-radius: 24px;
+  }
+
+  .workspace-nila-tea .topbar-workspace-nila-tea {
+    padding: 14px 16px;
+    gap: 14px;
+    border-radius: 18px;
+  }
+
+  .workspace-nila-tea .brand-block {
+    gap: 5px;
+  }
+
+  .workspace-nila-tea .brand-block h1 {
+    font-size: clamp(22px, 2.2vw, 36px);
+  }
+
+  .workspace-nila-tea .brand-block .eyebrow {
+    font-size: 10px;
+  }
+
+  .workspace-nila-tea .subhead {
+    font-size: 13px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero {
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-copy h2 {
+    font-size: clamp(18px, 1.8vw, 24px);
+    margin: 2px 0 4px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-copy p {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-hero-badges {
+    gap: 6px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-badge {
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-badge strong {
+    font-size: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-badge small {
+    font-size: 9px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-toolbar {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-segment .tab {
+    min-height: 34px;
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-segment .tab span {
+    font-size: 9px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary-card {
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary-card small {
+    font-size: 9px;
+  }
+
+  .workspace-nila-tea .nila-tea-phone-summary-card strong {
+    font-size: 18px;
+  }
+
+  .workspace-nila-tea .nila-tea-staff-today-panel {
+    margin-top: 8px;
+    padding: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-staff-today-item {
+    padding: 8px 10px;
+  }
+
+  .workspace-nila-tea .nila-topmark {
+    padding: 8px 10px;
+  }
+
+  .workspace-nila-tea .nila-topmark-logo {
+    width: clamp(108px, 12vw, 150px);
+  }
+
+  .workspace-nila-tea .workspace-shell {
+    grid-template-columns: 270px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail {
+    gap: 6px;
+    padding: 6px;
+    border-radius: 14px;
+    top: 10px;
+    max-height: calc(100vh - 20px);
+  }
+
+  .workspace-nila-tea .nila-tea-nav-head {
+    padding: 8px;
+    border-radius: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-head h3 {
+    font-size: 13px;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-section-label {
+    font-size: 8px;
+    padding: 0 3px;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-btn {
+    min-height: 32px;
+    font-size: 11px;
+    padding: 0 8px;
+    border-radius: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-btn-icon {
+    flex: 0 0 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-nav-rail .main-nav-toggle-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .workspace-nila-tea .nila-tea-panel {
+    padding: 12px;
+    border-radius: 22px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav {
+    padding: 10px;
+    border-radius: 16px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-nav-btn {
+    padding: 9px 10px;
+    border-radius: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-card {
+    padding: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid,
+  .workspace-nila-tea .nila-tea-user-permissions-grid {
+    gap: 8px 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permissions-grid {
+    padding: 8px 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-table-wrap {
+    max-height: min(30vh, 220px);
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card {
+    gap: 4px;
+    padding: 5px;
+    border-radius: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-photo-wrap {
+    padding: 3px;
+    border-radius: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-meta strong {
+    font-size: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-card-meta span {
+    font-size: 8px;
+    line-height: 1.1;
+  }
+}
+
+@media (max-width: 768px) {
+  .workspace-nila-tea .nila-tea-setup-shell {
+    display: block;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-card {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-tabs {
+    margin-bottom: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-form-grid,
+  .workspace-nila-tea .nila-tea-user-permissions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-actions .tab,
+  .workspace-nila-tea .nila-tea-setup-actions .btn-primary {
+    width: 100%;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-card {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(224, 212, 242, 0.96);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 10px 18px rgba(111, 66, 193, 0.08);
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-head strong {
+    display: block;
+    font-size: 15px;
+    line-height: 1.2;
+    color: #563874;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-head span {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: #8a74a4;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-photo {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    object-fit: cover;
+    border: 1px solid rgba(224, 212, 242, 0.96);
+    background: #ffffff;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-meta div {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(247, 241, 253, 0.9);
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-meta small {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #9b80ba;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-meta b {
+    font-size: 13px;
+    line-height: 1.35;
+    color: #563874;
+    word-break: break-word;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-status {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-status.is-active {
+    background: rgba(90, 183, 117, 0.12);
+    color: #2f8a4d;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-status.is-inactive {
+    background: rgba(195, 74, 90, 0.12);
+    color: #b24356;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .workspace-nila-tea .nila-tea-setup-mobile-actions .tab,
+  .workspace-nila-tea .nila-tea-setup-mobile-actions .btn-danger {
+    width: 100%;
+    min-height: 38px;
+  }
+}
+
+@media (min-width: 1100px) and (max-width: 1440px) {
+  .workspace-nila-tea .nila-tea-item-card-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }

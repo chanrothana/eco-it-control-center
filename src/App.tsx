@@ -9,6 +9,7 @@ import {
   Camera,
   CheckCircle2,
   ClipboardList,
+  Coffee,
   Copy,
   Eye,
   EyeOff,
@@ -44,9 +45,11 @@ import QRCode from "qrcode";
 import "./App.css";
 import CalendarGridTemplate from "./components/CalendarGridTemplate";
 import EISLogo from "./EIS_Logo.svg";
+import NilaTeaLogo from "./Logo Nila Tea.png";
 
 const publicAssetUrl = (path: string) => `${process.env.PUBLIC_URL || ""}${path.startsWith("/") ? path : `/${path}`}`;
 const ECO_LOGO_URL = publicAssetUrl("/eco-logo.png");
+const NILA_TEA_LOGO_URL = NilaTeaLogo;
 const PURCHASE_ORDER_LOGO_URL = EISLogo;
 const APP_ICON_FALLBACK_URL = publicAssetUrl("/logo192.png");
 const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
@@ -636,6 +639,59 @@ type RentalPrinterCounter = {
   note?: string;
   created: string;
 };
+type NilaTeaStockItem = {
+  id: number;
+  code: string;
+  nameKm: string;
+  nameEn: string;
+  unitKm: string;
+  packLabelKm: string;
+  reorderLevel: number;
+  targetRefillQty: number;
+  color: string;
+  photo: string;
+};
+type NilaTeaStockFlow = "begin" | "end";
+type NilaTeaDailyStockEntry = {
+  id: number;
+  date: string;
+  itemId: number;
+  flow: NilaTeaStockFlow;
+  closingQty: number;
+  refillQty: number;
+  note?: string;
+  photo?: string;
+  enteredBy?: string;
+  created: string;
+};
+type NilaTeaCupPrice = {
+  id: number;
+  labelKm: string;
+  labelEn: string;
+  price: number;
+};
+type NilaTeaUserRole = "staff" | "manager" | "super_admin";
+type NilaTeaUserPermissions = {
+  canOverview: boolean;
+  canStock: boolean;
+  canReport: boolean;
+  canSetup: boolean;
+  canEditPrices: boolean;
+  canManageItems: boolean;
+  canManageUsers: boolean;
+};
+type NilaTeaUser = {
+  id: number;
+  fullName: string;
+  username: string;
+  role: NilaTeaUserRole;
+  active: boolean;
+  permissions: NilaTeaUserPermissions;
+};
+type NilaTeaLinkSettings = {
+  shopName: string;
+  shopUrl: string;
+};
 
 type DashboardStats = {
   totalAssets: number;
@@ -656,6 +712,7 @@ type NavModule =
   | "classroom"
   | "cctv"
   | "inventory"
+  | "nila_tea"
   | "utilities"
   | "printer"
   | "pool"
@@ -1195,10 +1252,15 @@ const POOL_EQUIPMENT_FALLBACK_KEY = "it_pool_equipment_v1";
 const POOL_CHEMICAL_FALLBACK_KEY = "it_pool_chemical_v1";
 const POOL_OPERATION_FALLBACK_KEY = "it_pool_operation_v1";
 const POOL_COMPLAINT_FALLBACK_KEY = "it_pool_complaint_v1";
+const NILA_TEA_DAILY_FALLBACK_KEY = "it_nila_tea_daily_stock_v1";
+const NILA_TEA_CUP_PRICE_FALLBACK_KEY = "it_nila_tea_cup_prices_v1";
+const NILA_TEA_LINK_FALLBACK_KEY = "it_nila_tea_links_v1";
 const UTILITY_METER_FALLBACK_KEY = "it_utility_meters_v1";
 const UTILITY_READING_FALLBACK_KEY = "it_utility_readings_v1";
 const RENTAL_PRINTER_FALLBACK_KEY = "it_rental_printers_v1";
 const RENTAL_PRINTER_COUNTER_FALLBACK_KEY = "it_rental_printer_counters_v1";
+const NILA_TEA_ITEM_FALLBACK_KEY = "it_nila_tea_items_v1";
+const NILA_TEA_USER_FALLBACK_KEY = "it_nila_tea_users_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
 const APP_VERSION = "v2.3.0";
 const DEFAULT_MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
@@ -1432,6 +1494,7 @@ const DEFAULT_VIEWER_MODULES: NavModule[] = [
   "assets",
   "cctv",
   "inventory",
+  "nila_tea",
   "utilities",
   "printer",
   "pool",
@@ -1448,6 +1511,7 @@ const ALL_NAV_MODULES: NavModule[] = [
   "classroom",
   "cctv",
   "inventory",
+  "nila_tea",
   "utilities",
   "printer",
   "pool",
@@ -1468,6 +1532,7 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   classroom: "core",
   cctv: "operations",
   inventory: "core",
+  nila_tea: "core",
   utilities: "operations",
   printer: "operations",
   pool: "operations",
@@ -1481,6 +1546,193 @@ const NAV_SECTION_MAP: Record<NavModule, NavSection> = {
   vault: "admin",
   setup: "admin",
 };
+
+function buildNilaTeaMiniPhoto(label: string, color: string) {
+  const safeLabel = String(label || "").trim().slice(0, 2).toUpperCase() || "NT";
+  const safeColor = String(color || "#b86a32").trim() || "#b86a32";
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">` +
+    `<defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">` +
+    `<stop offset="0%" stop-color="${safeColor}"/>` +
+    `<stop offset="100%" stop-color="#f4d2ac"/></linearGradient></defs>` +
+    `<rect width="96" height="96" rx="26" fill="url(#g)"/>` +
+    `<circle cx="48" cy="38" r="21" fill="rgba(255,255,255,0.22)"/>` +
+    `<rect x="24" y="56" width="48" height="18" rx="9" fill="rgba(74,35,10,0.18)"/>` +
+    `<text x="48" y="46" text-anchor="middle" font-size="20" font-family="Arial, sans-serif" font-weight="700" fill="#fffaf2">${safeLabel}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+const NILA_TEA_STOCK_ITEMS: NilaTeaStockItem[] = [
+  {
+    id: 1,
+    code: "NT-001",
+    nameKm: "បាយក្តាំង",
+    nameEn: "Crispy Rice",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 5,
+    targetRefillQty: 12,
+    color: "#9c5a2d",
+    photo: buildNilaTeaMiniPhoto("BK", "#9c5a2d"),
+  },
+  {
+    id: 2,
+    code: "NT-002",
+    nameKm: "បាញ់ត្រាង",
+    nameEn: "Rice Cracker",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 5,
+    targetRefillQty: 12,
+    color: "#d17a37",
+    photo: buildNilaTeaMiniPhoto("BT", "#d17a37"),
+  },
+  {
+    id: 3,
+    code: "NT-003",
+    nameKm: "នំប័ងអាំង",
+    nameEn: "Toast Bread",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 6,
+    targetRefillQty: 14,
+    color: "#c99b45",
+    photo: buildNilaTeaMiniPhoto("NB", "#c99b45"),
+  },
+  {
+    id: 4,
+    code: "NT-004",
+    nameKm: "ជើងមាន់",
+    nameEn: "Chicken Feet",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 4,
+    targetRefillQty: 10,
+    color: "#b55f45",
+    photo: buildNilaTeaMiniPhoto("JM", "#b55f45"),
+  },
+  {
+    id: 5,
+    code: "NT-005",
+    nameKm: "ត្រជៀកជ្រូក",
+    nameEn: "Pig Ear",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 4,
+    targetRefillQty: 10,
+    color: "#bf6f77",
+    photo: buildNilaTeaMiniPhoto("TJ", "#bf6f77"),
+  },
+  {
+    id: 6,
+    code: "NT-006",
+    nameKm: "គីមឃី",
+    nameEn: "Kimchi",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 4,
+    targetRefillQty: 10,
+    color: "#c24b34",
+    photo: buildNilaTeaMiniPhoto("KK", "#c24b34"),
+  },
+  {
+    id: 7,
+    code: "NT-007",
+    nameKm: "ក្តាមប្រៃ",
+    nameEn: "Salt Crab",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 3,
+    targetRefillQty: 8,
+    color: "#46739a",
+    photo: buildNilaTeaMiniPhoto("KP", "#46739a"),
+  },
+  {
+    id: 8,
+    code: "NT-008",
+    nameKm: "ជើងទា",
+    nameEn: "Duck Feet",
+    unitKm: "កញ្ចប់",
+    packLabelKm: "រាប់តាមកញ្ចប់",
+    reorderLevel: 4,
+    targetRefillQty: 10,
+    color: "#7f4f3f",
+    photo: buildNilaTeaMiniPhoto("JT", "#7f4f3f"),
+  },
+];
+
+const NILA_TEA_DEFAULT_CUP_PRICES: NilaTeaCupPrice[] = [
+  { id: 1, labelKm: "កែវ 1000", labelEn: "Cup 1000", price: 1000 },
+  { id: 2, labelKm: "កែវ 2500", labelEn: "Cup 2500", price: 2500 },
+  { id: 3, labelKm: "កែវ 3000", labelEn: "Cup 3000", price: 3000 },
+  { id: 4, labelKm: "កែវ 3500", labelEn: "Cup 3500", price: 3500 },
+  { id: 5, labelKm: "កែវ 4000", labelEn: "Cup 4000", price: 4000 },
+  { id: 6, labelKm: "កែវ 5000", labelEn: "Cup 5000", price: 5000 },
+  { id: 7, labelKm: "កែវ 6000", labelEn: "Cup 6000", price: 6000 },
+];
+
+const NILA_TEA_DEFAULT_LINKS: NilaTeaLinkSettings = {
+  shopName: "Nila Tea",
+  shopUrl: "",
+};
+
+const NILA_TEA_DEFAULT_USER_PERMISSIONS: Record<NilaTeaUserRole, NilaTeaUserPermissions> = {
+  staff: {
+    canOverview: false,
+    canStock: true,
+    canReport: false,
+    canSetup: false,
+    canEditPrices: false,
+    canManageItems: false,
+    canManageUsers: false,
+  },
+  manager: {
+    canOverview: true,
+    canStock: true,
+    canReport: true,
+    canSetup: false,
+    canEditPrices: false,
+    canManageItems: false,
+    canManageUsers: false,
+  },
+  super_admin: {
+    canOverview: true,
+    canStock: true,
+    canReport: true,
+    canSetup: true,
+    canEditPrices: true,
+    canManageItems: true,
+    canManageUsers: true,
+  },
+};
+
+const NILA_TEA_DEFAULT_USERS: NilaTeaUser[] = [
+  {
+    id: 1,
+    fullName: "Nila Tea Super Admin",
+    username: "nila.admin",
+    role: "super_admin",
+    active: true,
+    permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS.super_admin },
+  },
+  {
+    id: 2,
+    fullName: "Nila Tea Manager",
+    username: "nila.manager",
+    role: "manager",
+    active: true,
+    permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS.manager },
+  },
+  {
+    id: 3,
+    fullName: "Nila Tea Staff",
+    username: "nila.staff",
+    role: "staff",
+    active: true,
+    permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS.staff },
+  },
+];
 const MENU_ACCESS_TREE: Array<{
   module: NavModule;
   labelEn: string;
@@ -1530,6 +1782,12 @@ const MENU_ACCESS_TREE: Array<{
     labelEn: "Inventory",
     labelKm: "ស្តុក",
     children: [{ key: "inventory.main", labelEn: "Inventory Management", labelKm: "គ្រប់គ្រងស្តុក" }],
+  },
+  {
+    module: "nila_tea",
+    labelEn: "Nila Tea",
+    labelKm: "Nila Tea",
+    children: [{ key: "nila_tea.main", labelEn: "Daily Stock Control", labelKm: "គ្រប់គ្រងស្តុកប្រចាំថ្ងៃ" }],
   },
   {
     module: "utilities",
@@ -3791,6 +4049,165 @@ function writePoolComplaintFallback(rows: PoolComplaint[]) {
   trySetLocalStorage(POOL_COMPLAINT_FALLBACK_KEY, JSON.stringify(rows));
 }
 
+function normalizeNilaTeaDailyEntries(input: unknown): NilaTeaDailyStockEntry[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): NilaTeaDailyStockEntry => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      date: String(row.date || "").trim() || toYmd(new Date()),
+      itemId: Number(row.itemId) || 0,
+      flow: String(row.flow || "").trim().toLowerCase() === "begin" ? "begin" : "end",
+      closingQty: Math.max(0, Number(row.closingQty) || 0),
+      refillQty: Math.max(0, Number(row.refillQty) || 0),
+      note: String(row.note || "").trim(),
+      photo: String(row.photo || "").trim(),
+      enteredBy: String(row.enteredBy || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.itemId > 0);
+}
+
+function readNilaTeaDailyFallback(): NilaTeaDailyStockEntry[] {
+  try {
+    const raw = localStorage.getItem(NILA_TEA_DAILY_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeNilaTeaDailyEntries(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeNilaTeaDailyFallback(rows: NilaTeaDailyStockEntry[]) {
+  trySetLocalStorage(NILA_TEA_DAILY_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function normalizeNilaTeaCupPrices(input: unknown): NilaTeaCupPrice[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): NilaTeaCupPrice => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      labelKm: String(row.labelKm || "").trim() || "កែវ",
+      labelEn: String(row.labelEn || "").trim() || "Cup",
+      price: Math.max(0, Number(row.price) || 0),
+    }));
+}
+
+function readNilaTeaCupPriceFallback(): NilaTeaCupPrice[] {
+  try {
+    const raw = localStorage.getItem(NILA_TEA_CUP_PRICE_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const rows = normalizeNilaTeaCupPrices(parsed);
+    return rows.length ? rows : NILA_TEA_DEFAULT_CUP_PRICES;
+  } catch {
+    return NILA_TEA_DEFAULT_CUP_PRICES;
+  }
+}
+
+function writeNilaTeaCupPriceFallback(rows: NilaTeaCupPrice[]) {
+  trySetLocalStorage(NILA_TEA_CUP_PRICE_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function normalizeNilaTeaItems(input: unknown): NilaTeaStockItem[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row, index): NilaTeaStockItem => {
+      const code = String(row.code || `NT-${String(index + 1).padStart(3, "0")}`).trim().toUpperCase();
+      const nameEn = String(row.nameEn || row.labelEn || "Nila Tea Item").trim() || "Nila Tea Item";
+      const color = String(row.color || "#9c5a2d").trim() || "#9c5a2d";
+      return {
+        id: Number(row.id) || Date.now() + index,
+        code,
+        nameKm: String(row.nameKm || row.labelKm || nameEn).trim() || nameEn,
+        nameEn,
+        unitKm: String(row.unitKm || "កែវ").trim() || "កែវ",
+        packLabelKm: String(row.packLabelKm || "រាប់តាមឯកតា").trim() || "រាប់តាមឯកតា",
+        reorderLevel: Math.max(0, Number(row.reorderLevel) || 0),
+        targetRefillQty: Math.max(0, Number(row.targetRefillQty) || 0),
+        color,
+        photo: String(row.photo || "").trim() || buildNilaTeaMiniPhoto(code.replace(/[^A-Z0-9]/g, "").slice(0, 2) || "NT", color),
+      };
+    });
+}
+
+function readNilaTeaItemFallback(): NilaTeaStockItem[] {
+  try {
+    const raw = localStorage.getItem(NILA_TEA_ITEM_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const rows = normalizeNilaTeaItems(parsed);
+    return rows.length ? rows : NILA_TEA_STOCK_ITEMS;
+  } catch {
+    return NILA_TEA_STOCK_ITEMS;
+  }
+}
+
+function writeNilaTeaItemFallback(rows: NilaTeaStockItem[]) {
+  trySetLocalStorage(NILA_TEA_ITEM_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function normalizeNilaTeaUserPermissions(input: unknown, role: NilaTeaUserRole): NilaTeaUserPermissions {
+  const source = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  const defaults = NILA_TEA_DEFAULT_USER_PERMISSIONS[role];
+  return {
+    canOverview: source.canOverview === undefined ? defaults.canOverview : Boolean(source.canOverview),
+    canStock: source.canStock === undefined ? defaults.canStock : Boolean(source.canStock),
+    canReport: source.canReport === undefined ? defaults.canReport : Boolean(source.canReport),
+    canSetup: source.canSetup === undefined ? defaults.canSetup : Boolean(source.canSetup),
+    canEditPrices: source.canEditPrices === undefined ? defaults.canEditPrices : Boolean(source.canEditPrices),
+    canManageItems: source.canManageItems === undefined ? defaults.canManageItems : Boolean(source.canManageItems),
+    canManageUsers: source.canManageUsers === undefined ? defaults.canManageUsers : Boolean(source.canManageUsers),
+  };
+}
+
+function normalizeNilaTeaUsers(input: unknown): NilaTeaUser[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row, index): NilaTeaUser => {
+      const rawRole = String(row.role || "staff").trim().toLowerCase();
+      const role: NilaTeaUserRole =
+        rawRole === "super_admin" ? "super_admin" : rawRole === "manager" ? "manager" : "staff";
+      return {
+        id: Number(row.id) || Date.now() + index,
+        fullName: String(row.fullName || row.displayName || "Nila Tea Staff").trim() || "Nila Tea Staff",
+        username: String(row.username || `nila.user.${index + 1}`).trim().toLowerCase() || `nila.user.${index + 1}`,
+        role,
+        active: row.active === undefined ? true : Boolean(row.active),
+        permissions: normalizeNilaTeaUserPermissions(row.permissions, role),
+      };
+    });
+}
+
+function readNilaTeaUserFallback(): NilaTeaUser[] {
+  try {
+    const raw = localStorage.getItem(NILA_TEA_USER_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const rows = normalizeNilaTeaUsers(parsed);
+    return rows.length ? rows : NILA_TEA_DEFAULT_USERS;
+  } catch {
+    return NILA_TEA_DEFAULT_USERS;
+  }
+}
+
+function writeNilaTeaUserFallback(rows: NilaTeaUser[]) {
+  trySetLocalStorage(NILA_TEA_USER_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readNilaTeaLinkFallback(): NilaTeaLinkSettings {
+  try {
+    const raw = localStorage.getItem(NILA_TEA_LINK_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return {
+      shopName: String(parsed?.shopName || NILA_TEA_DEFAULT_LINKS.shopName).trim() || NILA_TEA_DEFAULT_LINKS.shopName,
+      shopUrl: String(parsed?.shopUrl || "").trim(),
+    };
+  } catch {
+    return NILA_TEA_DEFAULT_LINKS;
+  }
+}
+
+function writeNilaTeaLinkFallback(value: NilaTeaLinkSettings) {
+  trySetLocalStorage(NILA_TEA_LINK_FALLBACK_KEY, JSON.stringify(value));
+}
+
 function readUtilityMeterFallback(): UtilityMeter[] {
   try {
     const raw = localStorage.getItem(UTILITY_METER_FALLBACK_KEY);
@@ -4240,6 +4657,23 @@ function formatDateTime(value: string) {
     minute: "2-digit",
   });
   return `${datePart} ${timePart}`;
+}
+
+function startOfWeekYmd(value: string) {
+  if (!value) return value;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  const day = date.getDay();
+  date.setDate(date.getDate() - day);
+  return toYmd(date);
+}
+
+function endOfWeekYmd(value: string) {
+  if (!value) return value;
+  const date = new Date(`${startOfWeekYmd(value)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  date.setDate(date.getDate() + 6);
+  return toYmd(date);
 }
 
 function getTermRange(year: number, term: "Term 1" | "Term 2" | "Term 3") {
@@ -7196,10 +7630,17 @@ export default function App() {
     if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
     const mode = String(params.get("mode") || "").toLowerCase();
-    return mode === "maintenance" || mode === "staff";
+    return mode === "maintenance";
+  }, []);
+  const nilaTeaStaffMode = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    const mode = String(params.get("mode") || "").toLowerCase();
+    return mode === "staff";
   }, []);
 
   const [tab, setTab] = useState<NavModule>("dashboard");
+  const [lastEcoTab, setLastEcoTab] = useState<NavModule>("dashboard");
   const [, startTabTransition] = useTransition();
   const [expandedNavModule, setExpandedNavModule] = useState<NavModule | null>(null);
   const [expandedNavSubKey, setExpandedNavSubKey] = useState<string | null>(null);
@@ -7213,6 +7654,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
+  const [nilaTeaUsers, setNilaTeaUsers] = useState<NilaTeaUser[]>(() => readNilaTeaUserFallback());
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
   const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
@@ -7230,6 +7672,7 @@ export default function App() {
       { id: "classroom", label: lang === "km" ? "ថ្នាក់រៀន" : "Classroom Control" },
       { id: "cctv", label: lang === "km" ? "គ្រប់គ្រង CCTV" : "CCTV Control" },
       { id: "inventory", label: t.inventory },
+      { id: "nila_tea", label: lang === "km" ? "Nila Tea" : "Nila Tea" },
       { id: "utilities", label: lang === "km" ? "សេវាប្រើប្រាស់" : "Utilities" },
       { id: "printer", label: lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer" },
       { id: "pool", label: t.pool },
@@ -7257,6 +7700,8 @@ export default function App() {
         return <Camera size={16} aria-hidden={true} />;
       case "inventory":
         return <Package size={16} aria-hidden={true} />;
+      case "nila_tea":
+        return <Coffee size={16} aria-hidden={true} />;
       case "utilities":
         return <Lightbulb size={16} aria-hidden={true} />;
       case "printer":
@@ -7316,6 +7761,77 @@ export default function App() {
       canAccessMenu("assets.register", "assets")
   );
   const showMaintenanceDashboard = !maintenanceQuickMode && !isAdmin && canAccessMenu("maintenance.record", "maintenance");
+  const workspaceSwitcherValue = nilaTeaStaffMode || tab === "nila_tea" ? "nila_tea" : "eco";
+  const isNilaTeaWorkspace = workspaceSwitcherValue === "nila_tea";
+  const matchedNilaTeaUser = useMemo(() => {
+    const authUsername = String(authUser?.username || "").trim().toLowerCase();
+    const authDisplayName = String(authUser?.displayName || "").trim().toLowerCase();
+    if (!authUsername && !authDisplayName) return null;
+    return (
+      nilaTeaUsers.find((user) => {
+        const username = String(user.username || "").trim().toLowerCase();
+        const fullName = String(user.fullName || "").trim().toLowerCase();
+        return user.active && ((authUsername && username === authUsername) || (authDisplayName && fullName === authDisplayName));
+      }) || null
+    );
+  }, [authUser?.displayName, authUser?.username, nilaTeaUsers]);
+  const nilaTeaRoleView = nilaTeaStaffMode ? "staff" : matchedNilaTeaUser ? matchedNilaTeaUser.role : isSuperAdmin ? "super_admin" : isAdmin ? "manager" : "staff";
+  const nilaTeaUseKhmer = lang === "km" || nilaTeaStaffMode;
+  const nilaTeaCanOpenDashboard = matchedNilaTeaUser ? matchedNilaTeaUser.permissions.canOverview : nilaTeaRoleView !== "staff";
+  const nilaTeaCanOpenReports = matchedNilaTeaUser ? matchedNilaTeaUser.permissions.canReport : nilaTeaRoleView !== "staff";
+  const nilaTeaCanOpenSetup = matchedNilaTeaUser ? matchedNilaTeaUser.permissions.canSetup : nilaTeaRoleView === "super_admin";
+  const nilaTeaCanEditPrices = matchedNilaTeaUser ? matchedNilaTeaUser.permissions.canEditPrices : nilaTeaRoleView === "super_admin";
+  const nilaTeaCanManageItems = matchedNilaTeaUser ? matchedNilaTeaUser.permissions.canManageItems : nilaTeaRoleView === "super_admin";
+  const nilaTeaCanManageUsers = matchedNilaTeaUser ? matchedNilaTeaUser.permissions.canManageUsers : nilaTeaRoleView === "super_admin";
+  const nilaTeaDesktopNavSections = useMemo(
+    () => [
+      {
+        section: "daily",
+        label: nilaTeaUseKhmer ? "ប្រតិបត្តិការប្រចាំថ្ងៃ" : "Daily",
+        items: [
+          ...(nilaTeaCanOpenDashboard
+            ? [
+                {
+                  key: "dashboard",
+                  label: nilaTeaUseKhmer ? "សង្ខេប" : "Overview",
+                  icon: <BarChart3 size={16} aria-hidden={true} />,
+                },
+              ]
+            : []),
+          {
+            key: "stock",
+            label: nilaTeaUseKhmer ? "ស្តុកថ្ងៃនេះ" : "Today Stock",
+            icon: <Package size={16} aria-hidden={true} />,
+          },
+        ],
+      },
+      {
+        section: "control",
+        label: nilaTeaUseKhmer ? "ការគ្រប់គ្រង" : "Control",
+        items: [
+          ...(nilaTeaCanOpenReports
+            ? [
+                {
+                  key: "report",
+                  label: nilaTeaUseKhmer ? "របាយការណ៍" : "Reports",
+                  icon: <ClipboardList size={16} aria-hidden={true} />,
+                },
+              ]
+            : []),
+          ...(nilaTeaCanOpenSetup
+            ? [
+                {
+                  key: "setup",
+                  label: nilaTeaUseKhmer ? "កំណត់" : "Setup",
+                  icon: <Settings size={16} aria-hidden={true} />,
+                },
+              ]
+            : []),
+        ],
+      },
+    ],
+    [nilaTeaCanOpenDashboard, nilaTeaCanOpenReports, nilaTeaCanOpenSetup, nilaTeaUseKhmer]
+  );
   const navMenuItems = useMemo(
     () =>
       navItems.filter((item) => {
@@ -7440,6 +7956,47 @@ export default function App() {
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
   const [inventoryDashboardGroup, setInventoryDashboardGroup] = useState<InventoryBusinessGroup>("SUPPLY");
+  const [nilaTeaItems, setNilaTeaItems] = useState<NilaTeaStockItem[]>(() => readNilaTeaItemFallback());
+  const [nilaTeaDailyEntries, setNilaTeaDailyEntries] = useState<NilaTeaDailyStockEntry[]>(() => readNilaTeaDailyFallback());
+  const [nilaTeaCupPrices, setNilaTeaCupPrices] = useState<NilaTeaCupPrice[]>(() => readNilaTeaCupPriceFallback());
+  const [nilaTeaLinks, setNilaTeaLinks] = useState<NilaTeaLinkSettings>(() => readNilaTeaLinkFallback());
+  const [nilaTeaCountDate, setNilaTeaCountDate] = useState(() => toYmd(new Date()));
+  const [nilaTeaView, setNilaTeaView] = useState<"dashboard" | "stock" | "report" | "setup">("dashboard");
+  const [nilaTeaStockFlow, setNilaTeaStockFlow] = useState<NilaTeaStockFlow>("end");
+  const [nilaTeaReportPeriod, setNilaTeaReportPeriod] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [nilaTeaShareBaseUrl, setNilaTeaShareBaseUrl] = useState("");
+  const [nilaTeaDraft, setNilaTeaDraft] = useState<Record<number, { closingQty: string; refillQty: string; note: string; photo: string }>>({});
+  const [nilaTeaEntryModalItemId, setNilaTeaEntryModalItemId] = useState<number | null>(null);
+  const [nilaTeaPhotoFileKey, setNilaTeaPhotoFileKey] = useState(0);
+  const [nilaTeaMessage, setNilaTeaMessage] = useState("");
+  const [nilaTeaSetupSection, setNilaTeaSetupSection] = useState<"bot" | "price" | "item" | "user">("item");
+  const [editingNilaTeaItemId, setEditingNilaTeaItemId] = useState<number | null>(null);
+  const [nilaTeaItemPhotoFileKey, setNilaTeaItemPhotoFileKey] = useState(0);
+  const [nilaTeaItemForm, setNilaTeaItemForm] = useState({
+    code: "",
+    nameKm: "",
+    nameEn: "",
+    unitKm: "កែវ",
+    packLabelKm: "រាប់តាមឯកតា",
+    reorderLevel: "0",
+    targetRefillQty: "0",
+    color: "#9c5a2d",
+    photo: "",
+  });
+  const [editingNilaTeaUserId, setEditingNilaTeaUserId] = useState<number | null>(null);
+  const [nilaTeaUserForm, setNilaTeaUserForm] = useState<{
+    fullName: string;
+    username: string;
+    role: NilaTeaUserRole;
+    active: boolean;
+    permissions: NilaTeaUserPermissions;
+  }>({
+    fullName: "",
+    username: "",
+    role: "staff",
+    active: true,
+    permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS.staff },
+  });
   const [utilitiesView, setUtilitiesView] = useState<
     "entry" | "history" | "monthly" | "yearly"
   >("entry");
@@ -7464,7 +8021,7 @@ export default function App() {
     ) => {
       startTabTransition(() => {
         setInventoryDashboardGroup(group);
-        setInventoryView(view);
+        setInventoryView(group === "SUPPLY" ? view : (view === "dashboard" ? "items" : view));
         setTab("inventory");
       });
     },
@@ -7494,6 +8051,143 @@ export default function App() {
       setTab(nextTab);
     });
   }, []);
+  useEffect(() => {
+    if (tab !== "nila_tea") {
+      setLastEcoTab(tab);
+    }
+  }, [tab]);
+  const handleWorkspaceSwitcherChange = useCallback((value: string) => {
+    if (nilaTeaStaffMode) return;
+    if (value === "nila_tea") {
+      startTabTransition(() => {
+        setTab("nila_tea");
+      });
+      return;
+    }
+    const nextEcoTab = lastEcoTab === "nila_tea" ? "dashboard" : lastEcoTab;
+    handleNavChange(nextEcoTab || "dashboard");
+  }, [handleNavChange, lastEcoTab, nilaTeaStaffMode]);
+  const switchWorkspaceFromPhone = useCallback((value: "eco" | "nila_tea") => {
+    if (typeof window === "undefined") return;
+    if (value === "nila_tea") {
+      if (nilaTeaStaffMode) {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete("mode");
+        nextUrl.searchParams.delete("nt_flow");
+        nextUrl.searchParams.set("workspace", "nila_tea");
+        if (!nextUrl.searchParams.get("nt_view")) {
+          nextUrl.searchParams.set("nt_view", "dashboard");
+        }
+        window.location.assign(nextUrl.toString());
+        return;
+      }
+      handleWorkspaceSwitcherChange("nila_tea");
+      return;
+    }
+    if (nilaTeaStaffMode) {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("mode");
+      nextUrl.searchParams.delete("nt_view");
+      nextUrl.searchParams.delete("nt_flow");
+      nextUrl.searchParams.delete("workspace");
+      window.location.assign(nextUrl.toString());
+      return;
+    }
+    handleWorkspaceSwitcherChange("eco");
+  }, [handleWorkspaceSwitcherChange, nilaTeaStaffMode]);
+  const refreshNilaTeaWorkspace = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const nextUrl = new URL(window.location.href);
+    if (nilaTeaStaffMode) {
+      nextUrl.searchParams.set("mode", "staff");
+    } else {
+      nextUrl.searchParams.delete("mode");
+      nextUrl.searchParams.set("workspace", "nila_tea");
+    }
+    nextUrl.searchParams.set("nt_view", nilaTeaView);
+    if (nilaTeaView === "stock") {
+      nextUrl.searchParams.set("nt_flow", nilaTeaStockFlow);
+    } else {
+      nextUrl.searchParams.delete("nt_flow");
+    }
+    window.location.assign(nextUrl.toString());
+  }, [nilaTeaStaffMode, nilaTeaStockFlow, nilaTeaView]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const mode = String(params.get("mode") || "").toLowerCase();
+    const workspace = String(params.get("workspace") || "").toLowerCase();
+    const nextNilaTeaView = String(params.get("nt_view") || "").toLowerCase();
+    const nextNilaTeaFlow = String(params.get("nt_flow") || "").toLowerCase();
+    if (mode === "staff" || workspace === "nila_tea") {
+      setTab("nila_tea");
+      if (nextNilaTeaView === "dashboard" || nextNilaTeaView === "stock" || nextNilaTeaView === "report" || nextNilaTeaView === "setup") {
+        setNilaTeaView(nextNilaTeaView);
+      } else if (mode === "staff") {
+        setNilaTeaView("stock");
+      }
+      if (nextNilaTeaFlow === "begin" || nextNilaTeaFlow === "end") {
+        setNilaTeaStockFlow(nextNilaTeaFlow);
+      }
+    }
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const loadShareBase = async () => {
+      if (typeof window === "undefined") return;
+      try {
+        const res = await requestJson<{ ok?: boolean; baseUrl?: string }>("/api/system/share-link");
+        if (cancelled) return;
+        const nextBase = String(res?.baseUrl || "").trim();
+        if (nextBase) {
+          setNilaTeaShareBaseUrl(nextBase);
+          return;
+        }
+      } catch {
+        // Fall back to the current browser origin when the API is unavailable.
+      }
+      if (!cancelled) {
+        setNilaTeaShareBaseUrl(window.location.origin);
+      }
+    };
+    void loadShareBase();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const buildNilaTeaShortLink = useCallback((view: "dashboard" | "stock" | "report" | "setup", flow?: "begin" | "end") => {
+    if (typeof window === "undefined") return "";
+    const baseOrigin = nilaTeaShareBaseUrl || window.location.origin;
+    const url = new URL(window.location.pathname, baseOrigin);
+    url.searchParams.set("mode", "staff");
+    url.searchParams.set("nt_view", view);
+    if (flow) {
+      url.searchParams.set("nt_flow", flow);
+    } else {
+      url.searchParams.delete("nt_flow");
+    }
+    url.searchParams.delete("workspace");
+    return url.toString();
+  }, [nilaTeaShareBaseUrl]);
+  const nilaTeaDashboardLink = useMemo(() => buildNilaTeaShortLink("dashboard"), [buildNilaTeaShortLink]);
+  const nilaTeaBeginningLink = useMemo(() => buildNilaTeaShortLink("stock", "begin"), [buildNilaTeaShortLink]);
+  const nilaTeaEndLink = useMemo(() => buildNilaTeaShortLink("stock", "end"), [buildNilaTeaShortLink]);
+  const copyNilaTeaShortLink = useCallback(async (view: "dashboard" | "stock" | "report" | "setup", flow?: "begin" | "end") => {
+    const link = buildNilaTeaShortLink(view, flow);
+    if (!link) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      }
+      setNilaTeaMessage(
+        lang === "km"
+          ? `បានចម្លងតំណ ${flow === "begin" ? "Beginning Stock" : flow === "end" ? "End Stock" : "Nila Tea"} រួចរាល់។`
+          : `Copied ${flow === "begin" ? "Beginning Stock" : flow === "end" ? "End Stock" : "Nila Tea"} link.`
+      );
+    } catch {
+      setNilaTeaMessage(link);
+    }
+  }, [buildNilaTeaShortLink, lang]);
   const maintenanceQuickNavItems = useMemo(
     () => [
       {
@@ -7540,6 +8234,413 @@ export default function App() {
       });
     },
     [canAccessMenu, canOpenAssetRegister]
+  );
+  useEffect(() => {
+    writeNilaTeaDailyFallback(nilaTeaDailyEntries);
+  }, [nilaTeaDailyEntries]);
+  useEffect(() => {
+    writeNilaTeaItemFallback(nilaTeaItems);
+  }, [nilaTeaItems]);
+  useEffect(() => {
+    writeNilaTeaCupPriceFallback(nilaTeaCupPrices);
+  }, [nilaTeaCupPrices]);
+  useEffect(() => {
+    writeNilaTeaUserFallback(nilaTeaUsers);
+  }, [nilaTeaUsers]);
+  useEffect(() => {
+    writeNilaTeaLinkFallback(nilaTeaLinks);
+  }, [nilaTeaLinks]);
+  useEffect(() => {
+    const map: Record<number, { closingQty: string; refillQty: string; note: string; photo: string }> = {};
+    for (const item of nilaTeaItems) {
+      const existing = nilaTeaDailyEntries.find(
+        (entry) => entry.date === nilaTeaCountDate && entry.itemId === item.id && entry.flow === nilaTeaStockFlow
+      );
+      map[item.id] = {
+        closingQty: existing ? String(existing.closingQty) : "",
+        refillQty: existing ? String(existing.refillQty) : String(item.targetRefillQty),
+        note: existing?.note || "",
+        photo: existing?.photo || "",
+      };
+    }
+    setNilaTeaDraft(map);
+  }, [nilaTeaCountDate, nilaTeaDailyEntries, nilaTeaItems, nilaTeaStockFlow]);
+  const nilaTeaEntriesForDate = useMemo(
+    () => nilaTeaDailyEntries.filter((entry) => entry.date === nilaTeaCountDate),
+    [nilaTeaCountDate, nilaTeaDailyEntries]
+  );
+  const nilaTeaEntriesForActiveFlow = useMemo(
+    () => nilaTeaEntriesForDate.filter((entry) => entry.flow === nilaTeaStockFlow),
+    [nilaTeaEntriesForDate, nilaTeaStockFlow]
+  );
+  const nilaTeaSummaryCards = useMemo(() => {
+    const rows = nilaTeaItems.map((item) => {
+      const draft = nilaTeaDraft[item.id] || { closingQty: "", refillQty: String(item.targetRefillQty), note: "", photo: "" };
+      const closingQty = Math.max(0, Number(draft.closingQty) || 0);
+      const refillQty = Math.max(0, Number(draft.refillQty) || 0);
+      return {
+        item,
+        closingQty,
+        refillQty,
+        isLow: closingQty <= item.reorderLevel,
+      };
+    });
+    const lowStockRows = rows.filter((row) => row.isLow);
+    return {
+      rows,
+      totalClosingQty: rows.reduce((sum, row) => sum + row.closingQty, 0),
+      totalRefillQty: rows.reduce((sum, row) => sum + row.refillQty, 0),
+      lowStockRows,
+    };
+  }, [nilaTeaDraft, nilaTeaItems]);
+  const nilaTeaLatestSaveAt = useMemo(() => {
+    const latest = nilaTeaEntriesForDate
+      .map((entry) => String(entry.created || "").trim())
+      .filter(Boolean)
+      .sort()
+      .pop();
+    return latest ? formatDateTime(latest) : "";
+  }, [nilaTeaEntriesForDate]);
+  const nilaTeaHistoryRows = useMemo(() => {
+    return [...nilaTeaDailyEntries]
+      .sort((a, b) => {
+        const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
+        if (dateCompare !== 0) return dateCompare;
+        return Number(a.itemId) - Number(b.itemId);
+      })
+      .map((entry) => {
+        const item = nilaTeaItems.find((row) => row.id === entry.itemId);
+        return {
+          ...entry,
+          itemCode: item?.code || "-",
+          itemNameKm: item?.nameKm || "-",
+          itemNameEn: item?.nameEn || "-",
+          unitKm: item?.unitKm || "",
+        };
+      });
+  }, [nilaTeaDailyEntries, nilaTeaItems]);
+  const saveNilaTeaSingleItemReport = useCallback((itemId: number) => {
+    const item = nilaTeaItems.find((row) => row.id === itemId);
+    if (!item) return;
+    const draft = nilaTeaDraft[itemId] || { closingQty: "", refillQty: String(item.targetRefillQty), note: "", photo: "" };
+    const nextRow: NilaTeaDailyStockEntry = {
+      id: Date.now() + itemId,
+      date: nilaTeaCountDate,
+      itemId,
+      flow: nilaTeaStockFlow,
+      closingQty: Math.max(0, Number(draft.closingQty) || 0),
+      refillQty: Math.max(0, Number(draft.refillQty) || 0),
+      note: String(draft.note || "").trim(),
+      photo: String(draft.photo || "").trim(),
+      enteredBy: currentOperatorName || "",
+      created: new Date().toISOString(),
+    };
+    setNilaTeaDailyEntries((prev) => [
+      ...prev.filter((entry) => !(entry.date === nilaTeaCountDate && entry.itemId === itemId && entry.flow === nilaTeaStockFlow)),
+      nextRow,
+    ]);
+    setNilaTeaMessage(
+      lang === "km"
+        ? `បានរក្សាទុក ${item.nameKm} សម្រាប់ ${nilaTeaStockFlow === "begin" ? "Beginning Stock" : "End Stock"} រួចរាល់។`
+        : `Saved ${item.nameEn} for ${nilaTeaStockFlow === "begin" ? "Beginning Stock" : "End Stock"}.`
+    );
+    setNilaTeaEntryModalItemId(null);
+  }, [currentOperatorName, lang, nilaTeaCountDate, nilaTeaDraft, nilaTeaItems, nilaTeaStockFlow]);
+  const resetNilaTeaDraft = useCallback(() => {
+    const map: Record<number, { closingQty: string; refillQty: string; note: string; photo: string }> = {};
+    for (const item of nilaTeaItems) {
+      map[item.id] = {
+        closingQty: "",
+        refillQty: String(item.targetRefillQty),
+        note: "",
+        photo: "",
+      };
+    }
+    setNilaTeaDraft(map);
+    setNilaTeaMessage("");
+  }, [nilaTeaItems]);
+  const onNilaTeaReportPhotoFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const itemId = nilaTeaEntryModalItemId;
+    if (!file || itemId === null) return;
+    const stamp = formatUploadPhotoTimestamp(new Date());
+    const photo = await optimizePhotoDataUrl(file, { timestampText: stamp });
+    setNilaTeaDraft((prev) => ({
+      ...prev,
+      [itemId]: {
+        ...(prev[itemId] || { closingQty: "", refillQty: "", note: "", photo: "" }),
+        photo,
+      },
+    }));
+    setNilaTeaPhotoFileKey((prev) => prev + 1);
+  }, [nilaTeaEntryModalItemId]);
+  const nilaTeaCurrentModalItem = useMemo(
+    () => nilaTeaItems.find((item) => item.id === nilaTeaEntryModalItemId) || null,
+    [nilaTeaEntryModalItemId, nilaTeaItems]
+  );
+  const nilaTeaTodayStaffRows = useMemo(() => {
+    return nilaTeaEntriesForDate
+      .slice()
+      .sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")))
+      .map((entry) => {
+        const item = nilaTeaItems.find((row) => row.id === entry.itemId);
+        return {
+          ...entry,
+          itemCode: item?.code || "-",
+          itemName: lang === "km" ? (item?.nameKm || "-") : (item?.nameEn || "-"),
+          unitLabel: item?.unitKm || "",
+        };
+      });
+  }, [lang, nilaTeaEntriesForDate, nilaTeaItems]);
+  const nilaTeaCurrentMonth = useMemo(() => String(nilaTeaCountDate || "").slice(0, 7), [nilaTeaCountDate]);
+  const nilaTeaMonthlyTotals = useMemo(() => {
+    const monthRows = nilaTeaDailyEntries.filter((entry) => String(entry.date || "").slice(0, 7) === nilaTeaCurrentMonth);
+    const totalInMorning = monthRows
+      .filter((entry) => entry.flow === "begin")
+      .reduce((sum, entry) => sum + Number(entry.refillQty || 0), 0);
+    const totalPlannedTomorrow = monthRows
+      .filter((entry) => entry.flow === "end")
+      .reduce((sum, entry) => sum + Number(entry.refillQty || 0), 0);
+    const latestEndByItem = new Map<number, NilaTeaDailyStockEntry>();
+    monthRows
+      .filter((entry) => entry.flow === "end")
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(a.itemId) - Number(b.itemId))
+      .forEach((entry) => {
+        if (!latestEndByItem.has(entry.itemId)) latestEndByItem.set(entry.itemId, entry);
+      });
+    const totalRemaining = Array.from(latestEndByItem.values()).reduce((sum, entry) => sum + Number(entry.closingQty || 0), 0);
+    let estimatedSold = 0;
+    const paired = new Map<string, { begin?: NilaTeaDailyStockEntry; end?: NilaTeaDailyStockEntry }>();
+    monthRows.forEach((entry) => {
+      const key = `${entry.date}-${entry.itemId}`;
+      const current = paired.get(key) || {};
+      if (entry.flow === "begin") current.begin = entry;
+      else current.end = entry;
+      paired.set(key, current);
+    });
+    paired.forEach((row) => {
+      if (row.begin && row.end) {
+        estimatedSold += Math.max(0, Number(row.begin.closingQty || 0) + Number(row.begin.refillQty || 0) - Number(row.end.closingQty || 0));
+      }
+    });
+    return {
+      totalInMorning,
+      totalPlannedTomorrow,
+      totalRemaining,
+      estimatedSold,
+      monthRows,
+    };
+  }, [nilaTeaCurrentMonth, nilaTeaDailyEntries]);
+  const nilaTeaReportRange = useMemo(() => {
+    if (nilaTeaReportPeriod === "daily") {
+      return {
+        key: nilaTeaCountDate,
+        label: `${lang === "km" ? "របាយការណ៍ប្រចាំថ្ងៃ" : "Daily Report"} • ${formatDate(nilaTeaCountDate)}`,
+        rows: nilaTeaHistoryRows.filter((row) => row.date === nilaTeaCountDate),
+      };
+    }
+    if (nilaTeaReportPeriod === "weekly") {
+      const from = startOfWeekYmd(nilaTeaCountDate);
+      const to = endOfWeekYmd(nilaTeaCountDate);
+      return {
+        key: `${from}_${to}`,
+        label: `${lang === "km" ? "របាយការណ៍ប្រចាំសប្តាហ៍" : "Weekly Report"} • ${formatDate(from)} - ${formatDate(to)}`,
+        rows: nilaTeaHistoryRows.filter((row) => String(row.date || "") >= from && String(row.date || "") <= to),
+      };
+    }
+    return {
+      key: nilaTeaCurrentMonth,
+      label: `${lang === "km" ? "របាយការណ៍ប្រចាំខែ" : "Monthly Report"} • ${formatMonthYear(nilaTeaCurrentMonth)}`,
+      rows: nilaTeaHistoryRows.filter((row) => String(row.date || "").slice(0, 7) === nilaTeaCurrentMonth),
+    };
+  }, [lang, nilaTeaCountDate, nilaTeaCurrentMonth, nilaTeaHistoryRows, nilaTeaReportPeriod]);
+  const nilaTeaReportTotals = useMemo(() => {
+    const totalInMorning = nilaTeaReportRange.rows
+      .filter((entry) => entry.flow === "begin")
+      .reduce((sum, entry) => sum + Number(entry.refillQty || 0), 0);
+    const totalPlannedTomorrow = nilaTeaReportRange.rows
+      .filter((entry) => entry.flow === "end")
+      .reduce((sum, entry) => sum + Number(entry.refillQty || 0), 0);
+    const latestEndByItem = new Map<number, (typeof nilaTeaReportRange.rows)[number]>();
+    nilaTeaReportRange.rows
+      .filter((entry) => entry.flow === "end")
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(a.itemId) - Number(b.itemId))
+      .forEach((entry) => {
+        if (!latestEndByItem.has(entry.itemId)) latestEndByItem.set(entry.itemId, entry);
+      });
+    const totalRemaining = Array.from(latestEndByItem.values()).reduce((sum, entry) => sum + Number(entry.closingQty || 0), 0);
+    let estimatedSold = 0;
+    const paired = new Map<string, { begin?: (typeof nilaTeaReportRange.rows)[number]; end?: (typeof nilaTeaReportRange.rows)[number] }>();
+    nilaTeaReportRange.rows.forEach((entry) => {
+      const key = `${entry.date}-${entry.itemId}`;
+      const current = paired.get(key) || {};
+      if (entry.flow === "begin") current.begin = entry;
+      else current.end = entry;
+      paired.set(key, current);
+    });
+    paired.forEach((row) => {
+      if (row.begin && row.end) {
+        estimatedSold += Math.max(0, Number(row.begin.closingQty || 0) + Number(row.begin.refillQty || 0) - Number(row.end.closingQty || 0));
+      }
+    });
+    return {
+      totalInMorning,
+      totalPlannedTomorrow,
+      totalRemaining,
+      estimatedSold,
+    };
+  }, [nilaTeaReportRange.rows]);
+  const nilaTeaPhoneNote = useMemo(() => {
+    const nowText = formatDateTime(new Date().toISOString());
+    const saveText = nilaTeaLatestSaveAt || (lang === "km" ? "មិនទាន់មានការកត់ត្រា" : "No saved record yet");
+    return {
+      label: nilaTeaView === "report"
+        ? nilaTeaReportRange.label
+        : nilaTeaStockFlow === "begin"
+        ? (nilaTeaUseKhmer ? "កត់ស្តុកព្រឹក" : "Morning Count")
+        : (nilaTeaUseKhmer ? "កត់ស្តុកល្ងាច" : "Ending Count"),
+      dateTime: nowText,
+      latest: saveText,
+    };
+  }, [lang, nilaTeaLatestSaveAt, nilaTeaReportRange.label, nilaTeaStockFlow, nilaTeaUseKhmer, nilaTeaView]);
+  const resetNilaTeaItemForm = useCallback(() => {
+    setEditingNilaTeaItemId(null);
+    setNilaTeaItemPhotoFileKey((prev) => prev + 1);
+    setNilaTeaItemForm({
+      code: "",
+      nameKm: "",
+      nameEn: "",
+      unitKm: "កែវ",
+      packLabelKm: "រាប់តាមឯកតា",
+      reorderLevel: "0",
+      targetRefillQty: "0",
+      color: "#9c5a2d",
+      photo: "",
+    });
+  }, []);
+  const saveNilaTeaSetupItem = useCallback(() => {
+    const code = String(nilaTeaItemForm.code || "").trim().toUpperCase();
+    const nameEn = String(nilaTeaItemForm.nameEn || "").trim();
+    const nameKm = String(nilaTeaItemForm.nameKm || "").trim();
+    if (!code || !nameEn || !nameKm) {
+      setNilaTeaMessage(nilaTeaUseKhmer ? "សូមបំពេញ code និងឈ្មោះទំនិញជាមុនសិន។" : "Please fill item code and item names first.");
+      return;
+    }
+    const color = String(nilaTeaItemForm.color || "#9c5a2d").trim() || "#9c5a2d";
+    const nextItem: NilaTeaStockItem = {
+      id: editingNilaTeaItemId || Date.now(),
+      code,
+      nameKm,
+      nameEn,
+      unitKm: String(nilaTeaItemForm.unitKm || "").trim() || "កែវ",
+      packLabelKm: String(nilaTeaItemForm.packLabelKm || "").trim() || "រាប់តាមឯកតា",
+      reorderLevel: Math.max(0, Number(nilaTeaItemForm.reorderLevel) || 0),
+      targetRefillQty: Math.max(0, Number(nilaTeaItemForm.targetRefillQty) || 0),
+      color,
+      photo: String(nilaTeaItemForm.photo || "").trim() || buildNilaTeaMiniPhoto(code.replace(/[^A-Z0-9]/g, "").slice(0, 2) || "NT", color),
+    };
+    setNilaTeaItems((prev) => {
+      const next = editingNilaTeaItemId
+        ? prev.map((item) => (item.id === editingNilaTeaItemId ? nextItem : item))
+        : [...prev, nextItem];
+      return next.sort((a, b) => a.code.localeCompare(b.code));
+    });
+    setNilaTeaMessage(nilaTeaUseKhmer ? "បានរក្សាទុកមុខទំនិញ Nila Tea រួចរាល់។" : "Nila Tea item saved.");
+    resetNilaTeaItemForm();
+  }, [editingNilaTeaItemId, nilaTeaItemForm, nilaTeaUseKhmer, resetNilaTeaItemForm]);
+  const onNilaTeaSetupItemPhotoFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const photo = await optimizePhotoDataUrl(file);
+    setNilaTeaItemForm((prev) => ({ ...prev, photo }));
+    setNilaTeaItemPhotoFileKey((prev) => prev + 1);
+  }, []);
+  const startEditNilaTeaItem = useCallback((item: NilaTeaStockItem) => {
+    setEditingNilaTeaItemId(item.id);
+    setNilaTeaItemPhotoFileKey((prev) => prev + 1);
+    setNilaTeaItemForm({
+      code: item.code,
+      nameKm: item.nameKm,
+      nameEn: item.nameEn,
+      unitKm: item.unitKm,
+      packLabelKm: item.packLabelKm,
+      reorderLevel: String(item.reorderLevel),
+      targetRefillQty: String(item.targetRefillQty),
+      color: item.color,
+      photo: item.photo,
+    });
+    setNilaTeaView("setup");
+  }, []);
+  const deleteNilaTeaItem = useCallback((itemId: number) => {
+    setNilaTeaItems((prev) => prev.filter((item) => item.id !== itemId));
+    setNilaTeaDailyEntries((prev) => prev.filter((entry) => entry.itemId !== itemId));
+    if (editingNilaTeaItemId === itemId) resetNilaTeaItemForm();
+    setNilaTeaMessage(nilaTeaUseKhmer ? "បានលុបមុខទំនិញ Nila Tea រួចរាល់។" : "Nila Tea item deleted.");
+  }, [editingNilaTeaItemId, nilaTeaUseKhmer, resetNilaTeaItemForm]);
+  const resetNilaTeaUserForm = useCallback(() => {
+    setEditingNilaTeaUserId(null);
+    setNilaTeaUserForm({
+      fullName: "",
+      username: "",
+      role: "staff",
+      active: true,
+      permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS.staff },
+    });
+  }, []);
+  const saveNilaTeaSetupUser = useCallback(() => {
+    const fullName = String(nilaTeaUserForm.fullName || "").trim();
+    const username = String(nilaTeaUserForm.username || "").trim().toLowerCase();
+    if (!fullName || !username) {
+      setNilaTeaMessage(nilaTeaUseKhmer ? "សូមបំពេញឈ្មោះបុគ្គលិក និង username ជាមុនសិន។" : "Please fill staff name and username first.");
+      return;
+    }
+    const nextUser: NilaTeaUser = {
+      id: editingNilaTeaUserId || Date.now(),
+      fullName,
+      username,
+      role: nilaTeaUserForm.role,
+      active: nilaTeaUserForm.active,
+      permissions: { ...nilaTeaUserForm.permissions },
+    };
+    setNilaTeaUsers((prev) => {
+      const next = editingNilaTeaUserId
+        ? prev.map((user) => (user.id === editingNilaTeaUserId ? nextUser : user))
+        : [...prev, nextUser];
+      return next.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    });
+    setNilaTeaMessage(nilaTeaUseKhmer ? "បានរក្សាទុកអ្នកប្រើ Nila Tea រួចរាល់។" : "Nila Tea user saved.");
+    resetNilaTeaUserForm();
+  }, [editingNilaTeaUserId, nilaTeaUseKhmer, nilaTeaUserForm, resetNilaTeaUserForm]);
+  const startEditNilaTeaUser = useCallback((user: NilaTeaUser) => {
+    setEditingNilaTeaUserId(user.id);
+    setNilaTeaUserForm({
+      fullName: user.fullName,
+      username: user.username,
+      role: user.role,
+      active: user.active,
+      permissions: { ...user.permissions },
+    });
+    setNilaTeaView("setup");
+  }, []);
+  const deleteNilaTeaUser = useCallback((userId: number) => {
+    setNilaTeaUsers((prev) => prev.filter((user) => user.id !== userId));
+    if (editingNilaTeaUserId === userId) resetNilaTeaUserForm();
+    setNilaTeaMessage(nilaTeaUseKhmer ? "បានលុបអ្នកប្រើ Nila Tea រួចរាល់។" : "Nila Tea user deleted.");
+  }, [editingNilaTeaUserId, nilaTeaUseKhmer, resetNilaTeaUserForm]);
+  const nilaTeaRoleLabel = useCallback(
+    (role: NilaTeaUserRole) =>
+      role === "super_admin"
+        ? nilaTeaUseKhmer
+          ? "អេដមីនធំ"
+          : "Super Admin"
+        : role === "manager"
+        ? nilaTeaUseKhmer
+          ? "អ្នកគ្រប់គ្រង"
+          : "Manager"
+        : nilaTeaUseKhmer
+        ? "បុគ្គលិក"
+        : "Staff",
+    [nilaTeaUseKhmer]
   );
   const getNavSubItems = useCallback(
     (module: NavModule): NavSubItem[] => {
@@ -7593,20 +8694,13 @@ export default function App() {
           };
           return INVENTORY_OPERATIONAL_GROUP_ORDER.map((group) => {
             const hasDailyFlow = inventoryBusinessGroupHasDailyStockFlow(group);
+            const showDashboardChild = group === "SUPPLY";
             return {
               key: `inventory.group.${group}`,
               label: lang === "km" ? inventoryNavLabelsKm[group as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL"] : inventoryBusinessGroupLabel(group),
               active: tab === "inventory" && inventoryDashboardGroup === group,
-              onSelect: () => openInventorySection(group, "dashboard"),
+              onSelect: () => openInventorySection(group, showDashboardChild ? "dashboard" : "items"),
               children: [
-                ...(group === "SUPPLY"
-                  ? []
-                  : [{
-                      key: `inventory.group.${group}.dashboard`,
-                      label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
-                      active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "dashboard",
-                      onSelect: () => openInventorySection(group, "dashboard"),
-                    }]),
                 {
                   key: `inventory.group.${group}.items`,
                   label:
@@ -7649,6 +8743,8 @@ export default function App() {
               ],
             };
           });
+        case "nila_tea":
+          return [];
         case "classroom":
           return [];
         case "cctv":
@@ -8467,6 +9563,13 @@ export default function App() {
     : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   useEffect(() => {
+    if (nilaTeaStaffMode) {
+      if (tab !== "nila_tea") setTab("nila_tea");
+      if (nilaTeaView !== "dashboard" && nilaTeaView !== "stock" && nilaTeaView !== "report" && nilaTeaView !== "setup") {
+        setNilaTeaView("stock");
+      }
+      return;
+    }
     if (maintenanceQuickMode) {
       if (tab !== "inventory" && tab !== "verification") setTab("inventory");
       return;
@@ -8474,7 +9577,28 @@ export default function App() {
     if (!navMenuItems.some((item) => item.id === tab)) {
       setTab(navMenuItems[0]?.id || "dashboard");
     }
-  }, [maintenanceQuickMode, navMenuItems, tab]);
+  }, [maintenanceQuickMode, navMenuItems, nilaTeaStaffMode, nilaTeaView, tab]);
+  useEffect(() => {
+    if (nilaTeaRoleView === "staff" && nilaTeaView !== "stock") {
+      setNilaTeaView("stock");
+      return;
+    }
+    if (nilaTeaRoleView === "manager" && nilaTeaView === "setup") {
+      setNilaTeaView("report");
+    }
+  }, [nilaTeaRoleView, nilaTeaView]);
+  useEffect(() => {
+    if (nilaTeaView !== "setup") return;
+    const availableSections: Array<"bot" | "price" | "item" | "user"> = [
+      "bot",
+      "price",
+      ...(nilaTeaCanManageItems ? (["item"] as const) : []),
+      ...(nilaTeaCanManageUsers ? (["user"] as const) : []),
+    ];
+    if (!availableSections.includes(nilaTeaSetupSection)) {
+      setNilaTeaSetupSection(availableSections[0] || "bot");
+    }
+  }, [nilaTeaCanManageItems, nilaTeaCanManageUsers, nilaTeaSetupSection, nilaTeaView]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -14575,6 +15699,11 @@ export default function App() {
       setInventoryToolRecordView("campus");
     }
   }, [inventoryIsToolControlGroup, inventoryToolRecordView]);
+  useEffect(() => {
+    if (inventoryIsToolControlGroup && inventoryView === "dashboard") {
+      setInventoryView("items");
+    }
+  }, [inventoryIsToolControlGroup, inventoryView]);
   useEffect(() => {
     if (
       !inventoryBusinessGroupHasDailyStockFlow(inventoryDashboardGroup) &&
@@ -32760,7 +33889,26 @@ export default function App() {
               }}
             />
             <p className="login-app-name-sunset">IT and Maintenance Controll</p>
-            <h2 className="login-title-sunset">{lang === "km" ? "ចូលប្រើគណនីរបស់អ្នក" : "Login to your account"}</h2>
+            <h2 className="login-title-sunset">
+              {nilaTeaStaffMode
+                ? (lang === "km" ? "ចូលប្រើតំណបុគ្គលិក Nila Tea" : "Nila Tea staff login")
+                : maintenanceQuickMode
+                ? (lang === "km" ? "ចូលប្រើតំណបុគ្គលិកថែទាំ" : "Maintenance staff login")
+                : (lang === "km" ? "ចូលប្រើគណនីរបស់អ្នក" : "Login to your account")}
+            </h2>
+            {nilaTeaStaffMode ? (
+              <p className="tiny" style={{ textAlign: "center", marginTop: -2, marginBottom: 14 }}>
+                {lang === "km"
+                  ? "តំណនេះសម្រាប់បុគ្គលិក Nila Tea ប៉ុណ្ណោះ ហើយនឹងបើកទៅ workspace របស់ Nila Tea ដោយផ្ទាល់។"
+                  : "This link is for Nila Tea staff only and opens directly into the Nila Tea workspace."}
+              </p>
+            ) : maintenanceQuickMode ? (
+              <p className="tiny" style={{ textAlign: "center", marginTop: -2, marginBottom: 14 }}>
+                {lang === "km"
+                  ? "តំណនេះសម្រាប់បុគ្គលិកថែទាំនៅ Eco maintenance mode។"
+                  : "This link is for Eco maintenance staff mode."}
+              </p>
+            ) : null}
             <div className="form-grid login-grid login-grid-sunset">
               <label className="field">
                 <input
@@ -32885,31 +34033,50 @@ export default function App() {
   }
 
   return (
-    <main className={`app-shell ${uiTheme === "light" ? "theme-light" : "theme-dark"}`}>
+    <main className={`app-shell ${uiTheme === "light" ? "theme-light" : "theme-dark"} ${isNilaTeaWorkspace ? "workspace-nila-tea" : "workspace-eco"}`}>
       <div className="bg-orb bg-orb-a" aria-hidden={true} />
       <div className="bg-orb bg-orb-b" aria-hidden={true} />
 
       {!isPhoneView && !hasModalOpen ? (
-        <section className="app-top-controls-wrap">
-          <div className="top-controls top-controls-grid app-top-controls-grid">
-            <label className="field campus-field">
-              <span>{t.view}</span>
-              {maintenanceQuickMode ? (
-                <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
-              ) : (
+        <section className={`app-top-controls-wrap ${isNilaTeaWorkspace ? "app-top-controls-wrap-nila-tea" : ""}`}>
+          <div className={`top-controls top-controls-grid app-top-controls-grid ${isNilaTeaWorkspace ? "app-top-controls-grid-nila-tea" : ""}`}>
+            {!nilaTeaStaffMode ? (
+              <label className="field campus-field">
+                <span>{lang === "km" ? "Workspace" : "Workspace"}</span>
                 <LocationPicker
-                  value={campusFilter}
+                  value={workspaceSwitcherValue}
+                  onChange={handleWorkspaceSwitcherChange}
                   options={[
-                    ...(isAdmin ? [{ value: "ALL", label: t.allCampuses }] : []),
-                    ...allowedCampusOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
+                    { value: "eco", label: "Eco" },
+                    { value: "nila_tea", label: "Nila Tea" },
                   ]}
-                  onChange={setCampusFilter}
-                  placeholder={t.allCampuses}
-                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  placeholder="Workspace"
+                  searchPlaceholder={lang === "km" ? "ស្វែងរក workspace..." : "Search workspace..."}
+                  emptyText={lang === "km" ? "មិនមាន workspace" : "No workspace found."}
                 />
-              )}
-            </label>
+              </label>
+            ) : null}
+
+            {!isNilaTeaWorkspace ? (
+              <label className="field campus-field">
+                <span>{t.view}</span>
+                {maintenanceQuickMode ? (
+                  <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
+                ) : (
+                  <LocationPicker
+                    value={campusFilter}
+                    options={[
+                      ...(isAdmin ? [{ value: "ALL", label: t.allCampuses }] : []),
+                      ...allowedCampusOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
+                    ]}
+                    onChange={setCampusFilter}
+                    placeholder={t.allCampuses}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                )}
+              </label>
+            ) : null}
 
             <label className="field campus-field">
               <span>{t.language}</span>
@@ -32951,10 +34118,10 @@ export default function App() {
         </section>
       ) : null}
 
-      <section className={`app-card app-card-layout ${maintenanceQuickMode ? "app-card-maintenance-quick" : ""}`}>
-        <header className={`topbar ${isPhoneView ? "topbar-phone" : ""}`}>
+      <section className={`app-card app-card-layout ${maintenanceQuickMode ? "app-card-maintenance-quick" : ""} ${isNilaTeaWorkspace ? "app-card-workspace-nila-tea" : ""}`}>
+        <header className={`topbar ${isPhoneView ? "topbar-phone" : ""} ${isNilaTeaWorkspace ? "topbar-workspace-nila-tea" : ""}`}>
           <div className="brand-block">
-            {isPhoneView ? (
+            {isPhoneView && !isNilaTeaWorkspace ? (
               <button
                 type="button"
                 className="mobile-brand-logo-btn"
@@ -32977,33 +34144,195 @@ export default function App() {
                 />
               </button>
             ) : null}
-            {isPhoneView ? null : <p className="eyebrow">{t.school}</p>}
+            {isPhoneView ? null : <p className="eyebrow">{isNilaTeaWorkspace ? (lang === "km" ? "ហាងភេសជ្ជៈ និងស្តុកប្រចាំថ្ងៃ" : "Tea Shop Daily Stock Workspace") : t.school}</p>}
             <h1 className={isPhoneView ? "brand-title-mobile" : ""}>
-              {maintenanceQuickMode
+              {isNilaTeaWorkspace
+                ? (nilaTeaUseKhmer ? "កំណត់ស្តុក Nila Tea" : "Nila Tea Workspace")
+                : maintenanceQuickMode
                 ? (lang === "km" ? "បុគ្គលិកថែទាំ" : "Maintenance Staff")
                 : t.title}
             </h1>
-            {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
+            {isPhoneView ? null : <p className="subhead">{isNilaTeaWorkspace ? (lang === "km" ? "មើលតែទិន្នន័យហាង Nila Tea ប៉ុណ្ណោះ។" : "Only Nila Tea shop data and controls are shown in this workspace.") : t.subhead}</p>}
           </div>
 
           <div className={`top-right ${isPhoneView ? "top-right-phone" : ""}`}>
-            <img loading="eager" fetchPriority="high" decoding="async" className="eco-header-logo"
-              src={ECO_LOGO_URL}
-              alt="ECO International School"
-              onError={(e) => {
-                const img = e.currentTarget;
-                if (!img.dataset.fallback) {
-                  img.dataset.fallback = "1";
-                  img.src = APP_ICON_FALLBACK_URL;
-                  return;
-                }
-                img.style.display = "none";
-              }}
-            />
+            {isNilaTeaWorkspace ? (
+              <button
+                type="button"
+                className={`nila-topmark ${isPhoneView ? "nila-topmark-button" : ""}`}
+                aria-label={isPhoneView ? "Refresh Nila Tea page" : "Nila Tea"}
+                onClick={refreshNilaTeaWorkspace}
+              >
+                <img
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                  className="nila-topmark-logo"
+                  src={NILA_TEA_LOGO_URL}
+                  alt="Nila Tea"
+                />
+              </button>
+            ) : (
+              <img loading="eager" fetchPriority="high" decoding="async" className="eco-header-logo"
+                src={ECO_LOGO_URL}
+                alt="ECO International School"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  if (!img.dataset.fallback) {
+                    img.dataset.fallback = "1";
+                    img.src = APP_ICON_FALLBACK_URL;
+                    return;
+                  }
+                  img.style.display = "none";
+                }}
+              />
+            )}
           </div>
         </header>
 
-        <section className={`workspace-shell ${navCollapsed ? "workspace-shell-nav-collapsed" : ""}`}>
+        {isPhoneView && isNilaTeaWorkspace ? (
+          <div className="mobile-nav-hud nila-tea-mobile-hud" ref={mobileNavRef}>
+            {mobileMenuOpen ? (
+              <button
+                type="button"
+                className="mobile-side-backdrop"
+                aria-label="Close menu"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+            ) : null}
+            <aside className={`mobile-side-drawer nila-tea-mobile-drawer ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}>
+              <div className="mobile-menu-head">
+                <button
+                  type="button"
+                  className="mobile-menu-close-btn"
+                  aria-label="Close menu"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  ✕
+                </button>
+                <strong>{nilaTeaUseKhmer ? "ម៉ឺនុយ Nila Tea" : "Nila Tea Menu"}</strong>
+                <span>{nilaTeaUseKhmer ? "បើក ឬ បិទការកំណត់ពីប៊ូតុងនេះ" : "Open or hide settings from this button."}</span>
+              </div>
+
+              <div className="mobile-menu-sections">
+                <section className="mobile-menu-section">
+                  <p className="mobile-menu-section-label">{nilaTeaUseKhmer ? "មើល" : "View"}</p>
+                  <div className="mobile-menu-grid">
+                    {nilaTeaCanOpenDashboard ? (
+                      <button
+                        type="button"
+                        className={`mobile-menu-nav-btn ${nilaTeaView === "dashboard" ? "mobile-menu-nav-btn-active" : ""}`}
+                        onClick={() => {
+                          setNilaTeaView("dashboard");
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mobile-menu-nav-label">{nilaTeaUseKhmer ? "សង្ខេប" : "Overview"}</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`mobile-menu-nav-btn ${nilaTeaView === "stock" ? "mobile-menu-nav-btn-active" : ""}`}
+                      onClick={() => {
+                        setNilaTeaView("stock");
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <span className="mobile-menu-nav-label">{nilaTeaUseKhmer ? "ស្តុកថ្ងៃនេះ" : "Today Stock"}</span>
+                    </button>
+                    {nilaTeaCanOpenReports ? (
+                      <button
+                        type="button"
+                        className={`mobile-menu-nav-btn ${nilaTeaView === "report" ? "mobile-menu-nav-btn-active" : ""}`}
+                        onClick={() => {
+                          setNilaTeaView("report");
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mobile-menu-nav-label">{nilaTeaUseKhmer ? "របាយការណ៍" : "Report"}</span>
+                      </button>
+                    ) : null}
+                    {nilaTeaCanOpenSetup ? (
+                      <button
+                        type="button"
+                        className={`mobile-menu-nav-btn ${nilaTeaView === "setup" ? "mobile-menu-nav-btn-active" : ""}`}
+                        onClick={() => {
+                          setNilaTeaView("setup");
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <span className="mobile-menu-nav-label">{nilaTeaUseKhmer ? "កំណត់" : "Control"}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </section>
+              </div>
+
+              <label className="field">
+                <span>{t.language}</span>
+                <LocationPicker
+                  value={lang}
+                  onChange={(value) => setLang(value as Lang)}
+                  options={[{ value: "km", label: t.khmer }, { value: "en", label: t.english }]}
+                  placeholder={t.language}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកភាសា..." : "Search language..."}
+                  emptyText={lang === "km" ? "មិនមានភាសា" : "No language found."}
+                />
+              </label>
+
+              <label className="field">
+                <span>{t.theme}</span>
+                <LocationPicker
+                  value={uiTheme}
+                  onChange={(value) => setUiTheme(value as UiTheme)}
+                  options={[
+                    { value: "dark", label: t.themeDark },
+                    { value: "light", label: t.themeLight },
+                  ]}
+                  placeholder={t.theme}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
+                  emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
+                />
+              </label>
+
+              <label className="field">
+                <span>{t.account}</span>
+                <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
+              </label>
+
+              <button
+                className="tab"
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleLogout();
+                }}
+              >
+                {t.logout}
+              </button>
+            </aside>
+
+            <div className="mobile-nav-topline nila-tea-mobile-topline">
+              {!mobileMenuOpen ? (
+                <button
+                  className="mobile-hamburger-btn"
+                  type="button"
+                  onClick={() => {
+                    setMobileNotificationOpen(false);
+                    setMobileMenuOpen(true);
+                  }}
+                  aria-expanded={false}
+                  aria-label="Open menu"
+                >
+                  <span className="mobile-hamburger-icon" aria-hidden={true}>☰</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        <section className={`workspace-shell ${navCollapsed ? "workspace-shell-nav-collapsed" : ""} ${isNilaTeaWorkspace && isPhoneView ? "workspace-shell-single" : ""}`}>
+          {!isNilaTeaWorkspace ? (
           <aside className={`main-nav-rail ${navCollapsed ? "main-nav-rail-collapsed" : ""}`}>
             <div className="main-nav-head">
               <div className="main-nav-head-copy">
@@ -33066,9 +34395,53 @@ export default function App() {
               </section>
             ))}
           </aside>
+          ) : !isPhoneView ? (
+          <aside className={`main-nav-rail nila-tea-nav-rail ${navCollapsed ? "main-nav-rail-collapsed" : ""}`}>
+            <div className="main-nav-head nila-tea-nav-head">
+              <div className="main-nav-head-copy">
+                <p className="eyebrow">{nilaTeaUseKhmer ? "ម៉ឺនុយ Nila Tea" : "Nila Tea Menu"}</p>
+                <h3>{nilaTeaUseKhmer ? "ការងារហាង Nila Tea" : "Nila Tea Controls"}</h3>
+              </div>
+              <button
+                type="button"
+                className="main-nav-toggle-btn"
+                title={navCollapsed ? (nilaTeaUseKhmer ? "បង្ហាញម៉ឺនុយ" : "Show menu") : (nilaTeaUseKhmer ? "បិទអត្ថបទម៉ឺនុយ" : "Hide menu text")}
+                aria-label={navCollapsed ? (nilaTeaUseKhmer ? "បង្ហាញម៉ឺនុយ" : "Show menu") : (nilaTeaUseKhmer ? "បិទអត្ថបទម៉ឺនុយ" : "Hide menu text")}
+                onClick={() => {
+                  setNavCollapsed((prev) => !prev);
+                }}
+              >
+                {navCollapsed ? <PanelLeftOpen size={18} aria-hidden={true} /> : <PanelLeftClose size={18} aria-hidden={true} />}
+              </button>
+            </div>
+            {nilaTeaDesktopNavSections.map((section) => (
+              <section key={section.section} className="main-nav-section">
+                <p className="main-nav-section-label">{section.label}</p>
+                <div className="main-nav-list">
+                  {section.items.map((item) => (
+                    <button
+                      key={`nila-tea-nav-${item.key}`}
+                      className={`main-nav-btn ${nilaTeaView === item.key ? "main-nav-btn-active" : ""}`}
+                      type="button"
+                      title={item.label}
+                      aria-label={item.label}
+                      onClick={() => {
+                        setNilaTeaView(item.key as "dashboard" | "stock" | "report" | "setup");
+                        scrollWorkspaceToTop();
+                      }}
+                    >
+                      <span className="main-nav-btn-icon" aria-hidden={true}>{item.icon}</span>
+                      <span className="main-nav-btn-label">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </aside>
+          ) : null}
 
           <section className="workspace-main" ref={workspaceMainRef}>
-            {!maintenanceQuickMode ? (
+            {!maintenanceQuickMode && !isNilaTeaWorkspace ? (
             <div className="mobile-nav-hud" ref={mobileNavRef}>
               {mobileMenuOpen ? (
                 <button
@@ -40172,24 +41545,6 @@ export default function App() {
                       />
                     </div>
                   </div>
-                  <div className="inventory-tool-workbench-stats">
-                    <article className="inventory-tool-workbench-chip">
-                      <span>{lang === "km" ? "ប្រភេទឧបករណ៍" : "Tool Types"}</span>
-                      <strong>{inventoryDashboardGroupSnapshot.totalItems}</strong>
-                    </article>
-                    <article className="inventory-tool-workbench-chip">
-                      <span>{lang === "km" ? "ទីតាំង" : "Locations"}</span>
-                      <strong>{inventoryDashboardLocationControlRows.length}</strong>
-                    </article>
-                    <article className="inventory-tool-workbench-chip">
-                      <span>{lang === "km" ? "រួចរាល់" : "Ready"}</span>
-                      <strong>{inventoryDashboardGroupSnapshot.totalOnHand}</strong>
-                    </article>
-                    <article className="inventory-tool-workbench-chip inventory-tool-workbench-chip-alert">
-                      <span>{lang === "km" ? "ត្រូវតាមដាន" : "Need Attention"}</span>
-                      <strong>{inventoryDashboardGroupSnapshot.lowStockItems + inventoryDashboardGroupSnapshot.pendingApprovals}</strong>
-                    </article>
-                  </div>
                   <div className="inventory-tool-workbench-tabs">
                     <button type="button" className={`tab ${inventoryView === "items" ? "tab-active" : ""}`} onClick={() => setInventoryView("items")}>
                       {lang === "km" ? "បញ្ជីឧបករណ៍បច្ចុប្បន្ន" : "Current Tools"}
@@ -47137,6 +48492,884 @@ export default function App() {
                 </div>
               </>
             )}
+          </section>
+        )}
+
+        {tab === "nila_tea" && (
+          <section className={`panel nila-tea-panel inventory-shell inventory-theme-supply nila-tea-shell ${isPhoneView ? "nila-tea-phone-shell" : ""}`}>
+            {isPhoneView ? (
+              <div className="nila-tea-phone-note-bar">
+                <div className="nila-tea-phone-note-copy">
+                  <strong>{nilaTeaPhoneNote.label}</strong>
+                  <span>{nilaTeaUseKhmer ? "កាលបរិច្ឆេទ និងម៉ោង" : "Date & Time"}: {nilaTeaPhoneNote.dateTime}</span>
+                  <span>{nilaTeaUseKhmer ? "រក្សាទុកចុងក្រោយ" : "Latest Save"}: {nilaTeaPhoneNote.latest}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="nila-tea-phone-hero">
+                <div className="nila-tea-phone-hero-copy">
+                  <span className="eyebrow">{nilaTeaUseKhmer ? "ស្តុកហាង Nila Tea" : "Nila Tea Stock Center"}</span>
+                  <h2>{nilaTeaUseKhmer ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ" : "Daily Stock Record"}</h2>
+                  <p>
+                    {nilaTeaRoleView === "staff"
+                      ? (nilaTeaUseKhmer
+                        ? "សម្រាប់បុគ្គលិកហាងតែប៉ុណ្ណោះ។ ព្រឹកកត់ចំនួនចូល ហើយល្ងាចរាប់នៅសល់វិញ។ ចុចលើមុខទំនិញនីមួយៗ ដើម្បីបញ្ចូលចំនួនពិត និងភ្ជាប់រូបថត។"
+                        : "Staff see only today's item work. Tap any item to submit the real amount with a daily photo report.")
+                      : (nilaTeaUseKhmer
+                        ? "Manager និង Super Admin អាចតាមដាន stock balance, monthly totals, sale summary និង alert របស់ Nila Tea។"
+                        : "Manager and Super Admin can monitor stock balance, monthly totals, sale summary, and Nila Tea alerts.")}
+                  </p>
+                </div>
+                <div className="nila-tea-phone-hero-badges">
+                  <article className="nila-tea-phone-badge">
+                    <small>{nilaTeaUseKhmer ? "តួនាទី" : "Role"}</small>
+                    <strong>{nilaTeaRoleView === "staff" ? (nilaTeaUseKhmer ? "បុគ្គលិក" : "Staff") : nilaTeaRoleView === "manager" ? (nilaTeaUseKhmer ? "អ្នកគ្រប់គ្រង" : "Manager") : (nilaTeaUseKhmer ? "អេដមីនធំ" : "Super Admin")}</strong>
+                  </article>
+                  <article className="nila-tea-phone-badge">
+                    <small>{nilaTeaUseKhmer ? "ថ្ងៃកត់ត្រា" : "Date"}</small>
+                    <strong>{nilaTeaCountDate}</strong>
+                  </article>
+                  <article className="nila-tea-phone-badge">
+                    <small>{nilaTeaUseKhmer ? "ប្រព័ន្ធ" : "System"}</small>
+                    <strong>{nilaTeaUseKhmer ? "ហាង Nila Tea" : "Nila Tea Shop"}</strong>
+                  </article>
+                </div>
+              </div>
+            )}
+
+            {nilaTeaMessage ? <p className="tiny nila-tea-message">{nilaTeaMessage}</p> : null}
+
+            {isPhoneView && nilaTeaStaffMode ? (
+            <div className="tabs nila-tea-view-tabs nila-tea-phone-top-tabs">
+              {nilaTeaCanOpenDashboard ? (
+                <button className={`tab ${nilaTeaView === "dashboard" ? "tab-active" : ""}`} onClick={() => setNilaTeaView("dashboard")}>
+                  {nilaTeaUseKhmer ? "សង្ខេប" : "Overview"}
+                </button>
+              ) : null}
+              <button className={`tab ${nilaTeaView === "stock" ? "tab-active" : ""}`} onClick={() => setNilaTeaView("stock")}>
+                {nilaTeaUseKhmer ? "ស្តុកថ្ងៃនេះ" : "Today Stock"}
+              </button>
+              {nilaTeaCanOpenReports ? (
+                <button className={`tab ${nilaTeaView === "report" ? "tab-active" : ""}`} onClick={() => setNilaTeaView("report")}>
+                  {nilaTeaUseKhmer ? "របាយការណ៍" : "Report"}
+                </button>
+              ) : null}
+              {nilaTeaCanOpenSetup ? (
+                <button className={`tab ${nilaTeaView === "setup" ? "tab-active" : ""}`} onClick={() => setNilaTeaView("setup")}>
+                  {nilaTeaUseKhmer ? "កំណត់" : "Control"}
+                </button>
+              ) : null}
+            </div>
+            ) : null}
+
+            {nilaTeaView === "dashboard" && nilaTeaCanOpenDashboard ? (
+              <div className="nila-tea-phone-overview-grid">
+                <article className="nila-tea-phone-metric">
+                  <span>{lang === "km" ? "មុខទំនិញសរុប" : "Items"}</span>
+                  <strong>{nilaTeaItems.length}</strong>
+                </article>
+                <article className="nila-tea-phone-metric">
+                  <span>{lang === "km" ? "នៅសល់សរុប" : "Remaining"}</span>
+                  <strong>{nilaTeaMonthlyTotals.totalRemaining}</strong>
+                </article>
+                <article className="nila-tea-phone-metric">
+                  <span>{lang === "km" ? "IN ខែនេះ" : "Month IN"}</span>
+                  <strong>{nilaTeaMonthlyTotals.totalInMorning}</strong>
+                </article>
+                <article className="nila-tea-phone-metric">
+                  <span>{lang === "km" ? "Sale Qty ខែនេះ" : "Month Sale Qty"}</span>
+                  <strong>{nilaTeaMonthlyTotals.estimatedSold}</strong>
+                </article>
+              </div>
+            ) : null}
+
+            {nilaTeaView === "stock" && (
+              <>
+                <div className="nila-tea-phone-toolbar">
+                  <div className="nila-tea-phone-segment">
+                    <button
+                      type="button"
+                      className={`tab ${nilaTeaStockFlow === "begin" ? "tab-active" : ""}`}
+                      onClick={() => setNilaTeaStockFlow("begin")}
+                    >
+                      {nilaTeaUseKhmer ? "ស្តុកព្រឹក" : "Begin Stock"}
+                      <span>{nilaTeaUseKhmer ? "រាប់ដើមថ្ងៃ" : "Morning"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`tab ${nilaTeaStockFlow === "end" ? "tab-active" : ""}`}
+                      onClick={() => setNilaTeaStockFlow("end")}
+                    >
+                      {nilaTeaUseKhmer ? "ស្តុកល្ងាច" : "Ending Stock"}
+                      <span>{nilaTeaUseKhmer ? "រាប់ចុងថ្ងៃ" : "Evening"}</span>
+                    </button>
+                  </div>
+                  <label className="field nila-tea-date-field">
+                    <span>{nilaTeaUseKhmer ? "ថ្ងៃកត់ត្រា" : "Report Date"}</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={nilaTeaCountDate}
+                      onChange={(e) => {
+                        setNilaTeaCountDate(e.target.value);
+                        setNilaTeaMessage("");
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div className="nila-tea-phone-summary">
+                  <article className="nila-tea-phone-summary-card">
+                    <small>{nilaTeaStockFlow === "begin" ? (nilaTeaUseKhmer ? "ចំនួនចូលព្រឹក" : "Today IN") : (nilaTeaUseKhmer ? "ស្តុកនៅសល់" : "Today Balance")}</small>
+                    <strong>{nilaTeaSummaryCards.totalClosingQty}</strong>
+                  </article>
+                  <article className="nila-tea-phone-summary-card">
+                    <small>{nilaTeaStockFlow === "begin" ? (nilaTeaUseKhmer ? "បំពេញចូល" : "Morning Fill") : (nilaTeaUseKhmer ? "ត្រៀមសម្រាប់ថ្ងៃស្អែក" : "Tomorrow IN")}</small>
+                    <strong>{nilaTeaSummaryCards.totalRefillQty}</strong>
+                  </article>
+                  <article className="nila-tea-phone-summary-card">
+                    <small>{nilaTeaUseKhmer ? "ស្តុកជិតអស់" : "Low Alert"}</small>
+                    <strong>{nilaTeaSummaryCards.lowStockRows.length}</strong>
+                  </article>
+                </div>
+
+                <div className="nila-tea-item-card-grid">
+                  {nilaTeaItems.map((item) => {
+                    const draft = nilaTeaDraft[item.id] || { closingQty: "", refillQty: String(item.targetRefillQty), note: "", photo: "" };
+                    const balanceQty = Math.max(0, Number(draft.closingQty) || 0);
+                    const isLow = balanceQty <= item.reorderLevel;
+                    return (
+                      <button
+                        key={`nila-tea-phone-item-${item.id}`}
+                        type="button"
+                        className={`nila-tea-item-card ${isLow ? "is-low" : ""}`}
+                        onClick={() => {
+                          setNilaTeaEntryModalItemId(item.id);
+                          setNilaTeaPhotoFileKey((prev) => prev + 1);
+                        }}
+                      >
+                        <div className="nila-tea-item-card-photo-wrap">
+                          <img loading="lazy" decoding="async" src={item.photo} alt={item.nameEn} className="nila-tea-item-card-photo" />
+                        </div>
+                        <div className="nila-tea-item-card-meta">
+                          <strong>{nilaTeaUseKhmer ? item.nameKm : item.nameEn}</strong>
+                          <span>{item.code}</span>
+                          <span>
+                            {nilaTeaUseKhmer ? "ស្តុកនៅសល់" : "Stock Balance"}: <b>{balanceQty}</b>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <article className="nila-tea-staff-today-panel">
+                  <div className="nila-tea-card-head">
+                    <div>
+                      <h3>{nilaTeaUseKhmer ? "កំណត់ត្រាថ្ងៃនេះ" : "Today In / Out"}</h3>
+                      <p>
+                        {nilaTeaUseKhmer
+                          ? "បង្ហាញតែការកត់ត្រាសម្រាប់ថ្ងៃនេះ។"
+                          : "Staff only see today's submitted item movements."}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="nila-tea-staff-today-list">
+                    {nilaTeaTodayStaffRows.length ? (
+                      nilaTeaTodayStaffRows.map((row) => (
+                        <article key={`nila-tea-staff-today-${row.id}`} className="nila-tea-staff-today-item">
+                          <div>
+                            <strong>{row.itemName}</strong>
+                            <span>{row.itemCode} • {row.flow === "begin" ? (nilaTeaUseKhmer ? "ព្រឹក" : "Morning") : (nilaTeaUseKhmer ? "ល្ងាច" : "Evening")}</span>
+                          </div>
+                          <div>
+                            <strong>{row.closingQty} {row.unitLabel}</strong>
+                            <span>{row.refillQty} {nilaTeaUseKhmer ? "បំពេញ" : "move"}</span>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="nila-tea-alert-ok">
+                        {nilaTeaUseKhmer ? "មិនទាន់មានកំណត់ត្រាសម្រាប់ថ្ងៃនេះទេ។" : "No item records submitted for this day yet."}
+                      </div>
+                    )}
+                  </div>
+                </article>
+              </>
+            )}
+
+            {nilaTeaView === "report" && nilaTeaCanOpenReports ? (
+              <>
+                <div className="nila-tea-phone-report-toolbar">
+                  <div className="nila-tea-phone-segment nila-tea-phone-segment-report">
+                    <button type="button" className={`tab ${nilaTeaReportPeriod === "daily" ? "tab-active" : ""}`} onClick={() => setNilaTeaReportPeriod("daily")}>
+                      {nilaTeaUseKhmer ? "ថ្ងៃ" : "Daily"}
+                    </button>
+                    <button type="button" className={`tab ${nilaTeaReportPeriod === "weekly" ? "tab-active" : ""}`} onClick={() => setNilaTeaReportPeriod("weekly")}>
+                      {nilaTeaUseKhmer ? "សប្តាហ៍" : "Weekly"}
+                    </button>
+                    <button type="button" className={`tab ${nilaTeaReportPeriod === "monthly" ? "tab-active" : ""}`} onClick={() => setNilaTeaReportPeriod("monthly")}>
+                      {nilaTeaUseKhmer ? "ខែ" : "Monthly"}
+                    </button>
+                  </div>
+                  <label className="field nila-tea-date-field">
+                    <span>{nilaTeaUseKhmer ? "ថ្ងៃយោង" : "Reference Date"}</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={nilaTeaCountDate}
+                      onChange={(e) => setNilaTeaCountDate(e.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="nila-tea-phone-overview-grid">
+                  <article className="nila-tea-phone-metric">
+                    <span>{lang === "km" ? "ស្តុកនៅសល់" : "Remaining Stock"}</span>
+                    <strong>{nilaTeaReportTotals.totalRemaining}</strong>
+                  </article>
+                  <article className="nila-tea-phone-metric">
+                    <span>{nilaTeaReportPeriod === "monthly" ? (lang === "km" ? "ចូលក្នុងខែ" : "Month IN") : nilaTeaReportPeriod === "weekly" ? (lang === "km" ? "ចូលក្នុងសប្តាហ៍" : "Week IN") : (lang === "km" ? "ចូលថ្ងៃនេះ" : "Today IN")}</span>
+                    <strong>{nilaTeaReportTotals.totalInMorning}</strong>
+                  </article>
+                  <article className="nila-tea-phone-metric">
+                    <span>{lang === "km" ? "ត្រៀមបំពេញ" : "Planned Tomorrow"}</span>
+                    <strong>{nilaTeaReportTotals.totalPlannedTomorrow}</strong>
+                  </article>
+                  <article className="nila-tea-phone-metric">
+                    <span>{lang === "km" ? "ចំនួនលក់" : "Sale Report Qty"}</span>
+                    <strong>{nilaTeaReportTotals.estimatedSold}</strong>
+                  </article>
+                </div>
+
+                <article className="nila-tea-card nila-tea-alert-card inventory-admin-control-card">
+                  <div className="nila-tea-card-head">
+                    <div>
+                      <h3>{lang === "km" ? "Nila Tea Stock Alert" : "Nila Tea Stock Alert"}</h3>
+                      <p>
+                        {lang === "km"
+                          ? "ប្រើស្ទាយ Eco Stock Alert ដូចគ្នា ប៉ុន្តែសម្រាប់ bot ថ្មីរបស់ Nila Tea។"
+                          : "Uses the same Eco stock-alert style, but for a dedicated Nila Tea Stock Alert bot."}
+                      </p>
+                    </div>
+                    <Bell size={18} aria-hidden={true} />
+                  </div>
+                  {nilaTeaSummaryCards.lowStockRows.length ? (
+                    <div className="nila-tea-alert-list">
+                      {nilaTeaSummaryCards.lowStockRows.map(({ item, closingQty, refillQty }) => (
+                        <article key={`nila-tea-report-alert-${item.id}`} className="nila-tea-alert-item">
+                          <img loading="lazy" decoding="async" src={item.photo} alt={item.nameEn} className="nila-tea-item-photo" />
+                          <div className="nila-tea-alert-copy">
+                            <strong>{lang === "km" ? item.nameKm : item.nameEn}</strong>
+                            <span>{item.code}</span>
+                          </div>
+                          <div className="nila-tea-alert-metrics">
+                            <div><small>{lang === "km" ? "នៅសល់" : "Balance"}</small><strong>{closingQty}</strong></div>
+                            <div><small>{lang === "km" ? "ត្រូវបន្ថែម" : "Target In"}</small><strong>{refillQty}</strong></div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="nila-tea-alert-ok">
+                      {lang === "km" ? "មិនមានស្តុកតិចសម្រាប់ផ្ញើ alert ទេ។" : "No low-stock items are waiting for alert delivery."}
+                    </div>
+                  )}
+                </article>
+
+                <article className="nila-tea-card inventory-dashboard-panel">
+                  <div className="nila-tea-card-head">
+                    <div>
+                      <h3>{nilaTeaReportRange.label}</h3>
+                      <p>{lang === "km" ? "ជ្រើសថ្ងៃ សប្តាហ៍ ឬ ខែ ដើម្បីមើលលទ្ធផលស្តុក និងប្រវត្តិចលនា។" : "Choose daily, weekly, or monthly view to review stock results and movement history."}</p>
+                    </div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>{lang === "km" ? "Date" : "Date"}</th>
+                          <th>{lang === "km" ? "Item" : "Item"}</th>
+                          <th>{lang === "km" ? "Flow" : "Flow"}</th>
+                          <th>{lang === "km" ? "Balance" : "Balance"}</th>
+                          <th>{lang === "km" ? "Move Qty" : "Move Qty"}</th>
+                          <th>{lang === "km" ? "By" : "By"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {nilaTeaReportRange.rows.length ? (
+                          nilaTeaReportRange.rows.map((row) => (
+                              <tr key={`nila-tea-history-${row.id}`}>
+                                <td>{row.date}</td>
+                                <td>{row.itemCode} - {lang === "km" ? row.itemNameKm : row.itemNameEn}</td>
+                                <td>{row.flow === "begin" ? (lang === "km" ? "ព្រឹក" : "Morning") : (lang === "km" ? "ល្ងាច" : "Evening")}</td>
+                                <td>{row.closingQty} {row.unitKm}</td>
+                                <td>{row.refillQty} {row.unitKm}</td>
+                                <td>{row.enteredBy || "-"}</td>
+                              </tr>
+                            ))
+                        ) : (
+                          <tr>
+                            <td colSpan={6}>{lang === "km" ? "មិនទាន់មានរបាយការណ៍សម្រាប់រយៈពេលនេះទេ។" : "No report rows saved for this period yet."}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              </>
+            ) : null}
+
+            {nilaTeaView === "setup" && nilaTeaCanOpenSetup ? (
+              <>
+                <div className={`nila-tea-setup-shell ${isPhoneView ? "nila-tea-setup-shell-phone" : ""}`}>
+                  {!isPhoneView ? (
+                    <aside className="nila-tea-setup-nav">
+                      <div className="nila-tea-setup-nav-head">
+                        <small>{lang === "km" ? "ម៉ឺនុយកំណត់" : "Setup Menu"}</small>
+                        <strong>{lang === "km" ? "កំណត់សម្រាប់ Nila Tea" : "Nila Tea Settings"}</strong>
+                        <span>
+                          {lang === "km"
+                            ? "ជ្រើសផ្នែកមួយ ដើម្បីកំណត់ item, user, តម្លៃលក់ និង bot alert។"
+                            : "Choose one section to manage items, users, sale prices, and alert bot settings."}
+                        </span>
+                      </div>
+                      <div className="nila-tea-setup-nav-list">
+                        <button
+                          className={`nila-tea-setup-nav-btn ${nilaTeaSetupSection === "item" ? "nila-tea-setup-nav-btn-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("item")}
+                          disabled={!nilaTeaCanManageItems}
+                        >
+                          <strong>{lang === "km" ? "មុខទំនិញ" : "Item"}</strong>
+                          <span>{lang === "km" ? "កំណត់បញ្ជីស្តុក" : "Stock item list"}</span>
+                        </button>
+                        <button
+                          className={`nila-tea-setup-nav-btn ${nilaTeaSetupSection === "user" ? "nila-tea-setup-nav-btn-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("user")}
+                          disabled={!nilaTeaCanManageUsers}
+                        >
+                          <strong>{lang === "km" ? "អ្នកប្រើ" : "User"}</strong>
+                          <span>{lang === "km" ? "កំណត់បុគ្គលិក និងសិទ្ធិ" : "Staff and permissions"}</span>
+                        </button>
+                        <button
+                          className={`nila-tea-setup-nav-btn ${nilaTeaSetupSection === "price" ? "nila-tea-setup-nav-btn-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("price")}
+                        >
+                          <strong>{lang === "km" ? "តម្លៃលក់" : "Sale Price"}</strong>
+                          <span>{lang === "km" ? "តម្លៃកែវ និងភេសជ្ជៈ" : "Cup and drink pricing"}</span>
+                        </button>
+                        <button
+                          className={`nila-tea-setup-nav-btn ${nilaTeaSetupSection === "bot" ? "nila-tea-setup-nav-btn-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("bot")}
+                        >
+                          <strong>{lang === "km" ? "បុតអាឡឺត" : "Bot"}</strong>
+                          <span>{lang === "km" ? "តំណ Alert និង Telegram" : "Alert and Telegram links"}</span>
+                        </button>
+                      </div>
+                    </aside>
+                  ) : null}
+
+                  <div className="nila-tea-setup-content">
+                    {isPhoneView ? (
+                      <div className="tabs nila-tea-view-tabs nila-tea-setup-tabs">
+                        <button
+                          className={`tab ${nilaTeaSetupSection === "item" ? "tab-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("item")}
+                          disabled={!nilaTeaCanManageItems}
+                        >
+                          {lang === "km" ? "មុខទំនិញ" : "Item"}
+                        </button>
+                        <button
+                          className={`tab ${nilaTeaSetupSection === "user" ? "tab-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("user")}
+                          disabled={!nilaTeaCanManageUsers}
+                        >
+                          {lang === "km" ? "អ្នកប្រើ" : "User"}
+                        </button>
+                        <button
+                          className={`tab ${nilaTeaSetupSection === "price" ? "tab-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("price")}
+                        >
+                          {lang === "km" ? "តម្លៃលក់" : "Sale Price"}
+                        </button>
+                        <button
+                          className={`tab ${nilaTeaSetupSection === "bot" ? "tab-active" : ""}`}
+                          type="button"
+                          onClick={() => setNilaTeaSetupSection("bot")}
+                        >
+                          {lang === "km" ? "បុតអាឡឺត" : "Bot"}
+                        </button>
+                      </div>
+                    ) : null}
+
+                {nilaTeaSetupSection === "bot" ? (
+                  <article className="nila-tea-card inventory-admin-control-card nila-tea-setup-card">
+                    <div className="nila-tea-card-head">
+                      <div>
+                        <h3>{lang === "km" ? "Telegram Alert Bot" : "Telegram Alert Bot"}</h3>
+                        <p>{lang === "km" ? "Super Admin គ្រប់គ្រង bot ថ្មីសម្រាប់ Nila Tea Stock Alert។" : "Super Admin controls the dedicated Nila Tea Stock Alert bot."}</p>
+                      </div>
+                    </div>
+                    <div className="nila-tea-link-stack nila-tea-setup-stack">
+                      <label className="field">
+                        <span>{lang === "km" ? "Bot Style" : "Bot Style"}</span>
+                        <div className="detail-value">Nila Tea Stock Alert</div>
+                      </label>
+                      <label className="field">
+                        <span>{lang === "km" ? "Beginning Stock Link" : "Beginning Stock Link"}</span>
+                        <input className="input" readOnly value={nilaTeaBeginningLink} />
+                      </label>
+                      <label className="field">
+                        <span>{lang === "km" ? "Ending Stock Link" : "Ending Stock Link"}</span>
+                        <input className="input" readOnly value={nilaTeaEndLink} />
+                      </label>
+                    </div>
+                  </article>
+                ) : null}
+
+                {nilaTeaSetupSection === "price" ? (
+                  <article className="nila-tea-card inventory-admin-control-card nila-tea-setup-card">
+                    <div className="nila-tea-card-head">
+                      <div>
+                        <h3>{lang === "km" ? "តម្លៃលក់" : "Sale Price Setup"}</h3>
+                        <p>{lang === "km" ? "កំណត់តម្លៃកែវលក់សម្រាប់ Nila Tea។" : "Maintain the sale prices used by Nila Tea."}</p>
+                      </div>
+                    </div>
+                    <div className="nila-tea-price-grid nila-tea-setup-price-grid">
+                      {nilaTeaCupPrices.map((row) => (
+                        <label key={`nila-tea-price-${row.id}`} className="field nila-tea-price-field">
+                          <span>{lang === "km" ? row.labelKm : row.labelEn}</span>
+                          <input
+                            className="input"
+                            inputMode="numeric"
+                            value={String(row.price)}
+                            disabled={!nilaTeaCanEditPrices}
+                            onChange={(e) =>
+                              setNilaTeaCupPrices((prev) =>
+                                prev.map((priceRow) =>
+                                  priceRow.id === row.id
+                                    ? { ...priceRow, price: Math.max(0, Number(e.target.value) || 0) }
+                                    : priceRow
+                                )
+                              )
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
+
+                {nilaTeaCanManageItems && nilaTeaSetupSection === "item" ? (
+                <article className="nila-tea-card inventory-admin-control-card nila-tea-setup-card">
+                  <div className="nila-tea-card-head">
+                    <div>
+                      <h3>{lang === "km" ? "កំណត់មុខទំនិញ" : "Item Setup"}</h3>
+                      <p>{lang === "km" ? "បន្ថែម ឬ កែប្រែមុខទំនិញសម្រាប់ cup, tea, coffee និង stock item ផ្សេងៗ។" : "Add and edit the manual Nila Tea item list for cups, tea, coffee, and other stock items."}</p>
+                    </div>
+                  </div>
+                  <div className="form-grid nila-tea-setup-form-grid">
+                    <label className="field">
+                      <span>{lang === "km" ? "លេខកូដ" : "Code"}</span>
+                      <input className="input" value={nilaTeaItemForm.code} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, code: e.target.value }))} placeholder="NT-009" />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ឈ្មោះខ្មែរ" : "Khmer Name"}</span>
+                      <input className="input" value={nilaTeaItemForm.nameKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, nameKm: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ឈ្មោះអង់គ្លេស" : "English Name"}</span>
+                      <input className="input" value={nilaTeaItemForm.nameEn} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, nameEn: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ឯកតា" : "Unit"}</span>
+                      <input className="input" value={nilaTeaItemForm.unitKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, unitKm: e.target.value }))} placeholder={lang === "km" ? "កែវ / កញ្ចប់" : "cup / pack"} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ស្លាករាប់" : "Count Label"}</span>
+                      <input className="input" value={nilaTeaItemForm.packLabelKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, packLabelKm: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "កម្រិតជិតអស់" : "Low Stock Level"}</span>
+                      <input className="input" inputMode="numeric" value={nilaTeaItemForm.reorderLevel} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, reorderLevel: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ចំនួនបំពេញ" : "Target Refill Qty"}</span>
+                      <input className="input" inputMode="numeric" value={nilaTeaItemForm.targetRefillQty} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, targetRefillQty: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "រូបមុខទំនិញ" : "Item Photo"}</span>
+                      <input
+                        key={`nila-item-photo-${nilaTeaItemPhotoFileKey}`}
+                        className="input"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => void onNilaTeaSetupItemPhotoFile(e)}
+                      />
+                      {nilaTeaItemForm.photo ? (
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={nilaTeaItemForm.photo}
+                          alt="Nila Tea item"
+                          className="inventory-quickout-photo-preview"
+                          style={{ marginTop: 8, maxWidth: 140, maxHeight: 140 }}
+                        />
+                      ) : (
+                        <small className="tiny">{lang === "km" ? "បង្ហោះរូបភាពមុខទំនិញ" : "Upload item photo"}</small>
+                      )}
+                    </label>
+                  </div>
+                  <div className="row-actions nila-tea-actions nila-tea-setup-actions">
+                    <button className="tab" type="button" onClick={resetNilaTeaItemForm}>
+                      {editingNilaTeaItemId ? (lang === "km" ? "បោះបង់កែ" : "Cancel Edit") : (lang === "km" ? "សម្អាត" : "Reset")}
+                    </button>
+                    <button className="btn-primary" type="button" onClick={saveNilaTeaSetupItem}>
+                      {editingNilaTeaItemId ? (lang === "km" ? "អាប់ដេតមុខទំនិញ" : "Update Item") : (lang === "km" ? "បន្ថែមមុខទំនិញ" : "Add Item")}
+                    </button>
+                  </div>
+                  {isPhoneView ? (
+                    <div className="nila-tea-setup-mobile-list">
+                      {nilaTeaItems.length ? (
+                        nilaTeaItems.map((item) => (
+                          <article key={`nila-setup-item-mobile-${item.id}`} className="nila-tea-setup-mobile-card">
+                            <div className="nila-tea-setup-mobile-head">
+                              <div>
+                                <strong>{lang === "km" ? item.nameKm : item.nameEn}</strong>
+                                <span>{item.code}</span>
+                              </div>
+                              <img loading="lazy" decoding="async" src={item.photo} alt={item.nameEn} className="nila-tea-setup-mobile-photo" />
+                            </div>
+                            <div className="nila-tea-setup-mobile-meta">
+                              <div><small>{lang === "km" ? "ឯកតា" : "Unit"}</small><b>{item.unitKm}</b></div>
+                              <div><small>{lang === "km" ? "ជិតអស់" : "Low"}</small><b>{item.reorderLevel}</b></div>
+                              <div><small>{lang === "km" ? "បំពេញ" : "Refill"}</small><b>{item.targetRefillQty}</b></div>
+                            </div>
+                            <div className="row-actions nila-tea-actions nila-tea-setup-mobile-actions">
+                              <button className="tab" type="button" onClick={() => startEditNilaTeaItem(item)}>
+                                {lang === "km" ? "កែ" : "Edit"}
+                              </button>
+                              <button className="btn-danger" type="button" onClick={() => deleteNilaTeaItem(item.id)}>
+                                {lang === "km" ? "លុប" : "Delete"}
+                              </button>
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="nila-tea-alert-ok">{lang === "km" ? "មិនទាន់មានមុខទំនិញសម្រាប់ Nila Tea ទេ។" : "No Nila Tea items yet."}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-wrap nila-tea-setup-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{lang === "km" ? "លេខកូដ" : "Code"}</th>
+                            <th>{lang === "km" ? "មុខទំនិញ" : "Item"}</th>
+                            <th>{lang === "km" ? "ឯកតា" : "Unit"}</th>
+                            <th>{lang === "km" ? "ជិតអស់" : "Low"}</th>
+                            <th>{lang === "km" ? "បំពេញ" : "Refill"}</th>
+                            <th>{lang === "km" ? "កែ" : "Edit"}</th>
+                            <th>{lang === "km" ? "លុប" : "Delete"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {nilaTeaItems.length ? (
+                            nilaTeaItems.map((item) => (
+                              <tr key={`nila-setup-item-${item.id}`}>
+                                <td><strong>{item.code}</strong></td>
+                                <td>{lang === "km" ? item.nameKm : item.nameEn}</td>
+                                <td>{item.unitKm}</td>
+                                <td>{item.reorderLevel}</td>
+                                <td>{item.targetRefillQty}</td>
+                                <td><button className="tab" type="button" onClick={() => startEditNilaTeaItem(item)}>{lang === "km" ? "កែ" : "Edit"}</button></td>
+                                <td><button className="btn-danger" type="button" onClick={() => deleteNilaTeaItem(item.id)}>X</button></td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7}>{lang === "km" ? "មិនទាន់មានមុខទំនិញសម្រាប់ Nila Tea ទេ។" : "No Nila Tea items yet."}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </article>
+                ) : null}
+
+                {nilaTeaCanManageUsers && nilaTeaSetupSection === "user" ? (
+                <article className="nila-tea-card inventory-admin-control-card nila-tea-setup-card">
+                  <div className="nila-tea-card-head">
+                    <div>
+                      <h3>{lang === "km" ? "កំណត់អ្នកប្រើ" : "User Setup"}</h3>
+                      <p>{lang === "km" ? "កំណត់ឈ្មោះបុគ្គលិក តួនាទី និងសិទ្ធិថា​អ្នកណាអាចមើល overview, report ឬ setup បាន។" : "Manage staff names, role, and who can open overview, reports, or setup in Nila Tea."}</p>
+                    </div>
+                  </div>
+                  <div className="form-grid nila-tea-setup-form-grid">
+                    <label className="field">
+                      <span>{lang === "km" ? "ឈ្មោះបុគ្គលិក" : "Staff Name"}</span>
+                      <input className="input" value={nilaTeaUserForm.fullName} onChange={(e) => setNilaTeaUserForm((prev) => ({ ...prev, fullName: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "Username" : "Username"}</span>
+                      <input className="input" value={nilaTeaUserForm.username} onChange={(e) => setNilaTeaUserForm((prev) => ({ ...prev, username: e.target.value.toLowerCase() }))} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "តួនាទី" : "Role"}</span>
+                      <select
+                        className="input"
+                        value={nilaTeaUserForm.role}
+                        onChange={(e) => {
+                          const nextRole = e.target.value as NilaTeaUserRole;
+                          setNilaTeaUserForm((prev) => ({
+                            ...prev,
+                            role: nextRole,
+                            permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS[nextRole] },
+                          }));
+                        }}
+                      >
+                        <option value="staff">{lang === "km" ? "បុគ្គលិក" : "Staff"}</option>
+                        <option value="manager">{lang === "km" ? "អ្នកគ្រប់គ្រង" : "Manager"}</option>
+                        <option value="super_admin">{lang === "km" ? "អេដមីនធំ" : "Super Admin"}</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ស្ថានភាព" : "Status"}</span>
+                      <select
+                        className="input"
+                        value={nilaTeaUserForm.active ? "active" : "inactive"}
+                        onChange={(e) => setNilaTeaUserForm((prev) => ({ ...prev, active: e.target.value === "active" }))}
+                      >
+                        <option value="active">{lang === "km" ? "ប្រើបាន" : "Active"}</option>
+                        <option value="inactive">{lang === "km" ? "បិទ" : "Inactive"}</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="form-grid nila-tea-setup-form-grid nila-tea-user-permissions-grid">
+                    {[
+                      { key: "canOverview", labelKm: "មើល Overview", labelEn: "Overview" },
+                      { key: "canStock", labelKm: "មើល Stock", labelEn: "Stock" },
+                      { key: "canReport", labelKm: "មើល Report", labelEn: "Report" },
+                      { key: "canSetup", labelKm: "ចូល Setup", labelEn: "Setup" },
+                      { key: "canEditPrices", labelKm: "កែតម្លៃលក់", labelEn: "Edit Prices" },
+                      { key: "canManageItems", labelKm: "កែ Items", labelEn: "Manage Items" },
+                      { key: "canManageUsers", labelKm: "កែ Users", labelEn: "Manage Users" },
+                    ].map((perm) => (
+                      <label key={`nila-user-perm-${perm.key}`} className="field" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(nilaTeaUserForm.permissions[perm.key as keyof NilaTeaUserPermissions])}
+                          onChange={(e) =>
+                            setNilaTeaUserForm((prev) => ({
+                              ...prev,
+                              permissions: {
+                                ...prev.permissions,
+                                [perm.key]: e.target.checked,
+                              },
+                            }))
+                          }
+                        />
+                        <span style={{ marginBottom: 0 }}>{lang === "km" ? perm.labelKm : perm.labelEn}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="row-actions nila-tea-actions nila-tea-setup-actions">
+                    <button className="tab" type="button" onClick={resetNilaTeaUserForm}>
+                      {editingNilaTeaUserId ? (lang === "km" ? "បោះបង់កែ" : "Cancel Edit") : (lang === "km" ? "សម្អាត" : "Reset")}
+                    </button>
+                    <button className="btn-primary" type="button" onClick={saveNilaTeaSetupUser}>
+                      {editingNilaTeaUserId ? (lang === "km" ? "អាប់ដេតអ្នកប្រើ" : "Update User") : (lang === "km" ? "បន្ថែមអ្នកប្រើ" : "Add User")}
+                    </button>
+                  </div>
+                  {isPhoneView ? (
+                    <div className="nila-tea-setup-mobile-list">
+                      {nilaTeaUsers.length ? (
+                        nilaTeaUsers.map((user) => (
+                          <article key={`nila-setup-user-mobile-${user.id}`} className="nila-tea-setup-mobile-card">
+                            <div className="nila-tea-setup-mobile-head">
+                              <div>
+                                <strong>{user.fullName}</strong>
+                                <span>@{user.username}</span>
+                              </div>
+                              <div className={`nila-tea-setup-mobile-status ${user.active ? "is-active" : "is-inactive"}`}>
+                                {user.active ? (lang === "km" ? "ប្រើបាន" : "Active") : (lang === "km" ? "បិទ" : "Inactive")}
+                              </div>
+                            </div>
+                            <div className="nila-tea-setup-mobile-meta">
+                              <div><small>{lang === "km" ? "តួនាទី" : "Role"}</small><b>{nilaTeaRoleLabel(user.role)}</b></div>
+                              <div><small>{lang === "km" ? "សិទ្ធិ" : "Permissions"}</small><b>{[
+                                user.permissions.canOverview ? "Overview" : "",
+                                user.permissions.canReport ? "Report" : "",
+                                user.permissions.canSetup ? "Setup" : "",
+                              ].filter(Boolean).join(", ") || (lang === "km" ? "ស្តុកតែប៉ុណ្ណោះ" : "Stock only")}</b></div>
+                            </div>
+                            <div className="row-actions nila-tea-actions nila-tea-setup-mobile-actions">
+                              <button className="tab" type="button" onClick={() => startEditNilaTeaUser(user)}>
+                                {lang === "km" ? "កែ" : "Edit"}
+                              </button>
+                              <button className="btn-danger" type="button" onClick={() => deleteNilaTeaUser(user.id)}>
+                                {lang === "km" ? "លុប" : "Delete"}
+                              </button>
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="nila-tea-alert-ok">{lang === "km" ? "មិនទាន់មានអ្នកប្រើ Nila Tea ទេ។" : "No Nila Tea users yet."}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-wrap nila-tea-setup-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{lang === "km" ? "ឈ្មោះ" : "Name"}</th>
+                            <th>{lang === "km" ? "Username" : "Username"}</th>
+                            <th>{lang === "km" ? "តួនាទី" : "Role"}</th>
+                            <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
+                            <th>{lang === "km" ? "សិទ្ធិ" : "Permissions"}</th>
+                            <th>{lang === "km" ? "កែ" : "Edit"}</th>
+                            <th>{lang === "km" ? "លុប" : "Delete"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {nilaTeaUsers.length ? (
+                            nilaTeaUsers.map((user) => (
+                              <tr key={`nila-setup-user-${user.id}`}>
+                                <td><strong>{user.fullName}</strong></td>
+                                <td>{user.username}</td>
+                                <td>{nilaTeaRoleLabel(user.role)}</td>
+                                <td>{user.active ? (lang === "km" ? "ប្រើបាន" : "Active") : (lang === "km" ? "បិទ" : "Inactive")}</td>
+                                <td>
+                                  {[
+                                    user.permissions.canOverview ? "Overview" : "",
+                                    user.permissions.canReport ? "Report" : "",
+                                    user.permissions.canSetup ? "Setup" : "",
+                                  ].filter(Boolean).join(", ") || (lang === "km" ? "ស្តុកតែប៉ុណ្ណោះ" : "Stock only")}
+                                </td>
+                                <td><button className="tab" type="button" onClick={() => startEditNilaTeaUser(user)}>{lang === "km" ? "កែ" : "Edit"}</button></td>
+                                <td><button className="btn-danger" type="button" onClick={() => deleteNilaTeaUser(user.id)}>X</button></td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7}>{lang === "km" ? "មិនទាន់មានអ្នកប្រើ Nila Tea ទេ។" : "No Nila Tea users yet."}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </article>
+                ) : null}
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {nilaTeaCurrentModalItem ? (
+              <div className="modal-backdrop" onClick={() => setNilaTeaEntryModalItemId(null)}>
+                <section className="panel modal-panel nila-tea-entry-modal" onClick={(e) => e.stopPropagation()}>
+                  <div className="panel-row">
+                    <h2>{nilaTeaUseKhmer ? "កត់ត្រាមុខទំនិញ" : "Daily Item Report"}</h2>
+                    <button className="tab" onClick={() => setNilaTeaEntryModalItemId(null)}>{t.close}</button>
+                  </div>
+                  <div className="nila-tea-entry-modal-head">
+                    <img loading="lazy" decoding="async" src={nilaTeaCurrentModalItem.photo} alt={nilaTeaCurrentModalItem.nameEn} className="nila-tea-entry-modal-photo" />
+                    <div className="nila-tea-entry-modal-summary">
+                      <strong>{nilaTeaUseKhmer ? nilaTeaCurrentModalItem.nameKm : nilaTeaCurrentModalItem.nameEn}</strong>
+                      <div>{nilaTeaCurrentModalItem.code}</div>
+                      <div>{nilaTeaStockFlow === "begin" ? (nilaTeaUseKhmer ? "កត់ស្តុកព្រឹក" : "Morning / Begin Stock") : (nilaTeaUseKhmer ? "កត់ស្តុកល្ងាច" : "Evening / Ending Stock")}</div>
+                    </div>
+                  </div>
+                  <div className="form-grid nila-tea-entry-modal-grid">
+                    <label className="field">
+                      <span>{nilaTeaStockFlow === "begin" ? (nilaTeaUseKhmer ? "ចំនួនស្តុកព្រឹក" : "Begin Stock Qty") : (nilaTeaUseKhmer ? "ចំនួននៅសល់" : "Stock Balance")}</span>
+                      <input
+                        className="input"
+                        inputMode="numeric"
+                        value={nilaTeaDraft[nilaTeaCurrentModalItem.id]?.closingQty || ""}
+                        onChange={(e) =>
+                          setNilaTeaDraft((prev) => ({
+                            ...prev,
+                            [nilaTeaCurrentModalItem.id]: {
+                              ...(prev[nilaTeaCurrentModalItem.id] || { closingQty: "", refillQty: String(nilaTeaCurrentModalItem.targetRefillQty), note: "", photo: "" }),
+                              closingQty: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    {nilaTeaRoleView !== "staff" ? (
+                      <>
+                        <label className="field">
+                          <span>{nilaTeaStockFlow === "begin" ? (nilaTeaUseKhmer ? "ចំនួនបញ្ចូលព្រឹក" : "IN Morning") : (nilaTeaUseKhmer ? "ត្រូវបំពេញស្អែក" : "IN Tomorrow")}</span>
+                          <input
+                            className="input"
+                            inputMode="numeric"
+                            value={nilaTeaDraft[nilaTeaCurrentModalItem.id]?.refillQty || ""}
+                            onChange={(e) =>
+                              setNilaTeaDraft((prev) => ({
+                                ...prev,
+                                [nilaTeaCurrentModalItem.id]: {
+                                  ...(prev[nilaTeaCurrentModalItem.id] || { closingQty: "", refillQty: String(nilaTeaCurrentModalItem.targetRefillQty), note: "", photo: "" }),
+                                  refillQty: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="field field-wide">
+                          <span>{nilaTeaUseKhmer ? "ចំណាំ" : "Note"}</span>
+                          <input
+                            className="input"
+                            value={nilaTeaDraft[nilaTeaCurrentModalItem.id]?.note || ""}
+                            onChange={(e) =>
+                              setNilaTeaDraft((prev) => ({
+                                ...prev,
+                                [nilaTeaCurrentModalItem.id]: {
+                                  ...(prev[nilaTeaCurrentModalItem.id] || { closingQty: "", refillQty: String(nilaTeaCurrentModalItem.targetRefillQty), note: "", photo: "" }),
+                                  note: e.target.value,
+                                },
+                              }))
+                            }
+                            placeholder={nilaTeaUseKhmer ? "កំណត់ចំណាំប្រចាំថ្ងៃ" : "Daily report note"}
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    <label className="field field-wide">
+                      <span>{nilaTeaUseKhmer ? "រូបថតប្រចាំថ្ងៃ" : "Daily Photo"}</span>
+                      <input
+                        key={`nila-tea-photo-${nilaTeaPhotoFileKey}`}
+                        type="file"
+                        accept="image/*"
+                        className="input"
+                        onChange={(e) => void onNilaTeaReportPhotoFile(e)}
+                      />
+                      {nilaTeaDraft[nilaTeaCurrentModalItem.id]?.photo ? (
+                        <img loading="lazy" decoding="async" src={nilaTeaDraft[nilaTeaCurrentModalItem.id]?.photo} alt="daily proof" className="inventory-quickout-photo-preview" />
+                      ) : (
+                        <small className="tiny">{nilaTeaUseKhmer ? "ភ្ជាប់រូបថតសម្រាប់កំណត់ត្រាប្រចាំថ្ងៃ" : "Attach a photo for the daily report."}</small>
+                      )}
+                    </label>
+                  </div>
+                  <div className="row-actions nila-tea-actions">
+                    <button className="tab" onClick={resetNilaTeaDraft}>{nilaTeaUseKhmer ? "សម្អាត" : "Reset"}</button>
+                    <button className="btn-primary" onClick={() => saveNilaTeaSingleItemReport(nilaTeaCurrentModalItem.id)}>
+                      {nilaTeaUseKhmer ? "រក្សាទុក" : "Save Daily Report"}
+                    </button>
+                  </div>
+                </section>
+              </div>
+            ) : null}
           </section>
         )}
 
