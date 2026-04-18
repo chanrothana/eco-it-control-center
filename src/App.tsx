@@ -7632,6 +7632,13 @@ export default function App() {
     const mode = String(params.get("mode") || "").toLowerCase();
     return mode === "maintenance";
   }, []);
+  const nilaTeaLoginMode = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    const mode = String(params.get("mode") || "").toLowerCase();
+    const workspace = String(params.get("workspace") || "").toLowerCase();
+    return mode === "staff" || workspace === "nila_tea";
+  }, []);
   const nilaTeaStaffMode = useMemo(() => {
     if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
@@ -7970,6 +7977,8 @@ export default function App() {
   const [nilaTeaPhotoFileKey, setNilaTeaPhotoFileKey] = useState(0);
   const [nilaTeaMessage, setNilaTeaMessage] = useState("");
   const [nilaTeaSetupSection, setNilaTeaSetupSection] = useState<"bot" | "price" | "item" | "user">("item");
+  const [nilaTeaItemSetupView, setNilaTeaItemSetupView] = useState<"gallery" | "register">("gallery");
+  const [nilaTeaItemEditModalOpen, setNilaTeaItemEditModalOpen] = useState(false);
   const [editingNilaTeaItemId, setEditingNilaTeaItemId] = useState<number | null>(null);
   const [nilaTeaItemPhotoFileKey, setNilaTeaItemPhotoFileKey] = useState(0);
   const [nilaTeaItemForm, setNilaTeaItemForm] = useState({
@@ -8505,6 +8514,7 @@ export default function App() {
   }, [lang, nilaTeaLatestSaveAt, nilaTeaReportRange.label, nilaTeaStockFlow, nilaTeaUseKhmer, nilaTeaView]);
   const resetNilaTeaItemForm = useCallback(() => {
     setEditingNilaTeaItemId(null);
+    setNilaTeaItemEditModalOpen(false);
     setNilaTeaItemPhotoFileKey((prev) => prev + 1);
     setNilaTeaItemForm({
       code: "",
@@ -8546,6 +8556,7 @@ export default function App() {
       return next.sort((a, b) => a.code.localeCompare(b.code));
     });
     setNilaTeaMessage(nilaTeaUseKhmer ? "បានរក្សាទុកមុខទំនិញ Nila Tea រួចរាល់។" : "Nila Tea item saved.");
+    setNilaTeaItemSetupView("gallery");
     resetNilaTeaItemForm();
   }, [editingNilaTeaItemId, nilaTeaItemForm, nilaTeaUseKhmer, resetNilaTeaItemForm]);
   const onNilaTeaSetupItemPhotoFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -8557,6 +8568,7 @@ export default function App() {
   }, []);
   const startEditNilaTeaItem = useCallback((item: NilaTeaStockItem) => {
     setEditingNilaTeaItemId(item.id);
+    setNilaTeaItemEditModalOpen(true);
     setNilaTeaItemPhotoFileKey((prev) => prev + 1);
     setNilaTeaItemForm({
       code: item.code,
@@ -8577,6 +8589,10 @@ export default function App() {
     if (editingNilaTeaItemId === itemId) resetNilaTeaItemForm();
     setNilaTeaMessage(nilaTeaUseKhmer ? "បានលុបមុខទំនិញ Nila Tea រួចរាល់។" : "Nila Tea item deleted.");
   }, [editingNilaTeaItemId, nilaTeaUseKhmer, resetNilaTeaItemForm]);
+  const openNilaTeaItemRegisterPage = useCallback(() => {
+    resetNilaTeaItemForm();
+    setNilaTeaItemSetupView("register");
+  }, [resetNilaTeaItemForm]);
   const resetNilaTeaUserForm = useCallback(() => {
     setEditingNilaTeaUserId(null);
     setNilaTeaUserForm({
@@ -8627,6 +8643,95 @@ export default function App() {
     if (editingNilaTeaUserId === userId) resetNilaTeaUserForm();
     setNilaTeaMessage(nilaTeaUseKhmer ? "បានលុបអ្នកប្រើ Nila Tea រួចរាល់។" : "Nila Tea user deleted.");
   }, [editingNilaTeaUserId, nilaTeaUseKhmer, resetNilaTeaUserForm]);
+  const renderNilaTeaItemEditor = useCallback((mode: "page" | "modal") => (
+    <article className={`nila-tea-card inventory-admin-control-card nila-tea-setup-card ${mode === "modal" ? "nila-tea-item-editor-modal-card" : ""}`}>
+      <div className="nila-tea-card-head">
+        <div>
+          <h3>
+            {editingNilaTeaItemId
+              ? (lang === "km" ? "កែមុខទំនិញ" : "Edit Item")
+              : (lang === "km" ? "ចុះបញ្ជីមុខទំនិញ" : "Register Item")}
+          </h3>
+          <p>
+            {lang === "km"
+              ? "បំពេញព័ត៌មានមុខទំនិញ រួចរក្សាទុកចូលក្នុងបញ្ជី Nila Tea។"
+              : "Fill the item information and save it into the Nila Tea stock list."}
+          </p>
+        </div>
+      </div>
+      <div className="form-grid nila-tea-setup-form-grid">
+        <label className="field">
+          <span>{lang === "km" ? "លេខកូដ" : "Code"}</span>
+          <input className="input" value={nilaTeaItemForm.code} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, code: e.target.value }))} placeholder="NT-009" />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "ឈ្មោះខ្មែរ" : "Khmer Name"}</span>
+          <input className="input" value={nilaTeaItemForm.nameKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, nameKm: e.target.value }))} />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "ឈ្មោះអង់គ្លេស" : "English Name"}</span>
+          <input className="input" value={nilaTeaItemForm.nameEn} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, nameEn: e.target.value }))} />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "ឯកតា" : "Unit"}</span>
+          <input className="input" value={nilaTeaItemForm.unitKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, unitKm: e.target.value }))} placeholder={lang === "km" ? "កែវ / កញ្ចប់" : "cup / pack"} />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "ស្លាករាប់" : "Count Label"}</span>
+          <input className="input" value={nilaTeaItemForm.packLabelKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, packLabelKm: e.target.value }))} />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "កម្រិតជិតអស់" : "Low Stock Level"}</span>
+          <input className="input" inputMode="numeric" value={nilaTeaItemForm.reorderLevel} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, reorderLevel: e.target.value }))} />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "ចំនួនបំពេញ" : "Target Refill Qty"}</span>
+          <input className="input" inputMode="numeric" value={nilaTeaItemForm.targetRefillQty} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, targetRefillQty: e.target.value }))} />
+        </label>
+        <label className="field">
+          <span>{lang === "km" ? "រូបមុខទំនិញ" : "Item Photo"}</span>
+          <input
+            key={`nila-item-photo-${nilaTeaItemPhotoFileKey}`}
+            className="input"
+            type="file"
+            accept="image/*"
+            onChange={(e) => void onNilaTeaSetupItemPhotoFile(e)}
+          />
+          {nilaTeaItemForm.photo ? (
+            <img
+              loading="lazy"
+              decoding="async"
+              src={nilaTeaItemForm.photo}
+              alt="Nila Tea item"
+              className="inventory-quickout-photo-preview"
+              style={{ marginTop: 8, maxWidth: 140, maxHeight: 140 }}
+            />
+          ) : (
+            <small className="tiny">{lang === "km" ? "បង្ហោះរូបភាពមុខទំនិញ" : "Upload item photo"}</small>
+          )}
+        </label>
+      </div>
+      <div className="row-actions nila-tea-actions nila-tea-setup-actions">
+        <button
+          className="tab"
+          type="button"
+          onClick={() => {
+            resetNilaTeaItemForm();
+            if (mode === "page") setNilaTeaItemSetupView("gallery");
+          }}
+        >
+          {mode === "modal"
+            ? (lang === "km" ? "បិទ" : "Close")
+            : editingNilaTeaItemId
+            ? (lang === "km" ? "បោះបង់កែ" : "Cancel Edit")
+            : (lang === "km" ? "ត្រឡប់" : "Back")}
+        </button>
+        <button className="btn-primary" type="button" onClick={saveNilaTeaSetupItem}>
+          {editingNilaTeaItemId ? (lang === "km" ? "អាប់ដេតមុខទំនិញ" : "Update Item") : (lang === "km" ? "បន្ថែមមុខទំនិញ" : "Add Item")}
+        </button>
+      </div>
+    </article>
+  ), [editingNilaTeaItemId, lang, nilaTeaItemForm.code, nilaTeaItemForm.nameEn, nilaTeaItemForm.nameKm, nilaTeaItemForm.packLabelKm, nilaTeaItemForm.photo, nilaTeaItemForm.reorderLevel, nilaTeaItemForm.targetRefillQty, nilaTeaItemForm.unitKm, nilaTeaItemPhotoFileKey, onNilaTeaSetupItemPhotoFile, resetNilaTeaItemForm, saveNilaTeaSetupItem, nilaTeaUseKhmer]);
   const nilaTeaRoleLabel = useCallback(
     (role: NilaTeaUserRole) =>
       role === "super_admin"
@@ -33876,8 +33981,8 @@ export default function App() {
         <section className="app-card login-page login-page-sunset">
           <section className="panel login-panel login-panel-sunset">
             <img loading="eager" fetchPriority="high" decoding="async" className="login-logo-sunset"
-              src={ECO_LOGO_URL}
-              alt="ECO International School"
+              src={nilaTeaLoginMode ? NILA_TEA_LOGO_URL : ECO_LOGO_URL}
+              alt={nilaTeaLoginMode ? "Nila Tea" : "ECO International School"}
               onError={(e) => {
                 const img = e.currentTarget;
                 if (!img.dataset.fallback) {
@@ -33888,10 +33993,12 @@ export default function App() {
                 img.style.display = "none";
               }}
             />
-            <p className="login-app-name-sunset">IT and Maintenance Controll</p>
+            <p className="login-app-name-sunset">{nilaTeaLoginMode ? "Nila Tea Stock Center" : "IT and Maintenance Controll"}</p>
             <h2 className="login-title-sunset">
               {nilaTeaStaffMode
                 ? (lang === "km" ? "ចូលប្រើតំណបុគ្គលិក Nila Tea" : "Nila Tea staff login")
+                : nilaTeaLoginMode
+                ? (lang === "km" ? "ចូលប្រើគណនី Nila Tea" : "Login to Nila Tea workspace")
                 : maintenanceQuickMode
                 ? (lang === "km" ? "ចូលប្រើតំណបុគ្គលិកថែទាំ" : "Maintenance staff login")
                 : (lang === "km" ? "ចូលប្រើគណនីរបស់អ្នក" : "Login to your account")}
@@ -33901,6 +34008,12 @@ export default function App() {
                 {lang === "km"
                   ? "តំណនេះសម្រាប់បុគ្គលិក Nila Tea ប៉ុណ្ណោះ ហើយនឹងបើកទៅ workspace របស់ Nila Tea ដោយផ្ទាល់។"
                   : "This link is for Nila Tea staff only and opens directly into the Nila Tea workspace."}
+              </p>
+            ) : nilaTeaLoginMode ? (
+              <p className="tiny" style={{ textAlign: "center", marginTop: -2, marginBottom: 14 }}>
+                {lang === "km"
+                  ? "សូមចូលប្រើជាមុនសិន បន្ទាប់មកប្រព័ន្ធនឹងបើកទៅ Nila Tea workspace ដោយស្វ័យប្រវត្តិ។"
+                  : "Please log in first, then the system will continue directly into the Nila Tea workspace."}
               </p>
             ) : maintenanceQuickMode ? (
               <p className="tiny" style={{ textAlign: "center", marginTop: -2, marginBottom: 14 }}>
@@ -48971,88 +49084,54 @@ export default function App() {
                 <article className="nila-tea-card inventory-admin-control-card nila-tea-setup-card">
                   <div className="nila-tea-card-head">
                     <div>
-                      <h3>{lang === "km" ? "កំណត់មុខទំនិញ" : "Item Setup"}</h3>
-                      <p>{lang === "km" ? "បន្ថែម ឬ កែប្រែមុខទំនិញសម្រាប់ cup, tea, coffee និង stock item ផ្សេងៗ។" : "Add and edit the manual Nila Tea item list for cups, tea, coffee, and other stock items."}</p>
+                      <h3>{lang === "km" ? "បញ្ជីមុខទំនិញ" : "Item Register"}</h3>
+                      <p>{lang === "km" ? "មើលបញ្ជី item ជា gallery ជាមុនសិន ហើយចូលទំព័រចុះបញ្ជីនៅពេលចង់បន្ថែម item ថ្មី។" : "See registered items in a gallery first, then open the register page when you want to add a new item."}</p>
                     </div>
                   </div>
-                  <div className="form-grid nila-tea-setup-form-grid">
-                    <label className="field">
-                      <span>{lang === "km" ? "លេខកូដ" : "Code"}</span>
-                      <input className="input" value={nilaTeaItemForm.code} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, code: e.target.value }))} placeholder="NT-009" />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ឈ្មោះខ្មែរ" : "Khmer Name"}</span>
-                      <input className="input" value={nilaTeaItemForm.nameKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, nameKm: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ឈ្មោះអង់គ្លេស" : "English Name"}</span>
-                      <input className="input" value={nilaTeaItemForm.nameEn} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, nameEn: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ឯកតា" : "Unit"}</span>
-                      <input className="input" value={nilaTeaItemForm.unitKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, unitKm: e.target.value }))} placeholder={lang === "km" ? "កែវ / កញ្ចប់" : "cup / pack"} />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ស្លាករាប់" : "Count Label"}</span>
-                      <input className="input" value={nilaTeaItemForm.packLabelKm} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, packLabelKm: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "កម្រិតជិតអស់" : "Low Stock Level"}</span>
-                      <input className="input" inputMode="numeric" value={nilaTeaItemForm.reorderLevel} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, reorderLevel: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ចំនួនបំពេញ" : "Target Refill Qty"}</span>
-                      <input className="input" inputMode="numeric" value={nilaTeaItemForm.targetRefillQty} onChange={(e) => setNilaTeaItemForm((prev) => ({ ...prev, targetRefillQty: e.target.value }))} />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "រូបមុខទំនិញ" : "Item Photo"}</span>
-                      <input
-                        key={`nila-item-photo-${nilaTeaItemPhotoFileKey}`}
-                        className="input"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => void onNilaTeaSetupItemPhotoFile(e)}
-                      />
-                      {nilaTeaItemForm.photo ? (
-                        <img
-                          loading="lazy"
-                          decoding="async"
-                          src={nilaTeaItemForm.photo}
-                          alt="Nila Tea item"
-                          className="inventory-quickout-photo-preview"
-                          style={{ marginTop: 8, maxWidth: 140, maxHeight: 140 }}
-                        />
-                      ) : (
-                        <small className="tiny">{lang === "km" ? "បង្ហោះរូបភាពមុខទំនិញ" : "Upload item photo"}</small>
-                      )}
-                    </label>
+                  <div className="nila-tea-item-setup-toolbar">
+                    <div className="tabs nila-tea-view-tabs nila-tea-item-setup-tabs">
+                      <button
+                        className={`tab ${nilaTeaItemSetupView === "gallery" ? "tab-active" : ""}`}
+                        type="button"
+                        onClick={() => {
+                          resetNilaTeaItemForm();
+                          setNilaTeaItemSetupView("gallery");
+                        }}
+                      >
+                        {lang === "km" ? "បញ្ជីរូបភាព" : "Gallery"}
+                      </button>
+                      <button
+                        className={`tab ${nilaTeaItemSetupView === "register" ? "tab-active" : ""}`}
+                        type="button"
+                        onClick={openNilaTeaItemRegisterPage}
+                      >
+                        {lang === "km" ? "ចុះបញ្ជី" : "Register Item"}
+                      </button>
+                    </div>
+                    {nilaTeaItemSetupView === "gallery" ? (
+                      <button className="btn-primary" type="button" onClick={openNilaTeaItemRegisterPage}>
+                        {lang === "km" ? "បន្ថែមមុខទំនិញ" : "Add Item"}
+                      </button>
+                    ) : null}
                   </div>
-                  <div className="row-actions nila-tea-actions nila-tea-setup-actions">
-                    <button className="tab" type="button" onClick={resetNilaTeaItemForm}>
-                      {editingNilaTeaItemId ? (lang === "km" ? "បោះបង់កែ" : "Cancel Edit") : (lang === "km" ? "សម្អាត" : "Reset")}
-                    </button>
-                    <button className="btn-primary" type="button" onClick={saveNilaTeaSetupItem}>
-                      {editingNilaTeaItemId ? (lang === "km" ? "អាប់ដេតមុខទំនិញ" : "Update Item") : (lang === "km" ? "បន្ថែមមុខទំនិញ" : "Add Item")}
-                    </button>
-                  </div>
-                  {isPhoneView ? (
-                    <div className="nila-tea-setup-mobile-list">
+                  {nilaTeaItemSetupView === "register" ? renderNilaTeaItemEditor("page") : null}
+                  {nilaTeaItemSetupView === "gallery" ? (
+                    <div className="nila-tea-item-register-gallery">
                       {nilaTeaItems.length ? (
                         nilaTeaItems.map((item) => (
-                          <article key={`nila-setup-item-mobile-${item.id}`} className="nila-tea-setup-mobile-card">
-                            <div className="nila-tea-setup-mobile-head">
-                              <div>
+                          <article key={`nila-item-gallery-${item.id}`} className="nila-tea-item-register-card">
+                            <div className="nila-tea-item-register-main">
+                              <div className="nila-tea-item-register-photo-wrap">
+                                <img loading="lazy" decoding="async" src={item.photo} alt={item.nameEn} className="nila-tea-item-register-photo" />
+                              </div>
+                              <div className="nila-tea-item-register-meta">
                                 <strong>{lang === "km" ? item.nameKm : item.nameEn}</strong>
                                 <span>{item.code}</span>
+                                <span>{lang === "km" ? "ឯកតា" : "Unit"}: <b>{item.unitKm}</b></span>
+                                <span>{lang === "km" ? "កម្រិតជិតអស់" : "Low"}: <b>{item.reorderLevel}</b></span>
                               </div>
-                              <img loading="lazy" decoding="async" src={item.photo} alt={item.nameEn} className="nila-tea-setup-mobile-photo" />
                             </div>
-                            <div className="nila-tea-setup-mobile-meta">
-                              <div><small>{lang === "km" ? "ឯកតា" : "Unit"}</small><b>{item.unitKm}</b></div>
-                              <div><small>{lang === "km" ? "ជិតអស់" : "Low"}</small><b>{item.reorderLevel}</b></div>
-                              <div><small>{lang === "km" ? "បំពេញ" : "Refill"}</small><b>{item.targetRefillQty}</b></div>
-                            </div>
-                            <div className="row-actions nila-tea-actions nila-tea-setup-mobile-actions">
+                            <div className="row-actions nila-tea-actions nila-tea-item-register-actions">
                               <button className="tab" type="button" onClick={() => startEditNilaTeaItem(item)}>
                                 {lang === "km" ? "កែ" : "Edit"}
                               </button>
@@ -49066,42 +49145,7 @@ export default function App() {
                         <div className="nila-tea-alert-ok">{lang === "km" ? "មិនទាន់មានមុខទំនិញសម្រាប់ Nila Tea ទេ។" : "No Nila Tea items yet."}</div>
                       )}
                     </div>
-                  ) : (
-                    <div className="table-wrap nila-tea-setup-table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>{lang === "km" ? "លេខកូដ" : "Code"}</th>
-                            <th>{lang === "km" ? "មុខទំនិញ" : "Item"}</th>
-                            <th>{lang === "km" ? "ឯកតា" : "Unit"}</th>
-                            <th>{lang === "km" ? "ជិតអស់" : "Low"}</th>
-                            <th>{lang === "km" ? "បំពេញ" : "Refill"}</th>
-                            <th>{lang === "km" ? "កែ" : "Edit"}</th>
-                            <th>{lang === "km" ? "លុប" : "Delete"}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {nilaTeaItems.length ? (
-                            nilaTeaItems.map((item) => (
-                              <tr key={`nila-setup-item-${item.id}`}>
-                                <td><strong>{item.code}</strong></td>
-                                <td>{lang === "km" ? item.nameKm : item.nameEn}</td>
-                                <td>{item.unitKm}</td>
-                                <td>{item.reorderLevel}</td>
-                                <td>{item.targetRefillQty}</td>
-                                <td><button className="tab" type="button" onClick={() => startEditNilaTeaItem(item)}>{lang === "km" ? "កែ" : "Edit"}</button></td>
-                                <td><button className="btn-danger" type="button" onClick={() => deleteNilaTeaItem(item.id)}>X</button></td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={7}>{lang === "km" ? "មិនទាន់មានមុខទំនិញសម្រាប់ Nila Tea ទេ។" : "No Nila Tea items yet."}</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  ) : null}
                 </article>
                 ) : null}
 
@@ -49269,6 +49313,13 @@ export default function App() {
                   )}
                 </article>
                 ) : null}
+                    {nilaTeaItemEditModalOpen ? (
+                      <div className="modal-backdrop" onClick={resetNilaTeaItemForm}>
+                        <section className="panel modal-panel nila-tea-item-editor-modal" onClick={(e) => e.stopPropagation()}>
+                          {renderNilaTeaItemEditor("modal")}
+                        </section>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </>
