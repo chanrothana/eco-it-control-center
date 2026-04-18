@@ -22279,6 +22279,81 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     min-width: 0;
   }
 
+  .workspace-nila-tea .nila-tea-user-password-note {
+    display: grid;
+    gap: 4px;
+    margin-top: 10px;
+    padding: 12px 14px;
+    border: 1px solid rgba(224, 212, 242, 0.96);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  .workspace-nila-tea .nila-tea-user-password-note strong {
+    font-size: 12px;
+    color: #4d3b6f;
+  }
+
+  .workspace-nila-tea .nila-tea-user-password-note span {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #776796;
+  }
+
+  .workspace-nila-tea .nila-tea-user-password-note .tab {
+    width: 100%;
+    min-height: 40px;
+    margin-top: 4px;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-card {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 12px 13px;
+    border: 1px solid rgba(219, 206, 239, 0.96);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-card:hover {
+    border-color: rgba(143, 103, 209, 0.46);
+    box-shadow: 0 10px 22px rgba(98, 71, 146, 0.08);
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-card.is-enabled {
+    border-color: rgba(123, 88, 191, 0.54);
+    background: linear-gradient(180deg, rgba(126, 84, 210, 0.12), rgba(255, 255, 255, 0.96));
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-checkbox {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    accent-color: #7b58bf;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-copy b {
+    font-size: 13px;
+    line-height: 1.2;
+    color: #463669;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-copy small {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #7d6e9a;
+  }
+
   .workspace-nila-tea .nila-tea-setup-actions {
     margin-top: 10px;
     gap: 8px;
@@ -22316,19 +22391,22 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     border: 1px solid rgba(224, 212, 242, 0.96);
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 12px 24px rgba(112, 82, 164, 0.08);
   }
 
   .workspace-nila-tea .nila-tea-item-register-main {
     display: grid;
-    grid-template-columns: 88px minmax(0, 1fr);
-    align-items: start;
-    gap: 12px;
+    grid-template-columns: 104px minmax(0, 1fr) 52px;
+    align-items: center;
+    gap: 18px;
   }
 
   .workspace-nila-tea .nila-tea-item-register-photo-wrap {
+    width: 100%;
     padding: 6px;
     border-radius: 14px;
     background: rgba(247, 241, 253, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(230, 219, 245, 0.92);
   }
 
   .workspace-nila-tea .nila-tea-item-register-photo {
@@ -22340,22 +22418,65 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
 
   .workspace-nila-tea .nila-tea-item-register-meta {
     display: grid;
-    align-content: start;
-    gap: 5px;
+    align-content: center;
+    gap: 4px;
     min-width: 0;
+    text-align: left;
+    align-self: center;
   }
 
-  .workspace-nila-tea .nila-tea-item-register-meta strong {
+  .workspace-nila-tea .nila-tea-item-register-name {
+    display: block;
+    width: 100%;
     font-size: 14px;
     color: #563874;
-    line-height: 1.25;
+    line-height: 1.2;
+    font-weight: 700;
   }
 
-  .workspace-nila-tea .nila-tea-item-register-meta span {
-    font-size: 12px;
-    color: #81699b;
-    line-height: 1.35;
+  .workspace-nila-tea .nila-tea-item-register-amount-card {
+    display: grid;
+    align-content: center;
+    justify-items: end;
+    gap: 0;
+    min-height: 100%;
+    align-self: center;
+    text-align: right;
+    justify-self: end;
+  }
+
+  .workspace-nila-tea .nila-tea-item-register-code {
+    display: block;
+    width: 100%;
+    font-size: 11px;
+    line-height: 1.25;
     word-break: break-word;
+    font-weight: 700;
+    color: #7a61a2;
+  }
+
+  .workspace-nila-tea .nila-tea-item-register-line {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #81699b;
+    word-break: break-word;
+  }
+
+  .workspace-nila-tea .nila-tea-item-register-line b {
+    font-size: 14px;
+    line-height: 1.2;
+    color: #563874;
+    font-weight: 700;
+  }
+
+  .workspace-nila-tea .nila-tea-item-register-amount {
+    font-size: 24px;
+    line-height: 1;
+    color: #563874;
+    font-weight: 800;
   }
 
   .workspace-nila-tea .nila-tea-item-register-meta b {
@@ -22367,6 +22488,14 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-top: 2px;
+    align-items: stretch;
+  }
+
+  .workspace-nila-tea .nila-tea-item-register-actions .tab,
+  .workspace-nila-tea .nila-tea-item-register-actions .btn-danger {
+    min-height: 42px;
+    border-radius: 14px;
+    font-weight: 700;
   }
 
   .workspace-nila-tea .nila-tea-item-register-actions .tab,
@@ -22689,6 +22818,15 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     padding: 8px 10px;
   }
 
+  .workspace-nila-tea .nila-tea-user-password-note {
+    padding: 10px 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-card {
+    padding: 10px 11px;
+    gap: 8px;
+  }
+
   .workspace-nila-tea .nila-tea-setup-table-wrap {
     max-height: min(30vh, 220px);
   }
@@ -22740,8 +22878,10 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
   }
 
   .workspace-nila-tea .nila-tea-item-register-main {
-    grid-template-columns: 76px minmax(0, 1fr);
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr) 44px;
+    gap: 16px;
+    align-items: center;
   }
 
   .workspace-nila-tea .nila-tea-item-register-photo-wrap {
@@ -22749,13 +22889,48 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
     border-radius: 12px;
   }
 
-  .workspace-nila-tea .nila-tea-item-register-meta strong {
+  .workspace-nila-tea .nila-tea-item-register-name {
     font-size: 15px;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .workspace-nila-tea .nila-tea-item-register-meta span {
+  .workspace-nila-tea .nila-tea-item-register-code,
+  .workspace-nila-tea .nila-tea-item-register-line {
     font-size: 11px;
-    line-height: 1.3;
+    line-height: 1.15;
+  }
+
+  .workspace-nila-tea .nila-tea-item-register-line b {
+    font-size: 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-item-register-amount {
+    font-size: 24px;
+    line-height: 0.95;
+  }
+
+  .workspace-main .nila-tea-item-register-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    align-items: stretch;
+    justify-items: stretch;
+    flex-direction: row;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .workspace-main .nila-tea-item-register-actions .tab,
+  .workspace-main .nila-tea-item-register-actions .btn-danger {
+    width: 100%;
+    margin: 0;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .workspace-nila-tea .nila-tea-setup-card {
@@ -22770,6 +22945,23 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
   .workspace-nila-tea .nila-tea-setup-form-grid,
   .workspace-nila-tea .nila-tea-user-permissions-grid {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-nila-tea .nila-tea-user-password-note {
+    border-radius: 14px;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-card {
+    grid-template-columns: 18px minmax(0, 1fr);
+    border-radius: 13px;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-copy b {
+    font-size: 12px;
+  }
+
+  .workspace-nila-tea .nila-tea-user-permission-copy small {
+    font-size: 10px;
   }
 
   .workspace-nila-tea .nila-tea-setup-actions {
@@ -22875,7 +23067,7 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
 
   .workspace-nila-tea .nila-tea-setup-mobile-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 

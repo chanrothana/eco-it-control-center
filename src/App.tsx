@@ -8593,6 +8593,15 @@ export default function App() {
     resetNilaTeaItemForm();
     setNilaTeaItemSetupView("register");
   }, [resetNilaTeaItemForm]);
+  const findAuthAccountByUsername = useCallback(
+    (username: string) =>
+      authAccounts.find((account) => String(account.username || "").trim().toLowerCase() === String(username || "").trim().toLowerCase()) || null,
+    [authAccounts]
+  );
+  const nilaTeaSelectedAuthAccount = useMemo(
+    () => findAuthAccountByUsername(nilaTeaUserForm.username),
+    [findAuthAccountByUsername, nilaTeaUserForm.username]
+  );
   const resetNilaTeaUserForm = useCallback(() => {
     setEditingNilaTeaUserId(null);
     setNilaTeaUserForm({
@@ -49125,10 +49134,14 @@ export default function App() {
                                 <img loading="lazy" decoding="async" src={item.photo} alt={item.nameEn} className="nila-tea-item-register-photo" />
                               </div>
                               <div className="nila-tea-item-register-meta">
-                                <strong>{lang === "km" ? item.nameKm : item.nameEn}</strong>
-                                <span>{item.code}</span>
-                                <span>{lang === "km" ? "ឯកតា" : "Unit"}: <b>{item.unitKm}</b></span>
-                                <span>{lang === "km" ? "កម្រិតជិតអស់" : "Low"}: <b>{item.reorderLevel}</b></span>
+                                <div className="nila-tea-item-register-name">{lang === "km" ? item.nameKm : item.nameEn}</div>
+                                <div className="nila-tea-item-register-code">{item.code}</div>
+                                <div className="nila-tea-item-register-line">
+                                  <b>{item.unitKm}</b>
+                                </div>
+                              </div>
+                              <div className="nila-tea-item-register-amount-card">
+                                <b className="nila-tea-item-register-amount">{item.reorderLevel}</b>
                               </div>
                             </div>
                             <div className="row-actions nila-tea-actions nila-tea-item-register-actions">
@@ -49197,19 +49210,89 @@ export default function App() {
                       </select>
                     </label>
                   </div>
+                  <div className="nila-tea-user-password-note">
+                    <strong>{lang === "km" ? "Password" : "Password"}</strong>
+                    <span>
+                      {lang === "km"
+                        ? nilaTeaSelectedAuthAccount
+                          ? `អាចកំណត់ពាក្យសម្ងាត់ថ្មីសម្រាប់ ${nilaTeaSelectedAuthAccount.username} ពីទីនេះបាន។`
+                          : "សូមប្រើ username ដែលមាននៅក្នុង Login Account ជាមុនសិន ដើម្បីកំណត់ពាក្យសម្ងាត់។"
+                        : nilaTeaSelectedAuthAccount
+                          ? `You can reset the login password for ${nilaTeaSelectedAuthAccount.username} from here.`
+                          : "Use a username that already exists in Login Account first, then reset the password here."}
+                    </span>
+                    <button
+                      className="tab"
+                      type="button"
+                      disabled={!nilaTeaSelectedAuthAccount || busy || !isAdmin}
+                      onClick={() => {
+                        if (nilaTeaSelectedAuthAccount) void resetAuthAccountPassword(nilaTeaSelectedAuthAccount);
+                      }}
+                    >
+                      {lang === "km" ? "កំណត់ពាក្យសម្ងាត់ឡើងវិញ" : "Reset Password"}
+                    </button>
+                  </div>
                   <div className="form-grid nila-tea-setup-form-grid nila-tea-user-permissions-grid">
                     {[
-                      { key: "canOverview", labelKm: "មើល Overview", labelEn: "Overview" },
-                      { key: "canStock", labelKm: "មើល Stock", labelEn: "Stock" },
-                      { key: "canReport", labelKm: "មើល Report", labelEn: "Report" },
-                      { key: "canSetup", labelKm: "ចូល Setup", labelEn: "Setup" },
-                      { key: "canEditPrices", labelKm: "កែតម្លៃលក់", labelEn: "Edit Prices" },
-                      { key: "canManageItems", labelKm: "កែ Items", labelEn: "Manage Items" },
-                      { key: "canManageUsers", labelKm: "កែ Users", labelEn: "Manage Users" },
+                      {
+                        key: "canOverview",
+                        labelKm: "មើល Overview",
+                        labelEn: "Overview",
+                        detailKm: "មើលទិដ្ឋភាពសង្ខេប",
+                        detailEn: "See summary screen",
+                      },
+                      {
+                        key: "canStock",
+                        labelKm: "មើល Stock",
+                        labelEn: "Stock",
+                        detailKm: "កត់ចូល និងកត់ចេញប្រចាំថ្ងៃ",
+                        detailEn: "Record daily stock in/out",
+                      },
+                      {
+                        key: "canReport",
+                        labelKm: "មើល Report",
+                        labelEn: "Report",
+                        detailKm: "មើលរបាយការណ៍ប្រចាំថ្ងៃ សប្តាហ៍ ខែ",
+                        detailEn: "Open daily, weekly, monthly reports",
+                      },
+                      {
+                        key: "canSetup",
+                        labelKm: "ចូល Setup",
+                        labelEn: "Setup",
+                        detailKm: "ចូលផ្នែកកំណត់សម្រាប់ហាង",
+                        detailEn: "Open shop setup pages",
+                      },
+                      {
+                        key: "canEditPrices",
+                        labelKm: "កែតម្លៃលក់",
+                        labelEn: "Edit Prices",
+                        detailKm: "កែតម្លៃលក់ក្នុងហាង",
+                        detailEn: "Change sale prices",
+                      },
+                      {
+                        key: "canManageItems",
+                        labelKm: "កែ Items",
+                        labelEn: "Manage Items",
+                        detailKm: "បន្ថែម កែ ឬលុបមុខទំនិញ",
+                        detailEn: "Add, edit, or delete items",
+                      },
+                      {
+                        key: "canManageUsers",
+                        labelKm: "កែ Users",
+                        labelEn: "Manage Users",
+                        detailKm: "បន្ថែម កែ ឬលុបអ្នកប្រើ",
+                        detailEn: "Add, edit, or delete users",
+                      },
                     ].map((perm) => (
-                      <label key={`nila-user-perm-${perm.key}`} className="field" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <label
+                        key={`nila-user-perm-${perm.key}`}
+                        className={`field nila-tea-user-permission-card ${
+                          nilaTeaUserForm.permissions[perm.key as keyof NilaTeaUserPermissions] ? "is-enabled" : ""
+                        }`}
+                      >
                         <input
                           type="checkbox"
+                          className="nila-tea-user-permission-checkbox"
                           checked={Boolean(nilaTeaUserForm.permissions[perm.key as keyof NilaTeaUserPermissions])}
                           onChange={(e) =>
                             setNilaTeaUserForm((prev) => ({
@@ -49221,7 +49304,10 @@ export default function App() {
                             }))
                           }
                         />
-                        <span style={{ marginBottom: 0 }}>{lang === "km" ? perm.labelKm : perm.labelEn}</span>
+                        <span className="nila-tea-user-permission-copy">
+                          <b>{lang === "km" ? perm.labelKm : perm.labelEn}</b>
+                          <small>{lang === "km" ? perm.detailKm : perm.detailEn}</small>
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -49259,6 +49345,17 @@ export default function App() {
                               <button className="tab" type="button" onClick={() => startEditNilaTeaUser(user)}>
                                 {lang === "km" ? "កែ" : "Edit"}
                               </button>
+                              <button
+                                className="tab"
+                                type="button"
+                                disabled={!findAuthAccountByUsername(user.username) || busy || !isAdmin}
+                                onClick={() => {
+                                  const account = findAuthAccountByUsername(user.username);
+                                  if (account) void resetAuthAccountPassword(account);
+                                }}
+                              >
+                                {lang === "km" ? "Reset Password" : "Reset Password"}
+                              </button>
                               <button className="btn-danger" type="button" onClick={() => deleteNilaTeaUser(user.id)}>
                                 {lang === "km" ? "លុប" : "Delete"}
                               </button>
@@ -49280,6 +49377,7 @@ export default function App() {
                             <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
                             <th>{lang === "km" ? "សិទ្ធិ" : "Permissions"}</th>
                             <th>{lang === "km" ? "កែ" : "Edit"}</th>
+                            <th>{lang === "km" ? "Reset Password" : "Reset Password"}</th>
                             <th>{lang === "km" ? "លុប" : "Delete"}</th>
                           </tr>
                         </thead>
@@ -49299,12 +49397,25 @@ export default function App() {
                                   ].filter(Boolean).join(", ") || (lang === "km" ? "ស្តុកតែប៉ុណ្ណោះ" : "Stock only")}
                                 </td>
                                 <td><button className="tab" type="button" onClick={() => startEditNilaTeaUser(user)}>{lang === "km" ? "កែ" : "Edit"}</button></td>
+                                <td>
+                                  <button
+                                    className="tab"
+                                    type="button"
+                                    disabled={!findAuthAccountByUsername(user.username) || busy || !isAdmin}
+                                    onClick={() => {
+                                      const account = findAuthAccountByUsername(user.username);
+                                      if (account) void resetAuthAccountPassword(account);
+                                    }}
+                                  >
+                                    {lang === "km" ? "Reset" : "Reset"}
+                                  </button>
+                                </td>
                                 <td><button className="btn-danger" type="button" onClick={() => deleteNilaTeaUser(user.id)}>X</button></td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={7}>{lang === "km" ? "មិនទាន់មានអ្នកប្រើ Nila Tea ទេ។" : "No Nila Tea users yet."}</td>
+                              <td colSpan={8}>{lang === "km" ? "មិនទាន់មានអ្នកប្រើ Nila Tea ទេ។" : "No Nila Tea users yet."}</td>
                             </tr>
                           )}
                         </tbody>
