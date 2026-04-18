@@ -7998,12 +7998,14 @@ export default function App() {
     username: string;
     role: NilaTeaUserRole;
     active: boolean;
+    password: string;
     permissions: NilaTeaUserPermissions;
   }>({
     fullName: "",
     username: "",
     role: "staff",
     active: true,
+    password: "",
     permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS.staff },
   });
   const [utilitiesView, setUtilitiesView] = useState<
@@ -8593,6 +8595,16 @@ export default function App() {
     resetNilaTeaItemForm();
     setNilaTeaItemSetupView("register");
   }, [resetNilaTeaItemForm]);
+  function authRoleForNilaTeaRole(role: NilaTeaUserRole): AuthRole {
+    if (role === "super_admin") return "Super Admin";
+    if (role === "manager") return "Admin";
+    return "Viewer";
+  }
+  function findAuthAccountByUsername(username: string) {
+    return authAccounts.find(
+      (account) => String(account.username || "").trim().toLowerCase() === String(username || "").trim().toLowerCase()
+    ) || null;
+  }
   const resetNilaTeaUserForm = useCallback(() => {
     setEditingNilaTeaUserId(null);
     setNilaTeaUserForm({
@@ -8600,14 +8612,114 @@ export default function App() {
       username: "",
       role: "staff",
       active: true,
+      password: "",
       permissions: { ...NILA_TEA_DEFAULT_USER_PERMISSIONS.staff },
     });
   }, []);
-  const saveNilaTeaSetupUser = useCallback(() => {
+  async function upsertNilaTeaAuthAccount(params: {
+    username: string;
+    displayName: string;
+    nilaRole: NilaTeaUserRole;
+    password?: string;
+    previousUsername?: string;
+  }) {
+    const username = String(params.username || "").trim().toLowerCase();
+    const displayName = String(params.displayName || "").trim();
+    const password = String(params.password || "").trim();
+    const previousUsername = String(params.previousUsername || "").trim().toLowerCase();
+    const authRole = authRoleForNilaTeaRole(params.nilaRole);
+    const existingAccount = findAuthAccountByUsername(username) || (previousUsername ? findAuthAccountByUsername(previousUsername) : null);
+    const modules: NavModule[] = authRole === "Viewer"
+      ? ["dashboard", "nila_tea", "reports"]
+      : ["dashboard", "nila_tea", "reports", "setup"];
+    const assetSubviewAccess: AssetSubviewAccess = authRole === "Viewer" ? "list_only" : "both";
+    const campuses = normalizeRoleCampuses(authRole, authRole === "Super Admin" ? ["ALL"] : [CAMPUS_LIST[0]]);
+    const menuAccess = normalizeMenuAccess(authRole, modules, assetSubviewAccess, defaultMenuAccessFor(authRole, modules, assetSubviewAccess));
+    const endpoint = existingAccount ? `/api/auth/users/${existingAccount.id}` : "/api/auth/users";
+    const method = existingAccount ? "PATCH" : "POST";
+    const body = {
+      username,
+      displayName,
+      role: authRole,
+      campuses,
+      modules,
+      assetSubviewAccess,
+      menuAccess,
+      ...(password ? { password } : {}),
+    };
+    const res = await requestJson<{ user?: AuthAccount }>(endpoint, {
+      method,
+      body: JSON.stringify(body),
+    });
+    const saved: AuthAccount = res.user?.username
+      ? {
+          id: Number(res.user.id) || existingAccount?.id || Date.now(),
+          username: res.user.username,
+          displayName: res.user.displayName || displayName,
+          role: normalizeRole(res.user.role),
+          campuses: normalizeRoleCampuses(normalizeRole(res.user.role), res.user.campuses || campuses),
+          modules: normalizeModulesByRole(normalizeRole(res.user.role), res.user.modules || modules),
+          assetSubviewAccess: normalizeAssetSubviewAccess((res.user as { assetSubviewAccess?: unknown }).assetSubviewAccess || assetSubviewAccess),
+          menuAccess: normalizeMenuAccess(
+            normalizeRole(res.user.role),
+            normalizeModulesByRole(normalizeRole(res.user.role), res.user.modules || modules),
+            normalizeAssetSubviewAccess((res.user as { assetSubviewAccess?: unknown }).assetSubviewAccess || assetSubviewAccess),
+            (res.user as { menuAccess?: unknown }).menuAccess || menuAccess
+          ),
+        }
+      : {
+          id: existingAccount?.id || Date.now(),
+          username,
+          displayName,
+          role: authRole,
+          campuses,
+          modules,
+          assetSubviewAccess,
+          menuAccess,
+        };
+    const merged = mergeAuthAccounts([saved], readAuthAccountsFallback());
+    writeAuthAccountsFallback(merged);
+    const permissionFallback = readAuthPermissionFallback();
+    if (existingAccount && existingAccount.username !== saved.username) {
+      delete permissionFallback[existingAccount.username];
+    }
+    writeAuthPermissionFallback({
+      ...permissionFallback,
+      [saved.username]: {
+        role: saved.role,
+        campuses: saved.campuses,
+        modules: saved.modules,
+        assetSubviewAccess: saved.assetSubviewAccess,
+        menuAccess: saved.menuAccess,
+      },
+    });
+    setAuthAccounts(merged);
+    return saved;
+  }
+  const saveNilaTeaSetupUser = useCallback(async () => {
     const fullName = String(nilaTeaUserForm.fullName || "").trim();
     const username = String(nilaTeaUserForm.username || "").trim().toLowerCase();
+    const password = String(nilaTeaUserForm.password || "").trim();
+    const editingUser = editingNilaTeaUserId !== null ? nilaTeaUsers.find((user) => user.id === editingNilaTeaUserId) || null : null;
+    const linkedAccount = findAuthAccountByUsername(username) || (editingUser ? findAuthAccountByUsername(editingUser.username) : null);
     if (!fullName || !username) {
       setNilaTeaMessage(nilaTeaUseKhmer ? "សូមបំពេញឈ្មោះបុគ្គលិក និង username ជាមុនសិន។" : "Please fill staff name and username first.");
+      return;
+    }
+    if (!linkedAccount && !password) {
+      setNilaTeaMessage(
+        nilaTeaUseKhmer
+          ? "សូមបញ្ចូល password ដើម្បីបង្កើត Login Account សម្រាប់អ្នកប្រើនេះ។"
+          : "Please enter a password to create the login account for this user."
+      );
+      return;
+    }
+    if (password && password.length < 8) {
+      setNilaTeaMessage(
+        nilaTeaUseKhmer
+          ? "Password ត្រូវមានយ៉ាងតិច 8 តួអក្សរ។"
+          : "Password must be at least 8 characters."
+      );
       return;
     }
     const nextUser: NilaTeaUser = {
@@ -8618,15 +8730,34 @@ export default function App() {
       active: nilaTeaUserForm.active,
       permissions: { ...nilaTeaUserForm.permissions },
     };
-    setNilaTeaUsers((prev) => {
-      const next = editingNilaTeaUserId
-        ? prev.map((user) => (user.id === editingNilaTeaUserId ? nextUser : user))
-        : [...prev, nextUser];
-      return next.sort((a, b) => a.fullName.localeCompare(b.fullName));
-    });
-    setNilaTeaMessage(nilaTeaUseKhmer ? "បានរក្សាទុកអ្នកប្រើ Nila Tea រួចរាល់។" : "Nila Tea user saved.");
-    resetNilaTeaUserForm();
-  }, [editingNilaTeaUserId, nilaTeaUseKhmer, nilaTeaUserForm, resetNilaTeaUserForm]);
+    setBusy(true);
+    try {
+      await upsertNilaTeaAuthAccount({
+        username,
+        displayName: fullName,
+        nilaRole: nilaTeaUserForm.role,
+        password,
+        previousUsername: editingUser?.username,
+      });
+      setNilaTeaUsers((prev) => {
+        const next = editingNilaTeaUserId
+          ? prev.map((user) => (user.id === editingNilaTeaUserId ? nextUser : user))
+          : [...prev, nextUser];
+        return next.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      });
+      setNilaTeaMessage(
+        nilaTeaUseKhmer
+          ? "បានរក្សាទុកអ្នកប្រើ Nila Tea និង Login Account រួចរាល់។"
+          : "Saved Nila Tea user and login account."
+      );
+      resetNilaTeaUserForm();
+      await loadAuthAccounts();
+    } catch (err) {
+      setNilaTeaMessage(err instanceof Error ? err.message : (nilaTeaUseKhmer ? "មិនអាចរក្សាទុក Login Account បានទេ។" : "Failed to save login account."));
+    } finally {
+      setBusy(false);
+    }
+  }, [authRoleForNilaTeaRole, editingNilaTeaUserId, findAuthAccountByUsername, loadAuthAccounts, nilaTeaUseKhmer, nilaTeaUserForm, nilaTeaUsers, resetNilaTeaUserForm]);
   const startEditNilaTeaUser = useCallback((user: NilaTeaUser) => {
     setEditingNilaTeaUserId(user.id);
     setNilaTeaUserForm({
@@ -8634,6 +8765,7 @@ export default function App() {
       username: user.username,
       role: user.role,
       active: user.active,
+      password: "",
       permissions: { ...user.permissions },
     });
     setNilaTeaView("setup");
@@ -10939,14 +11071,9 @@ export default function App() {
   const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
-  const findAuthAccountByUsername = useCallback(
-    (username: string) =>
-      authAccounts.find((account) => String(account.username || "").trim().toLowerCase() === String(username || "").trim().toLowerCase()) || null,
-    [authAccounts]
-  );
   const nilaTeaSelectedAuthAccount = useMemo(
     () => findAuthAccountByUsername(nilaTeaUserForm.username),
-    [findAuthAccountByUsername, nilaTeaUserForm.username]
+    [authAccounts, nilaTeaUserForm.username]
   );
   const [inventoryApprovalRoutingMap, setInventoryApprovalRoutingMap] = useState<InventoryApprovalRoutingMap>({});
   const [inventoryApprovalRoutingDraft, setInventoryApprovalRoutingDraft] = useState<InventoryApprovalRoutingDraft | null>(null);
@@ -49209,17 +49336,27 @@ export default function App() {
                         <option value="inactive">{lang === "km" ? "បិទ" : "Inactive"}</option>
                       </select>
                     </label>
+                    <label className="field field-wide">
+                      <span>{lang === "km" ? "ពាក្យសម្ងាត់ Login" : "Login Password"}</span>
+                      <input
+                        className="input"
+                        type="text"
+                        value={nilaTeaUserForm.password}
+                        placeholder={editingNilaTeaUserId !== null ? (lang === "km" ? "ទុកទទេ ដើម្បីរក្សាពាក្យសម្ងាត់ចាស់" : "Leave blank to keep current password") : ""}
+                        onChange={(e) => setNilaTeaUserForm((prev) => ({ ...prev, password: e.target.value }))}
+                      />
+                    </label>
                   </div>
                   <div className="nila-tea-user-password-note">
                     <strong>{lang === "km" ? "Password" : "Password"}</strong>
                     <span>
                       {lang === "km"
                         ? nilaTeaSelectedAuthAccount
-                          ? `អាចកំណត់ពាក្យសម្ងាត់ថ្មីសម្រាប់ ${nilaTeaSelectedAuthAccount.username} ពីទីនេះបាន។`
-                          : "សូមប្រើ username ដែលមាននៅក្នុង Login Account ជាមុនសិន ដើម្បីកំណត់ពាក្យសម្ងាត់។"
+                          ? `មាន Login Account រួចហើយសម្រាប់ ${nilaTeaSelectedAuthAccount.username}។ បញ្ចូល password ថ្មី ហើយចុច Save ដើម្បីអាប់ដេតបាន។`
+                          : "បញ្ចូល username និង password នៅទីនេះ រួចចុច Save ដើម្បីបង្កើត Login Account សម្រាប់បុគ្គលិកនេះ។"
                         : nilaTeaSelectedAuthAccount
-                          ? `You can reset the login password for ${nilaTeaSelectedAuthAccount.username} from here.`
-                          : "Use a username that already exists in Login Account first, then reset the password here."}
+                          ? `A login account already exists for ${nilaTeaSelectedAuthAccount.username}. Enter a new password here and save to update it.`
+                          : "Enter username and password here, then save to create the login account for this staff user."}
                     </span>
                     <button
                       className="tab"
