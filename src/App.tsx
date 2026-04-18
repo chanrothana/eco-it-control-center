@@ -8593,15 +8593,6 @@ export default function App() {
     resetNilaTeaItemForm();
     setNilaTeaItemSetupView("register");
   }, [resetNilaTeaItemForm]);
-  const findAuthAccountByUsername = useCallback(
-    (username: string) =>
-      authAccounts.find((account) => String(account.username || "").trim().toLowerCase() === String(username || "").trim().toLowerCase()) || null,
-    [authAccounts]
-  );
-  const nilaTeaSelectedAuthAccount = useMemo(
-    () => findAuthAccountByUsername(nilaTeaUserForm.username),
-    [findAuthAccountByUsername, nilaTeaUserForm.username]
-  );
   const resetNilaTeaUserForm = useCallback(() => {
     setEditingNilaTeaUserId(null);
     setNilaTeaUserForm({
@@ -10948,6 +10939,15 @@ export default function App() {
   const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
+  const findAuthAccountByUsername = useCallback(
+    (username: string) =>
+      authAccounts.find((account) => String(account.username || "").trim().toLowerCase() === String(username || "").trim().toLowerCase()) || null,
+    [authAccounts]
+  );
+  const nilaTeaSelectedAuthAccount = useMemo(
+    () => findAuthAccountByUsername(nilaTeaUserForm.username),
+    [findAuthAccountByUsername, nilaTeaUserForm.username]
+  );
   const [inventoryApprovalRoutingMap, setInventoryApprovalRoutingMap] = useState<InventoryApprovalRoutingMap>({});
   const [inventoryApprovalRoutingDraft, setInventoryApprovalRoutingDraft] = useState<InventoryApprovalRoutingDraft | null>(null);
   const [inventoryApprovalRoutingEditingRequester, setInventoryApprovalRoutingEditingRequester] = useState<string | null>(null);
