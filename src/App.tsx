@@ -841,6 +841,7 @@ type ServerSettings = {
   utilityReadings?: UtilityReading[];
   rentalPrinters?: RentalPrinter[];
   rentalPrinterCounters?: RentalPrinterCounter[];
+  nilaTeaDailyEntries?: NilaTeaDailyStockEntry[];
   itemTemplates?: ItemTemplate[];
   furnitureModels?: FurnitureModelMaster[];
   vaultAccounts?: VaultAccount[];
@@ -8166,6 +8167,24 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+  const loadNilaTeaDailySync = useCallback(async () => {
+    if (!authUser) return;
+    try {
+      const res = await requestJson<{ entries?: NilaTeaDailyStockEntry[] }>("/api/nila-tea/daily");
+      const rows = normalizeNilaTeaDailyEntries(res.entries);
+      setNilaTeaDailyEntries(rows);
+      writeNilaTeaDailyFallback(rows);
+    } catch (err) {
+      if (
+        isApiUnavailableError(err) ||
+        isMissingRouteError(err) ||
+        isUnauthorizedError(err)
+      ) {
+        return;
+      }
+      console.warn("Failed to sync Nila Tea daily records", err);
+    }
+  }, [authUser]);
   const buildNilaTeaShortLink = useCallback((view: "dashboard" | "stock" | "report" | "setup", flow?: "begin" | "end") => {
     if (typeof window === "undefined") return "";
     const baseOrigin = nilaTeaShareBaseUrl || window.location.origin;
@@ -8250,6 +8269,9 @@ export default function App() {
     writeNilaTeaDailyFallback(nilaTeaDailyEntries);
   }, [nilaTeaDailyEntries]);
   useEffect(() => {
+    void loadNilaTeaDailySync();
+  }, [loadNilaTeaDailySync]);
+  useEffect(() => {
     writeNilaTeaItemFallback(nilaTeaItems);
   }, [nilaTeaItems]);
   useEffect(() => {
@@ -8330,7 +8352,7 @@ export default function App() {
         };
       });
   }, [nilaTeaDailyEntries, nilaTeaItems]);
-  const saveNilaTeaSingleItemReport = useCallback((itemId: number) => {
+  const saveNilaTeaSingleItemReport = useCallback(async (itemId: number) => {
     const item = nilaTeaItems.find((row) => row.id === itemId);
     if (!item) return;
     const draft = nilaTeaDraft[itemId] || { closingQty: "", refillQty: String(item.targetRefillQty), note: "", photo: "" };
@@ -8346,17 +8368,45 @@ export default function App() {
       enteredBy: currentOperatorName || "",
       created: new Date().toISOString(),
     };
-    setNilaTeaDailyEntries((prev) => [
-      ...prev.filter((entry) => !(entry.date === nilaTeaCountDate && entry.itemId === itemId && entry.flow === nilaTeaStockFlow)),
+    const nextEntries = normalizeNilaTeaDailyEntries([
+      ...nilaTeaDailyEntries.filter(
+        (entry) => !(entry.date === nilaTeaCountDate && entry.itemId === itemId && entry.flow === nilaTeaStockFlow)
+      ),
       nextRow,
     ]);
+    setNilaTeaDailyEntries(nextEntries);
+    writeNilaTeaDailyFallback(nextEntries);
+    try {
+      const res = await requestJson<{ ok?: boolean; entries?: NilaTeaDailyStockEntry[] }>("/api/nila-tea/daily", {
+        method: "PUT",
+        body: JSON.stringify({ entries: nextEntries }),
+      });
+      if (Array.isArray(res.entries)) {
+        const synced = normalizeNilaTeaDailyEntries(res.entries);
+        setNilaTeaDailyEntries(synced);
+        writeNilaTeaDailyFallback(synced);
+      }
+    } catch (err) {
+      if (
+        !isApiUnavailableError(err) &&
+        !isMissingRouteError(err) &&
+        !isUnauthorizedError(err)
+      ) {
+        setNilaTeaMessage(
+          lang === "km"
+            ? "បានរក្សាទុកក្នុងឧបករណ៍ ប៉ុន្តែមិនអាច Sync ទៅ server បានទេ។"
+            : "Saved on this device, but could not sync to server."
+        );
+        return;
+      }
+    }
     setNilaTeaMessage(
       lang === "km"
         ? `បានរក្សាទុក ${item.nameKm} សម្រាប់ ${nilaTeaStockFlow === "begin" ? "Beginning Stock" : "End Stock"} រួចរាល់។`
         : `Saved ${item.nameEn} for ${nilaTeaStockFlow === "begin" ? "Beginning Stock" : "End Stock"}.`
     );
     setNilaTeaEntryModalItemId(null);
-  }, [currentOperatorName, lang, nilaTeaCountDate, nilaTeaDraft, nilaTeaItems, nilaTeaStockFlow]);
+  }, [currentOperatorName, lang, nilaTeaCountDate, nilaTeaDailyEntries, nilaTeaDraft, nilaTeaItems, nilaTeaStockFlow]);
   const resetNilaTeaDraft = useCallback(() => {
     const map: Record<number, { closingQty: string; refillQty: string; note: string; photo: string }> = {};
     for (const item of nilaTeaItems) {

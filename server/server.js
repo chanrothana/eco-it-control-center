@@ -1620,6 +1620,25 @@ function normalizeRentalPrinterCounters(input) {
     .filter((row) => row.rentalPrinterId && row.machineCode && row.billingMonth);
 }
 
+function normalizeNilaTeaDailyEntries(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      date: toText(row.date) || toYmdUtc(new Date()),
+      itemId: Number(row.itemId) || 0,
+      flow: toText(row.flow).toLowerCase() === "begin" ? "begin" : "end",
+      closingQty: Math.max(0, Number(row.closingQty) || 0),
+      refillQty: Math.max(0, Number(row.refillQty) || 0),
+      note: toText(row.note),
+      photo: toText(row.photo),
+      enteredBy: toText(row.enteredBy),
+      created: toText(row.created) || new Date().toISOString(),
+    }))
+    .filter((row) => row.itemId > 0);
+}
+
 function assetCategoryCode(category) {
   const normalized = normalizeCategoryInput(category);
   if (normalized === "IT") return "COM";
@@ -1796,6 +1815,7 @@ function normalizeImportedDb(input) {
   const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
   const rentalPrinters = normalizeRentalPrinters(settings.rentalPrinters);
   const rentalPrinterCounters = normalizeRentalPrinterCounters(settings.rentalPrinterCounters);
+  const nilaTeaDailyEntries = normalizeNilaTeaDailyEntries(settings.nilaTeaDailyEntries);
   const vaultAccounts = normalizeVaultAccounts(settings.vaultAccounts);
   const vaultCredentials = normalizeVaultCredentials(settings.vaultCredentials);
   const vaultDesignLinks = normalizeVaultDesignLinks(settings.vaultDesignLinks);
@@ -1844,6 +1864,7 @@ function normalizeImportedDb(input) {
       inventoryTxns,
       rentalPrinters,
       rentalPrinterCounters,
+      nilaTeaDailyEntries,
       poolCleaningSchedules,
       poolEquipmentChecks,
       poolChemicalRecords,
@@ -5910,6 +5931,7 @@ const server = http.createServer(async (req, res) => {
           inventoryTxns: normalizeInventoryTxns(settings.inventoryTxns),
           rentalPrinters: normalizeRentalPrinters(settings.rentalPrinters),
           rentalPrinterCounters: normalizeRentalPrinterCounters(settings.rentalPrinterCounters),
+          nilaTeaDailyEntries: normalizeNilaTeaDailyEntries(settings.nilaTeaDailyEntries),
           poolCleaningSchedules: normalizePoolCleaningSchedules(settings.poolCleaningSchedules),
           poolEquipmentChecks: normalizePoolEquipmentChecks(settings.poolEquipmentChecks),
           poolChemicalRecords: normalizePoolChemicalRecords(settings.poolChemicalRecords),
@@ -5984,6 +6006,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "rentalPrinterCounters")
           ? normalizeRentalPrinterCounters(incoming.rentalPrinterCounters)
           : normalizeRentalPrinterCounters(current.rentalPrinterCounters);
+      const nextNilaTeaDailyEntries =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "nilaTeaDailyEntries")
+          ? normalizeNilaTeaDailyEntries(incoming.nilaTeaDailyEntries)
+          : normalizeNilaTeaDailyEntries(current.nilaTeaDailyEntries);
       const nextPoolCleaningSchedules =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "poolCleaningSchedules")
           ? normalizePoolCleaningSchedules(incoming.poolCleaningSchedules)
@@ -6049,6 +6075,7 @@ const server = http.createServer(async (req, res) => {
         inventoryTxns: nextInventoryTxns,
         rentalPrinters: nextRentalPrinters,
         rentalPrinterCounters: nextRentalPrinterCounters,
+        nilaTeaDailyEntries: nextNilaTeaDailyEntries,
         poolCleaningSchedules: nextPoolCleaningSchedules,
         poolEquipmentChecks: nextPoolEquipmentChecks,
         poolChemicalRecords: nextPoolChemicalRecords,
@@ -6066,6 +6093,45 @@ const server = http.createServer(async (req, res) => {
       appendAuditLog(db, admin, "UPDATE", "settings", "campusNames", "Updated campus name settings");
       await writeDb(db);
       sendJson(res, 200, { ok: true, settings: db.settings });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/nila-tea/daily") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const db = await readDb();
+      const settings =
+        db.settings && typeof db.settings === "object"
+          ? db.settings
+          : {};
+      sendJson(res, 200, {
+        entries: normalizeNilaTeaDailyEntries(settings.nilaTeaDailyEntries),
+      });
+      return;
+    }
+
+    if (req.method === "PUT" && url.pathname === "/api/nila-tea/daily") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const body = await parseBody(req);
+      const db = await readDb();
+      const settings =
+        db.settings && typeof db.settings === "object"
+          ? db.settings
+          : {};
+      const entries = normalizeNilaTeaDailyEntries(body.entries);
+      db.settings = {
+        ...settings,
+        nilaTeaDailyEntries: entries,
+      };
+      await writeDb(db);
+      sendJson(res, 200, { ok: true, entries });
       return;
     }
 
