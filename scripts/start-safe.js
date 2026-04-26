@@ -7,8 +7,9 @@ const WEB_PORT = 3000;
 const API_PORT = 4000;
 const isPhoneMode = process.argv.includes("--phone");
 // Local mode should stay loopback-only; phone mode exposes to LAN.
-const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
-const webHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
+const apiHost = process.env.API_HOST || (isPhoneMode ? "0.0.0.0" : "127.0.0.1");
+// Let CRA choose its own localhost binding in local mode; forcing HOST can fail in some environments.
+const webHost = process.env.HOST || (isPhoneMode ? "0.0.0.0" : "");
 const children = [];
 let shuttingDown = false;
 
@@ -106,7 +107,11 @@ function runStartRunner(isApiPortBusy) {
     ? path.join("node_modules", ".bin", "react-scripts.cmd")
     : path.join("node_modules", ".bin", "react-scripts");
   const webEnv = { ...process.env, PORT: String(WEB_PORT) };
-  webEnv.HOST = webHost;
+  if (webHost) {
+    webEnv.HOST = webHost;
+  } else {
+    delete webEnv.HOST;
+  }
   if (!isPhoneMode) {
     webEnv.DANGEROUSLY_DISABLE_HOST_CHECK = "true";
   }
