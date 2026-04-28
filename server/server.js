@@ -5416,6 +5416,7 @@ function toPublicAssetView(asset, allAssets = []) {
     ? source.maintenanceHistory.map((entry) => ({
         id: Number(entry?.id || 0),
         date: toText(entry?.date),
+        createdAt: toText(entry?.createdAt),
         type: toText(entry?.type),
         note: toText(entry?.note),
         completion: toText(entry?.completion),
@@ -8330,6 +8331,7 @@ const server = http.createServer(async (req, res) => {
       const entry = {
         id: Date.now(),
         date,
+        createdAt: new Date().toISOString(),
         type,
         completion,
         condition,

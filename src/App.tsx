@@ -128,6 +128,7 @@ type MaintenanceWorkflow = {
 type MaintenanceEntry = {
   id: number;
   date: string;
+  createdAt?: string;
   type: string;
   note: string;
   completion?: "Done" | "Not Yet";
@@ -4240,6 +4241,16 @@ function formatDateTime(value: string) {
   return `${datePart} ${timePart}`;
 }
 
+function formatTimeOnly(value: string) {
+  if (!value || value === "-") return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getTermRange(year: number, term: "Term 1" | "Term 2" | "Term 3") {
   if (term === "Term 1") return { from: `${year}-01-01`, to: `${year}-04-30` };
   if (term === "Term 2") return { from: `${year}-05-01`, to: `${year}-08-31` };
@@ -6362,6 +6373,9 @@ type UserPickerProps = {
 type SearchableMultiSelectOption = {
   value: string;
   label: string;
+  description?: string;
+  photo?: string;
+  searchText?: string;
 };
 type SearchableMultiSelectPickerProps = {
   summary: string;
@@ -6665,7 +6679,9 @@ function SearchableMultiSelectPicker({
   const filteredOptions = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return options;
-    return options.filter((opt) => `${opt.label} ${opt.value}`.toLowerCase().includes(q));
+    return options.filter((opt) =>
+      `${opt.label} ${opt.value} ${opt.description || ""} ${opt.searchText || ""}`.toLowerCase().includes(q)
+    );
   }, [options, deferredSearch]);
 
   return (
@@ -6712,7 +6728,13 @@ function SearchableMultiSelectPicker({
                     checked={selectedValues.includes(opt.value)}
                     onChange={(e) => onToggleValue(opt.value, e.target.checked)}
                   />
-                  <span>{opt.label}</span>
+                  {opt.photo ? <img src={opt.photo} alt={opt.label} className="asset-picker-thumb" /> : null}
+                  <span className={opt.description ? "parent-asset-picker-option-content asset-picker-option-label" : "asset-picker-option-label"}>
+                    <span className="parent-asset-picker-option-title">{opt.label}</span>
+                    {opt.description ? (
+                      <span className="parent-asset-picker-option-meta">{opt.description}</span>
+                    ) : null}
+                  </span>
                 </label>
               ))
             ) : (
@@ -8433,7 +8455,7 @@ export default function App() {
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [inventorySupplyCampusQuickFilter, setInventorySupplyCampusQuickFilter] = useState("ALL");
   const [purchaseRequestCampusFilter, setPurchaseRequestCampusFilter] = useState("ALL");
-  const [purchaseRequestItemFilter, setPurchaseRequestItemFilter] = useState("ALL");
+  const [purchaseRequestItemFilter, setPurchaseRequestItemFilter] = useState<string[]>(["ALL"]);
   const [purchaseRequestQtyOverrides, setPurchaseRequestQtyOverrides] = useState<Record<string, string>>({});
   const [maintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [maintenanceStockOutViewDate, setMaintenanceStockOutViewDate] = useState(() => toYmd(new Date()));
@@ -11374,6 +11396,10 @@ export default function App() {
     },
     []
   );
+  const resetPurchaseRequestFilters = useCallback(() => {
+    setPurchaseRequestCampusFilter("ALL");
+    setPurchaseRequestItemFilter(["ALL"]);
+  }, []);
   const resetAssetListFilters = useCallback(() => {
     setAssetCampusMultiFilter(["ALL"]);
     setAssetCategoryMultiFilter(["ALL"]);
@@ -13654,38 +13680,60 @@ export default function App() {
     ],
     [cleaningSupplyCampusLabel, inventoryPurchaseCampusOptions, t.allCampuses]
   );
+  const inventoryPurchaseScopedRows = useMemo(() => {
+    if (purchaseRequestCampusFilter === "ALL") return inventoryPurchaseRows;
+    return inventoryPurchaseRows.filter((row) => String(row.campus || "").trim() === purchaseRequestCampusFilter);
+  }, [inventoryPurchaseRows, purchaseRequestCampusFilter]);
   const inventoryPurchaseItemOptions = useMemo(
     () =>
-      inventoryPurchaseRows
+      inventoryPurchaseScopedRows
         .map((row) => ({
           value: String(row.itemCode || "").trim(),
-          label: String(row.itemCode || "").trim(),
-          description: inventoryDisplayName(row.itemName, lang),
+          label: inventoryDisplayName(row.itemName, lang),
+          description: `${String(row.itemCode || "").trim()} • ${cleaningSupplyCampusLabel(String(row.campus || "").trim())}`,
           photo: String(row.photo || "").trim(),
           searchText: `${String(row.itemCode || "").trim()} ${inventoryDisplayName(row.itemName, lang)} ${cleaningSupplyCampusLabel(String(row.campus || ""))}`,
         }))
         .filter((row) => row.value)
         .filter((row, index, list) => list.findIndex((entry) => entry.value === row.value) === index)
-        .sort((a, b) => a.value.localeCompare(b.value)),
-    [cleaningSupplyCampusLabel, inventoryPurchaseRows, lang]
+        .sort((a, b) => {
+          const left = `${a.label} ${a.description || ""}`;
+          const right = `${b.label} ${b.description || ""}`;
+          return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+        }),
+    [cleaningSupplyCampusLabel, inventoryPurchaseScopedRows, lang]
   );
   const inventoryPurchaseItemPickerOptions = useMemo(
-    () => [
-      { value: "ALL", label: lang === "km" ? "គ្រប់ Item" : "All Items" },
-      ...inventoryPurchaseItemOptions,
-    ],
+    () => inventoryPurchaseItemOptions,
     [inventoryPurchaseItemOptions, lang]
   );
-  const filteredInventoryPurchaseRows = useMemo(() => {
-    let rows = [...inventoryPurchaseRows];
-    if (purchaseRequestCampusFilter !== "ALL") {
-      rows = rows.filter((row) => String(row.campus || "").trim() === purchaseRequestCampusFilter);
+  const inventoryPurchaseItemFilterValues = useMemo(
+    () => inventoryPurchaseItemPickerOptions.map((option) => option.value),
+    [inventoryPurchaseItemPickerOptions]
+  );
+  const inventoryPurchaseItemFilterSummary = useMemo(() => {
+    if (purchaseRequestItemFilter.includes("ALL")) return lang === "km" ? "គ្រប់ Item" : "All Items";
+    if (!purchaseRequestItemFilter.length) return lang === "km" ? "0 បានជ្រើស" : "0 selected";
+    if (purchaseRequestItemFilter.length === 1) {
+      return inventoryPurchaseItemPickerOptions.find((option) => option.value === purchaseRequestItemFilter[0])?.label || purchaseRequestItemFilter[0];
     }
-    if (purchaseRequestItemFilter !== "ALL") {
-      rows = rows.filter((row) => String(row.itemCode || "").trim() === purchaseRequestItemFilter);
+    return lang === "km" ? `បានជ្រើស ${purchaseRequestItemFilter.length} Item` : `${purchaseRequestItemFilter.length} items selected`;
+  }, [inventoryPurchaseItemPickerOptions, lang, purchaseRequestItemFilter]);
+  const filteredInventoryPurchaseRows = useMemo(() => {
+    let rows = [...inventoryPurchaseScopedRows];
+    if (!purchaseRequestItemFilter.includes("ALL")) {
+      const selectedCodes = new Set(purchaseRequestItemFilter);
+      rows = rows.filter((row) => selectedCodes.has(String(row.itemCode || "").trim()));
     }
     return rows;
-  }, [inventoryPurchaseRows, purchaseRequestCampusFilter, purchaseRequestItemFilter]);
+  }, [inventoryPurchaseScopedRows, purchaseRequestItemFilter]);
+  useEffect(() => {
+    if (purchaseRequestItemFilter.includes("ALL")) return;
+    const validValues = new Set(inventoryPurchaseItemOptions.map((option) => option.value));
+    const next = purchaseRequestItemFilter.filter((value) => validValues.has(value));
+    if (next.length === purchaseRequestItemFilter.length) return;
+    setPurchaseRequestItemFilter(next.length ? next : ["ALL"]);
+  }, [inventoryPurchaseItemOptions, purchaseRequestItemFilter]);
   const getPurchaseRequestQty = useCallback(
     (row: { id: number; suggestedQty: number }) => {
       const raw = String(purchaseRequestQtyOverrides[String(row.id)] || "").trim();
@@ -23992,6 +24040,7 @@ export default function App() {
     const entry: MaintenanceEntry = {
       id: Date.now(),
       date: maintenanceRecordForm.date,
+      createdAt: new Date().toISOString(),
       type: maintenanceRecordForm.type.trim(),
       completion: maintenanceRecordForm.completion,
       condition: maintenanceRecordForm.condition.trim(),
@@ -26458,6 +26507,7 @@ export default function App() {
       location: string;
       status: string;
       date: string;
+      createdAt: string;
       type: string;
       completion: string;
       condition: string;
@@ -26488,6 +26538,7 @@ export default function App() {
           location: asset.location || "-",
           status: asset.status || "Active",
           date: entry.date || "",
+          createdAt: entry.createdAt || "",
           type: entry.type || "",
           completion: entry.completion || "Not Yet",
           condition: entry.condition || "-",
@@ -26507,7 +26558,10 @@ export default function App() {
     return rows.sort((a, b) => {
       const aTime = Date.parse(a.date);
       const bTime = Date.parse(b.date);
-      if (!Number.isNaN(aTime) && !Number.isNaN(bTime)) return bTime - aTime;
+      if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) return bTime - aTime;
+      const aCreatedAt = Date.parse(a.createdAt || "");
+      const bCreatedAt = Date.parse(b.createdAt || "");
+      if (!Number.isNaN(aCreatedAt) && !Number.isNaN(bCreatedAt) && aCreatedAt !== bCreatedAt) return bCreatedAt - aCreatedAt;
       return b.rowId.localeCompare(a.rowId);
     });
   }, [assets]);
@@ -26584,7 +26638,12 @@ export default function App() {
         const aTime = Date.parse(a.date || "");
         const bTime = Date.parse(b.date || "");
         if (!Number.isNaN(aTime) && !Number.isNaN(bTime)) {
-          return (aTime - bTime) * sign;
+          if (aTime !== bTime) return (aTime - bTime) * sign;
+          const aCreatedAt = Date.parse(a.createdAt || "");
+          const bCreatedAt = Date.parse(b.createdAt || "");
+          if (!Number.isNaN(aCreatedAt) && !Number.isNaN(bCreatedAt) && aCreatedAt !== bCreatedAt) {
+            return (aCreatedAt - bCreatedAt) * sign;
+          }
         }
       }
 
@@ -41947,14 +42006,36 @@ export default function App() {
                     </label>
                     <label className="field">
                       <span>{lang === "km" ? "ទំនិញ" : "Item"}</span>
-                      <LocationPicker
-                        value={purchaseRequestItemFilter}
+                      <SearchableMultiSelectPicker
+                        summary={inventoryPurchaseItemFilterSummary}
                         options={inventoryPurchaseItemPickerOptions}
-                        onChange={setPurchaseRequestItemFilter}
+                        selectedValues={purchaseRequestItemFilter}
+                        allOptionLabel={lang === "km" ? "គ្រប់ Item" : "All Items"}
+                        allOptionChecked={purchaseRequestItemFilter.includes("ALL")}
+                        onToggleAllOption={(checked) =>
+                          setPurchaseRequestItemFilter((prev) =>
+                            applyMultiFilterSelection(prev, checked, "ALL", inventoryPurchaseItemFilterValues)
+                          )
+                        }
+                        onToggleValue={(value, checked) =>
+                          setPurchaseRequestItemFilter((prev) =>
+                            applyMultiFilterSelection(prev, checked, value, inventoryPurchaseItemFilterValues)
+                          )
+                        }
                         placeholder={lang === "km" ? "គ្រប់ Item" : "All Items"}
                         searchPlaceholder={lang === "km" ? "ស្វែងរក Item..." : "Search item..."}
                         emptyText={lang === "km" ? "មិនមាន Item" : "No item found."}
                       />
+                    </label>
+                    <label className="field inventory-purchase-summary-action-field">
+                      <span>{lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}</span>
+                      <button
+                        type="button"
+                        className="tab inventory-purchase-summary-reset-btn"
+                        onClick={resetPurchaseRequestFilters}
+                      >
+                        {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Clear Filters"}
+                      </button>
                     </label>
                   </div>
                   {isPhoneView ? (
@@ -45609,9 +45690,10 @@ export default function App() {
                         </span>
                       </div>
                       <div className="maintenance-mobile-asset-grid">
-                        <div className="maintenance-mobile-asset-field">
-                          <span>DATE</span>
+                      <div className="maintenance-mobile-asset-field">
+                          <span>WHEN</span>
                           <strong>{formatDate(row.date || "-")}</strong>
+                          <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
                           <span>TYPE</span>
@@ -45677,12 +45759,12 @@ export default function App() {
                 <table className="maintenance-history-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
+                      <th>When</th>
                       <th>Asset</th>
-                      <th>Campus</th>
+                      <th>Camp</th>
                       <th>Loc</th>
                       <th>Type</th>
-                      <th>Done</th>
+                      <th>OK</th>
                       <th>Cond</th>
                       <th>Note</th>
                       <th>By</th>
@@ -45703,7 +45785,10 @@ export default function App() {
                             row.note || ""
                           )}
                         >
-                          <td>{formatDate(row.date || "-")}</td>
+                          <td>
+                            <strong>{formatDate(row.date || "-")}</strong>
+                            <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
+                          </td>
                           <td>
                             <strong>{row.assetId}</strong>
                             <div className="tiny">{row.itemName}</div>
