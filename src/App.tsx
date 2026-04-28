@@ -11948,6 +11948,20 @@ export default function App() {
     }
     return Array.from(set).sort((a, b) => inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b)));
   }, [inventoryVisibleTxns, inventoryCampusLabel]);
+  const inventoryStockFilterItems = useMemo(() => {
+    return inventoryVisibleItems
+      .filter((item) => inventoryBusinessGroupValue(item) === inventoryDashboardGroup)
+      .filter((item) => {
+        if (inventoryStockFilterCampus === "ALL") return true;
+        return String(item.campus || "").trim() === inventoryStockFilterCampus;
+      })
+      .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
+  }, [inventoryDashboardGroup, inventoryStockFilterCampus, inventoryVisibleItems]);
+  useEffect(() => {
+    if (!inventoryStockFilterItemId) return;
+    if (inventoryStockFilterItems.some((item) => String(item.id) === inventoryStockFilterItemId)) return;
+    setInventoryStockFilterItemId("");
+  }, [inventoryStockFilterItemId, inventoryStockFilterItems]);
   const inventoryTxnsRows = useMemo(() => {
     const query = inventoryStockFilterQuery.trim().toLowerCase();
     const from = normalizeYmdInput(inventoryStockFilterDateFrom);
@@ -40745,7 +40759,7 @@ export default function App() {
                     <span>Item</span>
                     <InventoryItemPicker
                       value={inventoryStockFilterItemId}
-                      items={inventoryVisibleItems.slice().sort((a, b) => a.itemCode.localeCompare(b.itemCode))}
+                      items={inventoryStockFilterItems}
                       onChange={setInventoryStockFilterItemId}
                       placeholder="All items"
                       getLabel={inventoryItemLabel}
