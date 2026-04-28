@@ -212,8 +212,10 @@ type TransferHistoryRow = {
   date: string;
   fromCampus: string;
   fromLocation: string;
+  fromLocationPhoto: string;
   toCampus: string;
   toLocation: string;
+  toLocationPhoto: string;
   fromUser: string;
   toUser: string;
   responsibilityAck: string;
@@ -8411,6 +8413,7 @@ export default function App() {
   const [dashboardSupplyHoveredItemKey, setDashboardSupplyHoveredItemKey] = useState<string | null>(null);
   const [furnitureControlCampusFilter, setFurnitureControlCampusFilter] = useState<string[]>(["ALL"]);
   const [furnitureControlLocationFilter, setFurnitureControlLocationFilter] = useState<string[]>(["ALL"]);
+  const [furnitureControlItemFilter, setFurnitureControlItemFilter] = useState<string[]>(["ALL"]);
   const [quickCountCampusFilter, setQuickCountCampusFilter] = useState<string[]>(["ALL"]);
   const [quickCountCategoryFilter, setQuickCountCategoryFilter] = useState<string[]>(["ALL"]);
   const [quickCountLocationFilter, setQuickCountLocationFilter] = useState<string[]>(["ALL"]);
@@ -27974,6 +27977,16 @@ export default function App() {
   const allTransferRows = useMemo<TransferHistoryRow[]>(() => {
     const cachedAssets = readAssetFallback();
     const sourceAssets = cachedAssets.length ? cachedAssets : assets;
+    const locationPhotoMap = new Map(
+      locations
+        .map((row) => {
+          const campus = String(row.campus || "").trim();
+          const name = String(row.name || "").trim();
+          if (!campus || !name) return null;
+          return [`${campus}::${name}`, String(row.photo || "").trim()] as const;
+        })
+        .filter(Boolean) as Array<readonly [string, string]>
+    );
     const rows: TransferHistoryRow[] = [];
     for (const asset of sourceAssets) {
       for (const entry of asset.transferHistory || []) {
@@ -27983,6 +27996,10 @@ export default function App() {
             String(row.toCampus || "") === String(entry.toCampus || "") &&
             String(row.toLocation || "") === String(entry.toLocation || "")
         );
+        const fromCampus = String(entry.fromCampus || "").trim();
+        const fromLocation = String(entry.fromLocation || "").trim();
+        const toCampus = String(entry.toCampus || "").trim();
+        const toLocation = String(entry.toLocation || "").trim();
         rows.push({
           rowId: `${asset.id}-${entry.id}`,
           assetDbId: asset.id,
@@ -27993,10 +28010,12 @@ export default function App() {
           category: asset.category || "",
           itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           date: entry.date || "",
-          fromCampus: entry.fromCampus || "",
-          fromLocation: entry.fromLocation || "",
-          toCampus: entry.toCampus || "",
-          toLocation: entry.toLocation || "",
+          fromCampus,
+          fromLocation,
+          fromLocationPhoto: locationPhotoMap.get(`${fromCampus}::${fromLocation}`) || "",
+          toCampus,
+          toLocation,
+          toLocationPhoto: locationPhotoMap.get(`${toCampus}::${toLocation}`) || "",
           fromUser: matchedCustody?.fromUser || "",
           toUser: matchedCustody?.toUser || "",
           responsibilityAck: matchedCustody?.responsibilityAck ? "Yes" : "No",
@@ -28008,7 +28027,7 @@ export default function App() {
       }
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date));
-  }, [assets, assetItemName]);
+  }, [assets, assetItemName, locations]);
   const transferHistoryCampusOptions = useMemo(
     () =>
       Array.from(
@@ -28313,11 +28332,14 @@ export default function App() {
         return (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(campus))
           && (furnitureControlLocationFilter.includes("ALL") ? true : furnitureControlLocationFilter.includes(location));
       });
-    const rows = visibleLocationKeys.map((key) => {
+      const rows = visibleLocationKeys.map((key) => {
       const [campus, location] = key.split("::");
       const room = setupLocationMap.get(key);
       const matchingAssets = furnitureControlAssetRows.filter(
-        (asset) => asset.campus === campus && asset.location === location
+        (asset) =>
+          asset.campus === campus &&
+          asset.location === location &&
+          (furnitureControlItemFilter.includes("ALL") ? true : furnitureControlItemFilter.includes(asset.type))
       );
       const matchingAssetPhoto =
         assets
@@ -28383,7 +28405,7 @@ export default function App() {
         campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
         a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
     );
-  }, [locations, furnitureControlCampusFilter, furnitureControlLocationFilter, furnitureControlAssetRows, campusLabel, assets]);
+  }, [locations, furnitureControlCampusFilter, furnitureControlLocationFilter, furnitureControlItemFilter, furnitureControlAssetRows, campusLabel, assets]);
   const furnitureControlCampusRows = useMemo(() => {
     const map = new Map<
       string,
@@ -28507,6 +28529,23 @@ export default function App() {
     );
     return options.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
   }, [locations, furnitureControlAssetRows, furnitureControlCampusFilter]);
+  const furnitureControlItemFilterOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(
+        furnitureControlAssetRows
+          .filter((row) => (furnitureControlCampusFilter.includes("ALL") ? true : furnitureControlCampusFilter.includes(row.campus)))
+          .filter((row) => (furnitureControlLocationFilter.includes("ALL") ? true : furnitureControlLocationFilter.includes(row.location)))
+          .map((row) => row.type)
+          .filter(Boolean)
+      )
+    );
+    return options.sort((a, b) =>
+      assetItemName("FURNITURE", a, "").localeCompare(assetItemName("FURNITURE", b, ""), undefined, {
+        sensitivity: "base",
+        numeric: true,
+      })
+    );
+  }, [assetItemName, furnitureControlAssetRows, furnitureControlCampusFilter, furnitureControlLocationFilter]);
   useEffect(() => {
     setFurnitureControlLocationFilter((prev) => {
       if (prev.includes("ALL")) return ["ALL"];
@@ -28514,6 +28553,13 @@ export default function App() {
       return next.length ? next : ["ALL"];
     });
   }, [furnitureControlLocationFilterOptions]);
+  useEffect(() => {
+    setFurnitureControlItemFilter((prev) => {
+      if (prev.includes("ALL")) return ["ALL"];
+      const next = prev.filter((value) => furnitureControlItemFilterOptions.includes(value));
+      return next.length ? next : ["ALL"];
+    });
+  }, [furnitureControlItemFilterOptions]);
   const furnitureControlGapSummary = useMemo(() => {
     return {
       rooms: furnitureControlLocationRows.length,
@@ -29789,6 +29835,7 @@ export default function App() {
     if (reportType === "furniture_control") {
       setFurnitureControlCampusFilter(["ALL"]);
       setFurnitureControlLocationFilter(["ALL"]);
+      setFurnitureControlItemFilter(["ALL"]);
     }
   }, [reportType, resetAssetMasterReportFilters]);
 
@@ -29808,6 +29855,7 @@ export default function App() {
     setAssetByLocationLocationFilter("ALL");
     setFurnitureControlCampusFilter(["ALL"]);
     setFurnitureControlLocationFilter(["ALL"]);
+    setFurnitureControlItemFilter(["ALL"]);
     setReportPeriodMode("month");
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
@@ -31301,6 +31349,12 @@ export default function App() {
               ? "All Rooms"
               : furnitureControlLocationFilter.length
                 ? furnitureControlLocationFilter.join(", ")
+                : "-"
+          )} | Item Filter: ${escapeHtml(
+            furnitureControlItemFilter.includes("ALL")
+              ? "All Items"
+              : furnitureControlItemFilter.length
+                ? furnitureControlItemFilter.map((type) => assetItemName("FURNITURE", type, "")).join(", ")
                 : "-"
           )}</p>`
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
@@ -44380,12 +44434,18 @@ export default function App() {
                         <div className="transfer-history-route">
                           <div className="transfer-history-stop">
                             <span>From</span>
+                            <div className="transfer-history-stop-photo">
+                              {renderAssetPhoto(row.fromLocationPhoto || "", `${row.assetId}-from-location`)}
+                            </div>
                             <strong>{campusLabel(row.fromCampus)}</strong>
                             <small>{row.fromLocation || "-"}</small>
                           </div>
                           <div className="transfer-history-route-arrow">→</div>
                           <div className="transfer-history-stop">
                             <span>To</span>
+                            <div className="transfer-history-stop-photo">
+                              {renderAssetPhoto(row.toLocationPhoto || "", `${row.assetId}-to-location`)}
+                            </div>
                             <strong>{campusLabel(row.toCampus)}</strong>
                             <small>{row.toLocation || "-"}</small>
                           </div>
@@ -48884,6 +48944,30 @@ export default function App() {
                     }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកបន្ទប់..." : "Search room/location..."}
                     emptyText={lang === "km" ? "មិនមានបន្ទប់" : "No room found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(furnitureControlItemFilter, lang === "km" ? "គ្រប់មុខទំនិញ" : "All Items", (type) =>
+                      assetItemName("FURNITURE", type, "")
+                    )}
+                    options={furnitureControlItemFilterOptions.map((type) => ({
+                      value: type,
+                      label: assetItemName("FURNITURE", type, ""),
+                    }))}
+                    selectedValues={furnitureControlItemFilter}
+                    allOptionLabel={lang === "km" ? "គ្រប់មុខទំនិញ" : "All Items"}
+                    allOptionChecked={furnitureControlItemFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setFurnitureControlItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", furnitureControlItemFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setFurnitureControlItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, furnitureControlItemFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកមុខទំនិញ..." : "Search item..."}
+                    emptyText={lang === "km" ? "មិនមានមុខទំនិញ" : "No item found."}
                   />
                 </>
               ) : null}
