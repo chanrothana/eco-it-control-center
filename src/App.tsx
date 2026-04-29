@@ -32179,6 +32179,7 @@ export default function App() {
                             <div><strong>{t.category}:</strong> {asset.category || "-"}</div>
                             <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
                             <div><strong>{t.status}:</strong> {assetStatusLabel(asset.status || "-")}</div>
+                            <div><strong>{t.user}:</strong> {asset.assignedTo || "-"}</div>
                           </div>
                         </div>
                         <div className="public-asset-mobile-photo">
@@ -32464,14 +32465,12 @@ export default function App() {
                           <div className="field public-asset-dup-mobile"><span>{t.category}</span><div className="detail-value">{asset.category || "-"}</div></div>
                           <div className="field public-asset-dup-mobile"><span>{t.typeCode}</span><div className="detail-value">{asset.type || "-"}</div></div>
                           <div className="field public-asset-dup-mobile"><span>{t.name}</span><div className="detail-value">{assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}</div></div>
+                          <div className="field public-asset-dup-mobile"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
                           {showPublicQrSetFields ? (
                             <div className="field"><span>{t.setCode}</span><div className="detail-value">{asset.setCode || "-"}</div></div>
                           ) : null}
                           {showPublicQrSetFields ? (
                             <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{asset.parentAssetId || "-"}</div></div>
-                          ) : null}
-                          {asset.category === "IT" ? (
-                            <div className="field"><span>{t.user}</span><div className="detail-value">{asset.assignedTo || "-"}</div></div>
                           ) : null}
                           <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
                           <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
@@ -45148,6 +45147,127 @@ export default function App() {
                 headKeyPrefix="maintenance-dashboard-head"
                 dayKeyPrefix="maintenance-dashboard-day"
               />
+            </div>
+
+            <div className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-row">
+                <div>
+                  <h3 className="section-title">{lang === "km" ? "បញ្ជីកាលវិភាគថែទាំទាំងអស់" : "Full Maintenance Schedule List"}</h3>
+                  <p className="tiny" style={{ margin: 0 }}>
+                    {lang === "km"
+                      ? "មើលការងារថែទាំទាំងអស់តាមលំដាប់កាលបរិច្ឆេទ ដោយមិនចាំបាច់ចុចមើលតាមថ្ងៃនីមួយៗ។"
+                      : "See all scheduled maintenance items by date without opening each calendar day."}
+                  </p>
+                </div>
+                <div className="tiny">
+                  {scheduleListRows.length} {scheduleListRows.length === 1 ? "item" : "items"}
+                </div>
+              </div>
+              {isPhoneView ? (
+                <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
+                  {scheduleListRows.length ? (
+                    scheduleListRows.map((asset) => (
+                      <article key={`maintenance-dashboard-schedule-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                        <div className="schedule-mobile-card-head">
+                          <strong>{asset.assetId}</strong>
+                          <span>{formatDate(asset.nextMaintenanceDate || "-")}</span>
+                        </div>
+                        <div className="schedule-mobile-card-meta">
+                          <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                          <div>{campusLabel(asset.campus)} | {asset.location || "-"}</div>
+                          <div>
+                            {lang === "km" ? "របៀប" : "Mode"}:{" "}
+                            {maintenanceRepeatLabel(
+                              String(asset.repeatMode || "NONE"),
+                              Number(asset.repeatWeekOfMonth || 1),
+                              Number(asset.repeatWeekday || 6)
+                            )}
+                          </div>
+                          <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
+                        </div>
+                        <div className="row-actions">
+                          <button
+                            className="btn-primary btn-small"
+                            disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                            onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
+                          >
+                            Record
+                          </button>
+                          <button
+                            className="tab btn-small"
+                            disabled={!isAdmin}
+                            onClick={() => editScheduleForAsset(asset)}
+                          >
+                            {t.edit}
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t.assetId}</th>
+                        <th>{t.name}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.location}</th>
+                        <th>{t.date}</th>
+                        <th>{lang === "km" ? "របៀប" : "Mode"}</th>
+                        <th>{t.scheduleNote}</th>
+                        <th>{t.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scheduleListRows.length ? (
+                        scheduleListRows.map((asset) => (
+                          <tr key={`maintenance-dashboard-schedule-row-${asset.id}`}>
+                            <td><strong>{asset.assetId}</strong></td>
+                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                            <td>{campusLabel(asset.campus)}</td>
+                            <td>{asset.location || "-"}</td>
+                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                            <td>
+                              {maintenanceRepeatLabel(
+                                String(asset.repeatMode || "NONE"),
+                                Number(asset.repeatWeekOfMonth || 1),
+                                Number(asset.repeatWeekday || 6)
+                              )}
+                            </td>
+                            <td>{asset.scheduleNote || "-"}</td>
+                            <td>
+                              <div className="row-actions">
+                                <button
+                                  className="btn-primary btn-small"
+                                  disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                  onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
+                                >
+                                  Record
+                                </button>
+                                <button
+                                  className="tab btn-small"
+                                  disabled={!isAdmin}
+                                  onClick={() => editScheduleForAsset(asset)}
+                                >
+                                  {t.edit}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="panel" style={{ marginTop: 12 }}>
