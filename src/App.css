@@ -1706,6 +1706,46 @@ h2 {
   height: 16px;
 }
 
+.maintenance-staff-quick-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid rgba(116, 149, 208, 0.35);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(33, 52, 82, 0.98) 0%, rgba(27, 43, 69, 0.98) 100%);
+}
+
+.maintenance-staff-quick-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.maintenance-staff-quick-head h4 {
+  margin: 4px 0 6px;
+  font-size: 22px;
+  color: #f4f8ff;
+}
+
+.maintenance-staff-quick-head p:last-child {
+  margin: 0;
+  color: #b8c9e4;
+}
+
+.maintenance-staff-quick-form {
+  align-items: start;
+}
+
+.maintenance-staff-quick-panel .detail-value {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.maintenance-staff-quick-actions {
+  margin-top: 4px;
+}
+
 .printer-report-chart-card {
   margin-bottom: 14px;
   border: 1px solid #e2cfb2;
@@ -17190,6 +17230,22 @@ tr.row-maint-maintenance:hover td {
     border-radius: 14px;
     font-size: 13px;
     padding: 0 10px;
+  }
+
+  .maintenance-staff-quick-head {
+    display: grid;
+    gap: 10px;
+  }
+
+  .maintenance-staff-quick-head h4,
+  .maintenance-staff-quick-head p {
+    text-align: center;
+  }
+
+  .maintenance-staff-quick-panel .maintenance-quick-campus-chip {
+    justify-self: center;
+    width: 100%;
+    max-width: 280px;
   }
 
   .subhead {

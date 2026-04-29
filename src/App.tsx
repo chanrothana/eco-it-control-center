@@ -7564,6 +7564,12 @@ export default function App() {
       setTab("verification");
     });
   }, []);
+  const openMaintenanceQuickRecord = useCallback(() => {
+    startTabTransition(() => {
+      setMaintenanceView("record");
+      setTab("maintenance");
+    });
+  }, []);
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
@@ -7575,6 +7581,12 @@ export default function App() {
   }, []);
   const maintenanceQuickNavItems = useMemo(
     () => [
+      {
+        id: "maintenance" as const,
+        label: lang === "km" ? "កត់ត្រាការងារ" : "Daily Record",
+        active: tab === "maintenance",
+        onSelect: () => openMaintenanceQuickRecord(),
+      },
       {
         id: "inventory" as const,
         label: lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies",
@@ -7588,7 +7600,7 @@ export default function App() {
         onSelect: () => openMaintenanceQuickAssetCheck(),
       },
     ],
-    [lang, openMaintenanceQuickAssetCheck, openMaintenanceQuickSupplies, tab]
+    [lang, openMaintenanceQuickAssetCheck, openMaintenanceQuickRecord, openMaintenanceQuickSupplies, tab]
   );
   const handleMobileNavChange = useCallback(
     (nextTab: NavModule, options?: { closeMenu?: boolean }) => {
@@ -8541,7 +8553,7 @@ export default function App() {
 
   useEffect(() => {
     if (maintenanceQuickMode) {
-      if (tab !== "inventory" && tab !== "verification") setTab("inventory");
+      if (tab !== "inventory" && tab !== "verification" && tab !== "maintenance") setTab("maintenance");
       return;
     }
     if (!navMenuItems.some((item) => item.id === tab)) {
@@ -10151,8 +10163,8 @@ export default function App() {
   }, [inventoryAdminMatrixDatePickerOpen]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
-    openMaintenanceQuickSupplies();
-  }, [maintenanceQuickMode, openMaintenanceQuickSupplies]);
+    openMaintenanceQuickRecord();
+  }, [maintenanceQuickMode, openMaintenanceQuickRecord]);
 
   useEffect(() => {
     if (authUser) {
@@ -10314,6 +10326,13 @@ export default function App() {
       setCampusFilter(maintenanceLockedCampus);
     }
   }, [maintenanceQuickMode, maintenanceLockedCampus, campusFilter]);
+  useEffect(() => {
+    if (!maintenanceQuickMode) return;
+    if (!maintenanceLockedCampus) return;
+    if (maintenanceRecordCampusFilter !== maintenanceLockedCampus) {
+      setMaintenanceRecordCampusFilter(maintenanceLockedCampus);
+    }
+  }, [maintenanceQuickMode, maintenanceLockedCampus, maintenanceRecordCampusFilter]);
 
   useEffect(() => {
     if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
@@ -10364,6 +10383,12 @@ export default function App() {
     if (isAdmin) return true;
     setError("Admin role required for this action.");
     setSetupMessage("Admin role required for this action.");
+    return false;
+  }
+  function requireMaintenanceRecordAction() {
+    if (isAdmin) return true;
+    if (maintenanceQuickMode && canAccessMenu("maintenance.record", "maintenance")) return true;
+    setError(lang === "km" ? "ត្រូវការសិទ្ធិកត់ត្រាថែទាំ។" : "Maintenance record permission required.");
     return false;
   }
   function requireSuperAdminAction() {
@@ -24097,7 +24122,7 @@ export default function App() {
   }
 
   async function addMaintenanceRecordFromTab(): Promise<boolean> {
-    if (!requireAdminAction()) return false;
+    if (!requireMaintenanceRecordAction()) return false;
     const assetId = Number(maintenanceRecordForm.assetId);
     if (!assetId) return false;
     if (
@@ -24106,7 +24131,7 @@ export default function App() {
     ) {
       return false;
     }
-    if (!isSuperAdmin && maintenanceRecordForm.date < todayYmd) {
+    if (!isSuperAdmin && !maintenanceQuickMode && maintenanceRecordForm.date < todayYmd) {
       setError("Cannot set maintenance date to a past date.");
       return false;
     }
@@ -24114,10 +24139,17 @@ export default function App() {
       ...maintenanceRecordForm.workflow,
       template: getMaintenanceTemplateKey(maintenanceRecordSelectedAsset),
     });
+    const needsPhotoProof = !maintenanceQuickMode;
+    if (!maintenanceRecordForm.note.trim()) {
+      setError(maintenanceQuickMode ? "Please fill the maintenance note." : "Fill note and upload at least one before and after photo.");
+      return false;
+    }
     if (
-      !maintenanceRecordForm.note.trim() ||
-      !(maintenanceRecordForm.beforePhotos || []).length ||
-      !(maintenanceRecordForm.afterPhotos || []).length
+      needsPhotoProof &&
+      (
+        !(maintenanceRecordForm.beforePhotos || []).length ||
+        !(maintenanceRecordForm.afterPhotos || []).length
+      )
     ) {
       setError("Fill note and upload at least one before and after photo.");
       return false;
@@ -24245,7 +24277,11 @@ export default function App() {
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
       setMaintenanceRecordForm(createMaintenanceRecordForm(savedAsset, toYmd(new Date()), currentOperatorName));
       setMaintenanceRecordFileKey((k) => k + 1);
-      setMaintenanceView("history");
+      if (maintenanceQuickMode) {
+        window.alert(lang === "km" ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។" : "Maintenance record saved.");
+      } else {
+        setMaintenanceView("history");
+      }
       await loadData();
       return true;
     } catch (err) {
@@ -25926,9 +25962,14 @@ export default function App() {
     Boolean(maintenanceRecordForm.assetId) &&
     Boolean(maintenanceRecordForm.date) &&
     Boolean(maintenanceRecordForm.note.trim()) &&
-    (maintenanceRecordForm.beforePhotos || []).length > 0 &&
-    (maintenanceRecordForm.afterPhotos || []).length > 0
-  ), [maintenanceRecordForm]);
+    (
+      maintenanceQuickMode ||
+      (
+        (maintenanceRecordForm.beforePhotos || []).length > 0 &&
+        (maintenanceRecordForm.afterPhotos || []).length > 0
+      )
+    )
+  ), [maintenanceQuickMode, maintenanceRecordForm]);
   const detailAsset = useMemo(() => {
     if (assetDetailId == null) return null;
     return (
@@ -33175,7 +33216,7 @@ export default function App() {
                               }}
                             >
                               <span className="mobile-menu-nav-icon" aria-hidden={true}>
-                                {item.id === "inventory" ? navIcon("inventory") : navIcon("verification")}
+                                {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
                               </span>
                               <span className="mobile-menu-nav-label">{item.label}</span>
                             </button>
@@ -33513,8 +33554,8 @@ export default function App() {
                     <h2>{lang === "km" ? "ធ្វើការងារប្រចាំថ្ងៃបានលឿន" : "Daily Work, Faster"}</h2>
                     <p>
                       {lang === "km"
-                        ? "មើលសម្ភារៈសម្អាត កត់ត្រាចេញស្តុក និងបើក Asset Check ដោយមិនចាំបាច់ឃើញម៉ឺនុយធំៗរបស់ប្រព័ន្ធទាំងមូល។"
-                        : "Open cleaning supplies, record stock out, and jump to Asset Check without the full system menu."}
+                        ? "កត់ត្រាការងារជួសជុលប្រចាំថ្ងៃ បើកសម្ភារៈសម្អាត និងបើក Asset Check ដោយមិនចាំបាច់ឃើញម៉ឺនុយធំៗរបស់ប្រព័ន្ធទាំងមូល។"
+                        : "Record daily maintenance, open cleaning supplies, and jump to Asset Check without the full system menu."}
                     </p>
                   </div>
                   <span className="maintenance-quick-campus-chip">
@@ -33532,7 +33573,13 @@ export default function App() {
                   </article>
                   <article className="maintenance-quick-fact">
                     <span>{lang === "km" ? "មុខងារ" : "Focus"}</span>
-                    <strong>{tab === "verification" ? (lang === "km" ? "ពិនិត្យទ្រព្យ" : "Asset Check") : (lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies")}</strong>
+                    <strong>
+                      {tab === "verification"
+                        ? (lang === "km" ? "ពិនិត្យទ្រព្យ" : "Asset Check")
+                        : tab === "maintenance"
+                        ? (lang === "km" ? "កត់ត្រាការងារ" : "Daily Record")
+                        : (lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies")}
+                    </strong>
                   </article>
                 </div>
                 <div className="maintenance-quick-nav-row">
@@ -33544,7 +33591,7 @@ export default function App() {
                       onClick={item.onSelect}
                     >
                       <span className="maintenance-quick-nav-icon" aria-hidden={true}>
-                        {item.id === "inventory" ? navIcon("inventory") : navIcon("verification")}
+                        {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
                       </span>
                       <span>{item.label}</span>
                     </button>
@@ -33586,7 +33633,7 @@ export default function App() {
               </div>
             ) : null}
             {error ? <p className="alert alert-error">{error}</p> : null}
-            {!isAdmin ? <p className="alert">{t.viewerMode}</p> : null}
+            {!isAdmin && !(maintenanceQuickMode && canAccessMenu("maintenance.record", "maintenance")) ? <p className="alert">{t.viewerMode}</p> : null}
             {loading ? <p className="alert">{t.loading}</p> : null}
 
         {tab === "dashboard" && (
@@ -45153,6 +45200,7 @@ export default function App() {
         {tab === "maintenance" && (
           <>
           <section className="panel">
+            {!maintenanceQuickMode ? (
             <div className="tabs maintenance-view-tabs">
               {(canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) ? (
                 <button
@@ -45182,6 +45230,7 @@ export default function App() {
                 </button>
               ) : null}
             </div>
+            ) : null}
 
             {maintenanceView === "dashboard" && (canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) && (
             <>
@@ -45519,6 +45568,174 @@ export default function App() {
             )}
 
             {maintenanceView === "record" && canAccessMenu("maintenance.record", "maintenance") && (
+            <>
+            {maintenanceQuickMode ? (
+            <>
+            <h3 className="section-title">{lang === "km" ? "កត់ត្រាការងារប្រចាំថ្ងៃ" : "Daily Maintenance Record"}</h3>
+            <section className="panel maintenance-staff-quick-panel">
+              <div className="maintenance-staff-quick-head">
+                <div>
+                  <p className="maintenance-quick-kicker">{lang === "km" ? "សម្រាប់បុគ្គលិកថែទាំ" : "For Maintenance Staff"}</p>
+                  <h4>{lang === "km" ? "បំពេញជាភាសាខ្មែរ ងាយយល់ ងាយរក្សាទុក" : "Simple Khmer-first daily entry"}</h4>
+                  <p>
+                    {lang === "km"
+                      ? "បុគ្គលិកអាចកត់ត្រាការងារប្រចាំថ្ងៃបានភ្លាមៗ បន្ទាប់មក Admin ឬ Super Admin អាចពិនិត្យ កែសម្រួល និងបោះពុម្ពជារបាយការណ៍ប្រចាំខែ។"
+                      : "Staff can save daily work quickly, then Admin or Super Admin can review, correct, and print the monthly report."}
+                  </p>
+                </div>
+                <span className="maintenance-quick-campus-chip">{campusLabel(maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter)}</span>
+              </div>
+              <div className="form-grid maintenance-staff-quick-form">
+                <label className="field">
+                  <span>{lang === "km" ? "សាខា" : "Campus"}</span>
+                  <div className="detail-value">{campusLabel(maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter)}</div>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
+                  <input
+                    className="input"
+                    type="date"
+                    value={maintenanceRecordForm.date}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, date: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ទីតាំង" : "Location"}</span>
+                  <LocationPicker
+                    value={maintenanceRecordLocationFilter}
+                    onChange={setMaintenanceRecordLocationFilter}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
+                      ...maintenanceRecordLocationOptions.map((location) => ({ value: location, label: location })),
+                    ]}
+                    placeholder={lang === "km" ? "ជ្រើសទីតាំង" : "Select location"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                  />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
+                  <select
+                    className="input"
+                    value={maintenanceRecordForm.type}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, type: e.target.value }))}
+                  >
+                    {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
+                      <option key={`quick-maint-type-${opt}`} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field field-wide">
+                  <span>{lang === "km" ? "ទ្រព្យ ឬ សម្ភារៈ" : "Asset or Item"}</span>
+                  <AssetPicker
+                    value={maintenanceRecordForm.assetId}
+                    assets={maintenanceRecordFilteredAssets}
+                    getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${asset.location || "-"}`}
+                    onChange={(assetId) => {
+                      const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
+                      setMaintenanceRecordForm((f) => ({
+                        ...f,
+                        assetId,
+                        workflow: {
+                          ...normalizeMaintenanceWorkflow(f.workflow),
+                          template: getMaintenanceTemplateKey(selectedAsset),
+                          checklist: [],
+                        },
+                      }));
+                    }}
+                    placeholder={lang === "km" ? "ជ្រើសទ្រព្យ ឬ សម្ភារៈ" : "Select asset"}
+                    disabled={!maintenanceRecordFilteredAssets.length}
+                  />
+                  <div className="tiny">
+                    {maintenanceRecordFilteredAssets.length
+                      ? (lang === "km"
+                        ? `${maintenanceRecordFilteredAssets.length} ទ្រព្យ/សម្ភារៈ អាចជ្រើសបាន`
+                        : `${maintenanceRecordFilteredAssets.length} assets available`)
+                      : (lang === "km"
+                        ? "មិនមានទ្រព្យ/សម្ភារៈ ត្រូវតាមទីតាំងនេះទេ។"
+                        : "No asset matches this location.")}
+                  </div>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "អ្នកអនុវត្ត" : "Performed By"}</span>
+                  <input
+                    className="input"
+                    value={maintenanceRecordForm.by}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
+                    placeholder={lang === "km" ? "ឈ្មោះអ្នកធ្វើការ" : "Staff name"}
+                  />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "តម្លៃ" : "Cost"}</span>
+                  <input
+                    className="input"
+                    value={maintenanceRecordForm.cost}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                    placeholder={lang === "km" ? "បើមាន" : "Optional"}
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span>{lang === "km" ? "ការងារដែលបានធ្វើ" : "Work Done"}</span>
+                  <textarea
+                    className="textarea"
+                    value={maintenanceRecordForm.note}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, note: e.target.value }))}
+                    placeholder={
+                      lang === "km"
+                        ? "ឧទាហរណ៍៖ ជួសជុលទ្វារ ប្ដូរកូនសោ ជួសជុលកុំព្យូទ័រ ឬ សម្អាតម៉ាស៊ីនត្រជាក់"
+                        : "Example: repaired door, changed lock, fixed computer, or cleaned AC."
+                    }
+                  />
+                </label>
+                <label className="field field-wide">
+                  <span>{lang === "km" ? "ចំណាំបន្ថែម" : "Extra Remark"}</span>
+                  <input
+                    className="input"
+                    value={maintenanceRecordForm.condition}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                    placeholder={lang === "km" ? "អាចបន្ថែមស្ថានភាព ឬ មតិយោបល់" : "Optional condition or remark"}
+                  />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "រូបមុនធ្វើការ" : "Before Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                  <input
+                    key={`${maintenanceRecordFileKey}-staff-before`}
+                    className="file-input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
+                  />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "រូបក្រោយធ្វើការ" : "After Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                  <input
+                    key={`${maintenanceRecordFileKey}-staff-after`}
+                    className="file-input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
+                  />
+                </label>
+              </div>
+              <div className="asset-actions maintenance-staff-quick-actions">
+                <div className="tiny">
+                  {lang === "km"
+                    ? "បុគ្គលិកអាចកត់ត្រាជាមូលដ្ឋានសិន។ Admin អាចចូលកែសម្រួល និងបោះពុម្ពរបាយការណ៍ក្រោយបាន។"
+                    : "Staff can save the basic record first. Admin can review, correct, and print the report later."}
+                </div>
+                <button
+                  className="btn-primary"
+                  disabled={busy || !maintenanceRecordIsComplete}
+                  onClick={addMaintenanceRecordFromTab}
+                >
+                  {lang === "km" ? "រក្សាទុកកំណត់ត្រា" : "Save Daily Record"}
+                </button>
+              </div>
+            </section>
+            </>
+            ) : (
             <>
             <h3 className="section-title">{lang === "km" ? "កត់ត្រាលទ្ធផលថែទាំ" : "Record Maintenance Result"}</h3>
             <div className="form-grid maintenance-record-grid">
@@ -45919,6 +46136,8 @@ export default function App() {
                 {lang === "km" ? "បន្ថែមកំណត់ត្រាថែទាំ" : "Add Maintenance Record"}
               </button>
             </div>
+            </>
+            )}
             </>
             )}
 
