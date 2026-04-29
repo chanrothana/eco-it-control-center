@@ -31366,9 +31366,13 @@ export default function App() {
               .map((row) => {
                 const qr = String(rows.find((r) => r[1] === row.assetId)?.[0] || "");
                 const serial = String(row.serialNumber || "").trim() || "-";
+                const itemName = String(row.itemName || "").trim() || "-";
+                const location = String(row.location || "").trim() || "-";
                 const assignedTo = String(row.assignedTo || "").trim();
                 return `<div class="qr-sticker-wrap">
                   ${assignedTo ? `<div class="qr-sticker-user">${escapeHtml(assignedTo)}</div>` : ""}
+                  <div class="qr-sticker-item">${escapeHtml(itemName)}</div>
+                  <div class="qr-sticker-location">${escapeHtml(location)}</div>
                   <div class="qr-sticker-sn">SN: ${escapeHtml(serial)}</div>
                   <div class="qr-sticker">
                     <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
@@ -31531,6 +31535,8 @@ export default function App() {
           .qr-sticker-grid { display: grid; grid-template-columns: repeat(6, 96px); column-gap: 6px; row-gap: 6px; margin-top: 6px; width: 100%; justify-content: space-between; }
           .qr-sticker-wrap { width: 96px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
           .qr-sticker-user { width: 96px; min-height: 10px; text-align: center; font-size: 6.6px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
+          .qr-sticker-item { width: 96px; min-height: 10px; text-align: center; font-size: 6.6px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #314238; }
+          .qr-sticker-location { width: 96px; min-height: 10px; text-align: center; font-size: 6.4px; line-height: 1.05; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #5a695e; }
           .qr-sticker-sn { width: 96px; min-height: 10px; text-align: center; font-size: 6.8px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
           .qr-sticker { width: 96px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 4px 4px 4px; display: grid; gap: 3px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
           .qr-sticker-qr { width: 74px; height: 74px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }

@@ -16011,8 +16011,9 @@ tr.row-maint-maintenance:hover td {
   align-items: center;
   border: 1px solid #e0c8ac;
   border-radius: 12px;
-  background: #fffdf9;
+  background: linear-gradient(180deg, #fffdf9 0%, #fff8ef 100%);
   padding: 12px;
+  box-shadow: 0 8px 18px rgba(79, 55, 25, 0.08);
 }
 
 .qr-label-image-wrap {
@@ -16044,6 +16045,12 @@ tr.row-maint-maintenance:hover td {
   display: grid;
   gap: 4px;
   font-size: 14px;
+  color: #5b4a34;
+  line-height: 1.35;
+}
+
+.qr-label-meta > div:not(.qr-label-asset-id) {
+  color: #5b4a34;
 }
 
 .qr-label-asset-id {
