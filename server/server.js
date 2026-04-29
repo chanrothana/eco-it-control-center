@@ -2849,6 +2849,41 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   };
 }
 
+function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
+  if (!asset || !entry) return "";
+  const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+  const campus = formatTelegramCampusKhmer(asset.campus);
+  const location = toText(asset.location) || "-";
+  const date = toText(entry.date) || "-";
+  const type = toText(entry.type) || "-";
+  const performedBy = toText(entry.by) || toText(actor && actor.displayName) || toText(actor && actor.username) || "staff";
+  const note = toText(entry.note) || "-";
+  const condition = toText(entry.condition);
+  const checkedBy = toText(entry.checkedBy);
+  const cost = toText(entry.cost);
+  const lines = [
+    "ជូនដំណឹង ECO - ការងារជួសជុល",
+    "មានកំណត់ត្រាការងារថ្មី",
+    `Asset: ${toText(asset.assetId) || "-"} - ${itemName || "-"}`,
+    `សាខា: ${campus}`,
+    `ទីតាំង: ${location}`,
+    `កាលបរិច្ឆេទ: ${date}`,
+    `ប្រភេទការងារ: ${type}`,
+    `អ្នកអនុវត្ត: ${performedBy}`,
+    `ការងារដែលបានធ្វើ: ${note}`,
+  ];
+  if (condition) {
+    lines.push(`ចំណាំបន្ថែម: ${condition}`);
+  }
+  if (checkedBy) {
+    lines.push(`ពិនិត្យដោយ: ${checkedBy}`);
+  }
+  if (cost) {
+    lines.push(`តម្លៃ: ${cost}`);
+  }
+  return lines.join("\n");
+}
+
 initStorageSync();
 
 function appendAuditLog(db, user, action, entity, entityId, summary = "") {
@@ -8381,7 +8416,24 @@ const server = http.createServer(async (req, res) => {
       addMaintenanceDoneNotification(db, db.assets[idx], entry);
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
-      sendJson(res, 201, { asset: db.assets[idx], entry });
+      let telegramAlertSent = false;
+      try {
+        const message = buildMaintenanceRecordTelegramMessage(db.assets[idx], entry, user);
+        if (message) {
+          const report = await sendTelegramMaintenanceMessage(message, {
+            db,
+            photoUrl: toText(entry.photo) || toText(db.assets[idx].photo) || "",
+            includeResults: true,
+          });
+          telegramAlertSent = Boolean(report && report.ok);
+        }
+      } catch (err) {
+        console.warn(
+          "[MAINTENANCE ALERT] Failed to send maintenance record Telegram alert:",
+          err instanceof Error ? err.message : err
+        );
+      }
+      sendJson(res, 201, { asset: db.assets[idx], entry, telegramAlertSent });
       return;
     }
 
