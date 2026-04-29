@@ -4494,9 +4494,46 @@ h2 {
   color: #6f84a7;
 }
 
+.maintenance-view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 10px;
+  border: 1px solid rgba(191, 205, 233, 0.45);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(31, 47, 76, 0.82) 0%, rgba(24, 39, 65, 0.9) 100%);
+}
+
+.maintenance-view-tabs .tab {
+  min-height: 42px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(184, 197, 225, 0.54);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 246, 255, 0.96) 100%);
+  color: #344969;
+  font-weight: 800;
+  box-shadow: 0 6px 18px rgba(12, 21, 42, 0.12);
+}
+
+.maintenance-view-tabs .tab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(124, 157, 223, 0.72);
+}
+
+.maintenance-view-tabs .tab.tab-active {
+  border-color: rgba(77, 128, 236, 0.9);
+  background: linear-gradient(135deg, #5c8cf2 0%, #3c67dd 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(42, 83, 180, 0.32);
+}
+
 .maintenance-title-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -4504,9 +4541,23 @@ h2 {
   margin: 0;
 }
 
+.maintenance-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.maintenance-print-btn {
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(45, 91, 193, 0.24);
+}
+
 .maintenance-filter-row {
   display: grid;
-  grid-template-columns: 1.1fr 1.15fr 1.1fr 1fr 1fr 1.5fr;
+  grid-template-columns: 1.05fr 1.05fr 1.05fr 0.9fr 0.95fr 0.95fr 1.4fr;
   align-items: center;
   width: 100%;
   gap: 10px;
@@ -4527,6 +4578,10 @@ h2 {
 .maintenance-filters .input {
   width: 100%;
   min-width: 0;
+}
+
+.maintenance-logbook-print-area .maintenance-filter-row {
+  margin-bottom: 14px;
 }
 
 .maintenance-history-search-row {
@@ -8717,64 +8772,235 @@ label.backup-action-btn {
   -webkit-box-orient: initial;
 }
 
-.maintenance-logbook-note {
+.maintenance-logbook-sheet {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  border: 1px solid #d6d6d6;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 18px 18px 16px;
+  box-shadow: 0 12px 30px rgba(8, 15, 30, 0.08);
+}
+
+.maintenance-logbook-sheet-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: end;
+  gap: 18px;
+  border-bottom: 1px solid #3f3f3f;
+  padding-bottom: 10px;
+}
+
+.maintenance-logbook-sheet-brand {
+  width: 96px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  align-self: center;
+}
+
+.maintenance-logbook-sheet-title {
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  text-align: center;
+}
+
+.maintenance-logbook-sheet-title-km {
+  color: #1f1f1f;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.maintenance-logbook-sheet-title-en {
+  color: #1f1f1f;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.maintenance-logbook-sheet-header-spacer {
+  width: 96px;
+}
+
+.maintenance-logbook-sheet-meta {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+}
+
+.maintenance-logbook-sheet-campus {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #202020;
+}
+
+.maintenance-logbook-sheet-campus span {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.maintenance-logbook-sheet-campus strong {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.maintenance-logbook-sheet-month {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.maintenance-logbook-sheet-month span {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+}
+
+.maintenance-logbook-sheet-month strong {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.maintenance-logbook-sheet-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.maintenance-logbook-sheet-page {
+  display: grid;
+  gap: 2px;
+  color: #252525;
+  font-size: 12px;
+  text-align: right;
+}
+
+.maintenance-logbook-sheet-page strong {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.maintenance-logbook-print-footer {
+  display: none;
 }
 
 .maintenance-logbook-table-wrap {
-  border: 1px solid #d5c4a6;
-  border-radius: 18px;
-  background: #fffdf8;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
+  border: 1px solid #333333;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
 }
 
 .maintenance-logbook-table {
   width: 100%;
   border-collapse: collapse;
-  background: linear-gradient(180deg, rgba(255, 249, 236, 0.55), rgba(255, 255, 255, 0.96));
+  background: #ffffff;
 }
 
 .maintenance-logbook-table th,
 .maintenance-logbook-table td {
-  border: 1px solid #d9ccb6;
-  padding: 10px 9px;
+  border: 1px solid #3b3b3b;
+  padding: 9px 8px;
   vertical-align: top;
 }
 
 .maintenance-logbook-table th {
-  background: #f4ecdd;
-  color: #5d4931;
-  font-size: 12px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 14px;
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: center;
+}
+
+.maintenance-logbook-table th span,
+.maintenance-logbook-table th strong {
+  display: block;
+}
+
+.maintenance-logbook-table th span {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: 2px;
+}
+
+.maintenance-logbook-table th strong {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.3;
 }
 
 .maintenance-logbook-table td {
-  color: #2f3d57;
+  color: #1f1f1f;
   font-size: 14px;
   line-height: 1.45;
 }
 
-.maintenance-logbook-table tbody tr:nth-child(even) td {
-  background: rgba(255, 248, 234, 0.48);
+.maintenance-logbook-table tbody tr.maintenance-logbook-row-it td {
+  background: rgba(224, 242, 226, 0.92);
 }
 
-.maintenance-logbook-table td:nth-child(1),
-.maintenance-logbook-table td:nth-child(2),
-.maintenance-logbook-table td:nth-child(5),
-.maintenance-logbook-table td:nth-child(6) {
+.maintenance-logbook-table td:nth-child(1) {
+  width: 56px;
   text-align: center;
 }
 
+.maintenance-logbook-table td:nth-child(2) {
+  width: 130px;
+  text-align: center;
+}
+
+.maintenance-logbook-table td:nth-child(3) {
+  width: auto;
+}
+
+.maintenance-logbook-table td:nth-child(4) {
+  width: 120px;
+  text-align: center;
+}
+
+.maintenance-logbook-table td:nth-child(5) {
+  width: 82px;
+  text-align: center;
+}
+
+.maintenance-logbook-table td:nth-child(6) {
+  width: 120px;
+  text-align: center;
+}
+
+.maintenance-logbook-signature-name {
+  min-height: 22px;
+}
+
+.maintenance-logbook-signature-line {
+  margin-top: 18px;
+  border-bottom: 1px solid #111111;
+}
+
 .maintenance-logbook-mobile-card {
-  border: 1px solid #d6c7b0;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #fffdfa 0%, #fff7eb 100%);
+  border: 1px solid #3b3b3b;
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.maintenance-logbook-mobile-card.maintenance-logbook-row-it {
+  background: rgba(224, 242, 226, 0.92);
+  border-color: rgba(127, 171, 131, 0.95);
 }
 
 .maintenance-logbook-mobile-head {
@@ -8784,13 +9010,16 @@ label.backup-action-btn {
   gap: 10px;
 }
 
+.maintenance-logbook-mobile-head strong,
+.maintenance-logbook-mobile-head span {
+  color: #171717;
+}
+
 .maintenance-logbook-mobile-head strong {
-  color: #6b4f2d;
   font-size: 15px;
 }
 
 .maintenance-logbook-mobile-head span {
-  color: #5f7398;
   font-size: 12px;
   font-weight: 700;
 }
@@ -8798,9 +9027,9 @@ label.backup-action-btn {
 .maintenance-logbook-mobile-grid {
   display: grid;
   gap: 8px;
-  color: #2f3d57;
+  color: #222222;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .inventory-campus-monthly-compare-wrap {
@@ -15383,6 +15612,30 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: 1fr;
   }
 
+  .maintenance-view-tabs {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .maintenance-view-tabs .tab {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .maintenance-title-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .maintenance-title-actions {
+    width: 100%;
+  }
+
+  .maintenance-print-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
   .top-controls,
   .panel-filters {
     flex-direction: column;
@@ -19767,6 +20020,7 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
 
   .workspace-main > .panel > .printer-report-print-area,
   .workspace-main > .panel > .printer-graph-print-area,
+  .workspace-main > .panel > .maintenance-logbook-print-area,
   .workspace-main > .panel.documents-shell > .documents-print-area {
     display: block !important;
     width: 100% !important;
@@ -19775,15 +20029,73 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
   }
 
   .printer-report-print-area,
-  .printer-report-print-area * {
+  .printer-report-print-area *,
+  .maintenance-logbook-print-area,
+  .maintenance-logbook-print-area * {
     box-sizing: border-box !important;
   }
 
   .printer-report-print-area > .report-title-row,
   .printer-report-print-area > .panel-filters.report-filters,
+  .maintenance-logbook-print-area > .maintenance-title-row,
+  .maintenance-logbook-print-area > .panel-filters.maintenance-filters,
   .printer-graph-print-area > .report-title-row,
   .printer-graph-print-area > .panel-filters.report-filters {
     display: none !important;
+  }
+
+  .maintenance-logbook-print-area {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    padding-bottom: 18mm !important;
+  }
+
+  .maintenance-logbook-sheet {
+    margin-top: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .maintenance-logbook-table-wrap {
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  .maintenance-logbook-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  .maintenance-logbook-sheet-footer {
+    display: none !important;
+  }
+
+  .maintenance-logbook-print-footer {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    padding: 2mm 0;
+    color: #111111;
+    font-size: 11pt;
+    font-weight: 700;
+    background: transparent;
+  }
+
+  .maintenance-logbook-print-page-current::before {
+    content: counter(page);
+  }
+
+  .maintenance-logbook-print-page-total::before {
+    content: counter(pages);
   }
 
   .printer-report-card {

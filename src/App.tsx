@@ -8405,6 +8405,7 @@ export default function App() {
   const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
   const [maintenanceCampusFilter, setMaintenanceCampusFilter] = useState("ALL");
+  const [maintenanceMonthFilter, setMaintenanceMonthFilter] = useState(toYmd(new Date()).slice(0, 7));
   const [maintenanceDateFrom, setMaintenanceDateFrom] = useState("");
   const [maintenanceDateTo, setMaintenanceDateTo] = useState("");
   const [maintenanceSearchInput, setMaintenanceSearchInput] = useState("");
@@ -26759,6 +26760,12 @@ export default function App() {
     () => sortedMaintenanceRows.map((row, index) => ({ ...row, bookNo: index + 1 })),
     [sortedMaintenanceRows]
   );
+  const maintenanceMonthLabel = useMemo(() => {
+    if (!maintenanceMonthFilter) return "All Months";
+    const parsed = new Date(`${maintenanceMonthFilter}-01T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return maintenanceMonthFilter;
+    return parsed.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  }, [maintenanceMonthFilter]);
   const latestMaintenanceRows = useMemo(
     () => allMaintenanceRows.slice(0, 5),
     [allMaintenanceRows]
@@ -27467,6 +27474,17 @@ export default function App() {
       setMaintenanceTypeFilter("ALL");
     }
   }, [maintenanceTypeFilter, maintenanceTypeOptions]);
+  useEffect(() => {
+    if (!maintenanceMonthFilter) return;
+    const [yearText, monthText] = maintenanceMonthFilter.split("-");
+    const year = Number(yearText);
+    const monthIndex = Number(monthText) - 1;
+    if (Number.isNaN(year) || Number.isNaN(monthIndex)) return;
+    const start = new Date(year, monthIndex, 1);
+    const end = new Date(year, monthIndex + 1, 0);
+    setMaintenanceDateFrom(toYmd(start));
+    setMaintenanceDateTo(toYmd(end));
+  }, [maintenanceMonthFilter]);
   useEffect(() => {
     if (maintenanceRecordCampusFilter === "ALL") return;
     if (!maintenanceRecordCampusOptions.includes(maintenanceRecordCampusFilter)) {
@@ -45135,7 +45153,7 @@ export default function App() {
         {tab === "maintenance" && (
           <>
           <section className="panel">
-            <div className="tabs">
+            <div className="tabs maintenance-view-tabs">
               {(canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) ? (
                 <button
                   className={`tab ${maintenanceView === "dashboard" ? "tab-active" : ""}`}
@@ -45906,16 +45924,15 @@ export default function App() {
 
             {maintenanceView === "logbook" && canAccessMenu("maintenance.history", "maintenance") && (
             <>
+            <div className="maintenance-logbook-print-area">
             <div className="maintenance-title-row">
-              <h2>{lang === "km" ? "សៀវភៅកំណត់ត្រាថែទាំប្រចាំថ្ងៃ" : "Daily Maintenance Log Book"}</h2>
-            </div>
-            <div className="panel-note maintenance-logbook-note">
-              <strong>{lang === "km" ? "ទម្រង់សៀវភៅ:" : "Book-style view:"}</strong>
-              <span>
-                {lang === "km"
-                  ? " មួយជួរ ស្មើនឹង កំណត់ត្រាថែទាំមួយ។ អាចប្រើសម្រាប់ពិនិត្យប្រចាំថ្ងៃ និងបោះពុម្ពជំនួសសៀវភៅក្រដាស។"
-                  : " one row equals one maintenance record. Use this for daily review and printing in a familiar paper-book style."}
-              </span>
+              <h2>{lang === "km" ? "សៀវភៅកំណត់ត្រាថែទាំ" : "Maintenance Log Book"}</h2>
+              <div className="maintenance-title-actions">
+                <button className="btn-primary report-print-btn report-title-print-btn maintenance-print-btn" type="button" onClick={() => window.print()}>
+                  <Printer size={16} aria-hidden={true} />
+                  <span>{lang === "km" ? "បោះពុម្ព / PDF" : "Print / PDF"}</span>
+                </button>
+              </div>
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <select
@@ -45954,6 +45971,12 @@ export default function App() {
                   </option>
                 ))}
               </select>
+              <input
+                className="input"
+                type="month"
+                value={maintenanceMonthFilter}
+                onChange={(e) => setMaintenanceMonthFilter(e.target.value)}
+              />
               <input className="input" type="date" value={maintenanceDateFrom} onChange={(e) => setMaintenanceDateFrom(e.target.value)} />
               <input className="input" type="date" value={maintenanceDateTo} onChange={(e) => setMaintenanceDateTo(e.target.value)} />
               <div className="maintenance-history-search-row">
@@ -45970,23 +45993,50 @@ export default function App() {
                 />
               </div>
             </div>
+            <div className="maintenance-logbook-sheet">
+              <div className="maintenance-logbook-sheet-header">
+                <img
+                  className="maintenance-logbook-sheet-brand"
+                  src={EISLogo}
+                  alt="Eco International School logo"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <div className="maintenance-logbook-sheet-title">
+                  <div className="maintenance-logbook-sheet-title-km">សៀវភៅកត់ត្រា ការងារជួសជុលទូទៅ</div>
+                  <div className="maintenance-logbook-sheet-title-en">MAINTENANCE LOG BOOK</div>
+                </div>
+                <div className="maintenance-logbook-sheet-header-spacer" aria-hidden={true} />
+              </div>
+            <div className="maintenance-logbook-sheet-meta">
+              <div className="maintenance-logbook-sheet-campus">
+                <span>CAMPUS</span>
+                <strong>{maintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(maintenanceCampusFilter)}</strong>
+              </div>
+              <div className="maintenance-logbook-sheet-campus maintenance-logbook-sheet-month">
+                <span>MONTH</span>
+                <strong>{maintenanceMonthLabel}</strong>
+              </div>
+            </div>
             {isPhoneView ? (
               <div className="report-mobile-only report-card-list">
                 {maintenanceLogBookRows.length ? (
                   maintenanceLogBookRows.map((row) => (
-                    <article key={`maintenance-logbook-mobile-${row.rowId}`} className="report-card maintenance-logbook-mobile-card">
+                    <article
+                      key={`maintenance-logbook-mobile-${row.rowId}`}
+                      className={`report-card maintenance-logbook-mobile-card ${row.category === "IT" ? "maintenance-logbook-row-it" : ""}`}
+                    >
                       <div className="maintenance-logbook-mobile-head">
                         <strong>#{row.bookNo}</strong>
                         <span>{formatDate(row.date || "-")}</span>
                       </div>
                       <div className="maintenance-logbook-mobile-grid">
-                        <div><strong>{lang === "km" ? "Asset" : "Asset"}:</strong> {row.assetId}</div>
-                        <div><strong>{lang === "km" ? "ទីតាំង" : "Location"}:</strong> {campusLabel(row.campus)} • {row.location || "-"}</div>
-                        <div><strong>{lang === "km" ? "ការងារ" : "Work"}:</strong> {row.type || "-"}</div>
-                        <div><strong>{lang === "km" ? "ស្ថានភាព" : "Status"}:</strong> {maintenanceCompletionText(row.completion || "-")}</div>
-                        <div><strong>{lang === "km" ? "កំណត់ត្រា" : "Record"}:</strong> {row.note || "-"}</div>
-                        <div><strong>{lang === "km" ? "ធ្វើដោយ" : "By"}:</strong> {row.by || "-"}</div>
-                        <div><strong>{lang === "km" ? "ត្រួតពិនិត្យ" : "Checked"}:</strong> {row.checkedBy || "-"}</div>
+                        <div><strong>Maintenance or Inspection:</strong> {row.type || "-"}</div>
+                        <div><strong>Detail:</strong> {row.assetId} • {row.itemName} • {campusLabel(row.campus)} • {row.location || "-"}</div>
+                        <div><strong>Remark:</strong> {row.note || row.condition || "-"}</div>
+                        <div><strong>Performed By:</strong> {row.by || "-"}</div>
+                        <div><strong>Cost:</strong> {row.cost || "-"}</div>
+                        <div><strong>Signature:</strong> {row.checkedBy || row.by || "-"}</div>
                       </div>
                     </article>
                   ))
@@ -45999,50 +46049,66 @@ export default function App() {
                 <table className="maintenance-logbook-table">
                   <thead>
                     <tr>
-                      <th>No.</th>
-                      <th>{t.date}</th>
-                      <th>{lang === "km" ? "Asset / ទីតាំង" : "Asset / Location"}</th>
-                      <th>{lang === "km" ? "ការងារថែទាំ / ការត្រួតពិនិត្យ" : "Maintenance / Inspection Work"}</th>
-                      <th>{lang === "km" ? "ធ្វើដោយ" : "Performed By"}</th>
-                      <th>{lang === "km" ? "ត្រួតពិនិត្យដោយ" : "Checked By"}</th>
-                      <th>{lang === "km" ? "ស្ថានភាព / កំណត់ចំណាំ" : "Status / Remark"}</th>
+                      <th><span>ល.រ</span><strong>No.</strong></th>
+                      <th><span>កាលបរិច្ឆេទ</span><strong>Date</strong></th>
+                      <th><span>ការងារដែលបានធ្វើ</span><strong>Maintenance or Inspection</strong></th>
+                      <th><span>អ្នកអនុវត្ត</span><strong>Performed By</strong></th>
+                      <th><span>តម្លៃ</span><strong>Cost</strong></th>
+                      <th><span>ហត្ថលេខា</span><strong>Signature</strong></th>
                     </tr>
                   </thead>
                   <tbody>
                     {maintenanceLogBookRows.length ? (
                       maintenanceLogBookRows.map((row) => (
-                        <tr key={`maintenance-logbook-row-${row.rowId}`}>
+                        <tr
+                          key={`maintenance-logbook-row-${row.rowId}`}
+                          className={row.category === "IT" ? "maintenance-logbook-row-it" : ""}
+                        >
                           <td>{row.bookNo}</td>
                           <td>
                             <strong>{formatDate(row.date || "-")}</strong>
                             <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
                           </td>
                           <td>
-                            <strong>{row.assetId}</strong>
-                            <div>{row.itemName}</div>
-                            <div className="tiny">{campusLabel(row.campus)} • {row.location || "-"}</div>
-                          </td>
-                          <td>
                             <strong>{row.type || "-"}</strong>
+                            <div>{row.assetId} • {row.itemName}</div>
+                            <div className="tiny">{campusLabel(row.campus)} • {row.location || "-"}</div>
                             <div>{row.note || "-"}</div>
+                            <div className="tiny">{row.condition || "-"}</div>
                           </td>
                           <td>{row.by || "-"}</td>
-                          <td>{row.checkedBy || "-"}</td>
+                          <td>{row.cost || "-"}</td>
                           <td>
-                            <strong>{maintenanceCompletionText(row.completion || "-")}</strong>
-                            <div className="tiny">{row.condition || "-"}</div>
+                            <div className="maintenance-logbook-signature-name">
+                              {row.checkedBy || row.by || maintenanceCompletionText(row.completion || "-")}
+                            </div>
+                            <div className="maintenance-logbook-signature-line" aria-hidden={true} />
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7}>{lang === "km" ? "មិនទាន់មានកំណត់ត្រាថែទាំទេ។" : "No maintenance records yet."}</td>
+                        <td colSpan={6}>{lang === "km" ? "មិនទាន់មានកំណត់ត្រាថែទាំទេ។" : "No maintenance records yet."}</td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
             )}
+            <div className="maintenance-logbook-sheet-footer">
+              <div className="maintenance-logbook-sheet-page">
+                <span>Page No.</span>
+                <strong>1</strong>
+              </div>
+            </div>
+            </div>
+            <div className="maintenance-logbook-print-footer" aria-hidden={true}>
+              <span>Page No.</span>
+              <strong className="maintenance-logbook-print-page-current" />
+              <span>of</span>
+              <strong className="maintenance-logbook-print-page-total" />
+            </div>
+            </div>
             </>
             )}
 
@@ -46088,6 +46154,12 @@ export default function App() {
                   </option>
                 ))}
               </select>
+              <input
+                className="input"
+                type="month"
+                value={maintenanceMonthFilter}
+                onChange={(e) => setMaintenanceMonthFilter(e.target.value)}
+              />
               <input
                 className="input"
                 type="date"
