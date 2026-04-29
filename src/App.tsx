@@ -135,6 +135,7 @@ type MaintenanceEntry = {
   condition?: string;
   cost?: string;
   by?: string;
+  checkedBy?: string;
   tonerItemId?: number;
   tonerItemCode?: string;
   tonerItemName?: string;
@@ -4282,6 +4283,63 @@ function inventoryRecordCampusCode(campus: string) {
   if (campus === "Chaktomuk Campus" || campus === "Chaktomuk Campus (C2.2)") return "C2";
   return CAMPUS_CODE[campus] || "CX";
 }
+function inventoryCampusThemeClass(campus: string) {
+  const code = String(CAMPUS_CODE[campus] || inventoryRecordCampusCode(campus) || "CX").trim().toUpperCase();
+  const match = code.match(/^C(\d+)/);
+  const normalized = match ? `c${match[1]}` : code.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return `inventory-admin-campus-theme-${normalized}`;
+}
+function inventoryCampusThemeStyle(campus: string): React.CSSProperties {
+  const code = String(CAMPUS_CODE[campus] || inventoryRecordCampusCode(campus) || "CX").trim().toUpperCase();
+  const major = (code.match(/^C(\d+)/)?.[1] || "").trim();
+  const palette =
+    major === "1"
+      ? {
+          accent: "#d6a243",
+          accentSoft: "#f0d184",
+          shell: "#ffe9bf",
+          headBg: "rgba(214, 162, 67, 0.24)",
+          headBorder: "rgba(214, 162, 67, 0.46)",
+        }
+      : major === "2"
+        ? {
+            accent: "#8d64d8",
+            accentSoft: "#c7adef",
+            shell: "#eadcff",
+            headBg: "rgba(141, 100, 216, 0.24)",
+            headBorder: "rgba(141, 100, 216, 0.44)",
+          }
+        : major === "3"
+          ? {
+              accent: "#4d9961",
+              accentSoft: "#9fd39e",
+              shell: "#dff5e3",
+              headBg: "rgba(77, 153, 97, 0.24)",
+              headBorder: "rgba(77, 153, 97, 0.42)",
+            }
+          : major === "4"
+            ? {
+                accent: "#6674d6",
+                accentSoft: "#b7bdf5",
+                shell: "#e2e6ff",
+                headBg: "rgba(102, 116, 214, 0.24)",
+                headBorder: "rgba(102, 116, 214, 0.44)",
+              }
+            : {
+                accent: "#d6a243",
+                accentSoft: "#f0d184",
+                shell: "#fff2d7",
+                headBg: "rgba(214, 162, 67, 0.16)",
+                headBorder: "rgba(214, 162, 67, 0.28)",
+              };
+  return {
+    "--campus-accent": palette.accent,
+    "--campus-accent-soft": palette.accentSoft,
+    "--campus-shell": palette.shell,
+    "--campus-head-bg": palette.headBg,
+    "--campus-head-border": palette.headBorder,
+  } as React.CSSProperties;
+}
 function isInventoryTxnIn(type: InventoryTxn["type"]) {
   return type === "IN" || type === "BORROW_IN";
 }
@@ -5562,6 +5620,7 @@ function createMaintenanceRecordForm(
     note: "",
     cost: "",
     by: String(preferredBy || "").trim(),
+    checkedBy: "",
     photo: "",
     photos: [] as string[],
     beforePhotos: [] as string[],
@@ -7470,7 +7529,7 @@ export default function App() {
   const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("user");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
-  const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history">("dashboard");
+  const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history" | "logbook">("dashboard");
   const [verificationView, setVerificationView] = useState<"record" | "classroom" | "history">("record");
   const [pendingClassroomCheckRoomId, setPendingClassroomCheckRoomId] = useState<number | null>(null);
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
@@ -8021,6 +8080,16 @@ export default function App() {
               : []),
             ...(canAccessMenu("maintenance.history", "maintenance")
               ? [
+                  {
+                    key: "maintenance.logbook",
+                    label: lang === "km" ? "សៀវភៅកំណត់ត្រា" : "Log Book",
+                    active: maintenanceView === "logbook",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setMaintenanceView("logbook");
+                        setTab("maintenance");
+                      }),
+                  },
                   {
                     key: "maintenance.history",
                     label: lang === "km" ? "ប្រវត្តិ" : "History",
@@ -8927,6 +8996,7 @@ export default function App() {
     note: "",
     cost: "",
     by: "",
+    checkedBy: "",
     photo: "",
     photos: [] as string[],
     beforePhotos: [] as string[],
@@ -14584,6 +14654,9 @@ export default function App() {
         setMaintenanceView(canDashboardMaintenanceTab ? "dashboard" : "history");
       }
       if (maintenanceView === "history" && !canHistoryMaintenanceTab) {
+        setMaintenanceView(canDashboardMaintenanceTab ? "dashboard" : "record");
+      }
+      if (maintenanceView === "logbook" && !canHistoryMaintenanceTab) {
         setMaintenanceView(canDashboardMaintenanceTab ? "dashboard" : "record");
       }
     }
@@ -24064,6 +24137,7 @@ export default function App() {
       note: resolvedNote,
       cost: maintenanceRecordForm.cost.trim(),
       by: maintenanceRecordForm.by.trim(),
+      checkedBy: maintenanceRecordForm.checkedBy.trim(),
       beforePhotos: normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []),
       afterPhotos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
       photo: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || [])[0] || "",
@@ -25031,6 +25105,7 @@ export default function App() {
       note: entry.note || "",
       cost: entry.cost || "",
       by: entry.by || "",
+      checkedBy: entry.checkedBy || "",
       photo: normalizedPhotos.photo,
       photos: normalizedPhotos.photos,
       beforePhotos: normalizedPhotos.beforePhotos,
@@ -25054,6 +25129,7 @@ export default function App() {
     note: string;
     cost: string;
     by: string;
+    checkedBy: string;
     photo: string;
     photos?: string[];
     beforePhotos?: string[];
@@ -25072,6 +25148,7 @@ export default function App() {
       note: row.note,
       cost: row.cost,
       by: row.by,
+      checkedBy: row.checkedBy || "",
       photo: row.photo,
       photos: row.photos || [],
       beforePhotos: row.beforePhotos || [],
@@ -25092,6 +25169,7 @@ export default function App() {
       note: "",
       cost: "",
       by: "",
+      checkedBy: "",
       photo: "",
       photos: [],
       beforePhotos: [],
@@ -25152,6 +25230,7 @@ export default function App() {
       note: maintenanceEditForm.note.trim(),
       cost: maintenanceEditForm.cost.trim(),
       by: maintenanceEditForm.by.trim(),
+      checkedBy: maintenanceEditForm.checkedBy.trim(),
       beforePhotos: normalizeMaintenancePhotoList(maintenanceEditForm.beforePhotos || []),
       afterPhotos: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || []),
       photo: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || [])[0] || "",
@@ -26538,6 +26617,7 @@ export default function App() {
       reportFile: string;
       reportFileName: string;
       reportFileType: string;
+      checkedBy: string;
     }> = [];
     for (const asset of assets) {
       for (const entry of asset.maintenanceHistory || []) {
@@ -26562,6 +26642,7 @@ export default function App() {
           note: entry.note || "",
           cost: entry.cost || "-",
           by: entry.by || "-",
+          checkedBy: entry.checkedBy || "-",
           photo: normalizedPhotos.photo,
           photos: normalizedPhotos.photos,
           beforePhotos: normalizedPhotos.beforePhotos,
@@ -26625,6 +26706,7 @@ export default function App() {
           r.condition,
           r.note,
           r.by,
+          r.checkedBy,
           r.category,
           r.assetType,
         ]
@@ -26673,6 +26755,10 @@ export default function App() {
 
     return rows;
   }, [filteredMaintenanceRows, maintenanceSort]);
+  const maintenanceLogBookRows = useMemo(
+    () => sortedMaintenanceRows.map((row, index) => ({ ...row, bookNo: index + 1 })),
+    [sortedMaintenanceRows]
+  );
   const latestMaintenanceRows = useMemo(
     () => allMaintenanceRows.slice(0, 5),
     [allMaintenanceRows]
@@ -41330,7 +41416,11 @@ export default function App() {
                         ) : null}
                         <div className="inventory-admin-campus-balance-grid">
                           {inventoryDashboardVisibleCampusBalanceRows.map((row) => (
-                            <article key={`inventory-dashboard-campus-balance-${row.campus}`} className="inventory-admin-campus-balance-card">
+                            <article
+                              key={`inventory-dashboard-campus-balance-${row.campus}`}
+                              className={`inventory-admin-campus-balance-card ${inventoryCampusThemeClass(row.campus)}`}
+                              style={inventoryCampusThemeStyle(row.campus)}
+                            >
                               <div className="inventory-admin-campus-balance-head">
                                 <strong>{cleaningSupplyCampusLabel(row.campus)}</strong>
                                 <span className={`inventory-admin-campus-balance-badge ${row.zeroStockItems > 0 ? "inventory-admin-campus-balance-badge-danger" : row.lowStockItems > 0 ? "inventory-admin-campus-balance-badge-watch" : "inventory-admin-campus-balance-badge-ok"}`}>
@@ -45673,6 +45763,15 @@ export default function App() {
                       : "Auto-filled from login user, but you can change the name."}
                   </div>
                 </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ត្រួតពិនិត្យដោយ" : "Checked By"}</span>
+                  <input
+                    className="input"
+                    value={maintenanceRecordForm.checkedBy}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, checkedBy: e.target.value }))}
+                    placeholder={lang === "km" ? "ឈ្មោះអ្នកត្រួតពិនិត្យ" : "Supervisor / checker name"}
+                  />
+                </label>
               </div>
               {renderMaintenanceWorkflowSection()}
               <label className="field field-wide">
@@ -45805,6 +45904,148 @@ export default function App() {
             </>
             )}
 
+            {maintenanceView === "logbook" && canAccessMenu("maintenance.history", "maintenance") && (
+            <>
+            <div className="maintenance-title-row">
+              <h2>{lang === "km" ? "សៀវភៅកំណត់ត្រាថែទាំប្រចាំថ្ងៃ" : "Daily Maintenance Log Book"}</h2>
+            </div>
+            <div className="panel-note maintenance-logbook-note">
+              <strong>{lang === "km" ? "ទម្រង់សៀវភៅ:" : "Book-style view:"}</strong>
+              <span>
+                {lang === "km"
+                  ? " មួយជួរ ស្មើនឹង កំណត់ត្រាថែទាំមួយ។ អាចប្រើសម្រាប់ពិនិត្យប្រចាំថ្ងៃ និងបោះពុម្ពជំនួសសៀវភៅក្រដាស។"
+                  : " one row equals one maintenance record. Use this for daily review and printing in a familiar paper-book style."}
+              </span>
+            </div>
+            <div className="panel-filters maintenance-filters maintenance-filter-row">
+              <select
+                className="input"
+                value={maintenanceCampusFilter}
+                onChange={(e) => setMaintenanceCampusFilter(e.target.value)}
+              >
+                <option value="ALL">{t.allCampuses}</option>
+                {maintenanceCampusOptions.map((campus) => (
+                  <option key={`maintenance-logbook-campus-filter-${campus}`} value={campus}>
+                    {campusLabel(campus)}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
+                value={maintenanceCategoryFilter}
+                onChange={(e) => setMaintenanceCategoryFilter(e.target.value)}
+              >
+                <option value="ALL">{t.allCategories}</option>
+                {CATEGORY_OPTIONS.map((category) => (
+                  <option key={`maintenance-logbook-category-${category.value}`} value={category.value}>
+                    {lang === "km" ? category.km : category.en}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
+                value={maintenanceTypeFilter}
+                onChange={(e) => setMaintenanceTypeFilter(e.target.value)}
+              >
+                <option value="ALL">{lang === "km" ? "គ្រប់ប្រភេទថែទាំ" : "All Maintenance Types"}</option>
+                {maintenanceTypeOptions.map((type) => (
+                  <option key={`maintenance-logbook-type-${type}`} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+              <input className="input" type="date" value={maintenanceDateFrom} onChange={(e) => setMaintenanceDateFrom(e.target.value)} />
+              <input className="input" type="date" value={maintenanceDateTo} onChange={(e) => setMaintenanceDateTo(e.target.value)} />
+              <div className="maintenance-history-search-row">
+                <input
+                  className="input"
+                  type="search"
+                  placeholder={lang === "km" ? "ស្វែងរក asset, ទីតាំង, កំណត់ចំណាំ..." : "Search asset, location, note..."}
+                  value={maintenanceSearchInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setMaintenanceSearchInput(value);
+                    setMaintenanceSearchQuery(value.trim());
+                  }}
+                />
+              </div>
+            </div>
+            {isPhoneView ? (
+              <div className="report-mobile-only report-card-list">
+                {maintenanceLogBookRows.length ? (
+                  maintenanceLogBookRows.map((row) => (
+                    <article key={`maintenance-logbook-mobile-${row.rowId}`} className="report-card maintenance-logbook-mobile-card">
+                      <div className="maintenance-logbook-mobile-head">
+                        <strong>#{row.bookNo}</strong>
+                        <span>{formatDate(row.date || "-")}</span>
+                      </div>
+                      <div className="maintenance-logbook-mobile-grid">
+                        <div><strong>{lang === "km" ? "Asset" : "Asset"}:</strong> {row.assetId}</div>
+                        <div><strong>{lang === "km" ? "ទីតាំង" : "Location"}:</strong> {campusLabel(row.campus)} • {row.location || "-"}</div>
+                        <div><strong>{lang === "km" ? "ការងារ" : "Work"}:</strong> {row.type || "-"}</div>
+                        <div><strong>{lang === "km" ? "ស្ថានភាព" : "Status"}:</strong> {maintenanceCompletionText(row.completion || "-")}</div>
+                        <div><strong>{lang === "km" ? "កំណត់ត្រា" : "Record"}:</strong> {row.note || "-"}</div>
+                        <div><strong>{lang === "km" ? "ធ្វើដោយ" : "By"}:</strong> {row.by || "-"}</div>
+                        <div><strong>{lang === "km" ? "ត្រួតពិនិត្យ" : "Checked"}:</strong> {row.checkedBy || "-"}</div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">{lang === "km" ? "មិនទាន់មានកំណត់ត្រាថែទាំទេ។" : "No maintenance records yet."}</div>
+                )}
+              </div>
+            ) : (
+              <div className="table-wrap maintenance-logbook-table-wrap">
+                <table className="maintenance-logbook-table">
+                  <thead>
+                    <tr>
+                      <th>No.</th>
+                      <th>{t.date}</th>
+                      <th>{lang === "km" ? "Asset / ទីតាំង" : "Asset / Location"}</th>
+                      <th>{lang === "km" ? "ការងារថែទាំ / ការត្រួតពិនិត្យ" : "Maintenance / Inspection Work"}</th>
+                      <th>{lang === "km" ? "ធ្វើដោយ" : "Performed By"}</th>
+                      <th>{lang === "km" ? "ត្រួតពិនិត្យដោយ" : "Checked By"}</th>
+                      <th>{lang === "km" ? "ស្ថានភាព / កំណត់ចំណាំ" : "Status / Remark"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {maintenanceLogBookRows.length ? (
+                      maintenanceLogBookRows.map((row) => (
+                        <tr key={`maintenance-logbook-row-${row.rowId}`}>
+                          <td>{row.bookNo}</td>
+                          <td>
+                            <strong>{formatDate(row.date || "-")}</strong>
+                            <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
+                          </td>
+                          <td>
+                            <strong>{row.assetId}</strong>
+                            <div>{row.itemName}</div>
+                            <div className="tiny">{campusLabel(row.campus)} • {row.location || "-"}</div>
+                          </td>
+                          <td>
+                            <strong>{row.type || "-"}</strong>
+                            <div>{row.note || "-"}</div>
+                          </td>
+                          <td>{row.by || "-"}</td>
+                          <td>{row.checkedBy || "-"}</td>
+                          <td>
+                            <strong>{maintenanceCompletionText(row.completion || "-")}</strong>
+                            <div className="tiny">{row.condition || "-"}</div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7}>{lang === "km" ? "មិនទាន់មានកំណត់ត្រាថែទាំទេ។" : "No maintenance records yet."}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            </>
+            )}
+
             {maintenanceView === "history" && canAccessMenu("maintenance.history", "maintenance") && (
             <>
             <div className="maintenance-title-row">
@@ -45931,6 +46172,10 @@ export default function App() {
                           <span>BY</span>
                           <strong>{row.by || "-"}</strong>
                         </div>
+                        <div className="maintenance-mobile-asset-field">
+                          <span>CHECKED</span>
+                          <strong>{row.checkedBy || "-"}</strong>
+                        </div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">
                         <button
@@ -45968,6 +46213,7 @@ export default function App() {
                       <th>Cond</th>
                       <th>Note</th>
                       <th>By</th>
+                      <th>Checked</th>
                       <th>Edit</th>
                       <th>Del</th>
                     </tr>
@@ -46012,6 +46258,7 @@ export default function App() {
                           <td>{row.condition || "-"}</td>
                           <td>{row.note || "-"}</td>
                           <td>{row.by || "-"}</td>
+                          <td>{row.checkedBy || "-"}</td>
                           <td>
                             <button
                               className="btn-icon-edit"
@@ -46036,7 +46283,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={11}>No maintenance records yet.</td>
+                        <td colSpan={12}>No maintenance records yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -46142,6 +46389,14 @@ export default function App() {
                           className="input"
                           value={maintenanceEditForm.by}
                           onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, by: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Checked By</span>
+                        <input
+                          className="input"
+                          value={maintenanceEditForm.checkedBy}
+                          onChange={(e) => setMaintenanceEditForm((f) => ({ ...f, checkedBy: e.target.value }))}
                         />
                       </label>
                       <label className="field field-wide">
@@ -48513,6 +48768,7 @@ export default function App() {
                                             note: row.note,
                                             cost: row.cost,
                                             by: row.by,
+                                            checkedBy: row.checkedBy,
                                             photo: row.photo,
                                             photos: row.photos,
                                             beforePhotos: row.beforePhotos,

@@ -5423,6 +5423,7 @@ function toPublicAssetView(asset, allAssets = []) {
         condition: toText(entry?.condition),
         cost: toText(entry?.cost),
         by: toText(entry?.by),
+        checkedBy: toText(entry?.checkedBy),
         tonerItemId: Number(entry?.tonerItemId || 0),
         tonerItemCode: toText(entry?.tonerItemCode),
         tonerItemName: toText(entry?.tonerItemName),
@@ -7949,6 +7950,7 @@ const server = http.createServer(async (req, res) => {
         : normalizeMaintenanceWorkflowPayload(current.workflow);
       const nextCompletion = normalizeCompletion(body.completion);
       const nextCondition = toText(body.condition);
+      const nextCheckedBy = toText(body.checkedBy);
       const hasNextReportFile = Object.prototype.hasOwnProperty.call(body, "reportFile");
       const nextReportFile = hasNextReportFile
         ? await normalizeAttachmentValue(body.reportFile || {
@@ -7985,6 +7987,7 @@ const server = http.createServer(async (req, res) => {
         note: nextNote || toText(current.note),
         cost: nextCost,
         by: nextBy,
+        checkedBy: nextCheckedBy,
         photo: resolvedAfterPhotos[0] || toText(current.photo),
         photos: resolvedAfterPhotos,
         beforePhotos: resolvedBeforePhotos,
@@ -8303,6 +8306,7 @@ const server = http.createServer(async (req, res) => {
       const note = toText(body.note);
       const cost = toText(body.cost);
       const by = toText(body.by);
+      const checkedBy = toText(body.checkedBy);
       const media = await normalizeMaintenanceMediaPayload(body);
       const workflow = normalizeMaintenanceWorkflowPayload(body.workflow);
       const reportFile = await normalizeAttachmentValue(body.reportFile || {
@@ -8338,6 +8342,7 @@ const server = http.createServer(async (req, res) => {
         note,
         cost,
         by,
+        checkedBy,
         photo: media.photo,
         photos: media.photos,
         beforePhotos: media.beforePhotos,

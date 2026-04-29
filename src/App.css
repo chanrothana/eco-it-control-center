@@ -8667,10 +8667,14 @@ label.backup-action-btn {
 }
 
 .maintenance-history-table td:nth-child(10) {
-  width: 4.5%;
+  width: 10%;
 }
 
 .maintenance-history-table td:nth-child(11) {
+  width: 4.5%;
+}
+
+.maintenance-history-table td:nth-child(12) {
   width: 3.5%;
 }
 
@@ -8694,7 +8698,8 @@ label.backup-action-btn {
 .maintenance-history-table td:nth-child(4),
 .maintenance-history-table td:nth-child(6),
 .maintenance-history-table td:nth-child(8),
-.maintenance-history-table td:nth-child(9) {
+.maintenance-history-table td:nth-child(9),
+.maintenance-history-table td:nth-child(10) {
   word-break: normal;
   overflow-wrap: anywhere;
 }
@@ -8710,6 +8715,92 @@ label.backup-action-btn {
   overflow: visible;
   -webkit-line-clamp: unset;
   -webkit-box-orient: initial;
+}
+
+.maintenance-logbook-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.maintenance-logbook-table-wrap {
+  border: 1px solid #d5c4a6;
+  border-radius: 18px;
+  background: #fffdf8;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.65);
+}
+
+.maintenance-logbook-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: linear-gradient(180deg, rgba(255, 249, 236, 0.55), rgba(255, 255, 255, 0.96));
+}
+
+.maintenance-logbook-table th,
+.maintenance-logbook-table td {
+  border: 1px solid #d9ccb6;
+  padding: 10px 9px;
+  vertical-align: top;
+}
+
+.maintenance-logbook-table th {
+  background: #f4ecdd;
+  color: #5d4931;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.maintenance-logbook-table td {
+  color: #2f3d57;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.maintenance-logbook-table tbody tr:nth-child(even) td {
+  background: rgba(255, 248, 234, 0.48);
+}
+
+.maintenance-logbook-table td:nth-child(1),
+.maintenance-logbook-table td:nth-child(2),
+.maintenance-logbook-table td:nth-child(5),
+.maintenance-logbook-table td:nth-child(6) {
+  text-align: center;
+}
+
+.maintenance-logbook-mobile-card {
+  border: 1px solid #d6c7b0;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdfa 0%, #fff7eb 100%);
+}
+
+.maintenance-logbook-mobile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.maintenance-logbook-mobile-head strong {
+  color: #6b4f2d;
+  font-size: 15px;
+}
+
+.maintenance-logbook-mobile-head span {
+  color: #5f7398;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.maintenance-logbook-mobile-grid {
+  display: grid;
+  gap: 8px;
+  color: #2f3d57;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .inventory-campus-monthly-compare-wrap {
@@ -8927,10 +9018,17 @@ label.backup-action-btn {
 }
 
 .inventory-admin-campus-balance-card {
-  border: 1px solid #e3cfaf;
+  --campus-accent: #d6a243;
+  --campus-accent-soft: #f0d184;
+  --campus-shell: #fff5df;
+  --campus-head-bg: rgba(214, 162, 67, 0.12);
+  --campus-head-border: rgba(214, 162, 67, 0.26);
+  border: 1px solid var(--campus-head-border);
   border-radius: 18px;
-  background: linear-gradient(180deg, #fffdf9 0%, #fff7ea 100%);
-  box-shadow: 0 8px 18px rgba(133, 82, 29, 0.06);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, #fffdf9 0%, var(--campus-shell) 100%);
+  box-shadow: 0 10px 22px rgba(133, 82, 29, 0.08);
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -8939,11 +9037,70 @@ label.backup-action-btn {
   position: relative;
 }
 
+.inventory-admin-campus-balance-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  border-radius: 18px 18px 0 0;
+  background: linear-gradient(90deg, var(--campus-accent), var(--campus-accent-soft));
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c1 {
+  --campus-accent: #d6a243;
+  --campus-accent-soft: #f0d184;
+  --campus-shell: #ffe9bf;
+  --campus-head-bg: rgba(214, 162, 67, 0.24);
+  --campus-head-border: rgba(214, 162, 67, 0.46);
+  box-shadow:
+    0 12px 24px rgba(133, 82, 29, 0.1),
+    inset 0 0 0 1px rgba(214, 162, 67, 0.18);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2 {
+  --campus-accent: #8d64d8;
+  --campus-accent-soft: #c7adef;
+  --campus-shell: #eadcff;
+  --campus-head-bg: rgba(141, 100, 216, 0.24);
+  --campus-head-border: rgba(141, 100, 216, 0.44);
+  box-shadow:
+    0 12px 24px rgba(76, 48, 129, 0.1),
+    inset 0 0 0 1px rgba(141, 100, 216, 0.16);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c3 {
+  --campus-accent: #4d9961;
+  --campus-accent-soft: #9fd39e;
+  --campus-shell: #dff5e3;
+  --campus-head-bg: rgba(77, 153, 97, 0.24);
+  --campus-head-border: rgba(77, 153, 97, 0.42);
+  box-shadow:
+    0 12px 24px rgba(31, 92, 48, 0.1),
+    inset 0 0 0 1px rgba(77, 153, 97, 0.16);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c4 {
+  --campus-accent: #6674d6;
+  --campus-accent-soft: #b7bdf5;
+  --campus-shell: #e2e6ff;
+  --campus-head-bg: rgba(102, 116, 214, 0.24);
+  --campus-head-border: rgba(102, 116, 214, 0.44);
+  box-shadow:
+    0 12px 24px rgba(41, 55, 142, 0.1),
+    inset 0 0 0 1px rgba(102, 116, 214, 0.16);
+}
+
 .inventory-admin-campus-balance-head {
   display: flex;
   justify-content: center;
   padding-right: 56px;
   text-align: center;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  margin: -2px -2px 2px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--campus-accent) 14%, #ffffff) 0%, rgba(255, 255, 255, 0.72) 100%);
 }
 
 .inventory-admin-campus-balance-head strong {
@@ -8951,6 +9108,47 @@ label.backup-action-btn {
   font-family: var(--font-head);
   font-size: 18px;
   line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--campus-head-border);
+  background: var(--campus-head-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c1 .inventory-admin-campus-balance-head strong {
+  color: #6f4612;
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c1 .inventory-admin-campus-balance-head {
+  background: linear-gradient(180deg, rgba(214, 162, 67, 0.22) 0%, rgba(255, 248, 230, 0.96) 100%);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2 .inventory-admin-campus-balance-head strong {
+  color: #5e3ca1;
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2 .inventory-admin-campus-balance-head {
+  background: linear-gradient(180deg, rgba(141, 100, 216, 0.24) 0%, rgba(248, 242, 255, 0.96) 100%);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c3 .inventory-admin-campus-balance-head strong {
+  color: #2f6b40;
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c3 .inventory-admin-campus-balance-head {
+  background: linear-gradient(180deg, rgba(77, 153, 97, 0.24) 0%, rgba(238, 248, 239, 0.96) 100%);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c4 .inventory-admin-campus-balance-head strong {
+  color: #3146a1;
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c4 .inventory-admin-campus-balance-head {
+  background: linear-gradient(180deg, rgba(102, 116, 214, 0.24) 0%, rgba(241, 239, 252, 0.96) 100%);
 }
 
 .inventory-admin-campus-balance-badge {
@@ -9021,7 +9219,7 @@ label.backup-action-btn {
 .inventory-admin-campus-item-card {
   align-items: center;
   background: rgba(255, 255, 255, 0.72);
-  border: 1px solid #ead8bc;
+  border: 1px solid color-mix(in srgb, var(--campus-accent) 26%, #ffffff);
   border-radius: 14px;
   display: grid;
   gap: 8px;
