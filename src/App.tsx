@@ -45599,38 +45599,12 @@ export default function App() {
                     onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, date: e.target.value }))}
                   />
                 </label>
-                <label className="field">
-                  <span>{lang === "km" ? "ទីតាំង" : "Location"}</span>
-                  <LocationPicker
-                    value={maintenanceRecordLocationFilter}
-                    onChange={setMaintenanceRecordLocationFilter}
-                    options={[
-                      { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
-                      ...maintenanceRecordLocationOptions.map((location) => ({ value: location, label: location })),
-                    ]}
-                    placeholder={lang === "km" ? "ជ្រើសទីតាំង" : "Select location"}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
-                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
-                  />
-                </label>
-                <label className="field">
-                  <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
-                  <select
-                    className="input"
-                    value={maintenanceRecordForm.type}
-                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, type: e.target.value }))}
-                  >
-                    {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
-                      <option key={`quick-maint-type-${opt}`} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </label>
                 <label className="field field-wide">
                   <span>{lang === "km" ? "ទ្រព្យ ឬ សម្ភារៈ" : "Asset or Item"}</span>
                   <AssetPicker
                     value={maintenanceRecordForm.assetId}
                     assets={maintenanceRecordFilteredAssets}
-                    getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${asset.location || "-"}`}
+                    getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")}`}
                     onChange={(assetId) => {
                       const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
                       setMaintenanceRecordForm((f) => ({
@@ -45652,8 +45626,8 @@ export default function App() {
                         ? `${maintenanceRecordFilteredAssets.length} ទ្រព្យ/សម្ភារៈ អាចជ្រើសបាន`
                         : `${maintenanceRecordFilteredAssets.length} assets available`)
                       : (lang === "km"
-                        ? "មិនមានទ្រព្យ/សម្ភារៈ ត្រូវតាមទីតាំងនេះទេ។"
-                        : "No asset matches this location.")}
+                        ? "មិនមានទ្រព្យ/សម្ភារៈ សម្រាប់សាខានេះទេ។"
+                        : "No asset available for this campus.")}
                   </div>
                 </label>
                 <label className="field">
@@ -45663,15 +45637,6 @@ export default function App() {
                     value={maintenanceRecordForm.by}
                     onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
                     placeholder={lang === "km" ? "ឈ្មោះអ្នកធ្វើការ" : "Staff name"}
-                  />
-                </label>
-                <label className="field">
-                  <span>{lang === "km" ? "តម្លៃ" : "Cost"}</span>
-                  <input
-                    className="input"
-                    value={maintenanceRecordForm.cost}
-                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
-                    placeholder={lang === "km" ? "បើមាន" : "Optional"}
                   />
                 </label>
                 <label className="field field-wide">
