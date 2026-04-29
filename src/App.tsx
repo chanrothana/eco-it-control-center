@@ -46258,6 +46258,11 @@ export default function App() {
                             <div>{row.assetId} • {row.itemName}</div>
                             <div className="tiny">{campusLabel(row.campus)} • {row.location || "-"}</div>
                             <div>{row.note || "-"}</div>
+                            <div style={{ marginTop: 8 }}>
+                              {renderMaintenancePhotoGroups(row, `maintenance-logbook-${row.rowId}`, undefined, {
+                                maxPhotosPerGroup: 2,
+                              })}
+                            </div>
                             <div className="tiny">{row.condition || "-"}</div>
                           </td>
                           <td>{row.by || "-"}</td>

@@ -8443,7 +8443,6 @@ const server = http.createServer(async (req, res) => {
         if (message) {
           const report = await sendTelegramMaintenanceMessage(message, {
             db,
-            photoUrl: toText(entry.photo) || toText(db.assets[idx].photo) || "",
             includeResults: true,
           });
           telegramAlertSent = Boolean(report && report.ok);
