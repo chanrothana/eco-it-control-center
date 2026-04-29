@@ -2437,20 +2437,41 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
       ? Boolean(options.includeResults)
       : false;
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
-  const targets = Array.from(new Set(configuredTargets));
+  const discoveredChats =
+    TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
+      ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
+      : [];
+  telegramMaintenanceLastDiscoveredChats = discoveredChats;
+  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
+  const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
   if (!targets.length) return false;
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
     results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN));
   }
-  const successCount = results.filter((row) => row.ok).length;
+  let successCount = results.filter((row) => row.ok).length;
+  if (!successCount && TELEGRAM_BOT_TOKEN) {
+    const fallbackTargets = Array.from(
+      new Set([
+        ...targets,
+        ...resolveTelegramConfiguredChatIds(db, explicitChatIds),
+        ...(TELEGRAM_DISCOVER_CHAT_IDS ? (await discoverTelegramChatIds()).map((row) => toText(row.id)).filter(Boolean) : []),
+      ])
+    );
+    for (const chatId of fallbackTargets) {
+      if (results.some((row) => row.ok && row.chatId === chatId)) continue;
+      // eslint-disable-next-line no-await-in-loop
+      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2, TELEGRAM_BOT_TOKEN));
+    }
+    successCount = results.filter((row) => row.ok).length;
+  }
   telegramMaintenanceLastSendReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
     successCount,
-    targetCount: targets.length,
-    targets,
+    targetCount: Array.from(new Set(results.map((row) => toText(row.chatId)).filter(Boolean))).length,
+    targets: Array.from(new Set(results.map((row) => toText(row.chatId)).filter(Boolean))),
     errors: results
       .filter((row) => !row.ok)
       .map((row) => `chat ${row.chatId}: ${row.statusCode || 0} ${toText(row.body).slice(0, 160)}`),
