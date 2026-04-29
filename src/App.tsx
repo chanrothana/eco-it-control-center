@@ -8968,6 +8968,7 @@ export default function App() {
   const [maintenanceRecordForm, setMaintenanceRecordForm] = useState(() =>
     createMaintenanceRecordForm(undefined, toYmd(new Date()), "")
   );
+  const [maintenanceQuickGeneralTask, setMaintenanceQuickGeneralTask] = useState(true);
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
     const now = new Date();
@@ -11385,6 +11386,9 @@ export default function App() {
         (opt) => opt.code === typeCode
       );
       if (!option) {
+        if (typeCode === "GEN") {
+          return lang === "km" ? "ការងារជួសជុលទូទៅ" : "General Maintenance Task";
+        }
         if (String(category || "").trim().toUpperCase() === "FACILITY") {
           if (typeCode === AIRCON_FRONT_UNIT_TYPE_CODE) return "Front Unit (Indoor)";
           if (typeCode === AIRCON_OUTDOOR_UNIT_TYPE_CODE) return "Back Unit (Outdoor)";
@@ -24124,7 +24128,8 @@ export default function App() {
   async function addMaintenanceRecordFromTab(): Promise<boolean> {
     if (!requireMaintenanceRecordAction()) return false;
     const assetId = Number(maintenanceRecordForm.assetId);
-    if (!assetId) return false;
+    const isQuickGeneralTask = maintenanceQuickMode && maintenanceQuickGeneralTask;
+    if (!assetId && !isQuickGeneralTask) return false;
     if (
       !maintenanceRecordForm.date ||
       !maintenanceRecordForm.type.trim()
@@ -24237,34 +24242,52 @@ export default function App() {
       });
 
       try {
-        await requestJson<{ asset: Asset }>(`/api/assets/${assetId}/history`, {
-          method: "POST",
-          body: JSON.stringify({
-            ...entry,
-            reportFile: maintenanceRecordForm.reportFile
-              ? {
-                  url: maintenanceRecordForm.reportFile.url,
-                  name: maintenanceRecordForm.reportFile.name || "",
-                  mimeType: maintenanceRecordForm.reportFile.mimeType || "",
-                }
-              : "",
-            workflow: entry.workflow,
-          }),
-        });
-        const savedAsset = nextLocal.find((a) => a.id === assetId);
-        if (savedAsset) {
-          await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
-            method: "PATCH",
+        if (isQuickGeneralTask) {
+          await requestJson<{ asset: Asset; entry: MaintenanceEntry }>(`/api/maintenance/general-record`, {
+            method: "POST",
             body: JSON.stringify({
-              nextMaintenanceDate: savedAsset.nextMaintenanceDate || "",
-              scheduleNote: savedAsset.scheduleNote || "",
-              repeatMode: savedAsset.repeatMode || "NONE",
-              repeatWeekOfMonth: Number(savedAsset.repeatWeekOfMonth || 0),
-              repeatWeekday: Number(savedAsset.repeatWeekday || 0),
-              repeatCycleStep: Number(savedAsset.repeatCycleStep || 0),
-              status: savedAsset.status || "Active",
+              campus: maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter,
+              ...entry,
+              reportFile: maintenanceRecordForm.reportFile
+                ? {
+                    url: maintenanceRecordForm.reportFile.url,
+                    name: maintenanceRecordForm.reportFile.name || "",
+                    mimeType: maintenanceRecordForm.reportFile.mimeType || "",
+                  }
+                : "",
+              workflow: entry.workflow,
             }),
           });
+        } else {
+          await requestJson<{ asset: Asset }>(`/api/assets/${assetId}/history`, {
+            method: "POST",
+            body: JSON.stringify({
+              ...entry,
+              reportFile: maintenanceRecordForm.reportFile
+                ? {
+                    url: maintenanceRecordForm.reportFile.url,
+                    name: maintenanceRecordForm.reportFile.name || "",
+                    mimeType: maintenanceRecordForm.reportFile.mimeType || "",
+                  }
+                : "",
+              workflow: entry.workflow,
+            }),
+          });
+          const savedAsset = nextLocal.find((a) => a.id === assetId);
+          if (savedAsset) {
+            await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                nextMaintenanceDate: savedAsset.nextMaintenanceDate || "",
+                scheduleNote: savedAsset.scheduleNote || "",
+                repeatMode: savedAsset.repeatMode || "NONE",
+                repeatWeekOfMonth: Number(savedAsset.repeatWeekOfMonth || 0),
+                repeatWeekday: Number(savedAsset.repeatWeekday || 0),
+                repeatCycleStep: Number(savedAsset.repeatCycleStep || 0),
+                status: savedAsset.status || "Active",
+              }),
+            });
+          }
         }
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
@@ -24276,6 +24299,7 @@ export default function App() {
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
       setMaintenanceRecordForm(createMaintenanceRecordForm(savedAsset, toYmd(new Date()), currentOperatorName));
+      setMaintenanceQuickGeneralTask(true);
       setMaintenanceRecordFileKey((k) => k + 1);
       if (maintenanceQuickMode) {
         window.alert(lang === "km" ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។" : "Maintenance record saved.");
@@ -25959,7 +25983,7 @@ export default function App() {
     [assets, maintenanceRecordForm.assetId]
   );
   const maintenanceRecordIsComplete = useMemo(() => (
-    Boolean(maintenanceRecordForm.assetId) &&
+    (maintenanceQuickMode ? (maintenanceQuickGeneralTask || Boolean(maintenanceRecordForm.assetId)) : Boolean(maintenanceRecordForm.assetId)) &&
     Boolean(maintenanceRecordForm.date) &&
     Boolean(maintenanceRecordForm.note.trim()) &&
     (
@@ -25969,7 +25993,7 @@ export default function App() {
         (maintenanceRecordForm.afterPhotos || []).length > 0
       )
     )
-  ), [maintenanceQuickMode, maintenanceRecordForm]);
+  ), [maintenanceQuickGeneralTask, maintenanceQuickMode, maintenanceRecordForm]);
   const detailAsset = useMemo(() => {
     if (assetDetailId == null) return null;
     return (
@@ -28087,11 +28111,12 @@ export default function App() {
   }, [scheduleAssets, scheduleForm.assetId]);
 
   useEffect(() => {
+    if (maintenanceQuickMode && maintenanceQuickGeneralTask) return;
     if (maintenanceRecordForm.assetId) return;
     if (maintenanceRecordFilteredAssets.length) {
       setMaintenanceRecordForm((f) => ({ ...f, assetId: String(maintenanceRecordFilteredAssets[0].id) }));
     }
-  }, [maintenanceRecordFilteredAssets, maintenanceRecordForm.assetId]);
+  }, [maintenanceQuickGeneralTask, maintenanceQuickMode, maintenanceRecordFilteredAssets, maintenanceRecordForm.assetId]);
 
   useEffect(() => {
     if (verificationRecordForm.assetId) return;
@@ -45585,6 +45610,25 @@ export default function App() {
                 </div>
                 <span className="maintenance-quick-campus-chip">{campusLabel(maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter)}</span>
               </div>
+              <div className="asset-actions" style={{ gap: 8 }}>
+                <button
+                  type="button"
+                  className={`tab ${maintenanceQuickGeneralTask ? "tab-active" : ""}`}
+                  onClick={() => {
+                    setMaintenanceQuickGeneralTask(true);
+                    setMaintenanceRecordForm((f) => ({ ...f, assetId: "", type: "Repair" }));
+                  }}
+                >
+                  {lang === "km" ? "ការងារទូទៅ" : "General Task"}
+                </button>
+                <button
+                  type="button"
+                  className={`tab ${maintenanceQuickGeneralTask ? "" : "tab-active"}`}
+                  onClick={() => setMaintenanceQuickGeneralTask(false)}
+                >
+                  {lang === "km" ? "ភ្ជាប់ Asset" : "With Asset"}
+                </button>
+              </div>
               <div className="form-grid maintenance-staff-quick-form">
                 <label className="field">
                   <span>{lang === "km" ? "សាខា" : "Campus"}</span>
@@ -45599,37 +45643,46 @@ export default function App() {
                     onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, date: e.target.value }))}
                   />
                 </label>
-                <label className="field field-wide">
-                  <span>{lang === "km" ? "ទ្រព្យ ឬ សម្ភារៈ" : "Asset or Item"}</span>
-                  <AssetPicker
-                    value={maintenanceRecordForm.assetId}
-                    assets={maintenanceRecordFilteredAssets}
-                    getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")}`}
-                    onChange={(assetId) => {
-                      const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
-                      setMaintenanceRecordForm((f) => ({
-                        ...f,
-                        assetId,
-                        workflow: {
-                          ...normalizeMaintenanceWorkflow(f.workflow),
-                          template: getMaintenanceTemplateKey(selectedAsset),
-                          checklist: [],
-                        },
-                      }));
-                    }}
-                    placeholder={lang === "km" ? "ជ្រើសទ្រព្យ ឬ សម្ភារៈ" : "Select asset"}
-                    disabled={!maintenanceRecordFilteredAssets.length}
-                  />
-                  <div className="tiny">
-                    {maintenanceRecordFilteredAssets.length
-                      ? (lang === "km"
-                        ? `${maintenanceRecordFilteredAssets.length} ទ្រព្យ/សម្ភារៈ អាចជ្រើសបាន`
-                        : `${maintenanceRecordFilteredAssets.length} assets available`)
-                      : (lang === "km"
-                        ? "មិនមានទ្រព្យ/សម្ភារៈ សម្រាប់សាខានេះទេ។"
-                        : "No asset available for this campus.")}
+                {!maintenanceQuickGeneralTask ? (
+                  <label className="field field-wide">
+                    <span>{lang === "km" ? "ទ្រព្យ ឬ សម្ភារៈ" : "Asset or Item"}</span>
+                    <AssetPicker
+                      value={maintenanceRecordForm.assetId}
+                      assets={maintenanceRecordFilteredAssets}
+                      getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")}`}
+                      onChange={(assetId) => {
+                        const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
+                        setMaintenanceRecordForm((f) => ({
+                          ...f,
+                          assetId,
+                          workflow: {
+                            ...normalizeMaintenanceWorkflow(f.workflow),
+                            template: getMaintenanceTemplateKey(selectedAsset),
+                            checklist: [],
+                          },
+                        }));
+                      }}
+                      placeholder={lang === "km" ? "ជ្រើសទ្រព្យ ឬ សម្ភារៈ" : "Select asset"}
+                      disabled={!maintenanceRecordFilteredAssets.length}
+                    />
+                    <div className="tiny">
+                      {maintenanceRecordFilteredAssets.length
+                        ? (lang === "km"
+                          ? `${maintenanceRecordFilteredAssets.length} ទ្រព្យ/សម្ភារៈ អាចជ្រើសបាន`
+                          : `${maintenanceRecordFilteredAssets.length} assets available`)
+                        : (lang === "km"
+                          ? "មិនមានទ្រព្យ/សម្ភារៈ សម្រាប់សាខានេះទេ។"
+                          : "No asset available for this campus.")}
+                    </div>
+                  </label>
+                ) : (
+                  <div className="field field-wide">
+                    <span>{lang === "km" ? "របៀបកត់ត្រា" : "Record Mode"}</span>
+                    <div className="detail-value">
+                      {lang === "km" ? "កត់ត្រាការងារទូទៅ ដោយមិនភ្ជាប់ Asset" : "Saving a general maintenance task without an asset"}
+                    </div>
                   </div>
-                </label>
+                )}
                 <label className="field">
                   <span>{lang === "km" ? "អ្នកអនុវត្ត" : "Performed By"}</span>
                   <input
@@ -46258,11 +46311,6 @@ export default function App() {
                             <div>{row.assetId} • {row.itemName}</div>
                             <div className="tiny">{campusLabel(row.campus)} • {row.location || "-"}</div>
                             <div>{row.note || "-"}</div>
-                            <div style={{ marginTop: 8 }}>
-                              {renderMaintenancePhotoGroups(row, `maintenance-logbook-${row.rowId}`, undefined, {
-                                maxPhotosPerGroup: 2,
-                              })}
-                            </div>
                             <div className="tiny">{row.condition || "-"}</div>
                           </td>
                           <td>{row.by || "-"}</td>

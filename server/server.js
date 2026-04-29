@@ -278,6 +278,7 @@ const TYPE_LABELS = {
   DSK: "Deskset",
   CAB: "Cabinet",
   PNO: "Piano",
+  GEN: "General Maintenance",
 };
 const CATEGORY_CODE = {
   IT: "COM",
@@ -2451,7 +2452,7 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN));
   }
   let successCount = results.filter((row) => row.ok).length;
-  if (!successCount && TELEGRAM_BOT_TOKEN) {
+  if (TELEGRAM_BOT_TOKEN) {
     const fallbackTargets = Array.from(
       new Set([
         ...targets,
@@ -2903,6 +2904,95 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
     lines.push(`តម្លៃ: ${cost}`);
   }
   return lines.join("\n");
+}
+
+function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
+  if (!asset || !entry) return [];
+  const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+  const baseLabel = `${toText(asset.assetId) || "-"} - ${itemName || "-"}`;
+  const beforePhoto = resolveTelegramPhotoUrl(toText((entry.beforePhotos || [])[0] || ""));
+  const afterPhoto = resolveTelegramPhotoUrl(toText((entry.afterPhotos || [])[0] || entry.photo || ""));
+  const alerts = [];
+  if (beforePhoto) {
+    alerts.push({
+      photoUrl: beforePhoto,
+      caption: `រូបមុនជួសជុល\n${baseLabel}`,
+    });
+  }
+  if (afterPhoto) {
+    alerts.push({
+      photoUrl: afterPhoto,
+      caption: `រូបក្រោយជួសជុល\n${baseLabel}`,
+    });
+  }
+  return alerts;
+}
+
+function ensureGeneralMaintenanceAsset(db, campus) {
+  const normalizedCampus = normalizeCampusInput(campus);
+  if (!normalizedCampus) return null;
+  const assetId = `GENERAL TASK ${campusCode(normalizedCampus)}`;
+  const existing =
+    (Array.isArray(db.assets) ? db.assets : []).find(
+      (asset) =>
+        toText(asset.assetId) === assetId ||
+        (toUpper(asset.type) === "GEN" &&
+          normalizeCategoryInput(asset.category) === "FACILITY" &&
+          normalizeCampusInput(asset.campus) === normalizedCampus)
+    ) || null;
+  if (existing) return existing;
+  const maxId = (Array.isArray(db.assets) ? db.assets : []).reduce((max, asset) => Math.max(max, Number(asset && asset.id) || 0), 0);
+  const asset = {
+    id: maxId + 1,
+    campus: normalizedCampus,
+    category: "FACILITY",
+    type: "GEN",
+    pcType: "",
+    seq: 0,
+    assetId,
+    name: assetId,
+    location: "General Record",
+    setCode: "",
+    parentAssetId: "",
+    componentRole: "",
+    componentRequired: false,
+    assignedTo: "",
+    custodyStatus: "IN_STOCK",
+    brand: "",
+    model: "",
+    serialNumber: "",
+    specs: "",
+    purchaseDate: "",
+    warrantyUntil: "",
+    vendor: "",
+    notes: "SYSTEM_PLACEHOLDER_GENERAL_MAINTENANCE",
+    tonerModel: "",
+    tonerItemId: 0,
+    tonerMinStock: 0,
+    tonerExpectedYield: 0,
+    tonerLastChangedAt: "",
+    tonerLastPageCount: 0,
+    tonerNotes: "",
+    nextMaintenanceDate: "",
+    nextVerificationDate: "",
+    verificationFrequency: "NONE",
+    scheduleNote: "",
+    repeatMode: "NONE",
+    repeatWeekOfMonth: 0,
+    repeatWeekday: 0,
+    repeatCycleStep: 0,
+    maintenanceHistory: [],
+    verificationHistory: [],
+    transferHistory: [],
+    custodyHistory: [],
+    statusHistory: [],
+    photo: "",
+    photos: [],
+    status: "Active",
+    created: new Date().toISOString(),
+  };
+  db.assets = Array.isArray(db.assets) ? [asset, ...db.assets] : [asset];
+  return asset;
 }
 
 initStorageSync();
@@ -4851,6 +4941,14 @@ function assetIdCampusCode(name) {
     if (major > 0) return `ECO${major}`;
   }
   return "ECOX";
+}
+
+function assetItemName(category, typeCode, pcType = "") {
+  const normalizedType = toUpper(typeCode);
+  if (normalizedType === "GEN") return "General Maintenance Task";
+  const base = TYPE_LABELS[normalizedType] || normalizedType;
+  if (normalizedType === "PC" && toText(pcType)) return `${base} (${toText(pcType)})`;
+  return base;
 }
 
 function normalizeSerialKey(value) {
@@ -8447,6 +8545,14 @@ const server = http.createServer(async (req, res) => {
           });
           telegramAlertSent = Boolean(report && report.ok);
         }
+        const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(db.assets[idx], entry);
+        for (const item of photoAlerts) {
+          // eslint-disable-next-line no-await-in-loop
+          await sendTelegramMaintenanceMessage(item.caption, {
+            db,
+            photoUrl: item.photoUrl,
+          });
+        }
       } catch (err) {
         console.warn(
           "[MAINTENANCE ALERT] Failed to send maintenance record Telegram alert:",
@@ -8454,6 +8560,116 @@ const server = http.createServer(async (req, res) => {
         );
       }
       sendJson(res, 201, { asset: db.assets[idx], entry, telegramAlertSent });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/maintenance/general-record") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!canRecordMaintenance(user)) {
+        sendJson(res, 403, { error: "Maintenance record permission required" });
+        return;
+      }
+
+      const body = await parseBody(req);
+      const campus = normalizeCampusInput(body.campus);
+      const date = toText(body.date);
+      const type = toText(body.type);
+      const note = toText(body.note);
+      const cost = toText(body.cost);
+      const by = toText(body.by);
+      const checkedBy = toText(body.checkedBy);
+      const media = await normalizeMaintenanceMediaPayload(body);
+      const workflow = normalizeMaintenanceWorkflowPayload(body.workflow);
+      const reportFile = await normalizeAttachmentValue(body.reportFile || {
+        url: body.reportFile,
+        name: body.reportFileName,
+        mimeType: body.reportFileType,
+      }, "maintenance_reports");
+      const completion = normalizeCompletion(body.completion);
+      const condition = toText(body.condition);
+      if (!campus || !date || !type || !note) {
+        sendJson(res, 400, { error: "campus, date, type, note are required" });
+        return;
+      }
+      if (!userCanAccessCampus(user, campus)) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+
+      const db = await readDb();
+      const asset = ensureGeneralMaintenanceAsset(db, campus);
+      if (!asset) {
+        sendJson(res, 400, { error: "General maintenance campus is required" });
+        return;
+      }
+
+      const entry = {
+        id: Date.now(),
+        date,
+        createdAt: new Date().toISOString(),
+        type,
+        completion,
+        condition,
+        note,
+        cost,
+        by,
+        checkedBy,
+        photo: media.photo,
+        photos: media.photos,
+        beforePhotos: media.beforePhotos,
+        afterPhotos: media.afterPhotos,
+        reportFile: reportFile.url,
+        reportFileName: reportFile.name,
+        reportFileType: reportFile.mimeType,
+        workflow,
+        ticketId: 0,
+        ticketNo: "",
+        requestSource: "general",
+        requestedBy: "",
+        requestTitle: "",
+      };
+      asset.maintenanceHistory = Array.isArray(asset.maintenanceHistory)
+        ? [entry, ...asset.maintenanceHistory]
+        : [entry];
+      appendAuditLog(
+        db,
+        user,
+        "CREATE",
+        "maintenance_record",
+        `${asset.assetId}#${entry.id}`,
+        `${entry.type} | ${entry.completion || "Not Yet"}`
+      );
+      ensureMaintenanceScheduleNotifications(db);
+      await writeDb(db);
+      let telegramAlertSent = false;
+      try {
+        const message = buildMaintenanceRecordTelegramMessage(asset, entry, user);
+        if (message) {
+          const report = await sendTelegramMaintenanceMessage(message, {
+            db,
+            includeResults: true,
+          });
+          telegramAlertSent = Boolean(report && report.ok);
+        }
+        const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
+        for (const item of photoAlerts) {
+          // eslint-disable-next-line no-await-in-loop
+          await sendTelegramMaintenanceMessage(item.caption, {
+            db,
+            photoUrl: item.photoUrl,
+          });
+        }
+      } catch (err) {
+        console.warn(
+          "[MAINTENANCE ALERT] Failed to send general maintenance Telegram alert:",
+          err instanceof Error ? err.message : err
+        );
+      }
+      sendJson(res, 201, { asset, entry, telegramAlertSent });
       return;
     }
 
