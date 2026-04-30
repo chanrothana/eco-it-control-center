@@ -2451,22 +2451,7 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     // eslint-disable-next-line no-await-in-loop
     results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN));
   }
-  let successCount = results.filter((row) => row.ok).length;
-  if (TELEGRAM_BOT_TOKEN) {
-    const fallbackTargets = Array.from(
-      new Set([
-        ...targets,
-        ...resolveTelegramConfiguredChatIds(db, explicitChatIds),
-        ...(TELEGRAM_DISCOVER_CHAT_IDS ? (await discoverTelegramChatIds()).map((row) => toText(row.id)).filter(Boolean) : []),
-      ])
-    );
-    for (const chatId of fallbackTargets) {
-      if (results.some((row) => row.ok && row.chatId === chatId)) continue;
-      // eslint-disable-next-line no-await-in-loop
-      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2, TELEGRAM_BOT_TOKEN));
-    }
-    successCount = results.filter((row) => row.ok).length;
-  }
+  const successCount = results.filter((row) => row.ok).length;
   telegramMaintenanceLastSendReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
