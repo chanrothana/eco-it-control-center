@@ -16853,6 +16853,43 @@ tr.row-maint-maintenance:hover td {
   padding: 0 18px 18px;
 }
 
+.public-asset-group-body .field > span {
+  color: #7a5c3b;
+  font-weight: 700;
+}
+
+.public-asset-group-body .input,
+.public-asset-group-body .textarea,
+.public-asset-group-body .status-select,
+.public-asset-group-body .detail-value {
+  border-color: #d8c09b !important;
+  background: linear-gradient(180deg, #fffdfa, #f9f1e4) !important;
+  color: #3f2d1c !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.public-asset-group-body .input::placeholder,
+.public-asset-group-body .textarea::placeholder {
+  color: #9c7f5d !important;
+}
+
+.public-asset-group-body select.input {
+  color: #3f2d1c !important;
+}
+
+.public-asset-group-body input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.85;
+  filter: none;
+}
+
+.public-asset-group-body input[type="file"] {
+  color: #5c442d;
+}
+
+.public-asset-group-body .tiny {
+  color: #7a5c3b !important;
+}
+
 .public-asset-mobile-card {
   display: none;
 }
