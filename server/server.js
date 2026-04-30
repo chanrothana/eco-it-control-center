@@ -4372,31 +4372,38 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
 
   const normalizedLines = lines.map((line) => normalizeCounterOcrLine(line));
 
-  function extractCounterValue(line) {
+  function extractCounterValues(line) {
     const source = String(line || "");
     const values = [
       ...(source.match(/\d(?:[\d,\s]{2,}\d)/g) || []).map((value) => value.replace(/[,\s]/g, "").trim()),
       ...(source.match(/\d[\d,]*/g) || []).map((value) => value.replace(/,/g, "").trim()),
     ];
-    const normalized = values
+    return values
       .filter(Boolean)
       .filter((value) => !printerTypeCodes.has(value))
       .filter((value) => value.length >= 4);
+  }
+
+  function extractCounterValue(line) {
+    const normalized = extractCounterValues(line);
     return normalized.length ? normalized[normalized.length - 1] : "";
   }
 
-  const total2Patterns = [
-    /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,30}(\d[\d,]{3,})/i,
-    /\btotal\s*2\b[^0-9]{0,30}(\d[\d,]{3,})/i,
-  ];
-  let currentMono = "";
-  for (const pattern of total2Patterns) {
-    const match = flat.match(pattern);
-    if (match && match[1]) {
-      currentMono = match[1].replace(/,/g, "");
-      break;
+  function extractTotal2ValueFromText(source) {
+    const patterns = [
+      /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,120}(\d[\d,]{3,})/i,
+      /\btotal\s*2\b[^0-9]{0,120}(\d[\d,]{3,})/i,
+    ];
+    for (const pattern of patterns) {
+      const match = String(source || "").match(pattern);
+      if (match && match[1]) {
+        return match[1].replace(/,/g, "");
+      }
     }
+    return "";
   }
+
+  let currentMono = extractTotal2ValueFromText(flat);
 
   if (!currentMono) {
     const targetLinePattern = /\b102\b.*\btotal\s*2\b|\btotal\s*2\b.*\b102\b|\b102\b|\btotal\s*2\b/i;
@@ -4406,7 +4413,7 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
       const line = normalizedLines[i];
       if (!targetLinePattern.test(line)) continue;
 
-      const sameLineValue = extractCounterValue(line);
+      const sameLineValue = extractTotal2ValueFromText(line) || extractCounterValue(line);
       if (sameLineValue) {
         currentMono = sameLineValue;
         break;
@@ -4416,7 +4423,7 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
         const nearby = normalizedLines[i + offset] || "";
         if (!nearby) continue;
         if (otherTypePattern.test(nearby)) break;
-        const nearbyValue = extractCounterValue(nearby);
+        const nearbyValue = extractTotal2ValueFromText(nearby) || extractCounterValue(nearby);
         if (nearbyValue) {
           currentMono = nearbyValue;
           break;
@@ -4430,7 +4437,7 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
     for (let i = 0; i < normalizedLines.length - 1; i += 1) {
       const joined = `${normalizedLines[i]} ${normalizedLines[i + 1]}`.trim();
       if (!/\b102\b.*\btotal\s*2\b|\btotal\s*2\b.*\b102\b|\btotal\s*2\b/i.test(joined)) continue;
-      const joinedValue = extractCounterValue(joined);
+      const joinedValue = extractTotal2ValueFromText(joined) || extractCounterValue(joined);
       if (joinedValue) {
         currentMono = joinedValue;
         break;
@@ -4452,7 +4459,13 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
       .filter((index) => index >= 0);
 
     for (const targetIndex of total2Indexes) {
-      const nearest = possibleValues.find((entry) => Math.abs(entry.index - targetIndex) <= 2);
+      const nearest = possibleValues
+        .filter((entry) => Math.abs(entry.index - targetIndex) <= 2)
+        .sort((a, b) => {
+          const distanceDiff = Math.abs(a.index - targetIndex) - Math.abs(b.index - targetIndex);
+          if (distanceDiff !== 0) return distanceDiff;
+          return Number(b.value) - Number(a.value);
+        })[0];
       if (nearest) {
         currentMono = nearest.value;
         break;
@@ -4499,16 +4512,38 @@ function parsePrinterCounterFromHtml(html) {
   const text = stripHtmlToText(rawHtml);
   const warnings = [];
 
-  const total2Patterns = [
-    /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,30}(\d{2,})/i,
-    /\btotal\s*2\b[^0-9]{0,30}(\d{2,})/i,
-  ];
-  let currentMono = "";
-  for (const pattern of total2Patterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      currentMono = match[1];
-      break;
+  function extractTotal2ValueFromText(source) {
+    const patterns = [
+      /(?:^|\b)102\s*[:.\-]?\s*total\s*2\b[^0-9]{0,120}(\d{2,})/i,
+      /\btotal\s*2\b[^0-9]{0,120}(\d{2,})/i,
+    ];
+    for (const pattern of patterns) {
+      const match = String(source || "").match(pattern);
+      if (match && match[1]) return match[1];
+    }
+    return "";
+  }
+
+  let currentMono = extractTotal2ValueFromText(text);
+
+  if (!currentMono) {
+    const mainCounterBlock =
+      rawHtml.match(/main\s*counter[\s\S]*?(?:send\/fax application id|copyright canon|<\/table>)/i)?.[0] ||
+      rawHtml;
+    const rowMatches = mainCounterBlock.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+    for (const rowHtml of rowMatches) {
+      const rowText = stripHtmlToText(rowHtml);
+      if (!/\b102\b.*\btotal\s*2\b|\btotal\s*2\b.*\b102\b|\btotal\s*2\b/i.test(rowText)) continue;
+      currentMono = extractTotal2ValueFromText(rowText);
+      if (!currentMono) {
+        const numericValues = (rowText.match(/\d[\d,]{3,}/g) || [])
+          .map((value) => value.replace(/,/g, ""))
+          .filter((value) => value !== "101" && value !== "102" && value !== "106" && value !== "109");
+        if (numericValues.length) {
+          currentMono = numericValues[numericValues.length - 1];
+        }
+      }
+      if (currentMono) break;
     }
   }
 

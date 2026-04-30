@@ -5530,6 +5530,145 @@ label.backup-action-btn {
   font-weight: 700;
 }
 
+.vault-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.vault-register-head {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid #d6e1ef;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #edf4fd 100%);
+}
+
+.vault-register-head h4 {
+  margin: 0 0 4px;
+  color: #223657;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.vault-register-head p {
+  margin: 0;
+  color: #5a76a7;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (min-width: 769px) {
+  .vault-record-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .vault-record-card {
+    min-width: 0;
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid #d6e1ef;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%);
+    box-shadow: 0 10px 24px rgba(23, 48, 92, 0.08);
+  }
+
+  .vault-record-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .vault-record-card-head strong {
+    display: block;
+    color: #213656;
+    font-size: 18px;
+    line-height: 1.25;
+  }
+
+  .vault-record-card-head p {
+    margin: 4px 0 0;
+    color: #4f6992;
+    font-size: 13px;
+  }
+
+  .vault-record-card-head span {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #34588f;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .vault-record-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .vault-record-field {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .vault-record-field span {
+    color: #5a76a7;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .vault-record-field strong,
+  .vault-record-field a {
+    min-width: 0;
+    color: #213656;
+    font-size: 14px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .vault-record-field-wide {
+    grid-column: span 3;
+  }
+
+  .vault-record-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .vault-record-actions .tab,
+  .vault-record-actions .btn-danger {
+    width: 100%;
+    min-height: 40px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
+  .vault-record-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vault-record-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vault-record-field-wide {
+    grid-column: 1 / -1;
+  }
+}
+
 .setpack-toggle-row {
   display: flex;
   align-items: center;
@@ -18098,14 +18237,122 @@ tr.row-maint-maintenance:hover td {
     padding: 0 8px;
   }
 
-  .vault-mobile-empty {
-    padding: 18px 14px;
-    border: 1px solid var(--mobile-line);
-    border-radius: 16px;
-    background: #ffffff;
-    text-align: center;
-    color: var(--mobile-text-soft);
+.vault-mobile-empty {
+  padding: 18px 14px;
+  border: 1px solid var(--mobile-line);
+  border-radius: 16px;
+  background: #ffffff;
+  text-align: center;
+  color: var(--mobile-text-soft);
+}
+
+.vault-record-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.vault-record-card {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #d6e1ef;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f2f7ff 100%);
+  box-shadow: 0 10px 24px rgba(23, 48, 92, 0.08);
+}
+
+.vault-record-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vault-record-card-head strong {
+  display: block;
+  color: #213656;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.vault-record-card-head p {
+  margin: 4px 0 0;
+  color: #4f6992;
+  font-size: 13px;
+}
+
+.vault-record-card-head span {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #34588f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vault-record-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.vault-record-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.vault-record-field span {
+  color: #5a76a7;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vault-record-field strong,
+.vault-record-field a {
+  min-width: 0;
+  color: #213656;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.vault-record-field-wide {
+  grid-column: span 3;
+}
+
+.vault-record-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vault-record-actions .tab,
+.vault-record-actions .btn-danger {
+  width: 100%;
+  min-height: 40px;
+}
+
+@media (max-width: 1200px) {
+  .vault-record-grid {
+    grid-template-columns: 1fr;
   }
+
+  .vault-record-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vault-record-field-wide {
+    grid-column: 1 / -1;
+  }
+}
 
   .mobile-bottom-nav {
     display: none;

@@ -5306,23 +5306,6 @@ async function buildPrinterCounterOcrCandidates(photo: string): Promise<Array<{ 
   const full = String(photo || "").trim();
   if (!full) return [];
   const candidates = [
-    { photo: full, label: "full screenshot" },
-    {
-      photo: await cropImageDataUrl(full, { x: 0.14, y: 0.16, width: 0.76, height: 0.30 }),
-      label: "main counter table",
-    },
-    {
-      photo: await cropImageDataUrl(full, { x: 0.16, y: 0.18, width: 0.62, height: 0.17 }),
-      label: "Total 1/2 rows",
-    },
-    {
-      photo: await cropImageDataUrl(full, { x: 0.55, y: 0.16, width: 0.30, height: 0.16 }),
-      label: "counter values column",
-    },
-    {
-      photo: await cropImageDataUrl(full, { x: 0.12, y: 0.15, width: 0.80, height: 0.22 }),
-      label: "main counter rows tight",
-    },
     {
       photo: await cropImageDataUrl(full, { x: 0.14, y: 0.19, width: 0.74, height: 0.11 }),
       label: "102 total 2 row area",
@@ -5332,9 +5315,26 @@ async function buildPrinterCounterOcrCandidates(photo: string): Promise<Array<{ 
       label: "102 value focus",
     },
     {
+      photo: await cropImageDataUrl(full, { x: 0.16, y: 0.18, width: 0.62, height: 0.17 }),
+      label: "Total 1/2 rows",
+    },
+    {
       photo: await cropImageDataUrl(full, { x: 0.18, y: 0.16, width: 0.68, height: 0.14 }),
       label: "counter rows cropped wide",
     },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.12, y: 0.15, width: 0.80, height: 0.22 }),
+      label: "main counter rows tight",
+    },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.14, y: 0.16, width: 0.76, height: 0.30 }),
+      label: "main counter table",
+    },
+    {
+      photo: await cropImageDataUrl(full, { x: 0.55, y: 0.16, width: 0.30, height: 0.16 }),
+      label: "counter values column",
+    },
+    { photo: full, label: "full screenshot" },
   ];
   const seen = new Set<string>();
   return candidates.filter((entry) => {
@@ -9294,6 +9294,7 @@ export default function App() {
   const [vaultVisibleAccountPasswordId, setVaultVisibleAccountPasswordId] = useState<number | null>(null);
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
   const [vaultAccountFormPasswordVisible, setVaultAccountFormPasswordVisible] = useState(false);
+  const [vaultCredentialPageTab, setVaultCredentialPageTab] = useState<"records" | "register">("records");
   const [editingVaultAccountId, setEditingVaultAccountId] = useState<number | null>(null);
   const [editingVaultCredentialId, setEditingVaultCredentialId] = useState<number | null>(null);
   const [editingVaultDesignId, setEditingVaultDesignId] = useState<number | null>(null);
@@ -9653,6 +9654,7 @@ export default function App() {
     });
     setVaultCredentialFormPasswordVisible(false);
     setEditingVaultCredentialId(null);
+    setVaultCredentialPageTab("records");
   }
 
   function resetVaultDesignForm() {
@@ -16777,6 +16779,7 @@ export default function App() {
         warnings?: string[];
       } = {};
       let successfulCandidateLabel = "";
+      let bestScore = -1;
 
       for (const candidate of candidates) {
         const res = await requestJson<{
@@ -16793,10 +16796,23 @@ export default function App() {
             photo: candidate.photo,
           }),
         });
-        extracted = res.extracted || {};
-        if (extracted.currentMono) {
-          successfulCandidateLabel = candidate.label;
-          break;
+        const candidateExtracted = res.extracted || {};
+        if (candidateExtracted.currentMono) {
+          const currentValue = Number(candidateExtracted.currentMono) || 0;
+          const rawText = String(candidateExtracted.rawText || "").toLowerCase();
+          const warningsCount = Array.isArray(candidateExtracted.warnings) ? candidateExtracted.warnings.length : 0;
+          let score = currentValue;
+          if (candidate.label.includes("102")) score += 4_000_000_000;
+          else if (candidate.label.includes("Total 1/2")) score += 3_000_000_000;
+          else if (candidate.label.includes("main counter")) score += 2_000_000_000;
+          if (rawText.includes("102")) score += 500_000_000;
+          if (rawText.includes("total 2")) score += 500_000_000;
+          score -= warningsCount * 10_000_000;
+          if (score > bestScore) {
+            bestScore = score;
+            extracted = candidateExtracted;
+            successfulCandidateLabel = candidate.label;
+          }
         }
       }
 
@@ -17820,6 +17836,7 @@ export default function App() {
       await saveVaultSettingsToServer({ vaultCredentials: nextRows });
       resetVaultCredentialForm();
       setSetupMessage(editingVaultCredentialId ? "Vault credential record updated." : "Vault credential record added.");
+      setVaultCredentialPageTab("records");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save vault credential record");
     }
@@ -18402,6 +18419,7 @@ export default function App() {
 
   function startEditVaultCredential(row: VaultCredential) {
     setEditingVaultCredentialId(row.id);
+    setVaultCredentialPageTab("register");
     setVaultCredentialForm({
       systemName: row.systemName || "",
       loginUrl: row.loginUrl || "",
@@ -53452,7 +53470,24 @@ export default function App() {
                   Example record: <strong>System</strong> = School Main Email, <strong>Email / Username</strong> = `info@eis-edu.com`,
                   <strong> Password</strong> = stored credential, <strong>Password Updated Date</strong> = `25-Dec-2024`.
                 </div>
-                {isPhoneView ? (
+                <div className="vault-subtabs">
+                  <button
+                    type="button"
+                    className={`tab ${vaultCredentialPageTab === "records" ? "tab-active" : ""}`}
+                    onClick={() => setVaultCredentialPageTab("records")}
+                  >
+                    View Records
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab ${vaultCredentialPageTab === "register" ? "tab-active" : ""}`}
+                    onClick={() => setVaultCredentialPageTab("register")}
+                  >
+                    {editingVaultCredentialId ? "Edit Record" : "Register New"}
+                  </button>
+                </div>
+                {vaultCredentialPageTab === "records" ? (
+                isPhoneView ? (
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
                     {vaultCredentials.length ? vaultCredentials.map((row) => (
                       <article className="vault-mobile-card" key={`vault-credential-mobile-${row.id}`}>
@@ -53478,23 +53513,52 @@ export default function App() {
                     )) : <div className="vault-mobile-empty">No website login records yet.</div>}
                   </div>
                 ) : (
-                  <div className="table-wrap" style={{ marginTop: 12 }}>
-                    <table className="vault-responsive-table">
-                      <thead><tr><th>System / Account</th><th>Login URL</th><th>Email / Username</th><th>Password</th><th>Password Hint / Storage Note</th><th>2FA / OTP</th><th>Recovery</th><th>Password Updated</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                      <tbody>
-                        {vaultCredentials.length ? vaultCredentials.map((row) => (
-                          <tr key={`vault-credential-${row.id}`}>
-                            <td data-label="System / Account">{row.systemName || "-"}</td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="Email / Username"><strong>{row.username || "-"}</strong></td>
-                            <td data-label="Password" className="vault-table-password-cell">{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"} <button className="tab btn-small" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide" : "View"}</button></td>
-                            <td data-label="Password Hint / Storage Note">{row.secretHint || "-"}</td><td data-label="2FA / OTP">{row.twoFa || "-"}</td><td data-label="Recovery">{row.recovery || "-"}</td><td data-label="Password Updated">{formatDate(row.lastUpdated || "-")}</td>
-                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button></td>
-                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>X</button></td>
-                          </tr>
-                        )) : <tr className="vault-table-empty-row"><td colSpan={10}>No website login records yet.</td></tr>}
-                      </tbody>
-                    </table>
+                  <div className="vault-record-grid" style={{ marginTop: 12 }}>
+                    {vaultCredentials.length ? vaultCredentials.map((row) => (
+                      <article className="vault-record-card" key={`vault-credential-desktop-${row.id}`}>
+                        <div className="vault-record-card-head">
+                          <div>
+                            <strong>{row.systemName || "-"}</strong>
+                            <p>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "No login URL"}</p>
+                          </div>
+                          <span>{formatDate(row.lastUpdated || "-")}</span>
+                        </div>
+                        <div className="vault-record-fields">
+                          <div className="vault-record-field">
+                            <span>Email / Username</span>
+                            <strong>{row.username || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Password</span>
+                            <strong>{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>2FA / OTP</span>
+                            <strong>{row.twoFa || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field vault-record-field-wide">
+                            <span>Password Hint / Storage Note</span>
+                            <strong>{row.secretHint || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field vault-record-field-wide">
+                            <span>Recovery</span>
+                            <strong>{row.recovery || "-"}</strong>
+                          </div>
+                        </div>
+                        <div className="vault-record-actions">
+                          <button className="tab" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide Password" : "View Password"}</button>
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No website login records yet.</div>}
                   </div>
-                )}
+                )) : (
+                <>
+                <div className="vault-register-head">
+                  <h4>{editingVaultCredentialId ? "Edit Web Service Record" : "Register Web Service Record"}</h4>
+                  <p>{editingVaultCredentialId ? "Update the selected login record, then save it back to the list." : "Add a new website or service login record here."}</p>
+                </div>
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>System / Account Name</span><input className="input" value={vaultCredentialForm.systemName} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="School Main Email / Telegram Bot / Hosting Panel" /></label>
                   <label className="field"><span>Login URL</span><input className="input" value={vaultCredentialForm.loginUrl} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://mail.google.com/ or other login page" /></label>
@@ -53524,6 +53588,8 @@ export default function App() {
                   <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCredential}>{editingVaultCredentialId ? "Update Website Login" : "Add Website Login"}</button>
                   {editingVaultCredentialId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultCredentialForm}>Cancel Edit</button> : null}
                 </div>
+                </>
+                )}
               </>
             )}
 
