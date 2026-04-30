@@ -16816,6 +16816,9 @@ export default function App() {
         }
       }
 
+      const warningText = Array.isArray(extracted.warnings) ? extracted.warnings.join(" ") : "";
+      const looksLikeAppScreen = warningText.toLowerCase().includes("it control center screen");
+
       setRentalCounterForm((prev) => ({
         ...prev,
         photo,
@@ -16831,13 +16834,16 @@ export default function App() {
             .filter(Boolean)
             .join(" | "),
       }));
-      setRentalPrinterMessage(
-        extracted.currentMono
-          ? `Printer auto fill completed from ${successfulCandidateLabel || "screenshot"}. Please review the counter before saving.`
-          : Array.isArray(extracted.warnings) && extracted.warnings.length
-          ? `Printer auto fill completed with checks needed: ${extracted.warnings.join(" ")}`
-          : "Printer auto fill completed. Please review the counter before saving."
-      );
+      if (extracted.currentMono) {
+        setRentalPrinterMessage(`Printer auto fill completed from ${successfulCandidateLabel || "screenshot"}. Please review the counter before saving.`);
+      } else if (looksLikeAppScreen) {
+        setError("Uploaded image is the IT Control Center screen, not the Canon printer counter page.");
+        setRentalPrinterMessage("Please upload the Canon `Check Counter` screenshot itself, or use `Open Printer Web` and capture the printer page.");
+      } else if (Array.isArray(extracted.warnings) && extracted.warnings.length) {
+        setRentalPrinterMessage(`Could not detect 102 : Total 2 yet. ${extracted.warnings.join(" ")}`);
+      } else {
+        setRentalPrinterMessage("Could not detect 102 : Total 2 from this screenshot yet. Please try a clearer Canon counter screenshot.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Printer auto fill failed.");
     } finally {
@@ -53311,37 +53317,41 @@ export default function App() {
             )}
 
             {vaultTab !== "dashboard" ? (
-              <div className="row-actions setup-tabs-row vault-subtabs" style={{ marginBottom: 10 }}>
+              <div className="vault-main-nav" style={{ marginBottom: 10 }}>
                 {canAccessMenu("vault.dashboard", "vault") ? (
-                <button className="tab" onClick={() => setVaultTab("dashboard")}>
-                  Back To Dashboard
-                </button>
+                  <div className="vault-main-nav-action">
+                    <button className="tab vault-back-tab" onClick={() => setVaultTab("dashboard")}>
+                      Back To Dashboard
+                    </button>
+                  </div>
                 ) : null}
-                {canAccessMenu("vault.accounts", "vault") ? (
-                <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>
-                  Access Systems
-                </button>
-                ) : null}
-                {canAccessMenu("vault.credentials", "vault") ? (
-                <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>
-                  Web Services
-                </button>
-                ) : null}
-                {canAccessMenu("vault.design", "vault") ? (
-                <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>
-                  Design Folders
-                </button>
-                ) : null}
-                {canAccessMenu("vault.network", "vault") ? (
-                <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>
-                  Network & WiFi Docs
-                </button>
-                ) : null}
-                {canAccessMenu("vault.cctv", "vault") ? (
-                <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>
-                  CCTV Systems
-                </button>
-                ) : null}
+                <div className="row-actions setup-tabs-row vault-main-tabs">
+                  {canAccessMenu("vault.accounts", "vault") ? (
+                  <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>
+                    Access Systems
+                  </button>
+                  ) : null}
+                  {canAccessMenu("vault.credentials", "vault") ? (
+                  <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>
+                    Web Services
+                  </button>
+                  ) : null}
+                  {canAccessMenu("vault.design", "vault") ? (
+                  <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>
+                    Design Folders
+                  </button>
+                  ) : null}
+                  {canAccessMenu("vault.network", "vault") ? (
+                  <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>
+                    Network & WiFi Docs
+                  </button>
+                  ) : null}
+                  {canAccessMenu("vault.cctv", "vault") ? (
+                  <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>
+                    CCTV Systems
+                  </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
 
@@ -53470,7 +53480,7 @@ export default function App() {
                   Example record: <strong>System</strong> = School Main Email, <strong>Email / Username</strong> = `info@eis-edu.com`,
                   <strong> Password</strong> = stored credential, <strong>Password Updated Date</strong> = `25-Dec-2024`.
                 </div>
-                <div className="vault-subtabs">
+                <div className="vault-subtabs vault-credential-subtabs">
                   <button
                     type="button"
                     className={`tab ${vaultCredentialPageTab === "records" ? "tab-active" : ""}`}

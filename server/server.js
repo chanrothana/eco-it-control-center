@@ -4446,6 +4446,33 @@ function parsePrinterCounterFromOcrText(text, lineInput = []) {
   }
 
   if (!currentMono) {
+    const typeRows = normalizedLines
+      .map((line, index) => {
+        const match = line.match(/\b(101|102|106|109)\b[^a-z0-9]{0,12}[:.\-]?\s*total/i);
+        return match ? { index, code: match[1], line } : null;
+      })
+      .filter(Boolean);
+    const valueRows = normalizedLines
+      .map((line, index) => {
+        const values = extractCounterValues(line);
+        if (!values.length) return null;
+        if (/\b(?:101|102|106|109)\b[^a-z0-9]{0,12}[:.\-]?\s*total/i.test(line)) return null;
+        return { index, values, line };
+      })
+      .filter(Boolean);
+
+    if (typeRows.length >= 2 && valueRows.length >= typeRows.length) {
+      const targetTypeIndex = typeRows.findIndex((entry) => entry.code === "102");
+      if (targetTypeIndex >= 0 && valueRows[targetTypeIndex]) {
+        const mappedValues = valueRows[targetTypeIndex].values;
+        if (mappedValues.length) {
+          currentMono = mappedValues[mappedValues.length - 1];
+        }
+      }
+    }
+  }
+
+  if (!currentMono) {
     const possibleValues = normalizedLines
       .flatMap((line, index) => {
         const value = extractCounterValue(line);
