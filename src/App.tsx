@@ -11039,6 +11039,24 @@ export default function App() {
         </tr>
       `;
 
+    const missingSectionHtml = rentalMissingPrinterRows.length
+      ? `
+        <section class="rental-print-missing-card">
+          <div class="rental-print-section-title">Printers Missing Record For ${escapeHtml(rentalReportRange.to || "Selected Month")}</div>
+          <table class="rental-print-missing-table">
+            <thead>
+              <tr>
+                <th>Printer</th>
+                <th>Campus</th>
+                <th>Location</th>
+              </tr>
+            </thead>
+            <tbody>${missingRowsHtml}</tbody>
+          </table>
+        </section>
+      `
+      : "";
+
     const popup = window.open("", "_blank", "width=1200,height=900");
     if (!popup) {
       alert(lang === "km" ? "សូមអនុញ្ញាត pop-up សិន" : "Unable to open print window. Please allow pop-ups.");
@@ -11096,10 +11114,10 @@ export default function App() {
               color: #fff;
             }
             .print-page {
-              width: 210mm;
-              min-height: 297mm;
+              width: 297mm;
+              min-height: 210mm;
               margin: 0 auto;
-              padding: 10mm;
+              padding: 10mm 12mm;
               background: #fff;
             }
             .rental-print-header {
@@ -11119,17 +11137,17 @@ export default function App() {
             }
             .rental-print-title {
               margin: 4px 0 3px;
-              font-size: 26px;
+              font-size: 30px;
               line-height: 1.05;
               color: #2d2417;
             }
             .rental-print-subtitle {
               margin: 0;
-              font-size: 12px;
+              font-size: 13px;
               color: #62513b;
             }
             .rental-print-logo {
-              width: 160px;
+              width: 176px;
               height: auto;
               object-fit: contain;
             }
@@ -11156,7 +11174,7 @@ export default function App() {
             .rental-print-meta-card strong {
               display: block;
               margin-top: 3px;
-              font-size: 14px;
+              font-size: 16px;
               color: #2c2418;
             }
             .rental-print-chart-card,
@@ -11168,13 +11186,13 @@ export default function App() {
               background: #fffdfa;
             }
             .rental-print-section-title {
-              font-size: 15px;
+              font-size: 17px;
               font-weight: 800;
               color: #2c2418;
             }
             .rental-print-section-note {
               margin-top: 2px;
-              font-size: 11px;
+              font-size: 12px;
               color: #7d6a53;
             }
             .rental-print-chart-list {
@@ -11184,17 +11202,17 @@ export default function App() {
             }
             .rental-print-chart-row {
               display: grid;
-              grid-template-columns: 185px minmax(0, 1fr) 70px;
+              grid-template-columns: 260px minmax(0, 1fr) 88px;
               gap: 8px;
               align-items: center;
             }
             .rental-print-chart-label,
             .rental-print-chart-value {
-              font-size: 12px;
+              font-size: 13px;
               font-weight: 700;
             }
             .rental-print-chart-track {
-              height: 12px;
+              height: 14px;
               border-radius: 999px;
               background: #efe4cd;
               overflow: hidden;
@@ -11207,7 +11225,7 @@ export default function App() {
               margin-top: 10px;
               display: grid;
               grid-template-columns: repeat(2, minmax(0, 1fr));
-              gap: 8px;
+              gap: 10px;
             }
             .rental-print-campus-card {
               border: 1px solid #d8c7ab;
@@ -11217,9 +11235,9 @@ export default function App() {
               page-break-inside: avoid;
             }
             .rental-print-campus-head {
-              padding: 7px 10px;
+              padding: 8px 10px;
               color: #fff;
-              font-size: 13px;
+              font-size: 14px;
               font-weight: 800;
             }
             .rental-print-campus-table,
@@ -11233,8 +11251,8 @@ export default function App() {
             .rental-print-missing-table th,
             .rental-print-missing-table td {
               border: 1px solid #e6d6bb;
-              padding: 6px 7px;
-              font-size: 11px;
+              padding: 7px 8px;
+              font-size: 12px;
               vertical-align: top;
               text-align: left;
               word-break: break-word;
@@ -11243,7 +11261,7 @@ export default function App() {
             .rental-print-missing-table th {
               background: #f7efe0;
               color: #6f5d46;
-              font-size: 10px;
+              font-size: 10.5px;
               text-transform: uppercase;
               letter-spacing: 0.06em;
             }
@@ -11260,7 +11278,7 @@ export default function App() {
               text-align: center;
             }
             @page {
-              size: A4 portrait;
+              size: A4 landscape;
               margin: 8mm;
             }
             @media print {
@@ -11319,19 +11337,7 @@ export default function App() {
             </section>
             ${usageChartHtml}
             <section class="rental-print-campus-grid">${campusCardsHtml}</section>
-            <section class="rental-print-missing-card">
-              <div class="rental-print-section-title">Printers Missing Record For ${escapeHtml(rentalReportRange.to || "Selected Month")}</div>
-              <table class="rental-print-missing-table">
-                <thead>
-                  <tr>
-                    <th>Printer</th>
-                    <th>Campus</th>
-                    <th>Location</th>
-                  </tr>
-                </thead>
-                <tbody>${missingRowsHtml}</tbody>
-              </table>
-            </section>
+            ${missingSectionHtml}
           </main>
           <script>
             window.addEventListener("load", function () {
@@ -48306,7 +48312,7 @@ export default function App() {
                     {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
                       <article key={`rental-counter-mobile-${row.id}`} className="printer-counter-mobile-card">
                         <div className="printer-counter-mobile-head">
-                          <strong>{row.billingMonth}</strong>
+                          <strong>{formatMonthYear(row.billingMonth || "-")}</strong>
                           <span>{row.monoUsage} Mono</span>
                         </div>
                         <div className="printer-counter-mobile-body">
@@ -48345,7 +48351,7 @@ export default function App() {
                       <tbody>
                         {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
                           <tr key={`rental-counter-row-${row.id}`}>
-                            <td>{row.billingMonth}</td>
+                            <td>{formatMonthYear(row.billingMonth || "-")}</td>
                             <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
                             <td>{rentalPrinterCampusLabel(row.campus)}</td>
                             <td>{row.monoUsage}</td>
