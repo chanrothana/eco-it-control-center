@@ -2256,6 +2256,36 @@ function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEG
   });
 }
 
+function sendTelegramMediaGroupToChat(chatId, mediaItems = [], botToken = TELEGRAM_BOT_TOKEN) {
+  return new Promise((resolve) => {
+    const normalizedChatId = toText(chatId);
+    const normalizedMedia = Array.isArray(mediaItems)
+      ? mediaItems
+          .map((item) => ({
+            type: toText(item && item.type).trim() || "photo",
+            media: toText(item && item.media).trim(),
+            caption: toText(item && item.caption).trim(),
+          }))
+          .filter((item) => item.media)
+      : [];
+    if (!normalizedChatId || normalizedMedia.length < 2) {
+      resolve({ ok: false, chatId: normalizedChatId, statusCode: 0, body: "" });
+      return;
+    }
+    sendTelegramRequestWithToken(botToken, "sendMediaGroup", {
+      chat_id: normalizedChatId,
+      media: normalizedMedia,
+    }).then((result) => {
+      resolve({
+        ok: Boolean(result && result.ok),
+        chatId: normalizedChatId,
+        statusCode: Number(result && result.statusCode) || 0,
+        body: toText(result && result.body),
+      });
+    });
+  });
+}
+
 function deleteTelegramMessageFromChat(chatId, messageId, botToken = TELEGRAM_BOT_TOKEN) {
   return new Promise((resolve) => {
     const normalizedChatId = toText(chatId);
@@ -2324,6 +2354,19 @@ async function sendTelegramMessageToChatWithRetry(chatId, text, photoUrl = "", a
   for (let i = 0; i < attempts; i += 1) {
     // eslint-disable-next-line no-await-in-loop
     last = await sendTelegramMessageToChat(chatId, text, photoUrl, botToken);
+    if (last.ok) return last;
+    if (!shouldRetryTelegramResult(last) || i === attempts - 1) return last;
+    // eslint-disable-next-line no-await-in-loop
+    await waitMs(300 * (i + 1));
+  }
+  return last;
+}
+
+async function sendTelegramMediaGroupToChatWithRetry(chatId, mediaItems = [], attempts = 3, botToken = TELEGRAM_BOT_TOKEN) {
+  let last = { ok: false, chatId: toText(chatId), statusCode: 0, body: "" };
+  for (let i = 0; i < attempts; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    last = await sendTelegramMediaGroupToChat(chatId, mediaItems, botToken);
     if (last.ok) return last;
     if (!shouldRetryTelegramResult(last) || i === attempts - 1) return last;
     // eslint-disable-next-line no-await-in-loop
@@ -2475,6 +2518,42 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     };
   }
   return successCount > 0;
+}
+
+async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) {
+  const normalizedMedia = Array.isArray(mediaItems)
+    ? mediaItems
+        .map((item) => ({
+          type: toText(item && item.type).trim() || "photo",
+          media: toText(item && item.media).trim(),
+          caption: toText(item && item.caption).trim(),
+        }))
+        .filter((item) => item.media)
+        .slice(0, 10)
+    : [];
+  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_MAINTENANCE_BOT_TOKEN || normalizedMedia.length < 2) {
+    return false;
+  }
+  const db = options && typeof options === "object" ? options.db : null;
+  const explicitChatIds =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
+      ? options.chatIds
+      : [];
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
+  const discoveredChats =
+    TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
+      ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
+      : [];
+  telegramMaintenanceLastDiscoveredChats = discoveredChats;
+  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
+  const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
+  if (!targets.length) return false;
+  const results = [];
+  for (const chatId of targets) {
+    // eslint-disable-next-line no-await-in-loop
+    results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN));
+  }
+  return results.some((row) => row.ok);
 }
 
 function formatTicketRequestSourceLabel(value) {
@@ -2900,13 +2979,15 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   const alerts = [];
   if (beforePhoto) {
     alerts.push({
-      photoUrl: beforePhoto,
+      type: "photo",
+      media: beforePhoto,
       caption: `រូបមុនជួសជុល\n${baseLabel}`,
     });
   }
   if (afterPhoto) {
     alerts.push({
-      photoUrl: afterPhoto,
+      type: "photo",
+      media: afterPhoto,
       caption: `រូបក្រោយជួសជុល\n${baseLabel}`,
     });
   }
@@ -8531,12 +8612,16 @@ const server = http.createServer(async (req, res) => {
           telegramAlertSent = Boolean(report && report.ok);
         }
         const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(db.assets[idx], entry);
-        for (const item of photoAlerts) {
-          // eslint-disable-next-line no-await-in-loop
-          await sendTelegramMaintenanceMessage(item.caption, {
-            db,
-            photoUrl: item.photoUrl,
-          });
+        if (photoAlerts.length >= 2) {
+          await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
+        } else {
+          for (const item of photoAlerts) {
+            // eslint-disable-next-line no-await-in-loop
+            await sendTelegramMaintenanceMessage(item.caption, {
+              db,
+              photoUrl: item.media,
+            });
+          }
         }
       } catch (err) {
         console.warn(
@@ -8641,12 +8726,16 @@ const server = http.createServer(async (req, res) => {
           telegramAlertSent = Boolean(report && report.ok);
         }
         const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
-        for (const item of photoAlerts) {
-          // eslint-disable-next-line no-await-in-loop
-          await sendTelegramMaintenanceMessage(item.caption, {
-            db,
-            photoUrl: item.photoUrl,
-          });
+        if (photoAlerts.length >= 2) {
+          await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
+        } else {
+          for (const item of photoAlerts) {
+            // eslint-disable-next-line no-await-in-loop
+            await sendTelegramMaintenanceMessage(item.caption, {
+              db,
+              photoUrl: item.media,
+            });
+          }
         }
       } catch (err) {
         console.warn(

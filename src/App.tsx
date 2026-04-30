@@ -7303,7 +7303,6 @@ export default function App() {
   const inventoryAdminMatrixDateWrapRef = useRef<HTMLDivElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
-  const shownBrowserNotificationIdsRef = useRef<Set<number>>(new Set());
   const navItems = useMemo<Array<{ id: NavModule; label: string }>>(
     () => [
       { id: "dashboard", label: t.dashboard },
@@ -8659,9 +8658,6 @@ export default function App() {
   });
   const [maintenanceNotifications, setMaintenanceNotifications] = useState<MaintenanceNotification[]>([]);
   const [maintenanceNotificationUnread, setMaintenanceNotificationUnread] = useState(0);
-  const [browserNotificationPermission, setBrowserNotificationPermission] = useState<NotificationPermission>(
-    () => (typeof window !== "undefined" && "Notification" in window ? Notification.permission : "default")
-  );
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -14790,22 +14786,6 @@ export default function App() {
       );
       setMaintenanceNotifications(rows);
       setMaintenanceNotificationUnread(Number(res.unread) || rows.filter((row) => !row.read).length);
-
-      if (typeof window !== "undefined" && "Notification" in window) {
-        setBrowserNotificationPermission(Notification.permission);
-        if (Notification.permission === "granted") {
-          for (const row of rows) {
-            const id = Number(row.id);
-            if (!id || row.read || shownBrowserNotificationIdsRef.current.has(id)) continue;
-            shownBrowserNotificationIdsRef.current.add(id);
-            try {
-              new Notification(row.title, { body: row.message, tag: `maintenance-notification-${id}` });
-            } catch {
-              // Ignore browser notification errors; in-app list still works.
-            }
-          }
-        }
-      }
     } catch (err) {
       if (
         isApiUnavailableError(err) ||
@@ -15174,7 +15154,6 @@ export default function App() {
     if (!authUser) {
       setMaintenanceNotifications([]);
       setMaintenanceNotificationUnread(0);
-      shownBrowserNotificationIdsRef.current.clear();
       return;
     }
     void loadMaintenanceNotifications();
@@ -15245,16 +15224,6 @@ export default function App() {
     void loadAuthSessionLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, isAdmin, setupView]);
-
-  async function enablePhoneAlerts() {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    try {
-      const permission = await Notification.requestPermission();
-      setBrowserNotificationPermission(permission);
-    } catch {
-      setBrowserNotificationPermission("denied");
-    }
-  }
 
   async function markMaintenanceNotificationRead(id: number) {
     if (!id) return;
@@ -33408,11 +33377,6 @@ export default function App() {
                       {t.markAllRead}
                     </button>
                   </div>
-                  {browserNotificationPermission !== "granted" ? (
-                    <button type="button" className="tab" onClick={enablePhoneAlerts}>
-                      {t.enablePhoneAlerts}
-                    </button>
-                  ) : null}
                   <div className="mobile-notify-list">
                     {maintenanceNotifications.length ? (
                       maintenanceNotifications.map((row) => (
@@ -45724,6 +45688,29 @@ export default function App() {
                     multiple
                     onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
                   />
+                  {maintenanceRecordForm.beforePhotos.length ? (
+                    <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                      {maintenanceRecordForm.beforePhotos.map((url, index) => (
+                        <div key={`maintenance-staff-before-${index}`} className="asset-photo-chip">
+                          <img loading="lazy" decoding="async" src={url} alt={`maintenance-staff-before-${index + 1}`} className="asset-photo-chip-img" />
+                          <div className="asset-photo-chip-actions">
+                            <button
+                              type="button"
+                              className="tab"
+                              onClick={() =>
+                                setMaintenanceRecordForm((f) => ({
+                                  ...f,
+                                  beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                                }))
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "រូបក្រោយធ្វើការ" : "After Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
@@ -45735,6 +45722,34 @@ export default function App() {
                     multiple
                     onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
                   />
+                  {maintenanceRecordForm.afterPhotos.length ? (
+                    <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                      {maintenanceRecordForm.afterPhotos.map((url, index) => (
+                        <div key={`maintenance-staff-after-${index}`} className="asset-photo-chip">
+                          <img loading="lazy" decoding="async" src={url} alt={`maintenance-staff-after-${index + 1}`} className="asset-photo-chip-img" />
+                          <div className="asset-photo-chip-actions">
+                            <button
+                              type="button"
+                              className="tab"
+                              onClick={() =>
+                                setMaintenanceRecordForm((f) => {
+                                  const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                  return {
+                                    ...f,
+                                    afterPhotos: nextAfter,
+                                    photo: nextAfter[0] || "",
+                                    photos: nextAfter,
+                                  };
+                                })
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </label>
               </div>
               <div className="asset-actions maintenance-staff-quick-actions">
