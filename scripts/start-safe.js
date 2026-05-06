@@ -6,9 +6,9 @@ const path = require("path");
 const WEB_PORT = 3000;
 const API_PORT = 4000;
 const isPhoneMode = process.argv.includes("--phone");
-// Local mode should stay loopback-only; phone mode exposes to LAN.
+// Local mode can use CRA's default host handling; phone mode exposes to LAN.
 const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
-const webHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
+const webHost = isPhoneMode ? "0.0.0.0" : "";
 const children = [];
 let shuttingDown = false;
 
@@ -106,9 +106,8 @@ function runStartRunner(isApiPortBusy) {
     ? path.join("node_modules", ".bin", "react-scripts.cmd")
     : path.join("node_modules", ".bin", "react-scripts");
   const webEnv = { ...process.env, PORT: String(WEB_PORT) };
-  webEnv.HOST = webHost;
-  if (!isPhoneMode) {
-    webEnv.DANGEROUSLY_DISABLE_HOST_CHECK = "true";
+  if (webHost) {
+    webEnv.HOST = webHost;
   }
   const webChild = spawn(webCmd, ["start"], {
     stdio: "inherit",

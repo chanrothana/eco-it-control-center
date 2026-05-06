@@ -50,6 +50,7 @@ const ECO_LOGO_URL = publicAssetUrl("/eco-logo.png");
 const PURCHASE_ORDER_LOGO_URL = EISLogo;
 const APP_ICON_FALLBACK_URL = publicAssetUrl("/logo192.png");
 const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
+const MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY = "maintenance_notification_read_map_v1";
 
 type Asset = {
   id: number;
@@ -3118,6 +3119,59 @@ function writeCalendarEventFallback(events: CalendarEvent[]) {
 function writeStringMap(key: string, map: Record<string, string>) {
   if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(key, JSON.stringify(map));
+}
+
+function readMaintenanceNotificationReadMap(): Record<string, number[]> {
+  if (SERVER_ONLY_STORAGE) return {};
+  try {
+    const raw = localStorage.getItem(MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, number[]> = {};
+    for (const [username, values] of Object.entries(parsed)) {
+      const key = String(username || "").trim().toLowerCase();
+      if (!key) continue;
+      out[key] = Array.from(
+        new Set(
+          normalizeArray<number | string>(values).map((value) => Number(value) || 0).filter((value) => value > 0)
+        )
+      );
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeMaintenanceNotificationReadMap(map: Record<string, number[]>) {
+  if (SERVER_ONLY_STORAGE) return;
+  trySetLocalStorage(MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY, JSON.stringify(map));
+}
+
+function rememberMaintenanceNotificationsRead(username: string, ids: number[]) {
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  const normalizedIds = Array.from(new Set(ids.map((value) => Number(value) || 0).filter((value) => value > 0)));
+  if (!normalizedUsername || !normalizedIds.length) return;
+  const map = readMaintenanceNotificationReadMap();
+  const existing = Array.isArray(map[normalizedUsername]) ? map[normalizedUsername] : [];
+  map[normalizedUsername] = Array.from(new Set([...existing, ...normalizedIds]));
+  writeMaintenanceNotificationReadMap(map);
+}
+
+function applyMaintenanceNotificationReadFallback(
+  rows: MaintenanceNotification[],
+  username: string
+) {
+  const normalizedUsername = String(username || "").trim().toLowerCase();
+  if (!normalizedUsername) return rows;
+  const readMap = readMaintenanceNotificationReadMap();
+  const remembered = new Set((readMap[normalizedUsername] || []).map((value) => Number(value) || 0).filter((value) => value > 0));
+  if (!remembered.size) return rows;
+  return rows.map((row) =>
+    remembered.has(Number(row.id) || 0)
+      ? { ...row, read: true }
+      : row
+  );
 }
 
 function writeItemTypeFallback(map: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>) {
@@ -8658,6 +8712,10 @@ export default function App() {
   });
   const [maintenanceNotifications, setMaintenanceNotifications] = useState<MaintenanceNotification[]>([]);
   const [maintenanceNotificationUnread, setMaintenanceNotificationUnread] = useState(0);
+  const visibleMaintenanceNotifications = useMemo(
+    () => maintenanceNotifications.filter((row) => !row.read),
+    [maintenanceNotifications]
+  );
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -10301,12 +10359,21 @@ export default function App() {
     () => [...allowedCampuses].sort(compareCampusByCode),
     [allowedCampuses]
   );
+  const maintenanceQuickCampusSelectionEnabled = useMemo(
+    () => maintenanceQuickMode && allowedCampusOptions.length > 1,
+    [maintenanceQuickMode, allowedCampusOptions.length]
+  );
   const maintenanceLockedCampus = useMemo(() => {
     if (!maintenanceQuickMode) return "";
-    if (allowedCampuses.length) return allowedCampuses[0];
+    if (allowedCampuses.length === 1) return allowedCampuses[0];
+    return "";
+  }, [maintenanceQuickMode, allowedCampuses]);
+  const maintenanceQuickActiveCampus = useMemo(() => {
+    if (!maintenanceQuickMode) return "";
+    if (maintenanceLockedCampus) return maintenanceLockedCampus;
     if (campusFilter !== "ALL") return campusFilter;
-    return CAMPUS_LIST[0] || "";
-  }, [maintenanceQuickMode, allowedCampuses, campusFilter]);
+    return allowedCampusOptions[0] || CAMPUS_LIST[0] || "";
+  }, [maintenanceQuickMode, maintenanceLockedCampus, campusFilter, allowedCampusOptions]);
 
   useEffect(() => {
     if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
@@ -10320,18 +10387,22 @@ export default function App() {
   }, [authUser, campusFilter, allowedCampuses]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
-    if (!maintenanceLockedCampus) return;
-    if (campusFilter !== maintenanceLockedCampus) {
+    if (!maintenanceQuickActiveCampus) return;
+    if (campusFilter === "ALL") {
+      setCampusFilter(maintenanceQuickActiveCampus);
+      return;
+    }
+    if (maintenanceLockedCampus && campusFilter !== maintenanceLockedCampus) {
       setCampusFilter(maintenanceLockedCampus);
     }
-  }, [maintenanceQuickMode, maintenanceLockedCampus, campusFilter]);
+  }, [maintenanceQuickMode, maintenanceLockedCampus, maintenanceQuickActiveCampus, campusFilter]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
-    if (!maintenanceLockedCampus) return;
-    if (maintenanceRecordCampusFilter !== maintenanceLockedCampus) {
-      setMaintenanceRecordCampusFilter(maintenanceLockedCampus);
+    if (!maintenanceQuickActiveCampus) return;
+    if (maintenanceRecordCampusFilter !== maintenanceQuickActiveCampus) {
+      setMaintenanceRecordCampusFilter(maintenanceQuickActiveCampus);
     }
-  }, [maintenanceQuickMode, maintenanceLockedCampus, maintenanceRecordCampusFilter]);
+  }, [maintenanceQuickMode, maintenanceQuickActiveCampus, maintenanceRecordCampusFilter]);
 
   useEffect(() => {
     if (!authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses)) return;
@@ -10892,6 +10963,19 @@ export default function App() {
       if (raw === "Veng Sreng Campus" || raw === "C4") return "Campus 4 | Veng Sreng Campus";
       return campusLabel(raw);
     },
+    [campusLabel]
+  );
+  const quickCampusPickerOption = useCallback(
+    (campus: string) => ({
+      value: campus,
+      label: campus === "Chaktomuk Campus"
+        ? "សាខាចតុមុខ 2.1"
+        : campus === "Chaktomuk Campus (C2.2)"
+        ? "សាខាចតុមុខ 2.2"
+        : (CAMPUS_KM_LABEL[campus] || campusLabel(campus)),
+      description: "",
+      searchText: `${campus} ${CAMPUS_CODE[campus] || ""} ${campusLabel(campus)}`,
+    }),
     [campusLabel]
   );
   const rentalPrintSummaryRows = useMemo(
@@ -14789,11 +14873,14 @@ export default function App() {
       const res = await requestJson<{ notifications: MaintenanceNotification[]; unread: number }>(
         "/api/notifications?status=all&limit=30"
       );
-      const rows = normalizeArray<MaintenanceNotification>(res.notifications).sort(
-        (a, b) => Date.parse(String(b.createdAt || "")) - Date.parse(String(a.createdAt || ""))
+      const rows = applyMaintenanceNotificationReadFallback(
+        normalizeArray<MaintenanceNotification>(res.notifications).sort(
+          (a, b) => Date.parse(String(b.createdAt || "")) - Date.parse(String(a.createdAt || ""))
+        ),
+        authUser.username
       );
       setMaintenanceNotifications(rows);
-      setMaintenanceNotificationUnread(Number(res.unread) || rows.filter((row) => !row.read).length);
+      setMaintenanceNotificationUnread(rows.filter((row) => !row.read).length);
     } catch (err) {
       if (
         isApiUnavailableError(err) ||
@@ -15235,14 +15322,17 @@ export default function App() {
 
   async function markMaintenanceNotificationRead(id: number) {
     if (!id) return;
+    if (authUser?.username) {
+      rememberMaintenanceNotificationsRead(authUser.username, [id]);
+    }
+    setMaintenanceNotifications((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, read: true } : row))
+    );
+    setMaintenanceNotificationUnread((prev) => Math.max(0, prev - 1));
     try {
       await requestJson<{ ok: boolean }>(`/api/notifications/${id}/read`, {
         method: "PATCH",
       });
-      setMaintenanceNotifications((prev) =>
-        prev.map((row) => (row.id === id ? { ...row, read: true } : row))
-      );
-      setMaintenanceNotificationUnread((prev) => Math.max(0, prev - 1));
       await loadMaintenanceNotifications();
     } catch (err) {
       if (isUnauthorizedError(err)) return;
@@ -15251,12 +15341,18 @@ export default function App() {
   }
 
   async function markAllMaintenanceNotificationsRead() {
+    if (authUser?.username) {
+      rememberMaintenanceNotificationsRead(
+        authUser.username,
+        maintenanceNotifications.map((row) => Number(row.id) || 0)
+      );
+    }
+    setMaintenanceNotifications((prev) => prev.map((row) => ({ ...row, read: true })));
+    setMaintenanceNotificationUnread(0);
     try {
       await requestJson<{ ok: boolean }>("/api/notifications/read-all", {
         method: "PATCH",
       });
-      setMaintenanceNotifications((prev) => prev.map((row) => ({ ...row, read: true })));
-      setMaintenanceNotificationUnread(0);
       await loadMaintenanceNotifications();
     } catch (err) {
       if (isUnauthorizedError(err)) return;
@@ -33028,7 +33124,21 @@ export default function App() {
             <label className="field campus-field">
               <span>{t.view}</span>
               {maintenanceQuickMode ? (
-                <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
+                maintenanceQuickCampusSelectionEnabled ? (
+                  <LocationPicker
+                    value={maintenanceQuickActiveCampus}
+                    options={allowedCampusOptions.map(quickCampusPickerOption)}
+                    onChange={(value) => {
+                      setCampusFilter(value);
+                      setMaintenanceRecordCampusFilter(value);
+                    }}
+                    placeholder={t.campus}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                ) : (
+                  <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
+                )
               ) : (
                 <LocationPicker
                   value={campusFilter}
@@ -33290,7 +33400,22 @@ export default function App() {
                 <label className="field">
                   <span>{t.view}</span>
                   {maintenanceQuickMode ? (
-                    <div className="detail-value">{campusLabel(maintenanceLockedCampus || campusFilter)}</div>
+                    maintenanceQuickCampusSelectionEnabled ? (
+                      <LocationPicker
+                        value={maintenanceQuickActiveCampus}
+                        onChange={(value) => {
+                          setCampusFilter(value);
+                          setMaintenanceRecordCampusFilter(value);
+                          setMobileMenuOpen(false);
+                        }}
+                        options={allowedCampusOptions.map(quickCampusPickerOption)}
+                        placeholder={t.campus}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
+                    ) : (
+                      <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
+                    )
                   ) : (
                     <LocationPicker
                       value={campusFilter}
@@ -33400,6 +33525,7 @@ export default function App() {
                     <button
                       type="button"
                       className="tab btn-small"
+                      disabled={!visibleMaintenanceNotifications.length}
                       onClick={() => {
                         void markAllMaintenanceNotificationsRead();
                       }}
@@ -33408,8 +33534,8 @@ export default function App() {
                     </button>
                   </div>
                   <div className="mobile-notify-list">
-                    {maintenanceNotifications.length ? (
-                      maintenanceNotifications.map((row) => (
+                    {visibleMaintenanceNotifications.length ? (
+                      visibleMaintenanceNotifications.map((row) => (
                         row.kind === "inventory_out_approval" ? (() => {
                           const meta = getStockApprovalNotificationMeta(row);
                           const canApproveThisRequest = canCurrentUserApproveInventoryRequest(meta.txn, row);
@@ -33578,13 +33704,13 @@ export default function App() {
                     </p>
                   </div>
                   <span className="maintenance-quick-campus-chip">
-                    {campusLabel(maintenanceLockedCampus || campusFilter)}
+                    {campusLabel(maintenanceQuickActiveCampus)}
                   </span>
                 </div>
                 <div className="maintenance-quick-facts">
                   <article className="maintenance-quick-fact">
                     <span>{t.campus}</span>
-                    <strong>{campusLabel(maintenanceLockedCampus || campusFilter)}</strong>
+                    <strong>{campusLabel(maintenanceQuickActiveCampus)}</strong>
                   </article>
                   <article className="maintenance-quick-fact">
                     <span>{t.date}</span>
@@ -33600,6 +33726,37 @@ export default function App() {
                         : (lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies")}
                     </strong>
                   </article>
+                </div>
+                <div className="maintenance-quick-tools">
+                  <label className="field maintenance-quick-campus-field">
+                    <span>{t.campus}</span>
+                    {maintenanceQuickCampusSelectionEnabled ? (
+                      <LocationPicker
+                        value={maintenanceQuickActiveCampus}
+                        options={allowedCampusOptions.map(quickCampusPickerOption)}
+                        onChange={(value) => {
+                          setCampusFilter(value);
+                          setMaintenanceRecordCampusFilter(value);
+                        }}
+                        placeholder={t.campus}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
+                    ) : (
+                      <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
+                    )}
+                  </label>
+                  <button
+                    className="tab maintenance-quick-switch-btn"
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setMobileNotificationOpen(false);
+                      handleLogout();
+                    }}
+                  >
+                    {lang === "km" ? "ចាកចេញ / ប្តូរគណនី" : "Logout / Switch Account"}
+                  </button>
                 </div>
                 <div className="maintenance-quick-nav-row">
                   {maintenanceQuickNavItems.map((item) => (
@@ -45602,7 +45759,7 @@ export default function App() {
                       : "Staff can save daily work quickly, then Admin or Super Admin can review, correct, and print the monthly report."}
                   </p>
                 </div>
-                <span className="maintenance-quick-campus-chip">{campusLabel(maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter)}</span>
+                <span className="maintenance-quick-campus-chip">{campusLabel(maintenanceQuickActiveCampus)}</span>
               </div>
               <div className="asset-actions" style={{ gap: 8 }}>
                 <button
@@ -45626,7 +45783,21 @@ export default function App() {
               <div className="form-grid maintenance-staff-quick-form">
                 <label className="field">
                   <span>{lang === "km" ? "សាខា" : "Campus"}</span>
-                  <div className="detail-value">{campusLabel(maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter)}</div>
+                  {maintenanceQuickCampusSelectionEnabled ? (
+                    <LocationPicker
+                      value={maintenanceQuickActiveCampus}
+                      onChange={(value) => {
+                        setCampusFilter(value);
+                        setMaintenanceRecordCampusFilter(value);
+                      }}
+                      options={allowedCampusOptions.map(quickCampusPickerOption)}
+                      placeholder={t.campus}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
+                  ) : (
+                    <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
+                  )}
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
@@ -46384,12 +46555,6 @@ export default function App() {
               </div>
             </div>
             </div>
-            <div className="maintenance-logbook-print-footer" aria-hidden={true}>
-              <span>Page No.</span>
-              <strong className="maintenance-logbook-print-page-current" />
-              <span>of</span>
-              <strong className="maintenance-logbook-print-page-total" />
-            </div>
             </div>
             </>
             )}
@@ -46556,6 +46721,20 @@ export default function App() {
             ) : (
               <div className="table-wrap maintenance-history-desktop-wrap">
                 <table className="maintenance-history-table">
+                  <colgroup>
+                    <col className="maintenance-history-col-when" />
+                    <col className="maintenance-history-col-asset" />
+                    <col className="maintenance-history-col-campus" />
+                    <col className="maintenance-history-col-location" />
+                    <col className="maintenance-history-col-type" />
+                    <col className="maintenance-history-col-ok" />
+                    <col className="maintenance-history-col-condition" />
+                    <col className="maintenance-history-col-note" />
+                    <col className="maintenance-history-col-by" />
+                    <col className="maintenance-history-col-checked" />
+                    <col className="maintenance-history-col-edit" />
+                    <col className="maintenance-history-col-del" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>When</th>
@@ -46585,18 +46764,18 @@ export default function App() {
                             row.note || ""
                           )}
                         >
-                          <td>
+                          <td className="maintenance-history-cell-when">
                             <strong>{formatDate(row.date || "-")}</strong>
                             <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
                           </td>
-                          <td>
+                          <td className="maintenance-history-cell-asset">
                             <strong>{row.assetId}</strong>
                             <div className="tiny">{row.itemName}</div>
                           </td>
-                          <td>{campusLabel(row.campus)}</td>
-                          <td>{row.location || "-"}</td>
-                          <td>{row.type || "-"}</td>
-                          <td>
+                          <td className="maintenance-history-cell-campus">{campusLabel(row.campus)}</td>
+                          <td className="maintenance-history-cell-location">{row.location || "-"}</td>
+                          <td className="maintenance-history-cell-type">{row.type || "-"}</td>
+                          <td className="maintenance-history-cell-ok">
                             <span
                               className={`maintenance-history-done-icon ${
                                 String(row.completion || "").trim().toLowerCase() === "done"
@@ -46609,11 +46788,11 @@ export default function App() {
                               {String(row.completion || "").trim().toLowerCase() === "done" ? "✅" : "❌"}
                             </span>
                           </td>
-                          <td>{row.condition || "-"}</td>
-                          <td>{row.note || "-"}</td>
-                          <td>{row.by || "-"}</td>
-                          <td>{row.checkedBy || "-"}</td>
-                          <td>
+                          <td className="maintenance-history-cell-condition">{row.condition || "-"}</td>
+                          <td className="maintenance-history-cell-note">{row.note || "-"}</td>
+                          <td className="maintenance-history-cell-by">{row.by || "-"}</td>
+                          <td className="maintenance-history-cell-checked">{row.checkedBy || "-"}</td>
+                          <td className="maintenance-history-cell-edit">
                             <button
                               className="btn-icon-edit"
                               disabled={!isAdmin}
@@ -46624,7 +46803,7 @@ export default function App() {
                               ✎
                             </button>
                           </td>
-                          <td>
+                          <td className="maintenance-history-cell-del">
                             <button
                               className="btn-danger"
                               disabled={busy || !isAdmin}
