@@ -27013,10 +27013,10 @@ export default function App() {
     [sortedMaintenanceRows]
   );
   const maintenanceMonthLabel = useMemo(() => {
-    if (!maintenanceMonthFilter) return "All Months";
+    if (!maintenanceMonthFilter) return "គ្រប់ខែ";
     const parsed = new Date(`${maintenanceMonthFilter}-01T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return maintenanceMonthFilter;
-    return parsed.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    return formatKhmerMonthYear(parsed);
   }, [maintenanceMonthFilter]);
   const latestMaintenanceRows = useMemo(
     () => allMaintenanceRows.slice(0, 5),
@@ -46555,11 +46555,11 @@ export default function App() {
               </div>
             <div className="maintenance-logbook-sheet-meta">
               <div className="maintenance-logbook-sheet-campus">
-                <span>CAMPUS</span>
-                <strong>{maintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(maintenanceCampusFilter)}</strong>
+                <span>សាខា</span>
+                <strong>{maintenanceCampusFilter === "ALL" ? "គ្រប់សាខា" : campusLabel(maintenanceCampusFilter)}</strong>
               </div>
               <div className="maintenance-logbook-sheet-campus maintenance-logbook-sheet-month">
-                <span>MONTH</span>
+                <span>ខែ</span>
                 <strong>{maintenanceMonthLabel}</strong>
               </div>
             </div>
