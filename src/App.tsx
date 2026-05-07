@@ -1959,6 +1959,14 @@ const MAINTENANCE_TYPE_OPTIONS = [
   "Inspection",
   "Upgrade",
 ];
+const MAINTENANCE_CONDITION_OPTIONS = [
+  "Good",
+  "Working Well",
+  "Need Service",
+  "Need Repair",
+  "Replace Soon",
+  "Not Working",
+];
 const INVENTORY_CATEGORY_OPTIONS = [
   { value: "SUPPLY", label: "Cleaning Supplies" },
   { value: "CLEAN_TOOL", label: "Cleaning Tools" },
@@ -9029,11 +9037,14 @@ export default function App() {
     date: toYmd(new Date()),
     type: "Preventive",
     completion: "Done" as "Done" | "Not Yet",
-    condition: "",
+    condition: "Good",
     note: "",
     cost: "",
     by: "",
     photo: "",
+    photos: [] as string[],
+    beforePhotos: [] as string[],
+    afterPhotos: [] as string[],
   });
   const [publicQrTonerForm, setPublicQrTonerForm] = useState<TonerChangeForm>({
     itemId: "",
@@ -32300,18 +32311,48 @@ export default function App() {
     }
   }
 
-  async function onPublicQrRecordPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
+  async function onPublicQrRecordPhotoFile(
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "before" | "after" = "after"
+  ) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const oversized = files.find((file) => file.size > 15 * 1024 * 1024);
+    if (oversized) {
       alert(t.photoLimit);
+      e.target.value = "";
       return;
     }
     try {
-      const photo = await optimizeUploadPhoto(file);
-      setPublicQrRecordForm((f) => ({ ...f, photo }));
+      const optimized = Array.from(new Set(await Promise.all(files.map((file) => optimizeUploadPhoto(file)))));
+      let reachedLimit = false;
+      setPublicQrRecordForm((f) => {
+        const nextBefore =
+          target === "before"
+            ? normalizeMaintenancePhotoList([...(f.beforePhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.beforePhotos || []);
+        const nextAfter =
+          target === "after"
+            ? normalizeMaintenancePhotoList([...(f.afterPhotos || []), ...optimized])
+            : normalizeMaintenancePhotoList(f.afterPhotos || []);
+        reachedLimit =
+          (target === "before" ? nextBefore.length : nextAfter.length) >= MAX_MAINTENANCE_PHOTOS &&
+          optimized.length > 0;
+        return {
+          ...f,
+          beforePhotos: nextBefore.slice(0, MAX_MAINTENANCE_PHOTOS),
+          afterPhotos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+          photo: nextAfter[0] || "",
+          photos: nextAfter.slice(0, MAX_MAINTENANCE_PHOTOS),
+        };
+      });
+      if (reachedLimit) {
+        alert(lang === "km" ? `អាចបញ្ចូលរូបបានអតិបរមា ${MAX_MAINTENANCE_PHOTOS} ប៉ុណ្ណោះ។` : `Maximum ${MAX_MAINTENANCE_PHOTOS} photos allowed.`);
+      }
     } catch (err) {
       handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -32397,8 +32438,14 @@ export default function App() {
       setPublicQrRecordError("Asset ID is invalid.");
       return;
     }
-    if (!publicQrRecordForm.date || !publicQrRecordForm.type.trim() || !publicQrRecordForm.note.trim()) {
-      setPublicQrRecordError("Date, type, and note are required.");
+    if (
+      !publicQrRecordForm.date ||
+      !publicQrRecordForm.type.trim() ||
+      !publicQrRecordForm.note.trim() ||
+      !(publicQrRecordForm.beforePhotos || []).length ||
+      !(publicQrRecordForm.afterPhotos || []).length
+    ) {
+      setPublicQrRecordError("Date, type, note, before photo, and after photo are required.");
       return;
     }
     if (publicQrRecordForm.date < todayYmd) {
@@ -32419,7 +32466,10 @@ export default function App() {
           note: publicQrRecordForm.note.trim(),
           cost: publicQrRecordForm.cost.trim(),
           by: publicQrRecordForm.by.trim(),
-          photo: publicQrRecordForm.photo || "",
+          beforePhotos: normalizeMaintenancePhotoList(publicQrRecordForm.beforePhotos || []),
+          afterPhotos: normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []),
+          photo: normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || [])[0] || publicQrRecordForm.photo || "",
+          photos: normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []),
         }),
       });
       const ts = Date.now();
@@ -32431,11 +32481,14 @@ export default function App() {
         date: toYmd(new Date()),
         type: "Preventive",
         completion: "Done",
-        condition: "",
+        condition: "Good",
         note: "",
         cost: "",
         by: authUser?.displayName || "",
         photo: "",
+        photos: [],
+        beforePhotos: [],
+        afterPhotos: [],
       });
       setPublicQrRecordFileKey((k) => k + 1);
       setPublicQrSectionsOpen((prev) => ({ ...prev, maintenance: false }));
@@ -32778,11 +32831,15 @@ export default function App() {
                             </label>
                             <label className="field">
                               <span>Type</span>
-                              <input
+                              <select
                                 className="input"
                                 value={publicQrRecordForm.type}
                                 onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, type: e.target.value }))}
-                              />
+                              >
+                                {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
+                                  <option key={`public-qr-maintenance-type-${opt}`} value={opt}>{opt}</option>
+                                ))}
+                              </select>
                             </label>
                             <label className="field">
                               <span>Work Status</span>
@@ -32793,17 +32850,24 @@ export default function App() {
                                   setPublicQrRecordForm((f) => ({ ...f, completion: e.target.value as "Done" | "Not Yet" }))
                                 }
                               >
-                                <option value="Done">Done</option>
-                                <option value="Not Yet">Not Yet</option>
+                                {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
+                                  <option key={`public-qr-maintenance-${opt.value}`} value={opt.value}>
+                                    {maintenanceCompletionText(opt.value)}
+                                  </option>
+                                ))}
                               </select>
                             </label>
                             <label className="field">
                               <span>Condition</span>
-                              <input
+                              <select
                                 className="input"
                                 value={publicQrRecordForm.condition}
                                 onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, condition: e.target.value }))}
-                              />
+                              >
+                                {MAINTENANCE_CONDITION_OPTIONS.map((opt) => (
+                                  <option key={`public-qr-maintenance-condition-${opt}`} value={opt}>{opt}</option>
+                                ))}
+                              </select>
                             </label>
                             <label className="field field-wide">
                               <span>Note</span>
@@ -32830,23 +32894,90 @@ export default function App() {
                                 onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, by: e.target.value }))}
                               />
                             </label>
-                            <label className="field field-wide">
-                              <span>{t.photo}</span>
+                            <label className="field">
+                              <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
                               <input
-                                key={publicQrRecordFileKey}
+                                key={`${publicQrRecordFileKey}-before`}
+                                className="file-input"
                                 type="file"
                                 accept="image/*"
-                                onChange={onPublicQrRecordPhotoFile}
+                                multiple
+                                onChange={(e) => void onPublicQrRecordPhotoFile(e, "before")}
                               />
-                              {publicQrRecordForm.photo ? (
-                                <img loading="lazy" decoding="async" src={publicQrRecordForm.photo} alt="maintenance" className="photo-preview" />
+                              {publicQrRecordForm.beforePhotos.length ? (
+                                <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                                  {publicQrRecordForm.beforePhotos.map((url, index) => (
+                                    <div key={`public-qr-before-${index}`} className="asset-photo-chip">
+                                      <img loading="lazy" decoding="async" src={url} alt={`public-qr-before-${index + 1}`} className="asset-photo-chip-img" />
+                                      <div className="asset-photo-chip-actions">
+                                        <button
+                                          type="button"
+                                          className="tab"
+                                          onClick={() =>
+                                            setPublicQrRecordForm((f) => ({
+                                              ...f,
+                                              beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                                            }))
+                                          }
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </label>
+                            <label className="field">
+                              <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                              <input
+                                key={`${publicQrRecordFileKey}-after`}
+                                className="file-input"
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => void onPublicQrRecordPhotoFile(e, "after")}
+                              />
+                              {publicQrRecordForm.afterPhotos.length ? (
+                                <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
+                                  {publicQrRecordForm.afterPhotos.map((url, index) => (
+                                    <div key={`public-qr-after-${index}`} className="asset-photo-chip">
+                                      <img loading="lazy" decoding="async" src={url} alt={`public-qr-after-${index + 1}`} className="asset-photo-chip-img" />
+                                      <div className="asset-photo-chip-actions">
+                                        <button
+                                          type="button"
+                                          className="tab"
+                                          onClick={() =>
+                                            setPublicQrRecordForm((f) => {
+                                              const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                              return {
+                                                ...f,
+                                                afterPhotos: nextAfter,
+                                                photo: nextAfter[0] || "",
+                                                photos: nextAfter,
+                                              };
+                                            })
+                                          }
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               ) : null}
                             </label>
                             <div className="field field-wide">
                               <button
                                 className="btn-primary"
                                 type="button"
-                                disabled={publicQrRecordBusy || !publicQrRecordForm.date || !publicQrRecordForm.note.trim()}
+                                disabled={
+                                  publicQrRecordBusy ||
+                                  !publicQrRecordForm.date ||
+                                  !publicQrRecordForm.note.trim() ||
+                                  !(publicQrRecordForm.beforePhotos || []).length ||
+                                  !(publicQrRecordForm.afterPhotos || []).length
+                                }
                                 onClick={() => void addMaintenanceRecordFromPublicQr(asset)}
                               >
                                 {publicQrRecordBusy ? "Saving..." : "Save Maintenance Record"}
