@@ -9274,11 +9274,6 @@ label.backup-action-btn {
   min-height: 22px;
 }
 
-.maintenance-logbook-signature-line {
-  margin-top: 18px;
-  border-bottom: 1px solid #111111;
-}
-
 .maintenance-logbook-mobile-card {
   border: 1px solid #3b3b3b;
   border-radius: 0;

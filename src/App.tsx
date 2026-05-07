@@ -46581,7 +46581,7 @@ export default function App() {
                         <div><strong>Remark:</strong> {row.note || row.condition || "-"}</div>
                         <div><strong>Performed By:</strong> {row.by || "-"}</div>
                         <div><strong>Cost:</strong> {row.cost || "-"}</div>
-                        <div><strong>Signature:</strong> {row.checkedBy || row.by || "-"}</div>
+                        <div><strong>Signature:</strong> {row.checkedBy || row.by || ""}</div>
                       </div>
                     </article>
                   ))
@@ -46625,9 +46625,8 @@ export default function App() {
                           <td>{row.cost || "-"}</td>
                           <td>
                             <div className="maintenance-logbook-signature-name">
-                              {row.checkedBy || row.by || maintenanceCompletionText(row.completion || "-")}
+                              {row.checkedBy || row.by || ""}
                             </div>
-                            <div className="maintenance-logbook-signature-line" aria-hidden={true} />
                           </td>
                         </tr>
                       ))
