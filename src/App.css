@@ -1717,6 +1717,27 @@ h2 {
   color: #ffffff;
 }
 
+.maintenance-quick-hero-phone {
+  display: grid;
+  gap: 10px;
+}
+
+.maintenance-quick-hero-phone-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.maintenance-quick-nav-row-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.maintenance-quick-switch-btn-compact {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
 .maintenance-quick-nav-icon {
   display: inline-flex;
   align-items: center;
@@ -1741,6 +1762,14 @@ h2 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.maintenance-staff-quick-head-copy {
+  min-width: 0;
+}
+
+.maintenance-staff-quick-title {
+  text-align: center;
 }
 
 .maintenance-staff-quick-head h4 {
@@ -9357,6 +9386,21 @@ label.backup-action-btn {
   overflow-wrap: anywhere;
 }
 
+.inventory-daily-head h2 {
+  white-space: nowrap;
+}
+
+.maintenance-quick-mode-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.maintenance-quick-mode-toggle .tab {
+  width: 100%;
+  justify-content: center;
+}
+
 .inventory-admin-control-panel {
   display: grid;
   gap: 10px;
@@ -10725,20 +10769,38 @@ label.backup-action-btn {
 
 .maintenance-stockout-mobile-item-row {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
+  border: 1px solid #d6e2f6;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 8px;
 }
 
 .maintenance-stockout-mobile-photo {
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
-  min-height: 42px;
-  border-radius: 8px;
-  border: 1px solid #c8d6f0;
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  min-height: 60px;
+  border-radius: 12px;
+  border: 1px solid #c3d3ef;
   object-fit: cover;
   background: #fff;
+  display: block;
+}
+
+.maintenance-stockout-mobile-item-meta {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.maintenance-stockout-mobile-item-code {
+  font-size: 12px;
+  line-height: 1.2;
+  color: #59719d;
+  font-weight: 700;
 }
 
 .maintenance-stockout-mobile-photo-empty {
@@ -11602,6 +11664,42 @@ label.backup-action-btn {
   flex: 1 1 0;
   min-width: 0;
   white-space: nowrap;
+}
+
+.maintenance-quick-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.maintenance-quick-summary-pill {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(124, 162, 225, 0.26);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(207, 224, 255, 0.06));
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.maintenance-quick-summary-pill span {
+  color: #9eb4d8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.maintenance-quick-summary-pill strong {
+  color: #eef5ff;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .maintenance-quick-switch-btn {
@@ -17571,12 +17669,12 @@ tr.row-maint-maintenance:hover td {
   }
 
   .app-card-maintenance-quick .topbar {
-    padding: 8px 10px 10px;
-    border-radius: 0 0 16px 16px;
+    padding: 6px 10px 8px;
+    border-radius: 0 0 14px 14px;
     border-left: 0 !important;
     border-right: 0 !important;
     border-top: 0 !important;
-    box-shadow: 0 14px 28px rgba(5, 11, 21, 0.2);
+    box-shadow: 0 10px 20px rgba(5, 11, 21, 0.18);
   }
 
   .app-card-maintenance-quick .brand-block {
@@ -17588,14 +17686,63 @@ tr.row-maint-maintenance:hover td {
     max-height: 54px;
   }
 
+  .maintenance-quick-mobile-brand {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .maintenance-quick-mobile-brand-btn {
+    margin: 0;
+  }
+
+  .maintenance-quick-mobile-brand-logo-only {
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .maintenance-quick-mobile-logo {
+    width: min(72vw, 248px) !important;
+    max-height: 54px !important;
+  }
+
+  .maintenance-quick-mobile-brand-copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+    text-align: left;
+    align-content: center;
+  }
+
+  .maintenance-quick-mobile-brand-label {
+    margin: 0;
+    color: var(--mobile-text-soft);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .maintenance-quick-mobile-title {
+    margin: 0 !important;
+    max-width: none;
+    font-size: clamp(17px, 4.9vw, 21px) !important;
+    line-height: 1.02;
+    text-align: left;
+    display: block;
+    white-space: normal;
+  }
+
   .app-card-maintenance-quick .workspace-main {
     padding: 10px 8px 16px !important;
   }
 
   .maintenance-quick-hero-card {
-    margin-bottom: 10px;
-    padding: 14px;
-    border-radius: 18px;
+    margin-bottom: 8px;
+    padding: 10px;
+    border-radius: 16px;
   }
 
   .maintenance-quick-hero-top {
@@ -17615,7 +17762,9 @@ tr.row-maint-maintenance:hover td {
   }
 
   .maintenance-quick-kicker {
-    text-align: center;
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 0.12em;
   }
 
   .maintenance-quick-campus-chip {
@@ -17633,8 +17782,22 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: 1fr;
   }
 
+  .maintenance-quick-hero-phone {
+    gap: 8px;
+  }
+
+  .maintenance-quick-hero-phone-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
   .maintenance-quick-switch-btn {
     width: 100%;
+  }
+
+  .maintenance-quick-switch-btn-compact {
+    width: auto;
+    min-width: 92px;
   }
 
   .maintenance-quick-fact {
@@ -17657,6 +17820,11 @@ tr.row-maint-maintenance:hover td {
     gap: 8px;
   }
 
+  .maintenance-quick-nav-row-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
   .maintenance-quick-nav-btn {
     min-height: 44px;
     border-radius: 14px;
@@ -17664,20 +17832,53 @@ tr.row-maint-maintenance:hover td {
     padding: 0 10px;
   }
 
+  .maintenance-quick-nav-row-compact .maintenance-quick-nav-btn {
+    min-height: 42px;
+    padding: 0 8px;
+    font-size: 12px;
+    gap: 6px;
+  }
+
   .maintenance-staff-quick-head {
     display: grid;
-    gap: 10px;
+    gap: 8px;
   }
 
   .maintenance-staff-quick-head h4,
   .maintenance-staff-quick-head p {
-    text-align: center;
+    text-align: left;
   }
 
   .maintenance-staff-quick-panel .maintenance-quick-campus-chip {
     justify-self: center;
     width: 100%;
     max-width: 280px;
+  }
+
+  .maintenance-staff-quick-panel {
+    gap: 12px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .maintenance-staff-quick-head h4 {
+    margin: 2px 0 0;
+    font-size: 18px;
+    line-height: 1.15;
+    text-align: center;
+  }
+
+  .maintenance-quick-summary-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .maintenance-quick-summary-pill {
+    padding: 9px 10px;
+    border-radius: 12px;
+  }
+
+  .maintenance-quick-summary-pill strong {
+    font-size: 12px;
   }
 
   .subhead {

@@ -33546,17 +33546,17 @@ export default function App() {
       <section className={`app-card app-card-layout ${maintenanceQuickMode ? "app-card-maintenance-quick" : ""}`}>
         <header className={`topbar ${isPhoneView ? "topbar-phone" : ""}`}>
           <div className="brand-block">
-            {isPhoneView ? (
+            {isPhoneView && maintenanceQuickMode ? (
               <button
                 type="button"
-                className="mobile-brand-logo-btn"
+                className="mobile-brand-logo-btn maintenance-quick-mobile-brand-btn maintenance-quick-mobile-brand-logo-only"
                 onClick={handlePhoneLogoHome}
                 aria-label="Go to dashboard"
                 title="Dashboard"
               >
                 <img loading="eager" fetchPriority="high" decoding="async" src={ECO_LOGO_URL}
                   alt="Eco International School"
-                  className="mobile-brand-logo"
+                  className="mobile-brand-logo maintenance-quick-mobile-logo"
                   onError={(e) => {
                     const img = e.currentTarget;
                     if (!img.dataset.fallback) {
@@ -33568,14 +33568,40 @@ export default function App() {
                   }}
                 />
               </button>
-            ) : null}
-            {isPhoneView ? null : <p className="eyebrow">{t.school}</p>}
-            <h1 className={isPhoneView ? "brand-title-mobile" : ""}>
-              {maintenanceQuickMode
-                ? (lang === "km" ? "បុគ្គលិកថែទាំ" : "Maintenance Staff")
-                : t.title}
-            </h1>
-            {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
+            ) : (
+              <>
+                {isPhoneView ? (
+                  <button
+                    type="button"
+                    className="mobile-brand-logo-btn"
+                    onClick={handlePhoneLogoHome}
+                    aria-label="Go to dashboard"
+                    title="Dashboard"
+                  >
+                    <img loading="eager" fetchPriority="high" decoding="async" src={ECO_LOGO_URL}
+                      alt="Eco International School"
+                      className="mobile-brand-logo"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (!img.dataset.fallback) {
+                          img.dataset.fallback = "1";
+                          img.src = APP_ICON_FALLBACK_URL;
+                          return;
+                        }
+                        img.style.display = "none";
+                      }}
+                    />
+                  </button>
+                ) : null}
+                {isPhoneView ? null : <p className="eyebrow">{t.school}</p>}
+                <h1 className={isPhoneView ? "brand-title-mobile" : ""}>
+                  {maintenanceQuickMode
+                    ? (lang === "km" ? "បុគ្គលិកថែទាំ" : "Maintenance Staff")
+                    : t.title}
+                </h1>
+                {isPhoneView ? null : <p className="subhead">{t.subhead}</p>}
+              </>
+            )}
           </div>
 
           <div className={`top-right ${isPhoneView ? "top-right-phone" : ""}`}>
@@ -34040,88 +34066,141 @@ export default function App() {
             ) : null}
             {maintenanceQuickMode ? (
               <section className="maintenance-quick-hero-card">
-                <div className="maintenance-quick-hero-top">
-                  <div className="maintenance-quick-hero-copy">
-                    <p className="maintenance-quick-kicker">
-                      {lang === "km" ? "តំណលឿនសម្រាប់បុគ្គលិកថែទាំ" : "Maintenance Staff Link"}
-                    </p>
-                    <h2>{lang === "km" ? "ធ្វើការងារប្រចាំថ្ងៃបានលឿន" : "Daily Work, Faster"}</h2>
-                    <p>
-                      {lang === "km"
-                        ? "កត់ត្រាការងារជួសជុលប្រចាំថ្ងៃ បើកសម្ភារៈសម្អាត និងបើក Asset Check ដោយមិនចាំបាច់ឃើញម៉ឺនុយធំៗរបស់ប្រព័ន្ធទាំងមូល។"
-                        : "Record daily maintenance, open cleaning supplies, and jump to Asset Check without the full system menu."}
-                    </p>
-                  </div>
-                  <span className="maintenance-quick-campus-chip">
-                    {campusLabel(maintenanceQuickActiveCampus)}
-                  </span>
-                </div>
-                <div className="maintenance-quick-facts">
-                  <article className="maintenance-quick-fact">
-                    <span>{t.campus}</span>
-                    <strong>{campusLabel(maintenanceQuickActiveCampus)}</strong>
-                  </article>
-                  <article className="maintenance-quick-fact">
-                    <span>{t.date}</span>
-                    <strong>{maintenanceStockOutLabel || (lang === "km" ? formatKhmerDateYmd(todayYmd) : formatDate(todayYmd))}</strong>
-                  </article>
-                  <article className="maintenance-quick-fact">
-                    <span>{lang === "km" ? "មុខងារ" : "Focus"}</span>
-                    <strong>
-                      {tab === "verification"
-                        ? (lang === "km" ? "ពិនិត្យទ្រព្យ" : "Asset Check")
-                        : tab === "maintenance"
-                        ? (lang === "km" ? "កត់ត្រាការងារ" : "Daily Record")
-                        : (lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies")}
-                    </strong>
-                  </article>
-                </div>
-                <div className="maintenance-quick-tools">
-                  <label className="field maintenance-quick-campus-field">
-                    <span>{t.campus}</span>
-                    {maintenanceQuickCampusSelectionEnabled ? (
-                      <LocationPicker
-                        value={maintenanceQuickActiveCampus}
-                        options={allowedCampusOptions.map(quickCampusPickerOption)}
-                        onChange={(value) => {
-                          setCampusFilter(value);
-                          setMaintenanceRecordCampusFilter(value);
+                {isPhoneView ? (
+                  <div className="maintenance-quick-hero-phone">
+                    <div className="maintenance-quick-hero-phone-top">
+                      <label className="field maintenance-quick-campus-field">
+                        <span>{t.campus}</span>
+                        {maintenanceQuickCampusSelectionEnabled ? (
+                          <LocationPicker
+                            value={maintenanceQuickActiveCampus}
+                            options={allowedCampusOptions.map(quickCampusPickerOption)}
+                            onChange={(value) => {
+                              setCampusFilter(value);
+                              setMaintenanceRecordCampusFilter(value);
+                            }}
+                            placeholder={t.campus}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                            emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                          />
+                        ) : (
+                          <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
+                        )}
+                      </label>
+                      <button
+                        className="tab maintenance-quick-switch-btn maintenance-quick-switch-btn-compact"
+                        type="button"
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setMobileNotificationOpen(false);
+                          handleLogout();
                         }}
-                        placeholder={t.campus}
-                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
-                      />
-                    ) : (
-                      <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
-                    )}
-                  </label>
-                  <button
-                    className="tab maintenance-quick-switch-btn"
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setMobileNotificationOpen(false);
-                      handleLogout();
-                    }}
-                  >
-                    {lang === "km" ? "ចាកចេញ / ប្តូរគណនី" : "Logout / Switch Account"}
-                  </button>
-                </div>
-                <div className="maintenance-quick-nav-row">
-                  {maintenanceQuickNavItems.map((item) => (
-                    <button
-                      key={`maintenance-quick-hero-${item.id}`}
-                      type="button"
-                      className={`maintenance-quick-nav-btn ${item.active ? "maintenance-quick-nav-btn-active" : ""}`}
-                      onClick={item.onSelect}
-                    >
-                      <span className="maintenance-quick-nav-icon" aria-hidden={true}>
-                        {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
+                      >
+                        {lang === "km" ? "ចាកចេញ" : "Logout"}
+                      </button>
+                    </div>
+                    <div className="maintenance-quick-nav-row maintenance-quick-nav-row-compact">
+                      {maintenanceQuickNavItems.map((item) => (
+                        <button
+                          key={`maintenance-quick-hero-${item.id}`}
+                          type="button"
+                          className={`maintenance-quick-nav-btn ${item.active ? "maintenance-quick-nav-btn-active" : ""}`}
+                          onClick={item.onSelect}
+                        >
+                          <span className="maintenance-quick-nav-icon" aria-hidden={true}>
+                            {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
+                          </span>
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="maintenance-quick-hero-top">
+                      <div className="maintenance-quick-hero-copy">
+                        <p className="maintenance-quick-kicker">
+                          {lang === "km" ? "តំណលឿនសម្រាប់បុគ្គលិកថែទាំ" : "Maintenance Staff Link"}
+                        </p>
+                        <h2>{lang === "km" ? "ធ្វើការងារប្រចាំថ្ងៃបានលឿន" : "Daily Work, Faster"}</h2>
+                        <p>
+                          {lang === "km"
+                            ? "កត់ត្រាការងារជួសជុលប្រចាំថ្ងៃ បើកសម្ភារៈសម្អាត និងបើក Asset Check ដោយមិនចាំបាច់ឃើញម៉ឺនុយធំៗរបស់ប្រព័ន្ធទាំងមូល។"
+                            : "Record daily maintenance, open cleaning supplies, and jump to Asset Check without the full system menu."}
+                        </p>
+                      </div>
+                      <span className="maintenance-quick-campus-chip">
+                        {campusLabel(maintenanceQuickActiveCampus)}
                       </span>
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </div>
+                    </div>
+                    <div className="maintenance-quick-facts">
+                      <article className="maintenance-quick-fact">
+                        <span>{t.campus}</span>
+                        <strong>{campusLabel(maintenanceQuickActiveCampus)}</strong>
+                      </article>
+                      <article className="maintenance-quick-fact">
+                        <span>{t.date}</span>
+                        <strong>{maintenanceStockOutLabel || (lang === "km" ? formatKhmerDateYmd(todayYmd) : formatDate(todayYmd))}</strong>
+                      </article>
+                      <article className="maintenance-quick-fact">
+                        <span>{lang === "km" ? "មុខងារ" : "Focus"}</span>
+                        <strong>
+                          {tab === "verification"
+                            ? (lang === "km" ? "ពិនិត្យទ្រព្យ" : "Asset Check")
+                            : tab === "maintenance"
+                            ? (lang === "km" ? "កត់ត្រាការងារ" : "Daily Record")
+                            : (lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies")}
+                        </strong>
+                      </article>
+                    </div>
+                    <div className="maintenance-quick-tools">
+                      <label className="field maintenance-quick-campus-field">
+                        <span>{t.campus}</span>
+                        {maintenanceQuickCampusSelectionEnabled ? (
+                          <LocationPicker
+                            value={maintenanceQuickActiveCampus}
+                            options={allowedCampusOptions.map(quickCampusPickerOption)}
+                            onChange={(value) => {
+                              setCampusFilter(value);
+                              setMaintenanceRecordCampusFilter(value);
+                            }}
+                            placeholder={t.campus}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                            emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                          />
+                        ) : (
+                          <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
+                        )}
+                      </label>
+                      <button
+                        className="tab maintenance-quick-switch-btn"
+                        type="button"
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setMobileNotificationOpen(false);
+                          handleLogout();
+                        }}
+                      >
+                        {lang === "km" ? "ចាកចេញ / ប្តូរគណនី" : "Logout / Switch Account"}
+                      </button>
+                    </div>
+                    <div className="maintenance-quick-nav-row">
+                      {maintenanceQuickNavItems.map((item) => (
+                        <button
+                          key={`maintenance-quick-hero-${item.id}`}
+                          type="button"
+                          className={`maintenance-quick-nav-btn ${item.active ? "maintenance-quick-nav-btn-active" : ""}`}
+                          onClick={item.onSelect}
+                        >
+                          <span className="maintenance-quick-nav-icon" aria-hidden={true}>
+                            {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
+                          </span>
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </section>
             ) : null}
             {!isPhoneView ? (
@@ -41846,7 +41925,7 @@ export default function App() {
                     <h2>
                       {inventoryView === "dashboard"
                         ? `${inventoryBusinessGroupLabel(inventoryDashboardGroup)} ${lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard"}`
-                        : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ (ងាយស្រួល)" : "Daily Stock Record (Simple)")}
+                        : (lang === "km" ? "កត់ត្រាស្តុកប្រចាំថ្ងៃ" : "Daily Stock Record (Simple)")}
                     </h2>
                     <p className="tiny">
                       {inventoryView === "dashboard"
@@ -43114,7 +43193,7 @@ export default function App() {
                         {maintenanceStockOutRows.length ? (
                           maintenanceStockOutRows.map((row) => {
                             const item = inventoryVisibleItemById.get(Number(row.itemId));
-                            const itemPhoto = item?.photo || row.photo || "";
+                            const itemPhoto = String(item?.photo || row.photo || "").trim();
                             return (
                             <article key={`maintenance-stock-out-mobile-${row.id}`} className="maintenance-stockout-mobile-card maintenance-stockout-mobile-card-compact">
                               <div className="maintenance-stockout-mobile-head">
@@ -43122,13 +43201,18 @@ export default function App() {
                                 <span>{lang === "km" ? "បរិមាណ" : "Qty"}: {row.qty}</span>
                               </div>
                               <div className="maintenance-stockout-mobile-item-row">
-                                {itemPhoto ? (
+                                {isRenderablePhotoSource(itemPhoto) ? (
                                   <img loading="lazy" decoding="async" src={itemPhoto} alt={inventoryDisplayName(row.itemName, lang)} className="maintenance-stockout-mobile-photo" />
                                 ) : (
                                   <div className="maintenance-stockout-mobile-photo maintenance-stockout-mobile-photo-empty" aria-hidden={true}>-</div>
                                 )}
-                                <div className="maintenance-stockout-mobile-item">
-                                  {inventoryDisplayName(row.itemName, lang)}
+                                <div className="maintenance-stockout-mobile-item-meta">
+                                  <div className="maintenance-stockout-mobile-item">
+                                    {inventoryDisplayName(row.itemName, lang)}
+                                  </div>
+                                  <div className="maintenance-stockout-mobile-item-code">
+                                    {row.itemCode || (item?.itemCode || "-")}
+                                  </div>
                                 </div>
                               </div>
                               <div className="maintenance-stockout-mobile-reason">
@@ -46423,21 +46507,40 @@ export default function App() {
             <>
             {maintenanceQuickMode ? (
             <>
-            <h3 className="section-title">{lang === "km" ? "កត់ត្រាការងារប្រចាំថ្ងៃ" : "Daily Maintenance Record"}</h3>
+            <h3 className="section-title maintenance-staff-quick-title">{lang === "km" ? "កត់ត្រាការងារប្រចាំថ្ងៃ" : "Daily Maintenance Record"}</h3>
             <section className="panel maintenance-staff-quick-panel">
               <div className="maintenance-staff-quick-head">
-                <div>
+                <div className="maintenance-staff-quick-head-copy">
                   <p className="maintenance-quick-kicker">{lang === "km" ? "សម្រាប់បុគ្គលិកថែទាំ" : "For Maintenance Staff"}</p>
-                  <h4>{lang === "km" ? "បំពេញជាភាសាខ្មែរ ងាយយល់ ងាយរក្សាទុក" : "Simple Khmer-first daily entry"}</h4>
-                  <p>
-                    {lang === "km"
-                      ? "បុគ្គលិកអាចកត់ត្រាការងារប្រចាំថ្ងៃបានភ្លាមៗ បន្ទាប់មក Admin ឬ Super Admin អាចពិនិត្យ កែសម្រួល និងបោះពុម្ពជារបាយការណ៍ប្រចាំខែ។"
-                      : "Staff can save daily work quickly, then Admin or Super Admin can review, correct, and print the monthly report."}
-                  </p>
+                  <h4>{lang === "km" ? "កត់ត្រាការងារប្រចាំថ្ងៃ" : "Quick daily maintenance entry"}</h4>
+                  {!isPhoneView ? (
+                    <p>
+                      {lang === "km"
+                        ? "បុគ្គលិកអាចកត់ត្រាការងារប្រចាំថ្ងៃបានភ្លាមៗ បន្ទាប់មក Admin ឬ Super Admin អាចពិនិត្យ កែសម្រួល និងបោះពុម្ពជារបាយការណ៍ប្រចាំខែ។"
+                        : "Staff can save daily work quickly, then Admin or Super Admin can review, correct, and print the monthly report."}
+                    </p>
+                  ) : null}
                 </div>
-                <span className="maintenance-quick-campus-chip">{campusLabel(maintenanceQuickActiveCampus)}</span>
+                {isPhoneView ? (
+                  <div className="maintenance-quick-summary-strip">
+                    <div className="maintenance-quick-summary-pill">
+                      <span>{lang === "km" ? "សាខា" : "Campus"}</span>
+                      <strong>{campusLabel(maintenanceQuickActiveCampus)}</strong>
+                    </div>
+                    <div className="maintenance-quick-summary-pill">
+                      <span>{lang === "km" ? "ថ្ងៃ" : "Date"}</span>
+                      <strong>{formatDate(maintenanceRecordForm.date)}</strong>
+                    </div>
+                    <div className="maintenance-quick-summary-pill">
+                      <span>{lang === "km" ? "អ្នកធ្វើ" : "By"}</span>
+                      <strong>{maintenanceRecordForm.by || authUser?.displayName || "-"}</strong>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="maintenance-quick-campus-chip">{campusLabel(maintenanceQuickActiveCampus)}</span>
+                )}
               </div>
-              <div className="asset-actions" style={{ gap: 8 }}>
+              <div className="asset-actions maintenance-quick-mode-toggle" style={{ gap: 8 }}>
                 <button
                   type="button"
                   className={`tab ${maintenanceQuickGeneralTask ? "tab-active" : ""}`}
