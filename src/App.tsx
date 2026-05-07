@@ -4974,6 +4974,22 @@ function resolveNextScheduleDate(asset: Asset, fromYmd: string) {
     return "";
   }
   if (asset.repeatMode === "EVERY_6_MONTHS") {
+    return asset.nextMaintenanceDate || addMonthsToYmd(fromYmd, 6);
+  }
+  if (asset.repeatMode === "EVERY_12_MONTHS") {
+    return asset.nextMaintenanceDate || addMonthsToYmd(fromYmd, 12);
+  }
+  if (asset.repeatMode === "WDP_FILTER_CYCLE") {
+    return asset.nextMaintenanceDate || addMonthsToYmd(fromYmd, 6);
+  }
+  return asset.nextMaintenanceDate || "";
+}
+
+function advanceRepeatScheduleDate(asset: Asset, fromYmd: string) {
+  if (asset.repeatMode === "MONTHLY_WEEKDAY") {
+    return resolveNextScheduleDate(asset, fromYmd);
+  }
+  if (asset.repeatMode === "EVERY_6_MONTHS") {
     return addMonthsToYmd(fromYmd, 6);
   }
   if (asset.repeatMode === "EVERY_12_MONTHS") {
@@ -24393,15 +24409,15 @@ export default function App() {
           if (asset.repeatMode === "MONTHLY_WEEKDAY") {
             const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
             const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
-            nextMaintenanceDate = resolveNextScheduleDate(asset, shiftYmd(doneRef, 1));
+            nextMaintenanceDate = advanceRepeatScheduleDate(asset, shiftYmd(doneRef, 1));
           } else if (asset.repeatMode === "EVERY_6_MONTHS" || asset.repeatMode === "EVERY_12_MONTHS") {
             const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
             const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
-            nextMaintenanceDate = resolveNextScheduleDate(asset, doneRef);
+            nextMaintenanceDate = advanceRepeatScheduleDate(asset, doneRef);
           } else if (asset.repeatMode === "WDP_FILTER_CYCLE") {
             const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
             const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
-            nextMaintenanceDate = resolveNextScheduleDate(asset, doneRef);
+            nextMaintenanceDate = advanceRepeatScheduleDate(asset, doneRef);
             nextRepeatCycleStep = Number(asset.repeatCycleStep || 1) === 2 ? 1 : 2;
             nextScheduleNote = getWdpFilterCycleNote(nextRepeatCycleStep);
           } else {
@@ -45631,6 +45647,16 @@ export default function App() {
                           >
                             {t.edit}
                           </button>
+                          <button
+                            className="btn-danger"
+                            disabled={!isAdmin || busy}
+                            onClick={() => {
+                              void handleScheduleRowAction(asset, "delete");
+                            }}
+                            title={t.delete}
+                          >
+                            X
+                          </button>
                         </div>
                       </article>
                     ))
@@ -45679,15 +45705,25 @@ export default function App() {
                                 >
                                   Record
                                 </button>
-                                <button
-                                  className="tab btn-small"
-                                  disabled={!isAdmin}
-                                  onClick={() => editScheduleForAsset(asset)}
-                                >
-                                  {t.edit}
-                                </button>
-                              </div>
-                            </td>
+                              <button
+                                className="tab btn-small"
+                                disabled={!isAdmin}
+                                onClick={() => editScheduleForAsset(asset)}
+                              >
+                                {t.edit}
+                              </button>
+                              <button
+                                className="btn-danger"
+                                disabled={!isAdmin || busy}
+                                onClick={() => {
+                                  void handleScheduleRowAction(asset, "delete");
+                                }}
+                                title={t.delete}
+                              >
+                                X
+                              </button>
+                            </div>
+                          </td>
                           </tr>
                         ))
                       ) : (
