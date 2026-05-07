@@ -32456,6 +32456,12 @@ export default function App() {
     setPublicQrRecordError("");
     setPublicQrRecordMessage("");
     try {
+      const normalizedBeforePhotos = normalizeMaintenancePhotoList(publicQrRecordForm.beforePhotos || []);
+      const normalizedAfterPhotos = normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []);
+      const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
+        normalizedBeforePhotos[0] || "",
+        normalizedAfterPhotos[0] || ""
+      );
       await requestJson<{ entry: MaintenanceEntry }>(`/api/assets/${asset.id}/history`, {
         method: "POST",
         body: JSON.stringify({
@@ -32466,10 +32472,11 @@ export default function App() {
           note: publicQrRecordForm.note.trim(),
           cost: publicQrRecordForm.cost.trim(),
           by: publicQrRecordForm.by.trim(),
-          beforePhotos: normalizeMaintenancePhotoList(publicQrRecordForm.beforePhotos || []),
-          afterPhotos: normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []),
-          photo: normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || [])[0] || publicQrRecordForm.photo || "",
-          photos: normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []),
+          beforePhotos: normalizedBeforePhotos,
+          afterPhotos: normalizedAfterPhotos,
+          photo: normalizedAfterPhotos[0] || publicQrRecordForm.photo || "",
+          photos: normalizedAfterPhotos,
+          telegramPhoto,
         }),
       });
       const ts = Date.now();

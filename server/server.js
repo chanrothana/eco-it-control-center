@@ -3027,6 +3027,47 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   return alerts;
 }
 
+async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user) {
+  const message = buildMaintenanceRecordTelegramMessage(asset, entry, user);
+  const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
+  let telegramAlertSent = false;
+
+  if (photoAlerts.length === 1) {
+    const report = await sendTelegramMaintenanceMessage(message || photoAlerts[0].caption, {
+      db,
+      photoUrl: photoAlerts[0].media,
+      parseMode: message ? "HTML" : "",
+      includeResults: true,
+    });
+    return Boolean(report && report.ok);
+  }
+
+  if (message) {
+    const report = await sendTelegramMaintenanceMessage(message, {
+      db,
+      includeResults: true,
+      parseMode: "HTML",
+    });
+    telegramAlertSent = Boolean(report && report.ok);
+  }
+
+  if (photoAlerts.length >= 2) {
+    const report = await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
+    telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
+  } else {
+    for (const item of photoAlerts) {
+      // eslint-disable-next-line no-await-in-loop
+      const report = await sendTelegramMaintenanceMessage(item.caption, {
+        db,
+        photoUrl: item.media,
+      });
+      telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
+    }
+  }
+
+  return telegramAlertSent;
+}
+
 function ensureGeneralMaintenanceAsset(db, campus) {
   const normalizedCampus = normalizeCampusInput(campus);
   if (!normalizedCampus) return null;
@@ -8702,27 +8743,7 @@ const server = http.createServer(async (req, res) => {
       await writeDb(db);
       let telegramAlertSent = false;
       try {
-        const message = buildMaintenanceRecordTelegramMessage(db.assets[idx], entry, user);
-        if (message) {
-          const report = await sendTelegramMaintenanceMessage(message, {
-            db,
-            includeResults: true,
-            parseMode: "HTML",
-          });
-          telegramAlertSent = Boolean(report && report.ok);
-        }
-        const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(db.assets[idx], entry);
-        if (photoAlerts.length >= 2) {
-          await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
-        } else {
-          for (const item of photoAlerts) {
-            // eslint-disable-next-line no-await-in-loop
-            await sendTelegramMaintenanceMessage(item.caption, {
-              db,
-              photoUrl: item.media,
-            });
-          }
-        }
+        telegramAlertSent = await sendMaintenanceRecordTelegramAlert(db, db.assets[idx], entry, user);
       } catch (err) {
         console.warn(
           "[MAINTENANCE ALERT] Failed to send maintenance record Telegram alert:",
@@ -8818,27 +8839,7 @@ const server = http.createServer(async (req, res) => {
       await writeDb(db);
       let telegramAlertSent = false;
       try {
-        const message = buildMaintenanceRecordTelegramMessage(asset, entry, user);
-        if (message) {
-          const report = await sendTelegramMaintenanceMessage(message, {
-            db,
-            includeResults: true,
-            parseMode: "HTML",
-          });
-          telegramAlertSent = Boolean(report && report.ok);
-        }
-        const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
-        if (photoAlerts.length >= 2) {
-          await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
-        } else {
-          for (const item of photoAlerts) {
-            // eslint-disable-next-line no-await-in-loop
-            await sendTelegramMaintenanceMessage(item.caption, {
-              db,
-              photoUrl: item.media,
-            });
-          }
-        }
+        telegramAlertSent = await sendMaintenanceRecordTelegramAlert(db, asset, entry, user);
       } catch (err) {
         console.warn(
           "[MAINTENANCE ALERT] Failed to send general maintenance Telegram alert:",
