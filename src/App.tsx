@@ -148,6 +148,7 @@ type MaintenanceEntry = {
   photos?: string[];
   beforePhotos?: string[];
   afterPhotos?: string[];
+  telegramPhoto?: string;
   ticketId?: number;
   ticketNo?: string;
   requestSource?: string;
@@ -5354,6 +5355,81 @@ async function cropImageDataUrl(
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = src;
+  });
+}
+
+function drawContainImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+) {
+  const scale = Math.min(width / Math.max(1, img.width), height / Math.max(1, img.height));
+  const drawWidth = Math.max(1, Math.round(img.width * scale));
+  const drawHeight = Math.max(1, Math.round(img.height * scale));
+  const drawX = x + Math.round((width - drawWidth) / 2);
+  const drawY = y + Math.round((height - drawHeight) / 2);
+  ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+}
+
+async function buildMaintenanceTelegramComparisonPhoto(beforePhoto: string, afterPhoto: string): Promise<string> {
+  const beforeSrc = String(beforePhoto || "").trim();
+  const afterSrc = String(afterPhoto || "").trim();
+  if (!beforeSrc || !afterSrc) return "";
+  try {
+    const [beforeImg, afterImg] = await Promise.all([loadImageElement(beforeSrc), loadImageElement(afterSrc)]);
+    const canvas = document.createElement("canvas");
+    const panelWidth = 720;
+    const panelHeight = 720;
+    const gutter = 24;
+    const outerPadding = 28;
+    const headerHeight = 74;
+    const footerHeight = 20;
+    canvas.width = outerPadding * 2 + panelWidth * 2 + gutter;
+    canvas.height = outerPadding * 2 + headerHeight + panelHeight + footerHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+
+    ctx.fillStyle = "#f4efe6";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const panelTop = outerPadding + headerHeight;
+    const beforeX = outerPadding;
+    const afterX = outerPadding + panelWidth + gutter;
+    const panelFill = "#ffffff";
+    const panelStroke = "#d4c6b4";
+
+    [
+      { x: beforeX, label: "Before IMG", img: beforeImg },
+      { x: afterX, label: "After IMG", img: afterImg },
+    ].forEach(({ x, label, img }) => {
+      ctx.fillStyle = panelFill;
+      ctx.strokeStyle = panelStroke;
+      ctx.lineWidth = 3;
+      ctx.fillRect(x, panelTop, panelWidth, panelHeight);
+      ctx.strokeRect(x, panelTop, panelWidth, panelHeight);
+      drawContainImage(ctx, img, x + 14, panelTop + 14, panelWidth - 28, panelHeight - 28);
+      ctx.fillStyle = "#2f2418";
+      ctx.font = "700 34px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, x + panelWidth / 2, outerPadding + headerHeight / 2);
+    });
+
+    return canvas.toDataURL("image/jpeg", 0.86);
+  } catch {
+    return "";
+  }
 }
 
 async function buildPrinterCounterOcrCandidates(photo: string): Promise<Array<{ photo: string; label: string }>> {
@@ -20067,6 +20143,12 @@ export default function App() {
       setError("Date, type, and note are required.");
       return;
     }
+    const normalizedBeforePhotos = normalizeMaintenancePhotoList(ticketMaintenanceForm.beforePhotos || []);
+    const normalizedAfterPhotos = normalizeMaintenancePhotoList(ticketMaintenanceForm.afterPhotos || []);
+    const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
+      normalizedBeforePhotos[0] || "",
+      normalizedAfterPhotos[0] || ""
+    );
     setBusy(true);
     setError("");
     try {
@@ -20082,10 +20164,11 @@ export default function App() {
             note: ticketMaintenanceForm.note.trim(),
             cost: ticketMaintenanceForm.cost.trim(),
             by: ticketMaintenanceForm.by.trim(),
-            photo: ticketMaintenanceForm.afterPhotos[0] || ticketMaintenanceForm.photo || "",
-            photos: ticketMaintenanceForm.afterPhotos || [],
-            beforePhotos: ticketMaintenanceForm.beforePhotos || [],
-            afterPhotos: ticketMaintenanceForm.afterPhotos || [],
+            photo: normalizedAfterPhotos[0] || ticketMaintenanceForm.photo || "",
+            photos: normalizedAfterPhotos,
+            beforePhotos: normalizedBeforePhotos,
+            afterPhotos: normalizedAfterPhotos,
+            telegramPhoto,
             reportFile: ticketMaintenanceForm.reportFile
               ? {
                   url: ticketMaintenanceForm.reportFile.url,
@@ -24259,6 +24342,12 @@ export default function App() {
       workflow.workPerformed ||
       workflow.issueSummary
     ).trim();
+    const normalizedBeforePhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []);
+    const normalizedAfterPhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []);
+    const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
+      normalizedBeforePhotos[0] || "",
+      normalizedAfterPhotos[0] || ""
+    );
 
     const entry: MaintenanceEntry = {
       id: Date.now(),
@@ -24271,10 +24360,11 @@ export default function App() {
       cost: maintenanceRecordForm.cost.trim(),
       by: maintenanceRecordForm.by.trim(),
       checkedBy: maintenanceRecordForm.checkedBy.trim(),
-      beforePhotos: normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []),
-      afterPhotos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
-      photo: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || [])[0] || "",
-      photos: normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []),
+      beforePhotos: normalizedBeforePhotos,
+      afterPhotos: normalizedAfterPhotos,
+      photo: normalizedAfterPhotos[0] || "",
+      photos: normalizedAfterPhotos,
+      telegramPhoto,
       reportFile: maintenanceRecordForm.reportFile?.url || "",
       reportFileName: maintenanceRecordForm.reportFile?.name || "",
       reportFileType: maintenanceRecordForm.reportFile?.mimeType || "",
@@ -24350,6 +24440,7 @@ export default function App() {
                     mimeType: maintenanceRecordForm.reportFile.mimeType || "",
                   }
                 : "",
+              telegramPhoto: entry.telegramPhoto || "",
               workflow: entry.workflow,
             }),
           });
@@ -24365,6 +24456,7 @@ export default function App() {
                     mimeType: maintenanceRecordForm.reportFile.mimeType || "",
                   }
                 : "",
+              telegramPhoto: entry.telegramPhoto || "",
               workflow: entry.workflow,
             }),
           });
