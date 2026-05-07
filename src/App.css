@@ -15272,6 +15272,121 @@ tr.row-maint-maintenance:hover td {
   gap: 10px;
 }
 
+.maintenance-schedule-filter-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.maintenance-schedule-filter-actions {
+  align-self: end;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.maintenance-schedule-filter-actions .tab {
+  min-height: 44px;
+  height: 44px;
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.maintenance-schedule-table-wrap {
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
+}
+
+.maintenance-schedule-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
+}
+
+.maintenance-schedule-table th,
+.maintenance-schedule-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: middle;
+}
+
+.maintenance-schedule-table th:nth-child(1),
+.maintenance-schedule-table td:nth-child(1) {
+  width: 16%;
+}
+
+.maintenance-schedule-table th:nth-child(2),
+.maintenance-schedule-table td:nth-child(2) {
+  width: 12%;
+}
+
+.maintenance-schedule-table th:nth-child(3),
+.maintenance-schedule-table td:nth-child(3) {
+  width: 16%;
+}
+
+.maintenance-schedule-table th:nth-child(4),
+.maintenance-schedule-table td:nth-child(4) {
+  width: 10%;
+}
+
+.maintenance-schedule-table th:nth-child(5),
+.maintenance-schedule-table td:nth-child(5) {
+  width: 10%;
+}
+
+.maintenance-schedule-table th:nth-child(6),
+.maintenance-schedule-table td:nth-child(6) {
+  width: 14%;
+}
+
+.maintenance-schedule-table th:nth-child(7),
+.maintenance-schedule-table td:nth-child(7) {
+  width: 14%;
+}
+
+.maintenance-schedule-table th:last-child,
+.maintenance-schedule-table td:last-child {
+  width: 8%;
+  min-width: 0;
+  text-align: center;
+}
+
+.maintenance-schedule-action-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.maintenance-schedule-icon-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.maintenance-schedule-icon-btn svg {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 980px) {
+  .maintenance-schedule-filter-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .schedule-mobile-card {
   border: 1px solid #d8e3f2;
   border-radius: 12px;

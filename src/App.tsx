@@ -29,9 +29,11 @@ import {
   Settings,
   Shield,
   Snowflake,
+  Pencil,
   PanelLeftClose,
   PanelLeftOpen,
   Tablet,
+  Trash2,
   Tv,
   Usb,
   Volume2,
@@ -10033,6 +10035,9 @@ export default function App() {
   const [scheduleQuickFilterLocation, setScheduleQuickFilterLocation] = useState("ALL");
   const [scheduleQuickFilterCategory, setScheduleQuickFilterCategory] = useState("ALL");
   const [scheduleQuickFilterName, setScheduleQuickFilterName] = useState("ALL");
+  const [scheduleListMonthFilter, setScheduleListMonthFilter] = useState("ALL");
+  const [scheduleListCampusFilter, setScheduleListCampusFilter] = useState("ALL");
+  const [scheduleListLocationFilter, setScheduleListLocationFilter] = useState("ALL");
   const [bulkScheduleForm, setBulkScheduleForm] = useState({
     campus: "ALL",
     category: "SAFETY",
@@ -27896,6 +27901,47 @@ export default function App() {
       return a.assetId.localeCompare(b.assetId);
     });
   }, [scheduleAssets, assetItemName]);
+  const scheduleListMonthOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        scheduleListRows
+          .map((asset) => String(asset.nextMaintenanceDate || "").slice(0, 7))
+          .filter((value) => /^\d{4}-\d{2}$/.test(value))
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [scheduleListRows]);
+  const scheduleListCampusOptions = useMemo(() => {
+    return Array.from(new Set(scheduleListRows.map((asset) => asset.campus).filter(Boolean))).sort(compareCampusByCode);
+  }, [scheduleListRows]);
+  const scheduleListLocationOptions = useMemo(() => {
+    let rows = scheduleListRows;
+    if (scheduleListCampusFilter !== "ALL") {
+      rows = rows.filter((asset) => asset.campus === scheduleListCampusFilter);
+    }
+    return Array.from(new Set(rows.map((asset) => String(asset.location || "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [scheduleListRows, scheduleListCampusFilter]);
+  const filteredScheduleListRows = useMemo(() => {
+    return scheduleListRows.filter((asset) => {
+      const monthKey = String(asset.nextMaintenanceDate || "").slice(0, 7);
+      const location = String(asset.location || "").trim();
+      if (scheduleListMonthFilter !== "ALL" && monthKey !== scheduleListMonthFilter) return false;
+      if (scheduleListCampusFilter !== "ALL" && asset.campus !== scheduleListCampusFilter) return false;
+      if (scheduleListLocationFilter !== "ALL" && location !== scheduleListLocationFilter) return false;
+      return true;
+    });
+  }, [scheduleListRows, scheduleListMonthFilter, scheduleListCampusFilter, scheduleListLocationFilter]);
+  useEffect(() => {
+    if (scheduleListCampusFilter !== "ALL" && !scheduleListCampusOptions.includes(scheduleListCampusFilter)) {
+      setScheduleListCampusFilter("ALL");
+    }
+  }, [scheduleListCampusFilter, scheduleListCampusOptions]);
+  useEffect(() => {
+    if (scheduleListLocationFilter !== "ALL" && !scheduleListLocationOptions.includes(scheduleListLocationFilter)) {
+      setScheduleListLocationFilter("ALL");
+    }
+  }, [scheduleListLocationFilter, scheduleListLocationOptions]);
   const scheduleByDate = useMemo(() => {
     const gridStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
     gridStart.setDate(gridStart.getDate() - gridStart.getDay());
@@ -45607,13 +45653,84 @@ export default function App() {
                   </p>
                 </div>
                 <div className="tiny">
-                  {scheduleListRows.length} {scheduleListRows.length === 1 ? "item" : "items"}
+                  {filteredScheduleListRows.length} {filteredScheduleListRows.length === 1 ? "item" : "items"}
+                </div>
+              </div>
+              <div className="form-grid maintenance-schedule-filter-row" style={{ marginTop: 12 }}>
+                <label className="field">
+                  <span>{lang === "km" ? "ខែ" : "Month"}</span>
+                  <select
+                    className="input"
+                    value={scheduleListMonthFilter}
+                    onChange={(e) => setScheduleListMonthFilter(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់ខែ" : "All Months"}</option>
+                    {scheduleListMonthOptions.map((monthKey) => {
+                      const parsed = new Date(`${monthKey}-01T00:00:00`);
+                      const label = Number.isNaN(parsed.getTime())
+                        ? monthKey
+                        : (lang === "km"
+                          ? formatKhmerMonthYear(parsed)
+                          : parsed.toLocaleDateString("en-US", { month: "long", year: "numeric" }));
+                      return (
+                        <option key={`schedule-list-month-${monthKey}`} value={monthKey}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.campus}</span>
+                  <select
+                    className="input"
+                    value={scheduleListCampusFilter}
+                    onChange={(e) => {
+                      setScheduleListCampusFilter(e.target.value);
+                      setScheduleListLocationFilter("ALL");
+                    }}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់សាខា" : "All Campuses"}</option>
+                    {scheduleListCampusOptions.map((campus) => (
+                      <option key={`schedule-list-campus-${campus}`} value={campus}>
+                        {campusLabel(campus)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.location}</span>
+                  <select
+                    className="input"
+                    value={scheduleListLocationFilter}
+                    onChange={(e) => setScheduleListLocationFilter(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}</option>
+                    {scheduleListLocationOptions.map((location) => (
+                      <option key={`schedule-list-location-${location}`} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="row-actions maintenance-schedule-filter-actions">
+                  <button
+                    type="button"
+                    className="tab"
+                    onClick={() => {
+                      setScheduleListMonthFilter("ALL");
+                      setScheduleListCampusFilter("ALL");
+                      setScheduleListLocationFilter("ALL");
+                    }}
+                  >
+                    {lang === "km" ? "សម្អាត Filter" : "Clear Filters"}
+                  </button>
                 </div>
               </div>
               {isPhoneView ? (
                 <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
-                  {scheduleListRows.length ? (
-                    scheduleListRows.map((asset) => (
+                  {filteredScheduleListRows.length ? (
+                    filteredScheduleListRows.map((asset) => (
                       <article key={`maintenance-dashboard-schedule-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
                         <div className="schedule-mobile-card-head">
                           <strong>{asset.assetId}</strong>
@@ -45632,30 +45749,35 @@ export default function App() {
                           </div>
                           <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
                         </div>
-                        <div className="row-actions">
+                        <div className="maintenance-schedule-action-stack">
                           <button
-                            className="btn-primary btn-small"
+                            className="btn-primary btn-small maintenance-schedule-icon-btn"
                             disabled={!canAccessMenu("maintenance.record", "maintenance")}
                             onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
+                            title={lang === "km" ? "កត់ត្រា" : "Record"}
+                            aria-label={lang === "km" ? "កត់ត្រា" : "Record"}
                           >
-                            Record
+                            <ClipboardList size={16} strokeWidth={2.2} />
                           </button>
                           <button
-                            className="tab btn-small"
+                            className="tab btn-small maintenance-schedule-icon-btn"
                             disabled={!isAdmin}
                             onClick={() => editScheduleForAsset(asset)}
+                            title={lang === "km" ? "កែប្រែ" : "Edit"}
+                            aria-label={lang === "km" ? "កែប្រែ" : "Edit"}
                           >
-                            {t.edit}
+                            <Pencil size={16} strokeWidth={2.2} />
                           </button>
                           <button
-                            className="btn-danger"
+                            className="btn-danger maintenance-schedule-icon-btn"
                             disabled={!isAdmin || busy}
                             onClick={() => {
                               void handleScheduleRowAction(asset, "delete");
                             }}
                             title={t.delete}
+                            aria-label={t.delete}
                           >
-                            X
+                            <Trash2 size={16} strokeWidth={2.2} />
                           </button>
                         </div>
                       </article>
@@ -45665,8 +45787,8 @@ export default function App() {
                   )}
                 </div>
               ) : (
-                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
-                  <table>
+                <div className="table-wrap vault-table-wrap maintenance-schedule-table-wrap" style={{ marginTop: 12 }}>
+                  <table className="maintenance-schedule-table">
                     <thead>
                       <tr>
                         <th>{t.assetId}</th>
@@ -45680,8 +45802,8 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {scheduleListRows.length ? (
-                        scheduleListRows.map((asset) => (
+                      {filteredScheduleListRows.length ? (
+                        filteredScheduleListRows.map((asset) => (
                           <tr key={`maintenance-dashboard-schedule-row-${asset.id}`}>
                             <td><strong>{asset.assetId}</strong></td>
                             <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
@@ -45697,33 +45819,38 @@ export default function App() {
                             </td>
                             <td>{asset.scheduleNote || "-"}</td>
                             <td>
-                              <div className="row-actions">
+                              <div className="maintenance-schedule-action-stack">
                                 <button
-                                  className="btn-primary btn-small"
+                                  className="btn-primary btn-small maintenance-schedule-icon-btn"
                                   disabled={!canAccessMenu("maintenance.record", "maintenance")}
                                   onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
+                                  title={lang === "km" ? "កត់ត្រា" : "Record"}
+                                  aria-label={lang === "km" ? "កត់ត្រា" : "Record"}
                                 >
-                                  Record
+                                  <ClipboardList size={16} strokeWidth={2.2} />
                                 </button>
-                              <button
-                                className="tab btn-small"
-                                disabled={!isAdmin}
-                                onClick={() => editScheduleForAsset(asset)}
-                              >
-                                {t.edit}
-                              </button>
-                              <button
-                                className="btn-danger"
-                                disabled={!isAdmin || busy}
-                                onClick={() => {
-                                  void handleScheduleRowAction(asset, "delete");
-                                }}
-                                title={t.delete}
-                              >
-                                X
-                              </button>
-                            </div>
-                          </td>
+                                <button
+                                  className="tab btn-small maintenance-schedule-icon-btn"
+                                  disabled={!isAdmin}
+                                  onClick={() => editScheduleForAsset(asset)}
+                                  title={lang === "km" ? "កែប្រែ" : "Edit"}
+                                  aria-label={lang === "km" ? "កែប្រែ" : "Edit"}
+                                >
+                                  <Pencil size={16} strokeWidth={2.2} />
+                                </button>
+                                <button
+                                  className="btn-danger maintenance-schedule-icon-btn"
+                                  disabled={!isAdmin || busy}
+                                  onClick={() => {
+                                    void handleScheduleRowAction(asset, "delete");
+                                  }}
+                                  title={t.delete}
+                                  aria-label={t.delete}
+                                >
+                                  <Trash2 size={16} strokeWidth={2.2} />
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))
                       ) : (
