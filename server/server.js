@@ -2222,7 +2222,14 @@ function sendTelegramRequest(method, payload) {
   return sendTelegramRequestWithToken(TELEGRAM_BOT_TOKEN, method, payload);
 }
 
-function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEGRAM_BOT_TOKEN) {
+function escapeTelegramHtml(value) {
+  return toText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEGRAM_BOT_TOKEN, parseMode = "") {
   return new Promise((resolve) => {
     if (!toText(chatId) || !toText(text)) return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
     const method = toText(photoUrl) ? "sendPhoto" : "sendMessage";
@@ -2231,11 +2238,13 @@ function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEG
           chat_id: toText(chatId),
           photo: toText(photoUrl),
           caption: toText(text).slice(0, 1024),
+          ...(toText(parseMode) ? { parse_mode: toText(parseMode) } : {}),
         }
       : {
           chat_id: toText(chatId),
           text: toText(text),
           disable_web_page_preview: true,
+          ...(toText(parseMode) ? { parse_mode: toText(parseMode) } : {}),
         };
     sendTelegramRequestWithToken(botToken, method, payload).then((result) => {
       let messageId = 0;
@@ -2349,11 +2358,18 @@ function waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
-async function sendTelegramMessageToChatWithRetry(chatId, text, photoUrl = "", attempts = 3, botToken = TELEGRAM_BOT_TOKEN) {
+async function sendTelegramMessageToChatWithRetry(
+  chatId,
+  text,
+  photoUrl = "",
+  attempts = 3,
+  botToken = TELEGRAM_BOT_TOKEN,
+  parseMode = ""
+) {
   let last = { ok: false, chatId: toText(chatId), statusCode: 0, body: "" };
   for (let i = 0; i < attempts; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    last = await sendTelegramMessageToChat(chatId, text, photoUrl, botToken);
+    last = await sendTelegramMessageToChat(chatId, text, photoUrl, botToken, parseMode);
     if (last.ok) return last;
     if (!shouldRetryTelegramResult(last) || i === attempts - 1) return last;
     // eslint-disable-next-line no-await-in-loop
@@ -2480,6 +2496,10 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
       ? Boolean(options.includeResults)
       : false;
+  const parseMode =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "parseMode")
+      ? toText(options.parseMode)
+      : "";
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
   const discoveredChats =
     TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
@@ -2492,7 +2512,9 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
-    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN));
+    results.push(
+      await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN, parseMode)
+    );
   }
   const successCount = results.filter((row) => row.ok).length;
   telegramMaintenanceLastSendReport = {
@@ -2947,25 +2969,26 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
   const condition = toText(entry.condition);
   const checkedBy = toText(entry.checkedBy);
   const cost = toText(entry.cost);
+  const emphasize = (label, value) => `<b><u>${escapeTelegramHtml(label)}</u></b>: ${escapeTelegramHtml(value)}`;
   const lines = [
-    "ជូនដំណឹង ECO - ការងារជួសជុល",
-    "មានកំណត់ត្រាការងារថ្មី",
-    `Asset: ${toText(asset.assetId) || "-"} - ${itemName || "-"}`,
-    `សាខា: ${campus}`,
-    `ទីតាំង: ${location}`,
-    `កាលបរិច្ឆេទ: ${date}`,
-    `ប្រភេទការងារ: ${type}`,
-    `អ្នកអនុវត្ត: ${performedBy}`,
-    `ការងារដែលបានធ្វើ: ${note}`,
+    "<b><u>ជូនដំណឹង ECO - ការងារជួសជុល</u></b>",
+    "<b><u>មានកំណត់ត្រាការងារថ្មី</u></b>",
+    emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
+    emphasize("សាខា", campus),
+    emphasize("ទីតាំង", location),
+    emphasize("កាលបរិច្ឆេទ", date),
+    `ប្រភេទការងារ: ${escapeTelegramHtml(type)}`,
+    `អ្នកអនុវត្ត: ${escapeTelegramHtml(performedBy)}`,
+    `ការងារដែលបានធ្វើ: ${escapeTelegramHtml(note)}`,
   ];
   if (condition) {
-    lines.push(`ចំណាំបន្ថែម: ${condition}`);
+    lines.push(`ចំណាំបន្ថែម: ${escapeTelegramHtml(condition)}`);
   }
   if (checkedBy) {
-    lines.push(`ពិនិត្យដោយ: ${checkedBy}`);
+    lines.push(`ពិនិត្យដោយ: ${escapeTelegramHtml(checkedBy)}`);
   }
   if (cost) {
-    lines.push(`តម្លៃ: ${cost}`);
+    lines.push(`តម្លៃ: ${escapeTelegramHtml(cost)}`);
   }
   return lines.join("\n");
 }
@@ -8684,6 +8707,7 @@ const server = http.createServer(async (req, res) => {
           const report = await sendTelegramMaintenanceMessage(message, {
             db,
             includeResults: true,
+            parseMode: "HTML",
           });
           telegramAlertSent = Boolean(report && report.ok);
         }
@@ -8799,6 +8823,7 @@ const server = http.createServer(async (req, res) => {
           const report = await sendTelegramMaintenanceMessage(message, {
             db,
             includeResults: true,
+            parseMode: "HTML",
           });
           telegramAlertSent = Boolean(report && report.ok);
         }
