@@ -7676,7 +7676,7 @@ export default function App() {
   const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("user");
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
-  const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "record" | "history" | "logbook">("dashboard");
+  const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "overdue" | "record" | "history" | "logbook">("dashboard");
   const [verificationView, setVerificationView] = useState<"record" | "classroom" | "history">("record");
   const [pendingClassroomCheckRoomId, setPendingClassroomCheckRoomId] = useState<number | null>(null);
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
@@ -8239,6 +8239,16 @@ export default function App() {
               : []),
             ...(canAccessMenu("maintenance.history", "maintenance")
               ? [
+                  {
+                    key: "maintenance.overdue",
+                    label: lang === "km" ? "លើសកាលកំណត់" : "Overdue",
+                    active: maintenanceView === "overdue",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setMaintenanceView("overdue");
+                        setTab("maintenance");
+                      }),
+                  },
                   {
                     key: "maintenance.logbook",
                     label: lang === "km" ? "សៀវភៅកំណត់ត្រា" : "Log Book",
@@ -10038,6 +10048,9 @@ export default function App() {
   const [scheduleListMonthFilter, setScheduleListMonthFilter] = useState("ALL");
   const [scheduleListCampusFilter, setScheduleListCampusFilter] = useState("ALL");
   const [scheduleListLocationFilter, setScheduleListLocationFilter] = useState("ALL");
+  const [overdueMonthFilter, setOverdueMonthFilter] = useState("ALL");
+  const [overdueCampusFilter, setOverdueCampusFilter] = useState("ALL");
+  const [overdueLocationFilter, setOverdueLocationFilter] = useState("ALL");
   const [bulkScheduleForm, setBulkScheduleForm] = useState({
     campus: "ALL",
     category: "SAFETY",
@@ -14864,6 +14877,9 @@ export default function App() {
       const canDashboardMaintenanceTab = canRecordMaintenanceTab || canHistoryMaintenanceTab;
       if (maintenanceView === "dashboard" && !canDashboardMaintenanceTab) {
         setMaintenanceView(canHistoryMaintenanceTab ? "history" : "record");
+      }
+      if (maintenanceView === "overdue" && !canHistoryMaintenanceTab) {
+        setMaintenanceView(canDashboardMaintenanceTab ? "dashboard" : "record");
       }
       if (maintenanceView === "record" && !canRecordMaintenanceTab) {
         setMaintenanceView(canDashboardMaintenanceTab ? "dashboard" : "history");
@@ -27986,6 +28002,47 @@ export default function App() {
     const today = toYmd(new Date());
     return scheduleAssets.filter((a) => (a.nextMaintenanceDate || "") < today);
   }, [scheduleAssets]);
+  const overdueMonthOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        overdueScheduleAssets
+          .map((asset) => String(asset.nextMaintenanceDate || "").slice(0, 7))
+          .filter((value) => /^\d{4}-\d{2}$/.test(value))
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [overdueScheduleAssets]);
+  const overdueCampusOptions = useMemo(() => {
+    return Array.from(new Set(overdueScheduleAssets.map((asset) => asset.campus).filter(Boolean))).sort(compareCampusByCode);
+  }, [overdueScheduleAssets]);
+  const overdueLocationOptions = useMemo(() => {
+    let rows = overdueScheduleAssets;
+    if (overdueCampusFilter !== "ALL") {
+      rows = rows.filter((asset) => asset.campus === overdueCampusFilter);
+    }
+    return Array.from(new Set(rows.map((asset) => String(asset.location || "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [overdueScheduleAssets, overdueCampusFilter]);
+  const filteredOverdueScheduleAssets = useMemo(() => {
+    return overdueScheduleAssets.filter((asset) => {
+      const monthKey = String(asset.nextMaintenanceDate || "").slice(0, 7);
+      const location = String(asset.location || "").trim();
+      if (overdueMonthFilter !== "ALL" && monthKey !== overdueMonthFilter) return false;
+      if (overdueCampusFilter !== "ALL" && asset.campus !== overdueCampusFilter) return false;
+      if (overdueLocationFilter !== "ALL" && location !== overdueLocationFilter) return false;
+      return true;
+    });
+  }, [overdueScheduleAssets, overdueMonthFilter, overdueCampusFilter, overdueLocationFilter]);
+  useEffect(() => {
+    if (overdueCampusFilter !== "ALL" && !overdueCampusOptions.includes(overdueCampusFilter)) {
+      setOverdueCampusFilter("ALL");
+    }
+  }, [overdueCampusFilter, overdueCampusOptions]);
+  useEffect(() => {
+    if (overdueLocationFilter !== "ALL" && !overdueLocationOptions.includes(overdueLocationFilter)) {
+      setOverdueLocationFilter("ALL");
+    }
+  }, [overdueLocationFilter, overdueLocationOptions]);
   const maintenanceDashboardSummary = useMemo(() => {
     const total = allMaintenanceRows.length;
     const done = allMaintenanceRows.filter((row) => String(row.completion || "").trim().toLowerCase() === "done").length;
@@ -45542,6 +45599,14 @@ export default function App() {
               ) : null}
               {canAccessMenu("maintenance.history", "maintenance") ? (
                 <button
+                  className={`tab ${maintenanceView === "overdue" ? "tab-active" : ""}`}
+                  onClick={() => setMaintenanceView("overdue")}
+                >
+                  {lang === "km" ? "ទ្រព្យលើសកាលកំណត់" : "Overdue Assets"}
+                </button>
+              ) : null}
+              {canAccessMenu("maintenance.history", "maintenance") ? (
+                <button
                   className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
                   onClick={() => setMaintenanceView("history")}
                 >
@@ -45994,6 +46059,224 @@ export default function App() {
                   <div className="tiny">No campus completion data.</div>
                 )}
               </div>
+            </div>
+            </>
+            )}
+
+            {maintenanceView === "overdue" && canAccessMenu("maintenance.history", "maintenance") && (
+            <>
+            <div className="panel" style={{ marginTop: 12 }}>
+              <div className="panel-row">
+                <div>
+                  <h3 className="section-title">{lang === "km" ? "ទ្រព្យថែទាំលើសកាលកំណត់" : "Overdue Maintenance Assets"}</h3>
+                  <p className="tiny" style={{ margin: 0 }}>
+                    {lang === "km"
+                      ? "មើលតែទ្រព្យដែលផុតថ្ងៃកំណត់ថែទាំ ហើយមិនទាន់បានកត់ត្រាថា Done។"
+                      : "See only assets whose maintenance due date has passed and are not yet recorded as Done."}
+                  </p>
+                </div>
+                <div className="tiny">
+                  {filteredOverdueScheduleAssets.length} {filteredOverdueScheduleAssets.length === 1 ? "item" : "items"}
+                </div>
+              </div>
+              <div className="form-grid maintenance-schedule-filter-row" style={{ marginTop: 12 }}>
+                <label className="field">
+                  <span>{lang === "km" ? "ខែ" : "Month"}</span>
+                  <select className="input" value={overdueMonthFilter} onChange={(e) => setOverdueMonthFilter(e.target.value)}>
+                    <option value="ALL">{lang === "km" ? "គ្រប់ខែ" : "All Months"}</option>
+                    {overdueMonthOptions.map((monthKey) => {
+                      const parsed = new Date(`${monthKey}-01T00:00:00`);
+                      const label = Number.isNaN(parsed.getTime())
+                        ? monthKey
+                        : (lang === "km"
+                          ? formatKhmerMonthYear(parsed)
+                          : parsed.toLocaleDateString("en-US", { month: "long", year: "numeric" }));
+                      return (
+                        <option key={`overdue-month-${monthKey}`} value={monthKey}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.campus}</span>
+                  <select
+                    className="input"
+                    value={overdueCampusFilter}
+                    onChange={(e) => {
+                      setOverdueCampusFilter(e.target.value);
+                      setOverdueLocationFilter("ALL");
+                    }}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់សាខា" : "All Campuses"}</option>
+                    {overdueCampusOptions.map((campus) => (
+                      <option key={`overdue-campus-${campus}`} value={campus}>
+                        {campusLabel(campus)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.location}</span>
+                  <select className="input" value={overdueLocationFilter} onChange={(e) => setOverdueLocationFilter(e.target.value)}>
+                    <option value="ALL">{lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}</option>
+                    {overdueLocationOptions.map((location) => (
+                      <option key={`overdue-location-${location}`} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="row-actions maintenance-schedule-filter-actions">
+                  <button
+                    type="button"
+                    className="tab"
+                    onClick={() => {
+                      setOverdueMonthFilter("ALL");
+                      setOverdueCampusFilter("ALL");
+                      setOverdueLocationFilter("ALL");
+                    }}
+                  >
+                    {lang === "km" ? "សម្អាត Filter" : "Clear Filters"}
+                  </button>
+                </div>
+              </div>
+              {isPhoneView ? (
+                <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
+                  {filteredOverdueScheduleAssets.length ? (
+                    filteredOverdueScheduleAssets.map((asset) => (
+                      <article key={`maintenance-overdue-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                        <div className="schedule-mobile-card-head">
+                          <strong>{asset.assetId}</strong>
+                          <span>{formatDate(asset.nextMaintenanceDate || "-")}</span>
+                        </div>
+                        <div className="schedule-mobile-card-meta">
+                          <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                          <div>{campusLabel(asset.campus)} | {asset.location || "-"}</div>
+                          <div>
+                            {lang === "km" ? "របៀប" : "Mode"}:{" "}
+                            {maintenanceRepeatLabel(
+                              String(asset.repeatMode || "NONE"),
+                              Number(asset.repeatWeekOfMonth || 1),
+                              Number(asset.repeatWeekday || 6)
+                            )}
+                          </div>
+                          <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
+                        </div>
+                        <div className="maintenance-schedule-action-stack">
+                          <button
+                            className="btn-primary btn-small maintenance-schedule-icon-btn"
+                            disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                            onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
+                            title={lang === "km" ? "កត់ត្រា" : "Record"}
+                            aria-label={lang === "km" ? "កត់ត្រា" : "Record"}
+                          >
+                            <ClipboardList size={16} strokeWidth={2.2} />
+                          </button>
+                          <button
+                            className="tab btn-small maintenance-schedule-icon-btn"
+                            disabled={!isAdmin}
+                            onClick={() => editScheduleForAsset(asset)}
+                            title={lang === "km" ? "កែប្រែ" : "Edit"}
+                            aria-label={lang === "km" ? "កែប្រែ" : "Edit"}
+                          >
+                            <Pencil size={16} strokeWidth={2.2} />
+                          </button>
+                          <button
+                            className="btn-danger maintenance-schedule-icon-btn"
+                            disabled={!isAdmin || busy}
+                            onClick={() => {
+                              void handleScheduleRowAction(asset, "delete");
+                            }}
+                            title={t.delete}
+                            aria-label={t.delete}
+                          >
+                            <Trash2 size={16} strokeWidth={2.2} />
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">{lang === "km" ? "មិនមានទ្រព្យលើសកាលកំណត់" : "No overdue maintenance assets."}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap vault-table-wrap maintenance-schedule-table-wrap" style={{ marginTop: 12 }}>
+                  <table className="maintenance-schedule-table">
+                    <thead>
+                      <tr>
+                        <th>{t.assetId}</th>
+                        <th>{t.name}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.location}</th>
+                        <th>{lang === "km" ? "ថ្ងៃកំណត់" : "Due Date"}</th>
+                        <th>{lang === "km" ? "របៀប" : "Mode"}</th>
+                        <th>{t.scheduleNote}</th>
+                        <th>{t.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredOverdueScheduleAssets.length ? (
+                        filteredOverdueScheduleAssets.map((asset) => (
+                          <tr key={`maintenance-overdue-row-${asset.id}`}>
+                            <td><strong>{asset.assetId}</strong></td>
+                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
+                            <td>{campusLabel(asset.campus)}</td>
+                            <td>{asset.location || "-"}</td>
+                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                            <td>
+                              {maintenanceRepeatLabel(
+                                String(asset.repeatMode || "NONE"),
+                                Number(asset.repeatWeekOfMonth || 1),
+                                Number(asset.repeatWeekday || 6)
+                              )}
+                            </td>
+                            <td>{asset.scheduleNote || "-"}</td>
+                            <td>
+                              <div className="maintenance-schedule-action-stack">
+                                <button
+                                  className="btn-primary btn-small maintenance-schedule-icon-btn"
+                                  disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                  onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
+                                  title={lang === "km" ? "កត់ត្រា" : "Record"}
+                                  aria-label={lang === "km" ? "កត់ត្រា" : "Record"}
+                                >
+                                  <ClipboardList size={16} strokeWidth={2.2} />
+                                </button>
+                                <button
+                                  className="tab btn-small maintenance-schedule-icon-btn"
+                                  disabled={!isAdmin}
+                                  onClick={() => editScheduleForAsset(asset)}
+                                  title={lang === "km" ? "កែប្រែ" : "Edit"}
+                                  aria-label={lang === "km" ? "កែប្រែ" : "Edit"}
+                                >
+                                  <Pencil size={16} strokeWidth={2.2} />
+                                </button>
+                                <button
+                                  className="btn-danger maintenance-schedule-icon-btn"
+                                  disabled={!isAdmin || busy}
+                                  onClick={() => {
+                                    void handleScheduleRowAction(asset, "delete");
+                                  }}
+                                  title={t.delete}
+                                  aria-label={t.delete}
+                                >
+                                  <Trash2 size={16} strokeWidth={2.2} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8}>{lang === "km" ? "មិនមានទ្រព្យលើសកាលកំណត់" : "No overdue maintenance assets."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
             </>
             )}
