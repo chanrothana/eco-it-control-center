@@ -2974,8 +2974,18 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   if (!asset || !entry) return [];
   const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
   const baseLabel = `${toText(asset.assetId) || "-"} - ${itemName || "-"}`;
+  const telegramPhoto = resolveTelegramPhotoUrl(toText(entry.telegramPhoto || ""));
   const beforePhoto = resolveTelegramPhotoUrl(toText((entry.beforePhotos || [])[0] || ""));
   const afterPhoto = resolveTelegramPhotoUrl(toText((entry.afterPhotos || [])[0] || entry.photo || ""));
+  if (telegramPhoto) {
+    return [
+      {
+        type: "photo",
+        media: telegramPhoto,
+        caption: `រូបមុន និង ក្រោយជួសជុល\n${baseLabel}`,
+      },
+    ];
+  }
   const alerts = [];
   if (beforePhoto) {
     alerts.push({
@@ -3300,6 +3310,7 @@ async function normalizePhotoList(photos, group = "assets", maxCount = 5) {
 
 async function normalizeMaintenanceMediaPayload(body) {
   const rawPhoto = body ? body.photo : "";
+  const rawTelegramPhoto = body ? body.telegramPhoto : "";
   const rawPhotos = Array.isArray(body?.photos) ? body.photos : [];
   const rawBeforePhotos = Array.isArray(body?.beforePhotos) ? body.beforePhotos : [];
   const rawAfterPhotos = Array.isArray(body?.afterPhotos) ? body.afterPhotos : [];
@@ -3309,11 +3320,13 @@ async function normalizeMaintenanceMediaPayload(body) {
     "maintenance",
     5
   );
+  const telegramPhoto = await normalizePhotoValue(rawTelegramPhoto, "maintenance");
   return {
     beforePhotos: beforePhotos.slice(0, 5),
     afterPhotos: afterPhotos.slice(0, 5),
     photo: afterPhotos[0] || "",
     photos: afterPhotos.slice(0, 5),
+    telegramPhoto,
   };
 }
 
@@ -8629,6 +8642,7 @@ const server = http.createServer(async (req, res) => {
         photos: media.photos,
         beforePhotos: media.beforePhotos,
         afterPhotos: media.afterPhotos,
+        telegramPhoto: media.telegramPhoto,
         reportFile: reportFile.url,
         reportFileName: reportFile.name,
         reportFileType: reportFile.mimeType,
@@ -8754,6 +8768,7 @@ const server = http.createServer(async (req, res) => {
         photos: media.photos,
         beforePhotos: media.beforePhotos,
         afterPhotos: media.afterPhotos,
+        telegramPhoto: media.telegramPhoto,
         reportFile: reportFile.url,
         reportFileName: reportFile.name,
         reportFileType: reportFile.mimeType,
@@ -9130,6 +9145,7 @@ const server = http.createServer(async (req, res) => {
         photos: media.photos,
         beforePhotos: media.beforePhotos,
         afterPhotos: media.afterPhotos,
+        telegramPhoto: media.telegramPhoto,
         reportFile: reportFile.url,
         reportFileName: reportFile.name,
         reportFileType: reportFile.mimeType,
