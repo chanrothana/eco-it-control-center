@@ -5436,8 +5436,8 @@ async function buildMaintenanceTelegramComparisonPhoto(beforePhoto: string, afte
     const panelStroke = "#d4c6b4";
 
     [
-      { x: beforeX, label: "Before IMG", img: beforeImg },
-      { x: afterX, label: "After IMG", img: afterImg },
+      { x: beforeX, label: "រូបភាពមុនធ្វើ ឬ ជួសជុល", img: beforeImg },
+      { x: afterX, label: "រូបភាពក្រោយធ្វើ ឬ ជួសជុល", img: afterImg },
     ].forEach(({ x, label, img }) => {
       ctx.fillStyle = panelFill;
       ctx.strokeStyle = panelStroke;
@@ -5570,6 +5570,16 @@ function normalizeMaintenancePhotoList(input: unknown, maxCount = MAX_MAINTENANC
     if (out.length >= maxCount) break;
   }
   return out;
+}
+
+function isGeneralMaintenancePlaceholderAsset(asset: Partial<Asset> | null | undefined) {
+  if (!asset) return false;
+  const notes = String(asset.notes || "").trim();
+  if (notes === "SYSTEM_PLACEHOLDER_GENERAL_MAINTENANCE") return true;
+  const category = String(asset.category || "").trim().toUpperCase();
+  const type = String(asset.type || "").trim().toUpperCase();
+  const location = String(asset.location || "").trim();
+  return category === "FACILITY" && type === "GEN" && location === "General Record";
 }
 
 const MAINTENANCE_WORKFLOW_PRIORITY_OPTIONS: MaintenanceWorkflow["priority"][] = [
@@ -11613,7 +11623,7 @@ export default function App() {
     [itemNames, lang, allTypeOptions]
   );
   const assetNameFilterSourceAssets = useMemo(() => {
-    let list = [...assets];
+    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
     if (!assetCampusMultiFilter.includes("ALL")) {
       list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
     }
@@ -11661,6 +11671,7 @@ export default function App() {
     return Array.from(
       new Set(
         assets
+          .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
           .map((asset) => String(asset.location || "").trim())
           .filter(Boolean)
       )
@@ -11670,6 +11681,7 @@ export default function App() {
     return Array.from(
       new Set(
         assets
+          .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
           .map((asset) => String(asset.assignedTo || "").trim())
           .filter(Boolean)
       )
@@ -27326,7 +27338,7 @@ export default function App() {
     verificationDateTo,
   ]);
   const assetListRows = useMemo(() => {
-    let list = [...assets];
+    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
     if (!assetCampusMultiFilter.includes("ALL")) {
       list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
     }

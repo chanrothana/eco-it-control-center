@@ -2986,6 +2986,13 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
 function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
   if (!asset || !entry) return "";
   const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+  const isGeneralTask =
+    toText(asset.notes) === "SYSTEM_PLACEHOLDER_GENERAL_MAINTENANCE" ||
+    (
+      normalizeCategoryInput(asset.category) === "FACILITY" &&
+      toUpper(asset.type) === "GEN" &&
+      toText(asset.location) === "General Record"
+    );
   const campus = formatTelegramCampusKhmer(asset.campus);
   const location = toText(asset.location) || "-";
   const date = toText(entry.date) || "-";
@@ -2999,7 +3006,9 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
   const lines = [
     "<b><u>ជូនដំណឹង ECO - ការងារជួសជុល</u></b>",
     "<b><u>មានកំណត់ត្រាការងារថ្មី</u></b>",
-    emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
+    isGeneralTask
+      ? emphasize("ការងារទូទៅ", itemName || "General Maintenance Task")
+      : emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
     emphasize("សាខា", campus),
     emphasize("ទីតាំង", location),
     emphasize("កាលបរិច្ឆេទ", date),
@@ -3022,7 +3031,16 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
 function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   if (!asset || !entry) return [];
   const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
-  const baseLabel = `${toText(asset.assetId) || "-"} - ${itemName || "-"}`;
+  const isGeneralTask =
+    toText(asset.notes) === "SYSTEM_PLACEHOLDER_GENERAL_MAINTENANCE" ||
+    (
+      normalizeCategoryInput(asset.category) === "FACILITY" &&
+      toUpper(asset.type) === "GEN" &&
+      toText(asset.location) === "General Record"
+    );
+  const baseLabel = isGeneralTask
+    ? (itemName || "General Maintenance Task")
+    : `${toText(asset.assetId) || "-"} - ${itemName || "-"}`;
   const telegramPhoto = resolveTelegramPhotoUrl(toText(entry.telegramPhoto || ""));
   const beforePhoto = resolveTelegramPhotoUrl(toText((entry.beforePhotos || [])[0] || ""));
   const afterPhoto = resolveTelegramPhotoUrl(toText((entry.afterPhotos || [])[0] || entry.photo || ""));
