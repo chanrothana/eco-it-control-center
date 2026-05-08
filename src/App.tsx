@@ -30487,7 +30487,7 @@ export default function App() {
     []
   );
   const quickCountLocationOptions = useMemo(() => {
-    let list = [...assets];
+    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
     if (!quickCountCampusFilter.includes("ALL")) {
       list = list.filter((asset) => quickCountCampusFilter.includes(asset.campus));
     }
@@ -30517,7 +30517,7 @@ export default function App() {
     });
   }, [quickCountLocationFilter, quickCountLocationOptions]);
   const quickCountBaseAssets = useMemo(() => {
-    let list = [...assets];
+    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
     list = list.filter((asset) => !DASHBOARD_HIDDEN_COMPONENT_TYPES.has(String(asset.type || "").trim().toUpperCase()));
     if (!quickCountCampusFilter.includes("ALL")) {
       list = list.filter((asset) => quickCountCampusFilter.includes(asset.campus));
