@@ -118,6 +118,31 @@ const MAINTENANCE_ALERT_SWEEP_INTERVAL_MS = MAINTENANCE_ALERT_SWEEP_INTERVAL_MIN
 const ALLOW_DEV_AUTH_BYPASS =
   !IS_PROD &&
   String(process.env.ALLOW_DEV_AUTH_BYPASS || "false").toLowerCase() === "true";
+const APP_TIME_ZONE = "Asia/Phnom_Penh";
+
+function formatTelegramAlertSnapshot(date = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: APP_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const read = (type) => parts.find((part) => part.type === type)?.value || "";
+    const year = read("year");
+    const month = read("month");
+    const day = read("day");
+    const hour = read("hour");
+    const minute = read("minute");
+    if (year && month && day && hour && minute) {
+      return `${year}-${month}-${day} ${hour}:${minute} (${APP_TIME_ZONE})`;
+    }
+  } catch {}
+  return date.toISOString();
+}
 const DEFAULT_ADMIN_PASSWORD = String(
   process.env.BOOTSTRAP_ADMIN_PASSWORD || (!IS_PROD ? "EcoAdmin@2026!" : "")
 );
@@ -2742,6 +2767,7 @@ function discoverTelegramChatIds(botToken = TELEGRAM_BOT_TOKEN) {
 
 async function sendTelegramMaintenanceBatch(rows, db = null) {
   if (!Array.isArray(rows) || !rows.length) return false;
+  const snapshotText = formatTelegramAlertSnapshot(new Date());
   const lines = rows.slice(0, 8).map((row, idx) => {
     const dateText = toText(row.scheduleDate) || "-";
     const assetId = toText(row.assetId) || "Unknown";
@@ -2754,7 +2780,7 @@ async function sendTelegramMaintenanceBatch(rows, db = null) {
     return `${idx + 1}. ${title}${alertLabel ? ` (${alertLabel})` : ""}\nAsset: ${assetId} | Campus: ${campus} | Location: ${location} | Date: ${dateText}${suffix}`;
   });
   const extra = rows.length > 8 ? `\n+${rows.length - 8} more alert(s)` : "";
-  const text = `Eco IT Maintenance Alerts\n${lines.join("\n\n")}${extra}`;
+  const text = `Eco IT Maintenance Alerts\nSnapshot: ${snapshotText}\nNote: App overdue list may change after this alert is sent.\n\n${lines.join("\n\n")}${extra}`;
   return sendTelegramMaintenanceMessage(text, { db });
 }
 
