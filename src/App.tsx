@@ -9147,6 +9147,7 @@ export default function App() {
   const [maintenanceRecordForm, setMaintenanceRecordForm] = useState(() =>
     createMaintenanceRecordForm(undefined, toYmd(new Date()), "")
   );
+  const maintenanceRecordSaveLockRef = useRef(false);
   const [maintenanceQuickGeneralTask, setMaintenanceQuickGeneralTask] = useState(true);
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
@@ -24364,6 +24365,14 @@ export default function App() {
   }
 
   async function addMaintenanceRecordFromTab(): Promise<boolean> {
+    if (maintenanceRecordSaveLockRef.current) {
+      setError(
+        lang === "km"
+          ? "កំណត់ត្រានេះត្រូវបានដាក់ស្នើរួចហើយ។ សូមរង់ចាំលទ្ធផល។"
+          : "This maintenance record was already submitted. Please wait."
+      );
+      return false;
+    }
     if (!requireMaintenanceRecordAction()) return false;
     const assetId = Number(maintenanceRecordForm.assetId);
     const isQuickGeneralTask = maintenanceQuickMode && maintenanceQuickGeneralTask;
@@ -24437,6 +24446,7 @@ export default function App() {
         checklist: [],
       }),
     };
+    maintenanceRecordSaveLockRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -24487,9 +24497,11 @@ export default function App() {
       });
 
       let telegramAlertSent: boolean | null = null;
+      let duplicateSuppressed = false;
+      let serverSavedAsset: Asset | null = null;
       try {
         if (isQuickGeneralTask) {
-          const res = await requestJson<{ asset: Asset; entry: MaintenanceEntry; telegramAlertSent?: boolean }>(`/api/maintenance/general-record`, {
+          const res = await requestJson<{ asset: Asset; entry: MaintenanceEntry; telegramAlertSent?: boolean; duplicateSuppressed?: boolean }>(`/api/maintenance/general-record`, {
             method: "POST",
             body: JSON.stringify({
               campus: maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter,
@@ -24505,9 +24517,11 @@ export default function App() {
               workflow: entry.workflow,
             }),
           });
+          serverSavedAsset = res.asset || null;
           telegramAlertSent = typeof res.telegramAlertSent === "boolean" ? res.telegramAlertSent : null;
+          duplicateSuppressed = Boolean(res.duplicateSuppressed);
         } else {
-          const res = await requestJson<{ asset: Asset; entry?: MaintenanceEntry; telegramAlertSent?: boolean }>(`/api/assets/${assetId}/history`, {
+          const res = await requestJson<{ asset: Asset; entry?: MaintenanceEntry; telegramAlertSent?: boolean; duplicateSuppressed?: boolean }>(`/api/assets/${assetId}/history`, {
             method: "POST",
             body: JSON.stringify({
               ...entry,
@@ -24522,9 +24536,11 @@ export default function App() {
               workflow: entry.workflow,
             }),
           });
+          serverSavedAsset = res.asset || null;
           telegramAlertSent = typeof res.telegramAlertSent === "boolean" ? res.telegramAlertSent : null;
+          duplicateSuppressed = Boolean(res.duplicateSuppressed);
           const savedAsset = nextLocal.find((a) => a.id === assetId);
-          if (savedAsset) {
+          if (savedAsset && !duplicateSuppressed) {
             await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
               method: "PATCH",
               body: JSON.stringify({
@@ -24543,16 +24559,25 @@ export default function App() {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
       }
 
-      const savedAsset = nextLocal.find((a) => a.id === assetId) || maintenanceRecordSelectedAsset;
-      writeAssetFallback(nextLocal);
-      setAssets(nextLocal);
-      setStats(buildStatsFromAssets(nextLocal, campusFilter));
-      appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
+      const mergedLocal = duplicateSuppressed && serverSavedAsset
+        ? readAssetFallback().map((asset) => (asset.id === serverSavedAsset?.id ? normalizeAssetForUi(serverSavedAsset) : asset))
+        : nextLocal;
+      const savedAsset = mergedLocal.find((a) => a.id === assetId) || normalizeAssetForUi(serverSavedAsset) || maintenanceRecordSelectedAsset;
+      writeAssetFallback(mergedLocal);
+      setAssets(mergedLocal);
+      setStats(buildStatsFromAssets(mergedLocal, campusFilter));
+      if (!duplicateSuppressed) {
+        appendUiAudit("MAINTENANCE_CREATE", "asset", String(assetId), `${entry.type} | ${entry.completion || "-"}`);
+      }
       setMaintenanceRecordForm(createMaintenanceRecordForm(savedAsset, toYmd(new Date()), currentOperatorName));
       setMaintenanceQuickGeneralTask(true);
       setMaintenanceRecordFileKey((k) => k + 1);
       const successMessage =
-        telegramAlertSent === false
+        duplicateSuppressed
+          ? (lang === "km"
+            ? "កំណត់ត្រានេះបានដាក់ស្នើរួចហើយ និងជោគជ័យ។ ការចុចស្ទួនត្រូវបានមិនអើពើ។"
+            : "This maintenance record was already submitted successfully. Duplicate tap ignored.")
+          : telegramAlertSent === false
           ? (lang === "km"
             ? "បានរក្សាទុកកំណត់ត្រារួចរាល់ ប៉ុន្តែ Telegram alert មិនបានផ្ញើ។"
             : "Maintenance record saved, but Telegram alert failed to send.")
@@ -24577,6 +24602,7 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Failed to add maintenance record");
       return false;
     } finally {
+      maintenanceRecordSaveLockRef.current = false;
       setBusy(false);
     }
   }

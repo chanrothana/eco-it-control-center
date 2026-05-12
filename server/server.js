@@ -3525,6 +3525,30 @@ function normalizeMaintenanceWorkflowPayload(input) {
   };
 }
 
+function normalizeMaintenanceDuplicateValue(value) {
+  return toText(value).trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isDuplicateMaintenanceEntry(existing, candidate) {
+  if (!existing || !candidate) return false;
+  const existingCreatedAt = Date.parse(toText(existing.createdAt));
+  const candidateCreatedAt = Date.parse(toText(candidate.createdAt));
+  if (Number.isNaN(existingCreatedAt) || Number.isNaN(candidateCreatedAt)) return false;
+  if (Math.abs(candidateCreatedAt - existingCreatedAt) > 2 * 60 * 1000) return false;
+  return (
+    normalizeMaintenanceDuplicateValue(existing.date) === normalizeMaintenanceDuplicateValue(candidate.date) &&
+    normalizeMaintenanceDuplicateValue(existing.type) === normalizeMaintenanceDuplicateValue(candidate.type) &&
+    normalizeMaintenanceDuplicateValue(existing.completion) === normalizeMaintenanceDuplicateValue(candidate.completion) &&
+    normalizeMaintenanceDuplicateValue(existing.condition) === normalizeMaintenanceDuplicateValue(candidate.condition) &&
+    normalizeMaintenanceDuplicateValue(existing.note) === normalizeMaintenanceDuplicateValue(candidate.note) &&
+    normalizeMaintenanceDuplicateValue(existing.cost) === normalizeMaintenanceDuplicateValue(candidate.cost) &&
+    normalizeMaintenanceDuplicateValue(existing.by) === normalizeMaintenanceDuplicateValue(candidate.by) &&
+    normalizeMaintenanceDuplicateValue(existing.checkedBy) === normalizeMaintenanceDuplicateValue(candidate.checkedBy) &&
+    normalizeMaintenanceDuplicateValue(existing.photo) === normalizeMaintenanceDuplicateValue(candidate.photo) &&
+    normalizeMaintenanceDuplicateValue(existing.telegramPhoto) === normalizeMaintenanceDuplicateValue(candidate.telegramPhoto)
+  );
+}
+
 const uploadContentHashCache = new Map();
 
 async function getUploadContentHash(uploadUrl) {
@@ -8817,6 +8841,18 @@ const server = http.createServer(async (req, res) => {
         requestedBy: "",
         requestTitle: "",
       };
+      const duplicateEntry = (Array.isArray(db.assets[idx].maintenanceHistory) ? db.assets[idx].maintenanceHistory : []).find((row) =>
+        isDuplicateMaintenanceEntry(row, entry)
+      );
+      if (duplicateEntry) {
+        sendJson(res, 200, {
+          asset: db.assets[idx],
+          entry: duplicateEntry,
+          telegramAlertSent: true,
+          duplicateSuppressed: true,
+        });
+        return;
+      }
       db.assets[idx].maintenanceHistory = Array.isArray(db.assets[idx].maintenanceHistory)
         ? [entry, ...db.assets[idx].maintenanceHistory]
         : [entry];
@@ -8924,6 +8960,18 @@ const server = http.createServer(async (req, res) => {
         requestedBy: "",
         requestTitle: "",
       };
+      const duplicateEntry = (Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : []).find((row) =>
+        isDuplicateMaintenanceEntry(row, entry)
+      );
+      if (duplicateEntry) {
+        sendJson(res, 200, {
+          asset,
+          entry: duplicateEntry,
+          telegramAlertSent: true,
+          duplicateSuppressed: true,
+        });
+        return;
+      }
       asset.maintenanceHistory = Array.isArray(asset.maintenanceHistory)
         ? [entry, ...asset.maintenanceHistory]
         : [entry];
