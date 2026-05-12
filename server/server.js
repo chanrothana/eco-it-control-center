@@ -2255,6 +2255,24 @@ function escapeTelegramHtml(value) {
     .replace(/>/g, "&gt;");
 }
 
+function decodeTelegramHtmlEntities(value) {
+  return toText(value)
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function stripTelegramHtml(value) {
+  return decodeTelegramHtmlEntities(value)
+    .replace(/<\/?u>/gi, "")
+    .replace(/<\/?b>/gi, "")
+    .replace(/<\/?i>/gi, "")
+    .replace(/<\/?strong>/gi, "")
+    .replace(/<\/?em>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+}
+
 function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEGRAM_BOT_TOKEN, parseMode = "") {
   return new Promise((resolve) => {
     if (!toText(chatId) || !toText(text)) return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
@@ -2400,6 +2418,13 @@ async function sendTelegramMessageToChatWithRetry(
     if (!shouldRetryTelegramResult(last) || i === attempts - 1) return last;
     // eslint-disable-next-line no-await-in-loop
     await waitMs(300 * (i + 1));
+  }
+  if (toText(parseMode)) {
+    const plainText = stripTelegramHtml(text);
+    if (plainText && plainText !== toText(text)) {
+      last = await sendTelegramMessageToChat(chatId, plainText, photoUrl, botToken, "");
+      if (last.ok) return last;
+    }
   }
   return last;
 }
