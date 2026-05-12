@@ -3054,12 +3054,14 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
       ? emphasize("ការងារទូទៅ", itemName || "General Maintenance Task")
       : emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
     emphasize("សាខា", campus),
-    emphasize("ទីតាំង", location),
     emphasize("កាលបរិច្ឆេទ", date),
     `ប្រភេទការងារ: ${escapeTelegramHtml(type)}`,
     `អ្នកអនុវត្ត: ${escapeTelegramHtml(performedBy)}`,
     `ការងារដែលបានធ្វើ: ${escapeTelegramHtml(note)}`,
   ];
+  if (!isGeneralTask) {
+    lines.splice(4, 0, emphasize("ទីតាំង", location));
+  }
   if (condition) {
     lines.push(`ចំណាំបន្ថែម: ${escapeTelegramHtml(condition)}`);
   }
@@ -8877,16 +8879,17 @@ const server = http.createServer(async (req, res) => {
       addMaintenanceDoneNotification(db, db.assets[idx], entry);
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
-      let telegramAlertSent = false;
-      try {
-        telegramAlertSent = await sendMaintenanceRecordTelegramAlert(db, db.assets[idx], entry, user);
-      } catch (err) {
-        console.warn(
-          "[MAINTENANCE ALERT] Failed to send maintenance record Telegram alert:",
-          err instanceof Error ? err.message : err
-        );
-      }
-      sendJson(res, 201, { asset: db.assets[idx], entry, telegramAlertSent });
+      sendJson(res, 201, { asset: db.assets[idx], entry, telegramAlertQueued: true });
+      void (async () => {
+        try {
+          await sendMaintenanceRecordTelegramAlert(db, db.assets[idx], entry, user);
+        } catch (err) {
+          console.warn(
+            "[MAINTENANCE ALERT] Failed to send maintenance record Telegram alert:",
+            err instanceof Error ? err.message : err
+          );
+        }
+      })();
       return;
     }
 
@@ -8985,16 +8988,17 @@ const server = http.createServer(async (req, res) => {
       );
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
-      let telegramAlertSent = false;
-      try {
-        telegramAlertSent = await sendMaintenanceRecordTelegramAlert(db, asset, entry, user);
-      } catch (err) {
-        console.warn(
-          "[MAINTENANCE ALERT] Failed to send general maintenance Telegram alert:",
-          err instanceof Error ? err.message : err
-        );
-      }
-      sendJson(res, 201, { asset, entry, telegramAlertSent });
+      sendJson(res, 201, { asset, entry, telegramAlertQueued: true });
+      void (async () => {
+        try {
+          await sendMaintenanceRecordTelegramAlert(db, asset, entry, user);
+        } catch (err) {
+          console.warn(
+            "[MAINTENANCE ALERT] Failed to send general maintenance Telegram alert:",
+            err instanceof Error ? err.message : err
+          );
+        }
+      })();
       return;
     }
 

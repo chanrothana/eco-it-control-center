@@ -5449,7 +5449,17 @@ async function buildMaintenanceTelegramComparisonPhoto(beforePhoto: string, afte
       ctx.font = "700 34px Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(label, x + panelWidth / 2, outerPadding + headerHeight / 2);
+      const labelX = x + panelWidth / 2;
+      const labelY = outerPadding + headerHeight / 2;
+      ctx.fillText(label, labelX, labelY);
+      const textWidth = ctx.measureText(label).width;
+      const underlineY = labelY + 24;
+      ctx.strokeStyle = "#2f2418";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(labelX - textWidth / 2, underlineY);
+      ctx.lineTo(labelX + textWidth / 2, underlineY);
+      ctx.stroke();
     });
 
     return canvas.toDataURL("image/jpeg", 0.86);
@@ -24497,11 +24507,12 @@ export default function App() {
       });
 
       let telegramAlertSent: boolean | null = null;
+      let telegramAlertQueued = false;
       let duplicateSuppressed = false;
       let serverSavedAsset: Asset | null = null;
       try {
         if (isQuickGeneralTask) {
-          const res = await requestJson<{ asset: Asset; entry: MaintenanceEntry; telegramAlertSent?: boolean; duplicateSuppressed?: boolean }>(`/api/maintenance/general-record`, {
+          const res = await requestJson<{ asset: Asset; entry: MaintenanceEntry; telegramAlertSent?: boolean; telegramAlertQueued?: boolean; duplicateSuppressed?: boolean }>(`/api/maintenance/general-record`, {
             method: "POST",
             body: JSON.stringify({
               campus: maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter,
@@ -24519,9 +24530,10 @@ export default function App() {
           });
           serverSavedAsset = res.asset || null;
           telegramAlertSent = typeof res.telegramAlertSent === "boolean" ? res.telegramAlertSent : null;
+          telegramAlertQueued = Boolean(res.telegramAlertQueued);
           duplicateSuppressed = Boolean(res.duplicateSuppressed);
         } else {
-          const res = await requestJson<{ asset: Asset; entry?: MaintenanceEntry; telegramAlertSent?: boolean; duplicateSuppressed?: boolean }>(`/api/assets/${assetId}/history`, {
+          const res = await requestJson<{ asset: Asset; entry?: MaintenanceEntry; telegramAlertSent?: boolean; telegramAlertQueued?: boolean; duplicateSuppressed?: boolean }>(`/api/assets/${assetId}/history`, {
             method: "POST",
             body: JSON.stringify({
               ...entry,
@@ -24538,6 +24550,7 @@ export default function App() {
           });
           serverSavedAsset = res.asset || null;
           telegramAlertSent = typeof res.telegramAlertSent === "boolean" ? res.telegramAlertSent : null;
+          telegramAlertQueued = Boolean(res.telegramAlertQueued);
           duplicateSuppressed = Boolean(res.duplicateSuppressed);
           const savedAsset = nextLocal.find((a) => a.id === assetId);
           if (savedAsset && !duplicateSuppressed) {
@@ -24578,6 +24591,10 @@ export default function App() {
           ? (lang === "km"
             ? "កំណត់ត្រានេះបានដាក់ស្នើរួចហើយ និងជោគជ័យ។ ការចុចស្ទួនត្រូវបានមិនអើពើ។"
             : "This maintenance record was already submitted successfully. Duplicate tap ignored.")
+          : telegramAlertQueued
+          ? (lang === "km"
+            ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។ Telegram alert កំពុងផ្ញើ..."
+            : "Maintenance record saved. Telegram alert is sending...")
           : telegramAlertSent === false
           ? (lang === "km"
             ? "បានរក្សាទុកកំណត់ត្រារួចរាល់ ប៉ុន្តែ Telegram alert មិនបានផ្ញើ។"
