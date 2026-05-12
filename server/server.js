@@ -2371,13 +2371,13 @@ function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "defa
     kind === "maintenance" ? settings.telegramMaintenanceChatIds : settings.telegramChatIds
   );
   const fallbackSettingsTargets =
-    kind === "maintenance"
+    kind === "maintenance" && !primarySettingsTargets.length
       ? normalizeTelegramChatIds(settings.telegramChatIds)
       : [];
   const explicitTargets = normalizeTelegramChatIds(overrideChatIds);
   const primaryEnvTargets = kind === "maintenance" ? TELEGRAM_MAINTENANCE_CHAT_IDS : TELEGRAM_CHAT_IDS;
   const fallbackEnvTargets =
-    kind === "maintenance"
+    kind === "maintenance" && !primaryEnvTargets.length
       ? TELEGRAM_CHAT_IDS
       : [];
   return Array.from(
@@ -2551,9 +2551,7 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "parseMode")
       ? toText(options.parseMode)
       : "";
-  const maintenanceTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
-  const defaultTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "default");
-  const configuredTargets = Array.from(new Set([...maintenanceTargets, ...defaultTargets]));
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
   const discoveredChats =
     TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
       ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
@@ -2624,9 +2622,7 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
       : [];
-  const maintenanceTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
-  const defaultTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "default");
-  const configuredTargets = Array.from(new Set([...maintenanceTargets, ...defaultTargets]));
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
   const discoveredChats =
     TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
       ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
