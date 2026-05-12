@@ -143,6 +143,30 @@ function formatTelegramAlertSnapshot(date = new Date()) {
   } catch {}
   return date.toISOString();
 }
+
+function formatMaintenanceTelegramDateTime(entry) {
+  const date = toText(entry && entry.date) || "-";
+  const createdAtRaw = toText(entry && entry.createdAt);
+  if (!createdAtRaw) return date;
+  const createdAt = new Date(createdAtRaw);
+  if (Number.isNaN(createdAt.getTime())) return date;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: APP_TIME_ZONE,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).formatToParts(createdAt);
+    const read = (type) => parts.find((part) => part.type === type)?.value || "";
+    const hour = read("hour");
+    const minute = read("minute");
+    const period = read("dayPeriod").toUpperCase();
+    if (hour && minute && period) {
+      return `${date}, ${hour}:${minute}${period}`;
+    }
+  } catch {}
+  return date;
+}
 const DEFAULT_ADMIN_PASSWORD = String(
   process.env.BOOTSTRAP_ADMIN_PASSWORD || (!IS_PROD ? "EcoAdmin@2026!" : "")
 );
@@ -3039,7 +3063,7 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
     );
   const campus = formatTelegramCampusKhmer(asset.campus);
   const location = toText(asset.location) || "-";
-  const date = toText(entry.date) || "-";
+  const date = formatMaintenanceTelegramDateTime(entry);
   const type = toText(entry.type) || "-";
   const performedBy = toText(entry.by) || toText(actor && actor.displayName) || toText(actor && actor.username) || "staff";
   const note = toText(entry.note) || "-";
@@ -3048,14 +3072,14 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
   const cost = toText(entry.cost);
   const emphasize = (label, value) => `<b><u>${escapeTelegramHtml(label)}</u></b>: ${escapeTelegramHtml(value)}`;
   const lines = [
-    "<b><u>ជូនដំណឹង ECO - ការងារជួសជុល</u></b>",
-    "<b><u>មានកំណត់ត្រាការងារថ្មី</u></b>",
+    "<u><b>ជូនដំណឹង ECO - ការងារជួសជុល</b></u>",
+    "<u><b>មានកំណត់ត្រាការងារថ្មី</b></u>",
     isGeneralTask
       ? emphasize("ការងារទូទៅ", itemName || "General Maintenance Task")
       : emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
     emphasize("សាខា", campus),
     emphasize("កាលបរិច្ឆេទ", date),
-    `ប្រភេទការងារ: ${escapeTelegramHtml(type)}`,
+    `<b>ប្រភេទការងារ</b>: ${escapeTelegramHtml(type)}`,
     `អ្នកអនុវត្ត: ${escapeTelegramHtml(performedBy)}`,
     `ការងារដែលបានធ្វើ: ${escapeTelegramHtml(note)}`,
   ];
