@@ -2523,7 +2523,7 @@ async function sendTelegramMessage(text, options = {}) {
 }
 
 async function sendTelegramMaintenanceMessage(text, options = {}) {
-  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_MAINTENANCE_BOT_TOKEN || !toText(text)) {
+  if (!TELEGRAM_ALERT_ENABLED || (!TELEGRAM_MAINTENANCE_BOT_TOKEN && !TELEGRAM_BOT_TOKEN) || !toText(text)) {
     telegramMaintenanceLastSendReport = {
       at: new Date().toISOString(),
       ok: false,
@@ -2551,7 +2551,9 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "parseMode")
       ? toText(options.parseMode)
       : "";
-  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
+  const maintenanceTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
+  const defaultTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "default");
+  const configuredTargets = Array.from(new Set([...maintenanceTargets, ...defaultTargets]));
   const discoveredChats =
     TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
       ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
@@ -2561,13 +2563,23 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
   const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
   if (!targets.length) return false;
   const results = [];
+  const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
     results.push(
-      await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN, parseMode)
+      await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, primaryToken, parseMode)
     );
   }
-  const successCount = results.filter((row) => row.ok).length;
+  let successCount = results.filter((row) => row.ok).length;
+  if (!successCount && TELEGRAM_BOT_TOKEN && TELEGRAM_BOT_TOKEN !== primaryToken) {
+    for (const chatId of targets) {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(
+        await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2, TELEGRAM_BOT_TOKEN, parseMode)
+      );
+    }
+    successCount = results.filter((row) => row.ok).length;
+  }
   telegramMaintenanceLastSendReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
@@ -2604,7 +2616,7 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
         .filter((item) => item.media)
         .slice(0, 10)
     : [];
-  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_MAINTENANCE_BOT_TOKEN || normalizedMedia.length < 2) {
+  if (!TELEGRAM_ALERT_ENABLED || (!TELEGRAM_MAINTENANCE_BOT_TOKEN && !TELEGRAM_BOT_TOKEN) || normalizedMedia.length < 2) {
     return false;
   }
   const db = options && typeof options === "object" ? options.db : null;
@@ -2612,7 +2624,9 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
       : [];
-  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
+  const maintenanceTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
+  const defaultTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "default");
+  const configuredTargets = Array.from(new Set([...maintenanceTargets, ...defaultTargets]));
   const discoveredChats =
     TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
       ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
@@ -2622,9 +2636,17 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
   const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
   if (!targets.length) return false;
   const results = [];
+  const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
-    results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, TELEGRAM_MAINTENANCE_BOT_TOKEN));
+    results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, primaryToken));
+  }
+  if (results.some((row) => row.ok)) return true;
+  if (TELEGRAM_BOT_TOKEN && TELEGRAM_BOT_TOKEN !== primaryToken) {
+    for (const chatId of targets) {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 2, TELEGRAM_BOT_TOKEN));
+    }
   }
   return results.some((row) => row.ok);
 }
