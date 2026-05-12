@@ -24556,9 +24556,13 @@ export default function App() {
           ? (lang === "km"
             ? "បានរក្សាទុកកំណត់ត្រារួចរាល់ ប៉ុន្តែ Telegram alert មិនបានផ្ញើ។"
             : "Maintenance record saved, but Telegram alert failed to send.")
-          : (lang === "km"
-            ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។"
-            : "Maintenance record saved.");
+          : telegramAlertSent === true
+            ? (lang === "km"
+              ? "Telegram alert បានផ្ញើរ។"
+              : "Telegram alert sent.")
+            : (lang === "km"
+              ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។"
+              : "Maintenance record saved.");
       if (maintenanceQuickMode) {
         window.alert(successMessage);
       } else {
