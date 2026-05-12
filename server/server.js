@@ -2353,13 +2353,13 @@ function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "defa
     kind === "maintenance" ? settings.telegramMaintenanceChatIds : settings.telegramChatIds
   );
   const fallbackSettingsTargets =
-    kind === "maintenance" && !primarySettingsTargets.length
+    kind === "maintenance"
       ? normalizeTelegramChatIds(settings.telegramChatIds)
       : [];
   const explicitTargets = normalizeTelegramChatIds(overrideChatIds);
   const primaryEnvTargets = kind === "maintenance" ? TELEGRAM_MAINTENANCE_CHAT_IDS : TELEGRAM_CHAT_IDS;
   const fallbackEnvTargets =
-    kind === "maintenance" && !primaryEnvTargets.length
+    kind === "maintenance"
       ? TELEGRAM_CHAT_IDS
       : [];
   return Array.from(
