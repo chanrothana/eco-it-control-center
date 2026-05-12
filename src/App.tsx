@@ -24486,9 +24486,10 @@ export default function App() {
         };
       });
 
+      let telegramAlertSent: boolean | null = null;
       try {
         if (isQuickGeneralTask) {
-          await requestJson<{ asset: Asset; entry: MaintenanceEntry }>(`/api/maintenance/general-record`, {
+          const res = await requestJson<{ asset: Asset; entry: MaintenanceEntry; telegramAlertSent?: boolean }>(`/api/maintenance/general-record`, {
             method: "POST",
             body: JSON.stringify({
               campus: maintenanceLockedCampus || maintenanceRecordCampusFilter || campusFilter,
@@ -24504,8 +24505,9 @@ export default function App() {
               workflow: entry.workflow,
             }),
           });
+          telegramAlertSent = typeof res.telegramAlertSent === "boolean" ? res.telegramAlertSent : null;
         } else {
-          await requestJson<{ asset: Asset }>(`/api/assets/${assetId}/history`, {
+          const res = await requestJson<{ asset: Asset; entry?: MaintenanceEntry; telegramAlertSent?: boolean }>(`/api/assets/${assetId}/history`, {
             method: "POST",
             body: JSON.stringify({
               ...entry,
@@ -24520,6 +24522,7 @@ export default function App() {
               workflow: entry.workflow,
             }),
           });
+          telegramAlertSent = typeof res.telegramAlertSent === "boolean" ? res.telegramAlertSent : null;
           const savedAsset = nextLocal.find((a) => a.id === assetId);
           if (savedAsset) {
             await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
@@ -24548,9 +24551,20 @@ export default function App() {
       setMaintenanceRecordForm(createMaintenanceRecordForm(savedAsset, toYmd(new Date()), currentOperatorName));
       setMaintenanceQuickGeneralTask(true);
       setMaintenanceRecordFileKey((k) => k + 1);
+      const successMessage =
+        telegramAlertSent === false
+          ? (lang === "km"
+            ? "បានរក្សាទុកកំណត់ត្រារួចរាល់ ប៉ុន្តែ Telegram alert មិនបានផ្ញើ។"
+            : "Maintenance record saved, but Telegram alert failed to send.")
+          : (lang === "km"
+            ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។"
+            : "Maintenance record saved.");
       if (maintenanceQuickMode) {
-        window.alert(lang === "km" ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។" : "Maintenance record saved.");
+        window.alert(successMessage);
       } else {
+        if (telegramAlertSent === false) {
+          setSetupMessage(successMessage);
+        }
         setMaintenanceView("history");
       }
       await loadData();
