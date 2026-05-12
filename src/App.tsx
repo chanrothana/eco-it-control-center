@@ -24559,10 +24559,11 @@ export default function App() {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
       }
 
-      const mergedLocal = duplicateSuppressed && serverSavedAsset
-        ? readAssetFallback().map((asset) => (asset.id === serverSavedAsset?.id ? normalizeAssetForUi(serverSavedAsset) : asset))
+      const normalizedServerSavedAsset = serverSavedAsset ? normalizeAssetForUi(serverSavedAsset) : null;
+      const mergedLocal = duplicateSuppressed && normalizedServerSavedAsset
+        ? readAssetFallback().map((asset) => (asset.id === normalizedServerSavedAsset.id ? normalizedServerSavedAsset : asset))
         : nextLocal;
-      const savedAsset = mergedLocal.find((a) => a.id === assetId) || normalizeAssetForUi(serverSavedAsset) || maintenanceRecordSelectedAsset;
+      const savedAsset = mergedLocal.find((a) => a.id === assetId) || normalizedServerSavedAsset || maintenanceRecordSelectedAsset;
       writeAssetFallback(mergedLocal);
       setAssets(mergedLocal);
       setStats(buildStatsFromAssets(mergedLocal, campusFilter));
