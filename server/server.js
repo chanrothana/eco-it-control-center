@@ -211,6 +211,7 @@ let maintenanceAlertSweepRunning = false;
 const PUBLIC_APP_URL = String(
   process.env.PUBLIC_APP_URL ||
   process.env.RENDER_EXTERNAL_URL ||
+  (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : "") ||
   ""
 ).trim().replace(/\/+$/, "");
 const BUILD_DIR = path.join(__dirname, "..", "build");
@@ -3077,13 +3078,25 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user) {
   let telegramAlertSent = false;
 
   if (photoAlerts.length === 1) {
-    const report = await sendTelegramMaintenanceMessage(message || photoAlerts[0].caption, {
+    const primaryText = message || photoAlerts[0].caption;
+    const report = await sendTelegramMaintenanceMessage(primaryText, {
       db,
       photoUrl: photoAlerts[0].media,
       parseMode: message ? "HTML" : "",
       includeResults: true,
     });
-    return Boolean(report && report.ok);
+    if (report && report.ok) {
+      return true;
+    }
+    if (message) {
+      const fallback = await sendTelegramMaintenanceMessage(message, {
+        db,
+        parseMode: "HTML",
+        includeResults: true,
+      });
+      return Boolean(fallback && fallback.ok);
+    }
+    return false;
   }
 
   if (message) {
