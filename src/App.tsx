@@ -31974,11 +31974,11 @@ export default function App() {
                 const itemName = String(row.itemName || "").trim() || "-";
                 const location = String(row.location || "").trim() || "-";
                 const assignedTo = String(row.assignedTo || "").trim();
+                const detailsLine = `${location} | SN: ${serial}`;
                 return `<div class="qr-sticker-wrap">
                   ${assignedTo ? `<div class="qr-sticker-user">${escapeHtml(assignedTo)}</div>` : ""}
                   <div class="qr-sticker-item">${escapeHtml(itemName)}</div>
-                  <div class="qr-sticker-location">${escapeHtml(location)}</div>
-                  <div class="qr-sticker-sn">SN: ${escapeHtml(serial)}</div>
+                  <div class="qr-sticker-detail">${escapeHtml(detailsLine)}</div>
                   <div class="qr-sticker">
                     <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
                     <div class="qr-sticker-divider"></div>
@@ -32137,17 +32137,17 @@ export default function App() {
           }
           th:hover .preview-column-resizer::after { background: rgba(117, 80, 36, 0.4); }
           .is-preview-resizing, .is-preview-resizing * { cursor: col-resize !important; user-select: none !important; }
-          .qr-sticker-grid { display: grid; grid-template-columns: repeat(6, 96px); column-gap: 6px; row-gap: 6px; margin-top: 6px; width: 100%; justify-content: space-between; }
-          .qr-sticker-wrap { width: 96px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
-          .qr-sticker-user { width: 96px; min-height: 10px; text-align: center; font-size: 6.6px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
-          .qr-sticker-item { width: 96px; min-height: 10px; text-align: center; font-size: 6.6px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #314238; }
-          .qr-sticker-location { width: 96px; min-height: 10px; text-align: center; font-size: 6.4px; line-height: 1.05; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #5a695e; }
-          .qr-sticker-sn { width: 96px; min-height: 10px; text-align: center; font-size: 6.8px; line-height: 1.05; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1b2d23; }
-          .qr-sticker { width: 96px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 4px 4px 4px; display: grid; gap: 3px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
-          .qr-sticker-qr { width: 74px; height: 74px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
-          .qr-sticker-qr img { width: 68px; height: 68px; object-fit: contain; display: block; }
-          .qr-sticker-divider { width: 74px; height: 1px; background: #1b2d23; }
-          .qr-sticker-id { width: 74px; min-height: 14px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 2px; font-size: 7.2px; line-height: 1.02; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .qr-sticker-grid { display: grid; grid-template-columns: repeat(7, 82px); column-gap: 4px; row-gap: 5px; margin-top: 6px; width: 100%; justify-content: space-between; }
+          .qr-sticker-wrap { width: 82px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
+          .qr-sticker-user, .qr-sticker-item, .qr-sticker-detail { width: 82px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .qr-sticker-user { min-height: 8px; font-size: 5.8px; line-height: 1.02; font-weight: 700; color: #1b2d23; }
+          .qr-sticker-item { min-height: 8px; font-size: 5.9px; line-height: 1.02; font-weight: 800; color: #314238; }
+          .qr-sticker-detail { min-height: 8px; font-size: 5.5px; line-height: 1.02; font-weight: 700; color: #5a695e; }
+          .qr-sticker { width: 82px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 3px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
+          .qr-sticker-qr { width: 62px; height: 62px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
+          .qr-sticker-qr img { width: 58px; height: 58px; object-fit: contain; display: block; }
+          .qr-sticker-divider { width: 62px; height: 1px; background: #1b2d23; }
+          .qr-sticker-id { width: 62px; min-height: 11px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 1px; font-size: 6px; line-height: 1; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           @page { size: A4 landscape; margin: 6mm; }
           @media print {
             body { margin: 0; background: #fff; }
@@ -51796,9 +51796,10 @@ export default function App() {
                       </div>
                       <div className="qr-label-meta">
                         <div className="qr-label-asset-id">{row.assetId}</div>
-                        <div>{row.itemName}</div>
+                        <div className="qr-label-item-name">{row.itemName}</div>
                         <div>{reportCampusName(row.campus)} | {row.location || "-"}</div>
-                        <div>Status: {assetStatusLabel(row.status || "-")} | SN: {String(row.serialNumber || "").trim() || "-"}</div>
+                        <div>SN: {String(row.serialNumber || "").trim() || "-"}</div>
+                        {String(row.assignedTo || "").trim() ? <div>Assigned: {row.assignedTo}</div> : null}
                       </div>
                     </article>
                   ))
