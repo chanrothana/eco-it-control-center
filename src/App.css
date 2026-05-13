@@ -17205,6 +17205,11 @@ tr.row-maint-maintenance:hover td {
   font-size: 18px;
   font-weight: 700;
   text-align: center;
+  width: 100%;
+  max-width: 100%;
+  padding-left: 12px;
+  padding-right: 12px;
+  box-sizing: border-box;
 }
 
 .public-asset-mobile-card {
@@ -20318,8 +20323,10 @@ tr.row-maint-maintenance:hover td {
 
   .public-asset-date-field .input {
     min-height: 62px;
-    font-size: 20px;
+    font-size: 18px;
     border-radius: 18px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
 
   .public-asset-photo-row .photo-preview,
