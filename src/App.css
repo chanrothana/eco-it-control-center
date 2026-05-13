@@ -3327,6 +3327,184 @@ h2 {
   margin-top: 12px;
 }
 
+.cctv-live-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.cctv-live-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: end;
+}
+
+.cctv-live-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cctv-live-summary-pill {
+  border: 1px solid rgba(116, 154, 212, 0.28);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(13, 28, 49, 0.88) 0%, rgba(18, 40, 66, 0.96) 100%);
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.cctv-live-summary-pill span {
+  color: #8ca7cb;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cctv-live-summary-pill strong {
+  color: #f4f8ff;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.cctv-live-browser-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.cctv-live-nvr-card {
+  border: 1px solid rgba(116, 154, 212, 0.26);
+  border-radius: 22px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(16, 34, 57, 0.96) 0%, rgba(22, 45, 73, 0.98) 100%);
+  color: #f5f8ff;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.cctv-live-nvr-card:hover,
+.cctv-live-nvr-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(111, 164, 255, 0.58);
+  box-shadow: 0 18px 30px rgba(4, 14, 28, 0.26);
+}
+
+.cctv-live-nvr-card-active {
+  border-color: rgba(111, 164, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(111, 164, 255, 0.28), 0 22px 34px rgba(5, 17, 34, 0.32);
+}
+
+.cctv-live-nvr-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.cctv-live-nvr-card-head strong,
+.cctv-live-focus-copy strong {
+  display: block;
+  color: #f7fbff;
+  font-size: 18px;
+}
+
+.cctv-live-nvr-card-head span,
+.cctv-live-focus-copy span,
+.cctv-live-focus-copy small {
+  color: #a9bbd6;
+}
+
+.cctv-live-brand-chip {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(88, 136, 255, 0.18);
+  border: 1px solid rgba(128, 168, 255, 0.34);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cctv-live-nvr-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cctv-live-nvr-stats span {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d4e1f5;
+  font-size: 12px;
+}
+
+.cctv-live-nvr-link a,
+.cctv-live-focus-copy a {
+  color: #8fc0ff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.cctv-live-stage {
+  border: 1px solid #24405f;
+  border-radius: 28px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(103, 157, 255, 0.12) 0%, rgba(103, 157, 255, 0) 30%),
+    linear-gradient(180deg, rgba(13, 28, 48, 0.96) 0%, rgba(18, 36, 60, 0.98) 100%);
+  display: grid;
+  gap: 16px;
+}
+
+.cctv-live-stage-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+}
+
+.cctv-live-stage-top h3 {
+  margin: 0;
+  color: #f5f9ff;
+}
+
+.cctv-live-focus-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(220px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.cctv-live-focus-preview {
+  border-radius: 20px;
+  overflow: hidden;
+  background: rgba(8, 18, 31, 0.72);
+  border: 1px solid rgba(117, 150, 199, 0.24);
+}
+
+.cctv-live-focus-preview .cctv-live-thumb {
+  border: 0;
+  border-radius: 0;
+  min-height: 220px;
+}
+
+.cctv-live-focus-copy {
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid rgba(117, 150, 199, 0.2);
+  background: rgba(8, 19, 33, 0.44);
+  display: grid;
+  gap: 8px;
+}
+
+.cctv-live-grid-dense {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
 .cctv-live-card {
   border: 1px solid var(--border-color);
   border-radius: 16px;
@@ -3334,6 +3512,23 @@ h2 {
   background: rgba(250, 250, 252, 0.9);
   display: grid;
   gap: 6px;
+}
+
+.cctv-live-card-interactive {
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.cctv-live-card-interactive:hover,
+.cctv-live-card-interactive:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(111, 164, 255, 0.7);
+  box-shadow: 0 14px 24px rgba(8, 20, 36, 0.18);
+}
+
+.cctv-live-card-active {
+  border-color: rgba(89, 142, 255, 0.88);
+  box-shadow: 0 0 0 1px rgba(89, 142, 255, 0.24);
 }
 
 .cctv-live-thumb {
@@ -3375,6 +3570,15 @@ h2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .cctv-live-toolbar,
+  .cctv-live-focus-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .cctv-live-summary-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .cctv-site-grid {
     grid-template-columns: 1fr;
   }
@@ -3399,6 +3603,10 @@ h2 {
   }
 
   .cctv-live-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cctv-live-grid-dense {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -7623,6 +7623,9 @@ export default function App() {
   const [cctvSiteFilter, setCctvSiteFilter] = useState("ALL");
   const [cctvStatusFilter, setCctvStatusFilter] = useState("ALL");
   const [cctvQuery, setCctvQuery] = useState("");
+  const [cctvLiveCampusFilter, setCctvLiveCampusFilter] = useState("ALL");
+  const [cctvLiveNvrKey, setCctvLiveNvrKey] = useState("");
+  const [cctvLiveFocusCameraId, setCctvLiveFocusCameraId] = useState<number | null>(null);
   const [editingCctvCameraId, setEditingCctvCameraId] = useState<number | null>(null);
   const [editingCctvServiceId, setEditingCctvServiceId] = useState<number | null>(null);
   const [editingCctvChangeId, setEditingCctvChangeId] = useState<number | null>(null);
@@ -9656,6 +9659,138 @@ export default function App() {
       readiness,
     };
   }, [cctvSiteDashboardRows, cctvSummary]);
+  const cctvLiveCampusOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          cctvFilteredCameras
+            .map((row) => String(row.campus || "").trim())
+            .filter(Boolean)
+        )
+      ).sort(compareCampusByCode),
+    [cctvFilteredCameras]
+  );
+  const cctvNvrBrandLabel = useCallback(
+    (nvrName: string, loginUrl?: string) => {
+      const text = `${String(nvrName || "")} ${String(loginUrl || "")}`.toLowerCase();
+      if (text.includes("hik")) return "Hikvision";
+      if (text.includes("dahua") || text.includes("dhi")) return "Dahua";
+      return lang === "km" ? "NVR ទូទៅ" : "Generic NVR";
+    },
+    [lang]
+  );
+  const cctvLiveNvrRows = useMemo(() => {
+    const scopedCameras = cctvFilteredCameras.filter((row) =>
+      cctvLiveCampusFilter === "ALL" ? true : String(row.campus || "").trim() === cctvLiveCampusFilter
+    );
+    const recorderLookup = new Map<string, VaultCctvRecord>();
+    vaultCctvRecords.forEach((row) => {
+      const site = String(row.site || "").trim();
+      const nvrName = String(row.nvrName || "").trim();
+      if (site && nvrName) recorderLookup.set(`${site}::${nvrName}`, row);
+      if (nvrName && !recorderLookup.has(`::${nvrName}`)) recorderLookup.set(`::${nvrName}`, row);
+    });
+    const map = new Map<string, {
+      key: string;
+      campus: string;
+      nvrName: string;
+      brand: string;
+      loginUrl: string;
+      sites: string[];
+      cameras: CctvCameraRecord[];
+      total: number;
+      online: number;
+      offline: number;
+      issue: number;
+    }>();
+    for (const camera of scopedCameras) {
+      const campus = String(camera.campus || "").trim() || String(camera.site || "").trim() || "-";
+      const site = String(camera.site || "").trim() || campus;
+      const nvrName = String(camera.nvrName || "").trim() || site;
+      const recorder =
+        recorderLookup.get(`${site}::${nvrName}`) ||
+        recorderLookup.get(`::${nvrName}`);
+      const key = `${campus}::${nvrName}`;
+      const current = map.get(key) || {
+        key,
+        campus,
+        nvrName,
+        brand: cctvNvrBrandLabel(nvrName, recorder?.loginUrl || camera.liveUrl),
+        loginUrl: recorder?.loginUrl || camera.liveUrl || "",
+        sites: [],
+        cameras: [],
+        total: 0,
+        online: 0,
+        offline: 0,
+        issue: 0,
+      };
+      if (!current.sites.includes(site)) current.sites.push(site);
+      current.cameras.push(camera);
+      current.total += 1;
+      if (camera.status === "Online") current.online += 1;
+      else if (camera.status === "Offline") current.offline += 1;
+      else current.issue += 1;
+      map.set(key, current);
+    }
+    return Array.from(map.values())
+      .map((row) => ({
+        ...row,
+        sites: row.sites.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })),
+        cameras: row.cameras
+          .slice()
+          .sort((a, b) => {
+            const left = Number(a.channelNumber || a.arrange || 0);
+            const right = Number(b.channelNumber || b.arrange || 0);
+            if (left !== right) return left - right;
+            return a.cameraName.localeCompare(b.cameraName, undefined, { numeric: true, sensitivity: "base" });
+          }),
+      }))
+      .sort((a, b) => {
+        const campusCompare = compareCampusByCode(a.campus, b.campus);
+        if (campusCompare) return campusCompare;
+        return a.nvrName.localeCompare(b.nvrName, undefined, { numeric: true, sensitivity: "base" });
+      });
+  }, [cctvFilteredCameras, cctvLiveCampusFilter, cctvNvrBrandLabel, vaultCctvRecords]);
+  const cctvLiveSummary = useMemo(
+    () => ({
+      campuses: new Set(cctvLiveNvrRows.map((row) => row.campus)).size,
+      nvrs: cctvLiveNvrRows.length,
+      cameras: cctvLiveNvrRows.reduce((sum, row) => sum + row.total, 0),
+    }),
+    [cctvLiveNvrRows]
+  );
+  const activeCctvLiveNvr = useMemo(
+    () => cctvLiveNvrRows.find((row) => row.key === cctvLiveNvrKey) || cctvLiveNvrRows[0] || null,
+    [cctvLiveNvrKey, cctvLiveNvrRows]
+  );
+  const activeCctvLiveCamera = useMemo(
+    () => activeCctvLiveNvr?.cameras.find((camera) => camera.id === cctvLiveFocusCameraId) || activeCctvLiveNvr?.cameras[0] || null,
+    [activeCctvLiveNvr, cctvLiveFocusCameraId]
+  );
+  useEffect(() => {
+    if (cctvLiveCampusFilter === "ALL") return;
+    if (!cctvLiveCampusOptions.includes(cctvLiveCampusFilter)) {
+      setCctvLiveCampusFilter("ALL");
+    }
+  }, [cctvLiveCampusFilter, cctvLiveCampusOptions]);
+  useEffect(() => {
+    if (!cctvLiveNvrRows.length) {
+      if (cctvLiveNvrKey) setCctvLiveNvrKey("");
+      return;
+    }
+    if (!cctvLiveNvrRows.some((row) => row.key === cctvLiveNvrKey)) {
+      setCctvLiveNvrKey(cctvLiveNvrRows[0].key);
+    }
+  }, [cctvLiveNvrKey, cctvLiveNvrRows]);
+  useEffect(() => {
+    if (!activeCctvLiveNvr?.cameras.length) {
+      if (cctvLiveFocusCameraId !== null) setCctvLiveFocusCameraId(null);
+      return;
+    }
+    if (!activeCctvLiveNvr.cameras.some((camera) => camera.id === cctvLiveFocusCameraId)) {
+      setCctvLiveFocusCameraId(activeCctvLiveNvr.cameras[0].id);
+    }
+  }, [activeCctvLiveNvr, cctvLiveFocusCameraId]);
   const cctvFilteredServiceHistory = useMemo(() => {
     return [...cctvServiceHistory]
       .filter((entry) => {
@@ -40125,35 +40260,145 @@ export default function App() {
                 <div className="panel-row">
                   <div>
                     <h2>Live View & Site Control</h2>
-                    <p className="tiny">Open each campus live view quickly and keep camera snapshots, IP, and current status together.</p>
+                    <p className="tiny">Browse by campus, choose an NVR, and open a 16-channel-ready camera grid for Dahua or Hikvision setups.</p>
                   </div>
                 </div>
-                <div className="cctv-site-grid">
-                  {cctvSiteDashboardRows.length ? cctvSiteDashboardRows.map((siteRow) => {
-                    const cameras = cctvFilteredCameras.filter((camera) => camera.site === siteRow.site);
-                    return (
-                      <article key={`cctv-live-site-${siteRow.site}`} className="cctv-site-card">
-                        <div className="panel-row">
+                <section className="cctv-live-layout">
+                  <div className="cctv-live-toolbar">
+                    <label className="field">
+                      <span>{lang === "km" ? "ជ្រើស Campus" : "Select Campus"}</span>
+                      <select className="input" value={cctvLiveCampusFilter} onChange={(e) => setCctvLiveCampusFilter(e.target.value)}>
+                        <option value="ALL">{t.allCampuses}</option>
+                        {cctvLiveCampusOptions.map((campus) => (
+                          <option key={`cctv-live-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="cctv-live-summary-strip">
+                      <div className="cctv-live-summary-pill"><span>{lang === "km" ? "Campus" : "Campuses"}</span><strong>{cctvLiveSummary.campuses}</strong></div>
+                      <div className="cctv-live-summary-pill"><span>NVR</span><strong>{cctvLiveSummary.nvrs}</strong></div>
+                      <div className="cctv-live-summary-pill"><span>{lang === "km" ? "កាមេរ៉ា" : "Cameras"}</span><strong>{cctvLiveSummary.cameras}</strong></div>
+                    </div>
+                  </div>
+
+                  <div className="cctv-live-browser-grid">
+                    {cctvLiveNvrRows.length ? cctvLiveNvrRows.map((row) => (
+                      <button
+                        key={row.key}
+                        type="button"
+                        className={`cctv-live-nvr-card ${activeCctvLiveNvr?.key === row.key ? "cctv-live-nvr-card-active" : ""}`}
+                        onClick={() => setCctvLiveNvrKey(row.key)}
+                      >
+                        <div className="cctv-live-nvr-card-head">
                           <div>
-                            <h3 className="section-title" style={{ margin: 0 }}>{siteRow.site}</h3>
-                            <div className="tiny">{siteRow.nvrName || "No NVR / controller set"}</div>
+                            <strong>{campusLabel(row.campus)}</strong>
+                            <span>{row.nvrName}</span>
                           </div>
-                          {siteRow.loginUrl ? <a className="btn-primary btn-small" href={siteRow.loginUrl} target="_blank" rel="noreferrer">Open Live</a> : null}
+                          <span className="cctv-live-brand-chip">{row.brand}</span>
                         </div>
-                        <div className="cctv-live-grid">
-                          {cameras.length ? cameras.map((camera) => (
-                            <div key={`cctv-live-camera-${camera.id}`} className="cctv-live-card">
-                              {camera.snapshot ? <img loading="lazy" decoding="async" src={camera.snapshot} alt={camera.cameraName} className="cctv-live-thumb" /> : <div className="cctv-live-thumb cctv-live-thumb-empty">No preview</div>}
-                              <strong>{camera.channelName || camera.cameraName}</strong>
-                              <span className="tiny">{camera.ipAddress}{camera.serverPort ? `:${camera.serverPort}` : ""}</span>
-                              <span className="tiny">{camera.status}</span>
-                            </div>
-                          )) : <div className="tiny">No cameras under this site yet.</div>}
+                        <div className="cctv-live-nvr-stats">
+                          <span>{row.total} {lang === "km" ? "កាមេរ៉ា" : "cameras"}</span>
+                          <span>{row.online} {lang === "km" ? "online" : "online"}</span>
+                          <span>{row.offline} {lang === "km" ? "offline" : "offline"}</span>
                         </div>
-                      </article>
-                    );
-                  }) : <div className="tiny">No campus live-view setup yet.</div>}
-                </div>
+                        <div className="tiny">{row.sites.join(" • ") || "-"}</div>
+                        {row.loginUrl ? (
+                          <div className="cctv-live-nvr-link">
+                            <a href={row.loginUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                              {lang === "km" ? "បើក Portal" : "Open Portal"}
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="tiny">{lang === "km" ? "មិនទាន់មាន Live portal link" : "No live portal link yet"}</div>
+                        )}
+                      </button>
+                    )) : <div className="tiny">No NVR live-view setup yet.</div>}
+                  </div>
+
+                  {activeCctvLiveNvr ? (
+                    <article className="cctv-live-stage">
+                      <div className="cctv-live-stage-top">
+                        <div>
+                          <h3>{activeCctvLiveNvr.nvrName}</h3>
+                          <div className="tiny">
+                            {campusLabel(activeCctvLiveNvr.campus)} • {activeCctvLiveNvr.brand} • {activeCctvLiveNvr.total} {lang === "km" ? "កាមេរ៉ា" : "cameras"}
+                          </div>
+                        </div>
+                        {activeCctvLiveNvr.loginUrl ? (
+                          <a className="btn-primary btn-small" href={activeCctvLiveNvr.loginUrl} target="_blank" rel="noreferrer">
+                            {lang === "km" ? "បើក NVR" : "Open NVR"}
+                          </a>
+                        ) : null}
+                      </div>
+
+                      {activeCctvLiveCamera ? (
+                        <div className="cctv-live-focus-panel">
+                          <div className="cctv-live-focus-preview">
+                            {activeCctvLiveCamera.snapshot ? (
+                              <img
+                                loading="lazy"
+                                decoding="async"
+                                src={activeCctvLiveCamera.snapshot}
+                                alt={activeCctvLiveCamera.cameraName}
+                                className="cctv-live-thumb"
+                              />
+                            ) : (
+                              <div className="cctv-live-thumb cctv-live-thumb-empty">
+                                {activeCctvLiveCamera.liveUrl
+                                  ? (lang === "km" ? "Live link ready" : "Live link ready")
+                                  : (lang === "km" ? "ត្រៀមសម្រាប់ RTSP/HLS/WebRTC" : "Ready for RTSP/HLS/WebRTC")}
+                              </div>
+                            )}
+                          </div>
+                          <div className="cctv-live-focus-copy">
+                            <strong>{activeCctvLiveCamera.channelName || activeCctvLiveCamera.cameraName}</strong>
+                            <span>{activeCctvLiveCamera.cameraName}</span>
+                            <span>{activeCctvLiveCamera.site}</span>
+                            <span>{activeCctvLiveCamera.ipAddress}{activeCctvLiveCamera.serverPort ? `:${activeCctvLiveCamera.serverPort}` : ""}</span>
+                            <span>{activeCctvLiveCamera.status}</span>
+                            {activeCctvLiveCamera.liveUrl ? (
+                              <a href={activeCctvLiveCamera.liveUrl} target="_blank" rel="noreferrer">
+                                {lang === "km" ? "បើក Camera Link" : "Open Camera Link"}
+                              </a>
+                            ) : (
+                              <small>{lang === "km" ? "បន្ថែម browser-ready live URL ឬ stream bridge ដើម្បីបើក live ក្នុង software." : "Add a browser-ready live URL or stream bridge to turn this into true in-app live video."}</small>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="cctv-live-grid cctv-live-grid-dense">
+                        {activeCctvLiveNvr.cameras.length ? activeCctvLiveNvr.cameras.slice(0, 16).map((camera) => (
+                          <article
+                            key={`cctv-live-camera-${camera.id}`}
+                            className={`cctv-live-card cctv-live-card-interactive ${activeCctvLiveCamera?.id === camera.id ? "cctv-live-card-active" : ""}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setCctvLiveFocusCameraId(camera.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setCctvLiveFocusCameraId(camera.id);
+                              }
+                            }}
+                          >
+                            {camera.snapshot ? (
+                              <img loading="lazy" decoding="async" src={camera.snapshot} alt={camera.cameraName} className="cctv-live-thumb" />
+                            ) : (
+                              <div className="cctv-live-thumb cctv-live-thumb-empty">
+                                CH {camera.channelNumber || camera.arrange || "-"}
+                              </div>
+                            )}
+                            <strong>{camera.channelName || camera.cameraName}</strong>
+                            <span className="tiny">{camera.cameraName}</span>
+                            <span className="tiny">CH {camera.channelNumber || camera.arrange || "-"}</span>
+                            <span className="tiny">{camera.status}</span>
+                          </article>
+                        )) : <div className="tiny">No cameras under this NVR yet.</div>}
+                      </div>
+                    </article>
+                  ) : null}
+                </section>
               </>
             )}
 
