@@ -1959,6 +1959,14 @@ const MAINTENANCE_TYPE_OPTIONS = [
   "Inspection",
   "Upgrade",
 ];
+const MAINTENANCE_TYPE_KM_LABEL: Record<string, string> = {
+  Preventive: "ថែទាំបង្ការ",
+  Corrective: "កែតម្រូវបញ្ហា",
+  Repair: "ជួសជុល",
+  Replacement: "ប្តូរថ្មី",
+  Inspection: "ត្រួតពិនិត្យ",
+  Upgrade: "ធ្វើឱ្យប្រសើរ",
+};
 const MAINTENANCE_CONDITION_OPTIONS = [
   "Good",
   "Working Well",
@@ -12889,8 +12897,15 @@ export default function App() {
       .sort((a, b) => b.onHand - a.onHand || inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)));
   }, [inventoryDashboardScopedRows, inventoryCampusLabel, inventoryDisplayName, inventorySearch, lang]);
   const cleaningSupplyCampusLabel = useCallback(
-    (campus: string) => inventoryCampusLabel(campus).replace(/\s*\((?:2\.1|C2\.1)\)\s*$/, ""),
-    [inventoryCampusLabel]
+    (campus: string) => {
+      const raw = String(campus || "").trim();
+      if (!raw) return "-";
+      if (raw === "Chaktomuk Campus" || raw === "Chaktomuk Campus (C2.2)" || raw === "C2" || raw === "C2.1" || raw === "C2.2") {
+        return campusLabel("Chaktomuk Campus");
+      }
+      return inventoryCampusLabel(raw).replace(/\s*\((?:2\.1|C2\.1)\)\s*$/, "");
+    },
+    [campusLabel, inventoryCampusLabel]
   );
   const inventoryDashboardCampusBalanceOptions = useMemo(
     () => inventoryDashboardCampusBalanceRows.map((row) => ({
@@ -13943,10 +13958,17 @@ export default function App() {
   const maintenanceStockOutRows = useMemo(() => {
     const targetDate = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
     const month = String(maintenanceStockOutMonth || "").trim();
+    const quickCampusFilter =
+      maintenanceQuickMode && campusFilter !== "ALL"
+        ? campusFilter
+        : maintenanceQuickMode
+          ? maintenanceQuickActiveCampus
+          : "";
     return [...inventoryVisibleTxns]
       .filter((tx) => {
         if (!isInventoryTxnUsageOut(tx.type)) return false;
         if (String(tx.approvalStatus || "").toUpperCase() === "REJECTED") return false;
+        if (quickCampusFilter && String(tx.campus || "").trim() !== quickCampusFilter) return false;
         const date = normalizeYmdInput(tx.date);
         if (!date) return false;
         if (maintenanceQuickMode) return date === targetDate;
@@ -13954,20 +13976,33 @@ export default function App() {
         return date.startsWith(`${month}-`);
       })
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
-  }, [inventoryVisibleTxns, maintenanceQuickMode, maintenanceStockOutMonth, maintenanceStockOutViewDate, todayYmd]);
+  }, [
+    inventoryVisibleTxns,
+    maintenanceQuickMode,
+    maintenanceStockOutMonth,
+    maintenanceStockOutViewDate,
+    todayYmd,
+    campusFilter,
+    maintenanceQuickActiveCampus,
+  ]);
   const maintenanceStockOutRecordDates = useMemo(() => {
     if (!maintenanceQuickMode) return [] as string[];
+    const quickCampusFilter =
+      campusFilter !== "ALL"
+        ? campusFilter
+        : maintenanceQuickActiveCampus;
     const set = new Set<string>();
     for (const tx of inventoryVisibleTxns) {
       if (!isInventoryTxnUsageOut(tx.type)) continue;
       if (String(tx.approvalStatus || "").toUpperCase() === "REJECTED") continue;
+      if (quickCampusFilter && String(tx.campus || "").trim() !== quickCampusFilter) continue;
       const date = normalizeYmdInput(tx.date);
       if (!date) continue;
       if (date > todayYmd) continue;
       set.add(date);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [inventoryVisibleTxns, maintenanceQuickMode, todayYmd]);
+  }, [inventoryVisibleTxns, maintenanceQuickMode, todayYmd, campusFilter, maintenanceQuickActiveCampus]);
   const maintenanceStockOutPrevDate = useMemo(() => {
     if (!maintenanceQuickMode) return "";
     const current = normalizeYmdInput(maintenanceStockOutViewDate) || todayYmd;
@@ -32669,6 +32704,12 @@ export default function App() {
     return String(value || "").trim().toLowerCase() === "qr_asset" ? "QR Asset Scan" : "Manual";
   }
 
+  function maintenanceTypePublicLabel(value?: string) {
+    const raw = String(value || "").trim();
+    if (!raw) return "-";
+    return lang === "km" ? (MAINTENANCE_TYPE_KM_LABEL[raw] || raw) : raw;
+  }
+
   function renderPublicQrGroup(
     key: "request" | "maintenance" | "toner" | "details",
     title: string,
@@ -32677,7 +32718,7 @@ export default function App() {
   ) {
     const isOpen = publicQrSectionsOpen[key];
     return (
-      <section className={`public-asset-group ${isOpen ? "public-asset-group-open" : ""}`}>
+      <section className={`public-asset-group public-asset-group-${key} ${isOpen ? "public-asset-group-open" : ""}`}>
         <button
           type="button"
           className="public-asset-group-toggle"
@@ -32952,8 +32993,8 @@ export default function App() {
                         "Maintenance Record",
                         <>
                           <div className="form-grid">
-                            <label className="field">
-                              <span>Date</span>
+                            <label className="field public-asset-date-field">
+                              <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
                               <input
                                 className="input"
                                 type="date"
@@ -32963,14 +33004,16 @@ export default function App() {
                               />
                             </label>
                             <label className="field">
-                              <span>Type</span>
+                              <span>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}</span>
                               <select
                                 className="input"
                                 value={publicQrRecordForm.type}
                                 onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, type: e.target.value }))}
                               >
                                 {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
-                                  <option key={`public-qr-maintenance-type-${opt}`} value={opt}>{opt}</option>
+                                  <option key={`public-qr-maintenance-type-${opt}`} value={opt}>
+                                    {maintenanceTypePublicLabel(opt)}
+                                  </option>
                                 ))}
                               </select>
                             </label>
