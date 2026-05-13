@@ -10505,6 +10505,10 @@ export default function App() {
     () => maintenanceQuickMode && allowedCampusOptions.length > 1,
     [maintenanceQuickMode, allowedCampusOptions.length]
   );
+  const maintenanceQuickInventoryCampusAllEnabled = useMemo(
+    () => maintenanceQuickMode && tab === "inventory" && allowedCampusOptions.length > 1,
+    [maintenanceQuickMode, tab, allowedCampusOptions.length]
+  );
   const maintenanceLockedCampus = useMemo(() => {
     if (!maintenanceQuickMode) return "";
     if (allowedCampuses.length === 1) return allowedCampuses[0];
@@ -10531,13 +10535,20 @@ export default function App() {
     if (!maintenanceQuickMode) return;
     if (!maintenanceQuickActiveCampus) return;
     if (campusFilter === "ALL") {
+      if (maintenanceQuickInventoryCampusAllEnabled) return;
       setCampusFilter(maintenanceQuickActiveCampus);
       return;
     }
     if (maintenanceLockedCampus && campusFilter !== maintenanceLockedCampus) {
       setCampusFilter(maintenanceLockedCampus);
     }
-  }, [maintenanceQuickMode, maintenanceLockedCampus, maintenanceQuickActiveCampus, campusFilter]);
+  }, [
+    maintenanceQuickMode,
+    maintenanceLockedCampus,
+    maintenanceQuickActiveCampus,
+    maintenanceQuickInventoryCampusAllEnabled,
+    campusFilter,
+  ]);
   useEffect(() => {
     if (!maintenanceQuickMode) return;
     if (!maintenanceQuickActiveCampus) return;
@@ -11120,6 +11131,36 @@ export default function App() {
     }),
     [campusLabel]
   );
+  const maintenanceQuickCampusPickerOptions = useMemo(
+    () => [
+      ...(maintenanceQuickInventoryCampusAllEnabled
+        ? [{
+            value: "ALL",
+            label: t.allCampuses,
+            description: "",
+            searchText: `${t.allCampuses} ALL`,
+          }]
+        : []),
+      ...allowedCampusOptions.map(quickCampusPickerOption),
+    ],
+    [allowedCampusOptions, maintenanceQuickInventoryCampusAllEnabled, quickCampusPickerOption, t.allCampuses]
+  );
+  const maintenanceQuickCampusPickerValue = maintenanceQuickInventoryCampusAllEnabled
+    ? campusFilter
+    : maintenanceQuickActiveCampus;
+  const handleMaintenanceQuickCampusChange = useCallback(
+    (value: string) => {
+      setCampusFilter(value);
+      if (value !== "ALL") {
+        setMaintenanceRecordCampusFilter(value);
+      }
+    },
+    []
+  );
+  const maintenanceQuickCampusDisplayLabel =
+    maintenanceQuickInventoryCampusAllEnabled && campusFilter === "ALL"
+      ? t.allCampuses
+      : campusLabel(maintenanceQuickActiveCampus);
   const rentalPrintSummaryRows = useMemo(
     () =>
       rentalCampusReportBlocks.flatMap((block) =>
@@ -13283,13 +13324,16 @@ export default function App() {
   const inventoryDailyItemOptions = useMemo(() => {
     const q = String(inventoryDailyForm.search || "").trim().toLowerCase();
     let list = [...inventoryVisibleItems];
+    if (maintenanceQuickMode && campusFilter !== "ALL") {
+      list = list.filter((item) => String(item.campus || "").trim() === campusFilter);
+    }
     if (q) {
       list = list.filter((item) =>
         `${item.itemCode} ${item.itemName} ${inventoryAliasText(item.itemName)} ${item.location} ${item.vendor || ""}`.toLowerCase().includes(q)
       );
     }
     return list.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryVisibleItems, inventoryDailyForm.search]);
+  }, [inventoryVisibleItems, inventoryDailyForm.search, maintenanceQuickMode, campusFilter]);
   const inventoryDailyOutGalleryItems = useMemo(
     () =>
       inventoryDailyItemOptions.filter((item) =>
@@ -33549,12 +33593,9 @@ export default function App() {
               {maintenanceQuickMode ? (
                 maintenanceQuickCampusSelectionEnabled ? (
                   <LocationPicker
-                    value={maintenanceQuickActiveCampus}
-                    options={allowedCampusOptions.map(quickCampusPickerOption)}
-                    onChange={(value) => {
-                      setCampusFilter(value);
-                      setMaintenanceRecordCampusFilter(value);
-                    }}
+                    value={maintenanceQuickCampusPickerValue}
+                    options={maintenanceQuickCampusPickerOptions}
+                    onChange={handleMaintenanceQuickCampusChange}
                     placeholder={t.campus}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
@@ -33851,13 +33892,12 @@ export default function App() {
                   {maintenanceQuickMode ? (
                     maintenanceQuickCampusSelectionEnabled ? (
                       <LocationPicker
-                        value={maintenanceQuickActiveCampus}
+                        value={maintenanceQuickCampusPickerValue}
                         onChange={(value) => {
-                          setCampusFilter(value);
-                          setMaintenanceRecordCampusFilter(value);
+                          handleMaintenanceQuickCampusChange(value);
                           setMobileMenuOpen(false);
                         }}
-                        options={allowedCampusOptions.map(quickCampusPickerOption)}
+                        options={maintenanceQuickCampusPickerOptions}
                         placeholder={t.campus}
                         searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                         emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
@@ -34147,12 +34187,9 @@ export default function App() {
                         <span>{t.campus}</span>
                         {maintenanceQuickCampusSelectionEnabled ? (
                           <LocationPicker
-                            value={maintenanceQuickActiveCampus}
-                            options={allowedCampusOptions.map(quickCampusPickerOption)}
-                            onChange={(value) => {
-                              setCampusFilter(value);
-                              setMaintenanceRecordCampusFilter(value);
-                            }}
+                            value={maintenanceQuickCampusPickerValue}
+                            options={maintenanceQuickCampusPickerOptions}
+                            onChange={handleMaintenanceQuickCampusChange}
                             placeholder={t.campus}
                             searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                             emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
@@ -34204,13 +34241,13 @@ export default function App() {
                         </p>
                       </div>
                       <span className="maintenance-quick-campus-chip">
-                        {campusLabel(maintenanceQuickActiveCampus)}
+                        {maintenanceQuickCampusDisplayLabel}
                       </span>
                     </div>
                     <div className="maintenance-quick-facts">
                       <article className="maintenance-quick-fact">
                         <span>{t.campus}</span>
-                        <strong>{campusLabel(maintenanceQuickActiveCampus)}</strong>
+                        <strong>{maintenanceQuickCampusDisplayLabel}</strong>
                       </article>
                       <article className="maintenance-quick-fact">
                         <span>{t.date}</span>
@@ -34232,12 +34269,9 @@ export default function App() {
                         <span>{t.campus}</span>
                         {maintenanceQuickCampusSelectionEnabled ? (
                           <LocationPicker
-                            value={maintenanceQuickActiveCampus}
-                            options={allowedCampusOptions.map(quickCampusPickerOption)}
-                            onChange={(value) => {
-                              setCampusFilter(value);
-                              setMaintenanceRecordCampusFilter(value);
-                            }}
+                            value={maintenanceQuickCampusPickerValue}
+                            options={maintenanceQuickCampusPickerOptions}
+                            onChange={handleMaintenanceQuickCampusChange}
                             placeholder={t.campus}
                             searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                             emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
@@ -46599,7 +46633,7 @@ export default function App() {
                   <div className="maintenance-quick-summary-strip">
                     <div className="maintenance-quick-summary-pill">
                       <span>{lang === "km" ? "សាខា" : "Campus"}</span>
-                      <strong>{campusLabel(maintenanceQuickActiveCampus)}</strong>
+                      <strong>{maintenanceQuickCampusDisplayLabel}</strong>
                     </div>
                     <div className="maintenance-quick-summary-pill">
                       <span>{lang === "km" ? "ថ្ងៃ" : "Date"}</span>
@@ -46611,7 +46645,7 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <span className="maintenance-quick-campus-chip">{campusLabel(maintenanceQuickActiveCampus)}</span>
+                  <span className="maintenance-quick-campus-chip">{maintenanceQuickCampusDisplayLabel}</span>
                 )}
               </div>
               <div className="asset-actions maintenance-quick-mode-toggle" style={{ gap: 8 }}>
@@ -46638,12 +46672,9 @@ export default function App() {
                   <span>{lang === "km" ? "សាខា" : "Campus"}</span>
                   {maintenanceQuickCampusSelectionEnabled ? (
                     <LocationPicker
-                      value={maintenanceQuickActiveCampus}
-                      onChange={(value) => {
-                        setCampusFilter(value);
-                        setMaintenanceRecordCampusFilter(value);
-                      }}
-                      options={allowedCampusOptions.map(quickCampusPickerOption)}
+                      value={maintenanceQuickCampusPickerValue}
+                      onChange={handleMaintenanceQuickCampusChange}
+                      options={maintenanceQuickCampusPickerOptions}
                       placeholder={t.campus}
                       searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                       emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
