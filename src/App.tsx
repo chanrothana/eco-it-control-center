@@ -21577,7 +21577,7 @@ export default function App() {
           }
         </style>
       </head>
-      <body>
+      <body class="${reportType === "qr_labels" ? "qr-print-mode" : ""}">
         <div class="sheet">
           <div class="topbar">
             <img class="logo" src="${PURCHASE_ORDER_LOGO_URL}" alt="Eco International School logo" />
@@ -29724,6 +29724,7 @@ export default function App() {
       if (main?.assetId) setMainByCode.set(setCode, main.assetId);
     }
     return [...assets]
+      .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
       .map((asset) => {
         const setCode = String(asset.setCode || "").trim() || "-";
         const parentAssetId = String(asset.parentAssetId || "").trim();
@@ -32137,18 +32138,25 @@ export default function App() {
           }
           th:hover .preview-column-resizer::after { background: rgba(117, 80, 36, 0.4); }
           .is-preview-resizing, .is-preview-resizing * { cursor: col-resize !important; user-select: none !important; }
-          .qr-sticker-grid { display: grid; grid-template-columns: repeat(7, 82px); column-gap: 4px; row-gap: 5px; margin-top: 6px; width: 100%; justify-content: space-between; }
-          .qr-sticker-wrap { width: 82px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
-          .qr-sticker-user, .qr-sticker-item, .qr-sticker-detail { width: 82px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .qr-sticker-user { min-height: 8px; font-size: 5.8px; line-height: 1.02; font-weight: 700; color: #1b2d23; }
-          .qr-sticker-item { min-height: 8px; font-size: 5.9px; line-height: 1.02; font-weight: 800; color: #314238; }
-          .qr-sticker-detail { min-height: 8px; font-size: 5.5px; line-height: 1.02; font-weight: 700; color: #5a695e; }
-          .qr-sticker { width: 82px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 3px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
-          .qr-sticker-qr { width: 62px; height: 62px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
-          .qr-sticker-qr img { width: 58px; height: 58px; object-fit: contain; display: block; }
-          .qr-sticker-divider { width: 62px; height: 1px; background: #1b2d23; }
-          .qr-sticker-id { width: 62px; min-height: 11px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 1px; font-size: 6px; line-height: 1; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          @page { size: A4 landscape; margin: 6mm; }
+          body.qr-print-mode { background: #fff; }
+          body.qr-print-mode .preview-shell { padding: 8px 10px 10px; }
+          body.qr-print-mode h1 { margin-bottom: 2px; font-size: 16px; }
+          body.qr-print-mode h2 { font-size: 12px; }
+          body.qr-print-mode .report-head { margin-bottom: 3px; align-items: center; }
+          body.qr-print-mode .report-head-logo { width: 90px; max-width: 90px; }
+          body.qr-print-mode p.meta { margin: 0 0 4px; font-size: 9px; }
+          .qr-sticker-grid { display: grid; grid-template-columns: repeat(8, 72px); column-gap: 3px; row-gap: 4px; margin-top: 4px; width: 100%; justify-content: space-between; }
+          .qr-sticker-wrap { width: 72px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
+          .qr-sticker-user, .qr-sticker-item, .qr-sticker-detail { width: 72px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .qr-sticker-user { min-height: 7px; font-size: 5px; line-height: 1; font-weight: 700; color: #1b2d23; }
+          .qr-sticker-item { min-height: 7px; font-size: 5.1px; line-height: 1; font-weight: 800; color: #314238; }
+          .qr-sticker-detail { min-height: 7px; font-size: 4.8px; line-height: 1; font-weight: 700; color: #5a695e; }
+          .qr-sticker { width: 72px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 2px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
+          .qr-sticker-qr { width: 54px; height: 54px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
+          .qr-sticker-qr img { width: 50px; height: 50px; object-fit: contain; display: block; }
+          .qr-sticker-divider { width: 54px; height: 1px; background: #1b2d23; }
+          .qr-sticker-id { width: 54px; min-height: 10px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 1px; font-size: 5.2px; line-height: 1; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          @page { size: A4 landscape; margin: 3mm; }
           @media print {
             body { margin: 0; background: #fff; }
             .preview-toolbar { display: none !important; }
