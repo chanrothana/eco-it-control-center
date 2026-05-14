@@ -1530,6 +1530,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "cctv.dashboard", labelEn: "Dashboard", labelKm: "ផ្ទាំងសង្ខេប" },
       { key: "cctv.cameras", labelEn: "Camera List", labelKm: "បញ្ជីកាមេរ៉ា" },
       { key: "cctv.live", labelEn: "Live View", labelKm: "មើលបន្តផ្ទាល់" },
+      { key: "cctv.replay", labelEn: "Replay", labelKm: "មើលកំណត់ត្រា" },
       { key: "cctv.service", labelEn: "Service History", labelKm: "ប្រវត្តិជួសជុល" },
       { key: "cctv.changes", labelEn: "Change Log", labelKm: "ប្រវត្តិបម្លែង" },
       { key: "cctv.reports", labelEn: "Reports", labelKm: "របាយការណ៍" },
@@ -7634,7 +7635,7 @@ export default function App() {
   const [classroomRoomFilter, setClassroomRoomFilter] = useState("ALL");
   const [classroomQuery, setClassroomQuery] = useState("");
   const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
-  const [cctvView, setCctvView] = useState<"dashboard" | "cameras" | "live" | "service" | "changes" | "reports">("dashboard");
+  const [cctvView, setCctvView] = useState<"dashboard" | "cameras" | "live" | "replay" | "service" | "changes" | "reports">("dashboard");
   const [ticketsView, setTicketsView] = useState<"queue" | "register">("queue");
   const [cctvCameraRecords, setCctvCameraRecords] = useState<CctvCameraRecord[]>(() => readCctvCameraFallback());
   const [cctvServiceHistory, setCctvServiceHistory] = useState<CctvServiceHistoryRecord[]>(() => readCctvServiceFallback());
@@ -7643,8 +7644,16 @@ export default function App() {
   const [cctvStatusFilter, setCctvStatusFilter] = useState("ALL");
   const [cctvQuery, setCctvQuery] = useState("");
   const [cctvLiveCampusFilter, setCctvLiveCampusFilter] = useState("ALL");
+  const [cctvLiveScope, setCctvLiveScope] = useState<"ALL" | "NVR">("ALL");
+  const [cctvLiveLayout, setCctvLiveLayout] = useState<1 | 4 | 8 | 16>(4);
   const [cctvLiveNvrKey, setCctvLiveNvrKey] = useState("");
   const [cctvLiveFocusCameraId, setCctvLiveFocusCameraId] = useState<number | null>(null);
+  const [cctvReplayCampusFilter, setCctvReplayCampusFilter] = useState("ALL");
+  const [cctvReplayNvrFilter, setCctvReplayNvrFilter] = useState("ALL");
+  const [cctvReplayCameraId, setCctvReplayCameraId] = useState<number | "ALL">("ALL");
+  const [cctvReplayDate, setCctvReplayDate] = useState(() => toYmd(new Date()));
+  const [cctvReplayFromTime, setCctvReplayFromTime] = useState("08:00");
+  const [cctvReplayToTime, setCctvReplayToTime] = useState("09:00");
   const [editingCctvCameraId, setEditingCctvCameraId] = useState<number | null>(null);
   const [editingCctvServiceId, setEditingCctvServiceId] = useState<number | null>(null);
   const [editingCctvChangeId, setEditingCctvChangeId] = useState<number | null>(null);
@@ -7983,6 +7992,16 @@ export default function App() {
               onSelect: () =>
                 startTabTransition(() => {
                   setCctvView("live");
+                  setTab("cctv");
+                }),
+            },
+            {
+              key: "cctv.replay",
+              label: lang === "km" ? "មើលកំណត់ត្រា" : "Replay",
+              active: cctvView === "replay",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setCctvView("replay");
                   setTab("cctv");
                 }),
             },
@@ -9815,9 +9834,37 @@ export default function App() {
     () => cctvLiveNvrRows.find((row) => row.key === cctvLiveNvrKey) || cctvLiveNvrRows[0] || null,
     [cctvLiveNvrKey, cctvLiveNvrRows]
   );
+  const cctvLiveAllFilteredCameras = useMemo(
+    () =>
+      cctvLiveNvrRows
+        .flatMap((row) => row.cameras)
+        .sort((a, b) => {
+          const campusCompare = compareCampusByCode(String(a.campus || "").trim(), String(b.campus || "").trim());
+          if (campusCompare) return campusCompare;
+          const nvrCompare = String(a.nvrName || "").localeCompare(String(b.nvrName || ""), undefined, { numeric: true, sensitivity: "base" });
+          if (nvrCompare) return nvrCompare;
+          const channelCompare = Number(a.channelNumber || a.arrange || 0) - Number(b.channelNumber || b.arrange || 0);
+          if (channelCompare) return channelCompare;
+          return String(a.cameraName || "").localeCompare(String(b.cameraName || ""), undefined, { numeric: true, sensitivity: "base" });
+        }),
+    [cctvLiveNvrRows]
+  );
+  const cctvLiveSourceCameras = useMemo(
+    () => (cctvLiveScope === "ALL" ? cctvLiveAllFilteredCameras : activeCctvLiveNvr?.cameras || []),
+    [activeCctvLiveNvr?.cameras, cctvLiveAllFilteredCameras, cctvLiveScope]
+  );
+  const cctvLiveVisibleCameras = useMemo(
+    () => cctvLiveSourceCameras.slice(0, cctvLiveLayout),
+    [cctvLiveLayout, cctvLiveSourceCameras]
+  );
+  const cctvLiveGridColumns = useMemo(() => {
+    if (cctvLiveLayout === 1) return 1;
+    if (cctvLiveLayout === 4) return 2;
+    return 4;
+  }, [cctvLiveLayout]);
   const activeCctvLiveCamera = useMemo(
-    () => activeCctvLiveNvr?.cameras.find((camera) => camera.id === cctvLiveFocusCameraId) || activeCctvLiveNvr?.cameras[0] || null,
-    [activeCctvLiveNvr, cctvLiveFocusCameraId]
+    () => cctvLiveSourceCameras.find((camera) => camera.id === cctvLiveFocusCameraId) || cctvLiveSourceCameras[0] || null,
+    [cctvLiveFocusCameraId, cctvLiveSourceCameras]
   );
   useEffect(() => {
     if (cctvLiveCampusFilter === "ALL") return;
@@ -9835,14 +9882,74 @@ export default function App() {
     }
   }, [cctvLiveNvrKey, cctvLiveNvrRows]);
   useEffect(() => {
-    if (!activeCctvLiveNvr?.cameras.length) {
+    if (!cctvLiveSourceCameras.length) {
       if (cctvLiveFocusCameraId !== null) setCctvLiveFocusCameraId(null);
       return;
     }
-    if (!activeCctvLiveNvr.cameras.some((camera) => camera.id === cctvLiveFocusCameraId)) {
-      setCctvLiveFocusCameraId(activeCctvLiveNvr.cameras[0].id);
+    if (!cctvLiveSourceCameras.some((camera) => camera.id === cctvLiveFocusCameraId)) {
+      setCctvLiveFocusCameraId(cctvLiveSourceCameras[0].id);
     }
-  }, [activeCctvLiveNvr, cctvLiveFocusCameraId]);
+  }, [cctvLiveFocusCameraId, cctvLiveSourceCameras]);
+  const cctvReplayCampusOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          cctvCameraRecords.map((row) => String(row.campus || "").trim()).filter(Boolean)
+        )
+      ).sort(compareCampusByCode),
+    [cctvCameraRecords]
+  );
+  const cctvReplayNvrOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          cctvCameraRecords
+            .filter((row) => (cctvReplayCampusFilter === "ALL" ? true : String(row.campus || "").trim() === cctvReplayCampusFilter))
+            .map((row) => String(row.nvrName || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })),
+    [cctvCameraRecords, cctvReplayCampusFilter]
+  );
+  const cctvReplayCameraOptions = useMemo(
+    () =>
+      cctvCameraRecords
+        .filter((row) => (cctvReplayCampusFilter === "ALL" ? true : String(row.campus || "").trim() === cctvReplayCampusFilter))
+        .filter((row) => (cctvReplayNvrFilter === "ALL" ? true : String(row.nvrName || "").trim() === cctvReplayNvrFilter))
+        .sort((a, b) => {
+          const campusCompare = compareCampusByCode(String(a.campus || "").trim(), String(b.campus || "").trim());
+          if (campusCompare) return campusCompare;
+          const nvrCompare = String(a.nvrName || "").localeCompare(String(b.nvrName || ""), undefined, { numeric: true, sensitivity: "base" });
+          if (nvrCompare) return nvrCompare;
+          return Number(a.channelNumber || a.arrange || 0) - Number(b.channelNumber || b.arrange || 0);
+        }),
+    [cctvCameraRecords, cctvReplayCampusFilter, cctvReplayNvrFilter]
+  );
+  const cctvReplayVisibleCameras = useMemo(
+    () => (cctvReplayCameraId === "ALL" ? cctvReplayCameraOptions : cctvReplayCameraOptions.filter((row) => row.id === cctvReplayCameraId)),
+    [cctvReplayCameraId, cctvReplayCameraOptions]
+  );
+  const cctvReplayActiveCamera = useMemo(
+    () => cctvReplayVisibleCameras[0] || cctvReplayCameraOptions[0] || null,
+    [cctvReplayCameraOptions, cctvReplayVisibleCameras]
+  );
+  const cctvReplayWindowLabel = useMemo(() => {
+    const start = `${cctvReplayDate} ${cctvReplayFromTime}`;
+    const end = `${cctvReplayDate} ${cctvReplayToTime}`;
+    return `${formatDateTime(start)} - ${formatTimeOnly(end)}`;
+  }, [cctvReplayDate, cctvReplayFromTime, cctvReplayToTime]);
+  useEffect(() => {
+    if (cctvReplayCampusFilter === "ALL") return;
+    if (!cctvReplayCampusOptions.includes(cctvReplayCampusFilter)) setCctvReplayCampusFilter("ALL");
+  }, [cctvReplayCampusFilter, cctvReplayCampusOptions]);
+  useEffect(() => {
+    if (cctvReplayNvrFilter === "ALL") return;
+    if (!cctvReplayNvrOptions.includes(cctvReplayNvrFilter)) setCctvReplayNvrFilter("ALL");
+  }, [cctvReplayNvrFilter, cctvReplayNvrOptions]);
+  useEffect(() => {
+    if (cctvReplayCameraId === "ALL") return;
+    if (!cctvReplayCameraOptions.some((row) => row.id === cctvReplayCameraId)) setCctvReplayCameraId("ALL");
+  }, [cctvReplayCameraId, cctvReplayCameraOptions]);
   const cctvFilteredServiceHistory = useMemo(() => {
     return [...cctvServiceHistory]
       .filter((entry) => {
@@ -15270,6 +15377,7 @@ export default function App() {
       "dashboard",
       "cameras",
       "live",
+      "replay",
       "service",
       "changes",
       "reports",
@@ -40014,6 +40122,7 @@ export default function App() {
               <button className={`tab ${cctvView === "dashboard" ? "tab-active" : ""}`} onClick={() => setCctvView("dashboard")}>Dashboard</button>
               <button className={`tab ${cctvView === "cameras" ? "tab-active" : ""}`} onClick={() => setCctvView("cameras")}>Camera List</button>
               <button className={`tab ${cctvView === "live" ? "tab-active" : ""}`} onClick={() => setCctvView("live")}>Live View</button>
+              <button className={`tab ${cctvView === "replay" ? "tab-active" : ""}`} onClick={() => setCctvView("replay")}>Replay</button>
               <button className={`tab ${cctvView === "service" ? "tab-active" : ""}`} onClick={() => setCctvView("service")}>Service History</button>
               <button className={`tab ${cctvView === "changes" ? "tab-active" : ""}`} onClick={() => setCctvView("changes")}>Change Log</button>
               <button className={`tab ${cctvView === "reports" ? "tab-active" : ""}`} onClick={() => setCctvView("reports")}>Reports</button>
@@ -40395,6 +40504,22 @@ export default function App() {
                         ))}
                       </select>
                     </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "របៀបមើល" : "View Mode"}</span>
+                      <select className="input" value={cctvLiveScope} onChange={(e) => setCctvLiveScope(e.target.value as "ALL" | "NVR")}>
+                        <option value="ALL">{lang === "km" ? "មើលគ្រប់កាមេរ៉ាតាមតម្រង" : "All Filtered Cameras"}</option>
+                        <option value="NVR">{lang === "km" ? "មើលតែ NVR ដែលបានជ្រើស" : "Selected NVR Only"}</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "Layout" : "Layout"}</span>
+                      <select className="input" value={String(cctvLiveLayout)} onChange={(e) => setCctvLiveLayout(Number(e.target.value) as 1 | 4 | 8 | 16)}>
+                        <option value="1">1</option>
+                        <option value="4">4</option>
+                        <option value="8">8</option>
+                        <option value="16">16</option>
+                      </select>
+                    </label>
                     <div className="cctv-live-summary-strip">
                       <div className="cctv-live-summary-pill"><span>{lang === "km" ? "Campus" : "Campuses"}</span><strong>{cctvLiveSummary.campuses}</strong></div>
                       <div className="cctv-live-summary-pill"><span>NVR</span><strong>{cctvLiveSummary.nvrs}</strong></div>
@@ -40440,16 +40565,24 @@ export default function App() {
                     <article className="cctv-live-stage">
                       <div className="cctv-live-stage-top">
                         <div>
-                          <h3>{activeCctvLiveNvr.nvrName}</h3>
+                          <h3>{cctvLiveScope === "ALL" ? (lang === "km" ? "All Campus Live View" : "All Campus Live View") : activeCctvLiveNvr.nvrName}</h3>
                           <div className="tiny">
-                            {campusLabel(activeCctvLiveNvr.campus)} • {activeCctvLiveNvr.brand} • {activeCctvLiveNvr.total} {lang === "km" ? "កាមេរ៉ា" : "cameras"}
+                            {cctvLiveScope === "ALL"
+                              ? `${lang === "km" ? "គ្រប់ Campus" : "All Campuses"} • ${cctvLiveVisibleCameras.length}/${cctvLiveSourceCameras.length} ${lang === "km" ? "កាមេរ៉ាបានបង្ហាញ" : "cameras shown"} • Layout ${cctvLiveLayout}`
+                              : `${campusLabel(activeCctvLiveNvr.campus)} • ${activeCctvLiveNvr.brand} • ${cctvLiveVisibleCameras.length}/${activeCctvLiveNvr.total} ${lang === "km" ? "កាមេរ៉ាបានបង្ហាញ" : "cameras shown"}`}
                           </div>
                         </div>
-                        {activeCctvLiveNvr.loginUrl ? (
+                        {cctvLiveScope === "NVR" && activeCctvLiveNvr.loginUrl ? (
                           <a className="btn-primary btn-small" href={activeCctvLiveNvr.loginUrl} target="_blank" rel="noreferrer">
                             {lang === "km" ? "បើក NVR" : "Open NVR"}
                           </a>
-                        ) : null}
+                        ) : (
+                          <div className="tiny">
+                            {lang === "km"
+                              ? "អាចប្តូរ layout ទៅ 1 / 4 / 8 / 16 ហើយចុចកាមេរ៉ាមួយដើម្បីពង្រីក។"
+                              : "Switch layout to 1 / 4 / 8 / 16, then click any camera tile to focus it."}
+                          </div>
+                        )}
                       </div>
 
                       {activeCctvLiveCamera ? (
@@ -40474,6 +40607,7 @@ export default function App() {
                           <div className="cctv-live-focus-copy">
                             <strong>{activeCctvLiveCamera.channelName || activeCctvLiveCamera.cameraName}</strong>
                             <span>{activeCctvLiveCamera.cameraName}</span>
+                            <span>{campusLabel(activeCctvLiveCamera.campus || "-")} • {activeCctvLiveCamera.nvrName || "-"}</span>
                             <span>{activeCctvLiveCamera.site}</span>
                             <span>{activeCctvLiveCamera.ipAddress}{activeCctvLiveCamera.serverPort ? `:${activeCctvLiveCamera.serverPort}` : ""}</span>
                             <span>{activeCctvLiveCamera.status}</span>
@@ -40488,8 +40622,11 @@ export default function App() {
                         </div>
                       ) : null}
 
-                      <div className="cctv-live-grid cctv-live-grid-dense">
-                        {activeCctvLiveNvr.cameras.length ? activeCctvLiveNvr.cameras.slice(0, 16).map((camera) => (
+                      <div
+                        className="cctv-live-grid cctv-live-grid-dense"
+                        style={{ gridTemplateColumns: `repeat(${cctvLiveGridColumns}, minmax(0, 1fr))` }}
+                      >
+                        {cctvLiveVisibleCameras.length ? cctvLiveVisibleCameras.map((camera) => (
                           <article
                             key={`cctv-live-camera-${camera.id}`}
                             className={`cctv-live-card cctv-live-card-interactive ${activeCctvLiveCamera?.id === camera.id ? "cctv-live-card-active" : ""}`}
@@ -40512,13 +40649,147 @@ export default function App() {
                             )}
                             <strong>{camera.channelName || camera.cameraName}</strong>
                             <span className="tiny">{camera.cameraName}</span>
+                            <span className="tiny">{campusLabel(camera.campus || "-")} • {camera.nvrName || "-"}</span>
                             <span className="tiny">CH {camera.channelNumber || camera.arrange || "-"}</span>
                             <span className="tiny">{camera.status}</span>
                           </article>
-                        )) : <div className="tiny">No cameras under this NVR yet.</div>}
+                        )) : <div className="tiny">{lang === "km" ? "មិនទាន់មានកាមេរ៉ាតាមតម្រងនេះទេ។" : "No cameras available for this live filter yet."}</div>}
                       </div>
                     </article>
                   ) : null}
+                </section>
+              </>
+            )}
+
+            {cctvView === "replay" && (
+              <>
+                <div className="panel-row">
+                  <div>
+                    <h2>CCTV Replay</h2>
+                    <p className="tiny">Choose campus, NVR, camera, and time window here. This replay screen is ready for Dahua/Hikvision recorded-video integration.</p>
+                  </div>
+                </div>
+                <section className="cctv-live-layout">
+                  <div className="cctv-live-toolbar">
+                    <label className="field">
+                      <span>{lang === "km" ? "Campus" : "Campus"}</span>
+                      <select className="input" value={cctvReplayCampusFilter} onChange={(e) => setCctvReplayCampusFilter(e.target.value)}>
+                        <option value="ALL">{t.allCampuses}</option>
+                        {cctvReplayCampusOptions.map((campus) => (
+                          <option key={`cctv-replay-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>NVR</span>
+                      <select className="input" value={cctvReplayNvrFilter} onChange={(e) => setCctvReplayNvrFilter(e.target.value)}>
+                        <option value="ALL">{lang === "km" ? "គ្រប់ NVR" : "All NVRs"}</option>
+                        {cctvReplayNvrOptions.map((nvr) => (
+                          <option key={`cctv-replay-nvr-${nvr}`} value={nvr}>{nvr}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "កាមេរ៉ា" : "Camera"}</span>
+                      <select className="input" value={String(cctvReplayCameraId)} onChange={(e) => setCctvReplayCameraId(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}>
+                        <option value="ALL">{lang === "km" ? "គ្រប់កាមេរ៉ាតាមតម្រង" : "All Filtered Cameras"}</option>
+                        {cctvReplayCameraOptions.map((camera) => (
+                          <option key={`cctv-replay-camera-${camera.id}`} value={camera.id}>
+                            {`${campusLabel(camera.campus)} • ${camera.nvrName} • ${camera.channelName || camera.cameraName}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
+                      <input type="date" className="input" value={cctvReplayDate} onChange={(e) => setCctvReplayDate(e.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ចាប់ពីម៉ោង" : "From Time"}</span>
+                      <input type="time" className="input" value={cctvReplayFromTime} onChange={(e) => setCctvReplayFromTime(e.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ដល់ម៉ោង" : "To Time"}</span>
+                      <input type="time" className="input" value={cctvReplayToTime} onChange={(e) => setCctvReplayToTime(e.target.value)} />
+                    </label>
+                  </div>
+
+                  <article className="cctv-live-stage">
+                    <div className="cctv-live-stage-top">
+                      <div>
+                        <h3>{lang === "km" ? "Replay Viewer" : "Replay Viewer"}</h3>
+                        <div className="tiny">
+                          {cctvReplayWindowLabel} • {cctvReplayVisibleCameras.length} {lang === "km" ? "កាមេរ៉ា" : "camera(s)"} {lang === "km" ? "តាមតម្រង" : "in filter"}
+                        </div>
+                      </div>
+                      {cctvReplayActiveCamera?.liveUrl ? (
+                        <a className="btn-primary btn-small" href={cctvReplayActiveCamera.liveUrl} target="_blank" rel="noreferrer">
+                          {lang === "km" ? "បើក Camera Link" : "Open Camera Link"}
+                        </a>
+                      ) : null}
+                    </div>
+
+                    <div className="cctv-live-focus-panel">
+                      <div className="cctv-live-focus-preview">
+                        {cctvReplayActiveCamera?.snapshot ? (
+                          <img
+                            loading="lazy"
+                            decoding="async"
+                            src={cctvReplayActiveCamera.snapshot}
+                            alt={cctvReplayActiveCamera.cameraName}
+                            className="cctv-live-thumb"
+                          />
+                        ) : (
+                          <div className="cctv-live-thumb cctv-live-thumb-empty">
+                            {lang === "km" ? "Replay stream នឹងបង្ហាញទីនេះ" : "Replay stream will appear here"}
+                          </div>
+                        )}
+                      </div>
+                      <div className="cctv-live-focus-copy">
+                        <strong>{cctvReplayActiveCamera?.channelName || cctvReplayActiveCamera?.cameraName || "-"}</strong>
+                        <span>{cctvReplayActiveCamera?.cameraName || "-"}</span>
+                        <span>{campusLabel(cctvReplayActiveCamera?.campus || "-")} • {cctvReplayActiveCamera?.nvrName || "-"}</span>
+                        <span>{cctvReplayActiveCamera?.site || "-"}</span>
+                        <span>{cctvReplayActiveCamera?.ipAddress ? `${cctvReplayActiveCamera.ipAddress}${cctvReplayActiveCamera.serverPort ? `:${cctvReplayActiveCamera.serverPort}` : ""}` : "-"}</span>
+                        <small>
+                          {lang === "km"
+                            ? "ជំហានបន្ទាប់គឺភ្ជាប់ NVR playback API ឬ RTSP/HLS/WebRTC replay bridge ដើម្បីបង្ហាញវីដេអូកំណត់ត្រាពិតប្រាកដ។"
+                            : "Next step: connect NVR playback API or an RTSP/HLS/WebRTC replay bridge so recorded video plays directly here."}
+                        </small>
+                      </div>
+                    </div>
+
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{lang === "km" ? "Campus" : "Campus"}</th>
+                            <th>NVR</th>
+                            <th>{lang === "km" ? "កាមេរ៉ា" : "Camera"}</th>
+                            <th>{lang === "km" ? "ទីតាំង" : "Site"}</th>
+                            <th>{lang === "km" ? "ពេលវេលា Replay" : "Replay Window"}</th>
+                            <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cctvReplayVisibleCameras.length ? cctvReplayVisibleCameras.map((camera) => (
+                            <tr
+                              key={`cctv-replay-row-${camera.id}`}
+                              onClick={() => setCctvReplayCameraId(camera.id)}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <td>{campusLabel(camera.campus)}</td>
+                              <td>{camera.nvrName || "-"}</td>
+                              <td><strong>{camera.channelName || camera.cameraName}</strong><div className="tiny">CH {camera.channelNumber || camera.arrange || "-"}</div></td>
+                              <td>{camera.site || "-"}</td>
+                              <td>{cctvReplayWindowLabel}</td>
+                              <td>{camera.status}</td>
+                            </tr>
+                          )) : <tr><td colSpan={6}>{lang === "km" ? "មិនមានកាមេរ៉ាសម្រាប់ replay តាមតម្រងនេះទេ។" : "No cameras available for this replay filter."}</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
                 </section>
               </>
             )}

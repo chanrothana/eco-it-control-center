@@ -3334,7 +3334,7 @@ h2 {
 
 .cctv-live-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(180px, 220px)) minmax(0, 1fr);
   gap: 16px;
   align-items: end;
 }
