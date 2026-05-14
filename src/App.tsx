@@ -917,7 +917,9 @@ type VaultCctvRecord = {
   site: string;
   nvrName: string;
   loginUrl: string;
+  ipAddress?: string;
   username: string;
+  password?: string;
   cameraGroup?: string;
   retentionDays?: number;
   lastAngleReview?: string;
@@ -1571,7 +1573,10 @@ const MENU_ACCESS_TREE: Array<{
     module: "tickets",
     labelEn: "Work Orders",
     labelKm: "ការងារបញ្ជា",
-    children: [{ key: "tickets.main", labelEn: "Work Order Queue", labelKm: "បញ្ជីការងារ" }],
+    children: [
+      { key: "tickets.queue", labelEn: "Work Order Queue", labelKm: "បញ្ជីការងារ" },
+      { key: "tickets.register", labelEn: "Register Work Order", labelKm: "បង្កើតការងារ" },
+    ],
   },
   {
     module: "schedule",
@@ -4009,7 +4014,9 @@ function normalizeVaultCctvRecords(input: unknown): VaultCctvRecord[] {
       site: String(row.site || "").trim(),
       nvrName: String(row.nvrName || "").trim(),
       loginUrl: String(row.loginUrl || "").trim(),
+      ipAddress: String(row.ipAddress || "").trim() || extractHostFromUrl(String(row.loginUrl || "").trim()),
       username: String(row.username || "").trim(),
+      password: String(row.password || "").trim(),
       cameraGroup: String(row.cameraGroup || "").trim(),
       retentionDays: Number(row.retentionDays || 0),
       lastAngleReview: String(row.lastAngleReview || "").trim(),
@@ -4052,6 +4059,17 @@ function normalizeCctvCameraRecords(input: unknown): CctvCameraRecord[] {
       created: String(row.created || "").trim() || new Date().toISOString(),
     }))
     .filter((row) => row.campus && row.site && row.cameraName);
+}
+
+function extractHostFromUrl(raw: string): string {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  try {
+    return new URL(value).hostname || "";
+  } catch {
+    const match = value.match(/^(?:https?:\/\/)?([^/:?#]+)/i);
+    return match?.[1] || "";
+  }
 }
 
 function normalizeCctvServiceHistory(input: unknown): CctvServiceHistoryRecord[] {
@@ -7617,6 +7635,7 @@ export default function App() {
   const [classroomQuery, setClassroomQuery] = useState("");
   const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
   const [cctvView, setCctvView] = useState<"dashboard" | "cameras" | "live" | "service" | "changes" | "reports">("dashboard");
+  const [ticketsView, setTicketsView] = useState<"queue" | "register">("queue");
   const [cctvCameraRecords, setCctvCameraRecords] = useState<CctvCameraRecord[]>(() => readCctvCameraFallback());
   const [cctvServiceHistory, setCctvServiceHistory] = useState<CctvServiceHistoryRecord[]>(() => readCctvServiceFallback());
   const [cctvChangeLogs, setCctvChangeLogs] = useState<CctvChangeLogRecord[]>(() => readCctvChangeLogFallback());
@@ -7760,6 +7779,7 @@ export default function App() {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
       if (nextTab === "cctv") setCctvView("dashboard");
+      if (nextTab === "tickets") setTicketsView("queue");
       if (nextTab === "documents") setDocumentsView("user");
       if (nextTab === "vault") setVaultTab("dashboard");
       setTab(nextTab);
@@ -7911,6 +7931,29 @@ export default function App() {
           });
         case "classroom":
           return [];
+        case "tickets":
+          return [
+            {
+              key: "tickets.queue",
+              label: lang === "km" ? "បញ្ជីការងារ" : "Work Order Queue",
+              active: ticketsView === "queue",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setTicketsView("queue");
+                  setTab("tickets");
+                }),
+            },
+            {
+              key: "tickets.register",
+              label: lang === "km" ? "បង្កើតការងារ" : "Register Work Order",
+              active: ticketsView === "register",
+              onSelect: () =>
+                startTabTransition(() => {
+                  setTicketsView("register");
+                  setTab("tickets");
+                }),
+            },
+          ];
         case "cctv":
           return [
             {
@@ -8528,6 +8571,7 @@ export default function App() {
       scheduleView,
       setupView,
       tab,
+      ticketsView,
       t.cleaningSchedule,
       t.poolComplaints,
       transferView,
@@ -9465,6 +9509,10 @@ export default function App() {
     reportFile: null as MaintenanceReportFile | null,
     ticketStatus: "Done",
   });
+  const [ticketDashboardSourceFilter, setTicketDashboardSourceFilter] = useState<"ALL" | "QR" | "MANUAL">("QR");
+  const [ticketDashboardStatusFilter, setTicketDashboardStatusFilter] = useState<"ALL" | "OPEN" | "CLOSED">("OPEN");
+  const [ticketDashboardCampusFilter, setTicketDashboardCampusFilter] = useState("ALL");
+  const [ticketDashboardAssignedFilter, setTicketDashboardAssignedFilter] = useState("ALL");
 
   const [locationCampus, setLocationCampus] = useState(CAMPUS_LIST[0]);
   const [locationName, setLocationName] = useState("");
@@ -9497,8 +9545,10 @@ export default function App() {
   const [vaultReportShowSensitive, setVaultReportShowSensitive] = useState(false);
   const [vaultVisiblePasswordId, setVaultVisiblePasswordId] = useState<number | null>(null);
   const [vaultVisibleAccountPasswordId, setVaultVisibleAccountPasswordId] = useState<number | null>(null);
+  const [vaultVisibleCctvPasswordId, setVaultVisibleCctvPasswordId] = useState<number | null>(null);
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
   const [vaultAccountFormPasswordVisible, setVaultAccountFormPasswordVisible] = useState(false);
+  const [vaultCctvFormPasswordVisible, setVaultCctvFormPasswordVisible] = useState(false);
   const [vaultCredentialPageTab, setVaultCredentialPageTab] = useState<"records" | "register">("records");
   const [editingVaultAccountId, setEditingVaultAccountId] = useState<number | null>(null);
   const [editingVaultCredentialId, setEditingVaultCredentialId] = useState<number | null>(null);
@@ -9551,7 +9601,9 @@ export default function App() {
     site: "",
     nvrName: "",
     loginUrl: "",
+    ipAddress: "",
     username: "",
+    password: "",
     cameraGroup: "",
     retentionDays: "30",
     lastAngleReview: "",
@@ -10023,12 +10075,15 @@ export default function App() {
       site: "",
       nvrName: "",
       loginUrl: "",
+      ipAddress: "",
       username: "",
+      password: "",
       cameraGroup: "",
       retentionDays: "30",
       lastAngleReview: "",
       note: "",
     });
+    setVaultCctvFormPasswordVisible(false);
     setEditingVaultCctvId(null);
   }
   function resetCctvCameraForm() {
@@ -14343,6 +14398,60 @@ export default function App() {
     () => poolComplaints.filter((row) => poolMatchesActive(row.pool)),
     [poolComplaints, poolMatchesActive]
   );
+  const ticketDashboardCampusOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          tickets
+            .map((ticket) => String(ticket.campus || "").trim())
+            .filter(Boolean)
+        )
+      ).sort(compareCampusByCode),
+    [tickets]
+  );
+  const ticketDashboardAssignedOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          tickets
+            .map((ticket) => String(ticket.assignedTo || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })),
+    [tickets]
+  );
+  const ticketDashboardRows = useMemo(() => {
+    return tickets.filter((ticket) => {
+      const isQr = String(ticket.requestSource || "").toLowerCase() === "qr_asset";
+      const isClosed = ["Done", "Cancelled", "Resolved"].includes(String(ticket.status || ""));
+      if (ticketDashboardSourceFilter === "QR" && !isQr) return false;
+      if (ticketDashboardSourceFilter === "MANUAL" && isQr) return false;
+      if (ticketDashboardStatusFilter === "OPEN" && isClosed) return false;
+      if (ticketDashboardStatusFilter === "CLOSED" && !isClosed) return false;
+      if (ticketDashboardCampusFilter !== "ALL" && String(ticket.campus || "").trim() !== ticketDashboardCampusFilter) return false;
+      if (ticketDashboardAssignedFilter === "ASSIGNED") {
+        if (!String(ticket.assignedTo || "").trim()) return false;
+      } else if (ticketDashboardAssignedFilter === "UNASSIGNED") {
+        if (String(ticket.assignedTo || "").trim()) return false;
+      } else if (ticketDashboardAssignedFilter !== "ALL" && String(ticket.assignedTo || "").trim() !== ticketDashboardAssignedFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [ticketDashboardAssignedFilter, ticketDashboardCampusFilter, ticketDashboardSourceFilter, ticketDashboardStatusFilter, tickets]);
+  const ticketDashboardSummary = useMemo(() => {
+    const qrTickets = tickets.filter((ticket) => String(ticket.requestSource || "").toLowerCase() === "qr_asset");
+    const openQrTickets = qrTickets.filter((ticket) => !["Done", "Cancelled", "Resolved"].includes(String(ticket.status || "")));
+    const fixedQrTickets = qrTickets.filter((ticket) => ["Done", "Resolved"].includes(String(ticket.status || "")));
+    const unassignedQrTickets = qrTickets.filter((ticket) => !String(ticket.assignedTo || "").trim() && !["Done", "Cancelled", "Resolved"].includes(String(ticket.status || "")));
+    return {
+      totalQr: qrTickets.length,
+      openQr: openQrTickets.length,
+      fixedQr: fixedQrTickets.length,
+      unassignedQr: unassignedQrTickets.length,
+      visible: ticketDashboardRows.length,
+    };
+  }, [ticketDashboardRows.length, tickets]);
 
   const poolDashboardData = useMemo(() => {
     const recentComplaints = [...activePoolComplaints].sort((a, b) => {
@@ -18377,12 +18486,16 @@ export default function App() {
       setError("Site and NVR name are required.");
       return;
     }
+    const loginUrl = vaultCctvForm.loginUrl.trim();
+    const ipAddress = vaultCctvForm.ipAddress.trim() || extractHostFromUrl(loginUrl);
     const row: VaultCctvRecord = {
       id: editingVaultCctvId || Date.now(),
       site: vaultCctvForm.site.trim(),
       nvrName: vaultCctvForm.nvrName.trim(),
-      loginUrl: vaultCctvForm.loginUrl.trim(),
+      loginUrl,
+      ipAddress,
       username: vaultCctvForm.username.trim(),
+      password: vaultCctvForm.password.trim(),
       cameraGroup: vaultCctvForm.cameraGroup.trim(),
       retentionDays: Number(vaultCctvForm.retentionDays || 0),
       lastAngleReview: vaultCctvForm.lastAngleReview,
@@ -18928,11 +19041,14 @@ export default function App() {
 
   function startEditVaultCctv(row: VaultCctvRecord) {
     setEditingVaultCctvId(row.id);
+    setVaultCctvFormPasswordVisible(false);
     setVaultCctvForm({
       site: row.site || "",
       nvrName: row.nvrName || "",
       loginUrl: row.loginUrl || "",
+      ipAddress: row.ipAddress || extractHostFromUrl(row.loginUrl || ""),
       username: row.username || "",
+      password: row.password || "",
       cameraGroup: row.cameraGroup || "",
       retentionDays: String(row.retentionDays || 0),
       lastAngleReview: row.lastAngleReview || "",
@@ -33094,7 +33210,7 @@ export default function App() {
                         </select>
                       </label>
                       <label className="field field-wide">
-                        <span>{t.photo}</span>
+                        <span>{lang === "km" ? "រូបថត (មិនបង្ខំ)" : "Photo (Optional)"}</span>
                         <input
                           key={publicQrRequestFileKey}
                           type="file"
@@ -33104,6 +33220,11 @@ export default function App() {
                         {publicQrRequestForm.photo ? (
                           <img loading="lazy" decoding="async" src={publicQrRequestForm.photo} alt="request" className="photo-preview" />
                         ) : null}
+                        <div className="tiny" style={{ marginTop: 8 }}>
+                          {lang === "km"
+                            ? "អាចបន្ថែមរូបថតបញ្ហា ដើម្បីឱ្យក្រុមថែទាំត្រៀមគ្រឿងបន្លាស់ ឬឧបករណ៍បានលឿនជាងមុន។"
+                            : "You can add a problem photo to help maintenance staff prepare parts or tools before they come."}
+                        </div>
                       </label>
                       <div className="field field-wide">
                         <button
@@ -40567,71 +40688,161 @@ export default function App() {
         {tab === "tickets" && (
           <>
             <section className="panel">
-              <h2>{t.createWorkOrder}</h2>
-              <div className="form-grid">
-                <label className="field">
-                  <span>{t.campus}</span>
-                  <select className="input" value={ticketForm.campus} onChange={(e) => setTicketForm((f) => ({ ...f, campus: e.target.value }))}>
-                    {campusOptions.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{t.category}</span>
-                  <select className="input" value={ticketForm.category} onChange={(e) => setTicketForm((f) => ({ ...f, category: e.target.value }))}>
-                    {CATEGORY_OPTIONS.map((category) => (
-                      <option key={category.value} value={category.value}>{lang === "km" ? category.km : category.en}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{t.priority}</span>
-                  <select className="input" value={ticketForm.priority} onChange={(e) => setTicketForm((f) => ({ ...f, priority: e.target.value }))}>
-                    {PRIORITY_OPTIONS.map((p) => <option key={p.value} value={p.value}>{lang === "km" ? p.km : p.en}</option>)}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{t.relatedAsset}</span>
-                  <input className="input" value={ticketForm.assetId} onChange={(e) => setTicketForm((f) => ({ ...f, assetId: e.target.value.toUpperCase() }))} placeholder="ECO1-COM-PC-001" />
-                </label>
-                <label className="field field-wide">
-                  <span>{t.titleLabel}</span>
-                  <input className="input" value={ticketForm.title} onChange={(e) => setTicketForm((f) => ({ ...f, title: e.target.value }))} />
-                </label>
-                <label className="field field-wide">
-                  <span>{t.description}</span>
-                  <textarea className="textarea" value={ticketForm.description} onChange={(e) => setTicketForm((f) => ({ ...f, description: e.target.value }))} />
-                </label>
-                <label className="field field-wide">
-                  <span>{t.requestedBy}</span>
-                  <input className="input" value={ticketForm.requestedBy} onChange={(e) => setTicketForm((f) => ({ ...f, requestedBy: e.target.value }))} />
-                </label>
-                <label className="field">
-                  <span>Contact / Room</span>
-                  <input className="input" value={ticketForm.requesterContact} onChange={(e) => setTicketForm((f) => ({ ...f, requesterContact: e.target.value }))} />
-                </label>
-                <label className="field">
-                  <span>Assign To</span>
-                  <select className="input" value={ticketForm.assignedTo} onChange={(e) => setTicketForm((f) => ({ ...f, assignedTo: e.target.value }))}>
-                    <option value="">Unassigned</option>
-                    {users.map((user) => (
-                      <option key={`ticket-assign-${user.id}`} value={user.fullName}>{user.fullName}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field field-wide">
-                  <span>{t.photo}</span>
-                  <input key={ticketFileKey} type="file" accept="image/*" onChange={onTicketPhotoFile} />
-                  {ticketForm.photo ? <img loading="lazy" decoding="async" src={ticketForm.photo} alt="ticket" className="photo-preview" /> : null}
-                </label>
-              </div>
-              <div className="asset-actions">
-                <div className="photo-placeholder">{t.ticketQueue}: {tickets.length}</div>
-                <button className="btn-primary" disabled={busy || !isAdmin} onClick={createTicket}>{t.createWorkOrder}</button>
+              <div className="panel-row" style={{ marginBottom: 12 }}>
+                <div>
+                  <h2 style={{ marginBottom: 6 }}>{lang === "km" ? "Work Orders" : "Work Orders"}</h2>
+                  <p className="tiny" style={{ margin: 0 }}>
+                    {ticketsView === "queue"
+                      ? (lang === "km" ? "មើល និងតាមដាន ticket ទាំងអស់នៅទីនេះ។" : "Review and track all work order tickets here.")
+                      : (lang === "km" ? "បង្កើត ticket ថ្មីដោយដៃនៅទីនេះ។" : "Register a new manual work order here.")}
+                  </p>
+                </div>
+                <div className="asset-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <button className={`tab ${ticketsView === "queue" ? "tab-active" : ""}`} onClick={() => setTicketsView("queue")}>
+                    {lang === "km" ? "បញ្ជីការងារ" : "Work Order Queue"}
+                  </button>
+                  <button className={`tab ${ticketsView === "register" ? "tab-active" : ""}`} onClick={() => setTicketsView("register")}>
+                    {lang === "km" ? "បង្កើតការងារ" : "Register Work Order"}
+                  </button>
+                </div>
               </div>
             </section>
 
+            {ticketsView === "register" && (
+              <section className="panel">
+                <h2>{t.createWorkOrder}</h2>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select className="input" value={ticketForm.campus} onChange={(e) => setTicketForm((f) => ({ ...f, campus: e.target.value }))}>
+                      {campusOptions.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.category}</span>
+                    <select className="input" value={ticketForm.category} onChange={(e) => setTicketForm((f) => ({ ...f, category: e.target.value }))}>
+                      {CATEGORY_OPTIONS.map((category) => (
+                        <option key={category.value} value={category.value}>{lang === "km" ? category.km : category.en}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.priority}</span>
+                    <select className="input" value={ticketForm.priority} onChange={(e) => setTicketForm((f) => ({ ...f, priority: e.target.value }))}>
+                      {PRIORITY_OPTIONS.map((p) => <option key={p.value} value={p.value}>{lang === "km" ? p.km : p.en}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.relatedAsset}</span>
+                    <input className="input" value={ticketForm.assetId} onChange={(e) => setTicketForm((f) => ({ ...f, assetId: e.target.value.toUpperCase() }))} placeholder="ECO1-COM-PC-001" />
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.titleLabel}</span>
+                    <input className="input" value={ticketForm.title} onChange={(e) => setTicketForm((f) => ({ ...f, title: e.target.value }))} />
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.description}</span>
+                    <textarea className="textarea" value={ticketForm.description} onChange={(e) => setTicketForm((f) => ({ ...f, description: e.target.value }))} />
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.requestedBy}</span>
+                    <input className="input" value={ticketForm.requestedBy} onChange={(e) => setTicketForm((f) => ({ ...f, requestedBy: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Contact / Room</span>
+                    <input className="input" value={ticketForm.requesterContact} onChange={(e) => setTicketForm((f) => ({ ...f, requesterContact: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Assign To</span>
+                    <select className="input" value={ticketForm.assignedTo} onChange={(e) => setTicketForm((f) => ({ ...f, assignedTo: e.target.value }))}>
+                      <option value="">Unassigned</option>
+                      {users.map((user) => (
+                        <option key={`ticket-assign-${user.id}`} value={user.fullName}>{user.fullName}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.photo}</span>
+                    <input key={ticketFileKey} type="file" accept="image/*" onChange={onTicketPhotoFile} />
+                    {ticketForm.photo ? <img loading="lazy" decoding="async" src={ticketForm.photo} alt="ticket" className="photo-preview" /> : null}
+                  </label>
+                </div>
+                <div className="asset-actions">
+                  <div className="photo-placeholder">{t.ticketQueue}: {tickets.length}</div>
+                  <button className="btn-primary" disabled={busy || !isAdmin} onClick={createTicket}>{t.createWorkOrder}</button>
+                </div>
+              </section>
+            )}
+
+            {ticketsView === "queue" && (
             <section className="panel">
-              <h2>{t.workOrderQueue}</h2>
+              <div className="panel-row" style={{ marginBottom: 10 }}>
+                <h2 style={{ margin: 0 }}>{t.workOrderQueue}</h2>
+                <button className="btn-primary" type="button" onClick={() => setTicketsView("register")}>
+                  {lang === "km" ? "បង្កើតការងារ" : "Create Work Order"}
+                </button>
+              </div>
+              <div className="maintenance-quick-summary-strip" style={{ marginBottom: 14 }}>
+                <div className="maintenance-quick-summary-pill">
+                  <span>{lang === "km" ? "QR Ticket ទាំងអស់" : "All QR Tickets"}</span>
+                  <strong>{ticketDashboardSummary.totalQr}</strong>
+                </div>
+                <div className="maintenance-quick-summary-pill">
+                  <span>{lang === "km" ? "មិនទាន់បិទ" : "Open / Not Fixed"}</span>
+                  <strong>{ticketDashboardSummary.openQr}</strong>
+                </div>
+                <div className="maintenance-quick-summary-pill">
+                  <span>{lang === "km" ? "បានជួសជុល" : "Fixed / Closed"}</span>
+                  <strong>{ticketDashboardSummary.fixedQr}</strong>
+                </div>
+                <div className="maintenance-quick-summary-pill">
+                  <span>{lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}</span>
+                  <strong>{ticketDashboardSummary.unassignedQr}</strong>
+                </div>
+              </div>
+              <div className="form-grid" style={{ marginBottom: 12 }}>
+                <label className="field">
+                  <span>{lang === "km" ? "ប្រភព Ticket" : "Ticket Source"}</span>
+                  <select className="input" value={ticketDashboardSourceFilter} onChange={(e) => setTicketDashboardSourceFilter(e.target.value as "ALL" | "QR" | "MANUAL")}>
+                    <option value="QR">{lang === "km" ? "QR Scan តែប៉ុណ្ណោះ" : "QR Scan Only"}</option>
+                    <option value="ALL">{lang === "km" ? "គ្រប់ប្រភព" : "All Sources"}</option>
+                    <option value="MANUAL">{lang === "km" ? "បញ្ចូលដៃ" : "Manual Only"}</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ស្ថានភាពជួសជុល" : "Fix Status"}</span>
+                  <select className="input" value={ticketDashboardStatusFilter} onChange={(e) => setTicketDashboardStatusFilter(e.target.value as "ALL" | "OPEN" | "CLOSED")}>
+                    <option value="OPEN">{lang === "km" ? "មិនទាន់ជួសជុល" : "Open / Not Fixed"}</option>
+                    <option value="ALL">{lang === "km" ? "គ្រប់ស្ថានភាព" : "All Statuses"}</option>
+                    <option value="CLOSED">{lang === "km" ? "បានជួសជុល / បិទ" : "Fixed / Closed"}</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.campus}</span>
+                  <select className="input" value={ticketDashboardCampusFilter} onChange={(e) => setTicketDashboardCampusFilter(e.target.value)}>
+                    <option value="ALL">{t.allCampuses}</option>
+                    {ticketDashboardCampusOptions.map((campus) => (
+                      <option key={`ticket-dash-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
+                  <select className="input" value={ticketDashboardAssignedFilter} onChange={(e) => setTicketDashboardAssignedFilter(e.target.value)}>
+                    <option value="ALL">{lang === "km" ? "ទាំងអស់" : "All"}</option>
+                    <option value="UNASSIGNED">{lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}</option>
+                    <option value="ASSIGNED">{lang === "km" ? "បានចាត់ចែងហើយ" : "Assigned"}</option>
+                    {ticketDashboardAssignedOptions.map((name) => (
+                      <option key={`ticket-dash-assigned-${name}`} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="tiny" style={{ marginBottom: 10 }}>
+                {lang === "km"
+                  ? `បង្ហាញ ${ticketDashboardSummary.visible} ticket តាមតម្រងបច្ចុប្បន្ន។`
+                  : `Showing ${ticketDashboardSummary.visible} ticket(s) for the current dashboard filters.`}
+              </div>
               <div className="table-wrap report-table-wrap">
                 <table>
                   <thead>
@@ -40651,8 +40862,8 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {tickets.length ? (
-                      tickets.map((ticket) => (
+                    {ticketDashboardRows.length ? (
+                      ticketDashboardRows.map((ticket) => (
                         <tr key={ticket.id}>
                           <td><strong>{ticket.ticketNo}</strong></td>
                           <td>{campusLabel(ticket.campus)}</td>
@@ -40746,6 +40957,7 @@ export default function App() {
                 </table>
               </div>
             </section>
+            )}
           </>
         )}
 
@@ -55121,11 +55333,14 @@ export default function App() {
                         <div className="vault-mobile-fields">
                           <div className="vault-mobile-field"><span>Site</span><strong>{row.site || "-"}</strong></div>
                           <div className="vault-mobile-field"><span>Login URL</span><strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>IP Address</span><strong>{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</strong></div>
                           <div className="vault-mobile-field"><span>Username</span><strong>{row.username || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong></div>
                           <div className="vault-mobile-field"><span>Review</span><strong>{formatDate(row.lastAngleReview || "-")}</strong></div>
                           <div className="vault-mobile-field vault-mobile-field-wide"><span>Camera / Angle Area</span><strong>{row.cameraGroup || "-"}</strong></div>
                         </div>
                         <div className="vault-mobile-actions">
+                          {row.password ? <button className="tab" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide Password" : "View Password"}</button> : null}
                           <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button>
                           <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>{t.delete}</button>
                         </div>
@@ -55135,15 +55350,15 @@ export default function App() {
                 ) : (
                   <div className="table-wrap" style={{ marginTop: 12 }}>
                     <table className="vault-responsive-table">
-                      <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>Username</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
+                      <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>IP Address</th><th>Username</th><th>Password</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
                       <tbody>
                         {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
                           <tr key={`vault-cctv-${row.id}`}>
-                            <td data-label="Site">{row.site || "-"}</td><td data-label="NVR"><strong>{row.nvrName || "-"}</strong></td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="Username">{row.username || "-"}</td><td data-label="Camera / Angle Area">{row.cameraGroup || "-"}</td><td data-label="Retention">{row.retentionDays || 0} days</td><td data-label="Review">{formatDate(row.lastAngleReview || "-")}</td>
+                            <td data-label="Site">{row.site || "-"}</td><td data-label="NVR"><strong>{row.nvrName || "-"}</strong></td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="IP Address">{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</td><td data-label="Username">{row.username || "-"}</td><td data-label="Password">{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide" : "View"}</button> : null}</td><td data-label="Camera / Angle Area">{row.cameraGroup || "-"}</td><td data-label="Retention">{row.retentionDays || 0} days</td><td data-label="Review">{formatDate(row.lastAngleReview || "-")}</td>
                             <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button></td>
                             <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
                           </tr>
-                        )) : <tr className="vault-table-empty-row"><td colSpan={9}>No CCTV system records yet.</td></tr>}
+                        )) : <tr className="vault-table-empty-row"><td colSpan={11}>No CCTV system records yet.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -55151,8 +55366,24 @@ export default function App() {
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>Site/Campus</span><input className="input" value={vaultCctvForm.site} onChange={(e) => setVaultCctvForm((f) => ({ ...f, site: e.target.value }))} /></label>
                   <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
-                  <label className="field"><span>Login URL / Google Drive Map</span><input className="input" value={vaultCctvForm.loginUrl} onChange={(e) => setVaultCctvForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://... or https://drive.google.com/..." /></label>
+                  <label className="field"><span>Login URL / Google Drive Map</span><input className="input" value={vaultCctvForm.loginUrl} onChange={(e) => setVaultCctvForm((f) => ({ ...f, loginUrl: e.target.value, ipAddress: f.ipAddress || extractHostFromUrl(e.target.value) }))} placeholder="https://... or https://drive.google.com/..." /></label>
+                  <label className="field"><span>IP Address</span><input className="input" value={vaultCctvForm.ipAddress} onChange={(e) => setVaultCctvForm((f) => ({ ...f, ipAddress: e.target.value }))} placeholder="Auto-filled from login URL if blank" /></label>
                   <label className="field"><span>Username</span><input className="input" value={vaultCctvForm.username} onChange={(e) => setVaultCctvForm((f) => ({ ...f, username: e.target.value }))} /></label>
+                  <label className="field">
+                    <span>Password</span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        className="input"
+                        type={vaultCctvFormPasswordVisible ? "text" : "password"}
+                        value={vaultCctvForm.password}
+                        onChange={(e) => setVaultCctvForm((f) => ({ ...f, password: e.target.value }))}
+                        placeholder="NVR password"
+                      />
+                      <button type="button" className="tab btn-small" onClick={() => setVaultCctvFormPasswordVisible((v) => !v)}>
+                        {vaultCctvFormPasswordVisible ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </label>
                   <label className="field"><span>Camera Group / Angle Area</span><input className="input" value={vaultCctvForm.cameraGroup} onChange={(e) => setVaultCctvForm((f) => ({ ...f, cameraGroup: e.target.value }))} /></label>
                   <label className="field"><span>Retention Days</span><input type="number" min={0} className="input" value={vaultCctvForm.retentionDays} onChange={(e) => setVaultCctvForm((f) => ({ ...f, retentionDays: e.target.value }))} /></label>
                   <label className="field"><span>Last Angle Review</span><input type="date" className="input" value={vaultCctvForm.lastAngleReview} onChange={(e) => setVaultCctvForm((f) => ({ ...f, lastAngleReview: e.target.value }))} /></label>
