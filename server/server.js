@@ -1175,6 +1175,35 @@ function normalizeTelegramChatIds(input) {
   );
 }
 
+function normalizeStringMap(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out = {};
+  for (const [rawKey, rawValue] of Object.entries(input)) {
+    const key = toText(rawKey).trim();
+    if (!key) continue;
+    out[key] = toText(rawValue).trim();
+  }
+  return out;
+}
+
+function normalizeItemTypeOptions(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out = {};
+  for (const [rawCategory, rawRows] of Object.entries(input)) {
+    const category = toUpper(rawCategory);
+    if (!category) continue;
+    out[category] = normalizeArray(rawRows)
+      .filter((row) => row && typeof row === "object")
+      .map((row) => ({
+        itemEn: toText(row.itemEn || row.item_en).trim(),
+        itemKm: toText(row.itemKm || row.item_km || row.itemEn || row.item_en).trim(),
+        code: toUpper(row.code),
+      }))
+      .filter((row) => row.code && row.itemEn);
+  }
+  return out;
+}
+
 const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL"]);
 const INVENTORY_TXN_TYPE_SET = new Set(["IN", "OUT", "SET", "BORROW_OUT", "BORROW_IN", "BORROW_CONSUME"]);
 
@@ -2678,31 +2707,68 @@ function formatTicketRequestSourceLabel(value) {
   return toText(value) || "Manual";
 }
 
+function formatTicketRequestSourceKhmer(value) {
+  const key = toText(value).toLowerCase();
+  if (key === "qr_scan" || key === "qr_asset") return "ស្កេន QR";
+  if (key === "manual") return "បញ្ចូលដោយដៃ";
+  if (key === "general") return "ទូទៅ";
+  return toText(value) || "បញ្ចូលដោយដៃ";
+}
+
+function formatTicketPriorityKhmer(value) {
+  const key = toText(value).toLowerCase();
+  if (key === "low") return "ទាប";
+  if (key === "normal" || key === "medium") return "ធម្មតា";
+  if (key === "high") return "ខ្ពស់";
+  if (key === "urgent" || key === "critical") return "បន្ទាន់";
+  return toText(value) || "ធម្មតា";
+}
+
+function formatTicketStatusKhmer(value) {
+  const key = toText(value).toLowerCase();
+  if (key === "open") return "បើក";
+  if (key === "assigned") return "បានចាត់តាំង";
+  if (key === "in progress") return "កំពុងដំណើរការ";
+  if (key === "done" || key === "resolved" || key === "closed") return "បានបញ្ចប់";
+  if (key === "cancelled" || key === "canceled") return "បានលុបចោល";
+  return toText(value) || "បើក";
+}
+
+function formatTelegramTicketTitleKhmer(value, assetId = "") {
+  const title = toText(value);
+  const normalizedAssetId = toText(assetId);
+  if (!title) return normalizedAssetId ? `សំណើជួសជុលសម្រាប់ ${normalizedAssetId}` : "-";
+  if (normalizedAssetId && title === `Repair request for ${normalizedAssetId}`) {
+    return `សំណើជួសជុលសម្រាប់ ${normalizedAssetId}`;
+  }
+  return title;
+}
+
 async function sendTelegramWorkOrderCreatedAlert(ticket, db = null) {
   if (!ticket || typeof ticket !== "object") return false;
   const lines = [
-    "ECO Maintenance Alert",
-    "New maintenance / repair request",
-    `Ticket: ${toText(ticket.ticketNo) || "-"}`,
-    `Campus: ${formatTelegramCampusKhmer(ticket.campus)}`,
-    `Category: ${toText(ticket.category) || "-"}`,
-    `Title: ${toText(ticket.title) || "-"}`,
-    `Requested By: ${toText(ticket.requestedBy) || "-"}`,
-    `Priority: ${toText(ticket.priority) || "Normal"}`,
-    `Source: ${formatTicketRequestSourceLabel(ticket.requestSource)}`,
-    `Status: ${toText(ticket.status) || "Open"}`,
+    "សារ​ជូនដំណឹងថែទាំ ECO",
+    "មានសំណើថែទាំ / ជួសជុលថ្មី",
+    `លេខសំបុត្រ: ${toText(ticket.ticketNo) || "-"}`,
+    `សាខា: ${formatTelegramCampusKhmer(ticket.campus)}`,
+    `ផ្នែក: ${toText(ticket.category) || "-"}`,
+    `ចំណងជើង: ${formatTelegramTicketTitleKhmer(ticket.title, ticket.assetId)}`,
+    `អ្នកស្នើសុំ: ${toText(ticket.requestedBy) || "-"}`,
+    `អាទិភាព: ${formatTicketPriorityKhmer(ticket.priority)}`,
+    `ប្រភព: ${formatTicketRequestSourceKhmer(ticket.requestSource)}`,
+    `ស្ថានភាព: ${formatTicketStatusKhmer(ticket.status)}`,
   ];
   if (toText(ticket.assetId)) {
-    lines.push(`Asset ID: ${toText(ticket.assetId)}`);
+    lines.push(`លេខទ្រព្យ: ${toText(ticket.assetId)}`);
   }
   if (toText(ticket.assetLocation)) {
-    lines.push(`Location: ${toText(ticket.assetLocation)}`);
+    lines.push(`ទីតាំង: ${toText(ticket.assetLocation)}`);
   }
   if (toText(ticket.requesterContact)) {
-    lines.push(`Contact: ${toText(ticket.requesterContact)}`);
+    lines.push(`ទំនាក់ទំនង: ${toText(ticket.requesterContact)}`);
   }
   if (toText(ticket.description)) {
-    lines.push(`Description: ${toText(ticket.description)}`);
+    lines.push(`បរិយាយ: ${toText(ticket.description)}`);
   }
   const report = await sendTelegramMaintenanceMessage(lines.join("\n"), {
     db,
@@ -6346,6 +6412,9 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         settings: {
           ...settings,
+          itemNames: normalizeStringMap(settings.itemNames),
+          itemAssetCategories: normalizeStringMap(settings.itemAssetCategories),
+          itemTypeOptions: normalizeItemTypeOptions(settings.itemTypeOptions),
           inventoryApprovalRouting: normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting),
           telegramChatIds: normalizeTelegramChatIds(settings.telegramChatIds),
           telegramMaintenanceChatIds: normalizeTelegramChatIds(settings.telegramMaintenanceChatIds),
@@ -6389,6 +6458,18 @@ const server = http.createServer(async (req, res) => {
         !Array.isArray(incoming.campusNames)
           ? incoming.campusNames
           : current.campusNames || {};
+      const nextItemNames =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "itemNames")
+          ? normalizeStringMap(incoming.itemNames)
+          : normalizeStringMap(current.itemNames);
+      const nextItemAssetCategories =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "itemAssetCategories")
+          ? normalizeStringMap(incoming.itemAssetCategories)
+          : normalizeStringMap(current.itemAssetCategories);
+      const nextItemTypeOptions =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "itemTypeOptions")
+          ? normalizeItemTypeOptions(incoming.itemTypeOptions)
+          : normalizeItemTypeOptions(current.itemTypeOptions);
       const nextStaffUsers =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "staffUsers")
           ? normalizeStaffUsers(incoming.staffUsers)
@@ -6484,6 +6565,9 @@ const server = http.createServer(async (req, res) => {
       db.settings = {
         ...current,
         campusNames: nextCampusNames,
+        itemNames: nextItemNames,
+        itemAssetCategories: nextItemAssetCategories,
+        itemTypeOptions: nextItemTypeOptions,
         staffUsers: nextStaffUsers,
         calendarEvents: nextCalendarEvents,
         maintenanceReminderOffsets: nextMaintenanceReminderOffsets,

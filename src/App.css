@@ -17292,6 +17292,62 @@ tr.row-maint-maintenance:hover td {
   margin-bottom: 12px;
 }
 
+.public-qr-nav-topline {
+  z-index: 110;
+}
+
+.public-qr-account-chip {
+  width: auto !important;
+  min-width: 84px !important;
+  padding: 0 12px !important;
+}
+
+.public-qr-account-chip-text {
+  display: block;
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-qr-side-drawer {
+  z-index: 111;
+}
+
+.public-qr-menu-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--mobile-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.public-qr-menu-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--mobile-text-soft);
+}
+
+.public-qr-menu-row span {
+  flex: 0 0 auto;
+}
+
+.public-qr-menu-row strong {
+  min-width: 0;
+  text-align: right;
+  color: var(--mobile-text);
+}
+
+.public-qr-menu-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mobile-text-soft);
+}
+
 .public-asset-grid-summary {
   gap: 0;
 }
@@ -20437,6 +20493,14 @@ tr.row-maint-maintenance:hover td {
 
   .public-asset-panel h2 {
     font-size: clamp(24px, 7vw, 30px);
+  }
+
+  .public-qr-account-chip {
+    min-height: 46px;
+  }
+
+  .public-qr-side-drawer .field {
+    margin: 0;
   }
 
   .public-asset-grid {

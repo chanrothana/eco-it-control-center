@@ -775,6 +775,9 @@ type TelegramStatus = {
 };
 type ServerSettings = {
   campusNames?: Record<string, string>;
+  itemNames?: Record<string, string>;
+  itemAssetCategories?: Record<string, string>;
+  itemTypeOptions?: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>;
   staffUsers?: StaffUser[];
   calendarEvents?: CalendarEvent[];
   maintenanceReminderOffsets?: number[];
@@ -1157,6 +1160,7 @@ const CLASSROOM_VERIFICATION_FALLBACK_KEY = "it_classroom_verification_v1";
 const USER_FALLBACK_KEY = "it_users_fallback_v1";
 const CAMPUS_NAME_FALLBACK_KEY = "it_campus_names_fallback_v1";
 const ITEM_NAME_FALLBACK_KEY = "it_item_names_fallback_v1";
+const ITEM_ASSET_CATEGORY_FALLBACK_KEY = "it_item_asset_categories_fallback_v1";
 const ITEM_TYPE_FALLBACK_KEY = "it_item_types_fallback_v1";
 const ITEM_TEMPLATE_FALLBACK_KEY = "it_item_templates_fallback_v1";
 const FURNITURE_MODEL_FALLBACK_KEY = "it_furniture_models_v1";
@@ -3146,6 +3150,24 @@ function writeStringMap(key: string, map: Record<string, string>) {
   trySetLocalStorage(key, JSON.stringify(map));
 }
 
+function readStringMap(key: string): Record<string, string> {
+  if (SERVER_ONLY_STORAGE) return {};
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [mapKey, value] of Object.entries(parsed)) {
+      const normalizedKey = String(mapKey || "").trim();
+      if (!normalizedKey) continue;
+      out[normalizedKey] = String(value || "").trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 function readMaintenanceNotificationReadMap(): Record<string, number[]> {
   if (SERVER_ONLY_STORAGE) return {};
   try {
@@ -3202,6 +3224,30 @@ function applyMaintenanceNotificationReadFallback(
 function writeItemTypeFallback(map: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>) {
   if (SERVER_ONLY_STORAGE) return;
   trySetLocalStorage(ITEM_TYPE_FALLBACK_KEY, JSON.stringify(map));
+}
+
+function readItemTypeFallback(): Record<string, Array<{ itemEn: string; itemKm: string; code: string }>> {
+  if (SERVER_ONLY_STORAGE) return {};
+  try {
+    const raw = localStorage.getItem(ITEM_TYPE_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>> = {};
+    for (const [category, rows] of Object.entries(parsed)) {
+      const normalizedCategory = String(category || "").trim().toUpperCase();
+      if (!normalizedCategory) continue;
+      out[normalizedCategory] = normalizeArray<Record<string, unknown>>(rows)
+        .map((row) => ({
+          itemEn: String(row.itemEn || row.item_en || "").trim(),
+          itemKm: String(row.itemKm || row.item_km || row.itemEn || row.item_en || "").trim(),
+          code: String(row.code || "").trim().toUpperCase(),
+        }))
+        .filter((row) => row.code && row.itemEn);
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 function readItemTemplateFallback(): ItemTemplate[] {
@@ -3462,6 +3508,7 @@ function clearAllFallbackCaches() {
     USER_FALLBACK_KEY,
     CAMPUS_NAME_FALLBACK_KEY,
     ITEM_NAME_FALLBACK_KEY,
+    ITEM_ASSET_CATEGORY_FALLBACK_KEY,
     ITEM_TYPE_FALLBACK_KEY,
     ITEM_TEMPLATE_FALLBACK_KEY,
     AUTH_PERMISSION_FALLBACK_KEY,
@@ -8894,20 +8941,26 @@ export default function App() {
   });
   const [customTypeOptions, setCustomTypeOptions] = useState<
     Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>
-  >({});
+  >(() => readItemTypeFallback());
   const [itemNames, setItemNames] = useState<Record<string, string>>(() => {
     const defaults: Record<string, string> = {};
     for (const [category, items] of Object.entries(TYPE_OPTIONS)) {
       for (const item of items) defaults[`${category}:${item.code}`] = item.itemEn;
     }
-    return defaults;
+    return {
+      ...defaults,
+      ...readStringMap(ITEM_NAME_FALLBACK_KEY),
+    };
   });
   const [itemAssetCategories, setItemAssetCategories] = useState<Record<string, string>>(() => {
     const defaults: Record<string, string> = {};
     for (const [category, items] of Object.entries(TYPE_OPTIONS)) {
       for (const item of items) defaults[`${category}:${item.code}`] = defaultItemSetupAssetCategory(category);
     }
-    return defaults;
+    return {
+      ...defaults,
+      ...readStringMap(ITEM_ASSET_CATEGORY_FALLBACK_KEY),
+    };
   });
   const [stats, setStats] = useState<DashboardStats>({
     totalAssets: 0,
@@ -8918,6 +8971,7 @@ export default function App() {
   });
   const [maintenanceNotifications, setMaintenanceNotifications] = useState<MaintenanceNotification[]>([]);
   const [maintenanceNotificationUnread, setMaintenanceNotificationUnread] = useState(0);
+  const itemSetupSyncReadyRef = useRef(false);
   const visibleMaintenanceNotifications = useMemo(
     () => maintenanceNotifications.filter((row) => !row.read),
     [maintenanceNotifications]
@@ -10965,8 +11019,24 @@ export default function App() {
   }, [itemNames]);
 
   useEffect(() => {
+    writeStringMap(ITEM_ASSET_CATEGORY_FALLBACK_KEY, itemAssetCategories);
+  }, [itemAssetCategories]);
+
+  useEffect(() => {
     writeItemTypeFallback(customTypeOptions);
   }, [customTypeOptions]);
+  useEffect(() => {
+    if (!itemSetupSyncReadyRef.current) {
+      itemSetupSyncReadyRef.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void saveItemSetupToServer(customTypeOptions, itemNames, itemAssetCategories).catch((err) => {
+        console.warn("Failed to save item setup", err);
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [customTypeOptions, itemNames, itemAssetCategories]);
   useEffect(() => {
     writeItemTemplateFallback(itemTemplates);
   }, [itemTemplates]);
@@ -15546,6 +15616,53 @@ export default function App() {
           setCampusNames(mergedCampusNames);
           writeStringMap(CAMPUS_NAME_FALLBACK_KEY, mergedCampusNames);
         }
+        const serverItemNames =
+          settingsRes.settings?.itemNames && typeof settingsRes.settings.itemNames === "object"
+            ? Object.fromEntries(
+                Object.entries(settingsRes.settings.itemNames)
+                  .map(([key, value]) => [String(key || "").trim(), String(value || "").trim()])
+                  .filter(([key]) => Boolean(key))
+              )
+            : {};
+        const serverItemAssetCategories =
+          settingsRes.settings?.itemAssetCategories && typeof settingsRes.settings.itemAssetCategories === "object"
+            ? Object.fromEntries(
+                Object.entries(settingsRes.settings.itemAssetCategories)
+                  .map(([key, value]) => [String(key || "").trim(), String(value || "").trim().toUpperCase()])
+                  .filter(([key]) => Boolean(key))
+              )
+            : {};
+        const serverItemTypeOptions =
+          settingsRes.settings?.itemTypeOptions && typeof settingsRes.settings.itemTypeOptions === "object"
+            ? Object.fromEntries(
+                Object.entries(settingsRes.settings.itemTypeOptions).map(([category, rows]) => [
+                  String(category || "").trim().toUpperCase(),
+                  normalizeArray<Record<string, unknown>>(rows)
+                    .map((row) => ({
+                      itemEn: String(row.itemEn || row.item_en || "").trim(),
+                      itemKm: String(row.itemKm || row.item_km || row.itemEn || row.item_en || "").trim(),
+                      code: String(row.code || "").trim().toUpperCase(),
+                    }))
+                    .filter((row) => row.code && row.itemEn),
+                ])
+              )
+            : {};
+        if (Object.keys(serverItemTypeOptions).length) {
+          setCustomTypeOptions(serverItemTypeOptions);
+          writeItemTypeFallback(serverItemTypeOptions);
+        } else {
+          setCustomTypeOptions(readItemTypeFallback());
+        }
+        setItemNames((prev) => {
+          const next = { ...prev, ...serverItemNames };
+          writeStringMap(ITEM_NAME_FALLBACK_KEY, next);
+          return next;
+        });
+        setItemAssetCategories((prev) => {
+          const next = { ...prev, ...serverItemAssetCategories };
+          writeStringMap(ITEM_ASSET_CATEGORY_FALLBACK_KEY, next);
+          return next;
+        });
         const serverCalendarEvents = normalizeCalendarEvents(settingsRes.settings?.calendarEvents, []);
         const nextCalendarEvents = serverCalendarEvents.length
           ? serverCalendarEvents
@@ -15749,6 +15866,9 @@ export default function App() {
         }
       } else {
         // Keep local settings if /api/settings is unavailable.
+        setCustomTypeOptions(readItemTypeFallback());
+        setItemNames((prev) => ({ ...prev, ...readStringMap(ITEM_NAME_FALLBACK_KEY) }));
+        setItemAssetCategories((prev) => ({ ...prev, ...readStringMap(ITEM_ASSET_CATEGORY_FALLBACK_KEY) }));
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
         setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
         setInventoryItems(readInventoryItemFallback());
@@ -17160,6 +17280,28 @@ export default function App() {
       await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
         method: "PATCH",
         body: JSON.stringify({ settings: { campusNames: nextMap } }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function saveItemSetupToServer(
+    nextTypeOptions: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>,
+    nextItemNames: Record<string, string>,
+    nextItemAssetCategories: Record<string, string>
+  ) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settings: {
+            itemTypeOptions: nextTypeOptions,
+            itemNames: nextItemNames,
+            itemAssetCategories: nextItemAssetCategories,
+          },
+        }),
       });
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
@@ -31948,6 +32090,14 @@ export default function App() {
       details: false,
     });
   }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetId, publicQrAsset]);
+  useEffect(() => {
+    if (!pendingQrAssetId) return;
+    setMobileNotificationOpen(false);
+  }, [pendingQrAssetId]);
+  useEffect(() => {
+    if (!pendingQrAssetId || !authUser) return;
+    setMobileMenuOpen(false);
+  }, [pendingQrAssetId, authUser]);
 
   async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
@@ -33156,6 +33306,10 @@ export default function App() {
       : asset?.photo
       ? [asset.photo]
       : [];
+    const publicQrCampusSummary = asset ? campusLabel(asset.campus || "-") : t.loading;
+    const publicQrStatusSummary = asset ? assetStatusLabel(asset.status || "-") : t.loading;
+    const publicQrAssignedSummary = asset ? asset.assignedTo || "-" : t.loading;
+    const publicQrAccountSummary = authUser ? `${authUser.displayName} (${authUser.role})` : "Guest";
     const publicMaintenanceHistory = [...(asset?.maintenanceHistory || [])].sort(
       (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
     );
@@ -33222,6 +33376,176 @@ export default function App() {
     })();
     return (
       <main className="app-shell public-asset-shell">
+        {isPhoneView ? (
+          <div className="mobile-nav-topline public-qr-nav-topline">
+            {!mobileMenuOpen ? (
+              <button
+                className="mobile-hamburger-btn"
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-expanded={mobileMenuOpen}
+                aria-label="Open QR menu"
+              >
+                <span className="mobile-hamburger-icon" aria-hidden={true}>☰</span>
+              </button>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              className="mobile-notify-btn public-qr-account-chip"
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              aria-expanded={mobileMenuOpen}
+              aria-label={authUser ? "Open account menu" : "Open login menu"}
+            >
+              <span className="public-qr-account-chip-text">{authUser ? authUser.displayName : "Login"}</span>
+            </button>
+          </div>
+        ) : null}
+        {isPhoneView && mobileMenuOpen ? (
+          <button
+            type="button"
+            className="mobile-side-backdrop"
+            aria-label="Close QR menu"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        ) : null}
+        {isPhoneView ? (
+          <aside className={`mobile-side-drawer public-qr-side-drawer ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}>
+            <div className="mobile-menu-head">
+              <button
+                type="button"
+                className="mobile-menu-close-btn"
+                aria-label="Close QR menu"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                ✕
+              </button>
+              <strong>{lang === "km" ? "ម៉ឺនុយ QR Asset" : "QR Asset Menu"}</strong>
+              <span>{lang === "km" ? "ចូលប្រើគណនី ឬមើលស្ថានភាព Asset" : "Login or review this asset status."}</span>
+            </div>
+
+            <section className="mobile-menu-section">
+              <p className="mobile-menu-section-label">{lang === "km" ? "Campus Status" : "Campus Status"}</p>
+              <div className="public-qr-menu-card">
+                <div className="public-qr-menu-row"><span>{t.campus}</span><strong>{publicQrCampusSummary}</strong></div>
+                <div className="public-qr-menu-row"><span>{t.status}</span><strong>{publicQrStatusSummary}</strong></div>
+                <div className="public-qr-menu-row"><span>{t.user}</span><strong>{publicQrAssignedSummary}</strong></div>
+              </div>
+            </section>
+
+            <section className="mobile-menu-section">
+              <p className="mobile-menu-section-label">{lang === "km" ? "Quick Access" : "Quick Access"}</p>
+              <div className="mobile-menu-grid">
+                <div className="mobile-menu-item-group">
+                  <button
+                    type="button"
+                    className={`mobile-menu-nav-btn ${publicQrSectionsOpen.request ? "mobile-menu-nav-btn-active" : ""}`}
+                    onClick={() => {
+                      setPublicQrSectionsOpen((prev) => ({ ...prev, request: !prev.request }));
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <span className="mobile-menu-nav-icon" aria-hidden={true}>🛠</span>
+                    <span className="mobile-menu-nav-label">{lang === "km" ? "ស្នើជួសជុល" : "Request Repair"}</span>
+                  </button>
+                </div>
+                {publicQrCanRecordMaintenance ? (
+                  <div className="mobile-menu-item-group">
+                    <button
+                      type="button"
+                      className={`mobile-menu-nav-btn ${publicQrSectionsOpen.maintenance ? "mobile-menu-nav-btn-active" : ""}`}
+                      onClick={() => {
+                        setPublicQrSectionsOpen((prev) => ({ ...prev, maintenance: !prev.maintenance }));
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <span className="mobile-menu-nav-icon" aria-hidden={true}>📋</span>
+                      <span className="mobile-menu-nav-label">{lang === "km" ? "កត់ត្រាថែទាំ" : "Maintenance Record"}</span>
+                    </button>
+                  </div>
+                ) : null}
+                <div className="mobile-menu-item-group">
+                  <button
+                    type="button"
+                    className={`mobile-menu-nav-btn ${publicQrSectionsOpen.details ? "mobile-menu-nav-btn-active" : ""}`}
+                    onClick={() => {
+                      setPublicQrSectionsOpen((prev) => ({ ...prev, details: !prev.details }));
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <span className="mobile-menu-nav-icon" aria-hidden={true}>ℹ️</span>
+                    <span className="mobile-menu-nav-label">{lang === "km" ? "ព័ត៌មាន Asset" : "Asset Details"}</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="mobile-menu-section">
+              <p className="mobile-menu-section-label">{t.account}</p>
+              <div className="public-qr-menu-card">
+                <div className="public-qr-menu-row"><span>{lang === "km" ? "អ្នកប្រើបច្ចុប្បន្ន" : "Current User"}</span><strong>{publicQrAccountSummary}</strong></div>
+                {authUser ? (
+                  <>
+                    <div className="public-qr-menu-note">
+                      {publicQrCanRecordMaintenance
+                        ? (lang === "km" ? "គណនីនេះអាចកត់ត្រាថែទាំបាន។" : "This account can record maintenance from QR.")
+                        : (lang === "km" ? "គណនីនេះអាចមើលព័ត៌មាន Asset ប៉ុណ្ណោះ។" : "This account can currently view the asset only.")}
+                    </div>
+                    <button
+                      className="tab"
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        void handleLogout();
+                      }}
+                    >
+                      {t.logout}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="public-qr-menu-note">
+                      {lang === "km"
+                        ? "បុគ្គលិក Maintenance អាចចូលប្រើនៅទីនេះ ដើម្បីកត់ត្រាការជួសជុលពីទូរស័ព្ទថ្មី។"
+                        : "Maintenance staff can login here to record fixes from a new phone."}
+                    </div>
+                    <label className="field">
+                      <span>{lang === "km" ? "ឈ្មោះអ្នកប្រើ" : "Username"}</span>
+                      <input
+                        className="input"
+                        value={loginForm.username}
+                        autoComplete="username"
+                        onChange={(e) => setLoginForm((f) => ({ ...f, username: e.target.value }))}
+                        placeholder={lang === "km" ? "បញ្ចូល Username" : "Enter username"}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ពាក្យសម្ងាត់" : "Password"}</span>
+                      <input
+                        className="input"
+                        type={showLoginPassword ? "text" : "password"}
+                        value={loginForm.password}
+                        autoComplete="current-password"
+                        onChange={(e) => setLoginForm((f) => ({ ...f, password: e.target.value }))}
+                        placeholder={lang === "km" ? "បញ្ចូល Password" : "Enter password"}
+                      />
+                    </label>
+                    <button
+                      className="btn-primary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handleLogin()}
+                    >
+                      {busy ? `${t.login}...` : t.login}
+                    </button>
+                    {error ? <p className="alert alert-error">{error}</p> : null}
+                  </>
+                )}
+              </div>
+            </section>
+          </aside>
+        ) : null}
         <section className="app-card app-card-public-asset">
           <section className="panel public-asset-panel">
             <h2>Asset Detail</h2>
