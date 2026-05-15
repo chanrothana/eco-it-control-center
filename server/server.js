@@ -2744,11 +2744,25 @@ function formatTelegramTicketTitleKhmer(value, assetId = "") {
   return title;
 }
 
+function buildTelegramColorStrip(colorEmoji, title, subtitle, useHtml = false) {
+  const strip = `${colorEmoji}${colorEmoji}${colorEmoji}${colorEmoji}${colorEmoji}`;
+  if (useHtml) {
+    return [
+      `${strip} <b>${escapeTelegramHtml(title)}</b> ${strip}`,
+      `${strip} <b>${escapeTelegramHtml(subtitle)}</b> ${strip}`,
+    ];
+  }
+  return [
+    `${strip} ${title} ${strip}`,
+    `${strip} ${subtitle} ${strip}`,
+  ];
+}
+
 async function sendTelegramWorkOrderCreatedAlert(ticket, db = null) {
   if (!ticket || typeof ticket !== "object") return false;
+  const header = buildTelegramColorStrip("🟧", "សារ​ជូនដំណឹងថែទាំ ECO", "មានសំណើថែទាំ / ជួសជុលថ្មី");
   const lines = [
-    "សារ​ជូនដំណឹងថែទាំ ECO",
-    "មានសំណើថែទាំ / ជួសជុលថ្មី",
+    ...header,
     `លេខសំបុត្រ: ${toText(ticket.ticketNo) || "-"}`,
     `សាខា: ${formatTelegramCampusKhmer(ticket.campus)}`,
     `ផ្នែក: ${toText(ticket.category) || "-"}`,
@@ -3139,11 +3153,11 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, optio
   const checkedBy = toText(entry.checkedBy);
   const cost = toText(entry.cost);
   const emphasize = (label, value) => `<b><u>${escapeTelegramHtml(label)}</u></b>: ${escapeTelegramHtml(value)}`;
+  const header = mode === "ticket_fixed"
+    ? buildTelegramColorStrip("🟩", "ជូនដំណឹង ECO - ការងារជួសជុល", "ការស្នើសុំជួសជុលត្រូវបានបញ្ចប់", true)
+    : buildTelegramColorStrip("🟦", "ជូនដំណឹង ECO - ការងារជួសជុល", "មានកំណត់ត្រាការងារថ្មី", true);
   const lines = [
-    "<u><b>ជូនដំណឹង ECO - ការងារជួសជុល</b></u>",
-    mode === "ticket_fixed"
-      ? "<u><b>ការស្នើសុំជួសជុលត្រូវបានបញ្ចប់</b></u>"
-      : "<u><b>មានកំណត់ត្រាការងារថ្មី</b></u>",
+    ...header,
     isGeneralTask
       ? emphasize("ការងារទូទៅ", itemName || "General Maintenance Task")
       : emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
