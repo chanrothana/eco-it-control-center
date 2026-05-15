@@ -7545,6 +7545,7 @@ export default function App() {
   const [mobileNotificationOpen, setMobileNotificationOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
+  const publicQrMenuRef = useRef<HTMLElement | null>(null);
   const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
   const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const transferDateWrapRef = useRef<HTMLLabelElement | null>(null);
@@ -8877,6 +8878,7 @@ export default function App() {
       const target = event.target as Node | null;
       if (!target) return;
       if (mobileNavRef.current?.contains(target)) return;
+      if (publicQrMenuRef.current?.contains(target)) return;
       setMobileMenuOpen(false);
       setMobileNotificationOpen(false);
     };
@@ -33411,7 +33413,10 @@ export default function App() {
           />
         ) : null}
         {isPhoneView ? (
-          <aside className={`mobile-side-drawer public-qr-side-drawer ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}>
+          <aside
+            ref={publicQrMenuRef}
+            className={`mobile-side-drawer public-qr-side-drawer ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}
+          >
             <div className="mobile-menu-head">
               <button
                 type="button"
