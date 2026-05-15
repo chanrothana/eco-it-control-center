@@ -41448,8 +41448,133 @@ export default function App() {
                   ? `បង្ហាញ ${ticketDashboardSummary.visible} ticket តាមតម្រងបច្ចុប្បន្ន។`
                   : `Showing ${ticketDashboardSummary.visible} ticket(s) for the current dashboard filters.`}
               </div>
-              <div className="table-wrap report-table-wrap">
-                <table>
+              <div className="report-mobile-only report-card-list ticket-dashboard-mobile-list">
+                {ticketDashboardRows.length ? (
+                  ticketDashboardRows.map((ticket) => (
+                    <article key={`ticket-mobile-${ticket.id}`} className="report-card ticket-dashboard-mobile-card">
+                      <div className="report-card-head ticket-dashboard-mobile-head">
+                        <div className="ticket-dashboard-mobile-ticket">
+                          <strong>{ticket.ticketNo}</strong>
+                          <span>{ticket.title}</span>
+                        </div>
+                        <div className="ticket-dashboard-mobile-badges">
+                          <span className="maintenance-history-badge">{ticket.category}</span>
+                          <span className="maintenance-history-badge">
+                            {(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="ticket-dashboard-mobile-meta">
+                        <div>
+                          <small>{t.campus}</small>
+                          <strong>{campusLabel(ticket.campus)}</strong>
+                        </div>
+                        <div>
+                          <small>Source</small>
+                          <strong>{formatTicketRequestSource(ticket.requestSource)}</strong>
+                        </div>
+                        <div>
+                          <small>{t.requestedBy}</small>
+                          <strong>{ticket.requestedBy || "-"}</strong>
+                        </div>
+                        <div>
+                          <small>Contact</small>
+                          <strong>{ticket.requesterContact || "-"}</strong>
+                        </div>
+                        <div>
+                          <small>{t.created}</small>
+                          <strong>{formatDate(ticket.created)}</strong>
+                        </div>
+                        <div>
+                          <small>{t.asset}</small>
+                          <strong>{ticket.assetId || "-"}</strong>
+                        </div>
+                      </div>
+
+                      <div className="ticket-dashboard-mobile-controls">
+                        <label className="field">
+                          <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
+                          <select
+                            className="status-select"
+                            disabled={!isAdmin || busy}
+                            value={ticket.assignedTo || ""}
+                            onChange={(e) => void updateTicketRow(ticket, { assignedTo: e.target.value, status: e.target.value ? "Assigned" : ticket.status })}
+                          >
+                            <option value="">Unassigned</option>
+                            {users.map((user) => (
+                              <option key={`ticket-mobile-assign-${ticket.id}-${user.id}`} value={user.fullName}>
+                                {user.fullName}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>{t.status}</span>
+                          <select className="status-select" disabled={!isAdmin} value={ticket.status || "Open"} onChange={(e) => changeTicketStatus(ticket.id, e.target.value)}>
+                            {TICKET_STATUS_OPTIONS.map((status) => (
+                              <option key={`ticket-mobile-status-${ticket.id}-${status.value}`} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="asset-actions ticket-dashboard-actions">
+                        {ticket.assetId ? (
+                          <button className="tab btn-small" type="button" onClick={() => {
+                            setAssetCampusMultiFilter(["ALL"]);
+                            setAssetNameMultiFilter(["ALL"]);
+                            setAssetLocationMultiFilter(["ALL"]);
+                            setAssetAssignedToMultiFilter(["ALL"]);
+                            setAssetsView("list");
+                            setTab("assets");
+                            setSearch(ticket.assetId);
+                          }}>
+                            Open Asset
+                          </button>
+                        ) : null}
+                        {isSuperAdmin ? (
+                          <button
+                            className="tab btn-small"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => openTicketEditModal(ticket)}
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                        {ticket.assetDbId ? (
+                          <button
+                            className="btn-primary btn-small"
+                            type="button"
+                            disabled={busy || ticket.status === "Done" || ticket.status === "Cancelled"}
+                            onClick={() => openTicketMaintenanceModal(ticket)}
+                          >
+                            Complete & Record
+                          </button>
+                        ) : null}
+                        {isSuperAdmin ? (
+                          <button
+                            className="btn-danger btn-small"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void deleteTicketRow(ticket)}
+                          >
+                            Delete
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <article className="report-card ticket-dashboard-mobile-card">
+                    <strong>{t.noWorkOrders}</strong>
+                  </article>
+                )}
+              </div>
+
+              <div className="table-wrap report-table-wrap report-desktop-only ticket-dashboard-table-wrap">
+                <table className="ticket-dashboard-table">
                   <thead>
                     <tr>
                       <th>{t.ticketNo}</th>
@@ -41473,7 +41598,7 @@ export default function App() {
                           <td><strong>{ticket.ticketNo}</strong></td>
                           <td>{campusLabel(ticket.campus)}</td>
                           <td>{ticket.category}</td>
-                          <td>
+                          <td className="ticket-dashboard-title-cell">
                             {ticket.title}
                             {ticket.assetId ? <div className="tiny">{t.asset}: {ticket.assetId}</div> : null}
                           </td>
@@ -41504,8 +41629,8 @@ export default function App() {
                           <td>{ticket.requestedBy}</td>
                           <td>{ticket.requesterContact || "-"}</td>
                           <td>{formatDate(ticket.created)}</td>
-                          <td>
-                            <div className="asset-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+                          <td className="ticket-dashboard-actions-cell">
+                            <div className="asset-actions ticket-dashboard-actions">
                               {ticket.assetId ? (
                                 <button className="tab btn-small" type="button" onClick={() => {
                                   setAssetCampusMultiFilter(["ALL"]);

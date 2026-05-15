@@ -4143,6 +4143,176 @@ h2 {
   justify-self: end;
 }
 
+.ticket-dashboard-mobile-list {
+  gap: 12px;
+}
+
+.ticket-dashboard-mobile-card {
+  gap: 12px;
+  border-color: rgba(103, 131, 171, 0.3);
+  background: linear-gradient(180deg, rgba(31, 51, 78, 0.96), rgba(23, 39, 61, 0.96));
+  color: #e5eefc;
+  box-shadow: 0 12px 24px rgba(7, 18, 33, 0.16);
+}
+
+.ticket-dashboard-mobile-head {
+  align-items: start;
+}
+
+.ticket-dashboard-mobile-ticket {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ticket-dashboard-mobile-ticket strong {
+  font-size: 15px;
+  color: #ffffff;
+}
+
+.ticket-dashboard-mobile-ticket span {
+  color: #d3e2f8;
+  line-height: 1.4;
+}
+
+.ticket-dashboard-mobile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ticket-dashboard-mobile-badges .maintenance-history-badge {
+  border-color: rgba(142, 178, 228, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8f1ff;
+}
+
+.ticket-dashboard-mobile-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ticket-dashboard-mobile-meta > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 160, 211, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ticket-dashboard-mobile-meta small {
+  color: #9fb8dd;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ticket-dashboard-mobile-meta strong {
+  color: #f4f8ff;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ticket-dashboard-mobile-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.ticket-dashboard-mobile-controls .field {
+  gap: 6px;
+}
+
+.ticket-dashboard-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ticket-dashboard-table-wrap table.ticket-dashboard-table {
+  min-width: 1560px;
+}
+
+.ticket-dashboard-table th,
+.ticket-dashboard-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ticket-dashboard-table td:nth-child(1),
+.ticket-dashboard-table th:nth-child(1) {
+  min-width: 112px;
+}
+
+.ticket-dashboard-table td:nth-child(2),
+.ticket-dashboard-table th:nth-child(2) {
+  min-width: 158px;
+}
+
+.ticket-dashboard-table td:nth-child(3),
+.ticket-dashboard-table th:nth-child(3) {
+  min-width: 88px;
+}
+
+.ticket-dashboard-table td:nth-child(4),
+.ticket-dashboard-table th:nth-child(4) {
+  min-width: 250px;
+}
+
+.ticket-dashboard-table td:nth-child(5),
+.ticket-dashboard-table th:nth-child(5) {
+  min-width: 92px;
+}
+
+.ticket-dashboard-table td:nth-child(6),
+.ticket-dashboard-table th:nth-child(6) {
+  min-width: 110px;
+}
+
+.ticket-dashboard-table td:nth-child(7),
+.ticket-dashboard-table th:nth-child(7),
+.ticket-dashboard-table td:nth-child(8),
+.ticket-dashboard-table th:nth-child(8) {
+  min-width: 150px;
+}
+
+.ticket-dashboard-table td:nth-child(9),
+.ticket-dashboard-table th:nth-child(9) {
+  min-width: 140px;
+}
+
+.ticket-dashboard-table td:nth-child(10),
+.ticket-dashboard-table th:nth-child(10) {
+  min-width: 118px;
+}
+
+.ticket-dashboard-table td:nth-child(11),
+.ticket-dashboard-table th:nth-child(11) {
+  min-width: 132px;
+}
+
+.ticket-dashboard-table td:nth-child(12),
+.ticket-dashboard-table th:nth-child(12) {
+  min-width: 232px;
+}
+
+.ticket-dashboard-title-cell {
+  text-align: left;
+}
+
+.ticket-dashboard-actions-cell {
+  text-align: center;
+}
+
+.ticket-dashboard-actions-cell .ticket-dashboard-actions {
+  justify-content: center;
+}
+
+.ticket-dashboard-table .status-select {
+  min-width: 132px;
+  width: 100%;
+}
+
 .furniture-report-mobile-list {
   gap: 14px;
   margin-top: 12px;
@@ -18330,9 +18500,9 @@ tr.row-maint-maintenance:hover td {
     justify-items: center;
     gap: 8px;
     margin-bottom: 10px;
-    padding: 14px 12px 12px;
+    padding: calc(72px + env(safe-area-inset-top, 0px)) 12px 12px;
     border-radius: 14px;
-    min-height: 82px;
+    min-height: 144px;
   }
 
   .top-right-phone {
@@ -20686,9 +20856,9 @@ tr.row-maint-maintenance:hover td {
   }
 
   .topbar-phone {
-    padding: 12px 10px 10px;
+    padding: calc(70px + env(safe-area-inset-top, 0px)) 10px 10px;
     gap: 6px;
-    min-height: 76px;
+    min-height: 138px;
   }
 
   .mobile-nav-hud {
@@ -20709,6 +20879,10 @@ tr.row-maint-maintenance:hover td {
 
   .brand-title-mobile {
     max-width: 12ch;
+  }
+
+  .ticket-dashboard-mobile-meta {
+    grid-template-columns: 1fr;
   }
 
   .panel {

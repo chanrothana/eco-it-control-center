@@ -3117,8 +3117,10 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   };
 }
 
-function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
+function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, options = {}) {
   if (!asset || !entry) return "";
+  const mode = toText(options.mode) || "general";
+  const ticketNo = toText(options.ticketNo);
   const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
   const isGeneralTask =
     toText(asset.notes) === "SYSTEM_PLACEHOLDER_GENERAL_MAINTENANCE" ||
@@ -3139,7 +3141,9 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
   const emphasize = (label, value) => `<b><u>${escapeTelegramHtml(label)}</u></b>: ${escapeTelegramHtml(value)}`;
   const lines = [
     "<u><b>ជូនដំណឹង ECO - ការងារជួសជុល</b></u>",
-    "<u><b>មានកំណត់ត្រាការងារថ្មី</b></u>",
+    mode === "ticket_fixed"
+      ? "<u><b>ការស្នើសុំជួសជុលត្រូវបានបញ្ចប់</b></u>"
+      : "<u><b>មានកំណត់ត្រាការងារថ្មី</b></u>",
     isGeneralTask
       ? emphasize("ការងារទូទៅ", itemName || "General Maintenance Task")
       : emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
@@ -3149,6 +3153,9 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null) {
     `អ្នកអនុវត្ត: ${escapeTelegramHtml(performedBy)}`,
     `ការងារដែលបានធ្វើ: ${escapeTelegramHtml(note)}`,
   ];
+  if (mode === "ticket_fixed" && ticketNo) {
+    lines.splice(2, 0, emphasize("Ticket", ticketNo));
+  }
   if (!isGeneralTask) {
     lines.splice(4, 0, emphasize("ទីតាំង", location));
   }
@@ -3207,8 +3214,8 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   return alerts;
 }
 
-async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user) {
-  const message = buildMaintenanceRecordTelegramMessage(asset, entry, user);
+async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, options = {}) {
+  const message = buildMaintenanceRecordTelegramMessage(asset, entry, user, options);
   const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
   let telegramAlertSent = false;
 
@@ -9489,8 +9496,31 @@ const server = http.createServer(async (req, res) => {
           );
         }
       }
+      const shouldSendFixedTelegramAlert =
+        completion === "Done" ||
+        ["done", "resolved", "closed"].includes(toText(status).trim().toLowerCase());
       await writeDb(db);
-      sendJson(res, 200, { ticket: db.tickets[ticketIdx], asset: db.assets[assetIdx], entry });
+      sendJson(res, 200, {
+        ticket: db.tickets[ticketIdx],
+        asset: db.assets[assetIdx],
+        entry,
+        telegramAlertQueued: shouldSendFixedTelegramAlert,
+      });
+      if (shouldSendFixedTelegramAlert) {
+        void (async () => {
+          try {
+            await sendMaintenanceRecordTelegramAlert(db, db.assets[assetIdx], entry, user, {
+              mode: "ticket_fixed",
+              ticketNo: ticket.ticketNo,
+            });
+          } catch (err) {
+            console.warn(
+              "[MAINTENANCE ALERT] Failed to send work-order fixed Telegram alert:",
+              err instanceof Error ? err.message : err
+            );
+          }
+        })();
+      }
       return;
     }
 
