@@ -1216,6 +1216,11 @@ const RENTAL_PRINTER_COUNTER_FALLBACK_KEY = "it_rental_printer_counters_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
 const APP_VERSION = "v2.3.0";
 const DEFAULT_MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
+const QR_LABEL_SIZE_OPTIONS = [
+  { value: "2cm", label: "2cm x 2cm" },
+  { value: "4cm", label: "4cm x 4cm" },
+  { value: "6cm", label: "6cm x 6cm" },
+] as const;
 const APP_UPDATE_NOTES: Array<{ version: string; date: string; notes: string[] }> = [
   {
     version: "v2.3.0",
@@ -8721,7 +8726,7 @@ export default function App() {
   const [assetNameMultiFilter, setAssetNameMultiFilter] = useState<string[]>(["ALL"]);
   const [assetLocationMultiFilter, setAssetLocationMultiFilter] = useState<string[]>(["ALL"]);
   const [assetAssignedToMultiFilter, setAssetAssignedToMultiFilter] = useState<string[]>(["ALL"]);
-  const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState("ALL");
+  const [maintenanceCategoryFilter, setMaintenanceCategoryFilter] = useState<string[]>(["ALL"]);
   const [maintenanceTypeFilter, setMaintenanceTypeFilter] = useState("ALL");
   const [maintenanceCampusFilter, setMaintenanceCampusFilter] = useState("ALL");
   const [maintenanceMonthFilter, setMaintenanceMonthFilter] = useState(toYmd(new Date()).slice(0, 7));
@@ -8797,6 +8802,7 @@ export default function App() {
   const [qrCategoryFilter, setQrCategoryFilter] = useState<string[]>(["ALL"]);
   const [qrStatusFilter, setQrStatusFilter] = useState<string[]>(["ALL"]);
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
+  const [qrLabelSize, setQrLabelSize] = useState<"2cm" | "4cm" | "6cm">("4cm");
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
   const [dashboardSupplyHoveredItemKey, setDashboardSupplyHoveredItemKey] = useState<string | null>(null);
@@ -27622,22 +27628,26 @@ export default function App() {
   }, [assets]);
   const maintenanceTypeOptions = useMemo(() => {
     let rows = [...allMaintenanceRows];
-    if (maintenanceCategoryFilter !== "ALL") {
-      rows = rows.filter((r) => r.category === maintenanceCategoryFilter);
+    if (!maintenanceCategoryFilter.includes("ALL")) {
+      rows = rows.filter((r) => maintenanceCategoryFilter.includes(r.category));
     }
     if (maintenanceCampusFilter !== "ALL") {
       rows = rows.filter((r) => r.campus === maintenanceCampusFilter);
     }
     return Array.from(new Set(rows.map((r) => r.type).filter(Boolean))).sort();
   }, [allMaintenanceRows, maintenanceCategoryFilter, maintenanceCampusFilter]);
+  const maintenanceCategoryFilterOptions = useMemo(
+    () => Array.from(new Set(allMaintenanceRows.map((r) => r.category).filter(Boolean))).sort(),
+    [allMaintenanceRows]
+  );
   const maintenanceCampusOptions = useMemo(
     () => Array.from(new Set(allMaintenanceRows.map((r) => r.campus).filter(Boolean))).sort(compareCampusByCode),
     [allMaintenanceRows]
   );
   const filteredMaintenanceRows = useMemo(() => {
     let rows = [...allMaintenanceRows];
-    if (maintenanceCategoryFilter !== "ALL") {
-      rows = rows.filter((r) => r.category === maintenanceCategoryFilter);
+    if (!maintenanceCategoryFilter.includes("ALL")) {
+      rows = rows.filter((r) => maintenanceCategoryFilter.includes(r.category));
     }
     if (maintenanceTypeFilter !== "ALL") {
       rows = rows.filter((r) => r.type === maintenanceTypeFilter);
@@ -30969,6 +30979,7 @@ export default function App() {
       setQrCategoryFilter(["ALL"]);
       setQrStatusFilter(["ALL"]);
       setQrItemFilter(["ALL"]);
+      setQrLabelSize("4cm");
       return;
     }
     if (reportType === "asset_by_location") {
@@ -30995,6 +31006,7 @@ export default function App() {
     setQrCategoryFilter(["ALL"]);
     setQrStatusFilter(["ALL"]);
     setQrItemFilter(["ALL"]);
+    setQrLabelSize("4cm");
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
     setFurnitureControlCampusFilter(["ALL"]);
@@ -31998,6 +32010,11 @@ export default function App() {
     if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
     return getPreferredApiBase() || String(window.location.origin || DEFAULT_CLOUD_API_BASE).replace(/\/+$/, "");
   }, []);
+  const qrLabelSizeLabel = useMemo(
+    () => QR_LABEL_SIZE_OPTIONS.find((option) => option.value === qrLabelSize)?.label || "4cm x 4cm",
+    [qrLabelSize]
+  );
+  const qrLabelPreviewClass = `qr-label-card-size-${qrLabelSize.replace("cm", "")}`;
 
   const buildAssetQrUrl = useCallback((assetId: string) => {
     const id = String(assetId || "").trim();
@@ -32015,7 +32032,7 @@ export default function App() {
       for (const row of missing) {
         try {
           const dataUrl = await QRCode.toDataURL(buildAssetQrUrl(row.assetId), {
-            width: 220,
+            width: 480,
             margin: 1,
             errorCorrectionLevel: "M",
           });
@@ -32106,6 +32123,7 @@ export default function App() {
     let title = "";
     let columns: string[] = [];
     let rows: string[][] = [];
+    let qrPrintMap: Record<string, string> = {};
 
     const printPhotoBase =
       (apiBaseInput || ENV_API_BASE_URL || getAutoApiBaseForHost() || (typeof window !== "undefined" ? window.location.origin : ""))
@@ -32360,13 +32378,13 @@ export default function App() {
       title = "Asset ID + QR Labels";
       columns = ["QR", "Asset ID"];
       const missingRows = qrFilteredRows.filter((row) => !qrCodeMap[row.assetId]);
-      const qrPrintMap: Record<string, string> = { ...qrCodeMap };
+      qrPrintMap = { ...qrCodeMap };
       if (missingRows.length) {
         const generated: Array<[string, string]> = [];
         for (const row of missingRows) {
           try {
             const dataUrl = await QRCode.toDataURL(buildAssetQrUrl(row.assetId), {
-              width: 220,
+              width: 480,
               margin: 1,
               errorCorrectionLevel: "M",
             });
@@ -32472,7 +32490,7 @@ export default function App() {
         : reportType === "set_code"
         ? `<p><strong>Total Set Codes:</strong> ${setCodeReportRows.length} | <strong>Total Assets in Sets:</strong> ${setCodeReportRows.reduce((sum, row) => sum + row.totalItems, 0)}</p>`
         : reportType === "qr_labels"
-        ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length}</p>`
+        ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length} | <strong>QR Size:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
         : "";
     const printMetaHtml =
       reportType === "asset_master"
@@ -32509,26 +32527,35 @@ export default function App() {
                 ? furnitureControlItemFilter.map((type) => assetItemName("FURNITURE", type, "")).join(", ")
                 : "-"
           )}</p>`
+        : reportType === "qr_labels"
+        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)} | QR Size: ${escapeHtml(qrLabelSizeLabel)}</p>`
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
+
+    const qrPrintVariant = qrLabelSize.replace("cm", "");
+    const qrPrintContentMode =
+      qrLabelSize === "2cm" ? "compact" : qrLabelSize === "4cm" ? "standard" : "large";
 
     const reportContentHtml =
       reportType === "qr_labels"
         ? qrFilteredRows.length
-          ? `<div class="qr-sticker-grid">${qrFilteredRows
+          ? `<div class="qr-sticker-grid qr-sticker-grid-${qrPrintVariant}">${qrFilteredRows
               .map((row) => {
-                const qr = String(rows.find((r) => r[1] === row.assetId)?.[0] || "");
+                const qr = String(qrPrintMap[row.assetId] || rows.find((r) => r[1] === row.assetId)?.[0] || "");
                 const serial = String(row.serialNumber || "").trim() || "-";
                 const itemName = String(row.itemName || "").trim() || "-";
                 const location = String(row.location || "").trim() || "-";
+                const campus = String(reportCampusName(row.campus) || "").trim() || "-";
                 const assignedTo = String(row.assignedTo || "").trim();
-                const detailsLine = `${location} | SN: ${serial}`;
-                return `<div class="qr-sticker-wrap">
-                  ${assignedTo ? `<div class="qr-sticker-user">${escapeHtml(assignedTo)}</div>` : ""}
-                  <div class="qr-sticker-item">${escapeHtml(itemName)}</div>
-                  <div class="qr-sticker-detail">${escapeHtml(detailsLine)}</div>
-                  <div class="qr-sticker">
+                const locationLine = `${campus} | ${location}`;
+                const serialLine = `SN: ${serial}`;
+                return `<div class="qr-sticker-wrap qr-sticker-wrap-${qrPrintVariant}">
+                  ${qrPrintContentMode === "large" && assignedTo ? `<div class="qr-sticker-user">${escapeHtml(assignedTo)}</div>` : ""}
+                  ${qrPrintContentMode !== "compact" ? `<div class="qr-sticker-item">${escapeHtml(itemName)}</div>` : ""}
+                  ${qrPrintContentMode !== "compact" ? `<div class="qr-sticker-detail">${escapeHtml(locationLine)}</div>` : ""}
+                  ${qrPrintContentMode === "large" ? `<div class="qr-sticker-detail">${escapeHtml(serialLine)}</div>` : ""}
+                  <div class="qr-sticker qr-sticker-${qrPrintVariant}">
                     <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
-                    <div class="qr-sticker-divider"></div>
+                    ${qrPrintContentMode !== "compact" ? `<div class="qr-sticker-divider"></div>` : ""}
                     <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
                   </div>
                 </div>`;
@@ -32691,17 +32718,43 @@ export default function App() {
           body.qr-print-mode .report-head { margin-bottom: 3px; align-items: center; }
           body.qr-print-mode .report-head-logo { width: 90px; max-width: 90px; }
           body.qr-print-mode p.meta { margin: 0 0 4px; font-size: 9px; }
-          .qr-sticker-grid { display: grid; grid-template-columns: repeat(8, 72px); column-gap: 3px; row-gap: 4px; margin-top: 4px; width: 100%; justify-content: space-between; }
-          .qr-sticker-wrap { width: 72px; display: grid; gap: 1px; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
-          .qr-sticker-user, .qr-sticker-item, .qr-sticker-detail { width: 72px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .qr-sticker-user { min-height: 7px; font-size: 5px; line-height: 1; font-weight: 700; color: #1b2d23; }
-          .qr-sticker-item { min-height: 7px; font-size: 5.1px; line-height: 1; font-weight: 800; color: #314238; }
-          .qr-sticker-detail { min-height: 7px; font-size: 4.8px; line-height: 1; font-weight: 700; color: #5a695e; }
-          .qr-sticker { width: 72px; box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; padding: 2px; display: grid; gap: 2px; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; }
-          .qr-sticker-qr { width: 54px; height: 54px; box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; }
-          .qr-sticker-qr img { width: 50px; height: 50px; object-fit: contain; display: block; }
-          .qr-sticker-divider { width: 54px; height: 1px; background: #1b2d23; }
-          .qr-sticker-id { width: 54px; min-height: 10px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 1px; font-size: 5.2px; line-height: 1; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .qr-sticker-grid { display: grid; margin-top: 4px; width: 100%; justify-content: flex-start; align-items: start; }
+          .qr-sticker-grid-2 { grid-template-columns: repeat(auto-fill, minmax(2.4cm, 1fr)); gap: 0.16cm; }
+          .qr-sticker-grid-4 { grid-template-columns: repeat(auto-fill, minmax(4.8cm, 1fr)); gap: 0.24cm; }
+          .qr-sticker-grid-6 { grid-template-columns: repeat(auto-fill, minmax(7.2cm, 1fr)); gap: 0.28cm; }
+          .qr-sticker-wrap { display: grid; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
+          .qr-sticker-wrap-2 { width: 2.3cm; gap: 0.03cm; }
+          .qr-sticker-wrap-4 { width: 4.6cm; gap: 0.05cm; }
+          .qr-sticker-wrap-6 { width: 6.8cm; gap: 0.06cm; }
+          .qr-sticker-user, .qr-sticker-item, .qr-sticker-detail { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .qr-sticker-wrap-4 .qr-sticker-item,
+          .qr-sticker-wrap-6 .qr-sticker-item,
+          .qr-sticker-wrap-4 .qr-sticker-detail,
+          .qr-sticker-wrap-6 .qr-sticker-detail,
+          .qr-sticker-wrap-6 .qr-sticker-user { width: 100%; }
+          .qr-sticker-wrap-6 .qr-sticker-user { min-height: 0.34cm; font-size: 10px; line-height: 1.1; font-weight: 700; color: #1b2d23; }
+          .qr-sticker-wrap-4 .qr-sticker-item { min-height: 0.34cm; font-size: 9px; line-height: 1.1; font-weight: 800; color: #314238; }
+          .qr-sticker-wrap-6 .qr-sticker-item { min-height: 0.42cm; font-size: 12px; line-height: 1.1; font-weight: 800; color: #314238; }
+          .qr-sticker-wrap-4 .qr-sticker-detail { min-height: 0.3cm; font-size: 8px; line-height: 1.05; font-weight: 700; color: #5a695e; }
+          .qr-sticker-wrap-6 .qr-sticker-detail { min-height: 0.34cm; font-size: 10px; line-height: 1.08; font-weight: 700; color: #5a695e; }
+          .qr-sticker { box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; display: grid; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; background: #fff; }
+          .qr-sticker-2 { width: 2.3cm; padding: 0.08cm; gap: 0.04cm; }
+          .qr-sticker-4 { width: 4.6cm; padding: 0.12cm; gap: 0.06cm; }
+          .qr-sticker-6 { width: 6.8cm; padding: 0.14cm; gap: 0.08cm; }
+          .qr-sticker-qr { box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; background: #fff; }
+          .qr-sticker-2 .qr-sticker-qr { width: 2cm; height: 2cm; }
+          .qr-sticker-4 .qr-sticker-qr { width: 4cm; height: 4cm; }
+          .qr-sticker-6 .qr-sticker-qr { width: 6cm; height: 6cm; }
+          .qr-sticker-2 .qr-sticker-qr img { width: 1.86cm; height: 1.86cm; object-fit: contain; display: block; }
+          .qr-sticker-4 .qr-sticker-qr img { width: 3.7cm; height: 3.7cm; object-fit: contain; display: block; }
+          .qr-sticker-6 .qr-sticker-qr img { width: 5.62cm; height: 5.62cm; object-fit: contain; display: block; }
+          .qr-sticker-divider { background: #1b2d23; }
+          .qr-sticker-4 .qr-sticker-divider { width: 4cm; height: 1px; }
+          .qr-sticker-6 .qr-sticker-divider { width: 6cm; height: 1px; }
+          .qr-sticker-id { box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 1px; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .qr-sticker-2 .qr-sticker-id { width: 2cm; min-height: 0.28cm; font-size: 7px; line-height: 1.05; }
+          .qr-sticker-4 .qr-sticker-id { width: 4cm; min-height: 0.42cm; font-size: 11px; line-height: 1.05; }
+          .qr-sticker-6 .qr-sticker-id { width: 6cm; min-height: 0.52cm; font-size: 14px; line-height: 1.08; }
           @page { size: A4 landscape; margin: 3mm; }
           @media print {
             body { margin: 0; background: #fff; }
@@ -47160,46 +47213,6 @@ export default function App() {
         {tab === "maintenance" && (
           <>
           <section className="panel">
-            {!maintenanceQuickMode ? (
-            <div className="tabs maintenance-view-tabs">
-              {(canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) ? (
-                <button
-                  className={`tab ${maintenanceView === "dashboard" ? "tab-active" : ""}`}
-                  onClick={() => setMaintenanceView("dashboard")}
-                >
-                  {lang === "km" ? "ផ្ទាំងថែទាំ" : "Maintenance Dashboard"}
-                </button>
-              ) : null}
-              {canAccessMenu("maintenance.history", "maintenance") ? (
-                <button
-                  className={`tab ${maintenanceView === "overdue" ? "tab-active" : ""}`}
-                  onClick={() => setMaintenanceView("overdue")}
-                >
-                  {lang === "km" ? "ទ្រព្យលើសកាលកំណត់" : "Overdue Assets"}
-                </button>
-              ) : null}
-              {canAccessMenu("maintenance.history", "maintenance") ? (
-                <button
-                  className={`tab ${maintenanceView === "history" ? "tab-active" : ""}`}
-                  onClick={() => setMaintenanceView("history")}
-                >
-                  {lang === "km" ? "ផ្ទាំងប្រវត្តិថែទាំ" : "Maintenance History"}
-                </button>
-              ) : null}
-              {canAccessMenu("maintenance.record", "maintenance") ? (
-                <button
-                  className={`tab ${maintenanceView === "record" ? "tab-active" : ""}`}
-                  onClick={() => {
-                    setMaintenanceRecordScheduleJumpMode(false);
-                    setMaintenanceView("record");
-                  }}
-                >
-                  {lang === "km" ? "កត់ត្រាថែទាំ" : "Register Maintenance Task"}
-                </button>
-              ) : null}
-            </div>
-            ) : null}
-
             {maintenanceView === "dashboard" && (canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) && (
             <>
             <h3 className="section-title">{lang === "km" ? "ផ្ទាំងសង្ខេបថែទាំ" : "Maintenance Dashboard"}</h3>
@@ -48527,18 +48540,44 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <select
-                className="input"
-                value={maintenanceCategoryFilter}
-                onChange={(e) => setMaintenanceCategoryFilter(e.target.value)}
-              >
-                <option value="ALL">{t.allCategories}</option>
-                {CATEGORY_OPTIONS.map((category) => (
-                  <option key={`maintenance-logbook-category-${category.value}`} value={category.value}>
-                    {lang === "km" ? category.km : category.en}
-                  </option>
-                ))}
-              </select>
+              <details className="filter-menu">
+                <summary>
+                  {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
+                    const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+                    return row ? (lang === "km" ? row.km : row.en) : value;
+                  })}
+                </summary>
+                <div className="filter-menu-list">
+                  <label className="filter-menu-item">
+                    <input
+                      type="checkbox"
+                      checked={maintenanceCategoryFilter.includes("ALL")}
+                      onChange={(e) =>
+                        setMaintenanceCategoryFilter((prev) =>
+                          applyMultiFilterSelection(prev, e.target.checked, "ALL", maintenanceCategoryFilterOptions)
+                        )
+                      }
+                    />
+                    {t.allCategories}
+                  </label>
+                  {maintenanceCategoryFilterOptions.map((category) => (
+                    <label key={`maintenance-logbook-category-${category}`} className="filter-menu-item">
+                      <input
+                        type="checkbox"
+                        checked={maintenanceCategoryFilter.includes(category)}
+                        onChange={(e) =>
+                          setMaintenanceCategoryFilter((prev) =>
+                            applyMultiFilterSelection(prev, e.target.checked, category, maintenanceCategoryFilterOptions)
+                          )
+                        }
+                      />
+                      {lang === "km"
+                        ? CATEGORY_OPTIONS.find((item) => item.value === category)?.km || category
+                        : CATEGORY_OPTIONS.find((item) => item.value === category)?.en || category}
+                    </label>
+                  ))}
+                </div>
+              </details>
               <select
                 className="input"
                 value={maintenanceTypeFilter}
@@ -48703,18 +48742,44 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <select
-                className="input"
-                value={maintenanceCategoryFilter}
-                onChange={(e) => setMaintenanceCategoryFilter(e.target.value)}
-              >
-                <option value="ALL">{t.allCategories}</option>
-                {CATEGORY_OPTIONS.map((category) => (
-                  <option key={category.value} value={category.value}>
-                    {lang === "km" ? category.km : category.en}
-                  </option>
-                ))}
-              </select>
+              <details className="filter-menu">
+                <summary>
+                  {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
+                    const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+                    return row ? (lang === "km" ? row.km : row.en) : value;
+                  })}
+                </summary>
+                <div className="filter-menu-list">
+                  <label className="filter-menu-item">
+                    <input
+                      type="checkbox"
+                      checked={maintenanceCategoryFilter.includes("ALL")}
+                      onChange={(e) =>
+                        setMaintenanceCategoryFilter((prev) =>
+                          applyMultiFilterSelection(prev, e.target.checked, "ALL", maintenanceCategoryFilterOptions)
+                        )
+                      }
+                    />
+                    {t.allCategories}
+                  </label>
+                  {maintenanceCategoryFilterOptions.map((category) => (
+                    <label key={`maintenance-history-category-${category}`} className="filter-menu-item">
+                      <input
+                        type="checkbox"
+                        checked={maintenanceCategoryFilter.includes(category)}
+                        onChange={(e) =>
+                          setMaintenanceCategoryFilter((prev) =>
+                            applyMultiFilterSelection(prev, e.target.checked, category, maintenanceCategoryFilterOptions)
+                          )
+                        }
+                      />
+                      {lang === "km"
+                        ? CATEGORY_OPTIONS.find((item) => item.value === category)?.km || category
+                        : CATEGORY_OPTIONS.find((item) => item.value === category)?.en || category}
+                    </label>
+                  ))}
+                </div>
+              </details>
               <select
                 className="input"
                 value={maintenanceTypeFilter}
@@ -51899,6 +51964,17 @@ export default function App() {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search item name..."}
                     emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No item found."}
                   />
+                  <LocationPicker
+                    value={qrLabelSize}
+                    onChange={(value) => setQrLabelSize(value as "2cm" | "4cm" | "6cm")}
+                    options={QR_LABEL_SIZE_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    placeholder={lang === "km" ? "ទំហំ QR" : "QR Size"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទំហំ..." : "Search size..."}
+                    emptyText={lang === "km" ? "មិនមានទំហំ" : "No size found."}
+                  />
                 </>
               ) : null}
               {reportType === "asset_by_location" ? (
@@ -53029,7 +53105,7 @@ export default function App() {
               <div className="qr-label-grid">
                 {qrFilteredRows.length ? (
                   qrFilteredRows.map((row) => (
-                    <article className="qr-label-card" key={`qr-label-${row.assetDbId}`}>
+                    <article className={`qr-label-card ${qrLabelPreviewClass}`} key={`qr-label-${row.assetDbId}`}>
                       <div className="qr-label-image-wrap">
                         {qrCodeMap[row.assetId] ? (
                           <img loading="lazy" decoding="async" src={qrCodeMap[row.assetId]} alt={`QR ${row.assetId}`} className="qr-label-image" />
@@ -53039,10 +53115,10 @@ export default function App() {
                       </div>
                       <div className="qr-label-meta">
                         <div className="qr-label-asset-id">{row.assetId}</div>
-                        <div className="qr-label-item-name">{row.itemName}</div>
-                        <div>{reportCampusName(row.campus)} | {row.location || "-"}</div>
-                        <div>SN: {String(row.serialNumber || "").trim() || "-"}</div>
-                        {String(row.assignedTo || "").trim() ? <div>Assigned: {row.assignedTo}</div> : null}
+                        {qrLabelSize !== "2cm" ? <div className="qr-label-item-name">{row.itemName}</div> : null}
+                        {qrLabelSize !== "2cm" ? <div>{reportCampusName(row.campus)} | {row.location || "-"}</div> : null}
+                        {qrLabelSize === "6cm" ? <div>SN: {String(row.serialNumber || "").trim() || "-"}</div> : null}
+                        {qrLabelSize === "6cm" && String(row.assignedTo || "").trim() ? <div>Assigned: {row.assignedTo}</div> : null}
                       </div>
                     </article>
                   ))
