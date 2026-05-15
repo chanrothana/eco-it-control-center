@@ -2745,16 +2745,16 @@ function formatTelegramTicketTitleKhmer(value, assetId = "") {
 }
 
 function buildTelegramColorStrip(colorEmoji, title, subtitle, useHtml = false) {
-  const strip = `${colorEmoji}${colorEmoji}${colorEmoji}${colorEmoji}${colorEmoji}`;
+  const strip = `${colorEmoji}${colorEmoji}${colorEmoji}`;
   if (useHtml) {
     return [
-      `${strip} <b>${escapeTelegramHtml(title)}</b> ${strip}`,
-      `${strip} <b>${escapeTelegramHtml(subtitle)}</b> ${strip}`,
+      `${strip} <b>${escapeTelegramHtml(title)}</b>`,
+      `${strip} <b>${escapeTelegramHtml(subtitle)}</b>`,
     ];
   }
   return [
-    `${strip} ${title} ${strip}`,
-    `${strip} ${subtitle} ${strip}`,
+    `${strip} ${title}`,
+    `${strip} ${subtitle}`,
   ];
 }
 
