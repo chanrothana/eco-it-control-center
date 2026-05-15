@@ -4229,6 +4229,113 @@ h2 {
   flex-wrap: wrap;
 }
 
+.ticket-dashboard-desktop-list {
+  display: grid;
+  gap: 14px;
+}
+
+.ticket-dashboard-desktop-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(103, 131, 171, 0.28);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(34, 54, 82, 0.96), rgba(27, 44, 68, 0.97));
+  box-shadow: 0 16px 32px rgba(6, 16, 30, 0.18);
+}
+
+.ticket-dashboard-desktop-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.ticket-dashboard-desktop-title {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ticket-dashboard-desktop-ticketno {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9fb8dd;
+}
+
+.ticket-dashboard-desktop-title h3 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.08;
+  color: #f8fbff;
+}
+
+.ticket-dashboard-desktop-title p {
+  margin: 0;
+  color: #b8cae6;
+  font-size: 15px;
+}
+
+.ticket-dashboard-desktop-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ticket-dashboard-desktop-badges .maintenance-history-badge {
+  border-color: rgba(142, 178, 228, 0.26);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eef4ff;
+}
+
+.ticket-dashboard-desktop-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ticket-dashboard-desktop-meta > div {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(128, 160, 211, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ticket-dashboard-desktop-meta small {
+  color: #9fb8dd;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ticket-dashboard-desktop-meta strong {
+  color: #f4f8ff;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ticket-dashboard-desktop-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ticket-dashboard-desktop-controls .field {
+  gap: 6px;
+}
+
+.ticket-dashboard-desktop-actions {
+  justify-content: flex-start;
+}
+
+.ticket-dashboard-desktop-empty {
+  text-align: center;
+}
+
 .ticket-dashboard-table-wrap table.ticket-dashboard-table {
   min-width: 1560px;
 }
@@ -4311,6 +4418,12 @@ h2 {
 .ticket-dashboard-table .status-select {
   min-width: 132px;
   width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .ticket-dashboard-desktop-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .furniture-report-mobile-list {
