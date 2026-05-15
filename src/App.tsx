@@ -8802,7 +8802,7 @@ export default function App() {
   const [qrCategoryFilter, setQrCategoryFilter] = useState<string[]>(["ALL"]);
   const [qrStatusFilter, setQrStatusFilter] = useState<string[]>(["ALL"]);
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
-  const [qrLabelSize, setQrLabelSize] = useState<"2cm" | "4cm" | "6cm">("4cm");
+  const [qrLabelSize, setQrLabelSize] = useState<"2cm" | "4cm" | "6cm">("2cm");
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
   const [dashboardSupplyHoveredItemKey, setDashboardSupplyHoveredItemKey] = useState<string | null>(null);
@@ -30979,7 +30979,7 @@ export default function App() {
       setQrCategoryFilter(["ALL"]);
       setQrStatusFilter(["ALL"]);
       setQrItemFilter(["ALL"]);
-      setQrLabelSize("4cm");
+      setQrLabelSize("2cm");
       return;
     }
     if (reportType === "asset_by_location") {
@@ -31006,7 +31006,7 @@ export default function App() {
     setQrCategoryFilter(["ALL"]);
     setQrStatusFilter(["ALL"]);
     setQrItemFilter(["ALL"]);
-    setQrLabelSize("4cm");
+    setQrLabelSize("2cm");
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
     setFurnitureControlCampusFilter(["ALL"]);
@@ -32011,9 +32011,10 @@ export default function App() {
     return getPreferredApiBase() || String(window.location.origin || DEFAULT_CLOUD_API_BASE).replace(/\/+$/, "");
   }, []);
   const qrLabelSizeLabel = useMemo(
-    () => QR_LABEL_SIZE_OPTIONS.find((option) => option.value === qrLabelSize)?.label || "4cm x 4cm",
+    () => QR_LABEL_SIZE_OPTIONS.find((option) => option.value === qrLabelSize)?.label || "2cm x 2cm",
     [qrLabelSize]
   );
+  const qrLabelGridClass = `qr-label-grid qr-label-grid-size-${qrLabelSize.replace("cm", "")}`;
   const qrLabelPreviewClass = `qr-label-card-size-${qrLabelSize.replace("cm", "")}`;
 
   const buildAssetQrUrl = useCallback((assetId: string) => {
@@ -32532,8 +32533,6 @@ export default function App() {
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
 
     const qrPrintVariant = qrLabelSize.replace("cm", "");
-    const qrPrintContentMode =
-      qrLabelSize === "2cm" ? "compact" : qrLabelSize === "4cm" ? "standard" : "large";
 
     const reportContentHtml =
       reportType === "qr_labels"
@@ -32545,17 +32544,18 @@ export default function App() {
                 const itemName = String(row.itemName || "").trim() || "-";
                 const location = String(row.location || "").trim() || "-";
                 const campus = String(reportCampusName(row.campus) || "").trim() || "-";
-                const assignedTo = String(row.assignedTo || "").trim();
+                const assignedTo = String(row.assignedTo || "").trim() || "-";
                 const locationLine = `${campus} | ${location}`;
                 const serialLine = `SN: ${serial}`;
+                const assignedLine = `Assigned: ${assignedTo}`;
                 return `<div class="qr-sticker-wrap qr-sticker-wrap-${qrPrintVariant}">
-                  ${qrPrintContentMode === "large" && assignedTo ? `<div class="qr-sticker-user">${escapeHtml(assignedTo)}</div>` : ""}
-                  ${qrPrintContentMode !== "compact" ? `<div class="qr-sticker-item">${escapeHtml(itemName)}</div>` : ""}
-                  ${qrPrintContentMode !== "compact" ? `<div class="qr-sticker-detail">${escapeHtml(locationLine)}</div>` : ""}
-                  ${qrPrintContentMode === "large" ? `<div class="qr-sticker-detail">${escapeHtml(serialLine)}</div>` : ""}
+                  <div class="qr-sticker-item">${escapeHtml(itemName)}</div>
+                  <div class="qr-sticker-detail">${escapeHtml(locationLine)}</div>
+                  <div class="qr-sticker-detail">${escapeHtml(serialLine)}</div>
+                  <div class="qr-sticker-user">${escapeHtml(assignedLine)}</div>
                   <div class="qr-sticker qr-sticker-${qrPrintVariant}">
                     <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
-                    ${qrPrintContentMode !== "compact" ? `<div class="qr-sticker-divider"></div>` : ""}
+                    <div class="qr-sticker-divider"></div>
                     <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
                   </div>
                 </div>`;
@@ -32719,22 +32719,30 @@ export default function App() {
           body.qr-print-mode .report-head-logo { width: 90px; max-width: 90px; }
           body.qr-print-mode p.meta { margin: 0 0 4px; font-size: 9px; }
           .qr-sticker-grid { display: grid; margin-top: 4px; width: 100%; justify-content: flex-start; align-items: start; }
-          .qr-sticker-grid-2 { grid-template-columns: repeat(auto-fill, minmax(2.4cm, 1fr)); gap: 0.16cm; }
-          .qr-sticker-grid-4 { grid-template-columns: repeat(auto-fill, minmax(4.8cm, 1fr)); gap: 0.24cm; }
-          .qr-sticker-grid-6 { grid-template-columns: repeat(auto-fill, minmax(7.2cm, 1fr)); gap: 0.28cm; }
+          .qr-sticker-grid-2 { grid-template-columns: repeat(4, minmax(0, 2.3cm)); gap: 0.16cm; }
+          .qr-sticker-grid-4 { grid-template-columns: repeat(3, minmax(0, 4.6cm)); gap: 0.24cm; }
+          .qr-sticker-grid-6 { grid-template-columns: repeat(2, minmax(0, 6.8cm)); gap: 0.28cm; }
           .qr-sticker-wrap { display: grid; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
           .qr-sticker-wrap-2 { width: 2.3cm; gap: 0.03cm; }
           .qr-sticker-wrap-4 { width: 4.6cm; gap: 0.05cm; }
           .qr-sticker-wrap-6 { width: 6.8cm; gap: 0.06cm; }
           .qr-sticker-user, .qr-sticker-item, .qr-sticker-detail { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .qr-sticker-wrap-2 .qr-sticker-item,
           .qr-sticker-wrap-4 .qr-sticker-item,
           .qr-sticker-wrap-6 .qr-sticker-item,
+          .qr-sticker-wrap-2 .qr-sticker-detail,
           .qr-sticker-wrap-4 .qr-sticker-detail,
           .qr-sticker-wrap-6 .qr-sticker-detail,
+          .qr-sticker-wrap-2 .qr-sticker-user,
+          .qr-sticker-wrap-4 .qr-sticker-user,
           .qr-sticker-wrap-6 .qr-sticker-user { width: 100%; }
+          .qr-sticker-wrap-2 .qr-sticker-user { min-height: 0.18cm; font-size: 5.4px; line-height: 1.02; font-weight: 700; color: #1b2d23; }
+          .qr-sticker-wrap-4 .qr-sticker-user { min-height: 0.24cm; font-size: 7px; line-height: 1.05; font-weight: 700; color: #1b2d23; }
           .qr-sticker-wrap-6 .qr-sticker-user { min-height: 0.34cm; font-size: 10px; line-height: 1.1; font-weight: 700; color: #1b2d23; }
+          .qr-sticker-wrap-2 .qr-sticker-item { min-height: 0.18cm; font-size: 5.8px; line-height: 1.02; font-weight: 800; color: #314238; }
           .qr-sticker-wrap-4 .qr-sticker-item { min-height: 0.34cm; font-size: 9px; line-height: 1.1; font-weight: 800; color: #314238; }
           .qr-sticker-wrap-6 .qr-sticker-item { min-height: 0.42cm; font-size: 12px; line-height: 1.1; font-weight: 800; color: #314238; }
+          .qr-sticker-wrap-2 .qr-sticker-detail { min-height: 0.16cm; font-size: 5px; line-height: 1.02; font-weight: 700; color: #5a695e; }
           .qr-sticker-wrap-4 .qr-sticker-detail { min-height: 0.3cm; font-size: 8px; line-height: 1.05; font-weight: 700; color: #5a695e; }
           .qr-sticker-wrap-6 .qr-sticker-detail { min-height: 0.34cm; font-size: 10px; line-height: 1.08; font-weight: 700; color: #5a695e; }
           .qr-sticker { box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; display: grid; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; background: #fff; }
@@ -32749,6 +32757,7 @@ export default function App() {
           .qr-sticker-4 .qr-sticker-qr img { width: 3.7cm; height: 3.7cm; object-fit: contain; display: block; }
           .qr-sticker-6 .qr-sticker-qr img { width: 5.62cm; height: 5.62cm; object-fit: contain; display: block; }
           .qr-sticker-divider { background: #1b2d23; }
+          .qr-sticker-2 .qr-sticker-divider { width: 2cm; height: 1px; }
           .qr-sticker-4 .qr-sticker-divider { width: 4cm; height: 1px; }
           .qr-sticker-6 .qr-sticker-divider { width: 6cm; height: 1px; }
           .qr-sticker-id { box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 1px; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -51964,17 +51973,6 @@ export default function App() {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search item name..."}
                     emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No item found."}
                   />
-                  <LocationPicker
-                    value={qrLabelSize}
-                    onChange={(value) => setQrLabelSize(value as "2cm" | "4cm" | "6cm")}
-                    options={QR_LABEL_SIZE_OPTIONS.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                    placeholder={lang === "km" ? "ទំហំ QR" : "QR Size"}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកទំហំ..." : "Search size..."}
-                    emptyText={lang === "km" ? "មិនមានទំហំ" : "No size found."}
-                  />
                 </>
               ) : null}
               {reportType === "asset_by_location" ? (
@@ -52207,6 +52205,31 @@ export default function App() {
                 <strong>{selectedReportDisplayTitle}</strong>
                 <span>{selectedReportDisplayGuide}</span>
               </div>
+              {reportType === "qr_labels" ? (
+                <div className="panel-filters qr-size-toolbar">
+                  <div className="tiny report-filters-title">
+                    {lang === "km" ? "ជំហានទី 3: ជ្រើសទំហំ QR" : "Step 3: Select QR Size"}
+                  </div>
+                  <div className="qr-size-toolbar-row">
+                    <div className="field qr-size-toolbar-field">
+                      <span>{lang === "km" ? "ទំហំ QR" : "QR Size"}</span>
+                      <div className="qr-size-button-row" role="group" aria-label={lang === "km" ? "ជ្រើសទំហំ QR" : "Select QR size"}>
+                        {QR_LABEL_SIZE_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`qr-size-button ${qrLabelSize === option.value ? "is-selected" : ""}`}
+                            onClick={() => setQrLabelSize(option.value)}
+                            aria-pressed={qrLabelSize === option.value}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {reportType === "asset_master" && (
@@ -53102,7 +53125,7 @@ export default function App() {
             )}
 
             {reportType === "qr_labels" && (
-              <div className="qr-label-grid">
+              <div className={qrLabelGridClass}>
                 {qrFilteredRows.length ? (
                   qrFilteredRows.map((row) => (
                     <article className={`qr-label-card ${qrLabelPreviewClass}`} key={`qr-label-${row.assetDbId}`}>
@@ -53115,10 +53138,10 @@ export default function App() {
                       </div>
                       <div className="qr-label-meta">
                         <div className="qr-label-asset-id">{row.assetId}</div>
-                        {qrLabelSize !== "2cm" ? <div className="qr-label-item-name">{row.itemName}</div> : null}
-                        {qrLabelSize !== "2cm" ? <div>{reportCampusName(row.campus)} | {row.location || "-"}</div> : null}
-                        {qrLabelSize === "6cm" ? <div>SN: {String(row.serialNumber || "").trim() || "-"}</div> : null}
-                        {qrLabelSize === "6cm" && String(row.assignedTo || "").trim() ? <div>Assigned: {row.assignedTo}</div> : null}
+                        <div className="qr-label-item-name">{row.itemName || "-"}</div>
+                        <div>{reportCampusName(row.campus)} | {row.location || "-"}</div>
+                        <div>SN: {String(row.serialNumber || "").trim() || "-"}</div>
+                        <div>Assigned: {String(row.assignedTo || "").trim() || "-"}</div>
                       </div>
                     </article>
                   ))
