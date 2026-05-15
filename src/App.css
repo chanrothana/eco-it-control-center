@@ -4231,13 +4231,15 @@ h2 {
 
 .ticket-dashboard-desktop-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
 }
 
 .ticket-dashboard-desktop-card {
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(103, 131, 171, 0.28);
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(34, 54, 82, 0.96), rgba(27, 44, 68, 0.97));
@@ -4267,15 +4269,15 @@ h2 {
 
 .ticket-dashboard-desktop-title h3 {
   margin: 0;
-  font-size: 28px;
-  line-height: 1.08;
+  font-size: 22px;
+  line-height: 1.12;
   color: #f8fbff;
 }
 
 .ticket-dashboard-desktop-title p {
   margin: 0;
   color: #b8cae6;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .ticket-dashboard-desktop-badges {
@@ -4293,14 +4295,14 @@ h2 {
 
 .ticket-dashboard-desktop-meta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .ticket-dashboard-desktop-meta > div {
   display: grid;
   gap: 4px;
-  padding: 14px;
+  padding: 12px;
   border-radius: 14px;
   border: 1px solid rgba(128, 160, 211, 0.2);
   background: rgba(255, 255, 255, 0.04);
@@ -4321,7 +4323,7 @@ h2 {
 .ticket-dashboard-desktop-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .ticket-dashboard-desktop-controls .field {
@@ -4334,6 +4336,12 @@ h2 {
 
 .ticket-dashboard-desktop-empty {
   text-align: center;
+}
+
+@media (max-width: 1400px) {
+  .ticket-dashboard-desktop-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ticket-dashboard-table-wrap table.ticket-dashboard-table {
@@ -4418,12 +4426,6 @@ h2 {
 .ticket-dashboard-table .status-select {
   min-width: 132px;
   width: 100%;
-}
-
-@media (max-width: 1200px) {
-  .ticket-dashboard-desktop-meta {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .furniture-report-mobile-list {
