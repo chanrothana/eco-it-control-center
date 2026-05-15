@@ -9223,7 +9223,7 @@ const server = http.createServer(async (req, res) => {
         assetName: toText(asset.name) || toText(asset.assetId),
         assetLocation: toText(asset.location),
         title: toText(body.title) || `Repair request for ${toText(asset.assetId)}`,
-        requestSource: "qr_scan",
+        requestSource: "qr_asset",
         status: "Open",
       });
       if (typeof cleaned === "string") {

@@ -14601,7 +14601,7 @@ export default function App() {
   );
   const ticketDashboardRows = useMemo(() => {
     return tickets.filter((ticket) => {
-      const isQr = String(ticket.requestSource || "").toLowerCase() === "qr_asset";
+      const isQr = isQrTicketSource(ticket.requestSource);
       const isClosed = ["Done", "Cancelled", "Resolved"].includes(String(ticket.status || ""));
       if (ticketDashboardSourceFilter === "QR" && !isQr) return false;
       if (ticketDashboardSourceFilter === "MANUAL" && isQr) return false;
@@ -14619,7 +14619,7 @@ export default function App() {
     });
   }, [ticketDashboardAssignedFilter, ticketDashboardCampusFilter, ticketDashboardSourceFilter, ticketDashboardStatusFilter, tickets]);
   const ticketDashboardSummary = useMemo(() => {
-    const qrTickets = tickets.filter((ticket) => String(ticket.requestSource || "").toLowerCase() === "qr_asset");
+    const qrTickets = tickets.filter((ticket) => isQrTicketSource(ticket.requestSource));
     const openQrTickets = qrTickets.filter((ticket) => !["Done", "Cancelled", "Resolved"].includes(String(ticket.status || "")));
     const fixedQrTickets = qrTickets.filter((ticket) => ["Done", "Resolved"].includes(String(ticket.status || "")));
     const unassignedQrTickets = qrTickets.filter((ticket) => !String(ticket.assignedTo || "").trim() && !["Done", "Cancelled", "Resolved"].includes(String(ticket.status || "")));
@@ -33211,8 +33211,13 @@ export default function App() {
     return <div className="public-asset-history-empty">{message}</div>;
   }
 
+  function isQrTicketSource(value?: string) {
+    const source = String(value || "").trim().toLowerCase();
+    return source === "qr_asset" || source === "qr_scan";
+  }
+
   function formatTicketRequestSource(value?: string) {
-    return String(value || "").trim().toLowerCase() === "qr_asset" ? "QR Asset Scan" : "Manual";
+    return isQrTicketSource(value) ? "QR Asset Scan" : "Manual";
   }
 
   function maintenanceTypePublicLabel(value?: string) {

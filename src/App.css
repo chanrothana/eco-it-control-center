@@ -17300,6 +17300,7 @@ tr.row-maint-maintenance:hover td {
   width: auto !important;
   min-width: 84px !important;
   padding: 0 12px !important;
+  max-width: min(44vw, 220px);
 }
 
 .public-qr-account-chip-text {
@@ -20482,7 +20483,7 @@ tr.row-maint-maintenance:hover td {
   }
 
   .app-card-public-asset {
-    margin: 10px auto;
+    margin: calc(72px + env(safe-area-inset-top, 0px)) auto 10px;
     padding: 10px;
     border-radius: 14px;
   }
@@ -20497,6 +20498,7 @@ tr.row-maint-maintenance:hover td {
 
   .public-qr-account-chip {
     min-height: 46px;
+    max-width: min(42vw, 180px);
   }
 
   .public-qr-side-drawer .field {
@@ -20999,7 +21001,7 @@ tr.row-maint-maintenance:hover td {
   }
 
   .app-card-public-asset {
-    margin: 8px auto;
+    margin: calc(70px + env(safe-area-inset-top, 0px)) auto 8px;
     padding: 8px;
   }
 
