@@ -2133,6 +2133,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   ],
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
+    { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
     { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
     { itemEn: "Walkie Talkie", itemKm: "វិទ្យុទាក់ទង", code: "WTK" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
@@ -53512,53 +53513,6 @@ export default function App() {
 
         {(tab === "setup" || tab === "vault") && (
           <>
-          {tab === "setup" && !isPhoneView && (
-          <section className="panel">
-            <div className="row-actions setup-tabs-row">
-              {canAccessMenu("setup.campus", "setup") ? (
-                <button className={`tab ${setupView === "campus" ? "tab-active" : ""}`} onClick={() => setSetupView("campus")}>
-                  {t.campusNameSetup}
-                </button>
-              ) : null}
-              {canAccessMenu("setup.users", "setup") ? (
-                <button className={`tab ${setupView === "users" ? "tab-active" : ""}`} onClick={() => setSetupView("users")}>
-                  {t.userSetup}
-                </button>
-              ) : null}
-              {canAccessMenu("setup.permissions", "setup") ? (
-                <button className={`tab ${setupView === "permissions" ? "tab-active" : ""}`} onClick={() => setSetupView("permissions")}>
-                  {t.accountPermissionSetup}
-                </button>
-              ) : null}
-              {canAccessMenu("setup.backup", "setup") ? (
-                <button className={`tab ${setupView === "backup" ? "tab-active" : ""}`} onClick={() => setSetupView("backup")}>
-                  Backup & Audit
-                </button>
-              ) : null}
-              {canAccessMenu("setup.items", "setup") ? (
-                <button className={`tab ${setupView === "items" ? "tab-active" : ""}`} onClick={() => setSetupView("items")}>
-                  {t.itemNameSetup}
-                </button>
-              ) : null}
-              {canAccessMenu("setup.furnitureModels", "setup") ? (
-                <button className={`tab ${setupView === "furnitureModels" ? "tab-active" : ""}`} onClick={() => setSetupView("furnitureModels")}>
-                  Furniture Models
-                </button>
-              ) : null}
-              {canAccessMenu("setup.locations", "setup") ? (
-                <button className={`tab ${setupView === "locations" ? "tab-active" : ""}`} onClick={() => setSetupView("locations")}>
-                  {t.locationSetup}
-                </button>
-              ) : null}
-              {canAccessMenu("setup.calendar", "setup") ? (
-                <button className={`tab ${setupView === "calendar" ? "tab-active" : ""}`} onClick={() => setSetupView("calendar")}>
-                  Calendar Event Setup
-                </button>
-              ) : null}
-            </div>
-          </section>
-          )}
-
           {tab === "setup" && setupView === "campus" && canAccessMenu("setup.campus", "setup") && (
           <section className="panel">
             <h2>{t.campusNameSetup}</h2>
