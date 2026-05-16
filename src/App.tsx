@@ -12,6 +12,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Fan,
   FileText,
   Flame,
   Keyboard,
@@ -852,6 +853,7 @@ type ItemTemplate = {
   specs?: string;
   acType?: string;
   acHp?: string;
+  fanType?: string;
   acHasRemote?: boolean;
   acHasFrontPanel?: boolean;
   acHasOutdoor?: boolean;
@@ -2028,6 +2030,8 @@ function itemSetupAssetCategoryLabel(code: string) {
 }
 const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
+const FAN_TYPE_OPTIONS = ["Wall Fan", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
+const FAN_TYPE_CODES = ["FAN", "WFN", "CFN", "EFN"] as const;
 const FURNITURE_CONDITION_OPTIONS = ["Good", "Need Repair", "Broken", "Scrap"] as const;
 const FURNITURE_TRACKING_MODE_OPTIONS = ["Grouped", "Individual"] as const;
 const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
@@ -2563,7 +2567,7 @@ const TEXT = {
     openMaintenance: "Open Maintenance",
   },
   km: {
-    school: "សាលា អេកូ អន្តរជាតិ",
+    school: "សាលាអន្តរជាតិ អ៉ីខូ",
     title: "ប្រព័ន្ធគ្រប់គ្រង IT និងបរិក្ខារ",
     subhead: "គ្រប់គ្រងទ្រព្យសម្បត្តិ ការថែទាំ និងបញ្ហាតាមគ្រប់ Campus ជាកណ្តាល។",
     view: "មើល",
@@ -5965,6 +5969,13 @@ function isAirconAsset(category: string, type: string) {
   return String(category || "").toUpperCase() === "FACILITY" && String(type || "").toUpperCase() === "AC";
 }
 
+function isFanAsset(category: string, type: string) {
+  return (
+    String(category || "").toUpperCase() === "FACILITY" &&
+    FAN_TYPE_CODES.includes(String(type || "").trim().toUpperCase() as (typeof FAN_TYPE_CODES)[number])
+  );
+}
+
 function hidesAssignmentHistory(category: string, type: string) {
   const normalizedCategory = String(category || "").trim().toUpperCase();
   const normalizedType = String(type || "").trim().toUpperCase();
@@ -6080,6 +6091,39 @@ function buildAirconSpecs(
   if (hasOutdoor) included.push("Outdoor Unit");
   if (included.length) out.push(`Included: ${included.join(", ")}`);
   if (componentNote) out.push(`Components Note: ${componentNote}`);
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
+}
+
+function parseFanSpecs(specsRaw: string) {
+  const specs = String(specsRaw || "").trim();
+  if (!specs) {
+    return {
+      fanType: "",
+      specs: "",
+    };
+  }
+  let fanType = "";
+  const typeMatch = specs.match(/Fan Type:\s*([^|\n;]+?)(?=\s*(?:$))/i);
+  if (typeMatch?.[1]) fanType = String(typeMatch[1]).trim();
+  const cleanedSpecs = specs
+    .replace(/Fan Type:\s*([^|\n;]+?)(?=\s*(?:$))/gi, "")
+    .replace(/[|;]+/g, "\n")
+    .replace(/\n\s*,/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return {
+    fanType,
+    specs: cleanedSpecs,
+  };
+}
+
+function buildFanSpecs(baseSpecs: string, fanType: string) {
+  const normalized = parseFanSpecs(baseSpecs);
+  const out: string[] = [];
+  const type = String(fanType || "").trim();
+  if (type) out.push(`Fan Type: ${type}`);
   if (normalized.specs) out.push(normalized.specs);
   return out.join("\n").trim();
 }
@@ -8970,6 +9014,7 @@ export default function App() {
       ...readStringMap(ITEM_ASSET_CATEGORY_FALLBACK_KEY),
     };
   });
+  const [itemSetupSearchInput, setItemSetupSearchInput] = useState("");
   const [stats, setStats] = useState<DashboardStats>({
     totalAssets: 0,
     itAssets: 0,
@@ -9008,6 +9053,7 @@ export default function App() {
     serialNumber: "",
     acType: "",
     acHp: "",
+    fanType: "",
     acHasRemote: false,
     acHasFrontPanel: false,
     acHasOutdoor: false,
@@ -9251,6 +9297,7 @@ export default function App() {
     serialNumber: "",
     acType: "",
     acHp: "",
+    fanType: "",
     acHasRemote: false,
     acHasFrontPanel: false,
     acHasOutdoor: false,
@@ -10345,6 +10392,7 @@ export default function App() {
     specs: "",
     acType: "",
     acHp: "",
+    fanType: "",
     acHasRemote: false,
     acHasFrontPanel: true,
     acHasOutdoor: true,
@@ -14769,6 +14817,7 @@ export default function App() {
         vendor: string;
         acType: string;
         acHp: string;
+        fanType: string;
         count: number;
       }
     >();
@@ -14780,6 +14829,9 @@ export default function App() {
       const parsedAircon = isAirconAsset(asset.category, asset.type)
         ? parseAirconSpecs(specs)
         : { acType: "", acHp: "" };
+      const parsedFan = isFanAsset(asset.category, asset.type)
+        ? parseFanSpecs(specs)
+        : { fanType: "" };
       const existing = byModel.get(key);
       if (!existing) {
         byModel.set(key, {
@@ -14789,12 +14841,14 @@ export default function App() {
           vendor: String(asset.vendor || "").trim(),
           acType: String(parsedAircon.acType || "").trim(),
           acHp: String(parsedAircon.acHp || "").trim(),
+          fanType: String(parsedFan.fanType || "").trim(),
           count: 1,
         });
       } else {
         existing.count += 1;
         if (!existing.acType && parsedAircon.acType) existing.acType = String(parsedAircon.acType || "").trim();
         if (!existing.acHp && parsedAircon.acHp) existing.acHp = String(parsedAircon.acHp || "").trim();
+        if (!existing.fanType && parsedFan.fanType) existing.fanType = String(parsedFan.fanType || "").trim();
       }
     }
     return Array.from(byModel.values()).sort((a, b) => a.model.localeCompare(b.model));
@@ -14861,6 +14915,7 @@ export default function App() {
 
   const applyItemTemplateToCreate = useCallback((template: ItemTemplate) => {
     const isAc = isAirconAsset(template.category, template.type);
+    const isFan = isFanAsset(template.category, template.type);
     const parsedWalkie = String(template.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
       ? parseWalkieTalkieSpecs(String(template.specs || ""))
       : { hasCharger: false, chargerDetail: "", specs: String(template.specs || "") };
@@ -14874,6 +14929,7 @@ export default function App() {
       specs: parsedWalkie.specs,
       acType: isAc ? String(template.acType || "") : "",
       acHp: isAc ? String(template.acHp || "") : "",
+      fanType: isFan ? String(template.fanType || "") : "",
       acHasRemote: isAc ? Boolean(template.acHasRemote) : false,
       acHasFrontPanel: isAc ? Boolean(template.acHasFrontPanel) : false,
       acHasOutdoor: isAc ? Boolean(template.acHasOutdoor) : false,
@@ -14905,12 +14961,17 @@ export default function App() {
         if (!String(prev.acType || "").trim() && tpl.acType) next.acType = tpl.acType;
         if (!String(prev.acHp || "").trim() && tpl.acHp) next.acHp = tpl.acHp;
       }
+      if (isFanAsset(prev.category, prev.type)) {
+        if (!String(prev.fanType || "").trim() && tpl.fanType) next.fanType = tpl.fanType;
+      }
       return next;
     });
     setModelTemplateNote(
       isAirconAsset(assetForm.category, assetForm.type)
         ? `Model template matched: ${tpl.model}. AC Type and Capacity auto-filled`
-        : `Model template matched: ${tpl.model}. Specs auto-filled`
+        : isFanAsset(assetForm.category, assetForm.type)
+          ? `Model template matched: ${tpl.model}. Fan Type auto-filled`
+          : `Model template matched: ${tpl.model}. Specs auto-filled`
     );
   }, [assetForm.category, assetForm.type, modelTemplates]);
   const applySetPackModelTemplate = useCallback((type: SetPackChildType, rawModel: string) => {
@@ -15013,6 +15074,13 @@ export default function App() {
         };
       }
       return prev;
+    });
+  }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    setAssetForm((prev) => {
+      if (isFanAsset(prev.category, prev.type)) return prev;
+      if (!prev.fanType) return prev;
+      return { ...prev, fanType: "" };
     });
   }, [assetForm.category, assetForm.type]);
   useEffect(() => {
@@ -15190,9 +15258,30 @@ export default function App() {
       return a.code.localeCompare(b.code);
     });
   }, [allTypeOptions, itemAssetCategories]);
+  const deferredItemSetupSearchInput = useDeferredValue(itemSetupSearchInput);
+  const itemSetupSearchQuery = deferredItemSetupSearchInput.trim().toLowerCase();
+  const filteredItemSetupRows = useMemo(() => {
+    if (!itemSetupSearchQuery) return itemSetupRows;
+    return itemSetupRows.filter((row) => {
+      const assetTypeCode = String(itemAssetCategories[row.key] || row.assetCategory || "").trim().toUpperCase();
+      const assetCategoryLabel =
+        ITEM_SETUP_ASSET_CATEGORY_OPTIONS.find((opt) => opt.value === assetTypeCode)?.label || assetTypeCode;
+      const itemName = String(itemNames[row.key] || "").trim();
+      return [
+        row.category,
+        row.code,
+        assetTypeCode,
+        assetCategoryLabel,
+        itemName,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(itemSetupSearchQuery);
+    });
+  }, [itemAssetCategories, itemNames, itemSetupRows, itemSetupSearchQuery]);
   const itemSetupRowsByCategory = useMemo(() => {
-    const grouped = new Map<string, typeof itemSetupRows>();
-    itemSetupRows.forEach((row) => {
+    const grouped = new Map<string, typeof filteredItemSetupRows>();
+    filteredItemSetupRows.forEach((row) => {
       if (!grouped.has(row.category)) grouped.set(row.category, []);
       grouped.get(row.category)?.push(row);
     });
@@ -15210,7 +15299,7 @@ export default function App() {
           rows: grouped.get(category) || [],
         };
       });
-  }, [itemSetupRows, lang]);
+  }, [filteredItemSetupRows, lang]);
   const setPackChildMeta = useMemo<Array<{ type: SetPackChildType; label: string }>>(
     () => [
       { type: "MON", label: t.includeMonitor },
@@ -16148,6 +16237,7 @@ export default function App() {
     }
     const createAssignedTo = userRequired ? assetForm.assignedTo.trim() : "";
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
+    const createIsFan = isFanAsset(assetForm.category, assetForm.type);
     const createAirconComponents = createIsAircon
       ? [
           ...(assetForm.acHasRemote
@@ -16190,7 +16280,9 @@ export default function App() {
           hasOutdoor: assetForm.acHasOutdoor,
           componentNote: assetForm.acComponentNote,
         })
-      : (String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+      : (createIsFan
+          ? buildFanSpecs(assetForm.specs, assetForm.fanType)
+          : (String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
           ? buildWalkieTalkieSpecs(
               assetForm.specs,
               Boolean(assetForm.walkieHasCharger),
@@ -16208,7 +16300,7 @@ export default function App() {
                   quantity: assetForm.furnitureQuantity,
                   condition: assetForm.furnitureCondition,
                 })
-              : assetForm.specs));
+              : assetForm.specs)));
     const mainSerial = assetForm.serialNumber.trim();
     const duplicateMain = findDuplicateAssetSerial(assets, mainSerial);
     if (duplicateMain) {
@@ -16566,6 +16658,7 @@ export default function App() {
         serialNumber: "",
         acType: "",
         acHp: "",
+        fanType: "",
         acHasRemote: false,
         acHasFrontPanel: false,
         acHasOutdoor: false,
@@ -20263,6 +20356,7 @@ export default function App() {
       return;
     }
     const isAc = isAirconAsset(category, type);
+    const isFan = isFanAsset(category, type);
     const row: ItemTemplate = {
       id: editingItemTemplateId || Date.now(),
       name,
@@ -20274,6 +20368,7 @@ export default function App() {
       specs: String(itemTemplateForm.specs || "").trim(),
       acType: isAc ? String(itemTemplateForm.acType || "").trim() : "",
       acHp: isAc ? String(itemTemplateForm.acHp || "").trim() : "",
+      fanType: isFan ? String(itemTemplateForm.fanType || "").trim() : "",
       acHasRemote: isAc ? Boolean(itemTemplateForm.acHasRemote) : false,
       acHasFrontPanel: isAc ? Boolean(itemTemplateForm.acHasFrontPanel) : false,
       acHasOutdoor: isAc ? Boolean(itemTemplateForm.acHasOutdoor) : false,
@@ -20297,6 +20392,7 @@ export default function App() {
       specs: "",
       acType: "",
       acHp: "",
+      fanType: "",
       acHasRemote: false,
       acHasFrontPanel: true,
       acHasOutdoor: true,
@@ -20329,6 +20425,7 @@ export default function App() {
         specs: "",
         acType: "",
         acHp: "",
+        fanType: "",
         acHasRemote: false,
         acHasFrontPanel: true,
         acHasOutdoor: true,
@@ -20426,6 +20523,7 @@ export default function App() {
       specs: template.specs || "",
       acType: template.acType || "",
       acHp: template.acHp || "",
+      fanType: template.fanType || "",
       acHasRemote: Boolean(template.acHasRemote),
       acHasFrontPanel: Boolean(template.acHasFrontPanel),
       acHasOutdoor: Boolean(template.acHasOutdoor),
@@ -20445,6 +20543,7 @@ export default function App() {
       specs: "",
       acType: "",
       acHp: "",
+      fanType: "",
       acHasRemote: false,
       acHasFrontPanel: true,
       acHasOutdoor: true,
@@ -20472,6 +20571,7 @@ export default function App() {
       return;
     }
     const isAc = isAirconAsset(category, type);
+    const isFan = isFanAsset(category, type);
     const row: ItemTemplate = {
       id: Date.now(),
       name,
@@ -20483,6 +20583,7 @@ export default function App() {
       specs: String(assetForm.specs || "").trim(),
       acType: isAc ? String(assetForm.acType || "").trim() : "",
       acHp: isAc ? String(assetForm.acHp || "").trim() : "",
+      fanType: isFan ? String(assetForm.fanType || "").trim() : "",
       acHasRemote: isAc ? Boolean(assetForm.acHasRemote) : false,
       acHasFrontPanel: isAc ? Boolean(assetForm.acHasFrontPanel) : false,
       acHasOutdoor: isAc ? Boolean(assetForm.acHasOutdoor) : false,
@@ -23427,9 +23528,12 @@ export default function App() {
           acComponentNote: "",
           specs: asset.specs || "",
         };
+    const parsedFan = isFanAsset(asset.category, asset.type)
+      ? parseFanSpecs(asset.specs || "")
+      : { fanType: "", specs: parsedAircon.specs || String(asset.specs || "") };
     const parsedWalkie = String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
       ? parseWalkieTalkieSpecs(asset.specs || "")
-      : { hasCharger: false, chargerDetail: "", specs: parsedAircon.specs || String(asset.specs || "") };
+      : { hasCharger: false, chargerDetail: "", specs: parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
     const parsedFurniture = isFurnitureAsset(asset.category)
       ? parseFurnitureSpecs(asset.specs || "")
       : {
@@ -23460,6 +23564,7 @@ export default function App() {
       serialNumber: asset.serialNumber || "",
       acType: parsedAircon.acType,
       acHp: parsedAircon.acHp,
+      fanType: parsedFan.fanType,
       acHasRemote: parsedAircon.acHasRemote,
       acHasFrontPanel: parsedAircon.acHasFrontPanel,
       acHasOutdoor: parsedAircon.acHasOutdoor,
@@ -23482,7 +23587,7 @@ export default function App() {
       furnitureSize: parsedFurniture.size,
       furnitureQuantity: parsedFurniture.quantity || "1",
       furnitureCondition: parsedFurniture.condition || FURNITURE_CONDITION_OPTIONS[0],
-      specs: parsedFurniture.specs || parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
+      specs: parsedFurniture.specs || parsedWalkie.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
@@ -24009,7 +24114,9 @@ export default function App() {
             hasOutdoor: assetEditForm.acHasOutdoor,
             componentNote: assetEditForm.acComponentNote,
           })
-        : (String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
+        : (isFanAsset(editingAsset?.category || "", editingAsset?.type || "")
+            ? buildFanSpecs(assetEditForm.specs.trim(), assetEditForm.fanType)
+            : (String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
             ? buildWalkieTalkieSpecs(
                 assetEditForm.specs.trim(),
                 Boolean(assetEditForm.walkieHasCharger),
@@ -24027,7 +24134,7 @@ export default function App() {
                     quantity: assetEditForm.furnitureQuantity,
                     condition: assetEditForm.furnitureCondition,
                   })
-                : assetEditForm.specs.trim())),
+                : assetEditForm.specs.trim()))),
       purchaseDate: assetEditForm.purchaseDate.trim(),
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
@@ -31459,6 +31566,16 @@ export default function App() {
     if (code === "FCP" || name.includes("control panel")) return icon(Settings);
 
     if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return icon(Snowflake);
+    if (
+      code === "FAN" ||
+      code === "WFN" ||
+      code === "CFN" ||
+      code === "EFN" ||
+      name.includes("wall fan") ||
+      name.includes("ceiling fan") ||
+      name.includes("exhaust fan") ||
+      name.includes("fan")
+    ) return icon(Fan);
     if (code === "WDP" || name.includes("water dispenser")) return icon(Droplets);
     if (code === "WTK" || name.includes("walkie")) return icon(Radio);
     if (code === "FPN" || name.includes("front panel")) return icon(Puzzle);
@@ -33831,7 +33948,7 @@ export default function App() {
                               />
                             </label>
                             <label className="field">
-                              <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                              <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
                               <input
                                 key={`${publicQrRecordFileKey}-before`}
                                 className="file-input"
@@ -33865,7 +33982,7 @@ export default function App() {
                               ) : null}
                             </label>
                             <label className="field">
-                              <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                              <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
                               <input
                                 key={`${publicQrRecordFileKey}-after`}
                                 className="file-input"
@@ -34024,6 +34141,9 @@ export default function App() {
                           <div className="field"><span>{t.brand}</span><div className="detail-value">{asset.brand || "-"}</div></div>
                           <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
                           <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
+                          {isFanAsset(asset.category || "", asset.type || "") ? (
+                            <div className="field"><span>Fan Type</span><div className="detail-value">{parseFanSpecs(asset.specs || "").fanType || "-"}</div></div>
+                          ) : null}
                           <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
                           <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
                           <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
@@ -37747,6 +37867,23 @@ export default function App() {
                       </label>
                     </>
                   ) : null}
+                  {isFanAsset(assetForm.category, assetForm.type) ? (
+                    <label className="field">
+                      <span>Fan Type</span>
+                      <select
+                        className="input"
+                        value={assetForm.fanType}
+                        onChange={(e) => setAssetForm((f) => ({ ...f, fanType: e.target.value }))}
+                      >
+                        <option value="">Select fan type</option>
+                        {FAN_TYPE_OPTIONS.map((option) => (
+                          <option key={`fan-type-${option}`} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   {String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
                     <label className="field">
                       <span>Included Components</span>
@@ -38780,6 +38917,9 @@ export default function App() {
                     {!detailFurniture ? (
                       <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
                     ) : null}
+                    {isFanAsset(detailAsset.category, detailAsset.type) ? (
+                      <div className="field"><span>Fan Type</span><div className="detail-value">{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</div></div>
+                    ) : null}
                     <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
                     <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
                     {!detailFurniture ? (
@@ -39751,6 +39891,23 @@ export default function App() {
                           />
                         </label>
                       </>
+                    ) : null}
+                    {isFanAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                      <label className="field">
+                        <span>Fan Type</span>
+                        <select
+                          className="input"
+                          value={assetEditForm.fanType}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, fanType: e.target.value }))}
+                        >
+                          <option value="">Select fan type</option>
+                          {FAN_TYPE_OPTIONS.map((option) => (
+                            <option key={`edit-fan-type-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     ) : null}
                     {String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
                       <label className="field">
@@ -41931,7 +42088,7 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"}</span>
+                  <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"}</span>
                   <input key={`${ticketMaintenanceFileKey}-before`} type="file" accept="image/*" multiple onChange={(e) => void onTicketMaintenancePhotoFile(e, "before")} />
                   {ticketMaintenanceForm.beforePhotos.length ? (
                     <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
@@ -41947,7 +42104,7 @@ export default function App() {
                   ) : null}
                 </label>
                 <label className="field">
-                  <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"}</span>
+                  <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"}</span>
                   <input key={`${ticketMaintenanceFileKey}-after`} type="file" accept="image/*" multiple onChange={(e) => void onTicketMaintenancePhotoFile(e, "after")} />
                   {ticketMaintenanceForm.afterPhotos.length ? (
                     <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
@@ -48029,7 +48186,7 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>{lang === "km" ? "រូបមុនធ្វើការ" : "Before Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                  <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
                   <input
                     key={`${maintenanceRecordFileKey}-staff-before`}
                     className="file-input"
@@ -48063,7 +48220,7 @@ export default function App() {
                   ) : null}
                 </label>
                 <label className="field">
-                  <span>{lang === "km" ? "រូបក្រោយធ្វើការ" : "After Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                  <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
                   <input
                     key={`${maintenanceRecordFileKey}-staff-after`}
                     className="file-input"
@@ -53690,6 +53847,24 @@ export default function App() {
                     </label>
                   </>
                 ) : null}
+                {isFanAsset(itemTemplateForm.category, itemTemplateForm.type) ? (
+                  <label className="field">
+                    <span>Fan Type</span>
+                    <select
+                      className="input"
+                      value={itemTemplateForm.fanType}
+                      disabled={!isAdmin}
+                      onChange={(e) => setItemTemplateForm((f) => ({ ...f, fanType: e.target.value }))}
+                    >
+                      <option value="">Select fan type</option>
+                      {FAN_TYPE_OPTIONS.map((option) => (
+                        <option key={`setup-fan-type-${option}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="field field-wide">
                   <span>{t.specs}</span>
                   <textarea
@@ -53722,7 +53897,7 @@ export default function App() {
                       <th>{t.typeCode}</th>
                       <th>{t.brand}</th>
                       <th>{t.model}</th>
-                      <th>AC Spec</th>
+                      <th>Type Detail</th>
                       <th>{t.edit}</th>
                       <th>{t.delete}</th>
                     </tr>
@@ -53742,7 +53917,9 @@ export default function App() {
                             <td>
                               {isAirconAsset(tpl.category, tpl.type)
                                 ? [tpl.acType || "-", tpl.acHp || "-"].join(" | ")
-                                : "-"}
+                                : isFanAsset(tpl.category, tpl.type)
+                                  ? (tpl.fanType || "-")
+                                  : "-"}
                             </td>
                             <td>
                               <button
@@ -54939,7 +55116,35 @@ export default function App() {
 
           {tab === "setup" && setupView === "items" && canAccessMenu("setup.items", "setup") && (
           <section className="panel">
-            <h2>{t.itemNameSetup}</h2>
+            <div className="panel-head panel-head-compact">
+              <h2>{t.itemNameSetup}</h2>
+              {!isPhoneView ? (
+                <div
+                  className="panel-head-actions"
+                  style={{ alignItems: "flex-end", minWidth: "min(420px, 100%)", flexDirection: "column" }}
+                >
+                  <label className="field" style={{ width: "min(420px, 100%)" }}>
+                    <span>{lang === "km" ? "ស្វែងរកទំនិញ" : "Search Items"}</span>
+                    <input
+                      className="input"
+                      type="search"
+                      value={itemSetupSearchInput}
+                      onChange={(e) => setItemSetupSearchInput(e.target.value)}
+                      placeholder={
+                        lang === "km"
+                          ? "ស្វែងរកតាម Category, Type Code, Asset Type Code, ឬ Item Name..."
+                          : "Search by category, type code, asset type code, or item name..."
+                      }
+                    />
+                  </label>
+                  <div className="tiny">
+                    {lang === "km"
+                      ? `បង្ហាញ ${filteredItemSetupRows.length} / ${itemSetupRows.length} items`
+                      : `Showing ${filteredItemSetupRows.length} / ${itemSetupRows.length} items`}
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <div className="form-grid">
               <label className="field">
                 <span>{t.category}</span>
@@ -55019,76 +55224,105 @@ export default function App() {
               </div>
             </div>
             {isPhoneView ? (
-              <div className="item-setup-mobile-list">
-                {itemSetupRowsByCategory.map((group) => (
-                  <section className="item-setup-mobile-group" key={`item-setup-group-${group.category}`}>
-                    <div className="item-setup-mobile-group-head">
-                      <strong>{group.label}</strong>
-                      <span>{group.rows.length} {group.rows.length === 1 ? "item" : "items"}</span>
-                    </div>
-                    <div className="item-setup-mobile-group-list">
-                      {group.rows.map((row) => (
-                        <article className="item-setup-mobile-card" key={`item-setup-mobile-${row.key}`}>
-                          <div className="item-setup-mobile-head">
-                            <div className="item-setup-mobile-icon" aria-hidden={true}>
-                              {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
+              <>
+                <div className="panel-filters" style={{ marginTop: 12, marginBottom: 12 }}>
+                  <label className="field field-wide">
+                    <span>{lang === "km" ? "ស្វែងរកទំនិញ" : "Search Items"}</span>
+                    <input
+                      className="input"
+                      type="search"
+                      value={itemSetupSearchInput}
+                      onChange={(e) => setItemSetupSearchInput(e.target.value)}
+                      placeholder={
+                        lang === "km"
+                          ? "ស្វែងរកតាម Category, Type Code, Asset Type Code, ឬ Item Name..."
+                          : "Search by category, type code, asset type code, or item name..."
+                      }
+                    />
+                  </label>
+                  <div className="tiny">
+                    {lang === "km"
+                      ? `បង្ហាញ ${filteredItemSetupRows.length} / ${itemSetupRows.length} items`
+                      : `Showing ${filteredItemSetupRows.length} / ${itemSetupRows.length} items`}
+                  </div>
+                </div>
+              {itemSetupRowsByCategory.length ? (
+                <div className="item-setup-mobile-list">
+                  {itemSetupRowsByCategory.map((group) => (
+                    <section className="item-setup-mobile-group" key={`item-setup-group-${group.category}`}>
+                      <div className="item-setup-mobile-group-head">
+                        <strong>{group.label}</strong>
+                        <span>{group.rows.length} {group.rows.length === 1 ? "item" : "items"}</span>
+                      </div>
+                      <div className="item-setup-mobile-group-list">
+                        {group.rows.map((row) => (
+                          <article className="item-setup-mobile-card" key={`item-setup-mobile-${row.key}`}>
+                            <div className="item-setup-mobile-head">
+                              <div className="item-setup-mobile-icon" aria-hidden={true}>
+                                {itemTypeIcon(row.category, row.code, itemNames[row.key] || "")}
+                              </div>
+                              <div className="item-setup-mobile-title">
+                                <strong>{itemNames[row.key] || "-"}</strong>
+                                <span>{row.category} • {row.code}</span>
+                              </div>
                             </div>
-                            <div className="item-setup-mobile-title">
-                              <strong>{itemNames[row.key] || "-"}</strong>
-                              <span>{row.category} • {row.code}</span>
+                            <div className="item-setup-mobile-grid">
+                              <div>
+                                <small>{t.assetCategory}</small>
+                                <strong>
+                                  {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.find(
+                                    (opt) => opt.value === (itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()
+                                  )?.label || (itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
+                                </strong>
+                              </div>
+                              <div>
+                                <small>{t.assetTypeCode}</small>
+                                <strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong>
+                              </div>
                             </div>
-                          </div>
-                          <div className="item-setup-mobile-grid">
-                            <div>
-                              <small>{t.assetCategory}</small>
-                              <strong>
-                                {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.find(
-                                  (opt) => opt.value === (itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()
-                                )?.label || (itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
-                              </strong>
-                            </div>
-                            <div>
-                              <small>{t.assetTypeCode}</small>
-                              <strong>{(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}</strong>
-                            </div>
-                          </div>
-                          <details className="item-setup-mobile-details">
-                            <summary>{lang === "km" ? "កែសម្រួល" : "Edit details"}</summary>
-                            <div className="item-setup-mobile-detail-grid">
-                              <label className="field item-setup-mobile-field">
-                                <span>{t.assetCategory}</span>
-                                <select
-                                  className="input"
-                                  value={(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
-                                  onChange={(e) =>
-                                    setItemAssetCategories((prev) => ({ ...prev, [row.key]: e.target.value }))
-                                  }
-                                  disabled={!isAdmin}
-                                >
-                                  {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
-                                    <option key={`row-asset-category-mobile-${row.key}-${opt.value}`} value={opt.value}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <label className="field item-setup-mobile-field">
-                                <span>{t.itemName}</span>
-                                <input
-                                  className="input"
-                                  value={itemNames[row.key] || ""}
-                                  onChange={(e) => setItemNames((prev) => ({ ...prev, [row.key]: e.target.value }))}
-                                  disabled={!isAdmin}
-                                />
-                              </label>
-                            </div>
-                          </details>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
+                            <details className="item-setup-mobile-details">
+                              <summary>{lang === "km" ? "កែសម្រួល" : "Edit details"}</summary>
+                              <div className="item-setup-mobile-detail-grid">
+                                <label className="field item-setup-mobile-field">
+                                  <span>{t.assetCategory}</span>
+                                  <select
+                                    className="input"
+                                    value={(itemAssetCategories[row.key] || row.assetCategory || "OTA").toUpperCase()}
+                                    onChange={(e) =>
+                                      setItemAssetCategories((prev) => ({ ...prev, [row.key]: e.target.value }))
+                                    }
+                                    disabled={!isAdmin}
+                                  >
+                                    {ITEM_SETUP_ASSET_CATEGORY_OPTIONS.map((opt) => (
+                                      <option key={`row-asset-category-mobile-${row.key}-${opt.value}`} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="field item-setup-mobile-field">
+                                  <span>{t.itemName}</span>
+                                  <input
+                                    className="input"
+                                    value={itemNames[row.key] || ""}
+                                    onChange={(e) => setItemNames((prev) => ({ ...prev, [row.key]: e.target.value }))}
+                                    disabled={!isAdmin}
+                                  />
+                                </label>
+                              </div>
+                            </details>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="panel-note">
+                  {lang === "km" ? "មិនមាន items ត្រូវនឹងការស្វែងរកទេ។" : "No items match your search."}
+                </div>
+              )}
+              </>
             ) : (
               <div className="table-wrap">
                 <table>
@@ -55103,7 +55337,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {itemSetupRows.map((row) => (
+                    {filteredItemSetupRows.map((row) => (
                       <tr key={row.key}>
                         <td>{row.category}</td>
                         <td><strong>{row.code}</strong></td>
@@ -55139,6 +55373,13 @@ export default function App() {
                         </td>
                       </tr>
                     ))}
+                    {!filteredItemSetupRows.length ? (
+                      <tr>
+                        <td colSpan={6}>
+                          {lang === "km" ? "មិនមាន items ត្រូវនឹងការស្វែងរកទេ។" : "No items match your search."}
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>
@@ -57397,6 +57638,9 @@ export default function App() {
                 <div className="field"><span>{lang === "km" ? "លេខសម្គាល់" : "Asset ID"}</span><div className="detail-value">{detailAsset.assetId}</div></div>
                 {!detailFurniture ? (
                   <div className="field"><span>Serial Number</span><div className="detail-value">{String(detailAsset.serialNumber || "").trim() || "-"}</div></div>
+                ) : null}
+                {isFanAsset(detailAsset.category, detailAsset.type) ? (
+                  <div className="field"><span>Fan Type</span><div className="detail-value">{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</div></div>
                 ) : null}
                 <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
                 <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
