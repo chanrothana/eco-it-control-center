@@ -48187,7 +48187,7 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                  <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"}</span>
                   <input
                     key={`${maintenanceRecordFileKey}-staff-before`}
                     className="file-input"
@@ -48221,7 +48221,7 @@ export default function App() {
                   ) : null}
                 </label>
                 <label className="field">
-                  <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                  <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"}</span>
                   <input
                     key={`${maintenanceRecordFileKey}-staff-after`}
                     className="file-input"
