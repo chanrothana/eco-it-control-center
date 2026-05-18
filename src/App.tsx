@@ -9342,6 +9342,8 @@ export default function App() {
     createMaintenanceRecordForm(undefined, toYmd(new Date()), "")
   );
   const maintenanceRecordSaveLockRef = useRef(false);
+  const [maintenanceRecordSaving, setMaintenanceRecordSaving] = useState(false);
+  const [maintenanceRecordMessage, setMaintenanceRecordMessage] = useState("");
   const [maintenanceQuickGeneralTask, setMaintenanceQuickGeneralTask] = useState(true);
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
@@ -25119,43 +25121,46 @@ export default function App() {
     ).trim();
     const normalizedBeforePhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []);
     const normalizedAfterPhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []);
-    const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
-      normalizedBeforePhotos[0] || "",
-      normalizedAfterPhotos[0] || ""
-    );
-
-    const entry: MaintenanceEntry = {
-      id: Date.now(),
-      date: maintenanceRecordForm.date,
-      createdAt: new Date().toISOString(),
-      type: maintenanceRecordForm.type.trim(),
-      completion: maintenanceRecordForm.completion,
-      condition: maintenanceRecordForm.condition.trim(),
-      note: resolvedNote,
-      cost: maintenanceRecordForm.cost.trim(),
-      by: maintenanceRecordForm.by.trim(),
-      checkedBy: maintenanceRecordForm.checkedBy.trim(),
-      beforePhotos: normalizedBeforePhotos,
-      afterPhotos: normalizedAfterPhotos,
-      photo: normalizedAfterPhotos[0] || "",
-      photos: normalizedAfterPhotos,
-      telegramPhoto,
-      reportFile: maintenanceRecordForm.reportFile?.url || "",
-      reportFileName: maintenanceRecordForm.reportFile?.name || "",
-      reportFileType: maintenanceRecordForm.reportFile?.mimeType || "",
-      workflow: normalizeMaintenanceWorkflow({
-        ...workflow,
-        issueSummary: "",
-        rootCause: "",
-        workPerformed: "",
-        followUp: "",
-        checklist: [],
-      }),
-    };
     maintenanceRecordSaveLockRef.current = true;
+    setMaintenanceRecordSaving(true);
     setBusy(true);
     setError("");
+    setMaintenanceRecordMessage("");
     try {
+      const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
+        normalizedBeforePhotos[0] || "",
+        normalizedAfterPhotos[0] || ""
+      );
+
+      const entry: MaintenanceEntry = {
+        id: Date.now(),
+        date: maintenanceRecordForm.date,
+        createdAt: new Date().toISOString(),
+        type: maintenanceRecordForm.type.trim(),
+        completion: maintenanceRecordForm.completion,
+        condition: maintenanceRecordForm.condition.trim(),
+        note: resolvedNote,
+        cost: maintenanceRecordForm.cost.trim(),
+        by: maintenanceRecordForm.by.trim(),
+        checkedBy: maintenanceRecordForm.checkedBy.trim(),
+        beforePhotos: normalizedBeforePhotos,
+        afterPhotos: normalizedAfterPhotos,
+        photo: normalizedAfterPhotos[0] || "",
+        photos: normalizedAfterPhotos,
+        telegramPhoto,
+        reportFile: maintenanceRecordForm.reportFile?.url || "",
+        reportFileName: maintenanceRecordForm.reportFile?.name || "",
+        reportFileType: maintenanceRecordForm.reportFile?.mimeType || "",
+        workflow: normalizeMaintenanceWorkflow({
+          ...workflow,
+          issueSummary: "",
+          rootCause: "",
+          workPerformed: "",
+          followUp: "",
+          checklist: [],
+        }),
+      };
+
       const nextLocal = readAssetFallback().map((asset) => {
         if (asset.id !== assetId) return asset;
 
@@ -25303,7 +25308,7 @@ export default function App() {
               ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។"
               : "Maintenance record saved.");
       if (maintenanceQuickMode) {
-        window.alert(successMessage);
+        setMaintenanceRecordMessage(successMessage);
       } else {
         if (telegramAlertSent === false) {
           setSetupMessage(successMessage);
@@ -25317,6 +25322,7 @@ export default function App() {
       return false;
     } finally {
       maintenanceRecordSaveLockRef.current = false;
+      setMaintenanceRecordSaving(false);
       setBusy(false);
     }
   }
@@ -40462,15 +40468,16 @@ export default function App() {
                   </div>
                   <div className="asset-actions">
                     <div className="tiny">Save maintenance directly from the asset list with a simple problem-cause-action flow and photo proof.</div>
+                    {maintenanceRecordMessage ? <p className="alert">{maintenanceRecordMessage}</p> : null}
                     <button
                       className="btn-primary"
-                      disabled={busy || !isAdmin || !maintenanceRecordIsComplete}
+                      disabled={busy || maintenanceRecordSaving || !isAdmin || !maintenanceRecordIsComplete}
                       onClick={async () => {
                         const saved = await addMaintenanceRecordFromTab();
                         if (saved) setQuickRecordAssetId(null);
                       }}
                     >
-                      Add Maintenance Record
+                      {maintenanceRecordSaving ? "Saving..." : "Add Maintenance Record"}
                     </button>
                   </div>
                 </section>
@@ -48266,12 +48273,15 @@ export default function App() {
                     ? "បុគ្គលិកអាចកត់ត្រាជាមូលដ្ឋានសិន។ Admin អាចចូលកែសម្រួល និងបោះពុម្ពរបាយការណ៍ក្រោយបាន។"
                     : "Staff can save the basic record first. Admin can review, correct, and print the report later."}
                 </div>
+                {maintenanceRecordMessage ? <p className="alert">{maintenanceRecordMessage}</p> : null}
                 <button
                   className="btn-primary"
-                  disabled={busy || !maintenanceRecordIsComplete}
+                  disabled={busy || maintenanceRecordSaving || !maintenanceRecordIsComplete}
                   onClick={addMaintenanceRecordFromTab}
                 >
-                  {lang === "km" ? "រក្សាទុកកំណត់ត្រា" : "Save Daily Record"}
+                  {maintenanceRecordSaving
+                    ? (lang === "km" ? "កំពុងរក្សាទុក..." : "Saving...")
+                    : (lang === "km" ? "រក្សាទុកកំណត់ត្រា" : "Save Daily Record")}
                 </button>
               </div>
             </section>
@@ -49082,31 +49092,19 @@ export default function App() {
                   <colgroup>
                     <col className="maintenance-history-col-when" />
                     <col className="maintenance-history-col-asset" />
-                    <col className="maintenance-history-col-campus" />
-                    <col className="maintenance-history-col-location" />
-                    <col className="maintenance-history-col-type" />
-                    <col className="maintenance-history-col-ok" />
-                    <col className="maintenance-history-col-condition" />
+                    <col className="maintenance-history-col-work" />
                     <col className="maintenance-history-col-note" />
-                    <col className="maintenance-history-col-by" />
-                    <col className="maintenance-history-col-checked" />
-                    <col className="maintenance-history-col-edit" />
-                    <col className="maintenance-history-col-del" />
+                    <col className="maintenance-history-col-team" />
+                    <col className="maintenance-history-col-actions" />
                   </colgroup>
                   <thead>
                     <tr>
-                      <th>When</th>
+                      <th>Date</th>
                       <th>Asset</th>
-                      <th>Camp</th>
-                      <th>Loc</th>
-                      <th>Type</th>
-                      <th>OK</th>
-                      <th>Cond</th>
+                      <th>Work</th>
                       <th>Note</th>
-                      <th>By</th>
-                      <th>Checked</th>
-                      <th>Edit</th>
-                      <th>Del</th>
+                      <th>Team</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -49127,54 +49125,81 @@ export default function App() {
                             <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
                           </td>
                           <td className="maintenance-history-cell-asset">
-                            <strong>{row.assetId}</strong>
-                            <div className="tiny">{row.itemName}</div>
+                            <strong title={row.assetId}>{row.assetId}</strong>
+                            <div className="tiny maintenance-history-cell-item" title={row.itemName || "-"}>
+                              {row.itemName || "-"}
+                            </div>
+                            <div className="maintenance-history-cell-meta">
+                              <span className="maintenance-history-badge" title={campusLabel(row.campus)}>
+                                {campusLabel(row.campus)}
+                              </span>
+                              <span className="maintenance-history-badge maintenance-history-badge-soft" title={row.location || "-"}>
+                                {row.location || "-"}
+                              </span>
+                            </div>
                           </td>
-                          <td className="maintenance-history-cell-campus">{campusLabel(row.campus)}</td>
-                          <td className="maintenance-history-cell-location">{row.location || "-"}</td>
-                          <td className="maintenance-history-cell-type">{row.type || "-"}</td>
-                          <td className="maintenance-history-cell-ok">
-                            <span
-                              className={`maintenance-history-done-icon ${
-                                String(row.completion || "").trim().toLowerCase() === "done"
-                                  ? "is-done"
-                                  : "is-pending"
-                              }`}
-                              title={maintenanceCompletionText(row.completion || "-")}
-                              aria-label={maintenanceCompletionText(row.completion || "-")}
-                            >
-                              {String(row.completion || "").trim().toLowerCase() === "done" ? "✅" : "❌"}
-                            </span>
+                          <td className="maintenance-history-cell-work">
+                            <div className="maintenance-history-cell-work-pills">
+                              <span className="maintenance-history-badge" title={row.type || "-"}>
+                                {row.type || "-"}
+                              </span>
+                              <span
+                                className={`maintenance-history-badge ${
+                                  String(row.completion || "").trim().toLowerCase() === "done"
+                                    ? "maintenance-history-badge-done"
+                                    : "maintenance-history-badge-pending"
+                                }`}
+                                title={maintenanceCompletionText(row.completion || "-")}
+                              >
+                                {maintenanceCompletionText(row.completion || "-")}
+                              </span>
+                            </div>
+                            <div className="maintenance-history-cell-condition" title={row.condition || "-"}>
+                              {row.condition || "-"}
+                            </div>
                           </td>
-                          <td className="maintenance-history-cell-condition">{row.condition || "-"}</td>
-                          <td className="maintenance-history-cell-note">{row.note || "-"}</td>
-                          <td className="maintenance-history-cell-by">{row.by || "-"}</td>
-                          <td className="maintenance-history-cell-checked">{row.checkedBy || "-"}</td>
-                          <td className="maintenance-history-cell-edit">
-                            <button
-                              className="btn-icon-edit"
-                              disabled={!isAdmin}
-                              title={t.edit}
-                              aria-label={t.edit}
-                              onClick={() => editMaintenanceEntryFromHistoryRow(row)}
-                            >
-                              ✎
-                            </button>
+                          <td className="maintenance-history-cell-note">
+                            <div className="maintenance-history-note-clamp" title={row.note || "-"}>
+                              {row.note || "-"}
+                            </div>
                           </td>
-                          <td className="maintenance-history-cell-del">
-                            <button
-                              className="btn-danger"
-                              disabled={busy || !isAdmin}
-                              onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
-                            >
-                              X
-                            </button>
+                          <td className="maintenance-history-cell-team">
+                            <div className="maintenance-history-person">
+                              <span>By</span>
+                              <strong title={row.by || "-"}>{row.by || "-"}</strong>
+                            </div>
+                            <div className="maintenance-history-person">
+                              <span>Checked</span>
+                              <strong title={row.checkedBy || "-"}>{row.checkedBy || "-"}</strong>
+                            </div>
+                          </td>
+                          <td className="maintenance-history-cell-actions">
+                            <div className="maintenance-history-actions">
+                              <button
+                                className="btn-icon-edit"
+                                disabled={!isAdmin}
+                                title={t.edit}
+                                aria-label={t.edit}
+                                onClick={() => editMaintenanceEntryFromHistoryRow(row)}
+                              >
+                                <Pencil size={16} strokeWidth={2.2} />
+                              </button>
+                              <button
+                                className="btn-danger"
+                                disabled={busy || !isAdmin}
+                                title={t.delete}
+                                aria-label={t.delete}
+                                onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
+                              >
+                                <Trash2 size={16} strokeWidth={2.2} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={12}>No maintenance records yet.</td>
+                        <td colSpan={6}>No maintenance records yet.</td>
                       </tr>
                     )}
                   </tbody>
