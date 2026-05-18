@@ -9551,8 +9551,10 @@ label.backup-action-btn {
   line-height: 1.45;
   color: #49617d;
   display: block;
-  max-height: calc(1.45em * 2);
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .maintenance-history-cell-note {
@@ -9564,8 +9566,10 @@ label.backup-action-btn {
 
 .maintenance-history-note-clamp {
   display: block;
-  max-height: calc(1.55em * 3);
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .maintenance-history-cell-team {
@@ -9576,6 +9580,8 @@ label.backup-action-btn {
 .maintenance-history-person {
   display: grid;
   gap: 2px;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .maintenance-history-person span {
@@ -9583,6 +9589,7 @@ label.backup-action-btn {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #8a79a2;
+  background: transparent !important;
 }
 
 .maintenance-history-person strong {
@@ -9590,8 +9597,10 @@ label.backup-action-btn {
   font-weight: 700;
   line-height: 1.35;
   display: block;
-  max-height: calc(1.35em * 2);
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .maintenance-history-cell-actions {
@@ -12838,67 +12847,122 @@ label.backup-action-btn {
 .inventory-stock-table-wrap {
   max-height: 640px;
   overflow-y: auto;
-  overflow-x: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding: 12px;
+  border: 1px solid rgba(157, 180, 214, 0.2);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(245, 249, 255, 0.98), rgba(238, 244, 254, 0.98));
+  box-shadow: 0 12px 24px rgba(18, 43, 76, 0.07);
 }
 
 .inventory-stock-table {
-  min-width: 1680px;
-  width: max-content;
+  width: 100%;
   table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0 10px;
 }
 
 .inventory-stock-table th:nth-child(1),
 .inventory-stock-table td:nth-child(1) {
-  width: 140px;
+  width: 13%;
 }
 
 .inventory-stock-table th:nth-child(2),
 .inventory-stock-table td:nth-child(2) {
-  width: 150px;
+  width: 10%;
 }
 
 .inventory-stock-table th:nth-child(3),
 .inventory-stock-table td:nth-child(3) {
-  width: 320px;
+  width: 11%;
 }
 
 .inventory-stock-table th:nth-child(4),
 .inventory-stock-table td:nth-child(4) {
-  width: 260px;
+  width: 10%;
 }
 
 .inventory-stock-table th:nth-child(5),
 .inventory-stock-table td:nth-child(5) {
-  width: 140px;
+  width: 9%;
 }
 
 .inventory-stock-table th:nth-child(6),
 .inventory-stock-table td:nth-child(6) {
-  width: 90px;
+  width: 8%;
 }
 
 .inventory-stock-table th:nth-child(7),
 .inventory-stock-table td:nth-child(7) {
-  width: 220px;
+  width: 9%;
 }
 
 .inventory-stock-table th:nth-child(8),
 .inventory-stock-table td:nth-child(8) {
-  width: 170px;
+  width: 10%;
 }
 
 .inventory-stock-table th:nth-child(9),
 .inventory-stock-table td:nth-child(9) {
-  width: 420px;
+  width: 12%;
 }
 
 .inventory-stock-table th:nth-child(10),
 .inventory-stock-table td:nth-child(10) {
-  width: 170px;
+  width: 8%;
 }
 
 .inventory-stock-table td {
-  vertical-align: middle;
+  vertical-align: top;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  color: #2a3f60;
+  background: rgba(255, 255, 255, 0.97);
+  border-top: 1px solid rgba(220, 230, 244, 0.95);
+  border-bottom: 1px solid rgba(220, 230, 244, 0.95);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.inventory-stock-table thead th {
+  background: linear-gradient(180deg, rgba(242, 247, 253, 0.98), rgba(235, 242, 251, 0.98));
+  color: #6d83a6;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 10px;
+  border-bottom: 1px solid rgba(214, 225, 241, 0.9);
+}
+
+.inventory-stock-table thead th:first-child {
+  border-top-left-radius: 18px;
+  border-bottom-left-radius: 18px;
+}
+
+.inventory-stock-table thead th:last-child {
+  border-top-right-radius: 18px;
+  border-bottom-right-radius: 18px;
+}
+
+.inventory-stock-table tbody tr td:first-child {
+  border-left: 1px solid rgba(220, 230, 244, 0.95);
+  border-top-left-radius: 18px;
+  border-bottom-left-radius: 18px;
+  box-shadow: inset 3px 0 0 rgba(53, 99, 184, 0.16);
+}
+
+.inventory-stock-table tbody tr td:last-child {
+  border-right: 1px solid rgba(220, 230, 244, 0.95);
+  border-top-right-radius: 18px;
+  border-bottom-right-radius: 18px;
+}
+
+.inventory-stock-table tbody tr:nth-child(even) td {
+  background: rgba(248, 251, 255, 0.98);
+}
+
+.inventory-stock-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.99);
+  box-shadow: inset 0 0 0 999px rgba(241, 247, 255, 0.58);
 }
 
 .inventory-stock-edit-row td {
@@ -12911,6 +12975,7 @@ label.backup-action-btn {
 .inventory-stock-table td:nth-child(9) {
   white-space: normal;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .inventory-stock-edit-row .asset-row-actions {
@@ -12939,6 +13004,159 @@ label.backup-action-btn {
 
 .inventory-stock-edit-note {
   min-width: 360px;
+}
+
+.inventory-stock-filter-panel {
+  border: 1px solid rgba(96, 126, 170, 0.34);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(37, 54, 82, 0.94), rgba(30, 45, 70, 0.96));
+}
+
+.inventory-stock-filter-grid {
+  align-items: end;
+}
+
+.inventory-stock-filter-actions {
+  min-height: 44px;
+}
+
+.inventory-stock-date-cell strong,
+.inventory-stock-item-cell strong,
+.inventory-stock-campus-cell strong {
+  display: block;
+  color: #284166;
+  line-height: 1.25;
+}
+
+.inventory-stock-date-cell {
+  padding-right: 22px;
+}
+
+.inventory-stock-date-cell .tiny {
+  margin-top: 6px;
+  color: #8aa0bf;
+  font-size: 11px;
+}
+
+.inventory-stock-item-cell strong {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.inventory-stock-item-meta {
+  margin-top: 8px;
+}
+
+.inventory-stock-item-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 224, 242, 0.95);
+  background: rgba(238, 244, 252, 0.95);
+  color: #516a8f;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.inventory-stock-campus-cell strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.inventory-stock-secondary {
+  margin-top: 6px;
+  color: #7a90b0;
+  font-size: 12px;
+}
+
+.inventory-stock-flow-cell {
+  white-space: normal;
+  padding-right: 18px;
+}
+
+.inventory-stock-flow-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventory-stock-type-pill,
+.inventory-stock-qty-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(205, 219, 239, 0.98);
+  background: rgba(246, 249, 255, 0.98);
+  color: #36527b;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.inventory-stock-qty-pill {
+  background: rgba(255, 255, 255, 0.98);
+  color: #4e6588;
+}
+
+.inventory-stock-approval-text {
+  margin-top: 8px;
+  color: #7d93b3;
+}
+
+.inventory-stock-borrow-text,
+.inventory-stock-note-clamp {
+  margin-top: 8px;
+  line-height: 1.45;
+  color: #496380;
+}
+
+.inventory-stock-borrow-text {
+  font-size: 12px;
+}
+
+.inventory-stock-note-cell {
+  padding-right: 18px;
+}
+
+.inventory-stock-note-clamp {
+  display: -webkit-box;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 13px;
+}
+
+.inventory-stock-actions-cell {
+  white-space: nowrap;
+  vertical-align: middle;
+  padding-left: 6px;
+  padding-right: 14px;
+}
+
+.inventory-stock-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.inventory-stock-actions .btn-icon-edit,
+.inventory-stock-actions .btn-danger {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  box-shadow: 0 6px 14px rgba(31, 62, 108, 0.06);
 }
 
 .panel-note {

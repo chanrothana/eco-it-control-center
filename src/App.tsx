@@ -464,6 +464,7 @@ type InventoryTxn = {
   itemCode: string;
   itemName: string;
   date: string;
+  created: string;
   type: "IN" | "OUT" | "SET" | "BORROW_OUT" | "BORROW_IN" | "BORROW_CONSUME";
   qty: number;
   by?: string;
@@ -21508,6 +21509,7 @@ export default function App() {
       itemCode: item.itemCode,
       itemName: item.itemName,
       date: values.date,
+      created: new Date().toISOString(),
       type: values.type,
       qty,
       by: values.by.trim(),
@@ -43089,7 +43091,7 @@ export default function App() {
                   <button className="btn-primary" disabled={!isAdmin || inventoryTxnSaveBusy} onClick={createInventoryTxn}>Save Transaction</button>
                 </div>
 
-                <div className="panel" style={{ marginTop: 12, padding: 16 }}>
+                <div className="panel inventory-stock-filter-panel" style={{ marginTop: 12, padding: 16 }}>
                   <div className="asset-actions" style={{ marginBottom: 12 }}>
                     <strong>{lang === "km" ? "តម្រងទិន្នន័យ" : "Filters"}</strong>
                     <div className="tiny">
@@ -43098,7 +43100,7 @@ export default function App() {
                         : "Filter by date, campus, type, item, or text."}
                     </div>
                   </div>
-                  <div className="form-grid">
+                  <div className="form-grid inventory-stock-filter-grid">
                   <label className="field">
                     <span>{t.date} From</span>
                     <input
@@ -43166,7 +43168,7 @@ export default function App() {
                       placeholder="Item code, item name, by, note..."
                     />
                   </label>
-                  <div className="asset-actions" style={{ justifyContent: "flex-end" }}>
+                  <div className="asset-actions inventory-stock-filter-actions" style={{ justifyContent: "flex-end" }}>
                     <button
                       type="button"
                       className="tab"
@@ -43277,7 +43279,10 @@ export default function App() {
                             <>
                               <div className="inventory-stock-mobile-head">
                                 <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
-                                <span>{formatDate(row.date)}</span>
+                                <span>
+                                  {formatDate(row.date)}
+                                  {row.created ? ` • ${formatTimeOnly(row.created)}` : ""}
+                                </span>
                               </div>
                               <div className="inventory-stock-mobile-code-row">
                                 <strong>{row.itemCode}</strong>
@@ -43348,14 +43353,10 @@ export default function App() {
                       <thead>
                         <tr>
                           <th><button className={`th-sort-btn ${inventoryStockSort.key === "date" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("date")}>{t.date} {inventoryStockSort.key === "date" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "itemCode" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("itemCode")}>Item Code {inventoryStockSort.key === "itemCode" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "itemName" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("itemName")}>Item Name {inventoryStockSort.key === "itemName" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "campus" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("campus")}>{t.campus} {inventoryStockSort.key === "campus" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "type" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("type")}>Type {inventoryStockSort.key === "type" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "qty" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("qty")}>Qty {inventoryStockSort.key === "qty" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "borrow" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("borrow")}>Borrow Details {inventoryStockSort.key === "borrow" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "by" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("by")}>{t.by} {inventoryStockSort.key === "by" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
-                          <th><button className={`th-sort-btn ${inventoryStockSort.key === "note" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("note")}>{t.notes} {inventoryStockSort.key === "note" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                          <th colSpan={2}><button className={`th-sort-btn ${inventoryStockSort.key === "itemName" || inventoryStockSort.key === "itemCode" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("itemName")}>Item {(inventoryStockSort.key === "itemName" || inventoryStockSort.key === "itemCode") ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                          <th colSpan={2}><button className={`th-sort-btn ${inventoryStockSort.key === "campus" || inventoryStockSort.key === "by" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("campus")}>{lang === "km" ? "ទីតាំង" : "Location"} {(inventoryStockSort.key === "campus" || inventoryStockSort.key === "by") ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                          <th colSpan={2}><button className={`th-sort-btn ${inventoryStockSort.key === "type" || inventoryStockSort.key === "qty" || inventoryStockSort.key === "borrow" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("type")}>{lang === "km" ? "ចលនាស្តុក" : "Flow"} {(inventoryStockSort.key === "type" || inventoryStockSort.key === "qty" || inventoryStockSort.key === "borrow") ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
+                          <th colSpan={2}><button className={`th-sort-btn ${inventoryStockSort.key === "note" ? "is-active" : ""}`} onClick={() => toggleInventoryStockSort("note")}>{lang === "km" ? "កំណត់ត្រា" : "Record"} {inventoryStockSort.key === "note" ? (inventoryStockSort.direction === "asc" ? "▲" : "▼") : ""}</button></th>
                           <th>Actions</th>
                         </tr>
                       </thead>
@@ -43446,32 +43447,47 @@ export default function App() {
                                 </>
                               ) : (
                                 <>
-                                  <td>{formatDate(row.date)}</td>
-                                  <td><strong>{row.itemCode}</strong></td>
-                                  <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                                  <td>{inventoryCampusLabel(row.campus)}</td>
-                                  <td>
-                                    {inventoryTxnTypeLabel(row.type)}
-                                    {inventoryTxnApprovalLabel(row, lang) ? ` (${inventoryTxnApprovalLabel(row, lang)})` : ""}
+                                  <td className="inventory-stock-date-cell">
+                                    <strong>{formatDate(row.date)}</strong>
+                                    <div className="tiny">{row.created ? formatTimeOnly(row.created) : "-"}</div>
                                   </td>
-                                  <td>{row.qty}</td>
-                                  <td>
-                                    {row.type === "BORROW_OUT" || row.type === "BORROW_CONSUME"
-                                      ? `${inventoryCampusLabel(row.campus)} → ${inventoryCampusLabel(row.toCampus || "-")} (${row.borrowStatus || "-"})`
-                                      : row.type === "BORROW_IN"
-                                        ? `${inventoryCampusLabel(row.fromCampus || "-")} → ${inventoryCampusLabel(row.campus)} (${row.borrowStatus || "-"})`
-                                        : "-"}
+                                  <td className="inventory-stock-item-cell" colSpan={2}>
+                                    <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                    <div className="inventory-stock-item-meta">
+                                      <span className="inventory-stock-item-code">{row.itemCode}</span>
+                                    </div>
                                   </td>
-                                  <td>{row.by || "-"}</td>
-                                  <td>{row.note || "-"}</td>
-                                  <td>
-                                    <div className="asset-row-actions">
+                                  <td className="inventory-stock-campus-cell" colSpan={2}>
+                                    <strong>{inventoryCampusLabel(row.campus)}</strong>
+                                    <div className="tiny inventory-stock-secondary">{lang === "km" ? "ដោយ" : "By"}: {row.by || "-"}</div>
+                                  </td>
+                                  <td className="inventory-stock-flow-cell" colSpan={2}>
+                                    <div className="inventory-stock-flow-top">
+                                      <span className="inventory-stock-type-pill">{inventoryTxnTypeLabel(row.type)}</span>
+                                      <span className="inventory-stock-qty-pill">{lang === "km" ? "ចំនួន" : "Qty"} {row.qty}</span>
+                                    </div>
+                                    {inventoryTxnApprovalLabel(row, lang) ? (
+                                      <div className="tiny inventory-stock-approval-text">{inventoryTxnApprovalLabel(row, lang)}</div>
+                                    ) : null}
+                                    {(row.type === "BORROW_OUT" || row.type === "BORROW_CONSUME" || row.type === "BORROW_IN") ? (
+                                      <div className="tiny inventory-stock-borrow-text">
+                                        {row.type === "BORROW_OUT" || row.type === "BORROW_CONSUME"
+                                          ? `${inventoryCampusLabel(row.campus)} → ${inventoryCampusLabel(row.toCampus || "-")} (${row.borrowStatus || "-"})`
+                                          : `${inventoryCampusLabel(row.fromCampus || "-")} → ${inventoryCampusLabel(row.campus)} (${row.borrowStatus || "-"})`}
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                  <td className="inventory-stock-note-cell" colSpan={2}>
+                                    <div className="inventory-stock-note-clamp">{row.note || "-"}</div>
+                                  </td>
+                                  <td className="inventory-stock-actions-cell">
+                                    <div className="asset-row-actions inventory-stock-actions">
                                       <button className="btn-icon-edit" disabled={!isAdmin || (row.type === "SET" && !isSuperAdmin)} onClick={() => startInventoryTxnEdit(row)} title="Edit">
-                                        ✎
+                                        <Pencil size={16} strokeWidth={2.2} />
                                       </button>
                                       {isSuperAdmin ? (
                                         <button className="btn-danger" disabled={busy || (row.type === "SET" && !isSuperAdmin)} onClick={() => deleteInventoryTxn(row)} title={t.delete}>
-                                          X
+                                          <Trash2 size={16} strokeWidth={2.2} />
                                         </button>
                                       ) : null}
                                     </div>
