@@ -32659,6 +32659,10 @@ export default function App() {
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
 
     const qrPrintVariant = qrLabelSize.replace("cm", "");
+    const qrLabelPageCss =
+      reportType === "qr_labels"
+        ? `@page { size: A4 portrait; margin: 4mm; }`
+        : `@page { size: A4 landscape; margin: 3mm; }`;
 
     const reportContentHtml =
       reportType === "qr_labels"
@@ -32674,11 +32678,20 @@ export default function App() {
                 const locationLine = `${campus} | ${location}`;
                 const serialLine = `SN: ${serial}`;
                 const assignedLine = `Assigned: ${assignedTo}`;
+                const compactFourCm = qrPrintVariant === "4";
+                const metaLines = compactFourCm
+                  ? `
+                    <div class="qr-sticker-item">${escapeHtml(itemName)}</div>
+                    <div class="qr-sticker-detail qr-sticker-detail-campus">${escapeHtml(locationLine)}</div>
+                  `
+                  : `
+                    <div class="qr-sticker-item">${escapeHtml(itemName)}</div>
+                    <div class="qr-sticker-detail">${escapeHtml(locationLine)}</div>
+                    <div class="qr-sticker-detail">${escapeHtml(serialLine)}</div>
+                    <div class="qr-sticker-user">${escapeHtml(assignedLine)}</div>
+                  `;
                 return `<div class="qr-sticker-wrap qr-sticker-wrap-${qrPrintVariant}">
-                  <div class="qr-sticker-item">${escapeHtml(itemName)}</div>
-                  <div class="qr-sticker-detail">${escapeHtml(locationLine)}</div>
-                  <div class="qr-sticker-detail">${escapeHtml(serialLine)}</div>
-                  <div class="qr-sticker-user">${escapeHtml(assignedLine)}</div>
+                  ${metaLines}
                   <div class="qr-sticker qr-sticker-${qrPrintVariant}">
                     <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
                     <div class="qr-sticker-divider"></div>
@@ -32838,19 +32851,20 @@ export default function App() {
           th:hover .preview-column-resizer::after { background: rgba(117, 80, 36, 0.4); }
           .is-preview-resizing, .is-preview-resizing * { cursor: col-resize !important; user-select: none !important; }
           body.qr-print-mode { background: #fff; }
-          body.qr-print-mode .preview-shell { padding: 8px 10px 10px; }
-          body.qr-print-mode h1 { margin-bottom: 2px; font-size: 16px; }
-          body.qr-print-mode h2 { font-size: 12px; }
-          body.qr-print-mode .report-head { margin-bottom: 3px; align-items: center; }
-          body.qr-print-mode .report-head-logo { width: 90px; max-width: 90px; }
-          body.qr-print-mode p.meta { margin: 0 0 4px; font-size: 9px; }
+          body.qr-print-mode .preview-shell { padding: 4px 6px 6px; }
+          body.qr-print-mode h1 { margin-bottom: 1px; font-size: 13px; }
+          body.qr-print-mode h2 { font-size: 10px; }
+          body.qr-print-mode .report-head { margin-bottom: 2px; align-items: center; }
+          body.qr-print-mode .report-head-logo { width: 70px; max-width: 70px; }
+          body.qr-print-mode p.meta { margin: 0 0 2px; font-size: 7px; line-height: 1.15; }
+          body.qr-print-mode p { margin-top: 0; margin-bottom: 2px; }
           .qr-sticker-grid { display: grid; margin-top: 4px; width: 100%; justify-content: flex-start; align-items: start; }
           .qr-sticker-grid-2 { grid-template-columns: repeat(4, minmax(0, 2.3cm)); gap: 0.16cm; }
-          .qr-sticker-grid-4 { grid-template-columns: repeat(3, minmax(0, 4.6cm)); gap: 0.24cm; }
+          .qr-sticker-grid-4 { grid-template-columns: repeat(3, minmax(0, 6.2cm)); gap: 0.14cm 0.18cm; }
           .qr-sticker-grid-6 { grid-template-columns: repeat(2, minmax(0, 6.8cm)); gap: 0.28cm; }
           .qr-sticker-wrap { display: grid; justify-items: center; page-break-inside: avoid; break-inside: avoid; }
           .qr-sticker-wrap-2 { width: 2.3cm; gap: 0.03cm; }
-          .qr-sticker-wrap-4 { width: 4.6cm; gap: 0.05cm; }
+          .qr-sticker-wrap-4 { width: 6.2cm; gap: 0.02cm; }
           .qr-sticker-wrap-6 { width: 6.8cm; gap: 0.06cm; }
           .qr-sticker-user, .qr-sticker-item, .qr-sticker-detail { text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .qr-sticker-wrap-2 .qr-sticker-item,
@@ -32863,24 +32877,25 @@ export default function App() {
           .qr-sticker-wrap-4 .qr-sticker-user,
           .qr-sticker-wrap-6 .qr-sticker-user { width: 100%; }
           .qr-sticker-wrap-2 .qr-sticker-user { min-height: 0.18cm; font-size: 5.4px; line-height: 1.02; font-weight: 700; color: #1b2d23; }
-          .qr-sticker-wrap-4 .qr-sticker-user { min-height: 0.24cm; font-size: 7px; line-height: 1.05; font-weight: 700; color: #1b2d23; }
+          .qr-sticker-wrap-4 .qr-sticker-user { min-height: 0.2cm; font-size: 6px; line-height: 1.02; font-weight: 700; color: #1b2d23; }
           .qr-sticker-wrap-6 .qr-sticker-user { min-height: 0.34cm; font-size: 10px; line-height: 1.1; font-weight: 700; color: #1b2d23; }
           .qr-sticker-wrap-2 .qr-sticker-item { min-height: 0.18cm; font-size: 5.8px; line-height: 1.02; font-weight: 800; color: #314238; }
-          .qr-sticker-wrap-4 .qr-sticker-item { min-height: 0.34cm; font-size: 9px; line-height: 1.1; font-weight: 800; color: #314238; }
+          .qr-sticker-wrap-4 .qr-sticker-item { min-height: 0.22cm; font-size: 7.2px; line-height: 1.02; font-weight: 800; color: #314238; }
           .qr-sticker-wrap-6 .qr-sticker-item { min-height: 0.42cm; font-size: 12px; line-height: 1.1; font-weight: 800; color: #314238; }
           .qr-sticker-wrap-2 .qr-sticker-detail { min-height: 0.16cm; font-size: 5px; line-height: 1.02; font-weight: 700; color: #5a695e; }
-          .qr-sticker-wrap-4 .qr-sticker-detail { min-height: 0.3cm; font-size: 8px; line-height: 1.05; font-weight: 700; color: #5a695e; }
+          .qr-sticker-wrap-4 .qr-sticker-detail { min-height: 0.18cm; font-size: 5.8px; line-height: 1.02; font-weight: 700; color: #5a695e; }
           .qr-sticker-wrap-6 .qr-sticker-detail { min-height: 0.34cm; font-size: 10px; line-height: 1.08; font-weight: 700; color: #5a695e; }
+          .qr-sticker-wrap-4 .qr-sticker-detail-campus { color: #4d617b; }
           .qr-sticker { box-sizing: border-box; border: 1px solid #cfded0; border-radius: 0; display: grid; justify-items: center; page-break-inside: avoid; break-inside: avoid; overflow: hidden; background: #fff; }
           .qr-sticker-2 { width: 2.3cm; padding: 0.08cm; gap: 0.04cm; }
-          .qr-sticker-4 { width: 4.6cm; padding: 0.12cm; gap: 0.06cm; }
+          .qr-sticker-4 { width: 4.28cm; padding: 0.08cm; gap: 0.04cm; }
           .qr-sticker-6 { width: 6.8cm; padding: 0.14cm; gap: 0.08cm; }
           .qr-sticker-qr { box-sizing: border-box; border: 1px solid #e1e8e1; border-radius: 0; display: grid; place-items: center; background: #fff; }
           .qr-sticker-2 .qr-sticker-qr { width: 2cm; height: 2cm; }
           .qr-sticker-4 .qr-sticker-qr { width: 4cm; height: 4cm; }
           .qr-sticker-6 .qr-sticker-qr { width: 6cm; height: 6cm; }
           .qr-sticker-2 .qr-sticker-qr img { width: 1.86cm; height: 1.86cm; object-fit: contain; display: block; }
-          .qr-sticker-4 .qr-sticker-qr img { width: 3.7cm; height: 3.7cm; object-fit: contain; display: block; }
+          .qr-sticker-4 .qr-sticker-qr img { width: 3.78cm; height: 3.78cm; object-fit: contain; display: block; }
           .qr-sticker-6 .qr-sticker-qr img { width: 5.62cm; height: 5.62cm; object-fit: contain; display: block; }
           .qr-sticker-divider { background: #1b2d23; }
           .qr-sticker-2 .qr-sticker-divider { width: 2cm; height: 1px; }
@@ -32888,9 +32903,9 @@ export default function App() {
           .qr-sticker-6 .qr-sticker-divider { width: 6cm; height: 1px; }
           .qr-sticker-id { box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; border: 0; border-radius: 0; padding: 0 1px; font-weight: 800; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .qr-sticker-2 .qr-sticker-id { width: 2cm; min-height: 0.28cm; font-size: 7px; line-height: 1.05; }
-          .qr-sticker-4 .qr-sticker-id { width: 4cm; min-height: 0.42cm; font-size: 11px; line-height: 1.05; }
+          .qr-sticker-4 .qr-sticker-id { width: 4cm; min-height: 0.3cm; font-size: 8.8px; line-height: 1.02; }
           .qr-sticker-6 .qr-sticker-id { width: 6cm; min-height: 0.52cm; font-size: 14px; line-height: 1.08; }
-          @page { size: A4 landscape; margin: 3mm; }
+          ${qrLabelPageCss}
           @media print {
             body { margin: 0; background: #fff; }
             .preview-toolbar { display: none !important; }
