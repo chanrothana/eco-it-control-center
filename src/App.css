@@ -18051,6 +18051,51 @@ tr.row-maint-maintenance:hover td {
   color: var(--mobile-text-soft);
 }
 
+.public-qr-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.public-qr-lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.public-qr-lang-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c9d7ea;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #48648c;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.public-qr-lang-btn:hover {
+  transform: translateY(-1px);
+  border-color: #9db7de;
+  box-shadow: 0 8px 18px rgba(44, 73, 120, 0.12);
+}
+
+.public-qr-lang-btn.is-active {
+  border-color: #4f79d0;
+  background: linear-gradient(180deg, #5f8dff 0%, #4a6fe8 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(41, 75, 149, 0.2);
+}
+
 .public-asset-grid-summary {
   gap: 0;
 }
@@ -21198,6 +21243,22 @@ tr.row-maint-maintenance:hover td {
     font-size: clamp(24px, 7vw, 30px);
   }
 
+  .public-qr-topbar {
+    display: grid;
+    justify-items: start;
+    gap: 10px;
+  }
+
+  .public-qr-lang-switch {
+    width: 100%;
+  }
+
+  .public-qr-lang-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    min-height: 42px;
+  }
+
   .public-qr-account-chip {
     min-height: 46px;
     max-width: min(42vw, 180px);
@@ -21337,6 +21398,9 @@ tr.row-maint-maintenance:hover td {
   .public-asset-history-card {
     padding: 16px;
     border-radius: 18px;
+    border-color: #bfd0e7;
+    background: #f3f7fd;
+    color: #29466d;
   }
 
   .public-asset-history-head {
@@ -21357,6 +21421,9 @@ tr.row-maint-maintenance:hover td {
     min-height: 44px;
     padding: 0 14px;
     font-size: 15px;
+    border-color: #d4b07a;
+    background: #fff5e8;
+    color: #68411f;
   }
 
   .public-asset-history-date,
@@ -21366,9 +21433,31 @@ tr.row-maint-maintenance:hover td {
     font-size: 15px;
   }
 
+  .public-asset-group-body .section-title,
+  .public-asset-history-key,
+  .public-asset-history-date {
+    color: #2b4569 !important;
+  }
+
+  .public-asset-history-value,
+  .public-asset-history-note p {
+    color: #4d678b;
+  }
+
+  .public-asset-history-label,
+  .public-asset-history-photo-groups .maintenance-photo-group > small {
+    color: #607a9f;
+  }
+
   .public-asset-history-date {
     font-size: 18px;
     font-weight: 800;
+  }
+
+  .public-asset-history-empty {
+    border-color: #c9d8ea;
+    background: #f8fbff;
+    color: #496281;
   }
 
   .table-wrap,

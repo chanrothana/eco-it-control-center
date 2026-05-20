@@ -202,6 +202,7 @@ type TransferEntry = {
   toCampus: string;
   toLocation: string;
   quantity?: number;
+  photo?: string;
   reason?: string;
   by?: string;
   note?: string;
@@ -222,6 +223,7 @@ type TransferHistoryRow = {
   toCampus: string;
   toLocation: string;
   toLocationPhoto: string;
+  transferPhoto: string;
   fromUser: string;
   toUser: string;
   responsibilityAck: string;
@@ -9439,10 +9441,12 @@ export default function App() {
     toAssignedTo: "",
     responsibilityConfirmed: false,
     returnConfirmed: false,
+    photo: "",
     reason: "",
     by: "",
     note: "",
   });
+  const [transferPhotoFileKey, setTransferPhotoFileKey] = useState(0);
   const [transferHistoryEdit, setTransferHistoryEdit] = useState<TransferHistoryEditForm | null>(null);
   const [transferDatePickerOpen, setTransferDatePickerOpen] = useState(false);
   const [transferDateMonth, setTransferDateMonth] = useState(() => {
@@ -14075,6 +14079,18 @@ export default function App() {
       };
     });
   }, [transferDateMonth, getHolidayEvent]);
+  async function onTransferPhotoFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const optimized = await optimizePhotoDataUrl(file, { timestampText: formatUploadPhotoTimestamp(new Date()) });
+      setTransferForm((f) => ({ ...f, photo: optimized }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to read transfer photo");
+    } finally {
+      setTransferPhotoFileKey((n) => n + 1);
+    }
+  }
   const quickOutDateBadge = useMemo(() => {
     if (!inventoryQuickOutModal?.date) return "";
     const ymd = normalizeYmdInput(inventoryQuickOutModal.date);
@@ -25643,6 +25659,7 @@ export default function App() {
       toCampus: transferForm.toCampus,
       toLocation: destinationLocation,
       ...(groupedFurniture ? { quantity: transferQty } : {}),
+      photo: String(transferForm.photo || "").trim(),
       reason: transferForm.reason.trim(),
       by: transferForm.by.trim(),
       note: transferForm.note.trim(),
@@ -25892,10 +25909,12 @@ export default function App() {
         quantity: "1",
         responsibilityConfirmed: false,
         returnConfirmed: false,
+        photo: "",
         reason: "",
         by: "",
         note: "",
       }));
+      setTransferPhotoFileKey((n) => n + 1);
       await loadData();
       setTransferView("history");
       return true;
@@ -29285,6 +29304,7 @@ export default function App() {
           toCampus,
           toLocation,
           toLocationPhoto: locationPhotoMap.get(`${toCampus}::${toLocation}`) || "",
+          transferPhoto: String(entry.photo || "").trim(),
           fromUser: matchedCustody?.fromUser || "",
           toUser: matchedCustody?.toUser || "",
           responsibilityAck: matchedCustody?.responsibilityAck ? "Yes" : "No",
@@ -33502,6 +33522,95 @@ export default function App() {
 
   if (pendingQrAssetId) {
     const asset = publicQrAsset;
+    const publicQrText = {
+      assetDetail: lang === "km" ? "ព័ត៌មាន Asset" : "Asset Detail",
+      qrAssetMenu: lang === "km" ? "ម៉ឺនុយ QR Asset" : "QR Asset Menu",
+      qrMenuHint: lang === "km" ? "ចូលប្រើគណនី ឬមើលស្ថានភាព Asset" : "Login or review this asset status.",
+      campusStatus: lang === "km" ? "ស្ថានភាពសាខា" : "Campus Status",
+      quickAccess: lang === "km" ? "ចូលប្រើរហ័ស" : "Quick Access",
+      language: lang === "km" ? "ភាសា" : "Language",
+      currentUser: lang === "km" ? "អ្នកប្រើបច្ចុប្បន្ន" : "Current User",
+      requestRepair: lang === "km" ? "ស្នើជួសជុល" : "Request Repair",
+      maintenanceRecord: lang === "km" ? "កត់ត្រាថែទាំ" : "Maintenance Record",
+      assetDetails: lang === "km" ? "ព័ត៌មាន Asset" : "Asset Details",
+      assetDetailsHistory: lang === "km" ? "ព័ត៌មាន Asset និងប្រវត្តិ" : "Asset Details + History",
+      issueTitle: lang === "km" ? "ចំណងជើងបញ្ហា" : "Issue Title",
+      description: lang === "km" ? "ពិពណ៌នាបញ្ហា" : "Description",
+      describeProblem: lang === "km" ? "សូមពិពណ៌នាបញ្ហារបស់ Asset នេះ។" : "Describe the problem with this asset.",
+      requestedBy: lang === "km" ? "ស្នើដោយ" : "Requested By",
+      contactRoom: lang === "km" ? "ទំនាក់ទំនង / បន្ទប់" : "Contact / Room",
+      phoneTelegramRoom: lang === "km" ? "លេខទូរស័ព្ទ Telegram បន្ទប់..." : "Phone, Telegram, room...",
+      requestPhotoHelp:
+        lang === "km"
+          ? "អាចបន្ថែមរូបថតបញ្ហា ដើម្បីឱ្យក្រុមថែទាំត្រៀមគ្រឿងបន្លាស់ ឬឧបករណ៍បានលឿនជាងមុន។"
+          : "You can add a problem photo to help maintenance staff prepare parts or tools before they come.",
+      submitRequest: lang === "km" ? "ស្នើជួសជុល / បង្កើតការងារ" : "Request Fix / Create Work Order",
+      submitting: lang === "km" ? "កំពុងផ្ញើ..." : "Submitting...",
+      workOrderHint:
+        lang === "km"
+          ? "ប្រព័ន្ធនឹងបង្កើតការងារមុនសិន។ បច្ចេកទេសអាចបម្លែងវាជាប្រវត្តិថែទាំ បន្ទាប់ពីជួសជុលរួច។"
+          : "This creates a work order first. The technician can later convert it to maintenance history after fixing.",
+      requestGroupHint:
+        lang === "km"
+          ? "សម្រាប់បុគ្គលិក ឬអ្នកប្រើ ដែលចង់រាយការណ៍បញ្ហារបស់ Asset នេះ។"
+          : "For staff or users reporting a problem with this asset.",
+      workStatus: lang === "km" ? "ស្ថានភាពការងារ" : "Work Status",
+      condition: lang === "km" ? "លក្ខខណ្ឌ" : "Condition",
+      note: lang === "km" ? "កំណត់ចំណាំ" : "Note",
+      cost: lang === "km" ? "ចំណាយ" : "Cost",
+      by: lang === "km" ? "ដោយ" : "By",
+      remove: lang === "km" ? "ដកចេញ" : "Remove",
+      saving: lang === "km" ? "កំពុងរក្សាទុក..." : "Saving...",
+      saveMaintenanceRecord: lang === "km" ? "រក្សាទុកកំណត់ត្រាថែទាំ" : "Save Maintenance Record",
+      maintenanceGroupHint:
+        lang === "km"
+          ? "មើលឃើញសម្រាប់បុគ្គលិកថែទាំ និងអ្នកគ្រប់គ្រង ដែលអាចកត់ត្រាការថែទាំបាន។"
+          : "Visible for maintenance staff and admins who can record maintenance.",
+      tonerChange: lang === "km" ? "ប្តូរតូន័រ" : "Toner Change",
+      tonerItem: lang === "km" ? "មុខទំនិញតូន័រ" : "Toner Item",
+      selectToner: lang === "km" ? "ជ្រើសតូន័រ" : "Select toner",
+      oldTonerStatus: lang === "km" ? "ស្ថានភាពតូន័រចាស់" : "Old Toner Status",
+      pageCounter: lang === "km" ? "លេខរាប់ទំព័រ" : "Page Counter",
+      qty: lang === "km" ? "ចំនួន" : "Qty",
+      saveTonerChange: lang === "km" ? "រក្សាទុកការប្តូរតូន័រ" : "Save Toner Change",
+      tonerGroupHint:
+        lang === "km"
+          ? "អ្នកប្រើអាចស្កេន QR ម៉ាស៊ីនបោះពុម្ព ហើយកត់ត្រាការប្តូរតូន័រដោយផ្ទាល់។"
+          : "Users can scan printer QR and record toner replacement directly.",
+      fanType: lang === "km" ? "ប្រភេទកង្ហារ" : "Fan Type",
+      components: lang === "km" ? "គ្រឿងផ្សំ" : "Components",
+      role: lang === "km" ? "តួនាទី" : "Role",
+      assigned: lang === "km" ? "ប្រគល់ឱ្យ" : "Assigned",
+      noLinkedComponents: lang === "km" ? "មិនមានគ្រឿងផ្សំភ្ជាប់ទេ។" : "No linked components.",
+      maintenanceHistory: lang === "km" ? "ប្រវត្តិថែទាំ" : "Maintenance History",
+      transferLocationHistory: lang === "km" ? "ប្រវត្តិប្តូរទីតាំង" : "Transfer Location History",
+      activityHistory: lang === "km" ? "ប្រវត្តិសកម្មភាព" : "Activity History",
+      locationTransfer: lang === "km" ? "ប្តូរទីតាំង" : "Location Transfer",
+      fromCampus: lang === "km" ? "ពីសាខា" : "From Campus",
+      toCampus: lang === "km" ? "ទៅសាខា" : "To Campus",
+      fromLocation: lang === "km" ? "ពីទីតាំង" : "From Location",
+      toLocation: lang === "km" ? "ទៅទីតាំង" : "To Location",
+      fromStaff: lang === "km" ? "ពីបុគ្គលិក" : "From Staff",
+      toStaff: lang === "km" ? "ទៅបុគ្គលិក" : "To Staff",
+      ack: lang === "km" ? "ទទួលស្គាល់" : "Ack",
+      reason: lang === "km" ? "មូលហេតុ" : "Reason",
+      requestedSource: lang === "km" ? "ប្រភពសំណើ" : "Request Source",
+      requestedByLabel: lang === "km" ? "ស្នើដោយ" : "Requested By",
+      workOrder: lang === "km" ? "លេខការងារ" : "Work Order",
+      fromUser: lang === "km" ? "ពីអ្នកប្រើ" : "From User",
+      toUser: lang === "km" ? "ទៅអ្នកប្រើ" : "To User",
+      fromStatus: lang === "km" ? "ពីស្ថានភាព" : "From Status",
+      toStatus: lang === "km" ? "ទៅស្ថានភាព" : "To Status",
+      assignmentAndStatus: lang === "km" ? "ប្រគល់ + ស្ថានភាព" : "Assignment + Status",
+      statusUpdate: lang === "km" ? "អាប់ដេតស្ថានភាព" : "Status Update",
+      noMaintenanceHistory: lang === "km" ? "មិនទាន់មានប្រវត្តិថែទាំទេ។" : "No maintenance history yet.",
+      noTransferHistory: lang === "km" ? "មិនទាន់មានប្រវត្តិប្តូរទីតាំងទេ។" : "No transfer location history yet.",
+      noActivityHistory: lang === "km" ? "មិនទាន់មានប្រវត្តិសកម្មភាពទេ។" : "No activity history yet.",
+      detailsGroupHint:
+        lang === "km"
+          ? "មើលព័ត៌មាន និងប្រវត្តិ Asset សម្រាប់អ្នកប្រើទាំងអស់។"
+          : "Read-only asset details and history for all users.",
+    };
     const showPublicQrSetFields = asset?.category === "IT";
     const publicQrCampusAllowed = (authUser ? isAdminRole(authUser.role) : false) || (asset?.campus ? allowedCampuses.includes(asset.campus) : true);
     const publicQrCanRecordMaintenance = Boolean(
@@ -33635,11 +33744,11 @@ export default function App() {
                 ✕
               </button>
               <strong>{lang === "km" ? "ម៉ឺនុយ QR Asset" : "QR Asset Menu"}</strong>
-              <span>{lang === "km" ? "ចូលប្រើគណនី ឬមើលស្ថានភាព Asset" : "Login or review this asset status."}</span>
+              <span>{publicQrText.qrMenuHint}</span>
             </div>
 
             <section className="mobile-menu-section">
-              <p className="mobile-menu-section-label">{lang === "km" ? "Campus Status" : "Campus Status"}</p>
+              <p className="mobile-menu-section-label">{publicQrText.campusStatus}</p>
               <div className="public-qr-menu-card">
                 <div className="public-qr-menu-row"><span>{t.campus}</span><strong>{publicQrCampusSummary}</strong></div>
                 <div className="public-qr-menu-row"><span>{t.status}</span><strong>{publicQrStatusSummary}</strong></div>
@@ -33648,7 +33757,27 @@ export default function App() {
             </section>
 
             <section className="mobile-menu-section">
-              <p className="mobile-menu-section-label">{lang === "km" ? "Quick Access" : "Quick Access"}</p>
+              <p className="mobile-menu-section-label">{publicQrText.language}</p>
+              <div className="public-qr-lang-switch" role="group" aria-label={publicQrText.language}>
+                <button
+                  type="button"
+                  className={`public-qr-lang-btn ${lang === "en" ? "is-active" : ""}`}
+                  onClick={() => setLang("en")}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  className={`public-qr-lang-btn ${lang === "km" ? "is-active" : ""}`}
+                  onClick={() => setLang("km")}
+                >
+                  ខ្មែរ
+                </button>
+              </div>
+            </section>
+
+            <section className="mobile-menu-section">
+              <p className="mobile-menu-section-label">{publicQrText.quickAccess}</p>
               <div className="mobile-menu-grid">
                 <div className="mobile-menu-item-group">
                   <button
@@ -33697,7 +33826,7 @@ export default function App() {
             <section className="mobile-menu-section">
               <p className="mobile-menu-section-label">{t.account}</p>
               <div className="public-qr-menu-card">
-                <div className="public-qr-menu-row"><span>{lang === "km" ? "អ្នកប្រើបច្ចុប្បន្ន" : "Current User"}</span><strong>{publicQrAccountSummary}</strong></div>
+                <div className="public-qr-menu-row"><span>{publicQrText.currentUser}</span><strong>{publicQrAccountSummary}</strong></div>
                 {authUser ? (
                   <>
                     <div className="public-qr-menu-note">
@@ -33761,7 +33890,29 @@ export default function App() {
         ) : null}
         <section className="app-card app-card-public-asset">
           <section className="panel public-asset-panel">
-            <h2>Asset Detail</h2>
+            {!isPhoneView ? (
+              <div className="public-qr-topbar">
+                <h2>{publicQrText.assetDetail}</h2>
+                <div className="public-qr-lang-switch" role="group" aria-label={publicQrText.language}>
+                  <button
+                    type="button"
+                    className={`public-qr-lang-btn ${lang === "en" ? "is-active" : ""}`}
+                    onClick={() => setLang("en")}
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    className={`public-qr-lang-btn ${lang === "km" ? "is-active" : ""}`}
+                    onClick={() => setLang("km")}
+                  >
+                    ខ្មែរ
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <h2>{publicQrText.assetDetail}</h2>
+            )}
             {publicQrBusy ? (
               <p className="tiny">Loading asset...</p>
             ) : publicQrError ? (
@@ -33802,10 +33953,10 @@ export default function App() {
                 <div className="public-asset-action-panel">
                   {renderPublicQrGroup(
                     "request",
-                    "Request Repair",
+                    publicQrText.requestRepair,
                     <div className="form-grid">
                       <label className="field field-wide">
-                        <span>Issue Title</span>
+                        <span>{publicQrText.issueTitle}</span>
                         <input
                           className="input"
                           value={publicQrRequestForm.title}
@@ -33814,17 +33965,17 @@ export default function App() {
                         />
                       </label>
                       <label className="field field-wide">
-                        <span>Description</span>
+                        <span>{publicQrText.description}</span>
                         <textarea
                           className="input"
                           rows={3}
                           value={publicQrRequestForm.description}
                           onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, description: e.target.value }))}
-                          placeholder="Describe the problem with this asset."
+                          placeholder={publicQrText.describeProblem}
                         />
                       </label>
                       <label className="field">
-                        <span>Requested By</span>
+                        <span>{publicQrText.requestedBy}</span>
                         <input
                           className="input"
                           value={publicQrRequestForm.requestedBy}
@@ -33832,12 +33983,12 @@ export default function App() {
                         />
                       </label>
                       <label className="field">
-                        <span>Contact / Room</span>
+                        <span>{publicQrText.contactRoom}</span>
                         <input
                           className="input"
                           value={publicQrRequestForm.requesterContact}
                           onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, requesterContact: e.target.value }))}
-                          placeholder="Phone, Telegram, room..."
+                          placeholder={publicQrText.phoneTelegramRoom}
                         />
                       </label>
                       <label className="field">
@@ -33866,9 +34017,7 @@ export default function App() {
                           <img loading="lazy" decoding="async" src={publicQrRequestForm.photo} alt="request" className="photo-preview" />
                         ) : null}
                         <div className="tiny" style={{ marginTop: 8 }}>
-                          {lang === "km"
-                            ? "អាចបន្ថែមរូបថតបញ្ហា ដើម្បីឱ្យក្រុមថែទាំត្រៀមគ្រឿងបន្លាស់ ឬឧបករណ៍បានលឿនជាងមុន។"
-                            : "You can add a problem photo to help maintenance staff prepare parts or tools before they come."}
+                          {publicQrText.requestPhotoHelp}
                         </div>
                       </label>
                       <div className="field field-wide">
@@ -33878,20 +34027,20 @@ export default function App() {
                           disabled={publicQrRecordBusy || !publicQrRequestForm.requestedBy.trim()}
                           onClick={() => void submitPublicQrRepairRequest(asset)}
                         >
-                          {publicQrRecordBusy ? "Submitting..." : "Request Fix / Create Work Order"}
+                          {publicQrRecordBusy ? publicQrText.submitting : publicQrText.submitRequest}
                         </button>
                         <div className="tiny" style={{ marginTop: 8 }}>
-                          This creates a work order first. The technician can later convert it to maintenance history after fixing.
+                          {publicQrText.workOrderHint}
                         </div>
                       </div>
                     </div>,
-                    "For staff or users reporting a problem with this asset."
+                    publicQrText.requestGroupHint
                   )}
 
                   {publicQrCanRecordMaintenance
                     ? renderPublicQrGroup(
                         "maintenance",
-                        "Maintenance Record",
+                        publicQrText.maintenanceRecord,
                         <>
                           <div className="form-grid">
                             <label className="field public-asset-date-field">
@@ -33919,7 +34068,7 @@ export default function App() {
                               </select>
                             </label>
                             <label className="field">
-                              <span>Work Status</span>
+                              <span>{publicQrText.workStatus}</span>
                               <select
                                 className="input"
                                 value={publicQrRecordForm.completion}
@@ -33935,19 +34084,30 @@ export default function App() {
                               </select>
                             </label>
                             <label className="field">
-                              <span>Condition</span>
+                              <span>{publicQrText.condition}</span>
                               <select
                                 className="input"
                                 value={publicQrRecordForm.condition}
                                 onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, condition: e.target.value }))}
                               >
                                 {MAINTENANCE_CONDITION_OPTIONS.map((opt) => (
-                                  <option key={`public-qr-maintenance-condition-${opt}`} value={opt}>{opt}</option>
+                                  <option key={`public-qr-maintenance-condition-${opt}`} value={opt}>
+                                    {lang === "km"
+                                      ? (
+                                        {
+                                          Good: "ល្អ",
+                                          Fair: "មធ្យម",
+                                          Damaged: "ខូច",
+                                          Missing: "បាត់",
+                                        } as Record<string, string>
+                                      )[opt] || opt
+                                      : opt}
+                                  </option>
                                 ))}
                               </select>
                             </label>
                             <label className="field field-wide">
-                              <span>Note</span>
+                              <span>{publicQrText.note}</span>
                               <textarea
                                 className="input"
                                 rows={3}
@@ -33956,7 +34116,7 @@ export default function App() {
                               />
                             </label>
                             <label className="field">
-                              <span>Cost</span>
+                              <span>{publicQrText.cost}</span>
                               <input
                                 className="input"
                                 value={publicQrRecordForm.cost}
@@ -33964,7 +34124,7 @@ export default function App() {
                               />
                             </label>
                             <label className="field">
-                              <span>By</span>
+                              <span>{publicQrText.by}</span>
                               <input
                                 className="input"
                                 value={publicQrRecordForm.by}
@@ -33997,7 +34157,7 @@ export default function App() {
                                             }))
                                           }
                                         >
-                                          Remove
+                                          {publicQrText.remove}
                                         </button>
                                       </div>
                                     </div>
@@ -34036,7 +34196,7 @@ export default function App() {
                                             })
                                           }
                                         >
-                                          Remove
+                                          {publicQrText.remove}
                                         </button>
                                       </div>
                                     </div>
@@ -34057,26 +34217,26 @@ export default function App() {
                                 }
                                 onClick={() => void addMaintenanceRecordFromPublicQr(asset)}
                               >
-                                {publicQrRecordBusy ? "Saving..." : "Save Maintenance Record"}
+                                {publicQrRecordBusy ? publicQrText.saving : publicQrText.saveMaintenanceRecord}
                               </button>
                             </div>
                           </div>
                           {publicQrRecordError ? <p className="alert alert-error">{publicQrRecordError}</p> : null}
                           {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
                         </>,
-                        "Visible for maintenance staff and admins who can record maintenance."
+                        publicQrText.maintenanceGroupHint
                       )
                     : null}
                   {publicQrCanRecordMaintenance && isPrinterAssetRow(asset)
                     ? renderPublicQrGroup(
                         "toner",
-                        "Toner Change",
+                        publicQrText.tonerChange,
                         <>
                           <div className="form-grid">
                             <label className="field">
-                              <span>Toner Item</span>
+                              <span>{publicQrText.tonerItem}</span>
                               <select className="input" value={publicQrTonerForm.itemId} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, itemId: e.target.value }))}>
-                                <option value="">Select toner</option>
+                                <option value="">{publicQrText.selectToner}</option>
                                 {tonerInventoryItems
                                   .filter((item) => item.campus === asset.campus)
                                   .map((item) => (
@@ -34087,15 +34247,15 @@ export default function App() {
                               </select>
                             </label>
                             <label className="field">
-                              <span>Date</span>
+                              <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
                               <input className="input" type="date" value={publicQrTonerForm.date} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, date: e.target.value }))} />
                             </label>
                             <label className="field">
-                              <span>Qty</span>
+                              <span>{publicQrText.qty}</span>
                               <input className="input" type="number" min="1" value={publicQrTonerForm.qty} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, qty: e.target.value }))} />
                             </label>
                             <label className="field">
-                              <span>Old Toner Status</span>
+                              <span>{publicQrText.oldTonerStatus}</span>
                               <select className="input" value={publicQrTonerForm.oldTonerStatus} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, oldTonerStatus: e.target.value }))}>
                                 <option value="Empty">Empty</option>
                                 <option value="Low">Low</option>
@@ -34104,23 +34264,23 @@ export default function App() {
                               </select>
                             </label>
                             <label className="field">
-                              <span>Page Counter</span>
+                              <span>{publicQrText.pageCounter}</span>
                               <input className="input" type="number" min="0" value={publicQrTonerForm.pageCounter} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, pageCounter: e.target.value }))} />
                             </label>
                             <label className="field">
-                              <span>By</span>
+                              <span>{publicQrText.by}</span>
                               <input className="input" value={publicQrTonerForm.by} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, by: e.target.value }))} />
                             </label>
                             <label className="field field-wide">
-                              <span>Note</span>
+                              <span>{publicQrText.note}</span>
                               <textarea className="input" rows={3} value={publicQrTonerForm.note} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, note: e.target.value }))} />
                             </label>
                             <label className="field">
-                              <span>Cost</span>
+                              <span>{publicQrText.cost}</span>
                               <input className="input" value={publicQrTonerForm.cost} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, cost: e.target.value }))} />
                             </label>
                             <label className="field">
-                              <span>Condition</span>
+                              <span>{publicQrText.condition}</span>
                               <input className="input" value={publicQrTonerForm.condition} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, condition: e.target.value }))} />
                             </label>
                             <label className="field field-wide">
@@ -34132,21 +34292,21 @@ export default function App() {
                             </label>
                             <div className="field field-wide">
                               <button className="btn-primary" type="button" disabled={publicQrRecordBusy || !publicQrTonerForm.note.trim() || !publicQrTonerForm.itemId} onClick={() => void addTonerRecordFromPublicQr(asset)}>
-                                {publicQrRecordBusy ? "Saving..." : "Save Toner Change"}
+                                {publicQrRecordBusy ? publicQrText.saving : publicQrText.saveTonerChange}
                               </button>
                             </div>
                           </div>
                           {publicQrRecordError ? <p className="alert alert-error">{publicQrRecordError}</p> : null}
                           {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
                         </>,
-                        "Users can scan printer QR and record toner replacement directly."
+                        publicQrText.tonerGroupHint
                       )
                     : null}
 
                   {publicQrCanViewDetails
                     ? renderPublicQrGroup(
                         "details",
-                        "Asset Details + History",
+                        publicQrText.assetDetailsHistory,
                         <div className="form-grid public-asset-grid">
                           <div className="field public-asset-dup-mobile"><span>{t.assetId}</span><div className="detail-value"><strong>{asset.assetId || "-"}</strong></div></div>
                           <div className="field public-asset-dup-mobile"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(asset.status || "-")}</div></div>
@@ -34166,7 +34326,7 @@ export default function App() {
                           <div className="field"><span>{t.model}</span><div className="detail-value">{asset.model || "-"}</div></div>
                           <div className="field"><span>{t.serialNumber}</span><div className="detail-value">{asset.serialNumber || "-"}</div></div>
                           {isFanAsset(asset.category || "", asset.type || "") ? (
-                            <div className="field"><span>Fan Type</span><div className="detail-value">{parseFanSpecs(asset.specs || "").fanType || "-"}</div></div>
+                            <div className="field"><span>{publicQrText.fanType}</span><div className="detail-value">{parseFanSpecs(asset.specs || "").fanType || "-"}</div></div>
                           ) : null}
                           <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
                           <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
@@ -34193,7 +34353,7 @@ export default function App() {
                             </div>
                           </div>
                           <div className="field field-wide">
-                            <span>Components</span>
+                            <span>{publicQrText.components}</span>
                             <div className="public-asset-component-section">
                               {publicComponents.length ? (
                                 <div className="public-asset-component-list">
@@ -34224,10 +34384,10 @@ export default function App() {
                                             {component.name || assetItemName(component.category || "", component.type || "", component.pcType || "")}
                                           </div>
                                           <div className="public-asset-component-meta">
-                                            <span><strong>Role:</strong> {component.componentRole || component.type || "-"}</span>
-                                            <span><strong>Status:</strong> {assetStatusLabel(component.status || "-")}</span>
-                                            <span><strong>Location:</strong> {component.location || "-"}</span>
-                                            <span><strong>Assigned:</strong> {component.assignedTo || "-"}</span>
+                                            <span><strong>{publicQrText.role}:</strong> {component.componentRole || component.type || "-"}</span>
+                                            <span><strong>{t.status}:</strong> {assetStatusLabel(component.status || "-")}</span>
+                                            <span><strong>{t.location}:</strong> {component.location || "-"}</span>
+                                            <span><strong>{publicQrText.assigned}:</strong> {component.assignedTo || "-"}</span>
                                           </div>
                                         </div>
                                       </article>
@@ -34235,12 +34395,12 @@ export default function App() {
                                   })}
                                 </div>
                               ) : (
-                                <div className="detail-value">No linked components.</div>
+                                <div className="detail-value">{publicQrText.noLinkedComponents}</div>
                               )}
                             </div>
                           </div>
                           <div className="field field-wide">
-                            <h3 className="section-title" style={{ margin: 0 }}>Maintenance History</h3>
+                            <h3 className="section-title" style={{ margin: 0 }}>{publicQrText.maintenanceHistory}</h3>
                             <div className="public-asset-history-section">
                               {publicMaintenanceHistory.length ? (
                                 <div className="public-asset-history-list">
@@ -34253,20 +34413,20 @@ export default function App() {
                                           </div>
                                         </div>
                                       <div className="public-asset-history-grid">
-                                        {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(entry.completion || "-"))}
-                                        {renderPublicHistoryMeta("Condition", entry.condition || "-")}
-                                        {renderPublicHistoryMeta("By", entry.by || "-")}
-                                        {renderPublicHistoryMeta("Cost", entry.cost || "-")}
-                                        {entry.ticketNo ? renderPublicHistoryMeta("Work Order", entry.ticketNo) : null}
-                                        {entry.requestSource ? renderPublicHistoryMeta("Request Source", formatTicketRequestSource(entry.requestSource)) : null}
-                                        {entry.requestedBy ? renderPublicHistoryMeta("Requested By", entry.requestedBy) : null}
+                                          {renderPublicHistoryMeta(publicQrText.workStatus, maintenanceCompletionText(entry.completion || "-"))}
+                                        {renderPublicHistoryMeta(publicQrText.condition, entry.condition || "-")}
+                                        {renderPublicHistoryMeta(publicQrText.by, entry.by || "-")}
+                                        {renderPublicHistoryMeta(publicQrText.cost, entry.cost || "-")}
+                                        {entry.ticketNo ? renderPublicHistoryMeta(publicQrText.workOrder, entry.ticketNo) : null}
+                                        {entry.requestSource ? renderPublicHistoryMeta(publicQrText.requestedSource, formatTicketRequestSource(entry.requestSource)) : null}
+                                        {entry.requestedBy ? renderPublicHistoryMeta(publicQrText.requestedByLabel, entry.requestedBy) : null}
                                       </div>
                                       <div className="public-asset-history-note">
-                                        <span className="public-asset-history-label">Note</span>
+                                        <span className="public-asset-history-label">{publicQrText.note}</span>
                                         <p>{entry.note || "-"}</p>
                                       </div>
                                       <div className="public-asset-history-photo-section">
-                                        <span className="public-asset-history-label">Photos</span>
+                                        <span className="public-asset-history-label">{lang === "km" ? "រូបថត" : "Photos"}</span>
                                         <div className="public-asset-history-photo-groups">
                                           {renderMaintenancePhotoGroups(entry, `public-maint-${entry.id}`, {
                                             before: lang === "km" ? "មុនថែទាំ" : "Before Maintenance",
@@ -34281,12 +34441,12 @@ export default function App() {
                                   ))}
                                 </div>
                               ) : (
-                                renderPublicHistoryEmpty("No maintenance history yet.")
+                                renderPublicHistoryEmpty(publicQrText.noMaintenanceHistory)
                               )}
                             </div>
                           </div>
                           <div className="field field-wide">
-                            <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
+                            <h3 className="section-title" style={{ margin: 0 }}>{publicQrText.transferLocationHistory}</h3>
                             <div className="public-asset-history-section">
                               {publicTransferHistory.length ? (
                                 <div className="public-asset-history-list">
@@ -34300,21 +34460,21 @@ export default function App() {
                                     return (
                                       <article className="public-asset-history-card" key={`public-transfer-${entry.id}`}>
                                         <div className="public-asset-history-head">
-                                          <div className="public-asset-history-title">Location Transfer</div>
+                                          <div className="public-asset-history-title">{publicQrText.locationTransfer}</div>
                                           <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
                                         </div>
                                         <div className="public-asset-history-grid">
-                                          {renderPublicHistoryMeta("From Campus", campusLabel(entry.fromCampus || "-"))}
-                                          {renderPublicHistoryMeta("To Campus", campusLabel(entry.toCampus || "-"))}
-                                          {renderPublicHistoryMeta("From Location", entry.fromLocation || "-")}
-                                          {renderPublicHistoryMeta("To Location", entry.toLocation || "-")}
-                                          {renderPublicHistoryMeta("From Staff", custody?.fromUser || "-")}
-                                          {renderPublicHistoryMeta("To Staff", custody?.toUser || "-")}
-                                          {renderPublicHistoryMeta("Ack", custody?.responsibilityAck ? "Yes" : "No")}
-                                          {renderPublicHistoryMeta("By", entry.by || "-")}
+                                          {renderPublicHistoryMeta(publicQrText.fromCampus, campusLabel(entry.fromCampus || "-"))}
+                                          {renderPublicHistoryMeta(publicQrText.toCampus, campusLabel(entry.toCampus || "-"))}
+                                          {renderPublicHistoryMeta(publicQrText.fromLocation, entry.fromLocation || "-")}
+                                          {renderPublicHistoryMeta(publicQrText.toLocation, entry.toLocation || "-")}
+                                          {renderPublicHistoryMeta(publicQrText.fromStaff, custody?.fromUser || "-")}
+                                          {renderPublicHistoryMeta(publicQrText.toStaff, custody?.toUser || "-")}
+                                          {renderPublicHistoryMeta(publicQrText.ack, custody?.responsibilityAck ? "Yes" : "No")}
+                                          {renderPublicHistoryMeta(publicQrText.by, entry.by || "-")}
                                         </div>
                                         <div className="public-asset-history-note">
-                                          <span className="public-asset-history-label">Reason</span>
+                                          <span className="public-asset-history-label">{publicQrText.reason}</span>
                                           <p>{entry.reason || "-"}</p>
                                         </div>
                                       </article>
@@ -34322,12 +34482,12 @@ export default function App() {
                                   })}
                                 </div>
                               ) : (
-                                renderPublicHistoryEmpty("No transfer location history yet.")
+                                renderPublicHistoryEmpty(publicQrText.noTransferHistory)
                               )}
                             </div>
                           </div>
                           <div className="field field-wide">
-                            <h3 className="section-title" style={{ margin: 0 }}>Activity History</h3>
+                            <h3 className="section-title" style={{ margin: 0 }}>{publicQrText.activityHistory}</h3>
                             <div className="public-asset-history-section">
                               {publicActivityHistory.length ? (
                                 <div className="public-asset-history-list">
@@ -34336,35 +34496,35 @@ export default function App() {
                                       <div className="public-asset-history-head">
                                         <div className="public-asset-history-title">
                                           {entry.custody && entry.status
-                                            ? "Assignment + Status"
+                                            ? publicQrText.assignmentAndStatus
                                             : entry.custody
                                             ? formatPublicHistoryAction(entry.custody.action || "Assignment")
-                                            : "Status Update"}
+                                            : publicQrText.statusUpdate}
                                         </div>
                                         <div className="public-asset-history-date">{formatDate(entry.date || "-")}</div>
                                       </div>
                                       <div className="public-asset-history-grid">
-                                        {entry.custody ? renderPublicHistoryMeta("From User", entry.custody.fromUser || "-") : null}
-                                        {entry.custody ? renderPublicHistoryMeta("To User", entry.custody.toUser || "-") : null}
-                                        {entry.status ? renderPublicHistoryMeta("From Status", assetStatusLabel(entry.status.fromStatus || "-")) : null}
-                                        {entry.status ? renderPublicHistoryMeta("To Status", assetStatusLabel(entry.status.toStatus || "-")) : null}
-                                        {entry.custody ? renderPublicHistoryMeta("Ack", entry.custody.responsibilityAck ? "Yes" : "No") : null}
-                                        {renderPublicHistoryMeta("By", entry.by || "-")}
+                                        {entry.custody ? renderPublicHistoryMeta(publicQrText.fromUser, entry.custody.fromUser || "-") : null}
+                                        {entry.custody ? renderPublicHistoryMeta(publicQrText.toUser, entry.custody.toUser || "-") : null}
+                                        {entry.status ? renderPublicHistoryMeta(publicQrText.fromStatus, assetStatusLabel(entry.status.fromStatus || "-")) : null}
+                                        {entry.status ? renderPublicHistoryMeta(publicQrText.toStatus, assetStatusLabel(entry.status.toStatus || "-")) : null}
+                                        {entry.custody ? renderPublicHistoryMeta(publicQrText.ack, entry.custody.responsibilityAck ? "Yes" : "No") : null}
+                                        {renderPublicHistoryMeta(publicQrText.by, entry.by || "-")}
                                       </div>
                                       <div className="public-asset-history-note">
-                                        <span className="public-asset-history-label">{entry.status ? "Reason" : "Note"}</span>
+                                        <span className="public-asset-history-label">{entry.status ? publicQrText.reason : publicQrText.note}</span>
                                         <p>{entry.note || "-"}</p>
                                       </div>
                                     </article>
                                   ))}
                                 </div>
                               ) : (
-                                renderPublicHistoryEmpty("No activity history yet.")
+                                renderPublicHistoryEmpty(publicQrText.noActivityHistory)
                               )}
                             </div>
                           </div>
                         </div>,
-                        "Read-only asset details and history for all users."
+                        publicQrText.detailsGroupHint
                       )
                     : null}
                 </div>
@@ -40658,6 +40818,24 @@ export default function App() {
                       />
                     </label>
                     <label className="field field-wide">
+                      <span>Transfer Photo</span>
+                      <input key={`quick-transfer-photo-${transferPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={(e) => void onTransferPhotoFile(e)} />
+                      {transferForm.photo ? (
+                        <div className="transfer-preview" style={{ marginTop: 8 }}>
+                          <div className="transfer-preview-photo">
+                            <img loading="lazy" decoding="async" src={transferForm.photo} alt="Transfer" className="asset-picker-thumb" />
+                          </div>
+                          <div className="transfer-preview-meta">
+                            <strong>Transfer record photo</strong>
+                            <span>Will be saved into transfer history</span>
+                            <button type="button" className="tab" onClick={() => { setTransferForm((f) => ({ ...f, photo: "" })); setTransferPhotoFileKey((n) => n + 1); }}>
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </label>
+                    <label className="field field-wide">
                       <span>Note</span>
                       <textarea
                         className="textarea"
@@ -46693,6 +46871,24 @@ export default function App() {
                 />
               </label>
               <label className="field field-wide">
+                <span>Transfer Photo</span>
+                <input key={`transfer-photo-${transferPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={(e) => void onTransferPhotoFile(e)} />
+                {transferForm.photo ? (
+                  <div className="transfer-preview" style={{ marginTop: 8 }}>
+                    <div className="transfer-preview-photo">
+                      <img loading="lazy" decoding="async" src={transferForm.photo} alt="Transfer" className="asset-picker-thumb" />
+                    </div>
+                    <div className="transfer-preview-meta">
+                      <strong>Transfer record photo</strong>
+                      <span>Will be saved into transfer history</span>
+                      <button type="button" className="tab" onClick={() => { setTransferForm((f) => ({ ...f, photo: "" })); setTransferPhotoFileKey((n) => n + 1); }}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </label>
+              <label className="field field-wide">
                 <span>Note</span>
                 <textarea
                   className="textarea"
@@ -46845,6 +47041,14 @@ export default function App() {
                             <span>Reason</span>
                             <strong>{row.reason || "-"}</strong>
                           </div>
+                          {row.transferPhoto ? (
+                            <div className="transfer-history-mini-block">
+                              <span>Transfer Photo</span>
+                              <div className="transfer-history-stop-photo">
+                                {renderAssetPhoto(row.transferPhoto, `${row.assetId}-transfer-photo`)}
+                              </div>
+                            </div>
+                          ) : null}
                           <p className="transfer-history-note">{row.note || "-"}</p>
                         </div>
                       </div>

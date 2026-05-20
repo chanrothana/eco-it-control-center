@@ -6049,6 +6049,7 @@ function toPublicAssetView(asset, allAssets = []) {
         toCampus: toText(entry?.toCampus),
         toLocation: toText(entry?.toLocation),
         quantity: Math.max(0, Number(entry?.quantity || 0)),
+        photo: toText(entry?.photo),
         reason: toText(entry?.reason),
         by: toText(entry?.by),
         note: toText(entry?.note),
