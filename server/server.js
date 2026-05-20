@@ -2799,6 +2799,56 @@ async function sendTelegramWorkOrderCreatedAlert(ticket, db = null) {
   };
 }
 
+function findStaffUserByFullName(db, fullName) {
+  const target = toText(fullName).trim().toLowerCase();
+  if (!target) return null;
+  const settings = db && db.settings && typeof db.settings === "object" ? db.settings : {};
+  const users = normalizeStaffUsers(settings.staffUsers);
+  return users.find((row) => toText(row.fullName).trim().toLowerCase() === target) || null;
+}
+
+async function sendTelegramWorkOrderAssignedAlert(ticket, assignee, actor = null, db = null) {
+  if (!ticket || typeof ticket !== "object" || !assignee || typeof assignee !== "object") {
+    return { ok: false, skipped: true, reason: "missing ticket or assignee" };
+  }
+  const chatId = toText(assignee.telegramChatId);
+  if (!chatId) {
+    return { ok: false, skipped: true, reason: "missing telegram chat id" };
+  }
+  const assignedTo = toText(ticket.assignedTo) || toText(assignee.fullName) || "-";
+  const assignedBy = toText(actor && (actor.displayName || actor.username)) || "-";
+  const lines = [
+    ...buildTelegramColorStrip("🟦", "សារ​ជូនដំណឹងថែទាំ ECO", "អ្នកត្រូវបានចាត់តាំងការងារថ្មី"),
+    `លេខសំបុត្រ: ${toText(ticket.ticketNo) || "-"}`,
+    `សាខា: ${formatTelegramCampusKhmer(ticket.campus)}`,
+    `ផ្នែក: ${toText(ticket.category) || "-"}`,
+    `ចំណងជើង: ${formatTelegramTicketTitleKhmer(ticket.title, ticket.assetId)}`,
+    `ស្ថានភាព: ${formatTicketStatusKhmer(ticket.status || "Assigned")}`,
+    `ចាត់តាំងទៅ: ${assignedTo}`,
+    `ចាត់តាំងដោយ: ${assignedBy}`,
+  ];
+  if (toText(ticket.assetId)) {
+    lines.push(`លេខទ្រព្យ: ${toText(ticket.assetId)}`);
+  }
+  if (toText(ticket.assetLocation)) {
+    lines.push(`ទីតាំង: ${toText(ticket.assetLocation)}`);
+  }
+  if (toText(ticket.requestedBy)) {
+    lines.push(`អ្នកស្នើសុំ: ${toText(ticket.requestedBy)}`);
+  }
+  if (toText(ticket.requesterContact)) {
+    lines.push(`ទំនាក់ទំនង: ${toText(ticket.requesterContact)}`);
+  }
+  if (toText(ticket.description)) {
+    lines.push(`បរិយាយ: ${toText(ticket.description)}`);
+  }
+  return sendTelegramMaintenanceMessage(lines.join("\n"), {
+    db,
+    chatIds: [chatId],
+    photoUrl: resolveTelegramPhotoUrl(toText(ticket.photo)),
+  });
+}
+
 function resolveTelegramPhotoUrl(photoPath) {
   const raw = toText(photoPath);
   if (!raw) return "";
@@ -5539,6 +5589,7 @@ function normalizeStaffUsers(input) {
     const fullName = toText(row.fullName);
     const position = toText(row.position);
     const email = toText(row.email).toLowerCase();
+    const telegramChatId = toText(row.telegramChatId);
     if (!fullName || !position) continue;
     if (email) {
       if (usedEmails.has(email)) continue;
@@ -5551,6 +5602,7 @@ function normalizeStaffUsers(input) {
       fullName,
       position,
       email,
+      telegramChatId,
     });
   }
   return out;
@@ -5646,9 +5698,10 @@ function validateStaffUser(body) {
   const fullName = toText(body.fullName);
   const position = toText(body.position);
   const email = toText(body.email).toLowerCase();
+  const telegramChatId = toText(body.telegramChatId);
   if (!fullName) return "Staff full name is required";
   if (!position) return "Position is required";
-  return { fullName, position, email };
+  return { fullName, position, email, telegramChatId };
 }
 
 function validateTicket(body) {
@@ -6661,6 +6714,7 @@ const server = http.createServer(async (req, res) => {
         fullName: cleaned.fullName,
         position: cleaned.position,
         email: cleaned.email,
+        telegramChatId: cleaned.telegramChatId,
       };
       const nextUsers = [user, ...users];
       db.settings = {
@@ -9226,6 +9280,16 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
         console.warn("[MAINTENANCE ALERT] Failed to send work-order alert:", err instanceof Error ? err.message : err);
       }
+      if (toText(ticket.assignedTo)) {
+        try {
+          const assignee = findStaffUserByFullName(db, ticket.assignedTo);
+          if (assignee && assignee.telegramChatId) {
+            await sendTelegramWorkOrderAssignedAlert(ticket, assignee, admin, db);
+          }
+        } catch (err) {
+          console.warn("[MAINTENANCE ALERT] Failed to send assigned work-order alert:", err instanceof Error ? err.message : err);
+        }
+      }
       sendJson(res, 201, { ticket });
       return;
     }
@@ -9326,6 +9390,17 @@ const server = http.createServer(async (req, res) => {
       db.tickets[idx] = next;
       appendAuditLog(db, admin, "UPDATE", "ticket", next.ticketNo || String(id), `${next.status} | ${next.assignedTo || "-"}`);
       await writeDb(db);
+      const assignmentChanged = toText(current.assignedTo) !== toText(next.assignedTo);
+      if (assignmentChanged && toText(next.assignedTo)) {
+        try {
+          const assignee = findStaffUserByFullName(db, next.assignedTo);
+          if (assignee && assignee.telegramChatId) {
+            await sendTelegramWorkOrderAssignedAlert(next, assignee, admin, db);
+          }
+        } catch (err) {
+          console.warn("[MAINTENANCE ALERT] Failed to send updated assigned work-order alert:", err instanceof Error ? err.message : err);
+        }
+      }
       sendJson(res, 200, { ticket: next });
       return;
     }

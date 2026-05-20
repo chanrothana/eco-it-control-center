@@ -439,6 +439,7 @@ type StaffUser = {
   fullName: string;
   position: string;
   email: string;
+  telegramChatId?: string;
 };
 type InventoryItem = {
   id: number;
@@ -1885,6 +1886,30 @@ const CATEGORY_OPTIONS = [
   { value: "FACILITY", en: "Facility", km: "បរិក្ខារ" },
   { value: "FURNITURE", en: "Furniture", km: "គ្រឿងសង្ហារឹម" },
 ];
+
+const WORK_ORDER_ASSIGNABLE_ROLE_KEYWORDS: Record<string, string[]> = {
+  IT: ["it", "ict", "tech", "technician", "network", "server", "system", "computer", "printer", "support", "helpdesk", "cctv"],
+  SAFETY: ["security", "safety", "guard", "cctv"],
+  FACILITY: ["facility", "maintenance", "janitor", "cleaner", "electric", "plumb", "pool", "garden", "carpenter", "handyman", "repair", "technician", "air", "ac"],
+  FURNITURE: ["facility", "maintenance", "carpenter", "furniture", "repair", "handyman", "janitor"],
+};
+
+function workOrderAssignableUsers(users: StaffUser[], category: string, selectedName = "") {
+  const normalizedCategory = String(category || "").trim().toUpperCase();
+  const keywords = WORK_ORDER_ASSIGNABLE_ROLE_KEYWORDS[normalizedCategory] || [];
+  if (!keywords.length) return users;
+  const selected = String(selectedName || "").trim();
+  const filtered = users.filter((user) => {
+    const haystack = `${user.fullName} ${user.position} ${user.email || ""}`.toLowerCase();
+    return keywords.some((keyword) => haystack.includes(keyword));
+  });
+  if (!filtered.length) return users;
+  if (selected && !filtered.some((user) => user.fullName === selected)) {
+    const selectedUser = users.find((user) => user.fullName === selected);
+    if (selectedUser) return [...filtered, selectedUser];
+  }
+  return filtered;
+}
 
 const ASSET_STATUS_OPTIONS = [
   { value: "Active", en: "Active", km: "កំពុងប្រើ" },
@@ -9628,6 +9653,14 @@ export default function App() {
     assignedTo: "",
     photo: "",
   });
+  const registerAssignableUsers = useMemo(
+    () => workOrderAssignableUsers(users, ticketForm.category, ticketForm.assignedTo),
+    [users, ticketForm.category, ticketForm.assignedTo]
+  );
+  const ticketEditAssignableUsers = useMemo(
+    () => workOrderAssignableUsers(users, ticketEditForm.category, ticketEditForm.assignedTo),
+    [users, ticketEditForm.category, ticketEditForm.assignedTo]
+  );
   const [ticketMaintenanceModal, setTicketMaintenanceModal] = useState<null | Ticket>(null);
   const [ticketMaintenanceFileKey, setTicketMaintenanceFileKey] = useState(0);
   const [ticketMaintenanceForm, setTicketMaintenanceForm] = useState({
@@ -10381,6 +10414,7 @@ export default function App() {
     fullName: "",
     position: "",
     email: "",
+    telegramChatId: "",
   });
   const [newItemTypeForm, setNewItemTypeForm] = useState({
     category: "IT",
@@ -19533,6 +19567,7 @@ export default function App() {
     const fullName = userForm.fullName.trim();
     const position = userForm.position.trim();
     const email = userForm.email.trim().toLowerCase();
+    const telegramChatId = userForm.telegramChatId.trim();
     if (!fullName || !position) return;
 
     const emailTaken = email
@@ -19549,7 +19584,7 @@ export default function App() {
       if (editingUserId !== null) {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>(`/api/staff-users/${editingUserId}`, {
           method: "PATCH",
-          body: JSON.stringify({ fullName, position, email }),
+          body: JSON.stringify({ fullName, position, email, telegramChatId }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -19558,7 +19593,7 @@ export default function App() {
         } else {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, email } : u
+              u.id === editingUserId ? { ...u, fullName, position, email, telegramChatId } : u
             )
           );
         }
@@ -19566,7 +19601,7 @@ export default function App() {
       } else {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>("/api/staff-users", {
           method: "POST",
-          body: JSON.stringify({ fullName, position, email }),
+          body: JSON.stringify({ fullName, position, email, telegramChatId }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -19576,19 +19611,20 @@ export default function App() {
           const created = {
             ...res.user,
             email: String(res.user.email || "").trim().toLowerCase(),
+            telegramChatId: String(res.user.telegramChatId || "").trim(),
           };
           setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
         } else {
           await loadStaffUsers();
         }
       }
-      setUserForm({ fullName: "", position: "", email: "" });
+      setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         if (editingUserId !== null) {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, email } : u
+              u.id === editingUserId ? { ...u, fullName, position, email, telegramChatId } : u
             )
           );
           setEditingUserId(null);
@@ -19598,10 +19634,11 @@ export default function App() {
             fullName,
             position,
             email,
+            telegramChatId,
           };
           setUsers((prev) => [localUser, ...prev]);
         }
-        setUserForm({ fullName: "", position: "", email: "" });
+        setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
         setError("");
         return;
       }
@@ -20627,6 +20664,7 @@ export default function App() {
       fullName: user.fullName,
       position: user.position,
       email: user.email,
+      telegramChatId: user.telegramChatId || "",
     });
   }
 
@@ -20645,14 +20683,14 @@ export default function App() {
       }
       if (editingUserId === id) {
         setEditingUserId(null);
-        setUserForm({ fullName: "", position: "", email: "" });
+        setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
       }
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         setUsers((prev) => prev.filter((u) => u.id !== id));
         if (editingUserId === id) {
           setEditingUserId(null);
-          setUserForm({ fullName: "", position: "", email: "" });
+          setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
         }
         setError("");
         return;
@@ -41783,7 +41821,7 @@ export default function App() {
                     <span>Assign To</span>
                     <select className="input" value={ticketForm.assignedTo} onChange={(e) => setTicketForm((f) => ({ ...f, assignedTo: e.target.value }))}>
                       <option value="">Unassigned</option>
-                      {users.map((user) => (
+                      {registerAssignableUsers.map((user) => (
                         <option key={`ticket-assign-${user.id}`} value={user.fullName}>{user.fullName}</option>
                       ))}
                     </select>
@@ -41924,7 +41962,7 @@ export default function App() {
                             onChange={(e) => void updateTicketRow(ticket, { assignedTo: e.target.value, status: e.target.value ? "Assigned" : ticket.status })}
                           >
                             <option value="">Unassigned</option>
-                            {users.map((user) => (
+                            {workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "").map((user) => (
                               <option key={`ticket-mobile-assign-${ticket.id}-${user.id}`} value={user.fullName}>
                                 {user.fullName}
                               </option>
@@ -42043,7 +42081,7 @@ export default function App() {
                             onChange={(e) => void updateTicketRow(ticket, { assignedTo: e.target.value, status: e.target.value ? "Assigned" : ticket.status })}
                           >
                             <option value="">Unassigned</option>
-                            {users.map((user) => (
+                            {workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "").map((user) => (
                               <option key={`ticket-desktop-assign-${ticket.id}-${user.id}`} value={user.fullName}>
                                 {user.fullName}
                               </option>
@@ -42172,7 +42210,7 @@ export default function App() {
                   <span>Assign To</span>
                   <select className="input" value={ticketEditForm.assignedTo} onChange={(e) => setTicketEditForm((f) => ({ ...f, assignedTo: e.target.value }))}>
                     <option value="">Unassigned</option>
-                    {users.map((user) => (
+                    {ticketEditAssignableUsers.map((user) => (
                       <option key={`ticket-edit-assign-${ticketEditModal.id}-${user.id}`} value={user.fullName}>{user.fullName}</option>
                     ))}
                   </select>
@@ -54196,12 +54234,21 @@ export default function App() {
                   onChange={(e) => setUserForm((f) => ({ ...f, email: e.target.value }))}
                 />
               </label>
+              <label className="field field-wide">
+                <span>Telegram Chat ID ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
+                <input
+                  className="input"
+                  value={userForm.telegramChatId}
+                  onChange={(e) => setUserForm((f) => ({ ...f, telegramChatId: e.target.value }))}
+                  placeholder={lang === "km" ? "ឧ. 123456789" : "Example: 123456789"}
+                />
+              </label>
             </div>
             <div className="asset-actions">
               <div className="tiny">{t.manageAssignableUsers}</div>
               <div style={{ display: "flex", gap: 8 }}>
                 {editingUserId !== null ? (
-                  <button className="tab" onClick={() => { setEditingUserId(null); setUserForm({ fullName: "", position: "", email: "" }); }}>{t.cancelEdit}</button>
+                  <button className="tab" onClick={() => { setEditingUserId(null); setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" }); }}>{t.cancelEdit}</button>
                 ) : null}
                 <button className="btn-primary" disabled={busy || !isAdmin} onClick={createOrUpdateUser}>
                   {editingUserId !== null ? t.updateUser : t.addUser}
@@ -54219,6 +54266,7 @@ export default function App() {
                       </div>
                       <div className="setup-mobile-grid">
                         <div className="setup-mobile-wide"><small>{t.email}</small><strong>{u.email || "-"}</strong></div>
+                        <div className="setup-mobile-wide"><small>Telegram Chat ID</small><strong>{u.telegramChatId || "-"}</strong></div>
                       </div>
                       <div className="setup-mobile-actions">
                         <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startEditUser(u)} title={t.edit}>✎</button>
@@ -54238,6 +54286,7 @@ export default function App() {
                       <th>{t.staffFullName}</th>
                       <th>{t.position}</th>
                       <th>{t.email}</th>
+                      <th>Telegram Chat ID</th>
                       <th>{t.edit}</th>
                       <th>{t.delete}</th>
                     </tr>
@@ -54249,13 +54298,14 @@ export default function App() {
                           <td>{u.fullName}</td>
                           <td>{u.position}</td>
                           <td>{u.email || "-"}</td>
+                          <td>{u.telegramChatId || "-"}</td>
                           <td><button className="tab" disabled={!isAdmin} onClick={() => startEditUser(u)}>{t.edit}</button></td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => deleteUser(u.id)}>X</button></td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5}>{t.noUsersYet}</td>
+                        <td colSpan={6}>{t.noUsersYet}</td>
                       </tr>
                     )}
                   </tbody>
