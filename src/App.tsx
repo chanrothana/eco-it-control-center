@@ -41912,45 +41912,52 @@ export default function App() {
                 {ticketDashboardRows.length ? (
                   ticketDashboardRows.map((ticket) => (
                     <article key={`ticket-mobile-${ticket.id}`} className="report-card ticket-dashboard-mobile-card">
-                      <div className="report-card-head ticket-dashboard-mobile-head">
-                        <div className="ticket-dashboard-mobile-ticket">
-                          <strong>{ticket.ticketNo}</strong>
-                          <span>{ticket.title}</span>
-                        </div>
+                      <div className="ticket-dashboard-mobile-topline">
+                        <strong>{ticket.ticketNo}</strong>
+                        <span>{formatDate(ticket.created)}</span>
+                      </div>
+
+                      <div className="ticket-dashboard-mobile-ticket">
+                        <h3>{ticket.title}</h3>
                         <div className="ticket-dashboard-mobile-badges">
                           <span className="maintenance-history-badge">{ticket.category}</span>
                           <span className="maintenance-history-badge">
                             {(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}
                           </span>
+                          <span className="maintenance-history-badge">{formatTicketRequestSource(ticket.requestSource)}</span>
+                          <span className="maintenance-history-badge">{ticket.status || "Open"}</span>
+                        </div>
+                        <div className="ticket-dashboard-mobile-assetline">
+                          <span>{t.asset}</span>
+                          <strong>{ticket.assetId || "-"}</strong>
                         </div>
                       </div>
 
                       <div className="ticket-dashboard-mobile-meta">
-                        <div>
+                        <article className="ticket-dashboard-mobile-meta-card">
                           <small>{t.campus}</small>
                           <strong>{campusLabel(ticket.campus)}</strong>
-                        </div>
-                        <div>
-                          <small>Source</small>
-                          <strong>{formatTicketRequestSource(ticket.requestSource)}</strong>
-                        </div>
-                        <div>
+                        </article>
+                        <article className="ticket-dashboard-mobile-meta-card">
                           <small>{t.requestedBy}</small>
                           <strong>{ticket.requestedBy || "-"}</strong>
-                        </div>
-                        <div>
+                        </article>
+                        <article className="ticket-dashboard-mobile-meta-card">
                           <small>Contact</small>
                           <strong>{ticket.requesterContact || "-"}</strong>
-                        </div>
-                        <div>
-                          <small>{t.created}</small>
-                          <strong>{formatDate(ticket.created)}</strong>
-                        </div>
-                        <div>
-                          <small>{t.asset}</small>
-                          <strong>{ticket.assetId || "-"}</strong>
-                        </div>
+                        </article>
+                        <article className="ticket-dashboard-mobile-meta-card">
+                          <small>{lang === "km" ? "អ្នកទទួលការងារបច្ចុប្បន្ន" : "Current Assignee"}</small>
+                          <strong>{ticket.assignedTo || (lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned")}</strong>
+                        </article>
                       </div>
+
+                      {ticket.description ? (
+                        <div className="ticket-dashboard-mobile-note">
+                          <small>{t.description}</small>
+                          <p>{ticket.description}</p>
+                        </div>
+                      ) : null}
 
                       <div className="ticket-dashboard-mobile-controls">
                         <label className="field">
@@ -41979,7 +41986,7 @@ export default function App() {
                         </label>
                       </div>
 
-                      <div className="asset-actions ticket-dashboard-actions">
+                      <div className="asset-actions ticket-dashboard-actions ticket-dashboard-mobile-actions">
                         {ticket.assetId ? (
                           <button className="tab btn-small" type="button" onClick={() => {
                             setAssetCampusMultiFilter(["ALL"]);
@@ -48453,9 +48460,35 @@ export default function App() {
                     placeholder={
                       lang === "km"
                         ? "ឧទាហរណ៍៖ ជួសជុលទ្វារ ប្ដូរកូនសោ ជួសជុលកុំព្យូទ័រ ឬ សម្អាតម៉ាស៊ីនត្រជាក់"
-                        : "Example: repaired door, changed lock, fixed computer, or cleaned AC."
+                      : "Example: repaired door, changed lock, fixed computer, or cleaned AC."
                     }
                   />
+                </label>
+                <label className="field">
+                  <span>
+                    {maintenanceRecordForm.type === "Replacement"
+                      ? (lang === "km" ? "តម្លៃ / ចំណាយទំនិញថ្មី" : "Replacement Cost / Payment")
+                      : (lang === "km" ? "ចំណាយ / ថ្លៃទូទាត់" : "Cost / Payment")}
+                  </span>
+                  <input
+                    className="input"
+                    value={maintenanceRecordForm.cost}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                    placeholder={
+                      maintenanceRecordForm.type === "Replacement"
+                        ? (lang === "km" ? "ឧ. 10$ សម្រាប់គ្រឿងថ្មី" : "Example: 10$ for new replacement item")
+                        : (lang === "km" ? "ឧ. 5$, 10$, ឬ Free" : "Example: 5$, 10$, or Free")
+                    }
+                  />
+                  <div className="tiny">
+                    {maintenanceRecordForm.type === "Replacement"
+                      ? (lang === "km"
+                        ? "បើប្តូរគ្រឿងថ្មី សូមបញ្ចូលតម្លៃ ឬចំណាយដែលបានទូទាត់។"
+                        : "If a new item was replaced, enter the amount paid for that replacement.")
+                      : (lang === "km"
+                        ? "បញ្ចូលចំណាយ បើមាន។ អាចដាក់ជា 10$, 40000៛ ឬ Free។"
+                        : "Enter the payment if any. You can use values like 10$, 40000៛, or Free.")}
+                  </div>
                 </label>
                 <label className="field field-wide">
                   <span>{lang === "km" ? "ចំណាំបន្ថែម" : "Extra Remark"}</span>
