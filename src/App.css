@@ -4333,6 +4333,44 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.tickets-phone-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ticket-queue-mobile-head {
+  align-items: start;
+}
+
+.ticket-queue-mobile-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.ticket-queue-mobile-subtitle {
+  margin: 4px 0 0;
+}
+
+.ticket-mobile-filter-sheet {
+  display: grid;
+  gap: 10px;
+}
+
+.ticket-mobile-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ticket-mobile-filter-head-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .ticket-dashboard-desktop-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -19864,7 +19902,7 @@ tr.row-maint-maintenance:hover td {
   }
 
   .vault-mobile-field span {
-    color: #5a76a7 !important;
+    color: #375a93 !important;
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -19873,10 +19911,16 @@ tr.row-maint-maintenance:hover td {
 
   .vault-mobile-field strong {
     min-width: 0;
-    color: var(--mobile-text);
+    color: #122744;
     font-size: 14px;
     line-height: 1.35;
     overflow-wrap: anywhere;
+  }
+
+  .vault-mobile-field strong a {
+    color: #274f93;
+    font-weight: 800;
+    text-decoration: underline;
   }
 
   .vault-mobile-field-wide {
@@ -19894,6 +19938,16 @@ tr.row-maint-maintenance:hover td {
     width: 100%;
     min-height: 40px;
     padding: 0 8px;
+  }
+
+  .vault-mobile-actions .tab {
+    color: #193b70;
+    border-color: #c3d5f1;
+    background: linear-gradient(180deg, #ffffff, #eef4ff);
+  }
+
+  .vault-mobile-actions .btn-danger {
+    color: #fff7f7;
   }
 
 .vault-mobile-empty {
@@ -21626,6 +21680,205 @@ tr.row-maint-maintenance:hover td {
 
   .ticket-dashboard-mobile-actions {
     grid-template-columns: 1fr;
+  }
+
+  .app-card-workorders-phone .topbar-phone {
+    padding: 3px 4px 5px;
+    gap: 4px;
+    border-radius: 0 0 12px 12px;
+    border-left: 0 !important;
+    border-right: 0 !important;
+  }
+
+  .app-card-workorders-phone .brand-block {
+    gap: 4px;
+  }
+
+  .app-card-workorders-phone .mobile-brand-logo-btn {
+    margin-bottom: 2px;
+  }
+
+  .app-card-workorders-phone .mobile-brand-logo {
+    width: min(44vw, 172px);
+    max-height: 28px;
+  }
+
+  .app-card-workorders-phone .brand-title-mobile {
+    font-size: clamp(12px, 4.5vw, 17px) !important;
+    line-height: 1.04;
+    max-width: 11ch;
+  }
+
+  .app-card-workorders-phone .workspace-main {
+    padding-top: 4px;
+  }
+
+  .app-card-workorders-phone .tickets-mobile-intro-panel {
+    padding: 8px;
+    margin-top: 4px;
+  }
+
+  .app-card-workorders-phone .tickets-mobile-intro-panel .panel-row {
+    gap: 10px;
+    margin-bottom: 0 !important;
+  }
+
+  .app-card-workorders-phone .tickets-mobile-intro-panel h2 {
+    margin: 0 0 4px !important;
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .app-card-workorders-phone .tickets-mobile-intro-panel .tiny {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .app-card-workorders-phone .tickets-mobile-intro-panel .asset-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 8px !important;
+  }
+
+  .app-card-workorders-phone .tickets-mobile-intro-panel .asset-actions .tab {
+    width: 100%;
+    min-height: 38px;
+    font-size: 12px;
+    justify-content: center;
+  }
+
+  .app-card-workorders-phone .tickets-phone-switcher .tab {
+    width: 100%;
+    min-height: 38px;
+    font-size: 12px;
+    justify-content: center;
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-panel {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-panel .panel-row {
+    margin-bottom: 8px !important;
+    gap: 8px;
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-panel .panel-row h2 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.05;
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-panel .panel-row .btn-primary {
+    min-height: 38px;
+    padding-inline: 12px;
+    font-size: 12px;
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-head {
+    display: grid;
+    gap: 8px;
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-head-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-head-actions .btn-primary,
+  .app-card-workorders-phone .ticket-queue-mobile-head-actions .tab {
+    min-height: 38px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .app-card-workorders-phone .maintenance-quick-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px !important;
+  }
+
+  .app-card-workorders-phone .maintenance-quick-summary-pill {
+    min-height: 58px;
+    padding: 9px;
+    border-radius: 13px;
+  }
+
+  .app-card-workorders-phone .maintenance-quick-summary-pill span {
+    font-size: 10px;
+  }
+
+  .app-card-workorders-phone .maintenance-quick-summary-pill strong {
+    font-size: 17px;
+  }
+
+  .app-card-workorders-phone .form-grid {
+    gap: 10px;
+    margin-bottom: 10px !important;
+  }
+
+  .app-card-workorders-phone .ticket-dashboard-mobile-card {
+    margin-top: 0;
+  }
+
+  .app-card-workorders-phone .ticket-mobile-filter-sheet {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: calc(112px + env(safe-area-inset-top, 0px));
+    z-index: 86;
+    padding: 12px;
+    border-radius: 18px;
+    border: 1px solid rgba(107, 131, 171, 0.3);
+    background:
+      linear-gradient(180deg, rgba(35, 51, 78, 0.98), rgba(20, 34, 55, 0.98)),
+      radial-gradient(circle at top right, rgba(77, 126, 226, 0.16), transparent 44%);
+    box-shadow: 0 18px 48px rgba(6, 14, 27, 0.42);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px) scale(0.98);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .app-card-workorders-phone .ticket-mobile-filter-sheet-open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+  }
+
+  .app-card-workorders-phone .ticket-mobile-filter-head {
+    align-items: center;
+    margin-bottom: 2px;
+  }
+
+  .app-card-workorders-phone .ticket-mobile-filter-head strong {
+    font-size: 14px;
+    color: #eef5ff;
+    letter-spacing: 0.02em;
+  }
+
+  .app-card-workorders-phone .ticket-mobile-filter-head-actions .tab {
+    min-height: 34px;
+    padding-inline: 10px;
+    font-size: 11px;
+  }
+
+  .app-card-workorders-phone .ticket-mobile-filter-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 85;
+    border: 0;
+    background: rgba(5, 10, 18, 0.54);
+    backdrop-filter: blur(2px);
+  }
+
+  .app-card-workorders-phone .ticket-queue-mobile-visible-note {
+    margin-bottom: 2px !important;
+    color: #a9bddb;
   }
 
   .panel {

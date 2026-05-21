@@ -927,6 +927,9 @@ type VaultCctvRecord = {
   nvrName: string;
   loginUrl: string;
   ipAddress?: string;
+  publicIp?: string;
+  port?: string;
+  softwareApp?: string;
   username: string;
   password?: string;
   cameraGroup?: string;
@@ -4101,6 +4104,9 @@ function normalizeVaultCctvRecords(input: unknown): VaultCctvRecord[] {
       nvrName: String(row.nvrName || "").trim(),
       loginUrl: String(row.loginUrl || "").trim(),
       ipAddress: String(row.ipAddress || "").trim() || extractHostFromUrl(String(row.loginUrl || "").trim()),
+      publicIp: String(row.publicIp || "").trim(),
+      port: String(row.port || "").trim(),
+      softwareApp: String(row.softwareApp || "").trim(),
       username: String(row.username || "").trim(),
       password: String(row.password || "").trim(),
       cameraGroup: String(row.cameraGroup || "").trim(),
@@ -8922,6 +8928,7 @@ export default function App() {
   const useMobileCardLayout =
     isPhoneView || (typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false);
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
+  const [ticketMobileQueueFiltersOpen, setTicketMobileQueueFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [inventorySupplyCampusQuickFilter, setInventorySupplyCampusQuickFilter] = useState("ALL");
@@ -9715,6 +9722,7 @@ export default function App() {
   const [vaultVisiblePasswordId, setVaultVisiblePasswordId] = useState<number | null>(null);
   const [vaultVisibleAccountPasswordId, setVaultVisibleAccountPasswordId] = useState<number | null>(null);
   const [vaultVisibleCctvPasswordId, setVaultVisibleCctvPasswordId] = useState<number | null>(null);
+  const [vaultVisibleCctvAccessId, setVaultVisibleCctvAccessId] = useState<number | null>(null);
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
   const [vaultAccountFormPasswordVisible, setVaultAccountFormPasswordVisible] = useState(false);
   const [vaultCctvFormPasswordVisible, setVaultCctvFormPasswordVisible] = useState(false);
@@ -9771,6 +9779,9 @@ export default function App() {
     nvrName: "",
     loginUrl: "",
     ipAddress: "",
+    publicIp: "",
+    port: "",
+    softwareApp: "",
     username: "",
     password: "",
     cameraGroup: "",
@@ -9778,6 +9789,8 @@ export default function App() {
     lastAngleReview: "",
     note: "",
   });
+  const [vaultCctvSearchQuery, setVaultCctvSearchQuery] = useState("");
+  const [vaultCctvSiteFilter, setVaultCctvSiteFilter] = useState("ALL");
   const cctvSiteOptions = useMemo(
     () =>
       Array.from(
@@ -9789,6 +9802,29 @@ export default function App() {
       ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })),
     [vaultCctvRecords, cctvCameraRecords]
   );
+  const filteredVaultCctvRecords = useMemo(() => {
+    const query = vaultCctvSearchQuery.trim().toLowerCase();
+    return vaultCctvRecords
+      .filter((row) => (vaultCctvSiteFilter === "ALL" ? true : row.site === vaultCctvSiteFilter))
+      .filter((row) =>
+        query
+          ? [
+              row.site,
+              row.nvrName,
+              row.loginUrl,
+              row.ipAddress,
+              row.publicIp,
+              row.port,
+              row.softwareApp,
+              row.username,
+              row.cameraGroup,
+              row.note,
+            ]
+              .map((value) => String(value || "").toLowerCase())
+              .some((value) => value.includes(query))
+          : true
+      );
+  }, [vaultCctvRecords, vaultCctvSearchQuery, vaultCctvSiteFilter]);
   const cctvCampusFilterOptions = useMemo(() => [...CAMPUS_LIST].sort(compareCampusByCode), []);
   const cctvCameraNameMap = useMemo(
     () => new Map<number, CctvCameraRecord>(cctvCameraRecords.map((row) => [row.id, row])),
@@ -10333,6 +10369,9 @@ export default function App() {
       nvrName: "",
       loginUrl: "",
       ipAddress: "",
+      publicIp: "",
+      port: "",
+      softwareApp: "",
       username: "",
       password: "",
       cameraGroup: "",
@@ -18899,6 +18938,9 @@ export default function App() {
       nvrName: vaultCctvForm.nvrName.trim(),
       loginUrl,
       ipAddress,
+      publicIp: vaultCctvForm.publicIp.trim(),
+      port: vaultCctvForm.port.trim(),
+      softwareApp: vaultCctvForm.softwareApp.trim(),
       username: vaultCctvForm.username.trim(),
       password: vaultCctvForm.password.trim(),
       cameraGroup: vaultCctvForm.cameraGroup.trim(),
@@ -19452,6 +19494,9 @@ export default function App() {
       nvrName: row.nvrName || "",
       loginUrl: row.loginUrl || "",
       ipAddress: row.ipAddress || extractHostFromUrl(row.loginUrl || ""),
+      publicIp: row.publicIp || "",
+      port: row.port || "",
+      softwareApp: row.softwareApp || "",
       username: row.username || "",
       password: row.password || "",
       cameraGroup: row.cameraGroup || "",
@@ -34811,7 +34856,7 @@ export default function App() {
         </section>
       ) : null}
 
-      <section className={`app-card app-card-layout ${maintenanceQuickMode ? "app-card-maintenance-quick" : ""}`}>
+      <section className={`app-card app-card-layout ${maintenanceQuickMode ? "app-card-maintenance-quick" : ""} ${isPhoneView && tab === "tickets" ? "app-card-workorders-phone" : ""}`}>
         <header className={`topbar ${isPhoneView ? "topbar-phone" : ""}`}>
           <div className="brand-block">
             {isPhoneView && maintenanceQuickMode ? (
@@ -41752,25 +41797,36 @@ export default function App() {
 
         {tab === "tickets" && (
           <>
-            <section className="panel">
-              <div className="panel-row" style={{ marginBottom: 12 }}>
-                <div>
-                  <h2 style={{ marginBottom: 6 }}>{lang === "km" ? "Work Orders" : "Work Orders"}</h2>
-                  <p className="tiny" style={{ margin: 0 }}>
-                    {ticketsView === "queue"
-                      ? (lang === "km" ? "មើល និងតាមដាន ticket ទាំងអស់នៅទីនេះ។" : "Review and track all work order tickets here.")
-                      : (lang === "km" ? "បង្កើត ticket ថ្មីដោយដៃនៅទីនេះ។" : "Register a new manual work order here.")}
-                  </p>
-                </div>
-                <div className="asset-actions" style={{ gap: 8, flexWrap: "wrap" }}>
-                  <button className={`tab ${ticketsView === "queue" ? "tab-active" : ""}`} onClick={() => setTicketsView("queue")}>
+            <section className="panel tickets-mobile-intro-panel">
+              {isPhoneView && ticketsView === "queue" ? (
+                <div className="tickets-phone-switcher">
+                  <button className="tab tab-active" onClick={() => setTicketsView("queue")}>
                     {lang === "km" ? "បញ្ជីការងារ" : "Work Order Queue"}
                   </button>
-                  <button className={`tab ${ticketsView === "register" ? "tab-active" : ""}`} onClick={() => setTicketsView("register")}>
+                  <button className="tab" onClick={() => setTicketsView("register")}>
                     {lang === "km" ? "បង្កើតការងារ" : "Register Work Order"}
                   </button>
                 </div>
-              </div>
+              ) : (
+                <div className="panel-row" style={{ marginBottom: 12 }}>
+                  <div>
+                    <h2 style={{ marginBottom: 6 }}>{lang === "km" ? "Work Orders" : "Work Orders"}</h2>
+                    <p className="tiny" style={{ margin: 0 }}>
+                      {ticketsView === "queue"
+                        ? (lang === "km" ? "មើល និងតាមដាន ticket ទាំងអស់នៅទីនេះ។" : "Review and track all work order tickets here.")
+                        : (lang === "km" ? "បង្កើត ticket ថ្មីដោយដៃនៅទីនេះ។" : "Register a new manual work order here.")}
+                    </p>
+                  </div>
+                  <div className="asset-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+                    <button className={`tab ${ticketsView === "queue" ? "tab-active" : ""}`} onClick={() => setTicketsView("queue")}>
+                      {lang === "km" ? "បញ្ជីការងារ" : "Work Order Queue"}
+                    </button>
+                    <button className={`tab ${ticketsView === "register" ? "tab-active" : ""}`} onClick={() => setTicketsView("register")}>
+                      {lang === "km" ? "បង្កើតការងារ" : "Register Work Order"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             {ticketsView === "register" && (
@@ -41840,12 +41896,42 @@ export default function App() {
             )}
 
             {ticketsView === "queue" && (
-            <section className="panel">
-              <div className="panel-row" style={{ marginBottom: 10 }}>
-                <h2 style={{ margin: 0 }}>{t.workOrderQueue}</h2>
-                <button className="btn-primary" type="button" onClick={() => setTicketsView("register")}>
-                  {lang === "km" ? "បង្កើតការងារ" : "Create Work Order"}
-                </button>
+            <section className="panel ticket-queue-mobile-panel">
+              {isPhoneView && ticketMobileQueueFiltersOpen ? (
+                <button
+                  type="button"
+                  className="ticket-mobile-filter-overlay"
+                  aria-label="Close ticket filters"
+                  onClick={() => setTicketMobileQueueFiltersOpen(false)}
+                />
+              ) : null}
+              <div className="panel-row ticket-queue-mobile-head" style={{ marginBottom: 10 }}>
+                <div>
+                  <h2 style={{ margin: 0 }}>{t.workOrderQueue}</h2>
+                  {isPhoneView ? (
+                    <p className="tiny ticket-queue-mobile-subtitle">
+                      {lang === "km"
+                        ? `${ticketDashboardSummary.visible} ticket ត្រូវបានបង្ហាញ`
+                        : `${ticketDashboardSummary.visible} ticket(s) visible`}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="ticket-queue-mobile-head-actions">
+                  <button className="btn-primary" type="button" onClick={() => setTicketsView("register")}>
+                    {lang === "km" ? "បង្កើតការងារ" : "Create Work Order"}
+                  </button>
+                  {isPhoneView ? (
+                    <button
+                      type="button"
+                      className="tab ticket-queue-mobile-filter-toggle"
+                      onClick={() => setTicketMobileQueueFiltersOpen((open) => !open)}
+                    >
+                      {ticketMobileQueueFiltersOpen
+                        ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                        : (lang === "km" ? "តម្រង" : "Filters")}
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="maintenance-quick-summary-strip" style={{ marginBottom: 14 }}>
                 <div className="maintenance-quick-summary-pill">
@@ -41865,45 +41951,71 @@ export default function App() {
                   <strong>{ticketDashboardSummary.unassignedQr}</strong>
                 </div>
               </div>
-              <div className="form-grid" style={{ marginBottom: 12 }}>
-                <label className="field">
-                  <span>{lang === "km" ? "ប្រភព Ticket" : "Ticket Source"}</span>
-                  <select className="input" value={ticketDashboardSourceFilter} onChange={(e) => setTicketDashboardSourceFilter(e.target.value as "ALL" | "QR" | "MANUAL")}>
-                    <option value="QR">{lang === "km" ? "QR Scan តែប៉ុណ្ណោះ" : "QR Scan Only"}</option>
-                    <option value="ALL">{lang === "km" ? "គ្រប់ប្រភព" : "All Sources"}</option>
-                    <option value="MANUAL">{lang === "km" ? "បញ្ចូលដៃ" : "Manual Only"}</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{lang === "km" ? "ស្ថានភាពជួសជុល" : "Fix Status"}</span>
-                  <select className="input" value={ticketDashboardStatusFilter} onChange={(e) => setTicketDashboardStatusFilter(e.target.value as "ALL" | "OPEN" | "CLOSED")}>
-                    <option value="OPEN">{lang === "km" ? "មិនទាន់ជួសជុល" : "Open / Not Fixed"}</option>
-                    <option value="ALL">{lang === "km" ? "គ្រប់ស្ថានភាព" : "All Statuses"}</option>
-                    <option value="CLOSED">{lang === "km" ? "បានជួសជុល / បិទ" : "Fixed / Closed"}</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{t.campus}</span>
-                  <select className="input" value={ticketDashboardCampusFilter} onChange={(e) => setTicketDashboardCampusFilter(e.target.value)}>
-                    <option value="ALL">{t.allCampuses}</option>
-                    {ticketDashboardCampusOptions.map((campus) => (
-                      <option key={`ticket-dash-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
-                  <select className="input" value={ticketDashboardAssignedFilter} onChange={(e) => setTicketDashboardAssignedFilter(e.target.value)}>
-                    <option value="ALL">{lang === "km" ? "ទាំងអស់" : "All"}</option>
-                    <option value="UNASSIGNED">{lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}</option>
-                    <option value="ASSIGNED">{lang === "km" ? "បានចាត់ចែងហើយ" : "Assigned"}</option>
-                    {ticketDashboardAssignedOptions.map((name) => (
-                      <option key={`ticket-dash-assigned-${name}`} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </label>
+              <div
+                className={`ticket-mobile-filter-sheet ${isPhoneView && ticketMobileQueueFiltersOpen ? "ticket-mobile-filter-sheet-open" : ""}`}
+              >
+                <div className="ticket-mobile-filter-head">
+                  <strong>{lang === "km" ? "តម្រង Ticket" : "Ticket Filters"}</strong>
+                  <div className="ticket-mobile-filter-head-actions">
+                    <button
+                      type="button"
+                      className="tab"
+                      onClick={() => {
+                        setTicketDashboardSourceFilter("QR");
+                        setTicketDashboardStatusFilter("OPEN");
+                        setTicketDashboardCampusFilter("ALL");
+                        setTicketDashboardAssignedFilter("ALL");
+                      }}
+                    >
+                      {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}
+                    </button>
+                    {isPhoneView ? (
+                      <button type="button" className="tab" onClick={() => setTicketMobileQueueFiltersOpen(false)}>
+                        {lang === "km" ? "រួចរាល់" : "Done"}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="form-grid" style={{ marginBottom: 0 }}>
+                  <label className="field">
+                    <span>{lang === "km" ? "ប្រភព Ticket" : "Ticket Source"}</span>
+                    <select className="input" value={ticketDashboardSourceFilter} onChange={(e) => setTicketDashboardSourceFilter(e.target.value as "ALL" | "QR" | "MANUAL")}>
+                      <option value="QR">{lang === "km" ? "QR Scan តែប៉ុណ្ណោះ" : "QR Scan Only"}</option>
+                      <option value="ALL">{lang === "km" ? "គ្រប់ប្រភព" : "All Sources"}</option>
+                      <option value="MANUAL">{lang === "km" ? "បញ្ចូលដៃ" : "Manual Only"}</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "ស្ថានភាពជួសជុល" : "Fix Status"}</span>
+                    <select className="input" value={ticketDashboardStatusFilter} onChange={(e) => setTicketDashboardStatusFilter(e.target.value as "ALL" | "OPEN" | "CLOSED")}>
+                      <option value="OPEN">{lang === "km" ? "មិនទាន់ជួសជុល" : "Open / Not Fixed"}</option>
+                      <option value="ALL">{lang === "km" ? "គ្រប់ស្ថានភាព" : "All Statuses"}</option>
+                      <option value="CLOSED">{lang === "km" ? "បានជួសជុល / បិទ" : "Fixed / Closed"}</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select className="input" value={ticketDashboardCampusFilter} onChange={(e) => setTicketDashboardCampusFilter(e.target.value)}>
+                      <option value="ALL">{t.allCampuses}</option>
+                      {ticketDashboardCampusOptions.map((campus) => (
+                        <option key={`ticket-dash-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
+                    <select className="input" value={ticketDashboardAssignedFilter} onChange={(e) => setTicketDashboardAssignedFilter(e.target.value)}>
+                      <option value="ALL">{lang === "km" ? "ទាំងអស់" : "All"}</option>
+                      <option value="UNASSIGNED">{lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}</option>
+                      <option value="ASSIGNED">{lang === "km" ? "បានចាត់ចែងហើយ" : "Assigned"}</option>
+                      {ticketDashboardAssignedOptions.map((name) => (
+                        <option key={`ticket-dash-assigned-${name}`} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
-              <div className="tiny" style={{ marginBottom: 10 }}>
+              <div className="tiny ticket-queue-mobile-visible-note" style={{ marginBottom: 10 }}>
                 {lang === "km"
                   ? `បង្ហាញ ${ticketDashboardSummary.visible} ticket តាមតម្រងបច្ចុប្បន្ន។`
                   : `Showing ${ticketDashboardSummary.visible} ticket(s) for the current dashboard filters.`}
@@ -56712,9 +56824,36 @@ export default function App() {
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>CCTV Systems</strong> for recorder details, camera area mapping, CCTV login links, retention setup, and review history by campus or site.
                 </div>
+                <div className="vault-search-toolbar" style={{ marginBottom: 10 }}>
+                  <label className="field vault-search-field">
+                    <span>{lang === "km" ? "ស្វែងរក CCTV" : "Search CCTV"}</span>
+                    <div className="vault-search-input-wrap">
+                      <input
+                        className="input"
+                        type="search"
+                        value={vaultCctvSearchQuery}
+                        onChange={(e) => setVaultCctvSearchQuery(e.target.value)}
+                        placeholder={
+                          lang === "km"
+                            ? "ស្វែងរកតាម campus, NVR, IP, public IP, app..."
+                            : "Search by campus, NVR, IP, public IP, app..."
+                        }
+                      />
+                    </div>
+                  </label>
+                  <label className="field vault-search-field">
+                    <span>{lang === "km" ? "Campus / Site" : "Campus / Site"}</span>
+                    <select className="input" value={vaultCctvSiteFilter} onChange={(e) => setVaultCctvSiteFilter(e.target.value)}>
+                      <option value="ALL">{lang === "km" ? "ទាំងអស់" : "All Sites"}</option>
+                      {cctvSiteOptions.map((site) => (
+                        <option key={`vault-cctv-site-${site}`} value={site}>{site}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 {isPhoneView ? (
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
-                    {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
+                    {filteredVaultCctvRecords.length ? filteredVaultCctvRecords.map((row) => (
                       <article className="vault-mobile-card" key={`vault-cctv-mobile-${row.id}`}>
                         <div className="vault-mobile-card-head">
                           <strong>{row.nvrName || row.site || "-"}</strong>
@@ -56724,31 +56863,42 @@ export default function App() {
                           <div className="vault-mobile-field"><span>Site</span><strong>{row.site || "-"}</strong></div>
                           <div className="vault-mobile-field"><span>Login URL</span><strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
                           <div className="vault-mobile-field"><span>IP Address</span><strong>{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</strong></div>
-                          <div className="vault-mobile-field"><span>Username</span><strong>{row.username || "-"}</strong></div>
-                          <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong></div>
+                          <div className="vault-mobile-field"><span>Software / App</span><strong>{row.softwareApp || "-"}</strong></div>
                           <div className="vault-mobile-field"><span>Review</span><strong>{formatDate(row.lastAngleReview || "-")}</strong></div>
                           <div className="vault-mobile-field vault-mobile-field-wide"><span>Camera / Angle Area</span><strong>{row.cameraGroup || "-"}</strong></div>
+                          {vaultVisibleCctvAccessId === row.id ? (
+                            <>
+                              <div className="vault-mobile-field"><span>Username</span><strong>{row.username || "-"}</strong></div>
+                              <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong></div>
+                              <div className="vault-mobile-field"><span>Public IP / DDNS</span><strong>{row.publicIp || "-"}</strong></div>
+                              <div className="vault-mobile-field"><span>Port</span><strong>{row.port || "-"}</strong></div>
+                            </>
+                          ) : null}
+                          <div className="vault-mobile-field vault-mobile-field-wide"><span>Note</span><strong>{row.note || "-"}</strong></div>
                         </div>
                         <div className="vault-mobile-actions">
+                          <button className="tab" type="button" onClick={() => setVaultVisibleCctvAccessId((prev) => (prev === row.id ? null : row.id))}>
+                            {vaultVisibleCctvAccessId === row.id ? "Hide Access Info" : "View Access Info"}
+                          </button>
                           {row.password ? <button className="tab" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide Password" : "View Password"}</button> : null}
                           <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button>
                           <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>{t.delete}</button>
                         </div>
                       </article>
-                    )) : <div className="vault-mobile-empty">No CCTV system records yet.</div>}
+                    )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន CCTV ត្រូវតម្រងនេះទេ។" : "No CCTV system records match this search."}</div>}
                   </div>
                 ) : (
                   <div className="table-wrap" style={{ marginTop: 12 }}>
                     <table className="vault-responsive-table">
-                      <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>IP Address</th><th>Username</th><th>Password</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
+                      <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>IP Address</th><th>Public IP / DDNS</th><th>Port</th><th>Software / App</th><th>Username</th><th>Password</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
                       <tbody>
-                        {vaultCctvRecords.length ? vaultCctvRecords.map((row) => (
+                        {filteredVaultCctvRecords.length ? filteredVaultCctvRecords.map((row) => (
                           <tr key={`vault-cctv-${row.id}`}>
-                            <td data-label="Site">{row.site || "-"}</td><td data-label="NVR"><strong>{row.nvrName || "-"}</strong></td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="IP Address">{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</td><td data-label="Username">{row.username || "-"}</td><td data-label="Password">{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide" : "View"}</button> : null}</td><td data-label="Camera / Angle Area">{row.cameraGroup || "-"}</td><td data-label="Retention">{row.retentionDays || 0} days</td><td data-label="Review">{formatDate(row.lastAngleReview || "-")}</td>
+                            <td data-label="Site">{row.site || "-"}</td><td data-label="NVR"><strong>{row.nvrName || "-"}</strong></td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="IP Address">{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</td><td data-label="Public IP / DDNS">{row.publicIp || "-"}</td><td data-label="Port">{row.port || "-"}</td><td data-label="Software / App">{row.softwareApp || "-"}</td><td data-label="Username">{row.username || "-"}</td><td data-label="Password">{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide" : "View"}</button> : null}</td><td data-label="Camera / Angle Area">{row.cameraGroup || "-"}</td><td data-label="Retention">{row.retentionDays || 0} days</td><td data-label="Review">{formatDate(row.lastAngleReview || "-")}</td>
                             <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button></td>
                             <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
                           </tr>
-                        )) : <tr className="vault-table-empty-row"><td colSpan={11}>No CCTV system records yet.</td></tr>}
+                        )) : <tr className="vault-table-empty-row"><td colSpan={14}>{lang === "km" ? "មិនមាន CCTV ត្រូវតម្រងនេះទេ។" : "No CCTV system records match this search."}</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -56758,6 +56908,9 @@ export default function App() {
                   <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
                   <label className="field"><span>Login URL / Google Drive Map</span><input className="input" value={vaultCctvForm.loginUrl} onChange={(e) => setVaultCctvForm((f) => ({ ...f, loginUrl: e.target.value, ipAddress: f.ipAddress || extractHostFromUrl(e.target.value) }))} placeholder="https://... or https://drive.google.com/..." /></label>
                   <label className="field"><span>IP Address</span><input className="input" value={vaultCctvForm.ipAddress} onChange={(e) => setVaultCctvForm((f) => ({ ...f, ipAddress: e.target.value }))} placeholder="Auto-filled from login URL if blank" /></label>
+                  <label className="field"><span>Public IP / DDNS</span><input className="input" value={vaultCctvForm.publicIp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, publicIp: e.target.value }))} placeholder="203.0.113.10 or c1-nvr.ddns.net" /></label>
+                  <label className="field"><span>Port</span><input className="input" value={vaultCctvForm.port} onChange={(e) => setVaultCctvForm((f) => ({ ...f, port: e.target.value }))} placeholder="80 / 443 / 37777 / 8000" /></label>
+                  <label className="field"><span>Software / App</span><input className="input" value={vaultCctvForm.softwareApp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, softwareApp: e.target.value }))} placeholder="Dahua DMSS / SmartPSS or Hik-Connect / iVMS-4200" /></label>
                   <label className="field"><span>Username</span><input className="input" value={vaultCctvForm.username} onChange={(e) => setVaultCctvForm((f) => ({ ...f, username: e.target.value }))} /></label>
                   <label className="field">
                     <span>Password</span>
