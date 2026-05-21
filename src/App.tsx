@@ -48847,6 +48847,32 @@ export default function App() {
                 />
               </label>
               <label className="field">
+                <span>
+                  {maintenanceRecordForm.type === "Replacement"
+                    ? (lang === "km" ? "តម្លៃ / ចំណាយទំនិញថ្មី" : "Replacement Cost / Payment")
+                    : (lang === "km" ? "ចំណាយ / ថ្លៃទូទាត់" : "Cost / Payment")}
+                </span>
+                <input
+                  className="input"
+                  value={maintenanceRecordForm.cost}
+                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                  placeholder={
+                    maintenanceRecordForm.type === "Replacement"
+                      ? (lang === "km" ? "ឧ. 10$ សម្រាប់គ្រឿងថ្មី" : "Example: 10$ for new replacement item")
+                      : (lang === "km" ? "ឧ. 5$, 10$, ឬ Free" : "Example: 5$, 10$, or Free")
+                  }
+                />
+                <div className="tiny">
+                  {maintenanceRecordForm.type === "Replacement"
+                    ? (lang === "km"
+                      ? "បើប្តូរគ្រឿងថ្មី សូមបញ្ចូលតម្លៃ ឬចំណាយដែលបានទូទាត់។"
+                      : "If a new item was replaced, enter the amount paid for that replacement.")
+                    : (lang === "km"
+                      ? "បញ្ចូលចំណាយ បើមាន។ អាចដាក់ជា 10$, 40000៛ ឬ Free។"
+                      : "Enter the payment if any. You can use values like 10$, 40000៛, or Free.")}
+                </div>
+              </label>
+              <label className="field">
                 <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
                 <input
                   key={`${maintenanceRecordFileKey}-before`}
@@ -48932,14 +48958,6 @@ export default function App() {
                         value={maintenanceRecordForm.condition}
                         onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
                         placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ, ថ្មខ្សោយ, ត្រូវប្តូរឆាប់ៗ..." : "Example: Working well, battery low, replace soon..."}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ចំណាយ" : "Cost"}</span>
-                      <input
-                        className="input"
-                        value={maintenanceRecordForm.cost}
-                        onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
                       />
                     </label>
                   </div>
