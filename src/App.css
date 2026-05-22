@@ -1654,10 +1654,21 @@ h2 {
   margin: 0;
 }
 
+.maintenance-quick-campus-field > span {
+  color: #d7e6ff;
+  font-weight: 800;
+}
+
 .maintenance-quick-campus-field .detail-value {
   min-height: 44px;
   display: flex;
   align-items: center;
+  border-color: rgba(157, 188, 235, 0.42);
+  background: linear-gradient(180deg, rgba(34, 50, 76, 0.96), rgba(26, 39, 61, 0.94));
+  color: #f4f8ff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 16px rgba(8, 16, 30, 0.16);
 }
 
 .maintenance-quick-switch-btn {
@@ -1727,6 +1738,38 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: end;
+}
+
+.maintenance-quick-campus-field .asset-picker-trigger.input,
+.maintenance-quick-campus-field .asset-picker-search {
+  border-color: rgba(157, 188, 235, 0.42);
+  background: linear-gradient(180deg, rgba(34, 50, 76, 0.96), rgba(26, 39, 61, 0.94));
+  color: #f4f8ff;
+  -webkit-text-fill-color: #f4f8ff;
+  caret-color: #f4f8ff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 16px rgba(8, 16, 30, 0.16);
+}
+
+.maintenance-quick-campus-field .asset-picker-trigger.input:focus,
+.maintenance-quick-campus-field .asset-picker-search:focus {
+  border-color: #8cc0ff;
+  box-shadow:
+    0 0 0 3px rgba(90, 145, 226, 0.24),
+    0 10px 20px rgba(8, 16, 30, 0.22);
+}
+
+.maintenance-quick-campus-field .asset-picker-placeholder,
+.maintenance-quick-campus-field .asset-picker-search::placeholder {
+  color: #c2d6f7;
+  -webkit-text-fill-color: #c2d6f7;
+}
+
+.maintenance-quick-campus-field .asset-picker-selected,
+.maintenance-quick-campus-field .asset-picker-selected > span:last-child,
+.maintenance-quick-campus-field .asset-picker-caret {
+  color: #f4f8ff;
 }
 
 .maintenance-quick-nav-row-compact {
