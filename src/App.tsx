@@ -2005,6 +2005,8 @@ const MAINTENANCE_TYPE_OPTIONS = [
   "Repair",
   "Replacement",
   "Inspection",
+  "Cleaning",
+  "Installation",
   "Upgrade",
 ];
 const MAINTENANCE_TYPE_KM_LABEL: Record<string, string> = {
@@ -2013,6 +2015,8 @@ const MAINTENANCE_TYPE_KM_LABEL: Record<string, string> = {
   Repair: "ជួសជុល",
   Replacement: "ប្តូរថ្មី",
   Inspection: "ត្រួតពិនិត្យ",
+  Cleaning: "សម្អាត",
+  Installation: "ដំឡើង",
   Upgrade: "ធ្វើឱ្យប្រសើរ",
 };
 const MAINTENANCE_CONDITION_OPTIONS = [
