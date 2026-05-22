@@ -921,6 +921,15 @@ type VaultNetworkDoc = {
   note?: string;
   created: string;
 };
+type VaultCctvPasswordHistoryEntry = {
+  id: number;
+  date: string;
+  oldPassword?: string;
+  newPassword?: string;
+  note?: string;
+  changedBy?: string;
+  created: string;
+};
 type VaultCctvRecord = {
   id: number;
   site: string;
@@ -936,6 +945,7 @@ type VaultCctvRecord = {
   retentionDays?: number;
   lastAngleReview?: string;
   note?: string;
+  passwordHistory?: VaultCctvPasswordHistoryEntry[];
   created: string;
 };
 type CctvCameraRecord = {
@@ -4117,6 +4127,18 @@ function normalizeVaultCctvRecords(input: unknown): VaultCctvRecord[] {
       retentionDays: Number(row.retentionDays || 0),
       lastAngleReview: String(row.lastAngleReview || "").trim(),
       note: String(row.note || "").trim(),
+      passwordHistory: normalizeArray<VaultCctvPasswordHistoryEntry>((row as { passwordHistory?: unknown }).passwordHistory)
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => ({
+          id: Number(entry.id) || Date.now() + Math.floor(Math.random() * 1000),
+          date: String(entry.date || "").trim(),
+          oldPassword: String(entry.oldPassword || "").trim(),
+          newPassword: String(entry.newPassword || "").trim(),
+          note: String(entry.note || "").trim(),
+          changedBy: String(entry.changedBy || "").trim(),
+          created: String(entry.created || "").trim() || new Date().toISOString(),
+        }))
+        .sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`)),
       created: String(row.created || "").trim() || new Date().toISOString(),
     }));
 }
@@ -9793,6 +9815,14 @@ export default function App() {
     lastAngleReview: "",
     note: "",
   });
+  const [vaultCctvPasswordHistory, setVaultCctvPasswordHistory] = useState<VaultCctvPasswordHistoryEntry[]>([]);
+  const [vaultCctvPasswordHistoryForm, setVaultCctvPasswordHistoryForm] = useState({
+    date: toYmd(new Date()),
+    oldPassword: "",
+    newPassword: "",
+    note: "",
+    changedBy: "",
+  });
   const [vaultCctvSearchQuery, setVaultCctvSearchQuery] = useState("");
   const [vaultCctvSiteFilter, setVaultCctvSiteFilter] = useState("ALL");
   const cctvSiteOptions = useMemo(
@@ -10382,6 +10412,14 @@ export default function App() {
       retentionDays: "30",
       lastAngleReview: "",
       note: "",
+    });
+    setVaultCctvPasswordHistory([]);
+    setVaultCctvPasswordHistoryForm({
+      date: toYmd(new Date()),
+      oldPassword: "",
+      newPassword: "",
+      note: "",
+      changedBy: "",
     });
     setVaultCctvFormPasswordVisible(false);
     setEditingVaultCctvId(null);
@@ -18951,6 +18989,7 @@ export default function App() {
       retentionDays: Number(vaultCctvForm.retentionDays || 0),
       lastAngleReview: vaultCctvForm.lastAngleReview,
       note: vaultCctvForm.note.trim(),
+      passwordHistory: [...vaultCctvPasswordHistory].sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`)),
       created: editingVaultCctvId
         ? vaultCctvRecords.find((item) => item.id === editingVaultCctvId)?.created || new Date().toISOString()
         : new Date().toISOString(),
@@ -19508,6 +19547,54 @@ export default function App() {
       lastAngleReview: row.lastAngleReview || "",
       note: row.note || "",
     });
+    setVaultCctvPasswordHistory(Array.isArray(row.passwordHistory) ? [...row.passwordHistory] : []);
+    setVaultCctvPasswordHistoryForm({
+      date: toYmd(new Date()),
+      oldPassword: row.password || "",
+      newPassword: "",
+      note: "",
+      changedBy: "",
+    });
+  }
+
+  function closeVaultCctvEditModal() {
+    if (busy) return;
+    resetVaultCctvForm();
+  }
+
+  function addVaultCctvPasswordHistoryEntry() {
+    const date = vaultCctvPasswordHistoryForm.date.trim();
+    const oldPassword = vaultCctvPasswordHistoryForm.oldPassword.trim();
+    const newPassword = vaultCctvPasswordHistoryForm.newPassword.trim();
+    if (!date || !newPassword) {
+      setError("Password change date and new password are required.");
+      return;
+    }
+    setError("");
+    const entry: VaultCctvPasswordHistoryEntry = {
+      id: Date.now(),
+      date,
+      oldPassword,
+      newPassword,
+      note: vaultCctvPasswordHistoryForm.note.trim(),
+      changedBy: vaultCctvPasswordHistoryForm.changedBy.trim(),
+      created: new Date().toISOString(),
+    };
+    setVaultCctvPasswordHistory((prev) =>
+      [entry, ...prev].sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`))
+    );
+    setVaultCctvForm((prev) => ({ ...prev, password: newPassword }));
+    setVaultCctvPasswordHistoryForm({
+      date: toYmd(new Date()),
+      oldPassword: newPassword,
+      newPassword: "",
+      note: "",
+      changedBy: "",
+    });
+  }
+
+  function removeVaultCctvPasswordHistoryEntry(entryId: number) {
+    setVaultCctvPasswordHistory((prev) => prev.filter((entry) => entry.id !== entryId));
   }
 
   async function toggleMaintenanceReminderOffset(dayOffset: number) {
@@ -35012,7 +35099,7 @@ export default function App() {
                   onClick={() => setMobileMenuOpen(false)}
                 />
               ) : null}
-              <aside className={`mobile-side-drawer ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}>
+              <aside className={`mobile-side-drawer ${maintenanceQuickMode ? "maintenance-quick-side-drawer" : ""} ${mobileMenuOpen ? "mobile-side-drawer-open" : ""}`}>
                 <div className="mobile-menu-head">
                   <button
                     type="button"
@@ -35022,13 +35109,56 @@ export default function App() {
                   >
                     ✕
                   </button>
-                  <strong>{t.menu}</strong>
-                  <span>{lang === "km" ? "ចុចប៊ូតុងម៉ឺនុយ ដើម្បីបើក/បិទ" : "Tap menu button to open/close"}</span>
+                  <strong>{maintenanceQuickMode ? (lang === "km" ? "ម៉ឺនុយបុគ្គលិក" : "Staff Quick Menu") : t.menu}</strong>
+                  <span>
+                    {maintenanceQuickMode
+                      ? (lang === "km" ? "ម៉ឺនុយរហ័សសម្រាប់ការងារថែទាំពីទូរស័ព្ទ" : "Quick maintenance actions for phone use")
+                      : (lang === "km" ? "ចុចប៊ូតុងម៉ឺនុយ ដើម្បីបើក/បិទ" : "Tap menu button to open/close")}
+                  </span>
                 </div>
                 <div className="mobile-menu-sections">
                   {maintenanceQuickMode ? (
+                    <>
                     <section className="mobile-menu-section">
-                      <p className="mobile-menu-section-label">{lang === "km" ? "ម៉ឺនុយបុគ្គលិក" : "Staff Menu"}</p>
+                      <p className="mobile-menu-section-label">{lang === "km" ? "ស្ថានភាពបច្ចុប្បន្ន" : "Current Status"}</p>
+                      <div className="public-qr-menu-card maintenance-quick-menu-card">
+                        <div className="public-qr-menu-row">
+                          <span>{t.campus}</span>
+                          <strong>{maintenanceQuickCampusDisplayLabel}</strong>
+                        </div>
+                        <div className="public-qr-menu-row">
+                          <span>{lang === "km" ? "របៀប" : "Mode"}</span>
+                          <strong>{maintenanceQuickGeneralTask ? (lang === "km" ? "ការងារទូទៅ" : "General Task") : (lang === "km" ? "មាន Asset" : "With Asset")}</strong>
+                        </div>
+                        <div className="public-qr-menu-row">
+                          <span>{lang === "km" ? "ការជូនដំណឹង" : "Notifications"}</span>
+                          <strong>{maintenanceNotificationUnread > 0 ? `${maintenanceNotificationUnread}` : (lang === "km" ? "គ្មានថ្មី" : "No new")}</strong>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="mobile-menu-section">
+                      <p className="mobile-menu-section-label">{t.language}</p>
+                      <div className="public-qr-lang-switch maintenance-quick-lang-switch" role="group" aria-label={t.language}>
+                        <button
+                          type="button"
+                          className={`public-qr-lang-btn ${lang === "en" ? "is-active" : ""}`}
+                          onClick={() => setLang("en")}
+                        >
+                          English
+                        </button>
+                        <button
+                          type="button"
+                          className={`public-qr-lang-btn ${lang === "km" ? "is-active" : ""}`}
+                          onClick={() => setLang("km")}
+                        >
+                          ខ្មែរ
+                        </button>
+                      </div>
+                    </section>
+
+                    <section className="mobile-menu-section">
+                      <p className="mobile-menu-section-label">{lang === "km" ? "ចូលប្រើលឿន" : "Quick Access"}</p>
                       <div className="mobile-menu-grid">
                         {maintenanceQuickNavItems.map((item) => (
                           <div key={`mobile-quick-nav-${item.id}`} className="mobile-menu-item-group">
@@ -35049,6 +35179,7 @@ export default function App() {
                         ))}
                       </div>
                     </section>
+                    </>
                   ) : null}
                   {!maintenanceQuickMode ? navSections.map((section) => (
                     <section key={`mobile-nav-${section.section}`} className="mobile-menu-section">
@@ -35088,91 +35219,142 @@ export default function App() {
                   )) : null}
                 </div>
 
-                <label className="field">
-                  <span>{t.view}</span>
-                  {maintenanceQuickMode ? (
-                    maintenanceQuickCampusSelectionEnabled ? (
+                {maintenanceQuickMode ? (
+                  <>
+                    <section className="mobile-menu-section">
+                      <p className="mobile-menu-section-label">{lang === "km" ? "មើល និងរចនាប័ទ្ម" : "View & Theme"}</p>
+                      <div className="public-qr-menu-card maintenance-quick-menu-card maintenance-quick-settings-card">
+                        <label className="field">
+                          <span>{t.view}</span>
+                          {maintenanceQuickCampusSelectionEnabled ? (
+                            <LocationPicker
+                              value={maintenanceQuickCampusPickerValue}
+                              onChange={(value) => {
+                                handleMaintenanceQuickCampusChange(value);
+                                setMobileMenuOpen(false);
+                              }}
+                              options={maintenanceQuickCampusPickerOptions}
+                              placeholder={t.campus}
+                              searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                              emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                            />
+                          ) : (
+                            <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
+                          )}
+                        </label>
+                        <label className="field">
+                          <span>{t.theme}</span>
+                          <LocationPicker
+                            value={uiTheme}
+                            onChange={(value) => {
+                              setUiTheme(value as UiTheme);
+                            }}
+                            options={[
+                              { value: "dark", label: t.themeDark },
+                              { value: "light", label: t.themeLight },
+                            ]}
+                            placeholder={t.theme}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
+                            emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
+                          />
+                        </label>
+                      </div>
+                    </section>
+                    <section className="mobile-menu-section">
+                      <p className="mobile-menu-section-label">{t.account}</p>
+                      <div className="public-qr-menu-card maintenance-quick-menu-card">
+                        <div className="public-qr-menu-row">
+                          <span>{lang === "km" ? "អ្នកប្រើបច្ចុប្បន្ន" : "Current User"}</span>
+                          <strong>{authUser.displayName} ({authUser.role})</strong>
+                        </div>
+                        <div className="public-qr-menu-note">
+                          {lang === "km"
+                            ? "សម្រាប់ការងារថែទាំរហ័សពីទូរស័ព្ទ ដើម្បីកត់ត្រា និងបន្ទាន់សម័យបានងាយ។"
+                            : "Built for faster phone-based maintenance recording and updates."}
+                        </div>
+                        <button
+                          className="tab"
+                          type="button"
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            handleLogout();
+                          }}
+                        >
+                          {t.logout}
+                        </button>
+                      </div>
+                    </section>
+                  </>
+                ) : (
+                  <>
+                    <label className="field">
+                      <span>{t.view}</span>
                       <LocationPicker
-                        value={maintenanceQuickCampusPickerValue}
+                        value={campusFilter}
                         onChange={(value) => {
-                          handleMaintenanceQuickCampusChange(value);
+                          setCampusFilter(value);
                           setMobileMenuOpen(false);
                         }}
-                        options={maintenanceQuickCampusPickerOptions}
-                        placeholder={t.campus}
+                        options={[
+                          ...(isAdmin ? [{ value: "ALL", label: t.allCampuses }] : []),
+                          ...allowedCampusOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
+                        ]}
+                        placeholder={t.allCampuses}
                         searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                         emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                       />
-                    ) : (
-                      <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
-                    )
-                  ) : (
-                    <LocationPicker
-                      value={campusFilter}
-                      onChange={(value) => {
-                        setCampusFilter(value);
+                    </label>
+
+                    <label className="field">
+                      <span>{t.language}</span>
+                      <LocationPicker
+                        value={lang}
+                        onChange={(value) => {
+                          setLang(value as Lang);
+                        }}
+                        options={[
+                          { value: "en", label: t.english },
+                          { value: "km", label: t.khmer },
+                        ]}
+                        placeholder={t.language}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកភាសា..." : "Search language..."}
+                        emptyText={lang === "km" ? "មិនមានភាសា" : "No language found."}
+                      />
+                    </label>
+
+                    <label className="field">
+                      <span>{t.theme}</span>
+                      <LocationPicker
+                        value={uiTheme}
+                        onChange={(value) => {
+                          setUiTheme(value as UiTheme);
+                        }}
+                        options={[
+                          { value: "dark", label: t.themeDark },
+                          { value: "light", label: t.themeLight },
+                        ]}
+                        placeholder={t.theme}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
+                        emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
+                      />
+                    </label>
+
+                    <label className="field">
+                      <span>{t.account}</span>
+                      <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
+                    </label>
+                    <button
+                      className="tab"
+                      type="button"
+                      onClick={() => {
                         setMobileMenuOpen(false);
+                        handleLogout();
                       }}
-                      options={[
-                        ...(isAdmin ? [{ value: "ALL", label: t.allCampuses }] : []),
-                        ...allowedCampusOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
-                      ]}
-                      placeholder={t.allCampuses}
-                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
-                    />
-                  )}
-                </label>
-
-                <label className="field">
-                  <span>{t.language}</span>
-                  <LocationPicker
-                    value={lang}
-                    onChange={(value) => {
-                      setLang(value as Lang);
-                    }}
-                    options={[
-                      ...(!maintenanceQuickMode ? [{ value: "en", label: t.english }] : []),
-                      { value: "km", label: t.khmer },
-                    ]}
-                    placeholder={t.language}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកភាសា..." : "Search language..."}
-                    emptyText={lang === "km" ? "មិនមានភាសា" : "No language found."}
-                    disabled={maintenanceQuickMode}
-                  />
-                </label>
-
-                <label className="field">
-                  <span>{t.theme}</span>
-                  <LocationPicker
-                    value={uiTheme}
-                    onChange={(value) => {
-                      setUiTheme(value as UiTheme);
-                    }}
-                    options={[
-                      { value: "dark", label: t.themeDark },
-                      { value: "light", label: t.themeLight },
-                    ]}
-                    placeholder={t.theme}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
-                    emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
-                  />
-                </label>
-
-                <label className="field">
-                  <span>{t.account}</span>
-                  <div className="detail-value">{authUser.displayName} ({authUser.role})</div>
-                </label>
-                <button
-                  className="tab"
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    handleLogout();
-                  }}
-                >
-                  {t.logout}
-                </button>
+                    >
+                      {t.logout}
+                    </button>
+                  </>
+                )}
               </aside>
 
               <div className="mobile-nav-topline">
@@ -35378,55 +35560,8 @@ export default function App() {
                 </div>
               ) : null}
             </div>
-            {maintenanceQuickMode ? (
+            {maintenanceQuickMode && !isPhoneView ? (
               <section className="maintenance-quick-hero-card">
-                {isPhoneView ? (
-                  <div className="maintenance-quick-hero-phone">
-                    <div className="maintenance-quick-hero-phone-top">
-                      <label className="field maintenance-quick-campus-field">
-                        <span>{t.campus}</span>
-                        {maintenanceQuickCampusSelectionEnabled ? (
-                          <LocationPicker
-                            value={maintenanceQuickCampusPickerValue}
-                            options={maintenanceQuickCampusPickerOptions}
-                            onChange={handleMaintenanceQuickCampusChange}
-                            placeholder={t.campus}
-                            searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                            emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
-                          />
-                        ) : (
-                          <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
-                        )}
-                      </label>
-                      <button
-                        className="tab maintenance-quick-switch-btn maintenance-quick-switch-btn-compact"
-                        type="button"
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          setMobileNotificationOpen(false);
-                          handleLogout();
-                        }}
-                      >
-                        {lang === "km" ? "ចាកចេញ" : "Logout"}
-                      </button>
-                    </div>
-                    <div className="maintenance-quick-nav-row maintenance-quick-nav-row-compact">
-                      {maintenanceQuickNavItems.map((item) => (
-                        <button
-                          key={`maintenance-quick-hero-${item.id}`}
-                          type="button"
-                          className={`maintenance-quick-nav-btn ${item.active ? "maintenance-quick-nav-btn-active" : ""}`}
-                          onClick={item.onSelect}
-                        >
-                          <span className="maintenance-quick-nav-icon" aria-hidden={true}>
-                            {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
-                          </span>
-                          <span>{item.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
                   <>
                     <div className="maintenance-quick-hero-top">
                       <div className="maintenance-quick-hero-copy">
@@ -35508,7 +35643,6 @@ export default function App() {
                       ))}
                     </div>
                   </>
-                )}
               </section>
             ) : null}
             {!isPhoneView ? (
@@ -56888,6 +57022,7 @@ export default function App() {
                           <div className="vault-mobile-field"><span>IP Address</span><strong>{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</strong></div>
                           <div className="vault-mobile-field"><span>Software / App</span><strong>{row.softwareApp || "-"}</strong></div>
                           <div className="vault-mobile-field"><span>Review</span><strong>{formatDate(row.lastAngleReview || "-")}</strong></div>
+                          <div className="vault-mobile-field"><span>Password Changed</span><strong>{formatDate(row.passwordHistory?.[0]?.date || "-")}</strong></div>
                           <div className="vault-mobile-field vault-mobile-field-wide"><span>Camera / Angle Area</span><strong>{row.cameraGroup || "-"}</strong></div>
                           {vaultVisibleCctvAccessId === row.id ? (
                             <>
@@ -56911,54 +57046,111 @@ export default function App() {
                     )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន CCTV ត្រូវតម្រងនេះទេ។" : "No CCTV system records match this search."}</div>}
                   </div>
                 ) : (
-                  <div className="table-wrap" style={{ marginTop: 12 }}>
-                    <table className="vault-responsive-table">
-                      <thead><tr><th>Site</th><th>NVR</th><th>Login URL</th><th>IP Address</th><th>Public IP / DDNS</th><th>Port</th><th>Software / App</th><th>Username</th><th>Password</th><th>Camera/Angle Area</th><th>Retention</th><th>Review</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                      <tbody>
-                        {filteredVaultCctvRecords.length ? filteredVaultCctvRecords.map((row) => (
-                          <tr key={`vault-cctv-${row.id}`}>
-                            <td data-label="Site">{row.site || "-"}</td><td data-label="NVR"><strong>{row.nvrName || "-"}</strong></td><td data-label="Login URL">{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="IP Address">{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</td><td data-label="Public IP / DDNS">{row.publicIp || "-"}</td><td data-label="Port">{row.port || "-"}</td><td data-label="Software / App">{row.softwareApp || "-"}</td><td data-label="Username">{row.username || "-"}</td><td data-label="Password">{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide" : "View"}</button> : null}</td><td data-label="Camera / Angle Area">{row.cameraGroup || "-"}</td><td data-label="Retention">{row.retentionDays || 0} days</td><td data-label="Review">{formatDate(row.lastAngleReview || "-")}</td>
-                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button></td>
-                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>X</button></td>
-                          </tr>
-                        )) : <tr className="vault-table-empty-row"><td colSpan={14}>{lang === "km" ? "មិនមាន CCTV ត្រូវតម្រងនេះទេ។" : "No CCTV system records match this search."}</td></tr>}
-                      </tbody>
-                    </table>
+                  <div className="vault-record-grid vault-record-grid-cctv" style={{ marginTop: 12 }}>
+                    {filteredVaultCctvRecords.length ? filteredVaultCctvRecords.map((row) => (
+                      <article className="vault-record-card vault-record-card-cctv" key={`vault-cctv-${row.id}`}>
+                        <div className="vault-record-card-head">
+                          <div>
+                            <strong>{row.nvrName || row.site || "-"}</strong>
+                            <p>{row.site || "-"}</p>
+                          </div>
+                          <span>{row.retentionDays || 0} days</span>
+                        </div>
+                        <div className="vault-record-fields vault-record-fields-cctv">
+                          <div className="vault-record-field">
+                            <span>Login URL</span>
+                            <strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>IP Address</span>
+                            <strong>{row.ipAddress || extractHostFromUrl(row.loginUrl || "") || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Public IP / DDNS</span>
+                            <strong>{row.publicIp || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Port</span>
+                            <strong>{row.port || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Software / App</span>
+                            <strong>{row.softwareApp || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Username</span>
+                            <strong>{row.username || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Password</span>
+                            <strong>{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Review</span>
+                            <strong>{formatDate(row.lastAngleReview || "-")}</strong>
+                          </div>
+                          <div className="vault-record-field">
+                            <span>Password Changed</span>
+                            <strong>{formatDate(row.passwordHistory?.[0]?.date || "-")}</strong>
+                          </div>
+                          <div className="vault-record-field vault-record-field-wide vault-record-field-wide-cctv">
+                            <span>Camera / Angle Area</span>
+                            <strong>{row.cameraGroup || "-"}</strong>
+                          </div>
+                          <div className="vault-record-field vault-record-field-wide vault-record-field-wide-cctv">
+                            <span>Note</span>
+                            <strong>{row.note || "-"}</strong>
+                          </div>
+                        </div>
+                        <div className="vault-record-actions vault-record-actions-cctv">
+                          {row.password ? (
+                            <button className="tab" type="button" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>
+                              {vaultVisibleCctvPasswordId === row.id ? "Hide Password" : "View Password"}
+                            </button>
+                          ) : null}
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន CCTV ត្រូវតម្រងនេះទេ។" : "No CCTV system records match this search."}</div>}
                   </div>
                 )}
-                <div className="form-grid" style={{ marginTop: 12 }}>
-                  <label className="field"><span>Site/Campus</span><input className="input" value={vaultCctvForm.site} onChange={(e) => setVaultCctvForm((f) => ({ ...f, site: e.target.value }))} /></label>
-                  <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
-                  <label className="field"><span>Login URL / Google Drive Map</span><input className="input" value={vaultCctvForm.loginUrl} onChange={(e) => setVaultCctvForm((f) => ({ ...f, loginUrl: e.target.value, ipAddress: f.ipAddress || extractHostFromUrl(e.target.value) }))} placeholder="https://... or https://drive.google.com/..." /></label>
-                  <label className="field"><span>IP Address</span><input className="input" value={vaultCctvForm.ipAddress} onChange={(e) => setVaultCctvForm((f) => ({ ...f, ipAddress: e.target.value }))} placeholder="Auto-filled from login URL if blank" /></label>
-                  <label className="field"><span>Public IP / DDNS</span><input className="input" value={vaultCctvForm.publicIp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, publicIp: e.target.value }))} placeholder="203.0.113.10 or c1-nvr.ddns.net" /></label>
-                  <label className="field"><span>Port</span><input className="input" value={vaultCctvForm.port} onChange={(e) => setVaultCctvForm((f) => ({ ...f, port: e.target.value }))} placeholder="80 / 443 / 37777 / 8000" /></label>
-                  <label className="field"><span>Software / App</span><input className="input" value={vaultCctvForm.softwareApp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, softwareApp: e.target.value }))} placeholder="Dahua DMSS / SmartPSS or Hik-Connect / iVMS-4200" /></label>
-                  <label className="field"><span>Username</span><input className="input" value={vaultCctvForm.username} onChange={(e) => setVaultCctvForm((f) => ({ ...f, username: e.target.value }))} /></label>
-                  <label className="field">
-                    <span>Password</span>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input
-                        className="input"
-                        type={vaultCctvFormPasswordVisible ? "text" : "password"}
-                        value={vaultCctvForm.password}
-                        onChange={(e) => setVaultCctvForm((f) => ({ ...f, password: e.target.value }))}
-                        placeholder="NVR password"
-                      />
-                      <button type="button" className="tab btn-small" onClick={() => setVaultCctvFormPasswordVisible((v) => !v)}>
-                        {vaultCctvFormPasswordVisible ? "Hide" : "Show"}
-                      </button>
+                {!editingVaultCctvId ? (
+                  <>
+                    <div className="form-grid" style={{ marginTop: 12 }}>
+                      <label className="field"><span>Site/Campus</span><input className="input" value={vaultCctvForm.site} onChange={(e) => setVaultCctvForm((f) => ({ ...f, site: e.target.value }))} /></label>
+                      <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
+                      <label className="field"><span>Login URL / Google Drive Map</span><input className="input" value={vaultCctvForm.loginUrl} onChange={(e) => setVaultCctvForm((f) => ({ ...f, loginUrl: e.target.value, ipAddress: f.ipAddress || extractHostFromUrl(e.target.value) }))} placeholder="https://... or https://drive.google.com/..." /></label>
+                      <label className="field"><span>IP Address</span><input className="input" value={vaultCctvForm.ipAddress} onChange={(e) => setVaultCctvForm((f) => ({ ...f, ipAddress: e.target.value }))} placeholder="Auto-filled from login URL if blank" /></label>
+                      <label className="field"><span>Public IP / DDNS</span><input className="input" value={vaultCctvForm.publicIp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, publicIp: e.target.value }))} placeholder="203.0.113.10 or c1-nvr.ddns.net" /></label>
+                      <label className="field"><span>Port</span><input className="input" value={vaultCctvForm.port} onChange={(e) => setVaultCctvForm((f) => ({ ...f, port: e.target.value }))} placeholder="80 / 443 / 37777 / 8000" /></label>
+                      <label className="field"><span>Software / App</span><input className="input" value={vaultCctvForm.softwareApp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, softwareApp: e.target.value }))} placeholder="Dahua DMSS / SmartPSS or Hik-Connect / iVMS-4200" /></label>
+                      <label className="field"><span>Username</span><input className="input" value={vaultCctvForm.username} onChange={(e) => setVaultCctvForm((f) => ({ ...f, username: e.target.value }))} /></label>
+                      <label className="field">
+                        <span>Password</span>
+                        <div className="vault-cctv-password-row">
+                          <input
+                            className="input"
+                            type={vaultCctvFormPasswordVisible ? "text" : "password"}
+                            value={vaultCctvForm.password}
+                            onChange={(e) => setVaultCctvForm((f) => ({ ...f, password: e.target.value }))}
+                            placeholder="NVR password"
+                          />
+                          <button type="button" className="tab btn-small" onClick={() => setVaultCctvFormPasswordVisible((v) => !v)}>
+                            {vaultCctvFormPasswordVisible ? "Hide" : "Show"}
+                          </button>
+                        </div>
+                      </label>
+                      <label className="field"><span>Camera Group / Angle Area</span><input className="input" value={vaultCctvForm.cameraGroup} onChange={(e) => setVaultCctvForm((f) => ({ ...f, cameraGroup: e.target.value }))} /></label>
+                      <label className="field"><span>Retention Days</span><input type="number" min={0} className="input" value={vaultCctvForm.retentionDays} onChange={(e) => setVaultCctvForm((f) => ({ ...f, retentionDays: e.target.value }))} /></label>
+                      <label className="field"><span>Last Angle Review</span><input type="date" className="input" value={vaultCctvForm.lastAngleReview} onChange={(e) => setVaultCctvForm((f) => ({ ...f, lastAngleReview: e.target.value }))} /></label>
+                      <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCctvForm.note} onChange={(e) => setVaultCctvForm((f) => ({ ...f, note: e.target.value }))} /></label>
                     </div>
-                  </label>
-                  <label className="field"><span>Camera Group / Angle Area</span><input className="input" value={vaultCctvForm.cameraGroup} onChange={(e) => setVaultCctvForm((f) => ({ ...f, cameraGroup: e.target.value }))} /></label>
-                  <label className="field"><span>Retention Days</span><input type="number" min={0} className="input" value={vaultCctvForm.retentionDays} onChange={(e) => setVaultCctvForm((f) => ({ ...f, retentionDays: e.target.value }))} /></label>
-                  <label className="field"><span>Last Angle Review</span><input type="date" className="input" value={vaultCctvForm.lastAngleReview} onChange={(e) => setVaultCctvForm((f) => ({ ...f, lastAngleReview: e.target.value }))} /></label>
-                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCctvForm.note} onChange={(e) => setVaultCctvForm((f) => ({ ...f, note: e.target.value }))} /></label>
-                </div>
-                <div className="asset-actions">
-                  <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>{editingVaultCctvId ? "Update CCTV System Record" : "Add CCTV System Record"}</button>
-                  {editingVaultCctvId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultCctvForm}>Cancel Edit</button> : null}
-                </div>
+                    <div className="asset-actions">
+                      <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>Add CCTV System Record</button>
+                    </div>
+                  </>
+                ) : null}
               </>
             )}
           </section>
@@ -56970,6 +57162,137 @@ export default function App() {
 
         {isPhoneView ? (
           null
+        ) : null}
+
+        {editingVaultCctvId ? (
+          <div className="modal-backdrop" onClick={closeVaultCctvEditModal}>
+            <section className="panel modal-panel vault-cctv-edit-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <div>
+                  <h2>{lang === "km" ? "កែប្រែព័ត៌មាន CCTV" : "Edit CCTV System Record"}</h2>
+                  <p className="tiny vault-cctv-edit-intro">
+                    {lang === "km"
+                      ? "កែប្រែព័ត៌មាននៅទីនេះ ហើយចុច Update ដើម្បីរក្សាទុកភ្លាមៗ។"
+                      : "Update the record here and save it directly without searching for the form below."}
+                  </p>
+                </div>
+                <button className="tab" type="button" disabled={busy} onClick={closeVaultCctvEditModal}>{t.close}</button>
+              </div>
+              <div className="form-grid vault-cctv-edit-grid">
+                <label className="field"><span>Site/Campus</span><input className="input" value={vaultCctvForm.site} onChange={(e) => setVaultCctvForm((f) => ({ ...f, site: e.target.value }))} /></label>
+                <label className="field"><span>NVR / Controller</span><input className="input" value={vaultCctvForm.nvrName} onChange={(e) => setVaultCctvForm((f) => ({ ...f, nvrName: e.target.value }))} /></label>
+                <label className="field"><span>Login URL / Google Drive Map</span><input className="input" value={vaultCctvForm.loginUrl} onChange={(e) => setVaultCctvForm((f) => ({ ...f, loginUrl: e.target.value, ipAddress: f.ipAddress || extractHostFromUrl(e.target.value) }))} placeholder="https://... or https://drive.google.com/..." /></label>
+                <label className="field"><span>IP Address</span><input className="input" value={vaultCctvForm.ipAddress} onChange={(e) => setVaultCctvForm((f) => ({ ...f, ipAddress: e.target.value }))} placeholder="Auto-filled from login URL if blank" /></label>
+                <label className="field"><span>Public IP / DDNS</span><input className="input" value={vaultCctvForm.publicIp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, publicIp: e.target.value }))} placeholder="203.0.113.10 or c1-nvr.ddns.net" /></label>
+                <label className="field"><span>Port</span><input className="input" value={vaultCctvForm.port} onChange={(e) => setVaultCctvForm((f) => ({ ...f, port: e.target.value }))} placeholder="80 / 443 / 37777 / 8000" /></label>
+                <label className="field"><span>Software / App</span><input className="input" value={vaultCctvForm.softwareApp} onChange={(e) => setVaultCctvForm((f) => ({ ...f, softwareApp: e.target.value }))} placeholder="Dahua DMSS / SmartPSS or Hik-Connect / iVMS-4200" /></label>
+                <label className="field"><span>Username</span><input className="input" value={vaultCctvForm.username} onChange={(e) => setVaultCctvForm((f) => ({ ...f, username: e.target.value }))} /></label>
+                <label className="field">
+                  <span>Password</span>
+                  <div className="vault-cctv-password-row">
+                    <input
+                      className="input"
+                      type={vaultCctvFormPasswordVisible ? "text" : "password"}
+                      value={vaultCctvForm.password}
+                      onChange={(e) => setVaultCctvForm((f) => ({ ...f, password: e.target.value }))}
+                      placeholder="NVR password"
+                    />
+                    <button type="button" className="tab btn-small" onClick={() => setVaultCctvFormPasswordVisible((v) => !v)}>
+                      {vaultCctvFormPasswordVisible ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </label>
+                <div className="field field-wide vault-cctv-password-history-block">
+                  <span>Password Change History</span>
+                  <div className="vault-cctv-password-history-form">
+                    <label className="field">
+                      <span>Change Date</span>
+                      <input
+                        type="date"
+                        className="input"
+                        value={vaultCctvPasswordHistoryForm.date}
+                        onChange={(e) => setVaultCctvPasswordHistoryForm((prev) => ({ ...prev, date: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Old Password</span>
+                      <input
+                        className="input"
+                        value={vaultCctvPasswordHistoryForm.oldPassword}
+                        onChange={(e) => setVaultCctvPasswordHistoryForm((prev) => ({ ...prev, oldPassword: e.target.value }))}
+                        placeholder="Previous password"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>New Password</span>
+                      <input
+                        className="input"
+                        value={vaultCctvPasswordHistoryForm.newPassword}
+                        onChange={(e) => setVaultCctvPasswordHistoryForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                        placeholder="New password"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Changed By</span>
+                      <input
+                        className="input"
+                        value={vaultCctvPasswordHistoryForm.changedBy}
+                        onChange={(e) => setVaultCctvPasswordHistoryForm((prev) => ({ ...prev, changedBy: e.target.value }))}
+                        placeholder="Staff name"
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Change Note</span>
+                      <textarea
+                        className="textarea"
+                        value={vaultCctvPasswordHistoryForm.note}
+                        onChange={(e) => setVaultCctvPasswordHistoryForm((prev) => ({ ...prev, note: e.target.value }))}
+                        placeholder="Reason or note for this password change"
+                      />
+                    </label>
+                    <div className="vault-cctv-password-history-actions">
+                      <button type="button" className="tab" onClick={addVaultCctvPasswordHistoryEntry}>Add Password Change Record</button>
+                    </div>
+                  </div>
+                  {vaultCctvPasswordHistory.length ? (
+                    <div className="vault-cctv-password-history-list">
+                      {vaultCctvPasswordHistory.map((entry) => (
+                        <article className="vault-cctv-password-history-card" key={`vault-cctv-passhist-${entry.id}`}>
+                          <div className="vault-cctv-password-history-head">
+                            <strong>{formatDate(entry.date || "-")}</strong>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              onClick={() => removeVaultCctvPasswordHistoryEntry(entry.id)}
+                              aria-label="Remove password history entry"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div className="vault-cctv-password-history-grid">
+                            <div><span>Old</span><strong>{entry.oldPassword || "-"}</strong></div>
+                            <div><span>New</span><strong>{entry.newPassword || "-"}</strong></div>
+                            <div><span>Changed By</span><strong>{entry.changedBy || "-"}</strong></div>
+                            <div className="vault-cctv-password-history-note"><span>Note</span><strong>{entry.note || "-"}</strong></div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="panel-note vault-cctv-password-history-empty">No password change history yet.</div>
+                  )}
+                </div>
+                <label className="field"><span>Camera Group / Angle Area</span><input className="input" value={vaultCctvForm.cameraGroup} onChange={(e) => setVaultCctvForm((f) => ({ ...f, cameraGroup: e.target.value }))} /></label>
+                <label className="field"><span>Retention Days</span><input type="number" min={0} className="input" value={vaultCctvForm.retentionDays} onChange={(e) => setVaultCctvForm((f) => ({ ...f, retentionDays: e.target.value }))} /></label>
+                <label className="field"><span>Last Angle Review</span><input type="date" className="input" value={vaultCctvForm.lastAngleReview} onChange={(e) => setVaultCctvForm((f) => ({ ...f, lastAngleReview: e.target.value }))} /></label>
+                <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCctvForm.note} onChange={(e) => setVaultCctvForm((f) => ({ ...f, note: e.target.value }))} /></label>
+              </div>
+              <div className="asset-actions vault-cctv-edit-actions">
+                <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCctvRecord}>Update CCTV System Record</button>
+                <button className="tab" disabled={!isAdmin || busy} onClick={closeVaultCctvEditModal}>Cancel</button>
+              </div>
+            </section>
+          </div>
         ) : null}
 
         {inventoryQuickOutModal ? (

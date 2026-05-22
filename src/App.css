@@ -18254,6 +18254,60 @@ tr.row-maint-maintenance:hover td {
   z-index: 111;
 }
 
+.maintenance-quick-side-drawer {
+  z-index: 111;
+}
+
+.maintenance-quick-side-drawer .mobile-menu-head {
+  gap: 4px;
+  padding-bottom: 2px;
+}
+
+.maintenance-quick-side-drawer .mobile-menu-grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.maintenance-quick-side-drawer .mobile-menu-nav-btn {
+  min-height: 48px;
+  border-radius: 13px;
+}
+
+.maintenance-quick-side-drawer .public-qr-menu-card,
+.maintenance-quick-side-drawer .maintenance-quick-settings-card {
+  gap: 12px;
+}
+
+.maintenance-quick-side-drawer .field {
+  margin: 0;
+}
+
+.maintenance-quick-side-drawer .field > span {
+  color: var(--mobile-text-soft);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.maintenance-quick-side-drawer .detail-value {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.maintenance-quick-side-drawer .tab {
+  width: 100%;
+  min-height: 42px;
+}
+
+.maintenance-quick-lang-switch {
+  width: 100%;
+}
+
+.maintenance-quick-menu-card .public-qr-menu-row strong {
+  max-width: 58%;
+}
+
 .public-qr-menu-card {
   display: grid;
   gap: 10px;
@@ -19231,6 +19285,7 @@ tr.row-maint-maintenance:hover td {
     width: 46px;
     min-height: 46px;
     pointer-events: auto;
+    margin-left: auto;
   }
 
   .mobile-hamburger-btn,
@@ -20148,6 +20203,119 @@ tr.row-maint-maintenance:hover td {
   min-height: 40px;
 }
 
+.vault-record-grid-cctv {
+  grid-template-columns: 1fr;
+}
+
+.vault-record-card-cctv {
+  gap: 12px;
+}
+
+.vault-record-fields-cctv {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.vault-record-field-wide-cctv {
+  grid-column: 1 / -1;
+}
+
+.vault-record-actions-cctv {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.vault-cctv-password-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.vault-cctv-edit-modal {
+  width: min(920px, 100%);
+}
+
+.vault-cctv-edit-intro {
+  margin: 6px 0 0;
+}
+
+.vault-cctv-edit-grid {
+  margin-top: 12px;
+}
+
+.vault-cctv-edit-actions {
+  margin-top: 14px;
+}
+
+.vault-cctv-password-history-block {
+  display: grid;
+  gap: 12px;
+}
+
+.vault-cctv-password-history-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(94, 124, 168, 0.24);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.vault-cctv-password-history-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.vault-cctv-password-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.vault-cctv-password-history-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 124, 168, 0.22);
+  background: rgba(9, 16, 28, 0.28);
+}
+
+.vault-cctv-password-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vault-cctv-password-history-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vault-cctv-password-history-grid span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8ea5cd;
+  font-weight: 700;
+}
+
+.vault-cctv-password-history-grid strong {
+  color: #f4f7ff;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.vault-cctv-password-history-note {
+  grid-column: 1 / -1;
+}
+
+.vault-cctv-password-history-empty {
+  margin: 0;
+}
+
 @media (max-width: 1200px) {
   .vault-record-grid {
     grid-template-columns: 1fr;
@@ -20159,6 +20327,19 @@ tr.row-maint-maintenance:hover td {
 
   .vault-record-field-wide {
     grid-column: 1 / -1;
+  }
+
+  .vault-record-fields-cctv {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vault-cctv-edit-modal {
+    width: min(100%, 760px);
+  }
+
+  .vault-cctv-password-history-form,
+  .vault-cctv-password-history-grid {
+    grid-template-columns: 1fr;
   }
 }
 
