@@ -35003,7 +35003,6 @@ export default function App() {
           </aside>
 
           <section className="workspace-main" ref={workspaceMainRef}>
-            {!maintenanceQuickMode ? (
             <div className="mobile-nav-hud" ref={mobileNavRef}>
               {mobileMenuOpen ? (
                 <button
@@ -35051,7 +35050,7 @@ export default function App() {
                       </div>
                     </section>
                   ) : null}
-                  {navSections.map((section) => (
+                  {!maintenanceQuickMode ? navSections.map((section) => (
                     <section key={`mobile-nav-${section.section}`} className="mobile-menu-section">
                       <p className="mobile-menu-section-label">{section.label}</p>
                       <div className="mobile-menu-grid">
@@ -35086,7 +35085,7 @@ export default function App() {
                         })}
                       </div>
                     </section>
-                  ))}
+                  )) : null}
                 </div>
 
                 <label className="field">
@@ -35379,7 +35378,6 @@ export default function App() {
                 </div>
               ) : null}
             </div>
-            ) : null}
             {maintenanceQuickMode ? (
               <section className="maintenance-quick-hero-card">
                 {isPhoneView ? (
