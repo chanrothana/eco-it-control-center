@@ -13228,6 +13228,40 @@ label.backup-action-btn {
   font-weight: 700;
 }
 
+.inventory-stock-item-wrap,
+.inventory-stock-mobile-item-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.inventory-stock-item-photo,
+.inventory-stock-mobile-item-photo {
+  flex: 0 0 auto;
+}
+
+.inventory-stock-item-copy,
+.inventory-stock-mobile-item-copy {
+  min-width: 0;
+}
+
+.inventory-stock-item-photo .table-photo,
+.inventory-stock-item-photo .photo-placeholder,
+.inventory-stock-mobile-item-photo .table-photo,
+.inventory-stock-mobile-item-photo .photo-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+
+.inventory-stock-mobile-item-copy span {
+  display: block;
+  margin-top: 4px;
+  color: #7c93b4;
+  font-size: 11px;
+}
+
 .inventory-stock-item-meta {
   margin-top: 8px;
 }

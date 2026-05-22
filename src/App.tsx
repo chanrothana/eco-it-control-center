@@ -12534,10 +12534,10 @@ export default function App() {
   const inventoryItemRows = useMemo(() => {
     const query = inventoryItemFilterQuery.trim().toLowerCase();
     const rows = inventoryBalanceRows.filter((row) => {
-      if (inventoryItemFilterCampus !== "ALL" && String(row.campus || "").trim() !== inventoryItemFilterCampus) {
+      if (inventoryBusinessGroupValue(row) !== inventoryDashboardGroup) {
         return false;
       }
-      if (inventoryItemFilterGroup !== "ALL" && inventoryBusinessGroupValue(row) !== inventoryItemFilterGroup) {
+      if (inventoryItemFilterCampus !== "ALL" && String(row.campus || "").trim() !== inventoryItemFilterCampus) {
         return false;
       }
       if (!query) return true;
@@ -12590,8 +12590,8 @@ export default function App() {
     return rows;
   }, [
     inventoryBalanceRows,
+    inventoryDashboardGroup,
     inventoryItemFilterCampus,
-    inventoryItemFilterGroup,
     inventoryItemFilterQuery,
     inventoryItemSort,
     inventoryCampusLabel,
@@ -42978,18 +42978,7 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Group</span>
-                    <select
-                      className="input"
-                      value={inventoryItemFilterGroup}
-                      onChange={(e) => setInventoryItemFilterGroup(e.target.value)}
-                    >
-                      <option value="ALL">All Groups</option>
-                      {inventoryItemGroupOptions.map((group) => (
-                        <option key={`inventory-item-filter-group-${group}`} value={group}>
-                          {inventoryBusinessGroupLabel(group)}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="detail-value">{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</div>
                   </label>
                   <label className="field field-wide">
                     <span>Search</span>
@@ -43544,7 +43533,9 @@ export default function App() {
                 {isPhoneView ? (
                   <div className="inventory-stock-mobile-list" style={{ marginTop: 12 }}>
                     {inventoryTxnsRows.length ? (
-                      inventoryTxnsRows.map((row) => (
+                      inventoryTxnsRows.map((row) => {
+                        const itemPhoto = inventoryVisibleItemLookup.get(Number(row.itemId || 0))?.photo || "";
+                        return (
                         <article key={`inv-tx-mobile-${row.id}`} className="inventory-stock-mobile-card">
                           {editingInventoryTxnId === row.id ? (
                             <>
@@ -43632,11 +43623,18 @@ export default function App() {
                           ) : (
                             <>
                               <div className="inventory-stock-mobile-head">
-                                <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
-                                <span>
-                                  {formatDate(row.date)}
-                                  {row.created ? ` • ${formatTimeOnly(row.created)}` : ""}
-                                </span>
+                                <div className="inventory-stock-mobile-item-head">
+                                  <div className="inventory-stock-mobile-item-photo">
+                                    {renderAssetPhoto(itemPhoto, row.itemCode || row.itemName || "inventory-item")}
+                                  </div>
+                                  <div className="inventory-stock-mobile-item-copy">
+                                    <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                    <span>
+                                      {formatDate(row.date)}
+                                      {row.created ? ` • ${formatTimeOnly(row.created)}` : ""}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                               <div className="inventory-stock-mobile-code-row">
                                 <strong>{row.itemCode}</strong>
@@ -43696,7 +43694,7 @@ export default function App() {
                             </>
                           )}
                         </article>
-                      ))
+                      )})
                     ) : (
                       <div className="panel-note">No transactions yet.</div>
                     )}
@@ -43716,7 +43714,9 @@ export default function App() {
                       </thead>
                       <tbody>
                         {inventoryTxnsRows.length ? (
-                          inventoryTxnsRows.map((row) => (
+                          inventoryTxnsRows.map((row) => {
+                            const itemPhoto = inventoryVisibleItemLookup.get(Number(row.itemId || 0))?.photo || "";
+                            return (
                             <tr
                               key={`inv-tx-row-${row.id}`}
                               className={editingInventoryTxnId === row.id ? "inventory-stock-edit-row" : ""}
@@ -43806,9 +43806,16 @@ export default function App() {
                                     <div className="tiny">{row.created ? formatTimeOnly(row.created) : "-"}</div>
                                   </td>
                                   <td className="inventory-stock-item-cell" colSpan={2}>
-                                    <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
-                                    <div className="inventory-stock-item-meta">
-                                      <span className="inventory-stock-item-code">{row.itemCode}</span>
+                                    <div className="inventory-stock-item-wrap">
+                                      <div className="inventory-stock-item-photo">
+                                        {renderAssetPhoto(itemPhoto, row.itemCode || row.itemName || "inventory-item")}
+                                      </div>
+                                      <div className="inventory-stock-item-copy">
+                                        <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                        <div className="inventory-stock-item-meta">
+                                          <span className="inventory-stock-item-code">{row.itemCode}</span>
+                                        </div>
+                                      </div>
                                     </div>
                                   </td>
                                   <td className="inventory-stock-campus-cell" colSpan={2}>
@@ -43849,7 +43856,7 @@ export default function App() {
                                 </>
                               )}
                             </tr>
-                          ))
+                          )})
                         ) : (
                           <tr>
                             <td colSpan={10}>No transactions yet.</td>
@@ -48566,6 +48573,20 @@ export default function App() {
                     onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
                     placeholder={lang === "km" ? "ឈ្មោះអ្នកធ្វើការ" : "Staff name"}
                   />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ប្រភេទការងារ" : "Maintenance Type"}</span>
+                  <select
+                    className="input"
+                    value={maintenanceRecordForm.type}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, type: e.target.value }))}
+                  >
+                    {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
+                      <option key={`staff-quick-type-${opt}`} value={opt}>
+                        {maintenanceTypePublicLabel(opt)}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="field field-wide">
                   <span>{lang === "km" ? "ការងារដែលបានធ្វើ" : "Work Done"}</span>
