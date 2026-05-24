@@ -10609,15 +10609,19 @@ label.backup-action-btn {
 .inventory-admin-campus-balance-card {
   --campus-accent: #d6a243;
   --campus-accent-soft: #f0d184;
+  --campus-shell-top: #fffdf9;
   --campus-shell: #fff5df;
   --campus-head-bg: rgba(214, 162, 67, 0.12);
   --campus-head-border: rgba(214, 162, 67, 0.26);
+  --campus-title: #6f4612;
   border: 1px solid var(--campus-head-border);
   border-radius: 18px;
   background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0) 34%),
-    linear-gradient(180deg, #fffdf9 0%, var(--campus-shell) 100%);
-  box-shadow: 0 10px 22px rgba(133, 82, 29, 0.08);
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0) 34%),
+    linear-gradient(180deg, var(--campus-shell-top) 0%, var(--campus-shell) 100%);
+  box-shadow:
+    0 14px 30px color-mix(in srgb, var(--campus-accent) 18%, rgba(12, 24, 48, 0.04)),
+    inset 0 0 0 1px color-mix(in srgb, var(--campus-accent) 10%, transparent);
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -10630,7 +10634,7 @@ label.backup-action-btn {
   content: "";
   position: absolute;
   inset: 0 0 auto 0;
-  height: 6px;
+  height: 8px;
   border-radius: 18px 18px 0 0;
   background: linear-gradient(90deg, var(--campus-accent), var(--campus-accent-soft));
 }
@@ -10646,23 +10650,40 @@ label.backup-action-btn {
     inset 0 0 0 1px rgba(214, 162, 67, 0.18);
 }
 
-.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2 {
-  --campus-accent: #8d64d8;
-  --campus-accent-soft: #c7adef;
-  --campus-shell: #eadcff;
-  --campus-head-bg: rgba(141, 100, 216, 0.24);
-  --campus-head-border: rgba(141, 100, 216, 0.44);
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2-2 {
+  --campus-accent: #d96f4a;
+  --campus-accent-soft: #f5b59d;
+  --campus-shell-top: #fff4ef;
+  --campus-shell: #ffd7ca;
+  --campus-head-bg: rgba(217, 111, 74, 0.22);
+  --campus-head-border: rgba(217, 111, 74, 0.44);
+  --campus-title: #8a3e24;
   box-shadow:
-    0 12px 24px rgba(76, 48, 129, 0.1),
-    inset 0 0 0 1px rgba(141, 100, 216, 0.16);
+    0 12px 24px rgba(136, 64, 37, 0.12),
+    inset 0 0 0 1px rgba(217, 111, 74, 0.16);
+}
+
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2 {
+  --campus-accent: #4b78d1;
+  --campus-accent-soft: #a9c5ff;
+  --campus-shell-top: #f3f8ff;
+  --campus-shell: #d9e8ff;
+  --campus-head-bg: rgba(75, 120, 209, 0.22);
+  --campus-head-border: rgba(75, 120, 209, 0.42);
+  --campus-title: #284d94;
+  box-shadow:
+    0 12px 24px rgba(43, 73, 129, 0.11),
+    inset 0 0 0 1px rgba(75, 120, 209, 0.16);
 }
 
 .inventory-admin-campus-balance-card.inventory-admin-campus-theme-c3 {
   --campus-accent: #4d9961;
   --campus-accent-soft: #9fd39e;
+  --campus-shell-top: #f3fcf4;
   --campus-shell: #dff5e3;
   --campus-head-bg: rgba(77, 153, 97, 0.24);
   --campus-head-border: rgba(77, 153, 97, 0.42);
+  --campus-title: #2f6b40;
   box-shadow:
     0 12px 24px rgba(31, 92, 48, 0.1),
     inset 0 0 0 1px rgba(77, 153, 97, 0.16);
@@ -10671,9 +10692,11 @@ label.backup-action-btn {
 .inventory-admin-campus-balance-card.inventory-admin-campus-theme-c4 {
   --campus-accent: #6674d6;
   --campus-accent-soft: #b7bdf5;
+  --campus-shell-top: #f5f6ff;
   --campus-shell: #e2e6ff;
   --campus-head-bg: rgba(102, 116, 214, 0.24);
   --campus-head-border: rgba(102, 116, 214, 0.44);
+  --campus-title: #3146a1;
   box-shadow:
     0 12px 24px rgba(41, 55, 142, 0.1),
     inset 0 0 0 1px rgba(102, 116, 214, 0.16);
@@ -10693,7 +10716,7 @@ label.backup-action-btn {
 }
 
 .inventory-admin-campus-balance-head strong {
-  color: #3d2c18;
+  color: var(--campus-title);
   font-family: var(--font-head);
   font-size: 18px;
   line-height: 1.2;
@@ -10708,32 +10731,20 @@ label.backup-action-btn {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c1 .inventory-admin-campus-balance-head strong {
-  color: #6f4612;
-}
-
 .inventory-admin-campus-balance-card.inventory-admin-campus-theme-c1 .inventory-admin-campus-balance-head {
   background: linear-gradient(180deg, rgba(214, 162, 67, 0.22) 0%, rgba(255, 248, 230, 0.96) 100%);
 }
 
-.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2 .inventory-admin-campus-balance-head strong {
-  color: #5e3ca1;
+.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2-2 .inventory-admin-campus-balance-head {
+  background: linear-gradient(180deg, rgba(217, 111, 74, 0.24) 0%, rgba(255, 241, 235, 0.97) 100%);
 }
 
 .inventory-admin-campus-balance-card.inventory-admin-campus-theme-c2 .inventory-admin-campus-balance-head {
-  background: linear-gradient(180deg, rgba(141, 100, 216, 0.24) 0%, rgba(248, 242, 255, 0.96) 100%);
-}
-
-.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c3 .inventory-admin-campus-balance-head strong {
-  color: #2f6b40;
+  background: linear-gradient(180deg, rgba(75, 120, 209, 0.22) 0%, rgba(240, 246, 255, 0.97) 100%);
 }
 
 .inventory-admin-campus-balance-card.inventory-admin-campus-theme-c3 .inventory-admin-campus-balance-head {
   background: linear-gradient(180deg, rgba(77, 153, 97, 0.24) 0%, rgba(238, 248, 239, 0.96) 100%);
-}
-
-.inventory-admin-campus-balance-card.inventory-admin-campus-theme-c4 .inventory-admin-campus-balance-head strong {
-  color: #3146a1;
 }
 
 .inventory-admin-campus-balance-card.inventory-admin-campus-theme-c4 .inventory-admin-campus-balance-head {
@@ -20997,9 +21008,42 @@ tr.row-maint-maintenance:hover td {
   }
 
   .inventory-dashboard-panel .inventory-admin-campus-balance-card {
+    --campus-shell-top: color-mix(in srgb, var(--campus-accent) 4%, #ffffff);
+    --campus-shell: color-mix(in srgb, var(--campus-accent) 8%, #fffaf1);
+    --campus-head-bg: color-mix(in srgb, var(--campus-accent) 10%, rgba(255, 255, 255, 0.94));
+    --campus-head-border: color-mix(in srgb, var(--campus-accent) 24%, rgba(255, 255, 255, 0.24));
     border-radius: 16px;
     gap: 10px;
     padding: 14px;
+    background:
+      radial-gradient(circle at top right, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 34%),
+      linear-gradient(180deg, var(--campus-shell-top) 0%, var(--campus-shell) 100%);
+    box-shadow:
+      0 10px 22px rgba(10, 18, 38, 0.18),
+      inset 0 0 0 1px color-mix(in srgb, var(--campus-accent) 8%, transparent);
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-card::before {
+    height: 6px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-balance-meta span {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-item-card {
+    background: rgba(255, 255, 255, 0.84);
+    border-color: color-mix(in srgb, var(--campus-accent) 18%, #ffffff);
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-item-copy strong {
+    font-size: 13px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-campus-item-copy span,
+  .inventory-dashboard-panel .inventory-admin-campus-item-qty span {
+    font-size: 10px;
   }
 
   .inventory-dashboard-panel .inventory-admin-campus-balance-tools {
@@ -21075,6 +21119,10 @@ tr.row-maint-maintenance:hover td {
     padding: 10px;
   }
 
+  .inventory-dashboard-panel.inventory-theme-supply .inventory-admin-control-panel-supply {
+    background: transparent;
+  }
+
   .inventory-dashboard-panel .inventory-admin-control-row {
     flex-direction: column;
     align-items: flex-start;
@@ -21089,6 +21137,11 @@ tr.row-maint-maintenance:hover td {
     padding: 10px;
     border-radius: 12px;
     gap: 8px;
+    border: 1px solid rgba(149, 173, 214, 0.52);
+    background: linear-gradient(180deg, rgba(244, 249, 255, 0.99) 0%, rgba(232, 240, 252, 0.99) 100%);
+    box-shadow:
+      0 12px 28px rgba(10, 18, 38, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.72);
   }
 
   .inventory-dashboard-panel .inventory-admin-matrix-wrap .panel-row {
@@ -21115,6 +21168,41 @@ tr.row-maint-maintenance:hover td {
     width: 100%;
     min-width: 0;
     height: 44px;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-title-block strong {
+    color: #163257;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-title-block .tiny {
+    color: #6f8fbf;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap .field > span {
+    color: #718db7;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap .input,
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap select,
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap .quickout-date-input-wrap {
+    background: rgba(255, 255, 255, 0.96);
+    border-color: rgba(84, 112, 162, 0.62);
+    color: #23395b;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap .input::placeholder {
+    color: #b1bfd8;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-wrap .quickout-date-icon-btn {
+    border-color: rgba(186, 157, 103, 0.58);
+    background: rgba(255, 248, 237, 0.96);
+    color: #8a6330;
+  }
+
+  .inventory-dashboard-panel .inventory-admin-matrix-mobile-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(243, 248, 255, 1) 100%);
+    border-color: rgba(198, 214, 238, 0.96);
   }
 
   .inventory-dashboard-panel .inventory-admin-matrix-date-field .quickout-eco-inline-panel,

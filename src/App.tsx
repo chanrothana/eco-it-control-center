@@ -4507,60 +4507,84 @@ function inventoryRecordCampusCode(campus: string) {
   return CAMPUS_CODE[campus] || "CX";
 }
 function inventoryCampusThemeClass(campus: string) {
-  const code = String(CAMPUS_CODE[campus] || inventoryRecordCampusCode(campus) || "CX").trim().toUpperCase();
-  const match = code.match(/^C(\d+)/);
-  const normalized = match ? `c${match[1]}` : code.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const code = String(CAMPUS_CODE[campus] || campus || inventoryRecordCampusCode(campus) || "CX").trim().toUpperCase();
+  const normalized = code
+    .replace(/\./g, "-")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return `inventory-admin-campus-theme-${normalized}`;
 }
 function inventoryCampusThemeStyle(campus: string): React.CSSProperties {
-  const code = String(CAMPUS_CODE[campus] || inventoryRecordCampusCode(campus) || "CX").trim().toUpperCase();
-  const major = (code.match(/^C(\d+)/)?.[1] || "").trim();
+  const code = String(CAMPUS_CODE[campus] || campus || inventoryRecordCampusCode(campus) || "CX").trim().toUpperCase();
   const palette =
-    major === "1"
+    code === "C1"
       ? {
           accent: "#d6a243",
           accentSoft: "#f0d184",
+          shellTop: "#fff9ea",
           shell: "#ffe9bf",
           headBg: "rgba(214, 162, 67, 0.24)",
           headBorder: "rgba(214, 162, 67, 0.46)",
+          title: "#6f4612",
         }
-      : major === "2"
+      : code === "C2.2"
         ? {
-            accent: "#8d64d8",
-            accentSoft: "#c7adef",
-            shell: "#eadcff",
-            headBg: "rgba(141, 100, 216, 0.24)",
-            headBorder: "rgba(141, 100, 216, 0.44)",
+            accent: "#d96f4a",
+            accentSoft: "#f5b59d",
+            shellTop: "#fff4ef",
+            shell: "#ffd7ca",
+            headBg: "rgba(217, 111, 74, 0.22)",
+            headBorder: "rgba(217, 111, 74, 0.44)",
+            title: "#8a3e24",
           }
-        : major === "3"
+      : code === "C2" || code === "C2.1"
+        ? {
+            accent: "#4b78d1",
+            accentSoft: "#a9c5ff",
+            shellTop: "#f3f8ff",
+            shell: "#d9e8ff",
+            headBg: "rgba(75, 120, 209, 0.22)",
+            headBorder: "rgba(75, 120, 209, 0.42)",
+            title: "#284d94",
+          }
+        : code === "C3"
           ? {
               accent: "#4d9961",
               accentSoft: "#9fd39e",
+              shellTop: "#f3fcf4",
               shell: "#dff5e3",
               headBg: "rgba(77, 153, 97, 0.24)",
               headBorder: "rgba(77, 153, 97, 0.42)",
+              title: "#2f6b40",
             }
-          : major === "4"
+          : code === "C4"
             ? {
                 accent: "#6674d6",
                 accentSoft: "#b7bdf5",
+                shellTop: "#f5f6ff",
                 shell: "#e2e6ff",
                 headBg: "rgba(102, 116, 214, 0.24)",
                 headBorder: "rgba(102, 116, 214, 0.44)",
+                title: "#3146a1",
               }
             : {
-                accent: "#d6a243",
-                accentSoft: "#f0d184",
-                shell: "#fff2d7",
-                headBg: "rgba(214, 162, 67, 0.16)",
-                headBorder: "rgba(214, 162, 67, 0.28)",
+                accent: "#6d7f9f",
+                accentSoft: "#c5d0e6",
+                shellTop: "#f7f9fc",
+                shell: "#e8edf7",
+                headBg: "rgba(109, 127, 159, 0.18)",
+                headBorder: "rgba(109, 127, 159, 0.28)",
+                title: "#334766",
               };
   return {
     "--campus-accent": palette.accent,
     "--campus-accent-soft": palette.accentSoft,
+    "--campus-shell-top": palette.shellTop,
     "--campus-shell": palette.shell,
     "--campus-head-bg": palette.headBg,
     "--campus-head-border": palette.headBorder,
+    "--campus-title": palette.title,
   } as React.CSSProperties;
 }
 function isInventoryTxnIn(type: InventoryTxn["type"]) {
