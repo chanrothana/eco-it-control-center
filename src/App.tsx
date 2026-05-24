@@ -363,6 +363,20 @@ type ReportType =
   | "verification_summary"
   | "qr_labels";
 
+type QrLabelEntityType = "asset" | "rental_printer";
+type QrLabelRow = {
+  rowKey: string;
+  labelId: string;
+  itemName: string;
+  campus: string;
+  category: string;
+  location: string;
+  assignedTo?: string;
+  status: string;
+  serialNumber?: string;
+  entityType: QrLabelEntityType;
+};
+
 type ReportSection = "asset" | "maintenance" | "inventory" | "transfer" | "verification";
 
 type MaintenanceReportColumnKey =
@@ -8907,6 +8921,7 @@ export default function App() {
   const [qrCategoryFilter, setQrCategoryFilter] = useState<string[]>(["ALL"]);
   const [qrStatusFilter, setQrStatusFilter] = useState<string[]>(["ALL"]);
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
+  const [qrLabelEntityType, setQrLabelEntityType] = useState<QrLabelEntityType>("asset");
   const [qrLabelSize, setQrLabelSize] = useState<"2cm" | "4cm" | "6cm">("2cm");
   const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
@@ -9284,6 +9299,16 @@ export default function App() {
     return (
       new URLSearchParams(window.location.search).get("assetId") ||
       new URLSearchParams(window.location.search).get("asset") ||
+      ""
+    )
+      .trim()
+      .toUpperCase();
+  });
+  const [pendingQrPrinterCode] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return (
+      new URLSearchParams(window.location.search).get("printerCode") ||
+      new URLSearchParams(window.location.search).get("printer") ||
       ""
     )
       .trim()
@@ -10751,11 +10776,6 @@ export default function App() {
   useEffect(() => {
     trySetLocalStorage("ui_theme", uiTheme);
   }, [uiTheme]);
-  useEffect(() => {
-    if (!maintenanceQuickMode) return;
-    if (lang !== "km") setLang("km");
-    trySetLocalStorage("ui_lang", "km");
-  }, [maintenanceQuickMode, lang]);
 
   useEffect(() => {
     let cancelled = false;
@@ -30731,11 +30751,11 @@ export default function App() {
       .sort((a, b) => a.setCode.localeCompare(b.setCode));
   }, [assets, assetItemName]);
 
-  const qrLabelRows = useMemo(
+  const qrAssetLabelRows = useMemo<QrLabelRow[]>(
     () =>
       assetMasterSetRows.map((row) => ({
-        assetDbId: row.assetDbId,
-        assetId: row.assetId,
+        rowKey: `asset-${row.assetDbId}-${row.assetId}`,
+        labelId: row.assetId,
         itemName: row.itemName,
         campus: row.campus,
         category: row.category,
@@ -30743,8 +30763,29 @@ export default function App() {
         assignedTo: row.assignedTo,
         status: row.status,
         serialNumber: row.serialNumber,
+        entityType: "asset",
       })),
     [assetMasterSetRows]
+  );
+  const qrPrinterLabelRows = useMemo<QrLabelRow[]>(
+    () =>
+      rentalPrinterOptions.map((row) => ({
+        rowKey: `printer-${row.id}`,
+        labelId: row.machineCode,
+        itemName: row.machineName || row.model || row.machineCode,
+        campus: row.campus,
+        category: row.vendor || "Rental Printer",
+        location: row.location || "-",
+        assignedTo: row.vendor || "-",
+        status: row.status,
+        serialNumber: row.serialNumber,
+        entityType: "rental_printer",
+      })),
+    [rentalPrinterOptions]
+  );
+  const qrLabelRows = useMemo<QrLabelRow[]>(
+    () => (qrLabelEntityType === "rental_printer" ? qrPrinterLabelRows : qrAssetLabelRows),
+    [qrAssetLabelRows, qrLabelEntityType, qrPrinterLabelRows]
   );
 
   const assetMasterCampusFilterOptions = useMemo(() => {
@@ -31171,8 +31212,13 @@ export default function App() {
     if (reportType === "asset_master") {
       return `${selectedReportTypeLabel} - ${assetMasterCampusTitle}`;
     }
+    if (reportType === "qr_labels") {
+      return qrLabelEntityType === "rental_printer"
+        ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល + QR" : "Rental Printer + QR Labels")
+        : selectedReportTypeLabel;
+    }
     return selectedReportTypeLabel;
-  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle]);
+  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, lang, qrLabelEntityType]);
   const reportTypeGuideText = useMemo(() => {
     const guides: Record<ReportType, string> =
       lang === "km"
@@ -31187,7 +31233,7 @@ export default function App() {
             staff_borrowing: "ទ្រព្យដែលសាលាបានចាត់តាំងឱ្យបុគ្គលិកប្រើប្រាស់ និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
             maintenance_completion: "តាមដានលទ្ធផលថែទាំក្នុងចន្លោះកាលបរិច្ឆេទ។",
             verification_summary: "សង្ខេបលទ្ធផលត្រួតពិនិត្យតាមខែ ឬត្រីមាស។",
-            qr_labels: "បោះពុម្ពស្លាក QR សម្រាប់ទ្រព្យសម្បត្តិ។",
+            qr_labels: "បោះពុម្ពស្លាក QR សម្រាប់ទ្រព្យសម្បត្តិ ឬម៉ាស៊ីនបោះពុម្ពជួល។",
           }
         : {
             asset_master: "Detailed asset list based on selected filters.",
@@ -31200,7 +31246,7 @@ export default function App() {
             staff_borrowing: "Assets currently assigned to staff with accountability records.",
             maintenance_completion: "Maintenance completion records in selected date range.",
             verification_summary: "Verification summary by month or term.",
-            qr_labels: "Print QR labels for selected assets.",
+            qr_labels: "Print QR labels for selected assets or rental printers.",
           };
     return guides[reportType];
   }, [lang, reportType]);
@@ -31208,8 +31254,13 @@ export default function App() {
     if (reportType === "asset_master") {
       return `${lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"}: ${assetMasterItemTitle}`;
     }
+    if (reportType === "qr_labels") {
+      return qrLabelEntityType === "rental_printer"
+        ? (lang === "km" ? "បោះពុម្ព QR សម្រាប់ម៉ាស៊ីនបោះពុម្ពជួលដែលបានជ្រើស។" : "Print QR labels for selected rental printers.")
+        : (lang === "km" ? "បោះពុម្ព QR សម្រាប់ទ្រព្យសម្បត្តិដែលបានជ្រើស។" : "Print QR labels for selected assets.");
+    }
     return reportTypeGuideText;
-  }, [reportType, lang, assetMasterItemTitle, reportTypeGuideText]);
+  }, [reportType, lang, assetMasterItemTitle, reportTypeGuideText, qrLabelEntityType]);
   const hasReportFilters = useMemo(
     () =>
       reportType === "asset_master" ||
@@ -31290,6 +31341,7 @@ export default function App() {
       setQrStatusFilter(["ALL"]);
       setQrItemFilter(["ALL"]);
       setQrLabelSize("2cm");
+      setQrLabelEntityType("asset");
       return;
     }
     if (reportType === "asset_by_location") {
@@ -31369,6 +31421,9 @@ export default function App() {
   }, [qrLabelRows, qrCampusFilter, qrLocationFilter]);
   const qrCategoryFilterOptions = useMemo(() => {
     const options = Array.from(new Set(qrRowsByCampusLocation.map((row) => row.category).filter(Boolean)));
+    if (qrLabelEntityType === "rental_printer") {
+      return options.sort((a, b) => a.localeCompare(b));
+    }
     const order = ["IT", "SAFETY", "FACILITY"];
     return options.sort((a, b) => {
       const ai = order.indexOf(a);
@@ -31378,7 +31433,7 @@ export default function App() {
       if (bi === -1) return -1;
       return ai - bi;
     });
-  }, [qrRowsByCampusLocation]);
+  }, [qrRowsByCampusLocation, qrLabelEntityType]);
   const qrRowsByCampusLocationCategory = useMemo(() => {
     return qrRowsByCampusLocation.filter((row) =>
       qrCategoryFilter.includes("ALL") ? true : qrCategoryFilter.includes(row.category)
@@ -32342,22 +32397,31 @@ export default function App() {
     if (!id) return "";
     return `${qrScanBase}/?assetId=${encodeURIComponent(id)}`;
   }, [qrScanBase]);
+  const buildRentalPrinterQrUrl = useCallback((machineCode: string) => {
+    const code = String(machineCode || "").trim().toUpperCase();
+    if (!code) return "";
+    return `${qrScanBase}/?printerCode=${encodeURIComponent(code)}`;
+  }, [qrScanBase]);
 
   useEffect(() => {
     if (reportType !== "qr_labels") return;
-    const missing = qrFilteredRows.filter((row) => !qrCodeMap[row.assetId]);
+    const missing = qrFilteredRows.filter((row) => !qrCodeMap[row.labelId]);
     if (!missing.length) return;
     let cancelled = false;
     (async () => {
       const generated: Array<[string, string]> = [];
       for (const row of missing) {
         try {
-          const dataUrl = await QRCode.toDataURL(buildAssetQrUrl(row.assetId), {
+          const qrTarget =
+            row.entityType === "rental_printer"
+              ? buildRentalPrinterQrUrl(row.labelId)
+              : buildAssetQrUrl(row.labelId);
+          const dataUrl = await QRCode.toDataURL(qrTarget, {
             width: 480,
             margin: 1,
             errorCorrectionLevel: "M",
           });
-          generated.push([row.assetId, dataUrl]);
+          generated.push([row.labelId, dataUrl]);
         } catch {
           // skip invalid value
         }
@@ -32365,14 +32429,14 @@ export default function App() {
       if (cancelled || !generated.length) return;
       setQrCodeMap((prev) => {
         const next = { ...prev };
-        for (const [assetId, dataUrl] of generated) next[assetId] = dataUrl;
+        for (const [labelId, dataUrl] of generated) next[labelId] = dataUrl;
         return next;
       });
     })();
     return () => {
       cancelled = true;
     };
-  }, [reportType, qrFilteredRows, qrCodeMap, buildAssetQrUrl]);
+  }, [reportType, qrFilteredRows, qrCodeMap, buildAssetQrUrl, buildRentalPrinterQrUrl]);
 
   useEffect(() => {
     if (!pendingQrAssetId) return;
@@ -32438,6 +32502,16 @@ export default function App() {
     if (!pendingQrAssetId || !authUser) return;
     setMobileMenuOpen(false);
   }, [pendingQrAssetId, authUser]);
+  useEffect(() => {
+    if (!pendingQrPrinterCode || !authUser) return;
+    const printer = rentalPrinters.find(
+      (row) => String(row.machineCode || "").trim().toUpperCase() === pendingQrPrinterCode
+    );
+    if (!printer) return;
+    startEditRentalPrinter(printer);
+    setRentalPrinterMessage(`Opened rental printer from QR: ${printer.machineCode}`);
+    setMobileMenuOpen(false);
+  }, [authUser, pendingQrPrinterCode, rentalPrinters]);
 
   async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
@@ -32696,36 +32770,40 @@ export default function App() {
         r.by || "-",
       ]);
     } else {
-      title = "Asset ID + QR Labels";
-      columns = ["QR", "Asset ID"];
-      const missingRows = qrFilteredRows.filter((row) => !qrCodeMap[row.assetId]);
+      title = qrLabelEntityType === "rental_printer" ? "Rental Printer QR Labels" : "Asset ID + QR Labels";
+      columns = ["QR", qrLabelEntityType === "rental_printer" ? "Machine Code" : "Asset ID"];
+      const missingRows = qrFilteredRows.filter((row) => !qrCodeMap[row.labelId]);
       qrPrintMap = { ...qrCodeMap };
       if (missingRows.length) {
         const generated: Array<[string, string]> = [];
         for (const row of missingRows) {
           try {
-            const dataUrl = await QRCode.toDataURL(buildAssetQrUrl(row.assetId), {
+            const qrTarget =
+              row.entityType === "rental_printer"
+                ? buildRentalPrinterQrUrl(row.labelId)
+                : buildAssetQrUrl(row.labelId);
+            const dataUrl = await QRCode.toDataURL(qrTarget, {
               width: 480,
               margin: 1,
               errorCorrectionLevel: "M",
             });
-            generated.push([row.assetId, dataUrl]);
+            generated.push([row.labelId, dataUrl]);
           } catch {
             // skip invalid value
           }
         }
         if (generated.length) {
-          for (const [assetId, dataUrl] of generated) qrPrintMap[assetId] = dataUrl;
+          for (const [labelId, dataUrl] of generated) qrPrintMap[labelId] = dataUrl;
           setQrCodeMap((prev) => {
             const next = { ...prev };
-            for (const [assetId, dataUrl] of generated) next[assetId] = dataUrl;
+            for (const [labelId, dataUrl] of generated) next[labelId] = dataUrl;
             return next;
           });
         }
       }
       rows = qrFilteredRows.map((row) => [
-        qrPrintMap[row.assetId] || "",
-        row.assetId,
+        qrPrintMap[row.labelId] || "",
+        row.labelId,
       ]);
     }
 
@@ -32811,7 +32889,9 @@ export default function App() {
         : reportType === "set_code"
         ? `<p><strong>Total Set Codes:</strong> ${setCodeReportRows.length} | <strong>Total Assets in Sets:</strong> ${setCodeReportRows.reduce((sum, row) => sum + row.totalItems, 0)}</p>`
         : reportType === "qr_labels"
-        ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length} | <strong>QR Size:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
+        ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length} | <strong>QR Type:</strong> ${escapeHtml(
+            qrLabelEntityType === "rental_printer" ? "Rental Printer" : "Asset"
+          )} | <strong>QR Size:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
         : "";
     const printMetaHtml =
       reportType === "asset_master"
@@ -32849,7 +32929,9 @@ export default function App() {
                 : "-"
           )}</p>`
         : reportType === "qr_labels"
-        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)} | QR Size: ${escapeHtml(qrLabelSizeLabel)}</p>`
+        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Type: ${escapeHtml(
+            qrLabelEntityType === "rental_printer" ? "Rental Printer" : "Asset"
+          )} | Campus Filter: ${escapeHtml(filterLabel)} | QR Size: ${escapeHtml(qrLabelSizeLabel)}</p>`
         : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
 
     const qrPrintVariant = qrLabelSize.replace("cm", "");
@@ -32863,7 +32945,7 @@ export default function App() {
         ? qrFilteredRows.length
           ? `<div class="qr-sticker-grid qr-sticker-grid-${qrPrintVariant}">${qrFilteredRows
               .map((row) => {
-                const qr = String(qrPrintMap[row.assetId] || rows.find((r) => r[1] === row.assetId)?.[0] || "");
+                const qr = String(qrPrintMap[row.labelId] || rows.find((r) => r[1] === row.labelId)?.[0] || "");
                 const serial = String(row.serialNumber || "").trim() || "-";
                 const itemName = String(row.itemName || "").trim() || "-";
                 const location = String(row.location || "").trim() || "-";
@@ -32871,7 +32953,10 @@ export default function App() {
                 const assignedTo = String(row.assignedTo || "").trim() || "-";
                 const locationLine = `${campus} | ${location}`;
                 const serialLine = `SN: ${serial}`;
-                const assignedLine = `Assigned: ${assignedTo}`;
+                const assignedLine =
+                  row.entityType === "rental_printer"
+                    ? `Vendor: ${assignedTo}`
+                    : `Assigned: ${assignedTo}`;
                 const compactFourCm = qrPrintVariant === "4";
                 const metaLines = compactFourCm
                   ? `
@@ -32887,9 +32972,9 @@ export default function App() {
                 return `<div class="qr-sticker-wrap qr-sticker-wrap-${qrPrintVariant}">
                   ${metaLines}
                   <div class="qr-sticker qr-sticker-${qrPrintVariant}">
-                    <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.assetId)}" />` : ""}</div>
+                    <div class="qr-sticker-qr">${qr ? `<img loading="lazy" decoding="async" src="${qr}" alt="${escapeHtml(row.labelId)}" />` : ""}</div>
                     <div class="qr-sticker-divider"></div>
-                    <div class="qr-sticker-id">${escapeHtml(row.assetId)}</div>
+                    <div class="qr-sticker-id">${escapeHtml(row.labelId)}</div>
                   </div>
                 </div>`;
               })
@@ -52634,9 +52719,20 @@ export default function App() {
               ) : null}
               {reportType === "qr_labels" ? (
                 <>
+                  <LocationPicker
+                    value={qrLabelEntityType}
+                    onChange={(value) => setQrLabelEntityType(value as QrLabelEntityType)}
+                    options={[
+                      { value: "asset", label: lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset" },
+                      { value: "rental_printer", label: lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer" },
+                    ]}
+                    placeholder={lang === "km" ? "ប្រភេទ QR" : "QR Type"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ QR..." : "Search QR type..."}
+                    emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No type found."}
+                  />
                   <SearchableMultiSelectPicker
                     summary={summarizeMultiFilter(qrCampusFilter, t.allCampuses, reportCampusName)}
-                    options={campusOptions.map((campus) => ({
+                    options={Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean))).map((campus) => ({
                       value: campus,
                       label: reportCampusName(campus),
                     }))}
@@ -52645,12 +52741,22 @@ export default function App() {
                     allOptionChecked={qrCampusFilter.includes("ALL")}
                     onToggleAllOption={(checked) =>
                       setQrCampusFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", campusOptions)
+                        applyMultiFilterSelection(
+                          prev,
+                          checked,
+                          "ALL",
+                          Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean)))
+                        )
                       )
                     }
                     onToggleValue={(value, checked) =>
                       setQrCampusFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, campusOptions)
+                        applyMultiFilterSelection(
+                          prev,
+                          checked,
+                          value,
+                          Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean)))
+                        )
                       )
                     }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
@@ -52676,24 +52782,28 @@ export default function App() {
                     emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                   />
                   <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(qrCategoryFilter, t.allCategories, (category) =>
-                      category === "SAFETY"
-                        ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
-                        : category === "FACILITY"
-                          ? (lang === "km" ? "បរិក្ខារ" : "Facility")
-                          : category
+                    summary={summarizeMultiFilter(qrCategoryFilter, qrLabelEntityType === "rental_printer" ? "All Vendors" : t.allCategories, (category) =>
+                      qrLabelEntityType === "rental_printer"
+                        ? category
+                        : category === "SAFETY"
+                          ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                          : category === "FACILITY"
+                            ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                            : category
                     )}
                     options={qrCategoryFilterOptions.map((category) => ({
                       value: category,
                       label:
-                        category === "SAFETY"
-                          ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
-                          : category === "FACILITY"
-                            ? (lang === "km" ? "បរិក្ខារ" : "Facility")
-                            : category,
+                        qrLabelEntityType === "rental_printer"
+                          ? category
+                          : category === "SAFETY"
+                            ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
+                            : category === "FACILITY"
+                              ? (lang === "km" ? "បរិក្ខារ" : "Facility")
+                              : category,
                     }))}
                     selectedValues={qrCategoryFilter}
-                    allOptionLabel={t.allCategories}
+                    allOptionLabel={qrLabelEntityType === "rental_printer" ? "All Vendors" : t.allCategories}
                     allOptionChecked={qrCategoryFilter.includes("ALL")}
                     onToggleAllOption={(checked) =>
                       setQrCategoryFilter((prev) =>
@@ -52988,6 +53098,27 @@ export default function App() {
                   </div>
                   <div className="qr-size-toolbar-row">
                     <div className="field qr-size-toolbar-field">
+                      <span>{lang === "km" ? "ប្រភេទ QR" : "QR Type"}</span>
+                      <div className="qr-size-button-row" role="group" aria-label={lang === "km" ? "ជ្រើសប្រភេទ QR" : "Select QR type"}>
+                        <button
+                          type="button"
+                          className={`qr-size-button ${qrLabelEntityType === "asset" ? "is-selected" : ""}`}
+                          onClick={() => setQrLabelEntityType("asset")}
+                          aria-pressed={qrLabelEntityType === "asset"}
+                        >
+                          {lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset"}
+                        </button>
+                        <button
+                          type="button"
+                          className={`qr-size-button ${qrLabelEntityType === "rental_printer" ? "is-selected" : ""}`}
+                          onClick={() => setQrLabelEntityType("rental_printer")}
+                          aria-pressed={qrLabelEntityType === "rental_printer"}
+                        >
+                          {lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="field qr-size-toolbar-field">
                       <span>{lang === "km" ? "ទំហំ QR" : "QR Size"}</span>
                       <div className="qr-size-button-row" role="group" aria-label={lang === "km" ? "ជ្រើសទំហំ QR" : "Select QR size"}>
                         {QR_LABEL_SIZE_OPTIONS.map((option) => (
@@ -53045,7 +53176,10 @@ export default function App() {
             )}
             {reportType === "qr_labels" && (
               <div className="panel-note">
-                <strong>QR label view:</strong> scan QR to open this asset detail page directly.
+                <strong>QR label view:</strong>{" "}
+                {qrLabelEntityType === "rental_printer"
+                  ? "scan QR to open this rental printer record link."
+                  : "scan QR to open this asset detail page directly."}
               </div>
             )}
             {reportType === "asset_master" && (
@@ -53904,25 +54038,29 @@ export default function App() {
               <div className={qrLabelGridClass}>
                 {qrFilteredRows.length ? (
                   qrFilteredRows.map((row) => (
-                    <article className={`qr-label-card ${qrLabelPreviewClass}`} key={`qr-label-${row.assetDbId}`}>
+                    <article className={`qr-label-card ${qrLabelPreviewClass}`} key={`qr-label-${row.rowKey}`}>
                       <div className="qr-label-image-wrap">
-                        {qrCodeMap[row.assetId] ? (
-                          <img loading="lazy" decoding="async" src={qrCodeMap[row.assetId]} alt={`QR ${row.assetId}`} className="qr-label-image" />
+                        {qrCodeMap[row.labelId] ? (
+                          <img loading="lazy" decoding="async" src={qrCodeMap[row.labelId]} alt={`QR ${row.labelId}`} className="qr-label-image" />
                         ) : (
                           <div className="qr-label-image qr-label-placeholder">Generating QR...</div>
                         )}
                       </div>
                       <div className="qr-label-meta">
-                        <div className="qr-label-asset-id">{row.assetId}</div>
+                        <div className="qr-label-asset-id">{row.labelId}</div>
                         <div className="qr-label-item-name">{row.itemName || "-"}</div>
                         <div>{reportCampusName(row.campus)} | {row.location || "-"}</div>
                         <div>SN: {String(row.serialNumber || "").trim() || "-"}</div>
-                        <div>Assigned: {String(row.assignedTo || "").trim() || "-"}</div>
+                        <div>{row.entityType === "rental_printer" ? "Vendor" : "Assigned"}: {String(row.assignedTo || "").trim() || "-"}</div>
                       </div>
                     </article>
                   ))
                 ) : (
-                  <div className="panel-note">No assets match selected filters.</div>
+                  <div className="panel-note">
+                    {qrLabelEntityType === "rental_printer"
+                      ? "No rental printers match selected filters."
+                      : "No assets match selected filters."}
+                  </div>
                 )}
               </div>
             )}
