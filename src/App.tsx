@@ -49765,44 +49765,26 @@ export default function App() {
                 )}
               </div>
             ) : (
-              <div className="table-wrap maintenance-history-desktop-wrap">
-                <table className="maintenance-history-table">
-                  <colgroup>
-                    <col className="maintenance-history-col-when" />
-                    <col className="maintenance-history-col-asset" />
-                    <col className="maintenance-history-col-work" />
-                    <col className="maintenance-history-col-note" />
-                    <col className="maintenance-history-col-team" />
-                    <col className="maintenance-history-col-actions" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Asset</th>
-                      <th>Work</th>
-                      <th>Note</th>
-                      <th>Team</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedMaintenanceRows.length ? (
-                      sortedMaintenanceRows.map((row) => (
-                        <tr
-                          key={`maint-history-desktop-${row.rowId}`}
-                          className={maintenanceHistoryRowClass(
-                            row.type || "",
-                            row.completion || "",
-                            row.status || "",
-                            row.condition || "",
-                            row.note || ""
-                          )}
-                        >
-                          <td className="maintenance-history-cell-when">
-                            <strong>{formatDate(row.date || "-")}</strong>
-                            <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
-                          </td>
-                          <td className="maintenance-history-cell-asset">
+              <div className="maintenance-history-grid maintenance-history-grid-desktop">
+                {sortedMaintenanceRows.length ? (
+                  sortedMaintenanceRows.map((row) => (
+                    <article
+                      key={`maint-history-desktop-${row.rowId}`}
+                      className={`maintenance-history-card maintenance-history-card-desktop ${maintenanceHistoryRowClass(
+                        row.type || "",
+                        row.completion || "",
+                        row.status || "",
+                        row.condition || "",
+                        row.note || ""
+                      )}`}
+                    >
+                      <div className="maintenance-history-desktop-head">
+                        <div className="maintenance-history-desktop-summary">
+                          <div className="maintenance-history-desktop-date">
+                            <span>{formatDate(row.date || "-")}</span>
+                            <strong>{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</strong>
+                          </div>
+                          <div className="maintenance-history-desktop-asset">
                             <strong title={row.assetId}>{row.assetId}</strong>
                             <div className="tiny maintenance-history-cell-item" title={row.itemName || "-"}>
                               {row.itemName || "-"}
@@ -49815,73 +49797,77 @@ export default function App() {
                                 {row.location || "-"}
                               </span>
                             </div>
-                          </td>
-                          <td className="maintenance-history-cell-work">
-                            <div className="maintenance-history-cell-work-pills">
-                              <span className="maintenance-history-badge" title={row.type || "-"}>
-                                {row.type || "-"}
-                              </span>
-                              <span
-                                className={`maintenance-history-badge ${
-                                  String(row.completion || "").trim().toLowerCase() === "done"
-                                    ? "maintenance-history-badge-done"
-                                    : "maintenance-history-badge-pending"
-                                }`}
-                                title={maintenanceCompletionText(row.completion || "-")}
-                              >
-                                {maintenanceCompletionText(row.completion || "-")}
-                              </span>
+                            <div className="maintenance-history-desktop-workline">
+                              <div className="maintenance-history-cell-work-pills">
+                                <span className="maintenance-history-badge" title={row.type || "-"}>
+                                  {row.type || "-"}
+                                </span>
+                                <span
+                                  className={`maintenance-history-badge ${
+                                    String(row.completion || "").trim().toLowerCase() === "done"
+                                      ? "maintenance-history-badge-done"
+                                      : "maintenance-history-badge-pending"
+                                  }`}
+                                  title={maintenanceCompletionText(row.completion || "-")}
+                                >
+                                  {maintenanceCompletionText(row.completion || "-")}
+                                </span>
+                              </div>
+                              <div className="maintenance-history-cell-condition" title={row.condition || "-"}>
+                                {row.condition || "-"}
+                              </div>
                             </div>
-                            <div className="maintenance-history-cell-condition" title={row.condition || "-"}>
-                              {row.condition || "-"}
+                            <div className="maintenance-history-desktop-teamline">
+                              <span><strong>By:</strong> {row.by || "-"}</span>
+                              <span><strong>Checked:</strong> {row.checkedBy || "-"}</span>
                             </div>
-                          </td>
-                          <td className="maintenance-history-cell-note">
+                          </div>
+                          <section className="maintenance-history-desktop-panel maintenance-history-desktop-panel-photos maintenance-history-desktop-panel-photos-top">
+                            <div className="maintenance-history-desktop-panel-label">Photos</div>
+                            <div className="maintenance-history-desktop-photos">
+                              {renderMaintenancePhotoGroups(row, `maintenance-history-desktop-${row.rowId}`, undefined, {
+                                className: "maintenance-history-photo-groups-two-col maintenance-history-photo-groups-desktop",
+                                maxPhotosPerGroup: 2,
+                              })}
+                            </div>
+                          </section>
+                        </div>
+                        <div className="maintenance-history-actions maintenance-history-desktop-actions">
+                          <button
+                            className="btn-icon-edit"
+                            disabled={!isAdmin}
+                            title={t.edit}
+                            aria-label={t.edit}
+                            onClick={() => editMaintenanceEntryFromHistoryRow(row)}
+                          >
+                            <Pencil size={16} strokeWidth={2.2} />
+                          </button>
+                          <button
+                            className="btn-danger"
+                            disabled={busy || !isAdmin}
+                            title={t.delete}
+                            aria-label={t.delete}
+                            onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
+                          >
+                            <Trash2 size={16} strokeWidth={2.2} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="maintenance-history-desktop-body">
+                        <div className="maintenance-history-desktop-maincol">
+                          <section className="maintenance-history-desktop-panel maintenance-history-desktop-panel-note">
+                            <div className="maintenance-history-desktop-panel-label">Technician Note</div>
                             <div className="maintenance-history-note-clamp" title={row.note || "-"}>
                               {row.note || "-"}
                             </div>
-                          </td>
-                          <td className="maintenance-history-cell-team">
-                            <div className="maintenance-history-person">
-                              <span>By</span>
-                              <strong title={row.by || "-"}>{row.by || "-"}</strong>
-                            </div>
-                            <div className="maintenance-history-person">
-                              <span>Checked</span>
-                              <strong title={row.checkedBy || "-"}>{row.checkedBy || "-"}</strong>
-                            </div>
-                          </td>
-                          <td className="maintenance-history-cell-actions">
-                            <div className="maintenance-history-actions">
-                              <button
-                                className="btn-icon-edit"
-                                disabled={!isAdmin}
-                                title={t.edit}
-                                aria-label={t.edit}
-                                onClick={() => editMaintenanceEntryFromHistoryRow(row)}
-                              >
-                                <Pencil size={16} strokeWidth={2.2} />
-                              </button>
-                              <button
-                                className="btn-danger"
-                                disabled={busy || !isAdmin}
-                                title={t.delete}
-                                aria-label={t.delete}
-                                onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
-                              >
-                                <Trash2 size={16} strokeWidth={2.2} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6}>No maintenance records yet.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                          </section>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">No maintenance records yet.</div>
+                )}
               </div>
             )}
             </>
@@ -52575,7 +52561,7 @@ export default function App() {
                         {lang === "km" ? "រួចរាល់" : "Done"}
                       </button>
                     </div>
-                    <div className="panel-filters report-filters report-filter-row">
+                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" ? "report-filter-row-qr" : ""}`}>
               {reportType === "maintenance_completion" ? (
                 <>
                   <input
@@ -52719,17 +52705,6 @@ export default function App() {
               ) : null}
               {reportType === "qr_labels" ? (
                 <>
-                  <LocationPicker
-                    value={qrLabelEntityType}
-                    onChange={(value) => setQrLabelEntityType(value as QrLabelEntityType)}
-                    options={[
-                      { value: "asset", label: lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset" },
-                      { value: "rental_printer", label: lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer" },
-                    ]}
-                    placeholder={lang === "km" ? "ប្រភេទ QR" : "QR Type"}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ QR..." : "Search QR type..."}
-                    emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No type found."}
-                  />
                   <SearchableMultiSelectPicker
                     summary={summarizeMultiFilter(qrCampusFilter, t.allCampuses, reportCampusName)}
                     options={Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean))).map((campus) => ({
@@ -53094,11 +53069,11 @@ export default function App() {
               {reportType === "qr_labels" ? (
                 <div className="panel-filters qr-size-toolbar">
                   <div className="tiny report-filters-title">
-                    {lang === "km" ? "ជំហានទី 3: ជ្រើសទំហំ QR" : "Step 3: Select QR Size"}
+                    {lang === "km" ? "ជំហានទី 3: កំណត់ QR" : "Step 3: Configure QR"}
                   </div>
                   <div className="qr-size-toolbar-row">
-                    <div className="field qr-size-toolbar-field">
-                      <span>{lang === "km" ? "ប្រភេទ QR" : "QR Type"}</span>
+                    <div className="qr-size-toolbar-field qr-size-toolbar-field-type">
+                      <div className="qr-size-toolbar-label">{lang === "km" ? "ប្រភេទ QR" : "QR Type"}</div>
                       <div className="qr-size-button-row" role="group" aria-label={lang === "km" ? "ជ្រើសប្រភេទ QR" : "Select QR type"}>
                         <button
                           type="button"
@@ -53118,8 +53093,8 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-                    <div className="field qr-size-toolbar-field">
-                      <span>{lang === "km" ? "ទំហំ QR" : "QR Size"}</span>
+                    <div className="qr-size-toolbar-field qr-size-toolbar-field-size">
+                      <div className="qr-size-toolbar-label">{lang === "km" ? "ទំហំ QR" : "QR Size"}</div>
                       <div className="qr-size-button-row" role="group" aria-label={lang === "km" ? "ជ្រើសទំហំ QR" : "Select QR size"}>
                         {QR_LABEL_SIZE_OPTIONS.map((option) => (
                           <button
