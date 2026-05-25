@@ -5286,6 +5286,34 @@ h2 {
   color: #6f84a7;
 }
 
+.maintenance-quick-photo-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.maintenance-quick-photo-field {
+  min-width: 0;
+}
+
+.maintenance-quick-photo-gallery {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.maintenance-quick-photo-gallery .asset-photo-chip {
+  width: min(100%, 128px);
+}
+
+.maintenance-quick-photo-gallery .asset-photo-chip-img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
 
 .maintenance-title-row {
   display: flex;
@@ -17717,6 +17745,14 @@ tr.row-maint-maintenance:hover td {
 
   .maintenance-edit-photo-fields {
     min-width: 0;
+  }
+
+  .maintenance-quick-photo-pair {
+    gap: 10px;
+  }
+
+  .maintenance-quick-photo-gallery .asset-photo-chip {
+    width: 100%;
   }
 
   .public-asset-history-photo-groups,

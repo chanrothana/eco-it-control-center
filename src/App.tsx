@@ -48877,79 +48877,81 @@ export default function App() {
                     placeholder={lang === "km" ? "អាចបន្ថែមស្ថានភាព ឬ មតិយោបល់" : "Optional condition or remark"}
                   />
                 </label>
-                <label className="field">
-                  <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"}</span>
-                  <input
-                    key={`${maintenanceRecordFileKey}-staff-before`}
-                    className="file-input"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
-                  />
-                  {maintenanceRecordForm.beforePhotos.length ? (
-                    <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                      {maintenanceRecordForm.beforePhotos.map((url, index) => (
-                        <div key={`maintenance-staff-before-${index}`} className="asset-photo-chip">
-                          <img loading="lazy" decoding="async" src={url} alt={`maintenance-staff-before-${index + 1}`} className="asset-photo-chip-img" />
-                          <div className="asset-photo-chip-actions">
-                            <button
-                              type="button"
-                              className="tab"
-                              onClick={() =>
-                                setMaintenanceRecordForm((f) => ({
-                                  ...f,
-                                  beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
-                                }))
-                              }
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </label>
-                <label className="field">
-                  <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"}</span>
-                  <input
-                    key={`${maintenanceRecordFileKey}-staff-after`}
-                    className="file-input"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
-                  />
-                  {maintenanceRecordForm.afterPhotos.length ? (
-                    <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                      {maintenanceRecordForm.afterPhotos.map((url, index) => (
-                        <div key={`maintenance-staff-after-${index}`} className="asset-photo-chip">
-                          <img loading="lazy" decoding="async" src={url} alt={`maintenance-staff-after-${index + 1}`} className="asset-photo-chip-img" />
-                          <div className="asset-photo-chip-actions">
-                            <button
-                              type="button"
-                              className="tab"
-                              onClick={() =>
-                                setMaintenanceRecordForm((f) => {
-                                  const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
-                                  return {
+                <div className="field field-wide maintenance-quick-photo-pair">
+                  <label className="field maintenance-quick-photo-field">
+                    <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"}</span>
+                    <input
+                      key={`${maintenanceRecordFileKey}-staff-before`}
+                      className="file-input"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
+                    />
+                    {maintenanceRecordForm.beforePhotos.length ? (
+                      <div className="asset-photo-gallery maintenance-quick-photo-gallery">
+                        {maintenanceRecordForm.beforePhotos.map((url, index) => (
+                          <div key={`maintenance-staff-before-${index}`} className="asset-photo-chip">
+                            <img loading="lazy" decoding="async" src={url} alt={`maintenance-staff-before-${index + 1}`} className="asset-photo-chip-img" />
+                            <div className="asset-photo-chip-actions">
+                              <button
+                                type="button"
+                                className="tab"
+                                onClick={() =>
+                                  setMaintenanceRecordForm((f) => ({
                                     ...f,
-                                    afterPhotos: nextAfter,
-                                    photo: nextAfter[0] || "",
-                                    photos: nextAfter,
-                                  };
-                                })
-                              }
-                            >
-                              Remove
-                            </button>
+                                    beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                                  }))
+                                }
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </label>
+                        ))}
+                      </div>
+                    ) : null}
+                  </label>
+                  <label className="field maintenance-quick-photo-field">
+                    <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"}</span>
+                    <input
+                      key={`${maintenanceRecordFileKey}-staff-after`}
+                      className="file-input"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
+                    />
+                    {maintenanceRecordForm.afterPhotos.length ? (
+                      <div className="asset-photo-gallery maintenance-quick-photo-gallery">
+                        {maintenanceRecordForm.afterPhotos.map((url, index) => (
+                          <div key={`maintenance-staff-after-${index}`} className="asset-photo-chip">
+                            <img loading="lazy" decoding="async" src={url} alt={`maintenance-staff-after-${index + 1}`} className="asset-photo-chip-img" />
+                            <div className="asset-photo-chip-actions">
+                              <button
+                                type="button"
+                                className="tab"
+                                onClick={() =>
+                                  setMaintenanceRecordForm((f) => {
+                                    const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                    return {
+                                      ...f,
+                                      afterPhotos: nextAfter,
+                                      photo: nextAfter[0] || "",
+                                      photos: nextAfter,
+                                    };
+                                  })
+                                }
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </label>
+                </div>
               </div>
               <div className="asset-actions maintenance-staff-quick-actions">
                 <div className="tiny">
@@ -49283,79 +49285,81 @@ export default function App() {
                       : "Enter the payment if any. You can use values like 10$, 40000៛, or Free.")}
                 </div>
               </label>
-              <label className="field">
-                <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
-                <input
-                  key={`${maintenanceRecordFileKey}-before`}
-                  className="file-input"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
-                />
-                {maintenanceRecordForm.beforePhotos.length ? (
-                  <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                    {maintenanceRecordForm.beforePhotos.map((url, index) => (
-                      <div key={`maintenance-record-before-${index}`} className="asset-photo-chip">
-                        <img loading="lazy" decoding="async" src={url} alt={`maintenance-before-${index + 1}`} className="asset-photo-chip-img" />
-                        <div className="asset-photo-chip-actions">
-                          <button
-                            type="button"
-                            className="tab"
-                            onClick={() =>
-                              setMaintenanceRecordForm((f) => ({
-                                ...f,
-                                beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
-                              }))
-                            }
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </label>
-              <label className="field">
-                <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
-                <input
-                  key={`${maintenanceRecordFileKey}-after`}
-                  className="file-input"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
-                />
-                {maintenanceRecordForm.afterPhotos.length ? (
-                  <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                    {maintenanceRecordForm.afterPhotos.map((url, index) => (
-                      <div key={`maintenance-record-after-${index}`} className="asset-photo-chip">
-                        <img loading="lazy" decoding="async" src={url} alt={`maintenance-after-${index + 1}`} className="asset-photo-chip-img" />
-                        <div className="asset-photo-chip-actions">
-                          <button
-                            type="button"
-                            className="tab"
-                            onClick={() =>
-                              setMaintenanceRecordForm((f) => {
-                                const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
-                                return {
+              <div className="field field-wide maintenance-quick-photo-pair">
+                <label className="field maintenance-quick-photo-field">
+                  <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                  <input
+                    key={`${maintenanceRecordFileKey}-before`}
+                    className="file-input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
+                  />
+                  {maintenanceRecordForm.beforePhotos.length ? (
+                    <div className="asset-photo-gallery maintenance-quick-photo-gallery">
+                      {maintenanceRecordForm.beforePhotos.map((url, index) => (
+                        <div key={`maintenance-record-before-${index}`} className="asset-photo-chip">
+                          <img loading="lazy" decoding="async" src={url} alt={`maintenance-before-${index + 1}`} className="asset-photo-chip-img" />
+                          <div className="asset-photo-chip-actions">
+                            <button
+                              type="button"
+                              className="tab"
+                              onClick={() =>
+                                setMaintenanceRecordForm((f) => ({
                                   ...f,
-                                  afterPhotos: nextAfter,
-                                  photo: nextAfter[0] || "",
-                                  photos: nextAfter,
-                                };
-                              })
-                            }
-                          >
-                            Remove
-                          </button>
+                                  beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                                }))
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </label>
+                      ))}
+                    </div>
+                  ) : null}
+                </label>
+                <label className="field maintenance-quick-photo-field">
+                  <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                  <input
+                    key={`${maintenanceRecordFileKey}-after`}
+                    className="file-input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
+                  />
+                  {maintenanceRecordForm.afterPhotos.length ? (
+                    <div className="asset-photo-gallery maintenance-quick-photo-gallery">
+                      {maintenanceRecordForm.afterPhotos.map((url, index) => (
+                        <div key={`maintenance-record-after-${index}`} className="asset-photo-chip">
+                          <img loading="lazy" decoding="async" src={url} alt={`maintenance-after-${index + 1}`} className="asset-photo-chip-img" />
+                          <div className="asset-photo-chip-actions">
+                            <button
+                              type="button"
+                              className="tab"
+                              onClick={() =>
+                                setMaintenanceRecordForm((f) => {
+                                  const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                  return {
+                                    ...f,
+                                    afterPhotos: nextAfter,
+                                    photo: nextAfter[0] || "",
+                                    photos: nextAfter,
+                                  };
+                                })
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </label>
+              </div>
               <div className="field field-wide">
                 <details>
                   <summary style={{ cursor: "pointer", fontWeight: 600 }}>
