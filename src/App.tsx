@@ -12318,15 +12318,24 @@ export default function App() {
     []
   );
   const assetLocationFilterOptions = useMemo(() => {
+    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    if (!assetCampusMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
+    }
+    if (!assetCategoryMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetCategoryMultiFilter.includes(asset.category));
+    }
+    if (!assetAssignedToMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetAssignedToMultiFilter.includes(String(asset.assignedTo || "").trim()));
+    }
     return Array.from(
       new Set(
-        assets
-          .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
+        list
           .map((asset) => String(asset.location || "").trim())
           .filter(Boolean)
       )
     ).sort((a, b) => a.localeCompare(b));
-  }, [assets]);
+  }, [assets, assetCampusMultiFilter, assetCategoryMultiFilter, assetAssignedToMultiFilter]);
   const assetAssignedToFilterOptions = useMemo(() => {
     return Array.from(
       new Set(
@@ -41090,25 +41099,21 @@ export default function App() {
                         </label>
                         <label className="field">
                           <span>Assign To Staff</span>
-                          <select
-                            className="input"
+                          <UserPicker
                             value={transferForm.toAssignedTo}
-                            onChange={(e) =>
+                            users={users}
+                            onChange={(nextValue) =>
                               setTransferForm((f) => ({
                                 ...f,
-                                toAssignedTo: e.target.value,
+                                toAssignedTo: nextValue,
                                 responsibilityConfirmed: false,
                                 returnConfirmed: false,
                               }))
                             }
-                          >
-                            <option value="">Unassigned / In Stock</option>
-                            {users.map((u) => (
-                              <option key={`quick-transfer-user-${u.id}`} value={u.fullName}>
-                                {u.fullName}
-                              </option>
-                            ))}
-                          </select>
+                            placeholder={lang === "km" ? "មិនបានកំណត់ / នៅក្នុងស្តុក" : "Unassigned / In Stock"}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                            emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                          />
                         </label>
                         <label className="field check-field">
                           <span>Staff responsibility confirm</span>
@@ -47224,25 +47229,21 @@ export default function App() {
                 <>
                   <label className="field">
                     <span>Assign To Staff</span>
-                    <select
-                      className="input"
+                    <UserPicker
                       value={transferForm.toAssignedTo}
-                      onChange={(e) =>
+                      users={users}
+                      onChange={(nextValue) =>
                         setTransferForm((f) => ({
                           ...f,
-                          toAssignedTo: e.target.value,
+                          toAssignedTo: nextValue,
                           responsibilityConfirmed: false,
                           returnConfirmed: false,
                         }))
                       }
-                    >
-                      <option value="">Unassigned / In Stock</option>
-                      {users.map((u) => (
-                        <option key={`transfer-user-${u.id}`} value={u.fullName}>
-                          {u.fullName}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={lang === "km" ? "មិនបានកំណត់ / នៅក្នុងស្តុក" : "Unassigned / In Stock"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                      emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                    />
                   </label>
                   <label className="field check-field">
                     <span>Staff responsibility confirm</span>

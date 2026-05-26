@@ -5295,13 +5295,20 @@ h2 {
 
 .maintenance-quick-photo-field {
   min-width: 0;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 10px;
+  border: 1px solid rgba(154, 176, 210, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .maintenance-quick-photo-gallery {
-  margin-top: 8px;
   display: grid;
   gap: 8px;
   justify-items: start;
+  max-width: none;
 }
 
 .maintenance-quick-photo-gallery .asset-photo-chip {
@@ -17748,6 +17755,7 @@ tr.row-maint-maintenance:hover td {
   }
 
   .maintenance-quick-photo-pair {
+    grid-template-columns: 1fr;
     gap: 10px;
   }
 
