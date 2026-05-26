@@ -7616,6 +7616,9 @@ const server = http.createServer(async (req, res) => {
       const requestedBy = toText(body.requestedBy);
       const approvedBy = toText(body.approvedBy);
       const receivedBy = toText(body.receivedBy);
+      const transferToCampus = toText(body.transferToCampus);
+      const transferToItemId = Number(body.transferToItemId || 0);
+      const isCampusTransfer = type === "OUT" && transferToItemId > 0 && !!transferToCampus;
       const requiresApproval = requiresInventoryOutApproval(user, settings, date, type);
       const approvalStatus = type === "OUT" ? (requiresApproval ? "PENDING" : "APPROVED") : "";
       const approvalRequestedBy = toText(body.approvalRequestedBy) || toText(user.displayName) || toText(user.username);
@@ -7639,6 +7642,10 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: "Borrow Return requires fromCampus and receivedBy" });
         return;
       }
+      if (isCampusTransfer && approvalStatus === "PENDING") {
+        sendJson(res, 400, { error: "Campus transfer cannot be pending approval. Please ask admin to transfer directly." });
+        return;
+      }
 
       const currentStock = calcInventoryCurrentStock(item, txns);
       if (isInventoryTxnOutType(type) && qty > currentStock) {
@@ -7658,6 +7665,33 @@ const server = http.createServer(async (req, res) => {
           return;
         }
       }
+      let transferTargetItem = null;
+      if (isCampusTransfer) {
+        transferTargetItem = items.find((row) => Number(row.id) === transferToItemId) || null;
+        if (!transferTargetItem) {
+          sendJson(res, 404, { error: "Destination stock item not found" });
+          return;
+        }
+        if (!userCanAccessCampus(user, toText(transferTargetItem.campus))) {
+          sendJson(res, 403, { error: "Destination campus access denied" });
+          return;
+        }
+        if (toText(transferTargetItem.campus) !== transferToCampus) {
+          sendJson(res, 400, { error: "Destination campus does not match destination item" });
+          return;
+        }
+        if (toText(transferTargetItem.campus) === toText(item.campus)) {
+          sendJson(res, 400, { error: "Destination campus must be different from source campus" });
+          return;
+        }
+        if (
+          toText(transferTargetItem.itemCode).toUpperCase() !== toText(item.itemCode).toUpperCase() ||
+          toText(transferTargetItem.category) !== toText(item.category)
+        ) {
+          sendJson(res, 400, { error: "Destination item must match the same stock code and category" });
+          return;
+        }
+      }
 
       const photo = await normalizePhotoValue(body.photo, "inventory");
       const duplicateTxnPayload = {
@@ -7669,7 +7703,7 @@ const server = http.createServer(async (req, res) => {
         note: toText(body.note),
         photo,
       };
-      if (type === "OUT") {
+      if (type === "OUT" && !isCampusTransfer) {
         const duplicateTxn = txns.find((row) => isDuplicateInventoryOutTxn(row, duplicateTxnPayload));
         if (duplicateTxn) {
           sendJson(res, 200, {
@@ -7680,12 +7714,16 @@ const server = http.createServer(async (req, res) => {
           return;
         }
       }
+      const transferRef = isCampusTransfer ? `INV-XFER-${Date.now()}-${Math.floor(Math.random() * 1000)}` : "";
+      const baseDecisionBy = approvalStatus === "APPROVED" ? (approvalDecisionBy || toText(user.displayName) || toText(user.username)) : "";
+      const baseDecisionAt = approvalStatus === "APPROVED" ? (approvalDecisionAt || new Date().toISOString()) : "";
       const txn = {
         id: Date.now() + Math.floor(Math.random() * 1000),
         itemId: item.id,
         campus: toText(item.campus),
         itemCode: toText(item.itemCode),
         itemName: toText(item.itemName),
+        created: new Date().toISOString(),
         date,
         type,
         qty,
@@ -7710,8 +7748,8 @@ const server = http.createServer(async (req, res) => {
         approvalRequestedBy: approvalStatus === "PENDING" ? approvalRequestedBy : "",
         approvalRequestedUser: approvalStatus === "PENDING" ? toText(user.username) : "",
         approvalRequestedAt: approvalStatus === "PENDING" ? approvalRequestedAt : "",
-        approvalDecisionBy: approvalStatus === "APPROVED" ? (approvalDecisionBy || toText(user.displayName) || toText(user.username)) : "",
-        approvalDecisionAt: approvalStatus === "APPROVED" ? (approvalDecisionAt || new Date().toISOString()) : "",
+        approvalDecisionBy: baseDecisionBy,
+        approvalDecisionAt: baseDecisionAt,
         approvalDecisionNote: approvalStatus === "APPROVED" ? approvalDecisionNote : "",
         txnSource,
         referenceAssetId,
@@ -7720,8 +7758,49 @@ const server = http.createServer(async (req, res) => {
         invoiceNo,
         unitCost,
         totalCost,
+        transferRef,
         telegramMessageRefs: [],
       };
+      const nextTxnsToCreate = [txn];
+      if (isCampusTransfer && transferTargetItem) {
+        nextTxnsToCreate.push({
+          id: Date.now() + Math.floor(Math.random() * 1000) + 1000,
+          itemId: Number(transferTargetItem.id),
+          campus: toText(transferTargetItem.campus),
+          itemCode: toText(transferTargetItem.itemCode),
+          itemName: toText(transferTargetItem.itemName),
+          created: new Date().toISOString(),
+          date,
+          type: "IN",
+          qty,
+          by: toText(body.by),
+          note: toText(body.note),
+          fromCampus: toText(item.campus),
+          toCampus: toText(transferTargetItem.campus),
+          expectedReturnDate: "",
+          requestedBy: "",
+          approvedBy: "",
+          receivedBy: "",
+          photo,
+          borrowStatus: "",
+          approvalStatus: "APPROVED",
+          approvalRequestedBy: "",
+          approvalRequestedUser: "",
+          approvalRequestedAt: "",
+          approvalDecisionBy: baseDecisionBy,
+          approvalDecisionAt: baseDecisionAt,
+          approvalDecisionNote: "",
+          txnSource: "GENERAL",
+          referenceAssetId,
+          referenceAssetDbId,
+          supplier,
+          invoiceNo,
+          unitCost,
+          totalCost,
+          transferRef,
+          telegramMessageRefs: [],
+        });
+      }
       let approverTargets = [];
       if (approvalStatus === "PENDING") {
         approverTargets = resolveInventoryApprovalApprovers(db, txn.approvalRequestedUser, txn.campus);
@@ -7747,9 +7826,19 @@ const server = http.createServer(async (req, res) => {
           generatedBy: "inventory-out-approval",
         });
       }
-      const nextTxns = [txn, ...txns];
+      const nextTxns = [...nextTxnsToCreate, ...txns];
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(db, user, "CREATE", "inventory_txn", `${txn.itemCode}-${txn.id}`, `${type} ${qty} ${item.unit}`);
+      if (isCampusTransfer && transferTargetItem) {
+        appendAuditLog(
+          db,
+          user,
+          "CREATE",
+          "inventory_txn",
+          `${toText(transferTargetItem.itemCode)}-${nextTxnsToCreate[1].id}`,
+          `IN ${qty} ${toText(transferTargetItem.unit || item.unit)} from ${toText(item.campus)}`
+        );
+      }
       await writeDb(db);
       let telegramAlertSent = false;
       if (normalizeInventoryTxnType(txn.type) === "OUT") {
@@ -7767,7 +7856,7 @@ const server = http.createServer(async (req, res) => {
           await writeDb(db);
         }
       }
-      sendJson(res, 201, { txn, telegramAlertSent, duplicateSuppressed: false });
+      sendJson(res, 201, { txn, txns: nextTxnsToCreate, telegramAlertSent, duplicateSuppressed: false });
       return;
     }
 

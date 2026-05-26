@@ -508,6 +508,7 @@ type InventoryTxn = {
   invoiceNo?: string;
   unitCost?: number;
   totalCost?: number;
+  transferRef?: string;
   telegramMessageRefs?: Array<{ chatId?: string; messageId?: number }>;
 };
 type PoolCleaningSchedule = {
@@ -10882,6 +10883,8 @@ export default function App() {
     by: string;
     note: string;
     photo: string;
+    mode: "OUT" | "TRANSFER";
+    toCampus: string;
   }>(null);
   const [inventoryQuickOutFileKey, setInventoryQuickOutFileKey] = useState(0);
   const [inventoryQuickReasonTipsOpen, setInventoryQuickReasonTipsOpen] = useState(false);
@@ -14179,6 +14182,36 @@ export default function App() {
         ? inventoryVisibleItems.find((item) => String(item.id) === String(inventoryQuickOutModal.itemId)) || null
         : null,
     [inventoryVisibleItems, inventoryQuickOutModal]
+  );
+  const inventoryQuickTransferTargets = useMemo(() => {
+    if (!inventoryQuickOutSelectedItem) return [] as InventoryItem[];
+    return inventoryVisibleItems
+      .filter(
+        (item) =>
+          Number(item.id) !== Number(inventoryQuickOutSelectedItem.id) &&
+          String(item.itemCode || "").trim().toUpperCase() === String(inventoryQuickOutSelectedItem.itemCode || "").trim().toUpperCase() &&
+          String(item.category || "").trim() === String(inventoryQuickOutSelectedItem.category || "").trim() &&
+          String(item.campus || "").trim() !== String(inventoryQuickOutSelectedItem.campus || "").trim()
+      )
+      .sort(
+        (a, b) =>
+          inventoryCampusLabel(a.campus).localeCompare(inventoryCampusLabel(b.campus)) ||
+          inventoryLocationLabel(a.location, lang).localeCompare(inventoryLocationLabel(b.location, lang))
+      );
+  }, [inventoryCampusLabel, inventoryLocationLabel, inventoryQuickOutSelectedItem, inventoryVisibleItems, lang]);
+  const inventoryQuickTransferCampusOptions = useMemo(() => {
+    const map = new Map<string, InventoryItem>();
+    for (const item of inventoryQuickTransferTargets) {
+      if (!map.has(item.campus)) map.set(item.campus, item);
+    }
+    return Array.from(map.values());
+  }, [inventoryQuickTransferTargets]);
+  const inventoryQuickTransferTargetItem = useMemo(
+    () =>
+      inventoryQuickOutModal?.toCampus
+        ? inventoryQuickTransferTargets.find((item) => String(item.campus) === String(inventoryQuickOutModal.toCampus)) || null
+        : null,
+    [inventoryQuickOutModal?.toCampus, inventoryQuickTransferTargets]
   );
   const inventoryQuickOutReasonSuggestions = useMemo(() => {
     if (!inventoryQuickOutSelectedItem) return [] as string[];
@@ -21822,6 +21855,8 @@ export default function App() {
     requestedBy?: string;
     approvedBy?: string;
     receivedBy?: string;
+    transferToItemId?: string;
+    transferToCampus?: string;
   }): Promise<{ ok: boolean; pendingApproval?: boolean; duplicateSuppressed?: boolean }> {
     const itemId = Number(values.itemId);
     const rawQty = Number(values.qty || 0);
@@ -21896,6 +21931,9 @@ export default function App() {
     const requestedBy = String(values.requestedBy || "").trim();
     const approvedBy = String(values.approvedBy || "").trim();
     const receivedBy = String(values.receivedBy || "").trim();
+    const transferToCampus = String(values.transferToCampus || "").trim();
+    const transferToItemId = Number(values.transferToItemId || 0);
+    const isCampusTransfer = values.type === "OUT" && transferToItemId > 0 && !!transferToCampus;
     if (values.type === "BORROW_OUT" || values.type === "BORROW_CONSUME") {
       if (!toCampus || !requestedBy || !approvedBy) {
         setError("Borrow Out/Consume requires destination campus, requested by, and approved by.");
@@ -21913,6 +21951,17 @@ export default function App() {
       }
       if (fromCampus === item.campus) {
         setError("Source campus must be different from current campus.");
+        return { ok: false };
+      }
+    }
+    if (isCampusTransfer) {
+      if (transferToCampus === item.campus) {
+        setError(lang === "km" ? "សាខាទទួលត្រូវតែខុសពីសាខាដើម។" : "Destination campus must be different from source campus.");
+        return { ok: false };
+      }
+      const destinationItem = inventoryVisibleItems.find((candidate) => Number(candidate.id) === transferToItemId);
+      if (!destinationItem) {
+        setError(lang === "km" ? "រកមិនឃើញស្តុកគោលដៅនៅសាខាទទួល។" : "Destination stock item not found.");
         return { ok: false };
       }
     }
@@ -21959,7 +22008,7 @@ export default function App() {
     setBusy(true);
     try {
       try {
-        const res = await requestJson<{ txn: InventoryTxn; telegramAlertSent?: boolean; duplicateSuppressed?: boolean }>("/api/inventory/txns", {
+        const res = await requestJson<{ txn?: InventoryTxn; txns?: InventoryTxn[]; telegramAlertSent?: boolean; duplicateSuppressed?: boolean }>("/api/inventory/txns", {
           method: "POST",
           body: JSON.stringify({
             itemId: item.id,
@@ -21981,9 +22030,18 @@ export default function App() {
             approvalDecisionBy: needsManagerApproval ? "" : (authUser?.displayName || authUser?.username || values.by.trim()),
             approvalDecisionAt: needsManagerApproval ? "" : new Date().toISOString(),
             approvalDecisionNote: "",
+            transferToCampus,
+            transferToItemId,
           }),
         });
-        setInventoryTxns((prev) => [res.txn, ...prev.filter((entry) => entry.id !== res.txn.id)]);
+        const savedTxns = (Array.isArray(res.txns) && res.txns.length ? res.txns : (res.txn ? [res.txn] : [])).filter(Boolean) as InventoryTxn[];
+        if (!savedTxns.length) {
+          throw new Error("No inventory transaction returned.");
+        }
+        setInventoryTxns((prev) => {
+          const exclude = new Set(savedTxns.map((entry) => entry.id));
+          return [...savedTxns, ...prev.filter((entry) => !exclude.has(entry.id))];
+        });
         if (res.duplicateSuppressed) {
           setError(
             lang === "km"
@@ -21996,11 +22054,16 @@ export default function App() {
           setError("");
         }
         if (!res.duplicateSuppressed) {
-          appendUiAudit("CREATE", "inventory_txn", `${res.txn.itemCode}-${res.txn.id}`, `${res.txn.type} ${res.txn.qty} ${item.unit}`);
+          for (const savedTxn of savedTxns) {
+            appendUiAudit("CREATE", "inventory_txn", `${savedTxn.itemCode}-${savedTxn.id}`, `${savedTxn.type} ${savedTxn.qty} ${item.unit}`);
+          }
         }
         return { ok: true, pendingApproval: needsManagerApproval, duplicateSuppressed: Boolean(res.duplicateSuppressed) };
       } catch (err) {
         if (!isMissingRouteError(err)) throw err;
+        if (isCampusTransfer) {
+          throw new Error(lang === "km" ? "ត្រូវអាប់ដេត server មុន ដើម្បីប្រើការផ្ទេរស្តុកឆ្លងសាខា។" : "Server update is required before using cross-campus transfer.");
+        }
         const nextTxns = [tx, ...inventoryTxns];
         setInventoryTxns(nextTxns);
         void persistInventorySettings(inventoryItems, nextTxns);
@@ -22313,6 +22376,8 @@ export default function App() {
       by: recorder,
       note: "",
       photo: "",
+      mode: "OUT",
+      toCampus: "",
     });
     setQuickOutEcoMonth(new Date(base.getFullYear(), base.getMonth(), 1));
     setQuickOutEcoSelectedDate(baseDate);
@@ -22366,6 +22431,15 @@ export default function App() {
       setError(lang === "km" ? "សូមបញ្ចូលមូលហេតុចេញស្តុក។" : "Please enter reason for stock-out.");
       return;
     }
+    const isTransfer = modal.mode === "TRANSFER";
+    if (isTransfer && !inventoryQuickTransferTargetItem) {
+      setError(
+        lang === "km"
+          ? "សូមជ្រើសសាខាទទួលដែលមានស្តុកនេះរួចជាមុន។"
+          : "Please select a destination campus that already has this stock item."
+      );
+      return;
+    }
     const saved = await saveInventoryTxnEntry({
       itemId: modal.itemId,
       date: txDate,
@@ -22375,6 +22449,8 @@ export default function App() {
       note: reason,
       photo: modal.photo,
       requirePhoto: true,
+      transferToCampus: isTransfer ? (inventoryQuickTransferTargetItem?.campus || "") : "",
+      transferToItemId: isTransfer ? String(inventoryQuickTransferTargetItem?.id || "") : "",
     });
     if (!saved.ok) return;
     setInventoryDailyForm((prev) => ({
@@ -57722,6 +57798,35 @@ export default function App() {
                     );
                   })()}
                   <div className="form-grid inventory-quickout-form-grid" style={{ marginTop: 10 }}>
+                    <div className="field field-wide">
+                      <span>{lang === "km" ? "ប្រភេទប្រតិបត្តិការ" : "Action Type"}</span>
+                      <div className="inventory-quickout-mode-switch">
+                        <button
+                          type="button"
+                          className={`tab ${inventoryQuickOutModal.mode === "OUT" ? "active" : ""}`}
+                          onClick={() => setInventoryQuickOutModal((prev) => (prev ? { ...prev, mode: "OUT", toCampus: "" } : prev))}
+                        >
+                          {lang === "km" ? "ប្រើប្រាស់ / ចេញស្តុក" : "Use / Consume"}
+                        </button>
+                        <button
+                          type="button"
+                          className={`tab ${inventoryQuickOutModal.mode === "TRANSFER" ? "active" : ""}`}
+                          onClick={() =>
+                            setInventoryQuickOutModal((prev) => (
+                              prev
+                                ? {
+                                    ...prev,
+                                    mode: "TRANSFER",
+                                    toCampus: prev.toCampus || inventoryQuickTransferCampusOptions[0]?.campus || "",
+                                  }
+                                : prev
+                            ))
+                          }
+                        >
+                          {lang === "km" ? "ផ្ទេរទៅសាខា" : "Transfer to Campus"}
+                        </button>
+                      </div>
+                    </div>
                     <label className="field quickout-date-field" ref={quickOutEcoWrapRef}>
                       <span>{t.date}</span>
                       <div className="quickout-date-input-wrap">
@@ -57814,6 +57919,35 @@ export default function App() {
                         onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, qty: e.target.value } : prev))}
                       />
                     </label>
+                    {inventoryQuickOutModal.mode === "TRANSFER" ? (
+                      <label className="field">
+                        <span>{lang === "km" ? "សាខាទទួល" : "Destination Campus"}</span>
+                        <select
+                          className="input"
+                          value={inventoryQuickOutModal.toCampus}
+                          onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, toCampus: e.target.value } : prev))}
+                        >
+                          <option value="">{lang === "km" ? "ជ្រើសសាខាទទួល" : "Select destination campus"}</option>
+                          {inventoryQuickTransferCampusOptions.map((target) => (
+                            <option key={`quick-transfer-campus-${target.id}`} value={target.campus}>
+                              {inventoryCampusLabel(target.campus)}
+                            </option>
+                          ))}
+                        </select>
+                        {inventoryQuickTransferTargetItem ? (
+                          <small className="tiny">
+                            {lang === "km" ? "ទីតាំងទទួល" : "Destination location"}:{" "}
+                            <strong>{inventoryLocationLabel(inventoryQuickTransferTargetItem.location, lang)}</strong>
+                          </small>
+                        ) : (
+                          <small className="tiny">
+                            {lang === "km"
+                              ? "សូមជ្រើសសាខាដែលបានបង្កើតស្តុកនេះរួចជាមុន។"
+                              : "Choose a campus where this stock item already exists."}
+                          </small>
+                        )}
+                      </label>
+                    ) : null}
                     <label className="field field-wide">
                       <span>{lang === "km" ? "រូបថតចេញស្តុក" : "Stock Out Photo"}</span>
                       <input
@@ -57880,10 +58014,13 @@ export default function App() {
                         !inventoryQuickOutModal.itemId ||
                         !inventoryQuickOutModal.qty ||
                         !inventoryQuickOutModal.date ||
-                        !inventoryQuickOutModal.photo
+                        !inventoryQuickOutModal.photo ||
+                        (inventoryQuickOutModal.mode === "TRANSFER" && !inventoryQuickTransferTargetItem)
                       }
                     >
-                      {lang === "km" ? "រក្សាទុក ការបើកឥវ៉ាន់" : "Save Stock Out"}
+                      {inventoryQuickOutModal.mode === "TRANSFER"
+                        ? (lang === "km" ? "រក្សាទុក ការផ្ទេរស្តុក" : "Save Campus Transfer")
+                        : (lang === "km" ? "រក្សាទុក ការបើកឥវ៉ាន់" : "Save Stock Out")}
                     </button>
                   </div>
                 </>
