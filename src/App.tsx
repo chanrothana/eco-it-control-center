@@ -4878,6 +4878,14 @@ function inventoryDisplayName(itemName: string, lang: Lang) {
   const hit = Object.entries(INVENTORY_KM_NAME_MAP).find(([en]) => key.startsWith(`${en} `) || key.includes(en));
   return hit ? hit[1] : raw;
 }
+function inventoryTransferMatchCode(itemCode?: string) {
+  const raw = String(itemCode || "").trim().toUpperCase();
+  if (!raw) return "";
+  return raw.replace(/^C\d(?:\.\d)?-/, "");
+}
+function inventoryTransferMatchName(itemName?: string) {
+  return normalizeInventoryCompareText(String(itemName || "").trim());
+}
 function inventoryPurchasePackSizeForItem(itemCode?: string, itemName?: string) {
   const text = `${String(itemCode || "")} ${String(itemName || "")}`.toLowerCase();
   if (text.includes("hand tissue")) return 24;
@@ -12970,6 +12978,23 @@ export default function App() {
     for (const item of inventoryVisibleItems) out.set(Number(item.id), item);
     return out;
   }, [inventoryVisibleItems]);
+  const inventoryLatestTxnPhotoByItemId = useMemo(() => {
+    const out = new Map<number, string>();
+    const rows = [...inventoryVisibleTxns].sort((a, b) => {
+      const byDate = String(b.date || "").localeCompare(String(a.date || ""));
+      if (byDate !== 0) return byDate;
+      const byCreated = String(b.created || "").localeCompare(String(a.created || ""));
+      if (byCreated !== 0) return byCreated;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+    for (const row of rows) {
+      const itemId = Number(row.itemId || 0);
+      const photo = String(row.photo || "").trim();
+      if (!itemId || !photo || out.has(itemId)) continue;
+      out.set(itemId, photo);
+    }
+    return out;
+  }, [inventoryVisibleTxns]);
   const inventoryDashboardScopedRows = useMemo(
     () => inventoryBalanceRows.filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup),
     [inventoryBalanceRows, inventoryDashboardGroup]
@@ -14185,12 +14210,16 @@ export default function App() {
   );
   const inventoryQuickTransferTargets = useMemo(() => {
     if (!inventoryQuickOutSelectedItem) return [] as InventoryItem[];
+    const sourceCodeKey = inventoryTransferMatchCode(inventoryQuickOutSelectedItem.itemCode);
+    const sourceNameKey = inventoryTransferMatchName(inventoryQuickOutSelectedItem.itemName);
     return inventoryVisibleItems
       .filter(
         (item) =>
           Number(item.id) !== Number(inventoryQuickOutSelectedItem.id) &&
-          String(item.itemCode || "").trim().toUpperCase() === String(inventoryQuickOutSelectedItem.itemCode || "").trim().toUpperCase() &&
+          inventoryTransferMatchCode(item.itemCode) === sourceCodeKey &&
+          inventoryTransferMatchName(item.itemName) === sourceNameKey &&
           String(item.category || "").trim() === String(inventoryQuickOutSelectedItem.category || "").trim() &&
+          String(item.unit || "").trim().toLowerCase() === String(inventoryQuickOutSelectedItem.unit || "").trim().toLowerCase() &&
           String(item.campus || "").trim() !== String(inventoryQuickOutSelectedItem.campus || "").trim()
       )
       .sort(
@@ -44061,7 +44090,10 @@ export default function App() {
                   <div className="inventory-stock-mobile-list" style={{ marginTop: 12 }}>
                     {inventoryTxnsRows.length ? (
                       inventoryTxnsRows.map((row) => {
-                        const itemPhoto = inventoryVisibleItemLookup.get(Number(row.itemId || 0))?.photo || "";
+                        const itemPhoto =
+                          inventoryLatestTxnPhotoByItemId.get(Number(row.itemId || 0)) ||
+                          inventoryVisibleItemLookup.get(Number(row.itemId || 0))?.photo ||
+                          "";
                         return (
                         <article key={`inv-tx-mobile-${row.id}`} className="inventory-stock-mobile-card">
                           {editingInventoryTxnId === row.id ? (
@@ -44242,7 +44274,10 @@ export default function App() {
                       <tbody>
                         {inventoryTxnsRows.length ? (
                           inventoryTxnsRows.map((row) => {
-                            const itemPhoto = inventoryVisibleItemLookup.get(Number(row.itemId || 0))?.photo || "";
+                            const itemPhoto =
+                              inventoryLatestTxnPhotoByItemId.get(Number(row.itemId || 0)) ||
+                              inventoryVisibleItemLookup.get(Number(row.itemId || 0))?.photo ||
+                              "";
                             return (
                             <tr
                               key={`inv-tx-row-${row.id}`}
@@ -57980,7 +58015,11 @@ export default function App() {
                         className="input"
                         value={inventoryQuickOutModal.note}
                         onChange={(e) => setInventoryQuickOutModal((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
-                        placeholder={lang === "km" ? "មូលហេតុចេញស្តុក" : "Reason for stock out"}
+                        placeholder={
+                          inventoryQuickOutModal.mode === "TRANSFER"
+                            ? (lang === "km" ? "ឧ. បើកអោយខាងអនាម័យប្រើប្រាស់" : "Example: transfer for cleaning team use")
+                            : (lang === "km" ? "មូលហេតុចេញស្តុក" : "Reason for stock out")
+                        }
                       />
                       {inventoryQuickReasonTipsOpen && inventoryQuickOutReasonSuggestions.length ? (
                         <div className="quickout-reason-chips">

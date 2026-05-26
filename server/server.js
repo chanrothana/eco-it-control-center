@@ -1252,6 +1252,14 @@ function inventoryCampusGroupCode(campusName) {
   if (code === "C2.1" || code === "C2.2") return "C2";
   return code || "CX";
 }
+function inventoryTransferMatchCode(itemCode) {
+  const raw = toUpper(itemCode);
+  if (!raw) return "";
+  return raw.replace(/^C\d(?:\.\d)?-/, "");
+}
+function inventoryTransferMatchName(itemName) {
+  return normalizeSearchValue(itemName);
+}
 
 function getSettingsObject(db) {
   if (!db.settings || typeof db.settings !== "object") db.settings = {};
@@ -7685,10 +7693,12 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         if (
-          toText(transferTargetItem.itemCode).toUpperCase() !== toText(item.itemCode).toUpperCase() ||
-          toText(transferTargetItem.category) !== toText(item.category)
+          inventoryTransferMatchCode(transferTargetItem.itemCode) !== inventoryTransferMatchCode(item.itemCode) ||
+          inventoryTransferMatchName(transferTargetItem.itemName) !== inventoryTransferMatchName(item.itemName) ||
+          toText(transferTargetItem.category) !== toText(item.category) ||
+          toText(transferTargetItem.unit).toLowerCase() !== toText(item.unit).toLowerCase()
         ) {
-          sendJson(res, 400, { error: "Destination item must match the same stock code and category" });
+          sendJson(res, 400, { error: "Destination item must match the equivalent stock item on the other campus" });
           return;
         }
       }
