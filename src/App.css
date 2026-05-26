@@ -14118,6 +14118,23 @@ table {
   padding: 0;
 }
 
+.user-setup-search-field {
+  flex: 1 1 340px;
+  min-width: min(100%, 340px);
+}
+
+.user-setup-search-summary {
+  flex: 0 1 auto;
+  align-self: flex-end;
+  padding-bottom: 4px;
+}
+
+.setup-user-table-wrap {
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
 .furniture-model-mobile-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

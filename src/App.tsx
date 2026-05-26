@@ -1924,18 +1924,20 @@ const WORK_ORDER_ASSIGNABLE_ROLE_KEYWORDS: Record<string, string[]> = {
 function workOrderAssignableUsers(users: StaffUser[], category: string, selectedName = "") {
   const normalizedCategory = String(category || "").trim().toUpperCase();
   const keywords = WORK_ORDER_ASSIGNABLE_ROLE_KEYWORDS[normalizedCategory] || [];
-  if (!keywords.length) return users;
+  const sortUsersByName = (list: StaffUser[]) =>
+    [...list].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || "")));
+  if (!keywords.length) return sortUsersByName(users);
   const selected = String(selectedName || "").trim();
   const filtered = users.filter((user) => {
     const haystack = `${user.fullName} ${user.position} ${user.email || ""}`.toLowerCase();
     return keywords.some((keyword) => haystack.includes(keyword));
   });
-  if (!filtered.length) return users;
+  if (!filtered.length) return sortUsersByName(users);
   if (selected && !filtered.some((user) => user.fullName === selected)) {
     const selectedUser = users.find((user) => user.fullName === selected);
-    if (selectedUser) return [...filtered, selectedUser];
+    if (selectedUser) return sortUsersByName([...filtered, selectedUser]);
   }
-  return filtered;
+  return sortUsersByName(filtered);
 }
 
 const ASSET_STATUS_OPTIONS = [
@@ -3004,6 +3006,115 @@ function isClassroomLocationLike(input: {
   if (Number(input.currentStudents || 0) > 0) return true;
   const name = String(input.name || "").trim().toLowerCase();
   return name.includes("classroom") || name.includes("class room");
+}
+
+type LocationGroupKey = "CLASSROOM" | "OFFICE" | "OUTDOOR" | "STORAGE" | "UTILITY" | "OTHER";
+
+function classifyLocationGroup(input: {
+  isClassroom?: unknown;
+  currentStudents?: unknown;
+  name?: unknown;
+  notes?: unknown;
+}): LocationGroupKey {
+  if (isClassroomLocationLike(input)) return "CLASSROOM";
+  const haystack = `${String(input.name || "").trim().toLowerCase()} ${String(input.notes || "").trim().toLowerCase()}`;
+  if (
+    haystack.includes("office") ||
+    haystack.includes("admin") ||
+    haystack.includes("front office") ||
+    haystack.includes("teacher office") ||
+    haystack.includes("principal") ||
+    haystack.includes("director")
+  ) {
+    return "OFFICE";
+  }
+  if (
+    haystack.includes("walkway") ||
+    haystack.includes("playground") ||
+    haystack.includes("outdoor") ||
+    haystack.includes("garden") ||
+    haystack.includes("parking") ||
+    haystack.includes("yard")
+  ) {
+    return "OUTDOOR";
+  }
+  if (
+    haystack.includes("store") ||
+    haystack.includes("stock") ||
+    haystack.includes("storage") ||
+    haystack.includes("locker")
+  ) {
+    return "STORAGE";
+  }
+  if (
+    haystack.includes("lab") ||
+    haystack.includes("server") ||
+    haystack.includes("electrical") ||
+    haystack.includes("pump") ||
+    haystack.includes("utility") ||
+    haystack.includes("maintenance")
+  ) {
+    return "UTILITY";
+  }
+  return "OTHER";
+}
+
+function locationGroupLabel(key: LocationGroupKey, lang: "en" | "km") {
+  switch (key) {
+    case "CLASSROOM":
+      return lang === "km" ? "ថ្នាក់រៀន" : "Classroom";
+    case "OFFICE":
+      return lang === "km" ? "ការិយាល័យ" : "Office";
+    case "OUTDOOR":
+      return lang === "km" ? "កន្លែងខាងក្រៅ" : "Outdoor Space";
+    case "STORAGE":
+      return lang === "km" ? "បន្ទប់ស្តុក" : "Storage";
+    case "UTILITY":
+      return lang === "km" ? "បន្ទប់ប្រើប្រាស់" : "Utility";
+    default:
+      return lang === "km" ? "ផ្សេងៗ" : "Other";
+  }
+}
+
+function displayLocationName(name: string, lang: "en" | "km") {
+  const raw = String(name || "").trim();
+  if (!raw || lang !== "km") return raw;
+  const lower = raw.toLowerCase();
+  const exactMap: Record<string, string> = {
+    "admin office": "ការិយាល័យរដ្ឋបាល",
+    "front office": "ការិយាល័យមុខ",
+    "teacher office": "ការិយាល័យគ្រូ",
+    "student lunch area": "កន្លែងអាហារថ្ងៃត្រង់សិស្ស",
+    "cleaner stock room": "បន្ទប់ស្តុកអ្នកសម្អាត",
+    "stock room": "បន្ទប់ស្តុក",
+    "walkway, ground floor": "ផ្លូវដើរជាន់ផ្ទាល់ដី",
+  };
+  if (exactMap[lower]) return exactMap[lower];
+
+  let out = raw;
+  const replacements: Array<[RegExp, string]> = [
+    [/Classroom/gi, "ថ្នាក់រៀន"],
+    [/Walkway/gi, "ផ្លូវដើរ"],
+    [/Playground/gi, "ទីលានលេង"],
+    [/Gate/gi, "ច្រកទ្វារ"],
+    [/Office/gi, "ការិយាល័យ"],
+    [/Ground Floor/gi, "ជាន់ផ្ទាល់ដី"],
+    [/1st Floor/gi, "ជាន់ទី 1"],
+    [/2nd Floor/gi, "ជាន់ទី 2"],
+    [/3rd Floor/gi, "ជាន់ទី 3"],
+    [/4th Floor/gi, "ជាន់ទី 4"],
+    [/Backside/gi, "ខាងក្រោយ"],
+    [/Teacher/gi, "គ្រូ"],
+    [/Admin/gi, "រដ្ឋបាល"],
+    [/Front/gi, "មុខ"],
+    [/Student Lunch Area/gi, "កន្លែងអាហារថ្ងៃត្រង់សិស្ស"],
+    [/Stock Room/gi, "បន្ទប់ស្តុក"],
+    [/Cleaner/gi, "អ្នកសម្អាត"],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    out = out.replace(pattern, replacement);
+  }
+  return out;
 }
 
 function normalizeLocationEntries(input: unknown): LocationEntry[] {
@@ -4126,22 +4237,8 @@ function normalizeVaultNetworkDocs(input: unknown): VaultNetworkDoc[] {
 function normalizeVaultCctvRecords(input: unknown): VaultCctvRecord[] {
   return normalizeArray<VaultCctvRecord>(input)
     .filter((row) => row && typeof row === "object")
-    .map((row) => ({
-      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
-      site: String(row.site || "").trim(),
-      nvrName: String(row.nvrName || "").trim(),
-      loginUrl: String(row.loginUrl || "").trim(),
-      ipAddress: String(row.ipAddress || "").trim() || extractHostFromUrl(String(row.loginUrl || "").trim()),
-      publicIp: String(row.publicIp || "").trim(),
-      port: String(row.port || "").trim(),
-      softwareApp: String(row.softwareApp || "").trim(),
-      username: String(row.username || "").trim(),
-      password: String(row.password || "").trim(),
-      cameraGroup: String(row.cameraGroup || "").trim(),
-      retentionDays: Number(row.retentionDays || 0),
-      lastAngleReview: String(row.lastAngleReview || "").trim(),
-      note: String(row.note || "").trim(),
-      passwordHistory: normalizeArray<VaultCctvPasswordHistoryEntry>((row as { passwordHistory?: unknown }).passwordHistory)
+    .map((row) => {
+      const passwordHistory = normalizeArray<VaultCctvPasswordHistoryEntry>((row as { passwordHistory?: unknown }).passwordHistory)
         .filter((entry) => entry && typeof entry === "object")
         .map((entry) => ({
           id: Number(entry.id) || Date.now() + Math.floor(Math.random() * 1000),
@@ -4152,9 +4249,39 @@ function normalizeVaultCctvRecords(input: unknown): VaultCctvRecord[] {
           changedBy: String(entry.changedBy || "").trim(),
           created: String(entry.created || "").trim() || new Date().toISOString(),
         }))
-        .sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`)),
-      created: String(row.created || "").trim() || new Date().toISOString(),
-    }));
+        .sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`));
+      const password =
+        String(row.password || "").trim() ||
+        String(passwordHistory.find((entry) => String(entry.newPassword || "").trim())?.newPassword || "").trim();
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        site: String(row.site || "").trim(),
+        nvrName: String(row.nvrName || "").trim(),
+        loginUrl: String(row.loginUrl || "").trim(),
+        ipAddress: String(row.ipAddress || "").trim() || extractHostFromUrl(String(row.loginUrl || "").trim()),
+        publicIp: String(row.publicIp || "").trim(),
+        port: String(row.port || "").trim(),
+        softwareApp: String(row.softwareApp || "").trim(),
+        username: String(row.username || "").trim(),
+        password,
+        cameraGroup: String(row.cameraGroup || "").trim(),
+        retentionDays: Number(row.retentionDays || 0),
+        lastAngleReview: String(row.lastAngleReview || "").trim(),
+        note: String(row.note || "").trim(),
+        passwordHistory,
+        created: String(row.created || "").trim() || new Date().toISOString(),
+      };
+    });
+}
+
+function currentVaultCctvPassword(row?: Partial<VaultCctvRecord> | null) {
+  if (!row) return "";
+  const direct = String(row.password || "").trim();
+  if (direct) return direct;
+  const history = normalizeArray<VaultCctvPasswordHistoryEntry>(row.passwordHistory)
+    .filter((entry) => entry && typeof entry === "object")
+    .sort((a, b) => `${String(b.date || "")}-${String(b.created || "")}`.localeCompare(`${String(a.date || "")}-${String(a.created || "")}`));
+  return String(history.find((entry) => String(entry.newPassword || "").trim())?.newPassword || "").trim();
 }
 
 function normalizeCctvCameraRecords(input: unknown): CctvCameraRecord[] {
@@ -7829,6 +7956,7 @@ export default function App() {
   const [assetsView, setAssetsView] = useState<"register" | "list" | "gallery">("register");
   const [classroomCampusFilter, setClassroomCampusFilter] = useState("ALL");
   const [classroomRoomFilter, setClassroomRoomFilter] = useState("ALL");
+  const [classroomLocationTypeFilter, setClassroomLocationTypeFilter] = useState<"ALL" | LocationGroupKey>("ALL");
   const [classroomQuery, setClassroomQuery] = useState("");
   const [classroomView, setClassroomView] = useState<"dashboard" | "gallery">("gallery");
   const [cctvView, setCctvView] = useState<"dashboard" | "cameras" | "live" | "replay" | "service" | "changes" | "reports">("dashboard");
@@ -10546,6 +10674,7 @@ export default function App() {
     email: "",
     telegramChatId: "",
   });
+  const [userSetupSearch, setUserSetupSearch] = useState("");
   const [newItemTypeForm, setNewItemTypeForm] = useState({
     category: "IT",
     code: "",
@@ -10575,6 +10704,21 @@ export default function App() {
   const [editingFurnitureModelId, setEditingFurnitureModelId] = useState<number | null>(null);
   const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const filteredSetupUsers = useMemo(() => {
+    const query = userSetupSearch.trim().toLowerCase();
+    if (!query) return users;
+    return users.filter((user) => {
+      const haystack = [
+        user.fullName,
+        user.position,
+        user.email || "",
+        user.telegramChatId || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [userSetupSearch, users]);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
   const [inventoryApprovalRoutingMap, setInventoryApprovalRoutingMap] = useState<InventoryApprovalRoutingMap>({});
   const [inventoryApprovalRoutingDraft, setInventoryApprovalRoutingDraft] = useState<InventoryApprovalRoutingDraft | null>(null);
@@ -12271,6 +12415,33 @@ export default function App() {
       return base;
     },
     [itemNames, lang, allTypeOptions]
+  );
+  const reportCategoryLabel = useCallback(
+    (category: string) => {
+      const row = CATEGORY_OPTIONS.find((item) => item.value === category);
+      return row ? (lang === "km" ? row.km : row.en) : category;
+    },
+    [lang]
+  );
+  const reportLocationName = useCallback(
+    (location: string) => displayLocationName(location, lang),
+    [lang]
+  );
+  const qrAssetItemName = useCallback(
+    (category: string, typeCode: string, pcType = "", fallbackName = "") => {
+      if (lang !== "km") return fallbackName || assetItemName(category, typeCode, pcType);
+      const option = (allTypeOptions[category] || allTypeOptions.IT || TYPE_OPTIONS.IT).find(
+        (opt) => opt.code === typeCode
+      );
+      if (!option) return fallbackName || assetItemName(category, typeCode, pcType);
+      const normalizedPcType = String(pcType || "").trim();
+      const base = option.itemKm;
+      if (category === "IT" && typeCode === DESKTOP_PARENT_TYPE && normalizedPcType) {
+        return `${base} (${normalizedPcType})`;
+      }
+      return base;
+    },
+    [lang, assetItemName, allTypeOptions]
   );
   const assetNameFilterSourceAssets = useMemo(() => {
     let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
@@ -19027,6 +19198,10 @@ export default function App() {
     }
     const loginUrl = vaultCctvForm.loginUrl.trim();
     const ipAddress = vaultCctvForm.ipAddress.trim() || extractHostFromUrl(loginUrl);
+    const sortedPasswordHistory = [...vaultCctvPasswordHistory].sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`));
+    const currentPassword =
+      vaultCctvForm.password.trim() ||
+      String(sortedPasswordHistory.find((entry) => String(entry.newPassword || "").trim())?.newPassword || "").trim();
     const row: VaultCctvRecord = {
       id: editingVaultCctvId || Date.now(),
       site: vaultCctvForm.site.trim(),
@@ -19037,12 +19212,12 @@ export default function App() {
       port: vaultCctvForm.port.trim(),
       softwareApp: vaultCctvForm.softwareApp.trim(),
       username: vaultCctvForm.username.trim(),
-      password: vaultCctvForm.password.trim(),
+      password: currentPassword,
       cameraGroup: vaultCctvForm.cameraGroup.trim(),
       retentionDays: Number(vaultCctvForm.retentionDays || 0),
       lastAngleReview: vaultCctvForm.lastAngleReview,
       note: vaultCctvForm.note.trim(),
-      passwordHistory: [...vaultCctvPasswordHistory].sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`)),
+      passwordHistory: sortedPasswordHistory,
       created: editingVaultCctvId
         ? vaultCctvRecords.find((item) => item.id === editingVaultCctvId)?.created || new Date().toISOString()
         : new Date().toISOString(),
@@ -30107,13 +30282,26 @@ export default function App() {
     );
     return options.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }));
   }, [locations, allowedCampuses, classroomCampusFilter]);
+  const classroomLocationTypeOptions = useMemo(() => {
+    const options = Array.from(
+      new Set(
+        locations
+          .filter((row) => isClassroomLocationLike(row))
+          .filter((row) => allowedCampuses.includes(row.campus))
+          .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter))
+          .map((row) => classifyLocationGroup(row))
+      )
+    ) as LocationGroupKey[];
+    return options.sort((a, b) => locationGroupLabel(a, lang).localeCompare(locationGroupLabel(b, lang)));
+  }, [locations, allowedCampuses, classroomCampusFilter, lang]);
   const classroomControlRoomRows = useMemo(() => {
     const query = String(classroomQuery || "").trim().toLowerCase();
     const visibleLocations = locations
       .filter((row) => isClassroomLocationLike(row))
       .filter((row) => allowedCampuses.includes(row.campus))
       .filter((row) => (classroomCampusFilter === "ALL" ? true : row.campus === classroomCampusFilter))
-      .filter((row) => (classroomRoomFilter === "ALL" ? true : row.name === classroomRoomFilter));
+      .filter((row) => (classroomRoomFilter === "ALL" ? true : row.name === classroomRoomFilter))
+      .filter((row) => (classroomLocationTypeFilter === "ALL" ? true : classifyLocationGroup(row) === classroomLocationTypeFilter));
 
     const roomAssets = assets.filter((asset) => {
       if (!allowedCampuses.includes(asset.campus)) return false;
@@ -30212,6 +30400,8 @@ export default function App() {
         id: room.id,
         campus: room.campus,
         location: room.name,
+        locationTypeKey: classifyLocationGroup(room),
+        locationTypeLabel: locationGroupLabel(classifyLocationGroup(room), lang),
         notes: String(room.notes || "").trim(),
         roomPhoto: String(room.photo || "").trim(),
         currentStudents,
@@ -30246,7 +30436,7 @@ export default function App() {
           campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
           a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true })
       );
-  }, [locations, allowedCampuses, classroomCampusFilter, classroomRoomFilter, classroomQuery, assets, campusLabel, lang]);
+  }, [locations, allowedCampuses, classroomCampusFilter, classroomRoomFilter, classroomLocationTypeFilter, classroomQuery, assets, campusLabel, lang]);
   const classroomControlSummary = useMemo(() => {
     const rooms = classroomControlRoomRows.length;
     const needActionRooms = classroomControlRoomRows.filter((row) => row.status === "Need Action").length;
@@ -30789,7 +30979,7 @@ export default function App() {
       assetMasterSetRows.map((row) => ({
         rowKey: `asset-${row.assetDbId}-${row.assetId}`,
         labelId: row.assetId,
-        itemName: row.itemName,
+        itemName: qrAssetItemName(row.category, row.type, row.pcType || "", row.itemName),
         campus: row.campus,
         category: row.category,
         location: row.location,
@@ -30798,7 +30988,7 @@ export default function App() {
         serialNumber: row.serialNumber,
         entityType: "asset",
       })),
-    [assetMasterSetRows]
+    [assetMasterSetRows, qrAssetItemName]
   );
   const qrPrinterLabelRows = useMemo<QrLabelRow[]>(
     () =>
@@ -32803,8 +32993,11 @@ export default function App() {
         r.by || "-",
       ]);
     } else {
-      title = qrLabelEntityType === "rental_printer" ? "Rental Printer QR Labels" : "Asset ID + QR Labels";
-      columns = ["QR", qrLabelEntityType === "rental_printer" ? "Machine Code" : "Asset ID"];
+      title =
+        qrLabelEntityType === "rental_printer"
+          ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល + QR" : "Rental Printer QR Labels")
+          : (lang === "km" ? "លេខទ្រព្យ + QR" : "Asset ID + QR Labels");
+      columns = ["QR", qrLabelEntityType === "rental_printer" ? (lang === "km" ? "លេខម៉ាស៊ីន" : "Machine Code") : t.assetId];
       const missingRows = qrFilteredRows.filter((row) => !qrCodeMap[row.labelId]);
       qrPrintMap = { ...qrCodeMap };
       if (missingRows.length) {
@@ -32878,7 +33071,7 @@ export default function App() {
                 .join("")}</tr>`
           )
           .join("")
-      : `<tr><td colspan="${columns.length}">No data.</td></tr>`;
+      : `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
 
     const summaryHtml =
       reportType === "maintenance_completion"
@@ -32922,9 +33115,13 @@ export default function App() {
         : reportType === "set_code"
         ? `<p><strong>Total Set Codes:</strong> ${setCodeReportRows.length} | <strong>Total Assets in Sets:</strong> ${setCodeReportRows.reduce((sum, row) => sum + row.totalItems, 0)}</p>`
         : reportType === "qr_labels"
-        ? `<p><strong>Total QR Labels:</strong> ${qrFilteredRows.length} | <strong>QR Type:</strong> ${escapeHtml(
-            qrLabelEntityType === "rental_printer" ? "Rental Printer" : "Asset"
-          )} | <strong>QR Size:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
+        ? `<p><strong>${escapeHtml(lang === "km" ? "ចំនួនស្លាក QR សរុប" : "Total QR Labels")}:</strong> ${qrFilteredRows.length} | <strong>${escapeHtml(
+            lang === "km" ? "ប្រភេទ QR" : "QR Type"
+          )}:</strong> ${escapeHtml(
+            qrLabelEntityType === "rental_printer"
+              ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer")
+              : (lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset")
+          )} | <strong>${escapeHtml(lang === "km" ? "ទំហំ QR" : "QR Size")}:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
         : "";
     const printMetaHtml =
       reportType === "asset_master"
@@ -32962,10 +33159,18 @@ export default function App() {
                 : "-"
           )}</p>`
         : reportType === "qr_labels"
-        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Type: ${escapeHtml(
-            qrLabelEntityType === "rental_printer" ? "Rental Printer" : "Asset"
-          )} | Campus Filter: ${escapeHtml(filterLabel)} | QR Size: ${escapeHtml(qrLabelSizeLabel)}</p>`
-        : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(filterLabel)}</p>`;
+        ? `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
+            lang === "km" ? "ប្រភេទ" : "Type"
+          )}: ${escapeHtml(
+            qrLabelEntityType === "rental_printer"
+              ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer")
+              : (lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset")
+          )} | ${escapeHtml(lang === "km" ? "តម្រងសាខា" : "Campus Filter")}: ${escapeHtml(filterLabel)} | ${escapeHtml(
+            lang === "km" ? "ទំហំ QR" : "QR Size"
+          )}: ${escapeHtml(qrLabelSizeLabel)}</p>`
+        : `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
+            lang === "km" ? "តម្រងសាខា" : "Campus Filter"
+          )}: ${escapeHtml(filterLabel)}</p>`;
 
     const qrPrintVariant = qrLabelSize.replace("cm", "");
     const qrLabelPageCss =
@@ -32981,15 +33186,15 @@ export default function App() {
                 const qr = String(qrPrintMap[row.labelId] || rows.find((r) => r[1] === row.labelId)?.[0] || "");
                 const serial = String(row.serialNumber || "").trim() || "-";
                 const itemName = String(row.itemName || "").trim() || "-";
-                const location = String(row.location || "").trim() || "-";
+                const location = displayLocationName(String(row.location || "").trim() || "-", lang);
                 const campus = String(reportCampusName(row.campus) || "").trim() || "-";
                 const assignedTo = String(row.assignedTo || "").trim() || "-";
                 const locationLine = `${campus} | ${location}`;
-                const serialLine = `SN: ${serial}`;
+                const serialLine = `${lang === "km" ? "លេខស៊េរី" : "SN"}: ${serial}`;
                 const assignedLine =
                   row.entityType === "rental_printer"
-                    ? `Vendor: ${assignedTo}`
-                    : `Assigned: ${assignedTo}`;
+                    ? `${lang === "km" ? "ក្រុមហ៊ុន" : "Vendor"}: ${assignedTo}`
+                    : `${lang === "km" ? "អ្នកប្រើ" : "Assigned"}: ${assignedTo}`;
                 const compactFourCm = qrPrintVariant === "4";
                 const metaLines = compactFourCm
                   ? `
@@ -33012,7 +33217,7 @@ export default function App() {
                 </div>`;
               })
               .join("")}</div>`
-          : `<p>No data.</p>`
+          : `<p>${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</p>`
         : reportType === "furniture_control"
         ? `<div class="preview-table-wrap">
             <h2>Campus Summary</h2>
@@ -33228,27 +33433,29 @@ export default function App() {
       <body>
         <div class="preview-toolbar">
           <div>
-            <div><strong>Print Preview</strong></div>
+            <div><strong>${escapeHtml(lang === "km" ? "មើលមុនពេលបោះពុម្ព" : "Print Preview")}</strong></div>
             <div class="preview-toolbar-note">${
               reportType === "qr_labels"
-                ? "Review this layout, then click Print Now."
-                : "Drag table header edges to adjust column widths before printing."
+                ? escapeHtml(lang === "km" ? "សូមពិនិត្យទម្រង់នេះ រួចចុច បោះពុម្ពឥឡូវ។" : "Review this layout, then click Print Now.")
+                : escapeHtml(lang === "km" ? "អូសគែមក្បាលតារាង ដើម្បីកែទំហំជួរឈរ មុនបោះពុម្ព។" : "Drag table header edges to adjust column widths before printing.")
             }</div>
           </div>
           <div class="preview-toolbar-actions">
             ${
               reportType === "qr_labels"
                 ? ""
-                : '<button type="button" class="preview-btn" id="reset-widths-btn">Reset Widths</button>'
+                : `<button type="button" class="preview-btn" id="reset-widths-btn">${escapeHtml(lang === "km" ? "កំណត់ទំហំឡើងវិញ" : "Reset Widths")}</button>`
             }
-            <button type="button" class="preview-btn" id="close-preview-btn">Close</button>
-            <button type="button" class="preview-btn preview-btn-primary" id="print-now-btn">Print Now</button>
+            <button type="button" class="preview-btn" id="close-preview-btn">${escapeHtml(t.close)}</button>
+            <button type="button" class="preview-btn preview-btn-primary" id="print-now-btn">${escapeHtml(
+              lang === "km" ? "បោះពុម្ពឥឡូវ" : "Print Now"
+            )}</button>
           </div>
         </div>
         <div class="preview-shell">
           <div class="report-head">
             <div class="report-head-left">
-              <h1>Eco International School</h1>
+              <h1>${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</h1>
               <h2>${escapeHtml(title)}</h2>
             </div>
             <img loading="lazy" decoding="async" class="report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
@@ -42125,12 +42332,14 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Assign To</span>
-                    <select className="input" value={ticketForm.assignedTo} onChange={(e) => setTicketForm((f) => ({ ...f, assignedTo: e.target.value }))}>
-                      <option value="">Unassigned</option>
-                      {registerAssignableUsers.map((user) => (
-                        <option key={`ticket-assign-${user.id}`} value={user.fullName}>{user.fullName}</option>
-                      ))}
-                    </select>
+                    <UserPicker
+                      value={ticketForm.assignedTo}
+                      users={registerAssignableUsers}
+                      onChange={(value) => setTicketForm((f) => ({ ...f, assignedTo: value }))}
+                      placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                      emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                    />
                   </label>
                   <label className="field field-wide">
                     <span>{t.photo}</span>
@@ -42324,19 +42533,15 @@ export default function App() {
                       <div className="ticket-dashboard-mobile-controls">
                         <label className="field">
                           <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
-                          <select
-                            className="status-select"
-                            disabled={!isAdmin || busy}
+                          <UserPicker
                             value={ticket.assignedTo || ""}
-                            onChange={(e) => void updateTicketRow(ticket, { assignedTo: e.target.value, status: e.target.value ? "Assigned" : ticket.status })}
-                          >
-                            <option value="">Unassigned</option>
-                            {workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "").map((user) => (
-                              <option key={`ticket-mobile-assign-${ticket.id}-${user.id}`} value={user.fullName}>
-                                {user.fullName}
-                              </option>
-                            ))}
-                          </select>
+                            users={workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "")}
+                            disabled={!isAdmin || busy}
+                            onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
+                            placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                            emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                          />
                         </label>
                         <label className="field">
                           <span>{t.status}</span>
@@ -42443,19 +42648,15 @@ export default function App() {
                       <div className="ticket-dashboard-desktop-controls">
                         <label className="field">
                           <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
-                          <select
-                            className="status-select"
-                            disabled={!isAdmin || busy}
+                          <UserPicker
                             value={ticket.assignedTo || ""}
-                            onChange={(e) => void updateTicketRow(ticket, { assignedTo: e.target.value, status: e.target.value ? "Assigned" : ticket.status })}
-                          >
-                            <option value="">Unassigned</option>
-                            {workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "").map((user) => (
-                              <option key={`ticket-desktop-assign-${ticket.id}-${user.id}`} value={user.fullName}>
-                                {user.fullName}
-                              </option>
-                            ))}
-                          </select>
+                            users={workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "")}
+                            disabled={!isAdmin || busy}
+                            onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
+                            placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                            emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                          />
                         </label>
                         <label className="field">
                           <span>{t.status}</span>
@@ -42577,12 +42778,14 @@ export default function App() {
                 </label>
                 <label className="field">
                   <span>Assign To</span>
-                  <select className="input" value={ticketEditForm.assignedTo} onChange={(e) => setTicketEditForm((f) => ({ ...f, assignedTo: e.target.value }))}>
-                    <option value="">Unassigned</option>
-                    {ticketEditAssignableUsers.map((user) => (
-                      <option key={`ticket-edit-assign-${ticketEditModal.id}-${user.id}`} value={user.fullName}>{user.fullName}</option>
-                    ))}
-                  </select>
+                  <UserPicker
+                    value={ticketEditForm.assignedTo}
+                    users={ticketEditAssignableUsers}
+                    onChange={(value) => setTicketEditForm((f) => ({ ...f, assignedTo: value }))}
+                    placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                    emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                  />
                 </label>
                 <label className="field">
                   <span>{t.status}</span>
@@ -42932,9 +43135,9 @@ export default function App() {
             ) : (
               <section className="panel">
                 <div className="panel-row">
-                  <h3 className="section-title">{lang === "km" ? "Gallery ថ្នាក់រៀន" : "Classroom Gallery"}</h3>
+                  <h3 className="section-title">{lang === "km" ? "ទ្រព្យតាមទីតាំង" : "Asset by Location"}</h3>
                   <span className="tiny">
-                    {lang === "km" ? "ចុចលើបន្ទប់មួយ ដើម្បីមើល Item ទាំងអស់" : "Click a classroom to see all room items."}
+                    {lang === "km" ? "ចុចលើទីតាំងមួយ ដើម្បីមើល Item ទាំងអស់" : "Click a location to see all room items."}
                   </span>
                 </div>
                 <div
@@ -42960,13 +43163,13 @@ export default function App() {
                   </select>
                   <select
                     className="input"
-                    value={classroomRoomFilter}
-                    onChange={(e) => setClassroomRoomFilter(e.target.value)}
+                    value={classroomLocationTypeFilter}
+                    onChange={(e) => setClassroomLocationTypeFilter(e.target.value as "ALL" | LocationGroupKey)}
                   >
-                    <option value="ALL">{lang === "km" ? "គ្រប់បន្ទប់" : "All Rooms"}</option>
-                    {classroomRoomOptions.map((room) => (
-                      <option key={`classroom-room-${room}`} value={room}>
-                        {room}
+                    <option value="ALL">{lang === "km" ? "គ្រប់ប្រភេទទីតាំង" : "All Location Types"}</option>
+                    {classroomLocationTypeOptions.map((typeKey) => (
+                      <option key={`classroom-location-type-${typeKey}`} value={typeKey}>
+                        {locationGroupLabel(typeKey, lang)}
                       </option>
                     ))}
                   </select>
@@ -42974,7 +43177,7 @@ export default function App() {
                     className="input"
                     value={classroomQuery}
                     onChange={(e) => setClassroomQuery(e.target.value)}
-                    placeholder={lang === "km" ? "ស្វែងរកឈ្មោះបន្ទប់..." : "Search room name..."}
+                    placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទីតាំង..." : "Search location name..."}
                   />
                   <button
                     type="button"
@@ -42982,6 +43185,7 @@ export default function App() {
                     onClick={() => {
                       setClassroomCampusFilter("ALL");
                       setClassroomRoomFilter("ALL");
+                      setClassroomLocationTypeFilter("ALL");
                       setClassroomQuery("");
                     }}
                     style={{ minHeight: 56 }}
@@ -43016,6 +43220,7 @@ export default function App() {
                         </div>
                         <div className="asset-gallery-meta">
                           <strong>{row.location}</strong>
+                          <div>{row.locationTypeLabel}</div>
                           <div>{campusLabel(row.campus)}</div>
                           <div>
                             {lang === "km" ? "Items" : "Items"}: {row.itemCount}
@@ -52767,8 +52972,8 @@ export default function App() {
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
                   <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(qrLocationFilter, lang === "km" ? "គ្រប់ទីតាំង" : "All Locations")}
-                    options={qrLocationFilterOptions.map((location) => ({ value: location, label: location }))}
+                    summary={summarizeMultiFilter(qrLocationFilter, lang === "km" ? "គ្រប់ទីតាំង" : "All Locations", reportLocationName)}
+                    options={qrLocationFilterOptions.map((location) => ({ value: location, label: reportLocationName(location) }))}
                     selectedValues={qrLocationFilter}
                     allOptionLabel={lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
                     allOptionChecked={qrLocationFilter.includes("ALL")}
@@ -52786,28 +52991,17 @@ export default function App() {
                     emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                   />
                   <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(qrCategoryFilter, qrLabelEntityType === "rental_printer" ? "All Vendors" : t.allCategories, (category) =>
-                      qrLabelEntityType === "rental_printer"
-                        ? category
-                        : category === "SAFETY"
-                          ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
-                          : category === "FACILITY"
-                            ? (lang === "km" ? "បរិក្ខារ" : "Facility")
-                            : category
+                    summary={summarizeMultiFilter(
+                      qrCategoryFilter,
+                      qrLabelEntityType === "rental_printer" ? (lang === "km" ? "ក្រុមហ៊ុនទាំងអស់" : "All Vendors") : t.allCategories,
+                      (category) => (qrLabelEntityType === "rental_printer" ? category : reportCategoryLabel(category))
                     )}
                     options={qrCategoryFilterOptions.map((category) => ({
                       value: category,
-                      label:
-                        qrLabelEntityType === "rental_printer"
-                          ? category
-                          : category === "SAFETY"
-                            ? (lang === "km" ? "សុវត្ថិភាព" : "Safety")
-                            : category === "FACILITY"
-                              ? (lang === "km" ? "បរិក្ខារ" : "Facility")
-                              : category,
+                      label: qrLabelEntityType === "rental_printer" ? category : reportCategoryLabel(category),
                     }))}
                     selectedValues={qrCategoryFilter}
-                    allOptionLabel={qrLabelEntityType === "rental_printer" ? "All Vendors" : t.allCategories}
+                    allOptionLabel={qrLabelEntityType === "rental_printer" ? (lang === "km" ? "ក្រុមហ៊ុនទាំងអស់" : "All Vendors") : t.allCategories}
                     allOptionChecked={qrCategoryFilter.includes("ALL")}
                     onToggleAllOption={(checked) =>
                       setQrCategoryFilter((prev) =>
@@ -53180,10 +53374,10 @@ export default function App() {
             )}
             {reportType === "qr_labels" && (
               <div className="panel-note">
-                <strong>QR label view:</strong>{" "}
+                <strong>{lang === "km" ? "ទិដ្ឋភាពស្លាក QR" : "QR label view"}:</strong>{" "}
                 {qrLabelEntityType === "rental_printer"
-                  ? "scan QR to open this rental printer record link."
-                  : "scan QR to open this asset detail page directly."}
+                  ? (lang === "km" ? "ស្កេន QR ដើម្បីបើកកំណត់ត្រាម៉ាស៊ីនបោះពុម្ពជួលនេះ។" : "scan QR to open this rental printer record link.")
+                  : (lang === "km" ? "ស្កេន QR ដើម្បីបើកទំព័រព័ត៌មានទ្រព្យសម្បត្តិនេះដោយផ្ទាល់។" : "scan QR to open this asset detail page directly.")}
               </div>
             )}
             {reportType === "asset_master" && (
@@ -54053,9 +54247,9 @@ export default function App() {
                       <div className="qr-label-meta">
                         <div className="qr-label-asset-id">{row.labelId}</div>
                         <div className="qr-label-item-name">{row.itemName || "-"}</div>
-                        <div>{reportCampusName(row.campus)} | {row.location || "-"}</div>
-                        <div>SN: {String(row.serialNumber || "").trim() || "-"}</div>
-                        <div>{row.entityType === "rental_printer" ? "Vendor" : "Assigned"}: {String(row.assignedTo || "").trim() || "-"}</div>
+                        <div>{reportCampusName(row.campus)} | {reportLocationName(row.location || "-") || "-"}</div>
+                        <div>{lang === "km" ? "លេខស៊េរី" : "SN"}: {String(row.serialNumber || "").trim() || "-"}</div>
+                        <div>{row.entityType === "rental_printer" ? (lang === "km" ? "ក្រុមហ៊ុន" : "Vendor") : (lang === "km" ? "អ្នកប្រើ" : "Assigned")}: {String(row.assignedTo || "").trim() || "-"}</div>
                       </div>
                     </article>
                   ))
@@ -54704,6 +54898,11 @@ export default function App() {
                   onChange={(e) => setUserForm((f) => ({ ...f, telegramChatId: e.target.value }))}
                   placeholder={lang === "km" ? "ឧ. 123456789" : "Example: 123456789"}
                 />
+                <small className="tiny">
+                  {lang === "km"
+                    ? "នេះមិនមែនជាលេខទូរស័ព្ទទេ។ សូមបញ្ចូលលេខ Telegram Chat ID ដើម្បីឱ្យប្រព័ន្ធផ្ញើសារទៅបុគ្គលិកនោះដោយផ្ទាល់។"
+                    : "This is not a phone number. Enter the staff member's Telegram Chat ID so the system can message them directly."}
+                </small>
               </label>
             </div>
             <div className="asset-actions">
@@ -54717,10 +54916,30 @@ export default function App() {
                 </button>
               </div>
             </div>
+            <div className="asset-actions" style={{ marginTop: 12, gap: 12 }}>
+              <label className="field user-setup-search-field" style={{ margin: 0 }}>
+                <span>{lang === "km" ? "ស្វែងរកបុគ្គលិក" : "Search Staff"}</span>
+                <input
+                  className="input"
+                  value={userSetupSearch}
+                  onChange={(e) => setUserSetupSearch(e.target.value)}
+                  placeholder={
+                    lang === "km"
+                      ? "ស្វែងរកតាមឈ្មោះ តួនាទី អ៊ីមែល ឬ Telegram Chat ID"
+                      : "Search by name, position, email, or Telegram Chat ID"
+                  }
+                />
+              </label>
+              <div className="tiny user-setup-search-summary">
+                {lang === "km"
+                  ? `បង្ហាញ ${filteredSetupUsers.length} នាក់${userSetupSearch.trim() ? ` / សរុប ${users.length} នាក់` : ""}`
+                  : `Showing ${filteredSetupUsers.length}${userSetupSearch.trim() ? ` of ${users.length}` : ""} staff`}
+              </div>
+            </div>
             {isPhoneView ? (
-              users.length ? (
+              filteredSetupUsers.length ? (
                 <div className="setup-mobile-list" style={{ marginTop: 12 }}>
-                  {users.map((u) => (
+                  {filteredSetupUsers.map((u) => (
                     <article className="setup-mobile-card" key={`user-mobile-${u.id}`}>
                       <div className="setup-mobile-head">
                         <strong>{u.fullName}</strong>
@@ -54738,10 +54957,16 @@ export default function App() {
                   ))}
                 </div>
               ) : (
-                <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>{t.noUsersYet}</div>
+                <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>
+                  {userSetupSearch.trim()
+                    ? lang === "km"
+                      ? "រកមិនឃើញបុគ្គលិក។"
+                      : "No staff found."
+                    : t.noUsersYet}
+                </div>
               )
             ) : (
-              <div className="table-wrap" style={{ marginTop: 12 }}>
+              <div className="table-wrap setup-user-table-wrap" style={{ marginTop: 12 }}>
                 <table>
                   <thead>
                     <tr>
@@ -54754,8 +54979,8 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.length ? (
-                      users.map((u) => (
+                    {filteredSetupUsers.length ? (
+                      filteredSetupUsers.map((u) => (
                         <tr key={u.id}>
                           <td>{u.fullName}</td>
                           <td>{u.position}</td>
@@ -54767,7 +54992,13 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6}>{t.noUsersYet}</td>
+                        <td colSpan={6}>
+                          {userSetupSearch.trim()
+                            ? lang === "km"
+                              ? "រកមិនឃើញបុគ្គលិក។"
+                              : "No staff found."
+                            : t.noUsersYet}
+                        </td>
                       </tr>
                     )}
                   </tbody>
@@ -57154,6 +57385,10 @@ export default function App() {
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
                     {filteredVaultCctvRecords.length ? filteredVaultCctvRecords.map((row) => (
                       <article className="vault-mobile-card" key={`vault-cctv-mobile-${row.id}`}>
+                        {(() => {
+                          const visiblePassword = currentVaultCctvPassword(row);
+                          return (
+                            <>
                         <div className="vault-mobile-card-head">
                           <strong>{row.nvrName || row.site || "-"}</strong>
                           <span>{row.retentionDays || 0} days</span>
@@ -57169,7 +57404,7 @@ export default function App() {
                           {vaultVisibleCctvAccessId === row.id ? (
                             <>
                               <div className="vault-mobile-field"><span>Username</span><strong>{row.username || "-"}</strong></div>
-                              <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong></div>
+                              <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisibleCctvPasswordId === row.id ? (visiblePassword || "No password saved") : (visiblePassword ? "••••••••" : "No password saved")}</strong></div>
                               <div className="vault-mobile-field"><span>Public IP / DDNS</span><strong>{row.publicIp || "-"}</strong></div>
                               <div className="vault-mobile-field"><span>Port</span><strong>{row.port || "-"}</strong></div>
                             </>
@@ -57180,10 +57415,13 @@ export default function App() {
                           <button className="tab" type="button" onClick={() => setVaultVisibleCctvAccessId((prev) => (prev === row.id ? null : row.id))}>
                             {vaultVisibleCctvAccessId === row.id ? "Hide Access Info" : "View Access Info"}
                           </button>
-                          {row.password ? <button className="tab" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide Password" : "View Password"}</button> : null}
+                          <button className="tab" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleCctvPasswordId === row.id ? "Hide Password" : "View Password"}</button>
                           <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button>
                           <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>{t.delete}</button>
                         </div>
+                            </>
+                          );
+                        })()}
                       </article>
                     )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន CCTV ត្រូវតម្រងនេះទេ។" : "No CCTV system records match this search."}</div>}
                   </div>
@@ -57191,6 +57429,10 @@ export default function App() {
                   <div className="vault-record-grid vault-record-grid-cctv" style={{ marginTop: 12 }}>
                     {filteredVaultCctvRecords.length ? filteredVaultCctvRecords.map((row) => (
                       <article className="vault-record-card vault-record-card-cctv" key={`vault-cctv-${row.id}`}>
+                        {(() => {
+                          const visiblePassword = currentVaultCctvPassword(row);
+                          return (
+                            <>
                         <div className="vault-record-card-head">
                           <div>
                             <strong>{row.nvrName || row.site || "-"}</strong>
@@ -57225,7 +57467,7 @@ export default function App() {
                           </div>
                           <div className="vault-record-field">
                             <span>Password</span>
-                            <strong>{vaultVisibleCctvPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong>
+                            <strong>{vaultVisibleCctvPasswordId === row.id ? (visiblePassword || "No password saved") : (visiblePassword ? "••••••••" : "No password saved")}</strong>
                           </div>
                           <div className="vault-record-field">
                             <span>Review</span>
@@ -57245,14 +57487,15 @@ export default function App() {
                           </div>
                         </div>
                         <div className="vault-record-actions vault-record-actions-cctv">
-                          {row.password ? (
-                            <button className="tab" type="button" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>
-                              {vaultVisibleCctvPasswordId === row.id ? "Hide Password" : "View Password"}
-                            </button>
-                          ) : null}
+                          <button className="tab" type="button" onClick={() => setVaultVisibleCctvPasswordId((prev) => (prev === row.id ? null : row.id))}>
+                            {vaultVisibleCctvPasswordId === row.id ? "Hide Password" : "View Password"}
+                          </button>
                           <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCctv(row)}>{t.edit}</button>
                           <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("cctv", row.id)}>{t.delete}</button>
                         </div>
+                            </>
+                          );
+                        })()}
                       </article>
                     )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន CCTV ត្រូវតម្រងនេះទេ។" : "No CCTV system records match this search."}</div>}
                   </div>
