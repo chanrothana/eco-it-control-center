@@ -2753,6 +2753,10 @@ function formatTelegramTicketTitleKhmer(value, assetId = "") {
   return title;
 }
 
+function formatTelegramTicketHeadingHtml(value, assetId = "") {
+  return `<u><b>${escapeTelegramHtml(formatTelegramTicketTitleKhmer(value, assetId))}</b></u>`;
+}
+
 function buildTelegramColorStrip(colorEmoji, title, subtitle, useHtml = false) {
   const strip = `${colorEmoji}${colorEmoji}${colorEmoji}`;
   if (useHtml) {
@@ -2769,17 +2773,16 @@ function buildTelegramColorStrip(colorEmoji, title, subtitle, useHtml = false) {
 
 async function sendTelegramWorkOrderCreatedAlert(ticket, db = null) {
   if (!ticket || typeof ticket !== "object") return false;
-  const header = buildTelegramColorStrip("🟧", "សារ​ជូនដំណឹងថែទាំ ECO", "មានសំណើថែទាំ / ជួសជុលថ្មី");
+  const header = buildTelegramColorStrip("🟧", "សារ​ជូនដំណឹងថែទាំ ECO", "មានសំណើថែទាំ / ជួសជុលថ្មី", true);
   const lines = [
     ...header,
+    formatTelegramTicketHeadingHtml(ticket.title, ticket.assetId),
     `លេខសំបុត្រ: ${toText(ticket.ticketNo) || "-"}`,
     `សាខា: ${formatTelegramCampusKhmer(ticket.campus)}`,
     `ផ្នែក: ${toText(ticket.category) || "-"}`,
-    `ចំណងជើង: ${formatTelegramTicketTitleKhmer(ticket.title, ticket.assetId)}`,
     `អ្នកស្នើសុំ: ${toText(ticket.requestedBy) || "-"}`,
     `អាទិភាព: ${formatTicketPriorityKhmer(ticket.priority)}`,
     `ប្រភព: ${formatTicketRequestSourceKhmer(ticket.requestSource)}`,
-    `ស្ថានភាព: ${formatTicketStatusKhmer(ticket.status)}`,
   ];
   if (toText(ticket.assetId)) {
     lines.push(`លេខទ្រព្យ: ${toText(ticket.assetId)}`);
@@ -2797,6 +2800,7 @@ async function sendTelegramWorkOrderCreatedAlert(ticket, db = null) {
     db,
     photoUrl: resolveTelegramPhotoUrl(toText(ticket.photo)),
     includeResults: true,
+    parseMode: "HTML",
   });
   return {
     ok: Boolean(report && report.ok),
@@ -2823,12 +2827,11 @@ async function sendTelegramWorkOrderAssignedAlert(ticket, assignee, actor = null
   const assignedTo = toText(ticket.assignedTo) || toText(assignee.fullName) || "-";
   const assignedBy = toText(actor && (actor.displayName || actor.username)) || "-";
   const lines = [
-    ...buildTelegramColorStrip("🟦", "សារ​ជូនដំណឹងថែទាំ ECO", "អ្នកត្រូវបានចាត់តាំងការងារថ្មី"),
+    ...buildTelegramColorStrip("🟦", "សារ​ជូនដំណឹងថែទាំ ECO", "អ្នកត្រូវបានចាត់តាំងការងារថ្មី", true),
+    formatTelegramTicketHeadingHtml(ticket.title, ticket.assetId),
     `លេខសំបុត្រ: ${toText(ticket.ticketNo) || "-"}`,
     `សាខា: ${formatTelegramCampusKhmer(ticket.campus)}`,
     `ផ្នែក: ${toText(ticket.category) || "-"}`,
-    `ចំណងជើង: ${formatTelegramTicketTitleKhmer(ticket.title, ticket.assetId)}`,
-    `ស្ថានភាព: ${formatTicketStatusKhmer(ticket.status || "Assigned")}`,
     `ចាត់តាំងទៅ: ${assignedTo}`,
     `ចាត់តាំងដោយ: ${assignedBy}`,
   ];
@@ -2851,6 +2854,7 @@ async function sendTelegramWorkOrderAssignedAlert(ticket, assignee, actor = null
     db,
     chatIds: [chatId],
     photoUrl: resolveTelegramPhotoUrl(toText(ticket.photo)),
+    parseMode: "HTML",
   });
 }
 
