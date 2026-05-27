@@ -375,6 +375,7 @@ const SQLITE_TABLES = ["assets", "tickets", "locations", "users", "audit_logs", 
 const PASSWORD_PREFIX = "scrypt$";
 
 let sqliteDb;
+let sqliteRuntimeDisabled = false;
 let autoBackupTimer = null;
 let autoBackupRunning = false;
 const HAS_NATIVE_SQLITE = Boolean(DatabaseSync);
@@ -499,21 +500,64 @@ function looksLikeDataLoss(db) {
   return looksEmptyCore && hasPartialSideData;
 }
 
+function shouldUseSqlite() {
+  return HAS_NATIVE_SQLITE && !sqliteRuntimeDisabled;
+}
+
+function disableSqliteRuntime(reason) {
+  sqliteRuntimeDisabled = true;
+  sqliteDb = null;
+  console.warn(
+    `[SQLITE] Disabled runtime SQLite storage. Falling back to JSON storage at ${DB_PATH}.`,
+    reason || ""
+  );
+}
+
+function initJsonStorageSync() {
+  fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  if (!fsSync.existsSync(DB_PATH)) {
+    const initial = normalizeImportedDb({});
+    fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
+    return;
+  }
+  try {
+    const raw = fsSync.readFileSync(DB_PATH, "utf8");
+    const normalized = normalizeImportedDb(JSON.parse(raw));
+    fsSync.writeFileSync(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
+  } catch {
+    const initial = normalizeImportedDb({});
+    fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
+  }
+}
+
 function openSqlite() {
-  if (!HAS_NATIVE_SQLITE) {
+  if (!shouldUseSqlite()) {
     throw new Error("SQLite storage unavailable on this Node.js runtime");
   }
   if (sqliteDb) return sqliteDb;
   fsSync.mkdirSync(path.dirname(SQLITE_PATH), { recursive: true });
-  sqliteDb = new DatabaseSync(SQLITE_PATH);
+  try {
+    sqliteDb = new DatabaseSync(SQLITE_PATH);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err || "unknown SQLite open error");
+    disableSqliteRuntime(message);
+    throw new Error(`SQLite open failed: ${message}`);
+  }
   try {
     sqliteDb.exec("PRAGMA journal_mode = WAL;");
     sqliteDb.exec("PRAGMA synchronous = NORMAL;");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err || "unknown SQLite error");
     console.warn(`[SQLITE] WAL mode unavailable for ${SQLITE_PATH}. Falling back to DELETE journal mode.`, message);
-    sqliteDb.exec("PRAGMA journal_mode = DELETE;");
-    sqliteDb.exec("PRAGMA synchronous = FULL;");
+    try {
+      sqliteDb.exec("PRAGMA journal_mode = DELETE;");
+      sqliteDb.exec("PRAGMA synchronous = FULL;");
+    } catch (fallbackErr) {
+      const fallbackMessage =
+        fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr || "unknown SQLite fallback error");
+      disableSqliteRuntime(fallbackMessage);
+      throw new Error(`SQLite journal fallback failed: ${fallbackMessage}`);
+    }
   }
   sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS assets (
@@ -672,66 +716,71 @@ function readSqliteDbSync() {
 }
 
 function initStorageSync() {
-  if (!HAS_NATIVE_SQLITE) {
-    fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    if (!fsSync.existsSync(DB_PATH)) {
-      const initial = normalizeImportedDb({});
-      fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
-    } else {
-      try {
-        const raw = fsSync.readFileSync(DB_PATH, "utf8");
-        const normalized = normalizeImportedDb(JSON.parse(raw));
-        fsSync.writeFileSync(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
-      } catch {
-        const initial = normalizeImportedDb({});
-        fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
-      }
-    }
+  if (!shouldUseSqlite()) {
+    initJsonStorageSync();
     return;
   }
-  openSqlite();
-  let sqliteCurrent = readSqliteDbSync();
-  const sqliteRowEmpty = isSqliteEmptySync();
-  const sqliteScore = dbScore(sqliteCurrent);
-  const candidates = [];
-
-  const legacy = readLegacyJsonDbSync();
-  if (legacy) {
-    candidates.push({ label: "legacy JSON", db: normalizeImportedDb(legacy) });
-  }
-  const backup = readLatestBackupDbSync();
-  if (backup && backup.db) {
-    candidates.push({ label: `backup ${backup.source}`, db: backup.db });
-  }
-
-  let best = null;
-  for (const candidate of candidates) {
-    const score = dbScore(candidate.db);
-    if (!best || score > best.score) {
-      best = { ...candidate, score };
-    }
-  }
-
-  const shouldRecover =
-    Boolean(best) &&
-    best.score > sqliteScore &&
-    (sqliteRowEmpty || sqliteScore === 0 || looksLikeDataLoss(sqliteCurrent));
-
-  if (shouldRecover && best) {
-    replaceSqliteDataSync(best.db);
-    sqliteCurrent = normalizeImportedDb(best.db);
-    console.log(`Recovered SQLite data from ${best.label}`);
-  }
-
-  // Persist normalized/migrated data shape (including Asset ID format migration).
-  replaceSqliteDataSync(sqliteCurrent);
-
-  // Keep JSON in sync with SQLite as emergency mirror/fallback.
   try {
-    fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    fsSync.writeFileSync(DB_PATH, JSON.stringify(sqliteCurrent, null, 2), "utf8");
+    openSqlite();
   } catch (err) {
-    console.warn("Could not mirror SQLite to JSON:", err instanceof Error ? err.message : err);
+    console.warn("SQLite startup failed. Continuing with JSON storage:", err instanceof Error ? err.message : err);
+    initJsonStorageSync();
+    return;
+  }
+  let sqliteCurrent;
+  try {
+    sqliteCurrent = readSqliteDbSync();
+  } catch (err) {
+    disableSqliteRuntime(err instanceof Error ? err.message : String(err || "unknown SQLite read error"));
+    initJsonStorageSync();
+    return;
+  }
+  try {
+    const sqliteRowEmpty = isSqliteEmptySync();
+    const sqliteScore = dbScore(sqliteCurrent);
+    const candidates = [];
+
+    const legacy = readLegacyJsonDbSync();
+    if (legacy) {
+      candidates.push({ label: "legacy JSON", db: normalizeImportedDb(legacy) });
+    }
+    const backup = readLatestBackupDbSync();
+    if (backup && backup.db) {
+      candidates.push({ label: `backup ${backup.source}`, db: backup.db });
+    }
+
+    let best = null;
+    for (const candidate of candidates) {
+      const score = dbScore(candidate.db);
+      if (!best || score > best.score) {
+        best = { ...candidate, score };
+      }
+    }
+
+    const shouldRecover =
+      Boolean(best) &&
+      best.score > sqliteScore &&
+      (sqliteRowEmpty || sqliteScore === 0 || looksLikeDataLoss(sqliteCurrent));
+
+    if (shouldRecover && best) {
+      replaceSqliteDataSync(best.db);
+      sqliteCurrent = normalizeImportedDb(best.db);
+      console.log(`Recovered SQLite data from ${best.label}`);
+    }
+
+    // Persist normalized/migrated data shape (including Asset ID format migration).
+    replaceSqliteDataSync(sqliteCurrent);
+
+    // Keep JSON in sync with SQLite as emergency mirror/fallback.
+    try {
+      fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+      fsSync.writeFileSync(DB_PATH, JSON.stringify(sqliteCurrent, null, 2), "utf8");
+    } catch (err) {
+      console.warn("Could not mirror SQLite to JSON:", err instanceof Error ? err.message : err);
+    }
+  } catch (err) {
+    disableSqliteRuntime(err instanceof Error ? err.message : String(err || "unknown SQLite init error"));
+    initJsonStorageSync();
   }
 }
 
@@ -837,27 +886,16 @@ async function maybeServeFrontend(req, res, pathname) {
 }
 
 async function readDb() {
-  if (!HAS_NATIVE_SQLITE) {
-    try {
-      const raw = await fs.readFile(DB_PATH, "utf8");
-      const parsed = JSON.parse(raw);
-      const normalized = normalizeImportedDb(parsed);
-      if (!Array.isArray(normalized.users) || !normalized.users.length) {
-        normalized.users = [...DEFAULT_USERS];
-      }
-      return normalized;
-    } catch {
-      const fallback = normalizeImportedDb({});
-      if (!Array.isArray(fallback.users) || !fallback.users.length) {
-        fallback.users = [...DEFAULT_USERS];
-      }
-      await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-      await fs.writeFile(DB_PATH, JSON.stringify(fallback, null, 2), "utf8");
-      return fallback;
-    }
+  if (!shouldUseSqlite()) {
+    return readDbFromJsonFallback();
   }
 
-  const db = openSqlite();
+  let db;
+  try {
+    db = openSqlite();
+  } catch {
+    return readDbFromJsonFallback();
+  }
   const selectStmt = {};
   for (const table of SQLITE_TABLES) {
     selectStmt[table] = db.prepare(`SELECT payload FROM ${table} ORDER BY position ASC, row_id ASC`);
@@ -878,17 +916,44 @@ async function readDb() {
   return mapped;
 }
 
+async function readDbFromJsonFallback() {
+  try {
+    const raw = await fs.readFile(DB_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    const normalized = normalizeImportedDb(parsed);
+    if (!Array.isArray(normalized.users) || !normalized.users.length) {
+      normalized.users = [...DEFAULT_USERS];
+    }
+    return normalized;
+  } catch {
+    const fallback = normalizeImportedDb({});
+    if (!Array.isArray(fallback.users) || !fallback.users.length) {
+      fallback.users = [...DEFAULT_USERS];
+    }
+    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+    await fs.writeFile(DB_PATH, JSON.stringify(fallback, null, 2), "utf8");
+    return fallback;
+  }
+}
+
 async function writeDb(db) {
   const normalized = normalizeImportedDb(db);
   if (!Array.isArray(normalized.users) || !normalized.users.length) {
     normalized.users = [...DEFAULT_USERS];
   }
-  if (!HAS_NATIVE_SQLITE) {
+  if (!shouldUseSqlite()) {
     await writeJsonAtomic(DB_PATH, normalized);
     await mirrorDbSnapshot(normalized);
     return;
   }
-  replaceSqliteDataSync(normalized);
+  try {
+    replaceSqliteDataSync(normalized);
+  } catch (err) {
+    disableSqliteRuntime(err instanceof Error ? err.message : String(err || "unknown SQLite write error"));
+    await writeJsonAtomic(DB_PATH, normalized);
+    await mirrorDbSnapshot(normalized);
+    return;
+  }
   try {
     await writeJsonAtomic(DB_PATH, normalized);
     await mirrorDbSnapshot(normalized);
