@@ -506,8 +506,15 @@ function openSqlite() {
   if (sqliteDb) return sqliteDb;
   fsSync.mkdirSync(path.dirname(SQLITE_PATH), { recursive: true });
   sqliteDb = new DatabaseSync(SQLITE_PATH);
-  sqliteDb.exec("PRAGMA journal_mode = WAL;");
-  sqliteDb.exec("PRAGMA synchronous = NORMAL;");
+  try {
+    sqliteDb.exec("PRAGMA journal_mode = WAL;");
+    sqliteDb.exec("PRAGMA synchronous = NORMAL;");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err || "unknown SQLite error");
+    console.warn(`[SQLITE] WAL mode unavailable for ${SQLITE_PATH}. Falling back to DELETE journal mode.`, message);
+    sqliteDb.exec("PRAGMA journal_mode = DELETE;");
+    sqliteDb.exec("PRAGMA synchronous = FULL;");
+  }
   sqliteDb.exec(`
     CREATE TABLE IF NOT EXISTS assets (
       row_id INTEGER PRIMARY KEY AUTOINCREMENT,
