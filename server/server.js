@@ -664,6 +664,16 @@ function looksLikeBackupPayload(input) {
   );
 }
 
+function looksLikeFullBackupPayload(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const obj = input;
+  return (
+    Object.prototype.hasOwnProperty.call(obj, "db") &&
+    looksLikeBackupPayload(obj.db) &&
+    Array.isArray(obj.uploads)
+  );
+}
+
 function replaceSqliteDataSync(dbObject) {
   const db = openSqlite();
   const dbRows = mapDbToSqlRows(dbObject);
@@ -990,6 +1000,55 @@ async function createBackupSnapshot(requestedByUser = null, summary = "Server ba
   appendAuditLog(db, requestedByUser, "BACKUP_CREATE", "backup", name, summary);
   await writeDb(db);
   return name;
+}
+
+async function collectUploadBackupEntries(dirPath, baseDir = dirPath) {
+  const out = [];
+  const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...(await collectUploadBackupEntries(fullPath, baseDir)));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const raw = await fs.readFile(fullPath);
+    const stat = await fs.stat(fullPath).catch(() => null);
+    const relativePath = path.relative(baseDir, fullPath).split(path.sep).join("/");
+    out.push({
+      path: relativePath,
+      size: raw.length,
+      modifiedAt: stat ? new Date(stat.mtimeMs).toISOString() : "",
+      dataBase64: raw.toString("base64"),
+    });
+  }
+  return out;
+}
+
+async function buildFullBackupPayload() {
+  const db = await readDb();
+  const uploads = await collectUploadBackupEntries(UPLOADS_DIR);
+  return {
+    type: "eco-it-full-backup",
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    db: normalizeImportedDb(db),
+    uploads,
+  };
+}
+
+async function restoreUploadBackupEntries(entries) {
+  await resetDirContents(UPLOADS_DIR);
+  if (!Array.isArray(entries)) return;
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    const relativePath = String(entry.path || "").trim().replace(/^[/\\]+/, "");
+    const dataBase64 = String(entry.dataBase64 || "");
+    if (!relativePath || !dataBase64) continue;
+    const targetPath = path.join(UPLOADS_DIR, path.normalize(relativePath));
+    if (!isPathInside(UPLOADS_DIR, targetPath)) continue;
+    await writeBufferAtomic(targetPath, Buffer.from(dataBase64, "base64"));
+  }
 }
 
 async function pruneOldBackups() {
@@ -6472,6 +6531,13 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/backup/export-full") {
+      if (!requireAdmin(req, res)) return;
+      const payload = await buildFullBackupPayload();
+      sendJson(res, 200, payload);
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/backup/create") {
       const admin = requireAdmin(req, res);
       if (!admin) return;
@@ -6485,12 +6551,23 @@ const server = http.createServer(async (req, res) => {
       if (!admin) return;
       const body = await parseBody(req);
       const payload = body && Object.prototype.hasOwnProperty.call(body, "db") ? body.db : body;
-      if (!looksLikeBackupPayload(payload)) {
+      if (!looksLikeBackupPayload(payload) && !looksLikeFullBackupPayload(payload)) {
         sendJson(res, 400, { error: "Invalid backup format. Please select a valid backup JSON file." });
         return;
       }
-      const imported = normalizeImportedDb(payload);
-      appendAuditLog(imported, admin, "BACKUP_IMPORT", "system", "db", "Database restored from backup");
+      const isFullBackup = looksLikeFullBackupPayload(payload);
+      const imported = normalizeImportedDb(isFullBackup ? payload.db : payload);
+      if (isFullBackup) {
+        await restoreUploadBackupEntries(payload.uploads);
+      }
+      appendAuditLog(
+        imported,
+        admin,
+        "BACKUP_IMPORT",
+        "system",
+        isFullBackup ? "full-backup" : "db",
+        isFullBackup ? "Full backup restored with uploads" : "Database restored from backup"
+      );
       await writeDb(imported);
       sendJson(res, 200, { ok: true });
       return;

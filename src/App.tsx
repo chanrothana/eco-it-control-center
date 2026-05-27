@@ -20325,74 +20325,66 @@ export default function App() {
     }
   }
 
-  async function createServerBackup() {
+  async function exportFullBackupFile() {
     if (!requireAdminAction()) return;
     setBusy(true);
     setError("");
-    setSetupMessage("Creating server backup...");
+    setSetupMessage("Preparing full backup download...");
     try {
-      const res = await requestJson<{ ok: boolean; file?: string }>("/api/backup/create", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      setSetupMessage(res.file ? `Backup created: ${res.file}` : "Backup created.");
-      appendUiAudit("BACKUP_CREATE", "backup", res.file || "server", "Create server backup");
-      await loadAuditLogs();
-    } catch (err) {
-      if (isApiUnavailableError(err) || isMissingRouteError(err)) {
-        const payload = {
-          exportedAt: new Date().toISOString(),
-          assets,
-          tickets,
-          locations,
-          users,
-        };
-        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `eco-it-local-backup-${stamp}.json`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        setSetupMessage("Server route not available. Local backup downloaded.");
-        appendUiAudit("BACKUP_EXPORT_LOCAL", "backup", "local-file", "Export local backup file");
-        await loadAuditLogs();
-        return;
+      const authToken = localStorage.getItem(AUTH_TOKEN_KEY) || runtimeAuthToken;
+      const effectiveApiBaseOverride = getStoredApiBaseOverride();
+      const autoApiBase = getAutoApiBaseForHost().replace(/\/+$/, "");
+      const candidates: string[] = [];
+      if (effectiveApiBaseOverride) candidates.push(`${effectiveApiBaseOverride}/api/backup/export-full`);
+      if (ENV_API_BASE_URL) candidates.push(`${ENV_API_BASE_URL}/api/backup/export-full`);
+      if (!effectiveApiBaseOverride && !ENV_API_BASE_URL) {
+        candidates.push("/api/backup/export-full");
+        if (autoApiBase) candidates.push(`${autoApiBase}/api/backup/export-full`);
       }
-      const msg = err instanceof Error ? err.message : "Failed to create backup";
-      setError(msg);
-      setSetupMessage(`Create backup failed: ${msg}`);
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  async function exportBackupFile() {
-    if (!requireAdminAction()) return;
-    setBusy(true);
-    setError("");
-    setSetupMessage("Preparing backup download...");
-    try {
-      const res = await requestJson<{ generatedAt: string; db: unknown }>("/api/backup/export");
-      const stamp = (res.generatedAt || new Date().toISOString()).replace(/[:.]/g, "-");
-      const blob = new Blob([JSON.stringify(res.db, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `eco-it-backup-${stamp}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setSetupMessage("Backup file downloaded.");
-      await loadAuditLogs();
+      let lastError = "Failed to export full backup";
+      for (const endpoint of Array.from(new Set(candidates))) {
+        try {
+          const res = await fetch(endpoint, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            },
+          });
+          const text = await res.text();
+          let parsed: { generatedAt?: string; error?: string } | null = null;
+          try {
+            parsed = text ? JSON.parse(text) : null;
+          } catch {
+            parsed = null;
+          }
+          if (!res.ok) {
+            lastError = parsed?.error || `Request failed (${res.status})`;
+            continue;
+          }
+          const stamp = (parsed?.generatedAt || new Date().toISOString()).replace(/[:.]/g, "-");
+          const blob = new Blob([text], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `eco-it-full-backup-${stamp}.json`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          setSetupMessage("Full backup file downloaded.");
+          await loadAuditLogs();
+          return;
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : "Failed to export full backup";
+        }
+      }
+      throw new Error(lastError);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to export backup";
+      const msg = err instanceof Error ? err.message : "Failed to export full backup";
       setError(msg);
-      setSetupMessage(`Download backup failed: ${msg}`);
+      setSetupMessage(`Download full backup failed: ${msg}`);
     } finally {
       setBusy(false);
     }
@@ -20413,16 +20405,19 @@ export default function App() {
       } catch {
         throw new Error("Selected file is not valid JSON.");
       }
-      const hasBackupShape =
-        !!parsed &&
-        typeof parsed === "object" &&
-        !Array.isArray(parsed) &&
+      const isObjectPayload = !!parsed && typeof parsed === "object" && !Array.isArray(parsed);
+      const hasDbBackupShape =
+        isObjectPayload &&
         (Object.prototype.hasOwnProperty.call(parsed, "assets") ||
           Object.prototype.hasOwnProperty.call(parsed, "tickets") ||
           Object.prototype.hasOwnProperty.call(parsed, "locations") ||
           Object.prototype.hasOwnProperty.call(parsed, "users") ||
           Object.prototype.hasOwnProperty.call(parsed, "auditLogs"));
-      if (!hasBackupShape) {
+      const hasFullBackupShape =
+        isObjectPayload &&
+        Object.prototype.hasOwnProperty.call(parsed, "db") &&
+        Object.prototype.hasOwnProperty.call(parsed, "uploads");
+      if (!hasDbBackupShape && !hasFullBackupShape) {
         throw new Error("Selected file is not a valid backup format.");
       }
       await requestJson<{ ok: boolean }>("/api/backup/import", {
@@ -20441,148 +20436,6 @@ export default function App() {
       setBusy(false);
       setBackupImportKey((k) => k + 1);
       if (e.target) e.target.value = "";
-    }
-  }
-
-  async function syncFromLiveWeb() {
-    if (!requireAdminAction()) return;
-    const baseInput = window.prompt("Live server URL", DEFAULT_CLOUD_API_BASE);
-    const liveBase = String(baseInput || "").trim().replace(/\/+$/, "");
-    if (!liveBase) return;
-
-    const username = window.prompt("Live admin username", "admin");
-    if (!username || !username.trim()) return;
-    const password = window.prompt("Live admin password");
-    if (!password || !password.trim()) return;
-
-    setBusy(true);
-    setError("");
-    setSetupMessage("Syncing from live web...");
-    try {
-      const loginRes = await fetch(`${liveBase}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: username.trim(),
-          password,
-        }),
-      });
-      const loginData = (await loginRes.json().catch(() => ({}))) as { token?: string; user?: AuthUser; error?: string };
-      if (!loginRes.ok || !loginData.token) {
-        throw new Error(loginData.error || "Cannot login to live server.");
-      }
-
-      const exportRes = await fetch(`${liveBase}/api/backup/export`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${loginData.token}`,
-        },
-      });
-      const exportData = (await exportRes.json().catch(() => ({}))) as { db?: unknown; error?: string };
-      if (!exportRes.ok || !exportData.db || typeof exportData.db !== "object") {
-        throw new Error(exportData.error || "Cannot export backup from live server.");
-      }
-
-      await requestJson<{ ok: boolean }>("/api/backup/import", {
-        method: "POST",
-        body: JSON.stringify({ db: exportData.db }),
-      });
-
-      trySetLocalStorage(API_BASE_OVERRIDE_KEY, liveBase);
-      runtimeAuthToken = loginData.token;
-      trySetLocalStorage(AUTH_TOKEN_KEY, loginData.token);
-      if (loginData.user) {
-        trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(loginData.user));
-        setAuthUser(loginData.user);
-      }
-
-      setSetupMessage("Live sync completed. Local database updated and live web data is now active.");
-      appendUiAudit("BACKUP_IMPORT_REMOTE", "system", "db", `Synced database from ${liveBase}`);
-      await loadData();
-      await loadAuthAccounts();
-      await loadAuditLogs();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Live sync failed";
-      setError("");
-      setSetupMessage(`Live sync failed: ${msg}`);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function pushLocalDataToLiveWeb() {
-    if (!requireAdminAction()) return;
-    const confirmed = window.confirm(
-      "This will replace the live web database with your current local data. Continue?"
-    );
-    if (!confirmed) return;
-
-    const baseInput = window.prompt("Live server URL", DEFAULT_CLOUD_API_BASE);
-    const liveBase = String(baseInput || "").trim().replace(/\/+$/, "");
-    if (!liveBase) return;
-
-    const username = window.prompt("Live admin username", "admin");
-    if (!username || !username.trim()) return;
-    const password = window.prompt("Live admin password");
-    if (!password || !password.trim()) return;
-
-    setBusy(true);
-    setError("");
-    setSetupMessage("Pushing local data to live web...");
-    try {
-      const localExport = await requestJson<{ generatedAt?: string; db?: unknown }>("/api/backup/export");
-      if (!localExport.db || typeof localExport.db !== "object") {
-        throw new Error("Cannot export local backup data.");
-      }
-
-      const loginRes = await fetch(`${liveBase}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: username.trim(),
-          password,
-        }),
-      });
-      const loginData = (await loginRes.json().catch(() => ({}))) as { token?: string; error?: string };
-      if (!loginRes.ok || !loginData.token) {
-        throw new Error(loginData.error || "Cannot login to live server.");
-      }
-
-      const liveBackupRes = await fetch(`${liveBase}/api/backup/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${loginData.token}`,
-        },
-        body: JSON.stringify({}),
-      });
-      if (!liveBackupRes.ok) {
-        const backupData = (await liveBackupRes.json().catch(() => ({}))) as { error?: string };
-        throw new Error(backupData.error || "Cannot create backup on live server before import.");
-      }
-
-      const importRes = await fetch(`${liveBase}/api/backup/import`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${loginData.token}`,
-        },
-        body: JSON.stringify({ db: localExport.db }),
-      });
-      const importData = (await importRes.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!importRes.ok || !importData.ok) {
-        throw new Error(importData.error || "Cannot import local data to live server.");
-      }
-
-      setSetupMessage("Local data pushed to live web successfully.");
-      appendUiAudit("BACKUP_EXPORT_REMOTE", "system", "db", `Pushed local database to ${liveBase}`);
-      await loadAuditLogs();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Push to live web failed";
-      setError("");
-      setSetupMessage(`Push to live web failed: ${msg}`);
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -56118,23 +55971,20 @@ export default function App() {
           {tab === "setup" && setupView === "backup" && canAccessMenu("setup.backup", "setup") && (
           <section className="panel">
             <h2>Backup & Audit</h2>
-            <p className="backup-subline">Backup database to file, restore when needed, and keep local data aligned with the live web server.</p>
+            <p className="backup-subline">Download one full backup with database records and uploaded files, then restore it any time if needed.</p>
             {isPhoneView ? (
               <div className="backup-mobile-actions">
                 <article className="backup-mobile-group">
                   <div className="backup-mobile-group-head">
-                    <strong>Backup Files</strong>
-                    <span>Create, download, or restore a backup file.</span>
+                    <strong>Full Backup</strong>
+                    <span>Download the complete backup file or restore it later.</span>
                   </div>
                   <div className="backup-mobile-group-grid">
-                    <button className="btn-primary backup-action-btn" disabled={!isAdmin || busy} onClick={createServerBackup}>
-                      Create Backup
-                    </button>
-                    <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportBackupFile}>
-                      Download
+                    <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportFullBackupFile}>
+                      Download Full Backup
                     </button>
                     <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
-                      Restore
+                      Restore Backup
                       <input
                         key={backupImportKey}
                         type="file"
@@ -56144,20 +55994,6 @@ export default function App() {
                         style={{ display: "none" }}
                       />
                     </label>
-                  </div>
-                </article>
-                <article className="backup-mobile-group">
-                  <div className="backup-mobile-group-head">
-                    <strong>Live Web Sync</strong>
-                    <span>Pull from live web or push this local copy back up.</span>
-                  </div>
-                  <div className="backup-mobile-group-grid">
-                    <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
-                      Use Live Web Data
-                    </button>
-                    <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={pushLocalDataToLiveWeb}>
-                      Push Local Data
-                    </button>
                   </div>
                 </article>
                 {isSuperAdmin ? (
@@ -56182,17 +56018,8 @@ export default function App() {
             ) : (
               <div className="asset-actions">
                 <div className="backup-action-row">
-                  <button className="btn-primary backup-action-btn" disabled={!isAdmin || busy} onClick={createServerBackup}>
-                    Create Server Backup
-                  </button>
-                  <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportBackupFile}>
-                    Download Backup
-                  </button>
-                  <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={syncFromLiveWeb}>
-                    Use Live Web Data
-                  </button>
-                  <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={pushLocalDataToLiveWeb}>
-                    Push Local Data To Live Web
+                  <button className="tab backup-action-btn" disabled={!isAdmin || busy} onClick={exportFullBackupFile}>
+                    Download Full Backup
                   </button>
                   <label className={`tab backup-action-btn ${isAdmin && !busy ? "backup-action-btn-enabled" : "backup-action-btn-disabled"}`}>
                     Restore Backup
@@ -59258,40 +59085,83 @@ export default function App() {
                   </button>
                 ) : null}
               </div>
-              <div className="table-wrap asset-detail-history-wrap">
-                <table className="maintenance-history-modal-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th>Work Status</th>
-                      <th>Condition</th>
-                      <th>Note</th>
-                      <th>Cost</th>
-                      <th>By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailMaintenanceVisibleEntries.length ? (
-                      detailMaintenanceVisibleEntries.map((h) => (
-                        <tr key={`classroom-detail-history-${h.id}`}>
-                          <td data-label="Date">{formatDate(h.date)}</td>
-                          <td data-label="Type">{h.type}</td>
-                          <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
-                          <td data-label="Condition">{h.condition || "-"}</td>
-                          <td data-label="Note">{h.note || "-"}</td>
-                          <td data-label="Cost">{h.cost || "-"}</td>
-                          <td data-label="By">{h.by || "-"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr className="asset-detail-empty-row">
-                        <td colSpan={7}>{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</td>
+              {isPhoneView ? (
+                <div className="public-asset-history-section asset-detail-history-section">
+                  {detailMaintenanceVisibleEntries.length ? (
+                    <div className="public-asset-history-list">
+                      {detailMaintenanceVisibleEntries.map((h) => (
+                        <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-history-${h.id}`}>
+                          <div className="public-asset-history-head">
+                            <div className="public-asset-history-title">{h.type || (detailFurniture ? "Fixing" : "Maintenance")}</div>
+                            <div className="public-asset-history-head-side">
+                              <div className="public-asset-history-date">{formatDate(h.date)}</div>
+                            </div>
+                          </div>
+                          <div className="public-asset-history-grid">
+                            {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(h.completion || "-"))}
+                            {renderPublicHistoryMeta("Condition", h.condition || "-")}
+                            {renderPublicHistoryMeta("Cost", h.cost || "-")}
+                            {renderPublicHistoryMeta("By", h.by || "-")}
+                          </div>
+                          <div className="public-asset-history-note">
+                            <span className="public-asset-history-label">Noted</span>
+                            <p>{h.note || "-"}</p>
+                          </div>
+                          <div className="public-asset-history-photo-section">
+                            <span className="public-asset-history-label">Photos</span>
+                            <div className="public-asset-history-photo-groups">
+                              {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, {
+                                before: "Before",
+                                after: "After",
+                              }, {
+                                maxPhotosPerGroup: 1,
+                                className: "public-asset-history-photo-groups-two-col",
+                              })}
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    renderPublicHistoryEmpty(detailFurniture ? "No fixing records yet." : "No maintenance records yet.")
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap asset-detail-history-wrap">
+                  <table className="maintenance-history-modal-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Work Status</th>
+                        <th>Condition</th>
+                        <th>Note</th>
+                        <th>Cost</th>
+                        <th>By</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {detailMaintenanceVisibleEntries.length ? (
+                        detailMaintenanceVisibleEntries.map((h) => (
+                          <tr key={`classroom-detail-history-${h.id}`}>
+                            <td data-label="Date">{formatDate(h.date)}</td>
+                            <td data-label="Type">{h.type}</td>
+                            <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
+                            <td data-label="Condition">{h.condition || "-"}</td>
+                            <td data-label="Note">{h.note || "-"}</td>
+                            <td data-label="Cost">{h.cost || "-"}</td>
+                            <td data-label="By">{h.by || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className="asset-detail-empty-row">
+                          <td colSpan={7}>{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="panel-row" style={{ marginTop: 8 }}>
                 <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
@@ -59310,110 +59180,202 @@ export default function App() {
                   </button>
                 ) : null}
               </div>
-              <div className="table-wrap asset-detail-history-wrap">
-                <table className="asset-detail-transfer-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>From Campus</th>
-                      <th>From Location</th>
-                      <th>To Campus</th>
-                      <th>To Location</th>
-                      <th>Reason</th>
-                      <th>By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailTransferVisibleEntries.length ? (
-                      detailTransferVisibleEntries.map((h) => (
-                        <tr key={`classroom-detail-transfer-${h.id}`}>
-                          <td data-label="Date">{formatDate(h.date)}</td>
-                          <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
-                          <td data-label="From Location">{h.fromLocation || "-"}</td>
-                          <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
-                          <td data-label="To Location">{h.toLocation || "-"}</td>
-                          <td data-label="Reason">{h.reason || "-"}</td>
-                          <td data-label="By">{h.by || "-"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr className="asset-detail-empty-row">
-                        <td colSpan={7}>No transfer location history yet.</td>
+              {isPhoneView ? (
+                <div className="public-asset-history-section asset-detail-history-section">
+                  {detailTransferVisibleEntries.length ? (
+                    <div className="public-asset-history-list">
+                      {detailTransferVisibleEntries.map((h) => (
+                        <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-transfer-${h.id}`}>
+                          <div className="public-asset-history-head">
+                            <div className="public-asset-history-title">Location Transfer</div>
+                            <div className="public-asset-history-head-side">
+                              <div className="public-asset-history-date">{formatDate(h.date)}</div>
+                            </div>
+                          </div>
+                          <div className="public-asset-history-grid">
+                            {renderPublicHistoryMeta("From Campus", campusLabel(h.fromCampus))}
+                            {renderPublicHistoryMeta("To Campus", campusLabel(h.toCampus))}
+                            {renderPublicHistoryMeta("From Location", h.fromLocation || "-")}
+                            {renderPublicHistoryMeta("To Location", h.toLocation || "-")}
+                            {renderPublicHistoryMeta("By", h.by || "-")}
+                          </div>
+                          <div className="public-asset-history-note">
+                            <span className="public-asset-history-label">Reason</span>
+                            <p>{h.reason || "-"}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    renderPublicHistoryEmpty("No transfer location history yet.")
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap asset-detail-history-wrap">
+                  <table className="asset-detail-transfer-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>From Campus</th>
+                        <th>From Location</th>
+                        <th>To Campus</th>
+                        <th>To Location</th>
+                        <th>Reason</th>
+                        <th>By</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {detailTransferVisibleEntries.length ? (
+                        detailTransferVisibleEntries.map((h) => (
+                          <tr key={`classroom-detail-transfer-${h.id}`}>
+                            <td data-label="Date">{formatDate(h.date)}</td>
+                            <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
+                            <td data-label="From Location">{h.fromLocation || "-"}</td>
+                            <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
+                            <td data-label="To Location">{h.toLocation || "-"}</td>
+                            <td data-label="Reason">{h.reason || "-"}</td>
+                            <td data-label="By">{h.by || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className="asset-detail-empty-row">
+                          <td colSpan={7}>No transfer location history yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
                 <>
                   <h3 className="section-title">Assigned to History</h3>
-                  <div className="table-wrap asset-detail-history-wrap">
-                    <table className="asset-detail-custody-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>Action</th>
-                          <th>From User</th>
-                          <th>To User</th>
-                          <th>Ack</th>
-                          <th>By</th>
-                          <th>Note</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailCustodyEntries.length ? (
-                          detailCustodyEntries.map((h) => (
-                            <tr key={`classroom-detail-custody-${h.id}`}>
-                              <td data-label="Date">{formatDate(h.date)}</td>
-                              <td data-label="Action">{h.action || "-"}</td>
-                              <td data-label="From User">{h.fromUser || "-"}</td>
-                              <td data-label="To User">{h.toUser || "-"}</td>
-                              <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
-                              <td data-label="By">{h.by || "-"}</td>
-                              <td data-label="Note">{h.note || "-"}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={7}>No assigned history yet.</td>
+                  {isPhoneView ? (
+                    <div className="public-asset-history-section asset-detail-history-section">
+                      {detailCustodyEntries.length ? (
+                        <div className="public-asset-history-list">
+                          {detailCustodyEntries.map((h) => (
+                            <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-custody-${h.id}`}>
+                              <div className="public-asset-history-head">
+                                <div className="public-asset-history-title">{h.action || "Assigned Change"}</div>
+                                <div className="public-asset-history-head-side">
+                                  <div className="public-asset-history-date">{formatDate(h.date)}</div>
+                                </div>
+                              </div>
+                              <div className="public-asset-history-grid">
+                                {renderPublicHistoryMeta("From User", h.fromUser || "-")}
+                                {renderPublicHistoryMeta("To User", h.toUser || "-")}
+                                {renderPublicHistoryMeta("Ack", h.responsibilityAck ? "Yes" : "No")}
+                                {renderPublicHistoryMeta("By", h.by || "-")}
+                              </div>
+                              <div className="public-asset-history-note">
+                                <span className="public-asset-history-label">Note</span>
+                                <p>{h.note || "-"}</p>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        renderPublicHistoryEmpty("No assigned history yet.")
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-wrap asset-detail-history-wrap">
+                      <table className="asset-detail-custody-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Action</th>
+                            <th>From User</th>
+                            <th>To User</th>
+                            <th>Ack</th>
+                            <th>By</th>
+                            <th>Note</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {detailCustodyEntries.length ? (
+                            detailCustodyEntries.map((h) => (
+                              <tr key={`classroom-detail-custody-${h.id}`}>
+                                <td data-label="Date">{formatDate(h.date)}</td>
+                                <td data-label="Action">{h.action || "-"}</td>
+                                <td data-label="From User">{h.fromUser || "-"}</td>
+                                <td data-label="To User">{h.toUser || "-"}</td>
+                                <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
+                                <td data-label="By">{h.by || "-"}</td>
+                                <td data-label="Note">{h.note || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="asset-detail-empty-row">
+                              <td colSpan={7}>No assigned history yet.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </>
               ) : null}
 
               <h3 className="section-title">Status Timeline</h3>
-              <div className="table-wrap asset-detail-history-wrap">
-                <table className="asset-detail-status-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>From</th>
-                      <th>To</th>
-                      <th>Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailStatusEntries.length ? (
-                      detailStatusEntries.map((h) => (
-                        <tr key={`classroom-detail-status-${h.id}`}>
-                          <td data-label="Date">{formatDate(h.date)}</td>
-                          <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
-                          <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
-                          <td data-label="Reason">{h.reason || "-"}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr className="asset-detail-empty-row">
-                        <td colSpan={4}>No status timeline yet.</td>
+              {isPhoneView ? (
+                <div className="public-asset-history-section asset-detail-history-section">
+                  {detailStatusEntries.length ? (
+                    <div className="public-asset-history-list">
+                      {detailStatusEntries.map((h) => (
+                        <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-status-${h.id}`}>
+                          <div className="public-asset-history-head">
+                            <div className="public-asset-history-title">Status Change</div>
+                            <div className="public-asset-history-head-side">
+                              <div className="public-asset-history-date">{formatDate(h.date)}</div>
+                            </div>
+                          </div>
+                          <div className="public-asset-history-grid">
+                            {renderPublicHistoryMeta("From", assetStatusLabel(h.fromStatus))}
+                            {renderPublicHistoryMeta("To", assetStatusLabel(h.toStatus))}
+                          </div>
+                          <div className="public-asset-history-note">
+                            <span className="public-asset-history-label">Reason</span>
+                            <p>{h.reason || "-"}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    renderPublicHistoryEmpty("No status timeline yet.")
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap asset-detail-history-wrap">
+                  <table className="asset-detail-status-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Reason</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {detailStatusEntries.length ? (
+                        detailStatusEntries.map((h) => (
+                          <tr key={`classroom-detail-status-${h.id}`}>
+                            <td data-label="Date">{formatDate(h.date)}</td>
+                            <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
+                            <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
+                            <td data-label="Reason">{h.reason || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className="asset-detail-empty-row">
+                          <td colSpan={4}>No status timeline yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           </div>
         ) : null}

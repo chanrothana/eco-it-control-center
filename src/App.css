@@ -22081,6 +22081,104 @@ tr.row-maint-maintenance:hover td {
     grid-column: 1 / -1;
   }
 
+  .modal-panel .asset-detail-history-section {
+    margin-top: 8px;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-list {
+    gap: 10px;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-card {
+    gap: 12px;
+    padding: 14px 14px 16px;
+    border: 1.5px solid #d9c7ad;
+    border-radius: 18px;
+    background: linear-gradient(180deg, #fffdf8 0%, #fff7eb 100%);
+    box-shadow: 0 10px 22px rgba(13, 28, 49, 0.12);
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-head {
+    align-items: flex-start;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-title {
+    min-height: 0;
+    padding: 6px 12px;
+    border: 1px solid #e2c89b;
+    border-radius: 999px;
+    background: #fff1d8;
+    color: #8b5a29;
+    font-weight: 800;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-date {
+    font-size: 14px;
+    line-height: 1.25;
+    color: #6b7f9f;
+    font-weight: 700;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-grid {
+    gap: 10px 18px;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-item {
+    display: grid;
+    gap: 3px;
+    align-items: start;
+    font-size: 14px;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-key {
+    color: #7890b2;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-value {
+    font-size: 14px;
+    line-height: 1.4;
+    color: #2a446f;
+    font-weight: 600;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-note,
+  .modal-panel .asset-detail-history-section .public-asset-history-photo-section {
+    gap: 8px;
+    padding-top: 10px;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-note p {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #37527d;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-photo-groups-two-col {
+    gap: 14px;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-photo-groups .maintenance-photo-group > small {
+    color: #7b93b6;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .modal-panel .asset-detail-history-section .public-asset-history-photo-groups-two-col .maintenance-photo-stack .table-photo,
+  .modal-panel .asset-detail-history-section .public-asset-history-photo-groups-two-col .maintenance-photo-stack .photo-placeholder {
+    width: min(100%, 96px);
+    border-radius: 14px;
+    border: 1px solid #d7e1ef;
+    background: #f1f6fd;
+  }
+
   .report-quick-count-result {
     max-width: none;
     width: 100%;
