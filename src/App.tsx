@@ -7848,7 +7848,7 @@ export default function App() {
   const mobileNavRef = useRef<HTMLDivElement | null>(null);
   const publicQrMenuRef = useRef<HTMLElement | null>(null);
   const quickOutEcoWrapRef = useRef<HTMLLabelElement | null>(null);
-  const maintenanceRecordDateWrapRef = useRef<HTMLLabelElement | null>(null);
+  const maintenanceRecordDateWrapRef = useRef<HTMLDivElement | null>(null);
   const transferDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const scheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const bulkScheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
@@ -49592,7 +49592,7 @@ export default function App() {
                 </div>
               ) : null}
               <div className="maintenance-record-inline-triple field-wide">
-                <label className="field quickout-date-field" ref={maintenanceRecordDateWrapRef}>
+                <div className="field quickout-date-field" ref={maintenanceRecordDateWrapRef}>
                   <span>{t.date}</span>
                   <div className="quickout-date-input-wrap">
                     <input
@@ -49663,7 +49663,7 @@ export default function App() {
                       />
                     </div>
                   ) : null}
-                </label>
+                </div>
                 <label className="field">
                   <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
                   <input
