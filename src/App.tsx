@@ -9154,6 +9154,7 @@ export default function App() {
   const [purchaseRequestCampusFilter, setPurchaseRequestCampusFilter] = useState("ALL");
   const [purchaseRequestItemFilter, setPurchaseRequestItemFilter] = useState<string[]>(["ALL"]);
   const [purchaseRequestQtyOverrides, setPurchaseRequestQtyOverrides] = useState<Record<string, string>>({});
+  const [purchaseRequestUsedQtyOverrides, setPurchaseRequestUsedQtyOverrides] = useState<Record<string, string>>({});
   const [maintenanceStockOutMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [maintenanceStockOutViewDate, setMaintenanceStockOutViewDate] = useState(() => toYmd(new Date()));
   const todayYmd = toYmd(new Date());
@@ -12581,6 +12582,8 @@ export default function App() {
   const resetPurchaseRequestFilters = useCallback(() => {
     setPurchaseRequestCampusFilter("ALL");
     setPurchaseRequestItemFilter(["ALL"]);
+    setPurchaseRequestQtyOverrides({});
+    setPurchaseRequestUsedQtyOverrides({});
   }, []);
   const resetAssetListFilters = useCallback(() => {
     setAssetCampusMultiFilter(["ALL"]);
@@ -15071,6 +15074,16 @@ export default function App() {
       return parsed;
     },
     [purchaseRequestQtyOverrides]
+  );
+  const getPurchaseUsedQty = useCallback(
+    (row: { id: number; usedQty: number }) => {
+      const raw = String(purchaseRequestUsedQtyOverrides[String(row.id)] || "").trim();
+      if (!raw) return Number(row.usedQty || 0);
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed < 0) return Number(row.usedQty || 0);
+      return parsed;
+    },
+    [purchaseRequestUsedQtyOverrides]
   );
 
   const activePoolLabel = useMemo(() => {
@@ -22608,7 +22621,7 @@ export default function App() {
           inventoryCampusLabel(row.campus),
           row.category,
           row.unit,
-          row.usedQty,
+          getPurchaseUsedQty(row),
           row.currentStock,
           row.minStock,
           getPurchaseRequestQty(row),
@@ -22661,15 +22674,13 @@ export default function App() {
             <strong>${escapeHtml(inventoryDisplayName(row.itemName, lang))}</strong>
             <span class="desc-sub">${escapeHtml(row.itemCode)}${row.unit ? ` | ${escapeHtml(row.unit)}` : ""}</span>
           </td>
-          <td class="qty-cell">${row.usedQty}</td>
+          <td class="qty-cell">${getPurchaseUsedQty(row)}</td>
           <td class="stock-cell">${row.currentStock}</td>
           <td class="request-cell">${getPurchaseRequestQty(row)}</td>
           <td class="other-cell"></td>
-          <td class="supplier-cell">${escapeHtml(String(row.vendor || "").trim())}</td>
         </tr>`
       )
       .join("");
-    const subtotalQty = filteredInventoryPurchaseRows.reduce((sum, row) => sum + getPurchaseRequestQty(row), 0);
     const html = `
       <html>
       <head>
@@ -22736,11 +22747,6 @@ export default function App() {
             line-height: 1.02;
             padding-top: 0.6mm;
             padding-bottom: 0.6mm;
-          }
-          .main-table th.suppliers-head {
-            white-space: nowrap;
-            word-break: normal;
-            overflow-wrap: normal;
           }
           .main-table tbody td { height: 5.2mm; }
           .num-cell { text-align: center; padding-left: 0.2mm; padding-right: 0.2mm; }
@@ -22842,7 +22848,6 @@ export default function App() {
               <col style="width: 12mm" />
               <col style="width: 14mm" />
               <col style="width: 8mm" />
-              <col style="width: 10mm" />
             </colgroup>
             <thead>
               <tr>
@@ -22853,16 +22858,10 @@ export default function App() {
                 <th>Current Stock</th>
                 <th>Amount Request</th>
                 <th>Others</th>
-                <th class="suppliers-head">Suppliers</th>
               </tr>
             </thead>
             <tbody>
               ${rowsHtml}
-              <tr class="subtotal-row">
-                <td colspan="5" class="subtotal-label">Sub Total:</td>
-                <td>${subtotalQty}</td>
-                <td colspan="2"></td>
-              </tr>
             </tbody>
           </table>
           <div class="notice-box">
@@ -25651,6 +25650,29 @@ export default function App() {
     } finally {
       e.target.value = "";
     }
+  }
+
+  function renderMaintenancePhotoChooser(inputId: string, target: "before" | "after") {
+    return (
+      <>
+        <input
+          id={inputId}
+          key={`${maintenanceRecordFileKey}-${inputId}`}
+          className="file-input maintenance-quick-photo-input"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => void onMaintenanceRecordPhotoFile(e, target)}
+        />
+        <button
+          type="button"
+          className="tab btn-small maintenance-quick-photo-btn"
+          onClick={() => document.getElementById(inputId)?.click()}
+        >
+          {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
+        </button>
+      </>
+    );
   }
 
   async function addMaintenanceRecordFromTab(): Promise<boolean> {
@@ -45472,43 +45494,56 @@ export default function App() {
                               <div className="inventory-purchase-mobile-metrics">
                                 <div>
                                   <span>{lang === "km" ? "ប្រើ" : "Used"}</span>
-                                <strong>{row.usedQty}</strong>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={purchaseRequestUsedQtyOverrides[String(row.id)] ?? String(row.usedQty ?? 0)}
+                                    onChange={(e) =>
+                                      setPurchaseRequestUsedQtyOverrides((prev) => ({
+                                        ...prev,
+                                        [String(row.id)]: e.target.value,
+                                      }))
+                                    }
+                                    style={{ minWidth: 0, fontWeight: 700, marginTop: 4 }}
+                                  />
+                                </div>
+                                <div>
+                                  <span>{lang === "km" ? "បច្ចុប្បន្ន" : "Current"}</span>
+                                  <strong>{row.currentStock}</strong>
+                                </div>
+                                <div>
+                                  <span>{lang === "km" ? "អប្បបរមា" : "Min"}</span>
+                                  <strong>{row.minStock}</strong>
+                                </div>
                               </div>
-                              <div>
-                                <span>{lang === "km" ? "បច្ចុប្បន្ន" : "Current"}</span>
-                                <strong>{row.currentStock}</strong>
+                              <div className="inventory-purchase-mobile-suggest">
+                                <label className="field">
+                                  <span>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</span>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={purchaseRequestQtyOverrides[String(row.id)] ?? String(row.suggestedQty ?? 0)}
+                                    onChange={(e) =>
+                                      setPurchaseRequestQtyOverrides((prev) => ({
+                                        ...prev,
+                                        [String(row.id)]: e.target.value,
+                                      }))
+                                    }
+                                    style={{ fontWeight: 700 }}
+                                  />
+                                </label>
+                                {Number(row.packSize || 0) > 0 ? (
+                                  <span className="tiny">
+                                    {String(row.itemName || "").toLowerCase().includes("shampoo") || String(row.itemName || "").toLowerCase().includes("alcohol")
+                                      ? `1 box = ${row.packSize} bottles`
+                                      : `1 box = ${row.packSize} units`}
+                                  </span>
+                                ) : null}
                               </div>
-                              <div>
-                                <span>{lang === "km" ? "អប្បបរមា" : "Min"}</span>
-                                <strong>{row.minStock}</strong>
-                              </div>
-                            </div>
-                            <div className="inventory-purchase-mobile-suggest">
-                              <label className="field">
-                                <span>{lang === "km" ? "ស្នើទិញ" : "Suggested Qty"}</span>
-                                <input
-                                  className="input"
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={purchaseRequestQtyOverrides[String(row.id)] ?? String(row.suggestedQty ?? 0)}
-                                  onChange={(e) =>
-                                    setPurchaseRequestQtyOverrides((prev) => ({
-                                      ...prev,
-                                      [String(row.id)]: e.target.value,
-                                    }))
-                                  }
-                                  style={{ fontWeight: 700 }}
-                                />
-                              </label>
-                              {Number(row.packSize || 0) > 0 ? (
-                                <span className="tiny">
-                                  {String(row.itemName || "").toLowerCase().includes("shampoo") || String(row.itemName || "").toLowerCase().includes("alcohol")
-                                    ? `1 box = ${row.packSize} bottles`
-                                    : `1 box = ${row.packSize} units`}
-                                </span>
-                              ) : null}
-                            </div>
                           </article>
                         ))
                       ) : (
@@ -45553,7 +45588,22 @@ export default function App() {
                                   </div>
                                 </td>
                                 <td>{cleaningSupplyCampusLabel(String(row.campus || ""))}</td>
-                                <td>{row.usedQty}</td>
+                                <td>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={purchaseRequestUsedQtyOverrides[String(row.id)] ?? String(row.usedQty ?? 0)}
+                                    onChange={(e) =>
+                                      setPurchaseRequestUsedQtyOverrides((prev) => ({
+                                        ...prev,
+                                        [String(row.id)]: e.target.value,
+                                      }))
+                                    }
+                                    style={{ minWidth: 88, fontWeight: 700 }}
+                                  />
+                                </td>
                                 <td>{row.currentStock}</td>
                                 <td>{row.minStock}</td>
                                 <td>
@@ -49335,23 +49385,7 @@ export default function App() {
                 <div className="field field-wide maintenance-quick-photo-pair">
                   <label className="field maintenance-quick-photo-field">
                     <span>{lang === "km" ? "មុន" : "Before"}</span>
-                    <input
-                      id={`maintenance-staff-before-upload-${maintenanceRecordFileKey}`}
-                      key={`${maintenanceRecordFileKey}-staff-before`}
-                      className="file-input maintenance-quick-photo-input"
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      multiple
-                      onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
-                    />
-                    <button
-                      type="button"
-                      className="tab btn-small maintenance-quick-photo-btn"
-                      onClick={() => document.getElementById(`maintenance-staff-before-upload-${maintenanceRecordFileKey}`)?.click()}
-                    >
-                      {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
-                    </button>
+                    {renderMaintenancePhotoChooser(`maintenance-staff-before-upload-${maintenanceRecordFileKey}`, "before")}
                     {maintenanceRecordForm.beforePhotos.length ? (
                       <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                         {maintenanceRecordForm.beforePhotos.map((url, index) => (
@@ -49378,23 +49412,7 @@ export default function App() {
                   </label>
                   <label className="field maintenance-quick-photo-field">
                     <span>{lang === "km" ? "ក្រោយ" : "After"}</span>
-                    <input
-                      id={`maintenance-staff-after-upload-${maintenanceRecordFileKey}`}
-                      key={`${maintenanceRecordFileKey}-staff-after`}
-                      className="file-input maintenance-quick-photo-input"
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      multiple
-                      onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
-                    />
-                    <button
-                      type="button"
-                      className="tab btn-small maintenance-quick-photo-btn"
-                      onClick={() => document.getElementById(`maintenance-staff-after-upload-${maintenanceRecordFileKey}`)?.click()}
-                    >
-                      {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
-                    </button>
+                    {renderMaintenancePhotoChooser(`maintenance-staff-after-upload-${maintenanceRecordFileKey}`, "after")}
                     {maintenanceRecordForm.afterPhotos.length ? (
                       <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                         {maintenanceRecordForm.afterPhotos.map((url, index) => (
@@ -49770,23 +49788,7 @@ export default function App() {
               <div className="field field-wide maintenance-quick-photo-pair">
                 <label className="field maintenance-quick-photo-field">
                   <span>{lang === "km" ? "មុន" : "Before"} ({MAX_MAINTENANCE_PHOTOS})</span>
-                  <input
-                    id={`maintenance-record-before-upload-${maintenanceRecordFileKey}`}
-                    key={`${maintenanceRecordFileKey}-before`}
-                    className="file-input maintenance-quick-photo-input"
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    multiple
-                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
-                  />
-                  <button
-                    type="button"
-                    className="tab btn-small maintenance-quick-photo-btn"
-                    onClick={() => document.getElementById(`maintenance-record-before-upload-${maintenanceRecordFileKey}`)?.click()}
-                  >
-                    {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
-                  </button>
+                  {renderMaintenancePhotoChooser(`maintenance-record-before-upload-${maintenanceRecordFileKey}`, "before")}
                   {maintenanceRecordForm.beforePhotos.length ? (
                     <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                       {maintenanceRecordForm.beforePhotos.map((url, index) => (
@@ -49813,23 +49815,7 @@ export default function App() {
                 </label>
                 <label className="field maintenance-quick-photo-field">
                   <span>{lang === "km" ? "ក្រោយ" : "After"} ({MAX_MAINTENANCE_PHOTOS})</span>
-                  <input
-                    id={`maintenance-record-after-upload-${maintenanceRecordFileKey}`}
-                    key={`${maintenanceRecordFileKey}-after`}
-                    className="file-input maintenance-quick-photo-input"
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    multiple
-                    onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
-                  />
-                  <button
-                    type="button"
-                    className="tab btn-small maintenance-quick-photo-btn"
-                    onClick={() => document.getElementById(`maintenance-record-after-upload-${maintenanceRecordFileKey}`)?.click()}
-                  >
-                    {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
-                  </button>
+                  {renderMaintenancePhotoChooser(`maintenance-record-after-upload-${maintenanceRecordFileKey}`, "after")}
                   {maintenanceRecordForm.afterPhotos.length ? (
                     <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                       {maintenanceRecordForm.afterPhotos.map((url, index) => (
