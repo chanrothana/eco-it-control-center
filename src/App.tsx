@@ -49119,7 +49119,7 @@ export default function App() {
                   <div className="field field-wide">
                     <span>{lang === "km" ? "របៀបកត់ត្រា" : "Record Mode"}</span>
                     <div className="detail-value">
-                      {lang === "km" ? "កត់ត្រាការងារទូទៅ ដោយមិនភ្ជាប់ Asset" : "Saving a general maintenance task without an asset"}
+                      {lang === "km" ? "ការងារទូទៅ" : "General Task"}
                     </div>
                   </div>
                 )}
@@ -49196,15 +49196,24 @@ export default function App() {
                 </label>
                 <div className="field field-wide maintenance-quick-photo-pair">
                   <label className="field maintenance-quick-photo-field">
-                    <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"}</span>
+                    <span>{lang === "km" ? "មុន" : "Before"}</span>
                     <input
+                      id={`maintenance-staff-before-upload-${maintenanceRecordFileKey}`}
                       key={`${maintenanceRecordFileKey}-staff-before`}
-                      className="file-input"
+                      className="file-input maintenance-quick-photo-input"
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       multiple
                       onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
                     />
+                    <button
+                      type="button"
+                      className="tab btn-small maintenance-quick-photo-btn"
+                      onClick={() => document.getElementById(`maintenance-staff-before-upload-${maintenanceRecordFileKey}`)?.click()}
+                    >
+                      {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
+                    </button>
                     {maintenanceRecordForm.beforePhotos.length ? (
                       <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                         {maintenanceRecordForm.beforePhotos.map((url, index) => (
@@ -49230,15 +49239,24 @@ export default function App() {
                     ) : null}
                   </label>
                   <label className="field maintenance-quick-photo-field">
-                    <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"}</span>
+                    <span>{lang === "km" ? "ក្រោយ" : "After"}</span>
                     <input
+                      id={`maintenance-staff-after-upload-${maintenanceRecordFileKey}`}
                       key={`${maintenanceRecordFileKey}-staff-after`}
-                      className="file-input"
+                      className="file-input maintenance-quick-photo-input"
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       multiple
                       onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
                     />
+                    <button
+                      type="button"
+                      className="tab btn-small maintenance-quick-photo-btn"
+                      onClick={() => document.getElementById(`maintenance-staff-after-upload-${maintenanceRecordFileKey}`)?.click()}
+                    >
+                      {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
+                    </button>
                     {maintenanceRecordForm.afterPhotos.length ? (
                       <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                         {maintenanceRecordForm.afterPhotos.map((url, index) => (
@@ -49604,15 +49622,24 @@ export default function App() {
               </label>
               <div className="field field-wide maintenance-quick-photo-pair">
                 <label className="field maintenance-quick-photo-field">
-                  <span>{lang === "km" ? "រូបមុនថែទាំ" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                  <span>{lang === "km" ? "មុន" : "Before"} ({MAX_MAINTENANCE_PHOTOS})</span>
                   <input
+                    id={`maintenance-record-before-upload-${maintenanceRecordFileKey}`}
                     key={`${maintenanceRecordFileKey}-before`}
-                    className="file-input"
+                    className="file-input maintenance-quick-photo-input"
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     multiple
                     onChange={(e) => void onMaintenanceRecordPhotoFile(e, "before")}
                   />
+                  <button
+                    type="button"
+                    className="tab btn-small maintenance-quick-photo-btn"
+                    onClick={() => document.getElementById(`maintenance-record-before-upload-${maintenanceRecordFileKey}`)?.click()}
+                  >
+                    {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
+                  </button>
                   {maintenanceRecordForm.beforePhotos.length ? (
                     <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                       {maintenanceRecordForm.beforePhotos.map((url, index) => (
@@ -49638,15 +49665,24 @@ export default function App() {
                   ) : null}
                 </label>
                 <label className="field maintenance-quick-photo-field">
-                  <span>{lang === "km" ? "រូបបន្ទាប់ពីថែទាំ" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                  <span>{lang === "km" ? "ក្រោយ" : "After"} ({MAX_MAINTENANCE_PHOTOS})</span>
                   <input
+                    id={`maintenance-record-after-upload-${maintenanceRecordFileKey}`}
                     key={`${maintenanceRecordFileKey}-after`}
-                    className="file-input"
+                    className="file-input maintenance-quick-photo-input"
                     type="file"
                     accept="image/*"
+                    capture="environment"
                     multiple
                     onChange={(e) => void onMaintenanceRecordPhotoFile(e, "after")}
                   />
+                  <button
+                    type="button"
+                    className="tab btn-small maintenance-quick-photo-btn"
+                    onClick={() => document.getElementById(`maintenance-record-after-upload-${maintenanceRecordFileKey}`)?.click()}
+                  >
+                    {lang === "km" ? "បន្ថែមរូប" : "Add Photo"}
+                  </button>
                   {maintenanceRecordForm.afterPhotos.length ? (
                     <div className="asset-photo-gallery maintenance-quick-photo-gallery">
                       {maintenanceRecordForm.afterPhotos.map((url, index) => (

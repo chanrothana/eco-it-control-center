@@ -6,10 +6,10 @@ const path = require("path");
 const WEB_PORT = 3000;
 const API_PORT = 4000;
 const isPhoneMode = process.argv.includes("--phone");
-// Local mode should bind to loopback explicitly so environments that block
-// wildcard binds (`0.0.0.0`) still work with localhost.
-const apiHost = isPhoneMode ? "0.0.0.0" : "127.0.0.1";
-const webHost = isPhoneMode ? "0.0.0.0" : "localhost";
+// Local mode should bind to loopback explicitly. Using `127.0.0.1` avoids
+// environments where `localhost` resolves to IPv6 (`::1`) and CRA fails to bind.
+const apiHost = process.env.API_HOST || (isPhoneMode ? "0.0.0.0" : "127.0.0.1");
+const webHost = process.env.HOST || (isPhoneMode ? "0.0.0.0" : "127.0.0.1");
 const children = [];
 let shuttingDown = false;
 
