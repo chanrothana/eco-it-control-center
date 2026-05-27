@@ -8766,6 +8766,159 @@ label.backup-action-btn {
   border-radius: 9px;
 }
 
+.maintenance-quick-datetime-field {
+  gap: 0;
+}
+
+.maintenance-datetime-eco-panel {
+  border-radius: 24px;
+  padding: 14px;
+  border: 1px solid rgba(108, 139, 184, 0.42);
+  background:
+    linear-gradient(180deg, rgba(48, 70, 104, 0.98) 0%, rgba(34, 53, 81, 0.98) 100%);
+  box-shadow: 0 18px 34px rgba(9, 19, 34, 0.42);
+}
+
+.maintenance-datetime-eco-head {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.maintenance-datetime-eco-head .quickout-eco-title {
+  color: #eef4ff;
+  font-size: 15px;
+}
+
+.maintenance-datetime-eco-head .quickout-eco-nav-btn {
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid #cfd8e7;
+  background: linear-gradient(180deg, #ffffff, #eef3fb);
+  color: #334c73;
+  box-shadow: 0 6px 16px rgba(8, 17, 31, 0.16);
+}
+
+.maintenance-datetime-eco-month {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 16px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 151, 190, 0.46);
+  background: rgba(68, 92, 128, 0.42);
+  color: #dfeaff;
+  font-weight: 600;
+}
+
+.maintenance-datetime-eco-grid {
+  gap: 8px;
+}
+
+.maintenance-datetime-eco-grid .calendar-day {
+  min-height: 54px;
+  border-radius: 16px;
+  border-color: rgba(135, 165, 210, 0.52);
+  background: linear-gradient(180deg, #f7fbff 0%, #dce8f8 100%);
+  color: #28456f;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-head {
+  min-height: 42px;
+  border-radius: 14px;
+  color: #4c6d98;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-head-weekend,
+.maintenance-datetime-eco-grid .calendar-day.calendar-weekend {
+  color: #c84754;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-selected {
+  border-color: #7fa3de;
+  background: linear-gradient(180deg, #ffffff 0%, #d7e6ff 100%);
+  box-shadow: inset 0 0 0 2px rgba(95, 142, 231, 0.55), 0 10px 18px rgba(38, 76, 138, 0.26);
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday,
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-public,
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-break {
+  background: linear-gradient(180deg, #d5545c, #bf414a);
+  border-color: #9f2f39;
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(122, 25, 38, 0.22);
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-ptc {
+  background: linear-gradient(180deg, #7ec7d8, #57a9bd);
+  border-color: #3c8ca0;
+  color: #fff;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-term_end {
+  background: linear-gradient(180deg, #6ea0ee, #467cd4);
+  border-color: #355faa;
+  color: #fff;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-term_start {
+  background: linear-gradient(180deg, #67b24f, #4f933e);
+  border-color: #3c752f;
+  color: #fff;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-camp {
+  background: linear-gradient(180deg, #f2ec2e, #d6cf1f);
+  border-color: #b8b112;
+  color: #3b3400;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-celebration {
+  background: linear-gradient(180deg, #19d7e2, #11aeb8);
+  border-color: #0d8992;
+  color: #00353a;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday span,
+.maintenance-datetime-eco-grid .calendar-day[class*="calendar-holiday-"] span {
+  color: inherit !important;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-today::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #ef8e3b;
+}
+
+.maintenance-datetime-eco-time {
+  margin-top: 14px;
+  gap: 6px;
+}
+
+.maintenance-datetime-eco-badge {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(127, 163, 222, 0.42);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eef4ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.maintenance-datetime-eco-time > span {
+  color: #dfeaff;
+}
+
 .quickout-eco-grid .calendar-day.calendar-day-locked {
   opacity: 0.45;
   cursor: not-allowed;

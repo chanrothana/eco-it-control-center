@@ -4605,6 +4605,21 @@ function formatTimeOnly(value: string) {
   });
 }
 
+function toHm(value: Date) {
+  const hours = String(value.getHours()).padStart(2, "0");
+  const minutes = String(value.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function combineYmdAndTimeToIso(date: string, time: string) {
+  const normalizedDate = normalizeYmdInput(date);
+  const normalizedTime = /^\d{2}:\d{2}$/.test(String(time || "").trim()) ? String(time || "").trim() : "";
+  if (!normalizedDate) return new Date().toISOString();
+  const combined = new Date(`${normalizedDate}T${normalizedTime || "00:00"}:00`);
+  if (Number.isNaN(combined.getTime())) return new Date().toISOString();
+  return combined.toISOString();
+}
+
 function getTermRange(year: number, term: "Term 1" | "Term 2" | "Term 3") {
   if (term === "Term 1") return { from: `${year}-01-01`, to: `${year}-04-30` };
   if (term === "Term 2") return { from: `${year}-05-01`, to: `${year}-08-31` };
@@ -6101,6 +6116,7 @@ function createMaintenanceRecordForm(
   preferredDate = toYmd(new Date()),
   preferredBy = ""
 ) {
+  const now = new Date();
   const workflow = normalizeMaintenanceWorkflow({
     template: getMaintenanceTemplateKey(asset),
     priority: "Normal",
@@ -6108,6 +6124,7 @@ function createMaintenanceRecordForm(
   return {
     assetId: asset ? String(asset.id) : "",
     date: preferredDate,
+    time: toHm(now),
     type: "Preventive",
     completion: "Done" as "Done" | "Not Yet",
     condition: "",
@@ -14286,6 +14303,19 @@ export default function App() {
       year: "numeric",
     });
   }, [maintenanceRecordForm.date, lang]);
+  const maintenanceRecordDisplayDateTime = useMemo(() => {
+    const ymd = normalizeYmdInput(maintenanceRecordForm.date || "");
+    const time = /^\d{2}:\d{2}$/.test(String(maintenanceRecordForm.time || "").trim())
+      ? String(maintenanceRecordForm.time || "").trim()
+      : "";
+    if (!ymd) return "";
+    const value = `${ymd}T${time || "00:00"}:00`;
+    if (lang === "km") {
+      const dateLabel = formatKhmerDateYmd(ymd);
+      return time ? `${dateLabel} ${time}` : dateLabel;
+    }
+    return formatDateTime(value);
+  }, [maintenanceRecordForm.date, maintenanceRecordForm.time, lang]);
   const maintenanceRecordDateMonthLabel = useMemo(
     () =>
       lang === "km"
@@ -14327,6 +14357,32 @@ export default function App() {
       };
     });
   }, [maintenanceRecordDateMonth, getHolidayEvent]);
+  const maintenanceRecordDateBadge = useMemo(() => {
+    const ymd = normalizeYmdInput(maintenanceRecordForm.date || "");
+    if (!ymd) return "";
+    const holiday = getHolidayEvent(ymd);
+    if (holiday.name) {
+      if (isNonWorkingHolidayType(holiday.type)) {
+        return lang === "km" ? `ថ្ងៃឈប់សម្រាក៖ ${holiday.name}` : `Eco Holiday: ${holiday.name}`;
+      }
+      const kmTypeLabel: Record<CalendarEventType, string> = {
+        public: "ថ្ងៃឈប់សម្រាក",
+        break: "វិស្សមកាល",
+        ptc: "PTC",
+        term_end: "បញ្ចប់ឆមាស",
+        term_start: "ចាប់ផ្តើមឆមាស",
+        camp: "ជំរំ",
+        celebration: "ព្រឹត្តិការណ៍",
+      };
+      const typeLabel = lang === "km"
+        ? kmTypeLabel[normalizeCalendarEventType(holiday.type)]
+        : calendarEventTypeLabel(normalizeCalendarEventType(holiday.type));
+      return `${typeLabel}: ${holiday.name}`;
+    }
+    const day = new Date(`${ymd}T00:00:00`).getDay();
+    if (day === 0 || day === 6) return lang === "km" ? "ចុងសប្តាហ៍" : "Weekend";
+    return "";
+  }, [maintenanceRecordForm.date, getHolidayEvent, lang]);
   const scheduleDisplayDate = useMemo(() => {
     const ymd = normalizeYmdInput(scheduleForm.date || "");
     if (!ymd) return "";
@@ -25660,7 +25716,7 @@ export default function App() {
       const entry: MaintenanceEntry = {
         id: Date.now(),
         date: maintenanceRecordForm.date,
-        createdAt: new Date().toISOString(),
+        createdAt: combineYmdAndTimeToIso(maintenanceRecordForm.date, maintenanceRecordForm.time),
         type: maintenanceRecordForm.type.trim(),
         completion: maintenanceRecordForm.completion,
         condition: maintenanceRecordForm.condition.trim(),
@@ -40206,7 +40262,7 @@ export default function App() {
             )}
 
             {assetsView === "list" && editingAsset && (
-              <div className="modal-backdrop" onClick={cancelEditAsset}>
+              <div className="modal-backdrop">
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
                     <h2>Edit Asset - {editingAsset.assetId}</h2>
@@ -49027,8 +49083,8 @@ export default function App() {
                       <strong>{maintenanceQuickCampusDisplayLabel}</strong>
                     </div>
                     <div className="maintenance-quick-summary-pill">
-                      <span>{lang === "km" ? "ថ្ងៃ" : "Date"}</span>
-                      <strong>{formatDate(maintenanceRecordForm.date)}</strong>
+                      <span>{lang === "km" ? "ថ្ងៃ / ម៉ោង" : "Date / Time"}</span>
+                      <strong>{maintenanceRecordDisplayDateTime || "-"}</strong>
                     </div>
                     <div className="maintenance-quick-summary-pill">
                       <span>{lang === "km" ? "អ្នកធ្វើ" : "By"}</span>
@@ -49074,15 +49130,97 @@ export default function App() {
                     <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
                   )}
                 </label>
-                <label className="field">
-                  <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
-                  <input
-                    className="input"
-                    type="date"
-                    value={maintenanceRecordForm.date}
-                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, date: e.target.value }))}
-                  />
-                </label>
+                <div className="field">
+                  <span>{lang === "km" ? "កាលបរិច្ឆេទ និងម៉ោង" : "Date & Time"}</span>
+                  <div className="quickout-date-field maintenance-quick-datetime-field" ref={maintenanceRecordDateWrapRef}>
+                    <div className="quickout-date-input-wrap">
+                      <input
+                        className="input"
+                        type="text"
+                        readOnly
+                        value={maintenanceRecordDisplayDateTime}
+                        placeholder="dd/mm/yyyy, hh:mm"
+                      />
+                      <button
+                        type="button"
+                        className="quickout-date-icon-btn"
+                        onClick={openMaintenanceRecordDatePicker}
+                        aria-label="Open Eco Calendar"
+                      >
+                        <Calendar size={18} />
+                      </button>
+                    </div>
+                    {maintenanceRecordDatePickerOpen ? (
+                      <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel">
+                        <div className="quickout-eco-head maintenance-datetime-eco-head">
+                          <strong className="quickout-eco-title">{lang === "km" ? "Eco Calendar View" : "Eco Calendar View"}</strong>
+                          <div className="quickout-eco-nav">
+                            <button
+                              type="button"
+                              className="quickout-eco-nav-btn"
+                              aria-label="Previous month"
+                              disabled={!maintenanceRecordDateCanGoPrevMonth}
+                              onClick={() =>
+                                setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                              }
+                            >
+                              {"<"}
+                            </button>
+                            <button
+                              type="button"
+                              className="quickout-eco-nav-btn"
+                              aria-label="Next month"
+                              onClick={() =>
+                                setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                              }
+                            >
+                              {">"}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="maintenance-datetime-eco-month">
+                          {maintenanceRecordDateMonthLabel}
+                        </div>
+                        <CalendarGridTemplate
+                          weekdayLabels={calendarWeekdayLabels}
+                          days={maintenanceRecordDateGridDays}
+                          selectedDate={maintenanceRecordSelectedDate}
+                          todayYmd={todayYmd}
+                          isPhoneView={isPhoneView}
+                          onSelectDate={(ymd) => {
+                            setMaintenanceRecordSelectedDate(ymd);
+                            setMaintenanceRecordForm((f) => ({ ...f, date: ymd }));
+                          }}
+                          isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
+                          gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
+                          renderHolidayTag={(d) =>
+                            d.holidayName ? (
+                              <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                                {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                              </em>
+                            ) : null
+                          }
+                          headKeyPrefix="maintenance-quick-date-head"
+                          dayKeyPrefix="maintenance-quick-date-day"
+                        />
+                        {maintenanceRecordDateBadge ? (
+                          <div className="maintenance-datetime-eco-badge">
+                            {maintenanceRecordDateBadge}
+                          </div>
+                        ) : null}
+                        <label className="field maintenance-datetime-eco-time">
+                          <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
+                          <input
+                            className="input"
+                            type="time"
+                            value={maintenanceRecordForm.time || "00:00"}
+                            onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, time: e.target.value }))}
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
                 {!maintenanceQuickGeneralTask ? (
                   <label className="field field-wide">
                     <span>{lang === "km" ? "ទ្រព្យ ឬ សម្ភារៈ" : "Asset or Item"}</span>
@@ -49525,6 +49663,15 @@ export default function App() {
                       />
                     </div>
                   ) : null}
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
+                  <input
+                    className="input"
+                    type="time"
+                    value={maintenanceRecordForm.time || "00:00"}
+                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, time: e.target.value }))}
+                  />
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
