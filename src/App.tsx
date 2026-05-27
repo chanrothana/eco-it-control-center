@@ -1561,9 +1561,13 @@ const MENU_ACCESS_TREE: Array<{
   },
   {
     module: "classroom",
-    labelEn: "Classroom Control",
-    labelKm: "គ្រប់គ្រងថ្នាក់រៀន",
-    children: [{ key: "classroom.main", labelEn: "Classroom Dashboard", labelKm: "ផ្ទាំងគ្រប់គ្រងថ្នាក់រៀន" }],
+    labelEn: "Location Control",
+    labelKm: "គ្រប់គ្រងទីតាំង",
+    children: [
+      { key: "classroom.main", labelEn: "Classroom Control", labelKm: "ថ្នាក់រៀន" },
+      { key: "classroom.office", labelEn: "Office", labelKm: "ការិយាល័យ" },
+      { key: "classroom.outdoor", labelEn: "Outdoor Space", labelKm: "កន្លែងខាងក្រៅ" },
+    ],
   },
   {
     module: "cctv",
@@ -7859,7 +7863,7 @@ export default function App() {
     () => [
       { id: "dashboard", label: t.dashboard },
       { id: "assets", label: t.assets },
-      { id: "classroom", label: lang === "km" ? "ថ្នាក់រៀន" : "Classroom Control" },
+      { id: "classroom", label: lang === "km" ? "គ្រប់គ្រងទីតាំង" : "Location Control" },
       { id: "cctv", label: lang === "km" ? "គ្រប់គ្រង CCTV" : "CCTV Control" },
       { id: "inventory", label: t.inventory },
       { id: "utilities", label: lang === "km" ? "សេវាប្រើប្រាស់" : "Utilities" },
@@ -8128,6 +8132,14 @@ export default function App() {
       setTab("verification");
     });
   }, []);
+  const openClassroomLocationGroup = useCallback((group: "CLASSROOM" | "OFFICE" | "OUTDOOR") => {
+    startTabTransition(() => {
+      setClassroomView("gallery");
+      setClassroomLocationTypeFilter(group);
+      setClassroomDetailRoomId(null);
+      setTab("classroom");
+    });
+  }, []);
   const openMaintenanceQuickRecord = useCallback(() => {
     startTabTransition(() => {
       setMaintenanceView("record");
@@ -8289,7 +8301,26 @@ export default function App() {
             };
           });
         case "classroom":
-          return [];
+          return [
+            {
+              key: "classroom.location.classroom",
+              label: lang === "km" ? "ថ្នាក់រៀន" : "Classroom Control",
+              active: tab === "classroom" && classroomLocationTypeFilter === "CLASSROOM",
+              onSelect: () => openClassroomLocationGroup("CLASSROOM"),
+            },
+            {
+              key: "classroom.location.office",
+              label: lang === "km" ? "ការិយាល័យ" : "Office",
+              active: tab === "classroom" && classroomLocationTypeFilter === "OFFICE",
+              onSelect: () => openClassroomLocationGroup("OFFICE"),
+            },
+            {
+              key: "classroom.location.outdoor",
+              label: lang === "km" ? "កន្លែងខាងក្រៅ" : "Outdoor Space",
+              active: tab === "classroom" && classroomLocationTypeFilter === "OUTDOOR",
+              onSelect: () => openClassroomLocationGroup("OUTDOOR"),
+            },
+          ];
         case "tickets":
           return [
             {
@@ -15085,6 +15116,32 @@ export default function App() {
     },
     [purchaseRequestUsedQtyOverrides]
   );
+  const classroomSectionTitle = useMemo(() => {
+    if (classroomLocationTypeFilter === "ALL") {
+      return lang === "km" ? "គ្រប់គ្រងទីតាំង" : "Location Control";
+    }
+    return locationGroupLabel(classroomLocationTypeFilter, lang);
+  }, [classroomLocationTypeFilter, lang]);
+  const classroomSectionSubtitle = useMemo(() => {
+    if (classroomLocationTypeFilter === "CLASSROOM") {
+      return lang === "km"
+        ? "តាមដានសម្ភារៈ និងទ្រព្យសម្រាប់ថ្នាក់រៀននីមួយៗ"
+        : "Track classroom setup, furniture, and key room assets in one place.";
+    }
+    if (classroomLocationTypeFilter === "OFFICE") {
+      return lang === "km"
+        ? "តាមដានសម្ភារៈ និងទ្រព្យសម្រាប់ការិយាល័យនីមួយៗ"
+        : "Track office setup, furniture, and key workspace assets in one place.";
+    }
+    if (classroomLocationTypeFilter === "OUTDOOR") {
+      return lang === "km"
+        ? "តាមដានសម្ភារៈ និងទ្រព្យសម្រាប់តំបន់ខាងក្រៅនីមួយៗ"
+        : "Track outdoor spaces, fixtures, and key area assets in one place.";
+    }
+    return lang === "km"
+      ? "តាមដានសម្ភារៈ និងទ្រព្យតាមទីតាំង"
+      : "Track setup, furniture, and key assets by location.";
+  }, [classroomLocationTypeFilter, lang]);
 
   const activePoolLabel = useMemo(() => {
     const campus = String(poolInfo.campus || "").trim();
@@ -39705,12 +39762,6 @@ export default function App() {
                   </div>
                   {isAdmin ? (
                     <div className="asset-actions" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-                      <button type="button" className="btn-primary btn-small" onClick={() => openMaintenanceQuickFromDetail(detailAsset)}>
-                        {detailFurniture ? "Record Fixing" : "Record Maintenance"}
-                      </button>
-                      <button type="button" className="btn-primary btn-small" onClick={() => openTransferQuickFromDetail(detailAsset)}>
-                        Record Transfer
-                      </button>
                       <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
                         {detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
                       </button>
@@ -43141,12 +43192,8 @@ export default function App() {
             <section className="panel">
               <div className="panel-row">
                 <div>
-                  <h2>{lang === "km" ? "គ្រប់គ្រងថ្នាក់រៀន" : "Classroom Control"}</h2>
-                  <div className="tiny">
-                    {lang === "km"
-                      ? "តាមដានសម្ភារៈ និងទ្រព្យសម្រាប់ថ្នាក់រៀននីមួយៗ"
-                      : "Track classroom setup, furniture, and key room assets in one place."}
-                  </div>
+                  <h2>{classroomSectionTitle}</h2>
+                  <div className="tiny">{classroomSectionSubtitle}</div>
                 </div>
               </div>
             </section>
@@ -43328,7 +43375,7 @@ export default function App() {
                   style={{
                     marginBottom: 12,
                     display: "grid",
-                    gridTemplateColumns: isPhoneView ? "1fr" : "repeat(4, minmax(0, 1fr))",
+                    gridTemplateColumns: isPhoneView ? "1fr" : "repeat(3, minmax(0, 1fr))",
                     gap: 12,
                   }}
                 >
@@ -43344,18 +43391,6 @@ export default function App() {
                       </option>
                     ))}
                   </select>
-                  <select
-                    className="input"
-                    value={classroomLocationTypeFilter}
-                    onChange={(e) => setClassroomLocationTypeFilter(e.target.value as "ALL" | LocationGroupKey)}
-                  >
-                    <option value="ALL">{lang === "km" ? "គ្រប់ប្រភេទទីតាំង" : "All Location Types"}</option>
-                    {classroomLocationTypeOptions.map((typeKey) => (
-                      <option key={`classroom-location-type-${typeKey}`} value={typeKey}>
-                        {locationGroupLabel(typeKey, lang)}
-                      </option>
-                    ))}
-                  </select>
                   <input
                     className="input"
                     value={classroomQuery}
@@ -43368,7 +43403,6 @@ export default function App() {
                     onClick={() => {
                       setClassroomCampusFilter("ALL");
                       setClassroomRoomFilter("ALL");
-                      setClassroomLocationTypeFilter("ALL");
                       setClassroomQuery("");
                     }}
                     style={{ minHeight: 56 }}
@@ -59123,12 +59157,6 @@ export default function App() {
               </div>
               {isAdmin ? (
                 <div className="asset-actions" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-                  <button type="button" className="btn-primary btn-small" onClick={() => openMaintenanceQuickFromDetail(detailAsset)}>
-                    {detailFurniture ? "Record Fixing" : "Record Maintenance"}
-                  </button>
-                  <button type="button" className="btn-primary btn-small" onClick={() => openTransferQuickFromDetail(detailAsset)}>
-                    Record Transfer
-                  </button>
                   <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
                     {detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
                   </button>
