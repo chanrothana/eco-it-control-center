@@ -59097,7 +59097,7 @@ export default function App() {
                               <div className="public-asset-history-date">{formatDate(h.date)}</div>
                             </div>
                           </div>
-                          <div className="public-asset-history-grid">
+                          <div className="public-asset-history-grid public-asset-history-grid-paired asset-detail-history-grid-compact">
                             {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(h.completion || "-"))}
                             {renderPublicHistoryMeta("Condition", h.condition || "-")}
                             {renderPublicHistoryMeta("Cost", h.cost || "-")}

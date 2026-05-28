@@ -21688,6 +21688,8 @@ tr.row-maint-maintenance:hover td {
   .workspace-main .status-select {
     appearance: none;
     -webkit-appearance: none;
+    -webkit-text-fill-color: #17304f;
+    color-scheme: light;
     padding-right: 54px;
     background:
       linear-gradient(180deg, #f8fbff 0%, #edf4fe 100%) right 6px center / 36px calc(100% - 12px) no-repeat,
@@ -21698,6 +21700,14 @@ tr.row-maint-maintenance:hover td {
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.82),
       0 0 0 1px rgba(201, 216, 236, 0.18);
+  }
+
+  .workspace-main select.input option,
+  .workspace-main .status-select option,
+  .workspace-main select.input optgroup,
+  .workspace-main .status-select optgroup {
+    color: #17304f;
+    background: #f7fbff;
   }
 
   .workspace-main input.input[type="date"],
@@ -22125,11 +22135,23 @@ tr.row-maint-maintenance:hover td {
     gap: 10px 18px;
   }
 
+  .modal-panel .asset-detail-history-section .asset-detail-history-grid-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+  }
+
   .modal-panel .asset-detail-history-section .public-asset-history-item {
     display: grid;
     gap: 3px;
     align-items: start;
     font-size: 14px;
+  }
+
+  .modal-panel .asset-detail-history-section .asset-detail-history-grid-compact .public-asset-history-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px;
   }
 
   .modal-panel .asset-detail-history-section .public-asset-history-key {
@@ -22145,6 +22167,10 @@ tr.row-maint-maintenance:hover td {
     line-height: 1.4;
     color: #2a446f;
     font-weight: 600;
+  }
+
+  .modal-panel .asset-detail-history-section .asset-detail-history-grid-compact .public-asset-history-value {
+    display: inline;
   }
 
   .modal-panel .asset-detail-history-section .public-asset-history-note,
