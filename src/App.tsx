@@ -10816,6 +10816,7 @@ export default function App() {
   const [editingFurnitureModelId, setEditingFurnitureModelId] = useState<number | null>(null);
   const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [userSetupModalOpen, setUserSetupModalOpen] = useState(false);
   const filteredSetupUsers = useMemo(() => {
     const query = userSetupSearch.trim().toLowerCase();
     if (!query) return users;
@@ -20229,7 +20230,8 @@ export default function App() {
           await loadStaffUsers();
         }
       }
-      setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
+      resetUserSetupForm();
+      setUserSetupModalOpen(false);
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         if (editingUserId !== null) {
@@ -20251,7 +20253,8 @@ export default function App() {
           };
           setUsers((prev) => [localUser, ...prev]);
         }
-        setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
+        resetUserSetupForm();
+        setUserSetupModalOpen(false);
         setError("");
         return;
       }
@@ -21124,6 +21127,21 @@ export default function App() {
     }
   }
 
+  function resetUserSetupForm() {
+    setEditingUserId(null);
+    setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
+  }
+
+  function closeUserSetupModal() {
+    setUserSetupModalOpen(false);
+    resetUserSetupForm();
+  }
+
+  function openCreateUserModal() {
+    resetUserSetupForm();
+    setUserSetupModalOpen(true);
+  }
+
   function startEditUser(user: StaffUser) {
     setEditingUserId(user.id);
     setUserForm({
@@ -21133,6 +21151,7 @@ export default function App() {
       email: user.email,
       telegramChatId: user.telegramChatId || "",
     });
+    setUserSetupModalOpen(true);
   }
 
   async function deleteUser(id: number) {
@@ -21149,15 +21168,13 @@ export default function App() {
         setUsers((prev) => prev.filter((u) => u.id !== id));
       }
       if (editingUserId === id) {
-        setEditingUserId(null);
-        setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
+        closeUserSetupModal();
       }
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         setUsers((prev) => prev.filter((u) => u.id !== id));
         if (editingUserId === id) {
-          setEditingUserId(null);
-          setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
+          closeUserSetupModal();
         }
         setError("");
         return;
@@ -55097,82 +55114,11 @@ export default function App() {
           {tab === "setup" && setupView === "users" && canAccessMenu("setup.users", "setup") && (
           <section className="panel">
             <h2>{t.userSetup}</h2>
-            <div className="form-grid">
-              <label className="field">
-                <span>{t.staffFullName}</span>
-                <input
-                  className="input"
-                  value={userForm.fullName}
-                  onChange={(e) => setUserForm((f) => ({ ...f, fullName: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span>{t.position}</span>
-                <input
-                  className="input"
-                  value={userForm.position}
-                  onChange={(e) => setUserForm((f) => ({ ...f, position: e.target.value }))}
-                />
-              </label>
-              <label className="field">
-                <span>{t.campus}</span>
-                <div className="filter-menu asset-picker-menu-static">
-                  {campusOptions.map((campus) => (
-                    <label key={`setup-user-campus-${campus}`} className="filter-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={userForm.campuses.includes(campus)}
-                        onChange={(e) =>
-                          setUserForm((f) => ({
-                            ...f,
-                            campuses: toggleCampusAccess(f.campuses, campus, e.target.checked),
-                          }))
-                        }
-                      />
-                      <span>{campusLabel(campus)}</span>
-                    </label>
-                  ))}
-                </div>
-                <small className="tiny">
-                  {userForm.campuses.length === 1
-                    ? campusLabel(userForm.campuses[0])
-                    : `${userForm.campuses.length} campuses selected`}
-                </small>
-              </label>
-              <label className="field field-wide">
-                <span>{t.email} ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
-                <input
-                  className="input"
-                  type="email"
-                  value={userForm.email}
-                  onChange={(e) => setUserForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </label>
-              <label className="field field-wide">
-                <span>Telegram Chat ID ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
-                <input
-                  className="input"
-                  value={userForm.telegramChatId}
-                  onChange={(e) => setUserForm((f) => ({ ...f, telegramChatId: e.target.value }))}
-                  placeholder={lang === "km" ? "ឧ. 123456789" : "Example: 123456789"}
-                />
-                <small className="tiny">
-                  {lang === "km"
-                    ? "នេះមិនមែនជាលេខទូរស័ព្ទទេ។ សូមបញ្ចូលលេខ Telegram Chat ID ដើម្បីឱ្យប្រព័ន្ធផ្ញើសារទៅបុគ្គលិកនោះដោយផ្ទាល់។"
-                    : "This is not a phone number. Enter the staff member's Telegram Chat ID so the system can message them directly."}
-                </small>
-              </label>
-            </div>
-              <div className="asset-actions">
+            <div className="asset-actions">
               <div className="tiny">{t.manageAssignableUsers}</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {editingUserId !== null ? (
-                  <button className="tab" onClick={() => { setEditingUserId(null); setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" }); }}>{t.cancelEdit}</button>
-                ) : null}
-                <button className="btn-primary" disabled={busy || !isAdmin} onClick={createOrUpdateUser}>
-                  {editingUserId !== null ? t.updateUser : t.addUser}
-                </button>
-              </div>
+              <button className="btn-primary" disabled={!isAdmin} onClick={openCreateUserModal}>
+                {t.addUser}
+              </button>
             </div>
             <div className="asset-actions" style={{ marginTop: 12, gap: 12 }}>
               <label className="field user-setup-search-field" style={{ margin: 0 }}>
@@ -55266,6 +55212,91 @@ export default function App() {
                 </table>
               </div>
             )}
+            {userSetupModalOpen ? (
+              <div className="modal-backdrop" onClick={() => { if (!busy) closeUserSetupModal(); }}>
+                <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+                  <div className="panel-row">
+                    <h2>{editingUserId !== null ? t.updateUser : t.addUser}</h2>
+                    <button className="tab" disabled={busy} onClick={closeUserSetupModal}>Close</button>
+                  </div>
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>{t.staffFullName}</span>
+                      <input
+                        className="input"
+                        value={userForm.fullName}
+                        onChange={(e) => setUserForm((f) => ({ ...f, fullName: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{t.position}</span>
+                      <input
+                        className="input"
+                        value={userForm.position}
+                        onChange={(e) => setUserForm((f) => ({ ...f, position: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>{t.campus}</span>
+                      <div className="filter-menu asset-picker-menu-static">
+                        {campusOptions.map((campus) => (
+                          <label key={`setup-user-campus-${campus}`} className="filter-menu-item">
+                            <input
+                              type="checkbox"
+                              checked={userForm.campuses.includes(campus)}
+                              onChange={(e) =>
+                                setUserForm((f) => ({
+                                  ...f,
+                                  campuses: toggleCampusAccess(f.campuses, campus, e.target.checked),
+                                }))
+                              }
+                            />
+                            <span>{campusLabel(campus)}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <small className="tiny">
+                        {userForm.campuses.length === 1
+                          ? campusLabel(userForm.campuses[0])
+                          : `${userForm.campuses.length} campuses selected`}
+                      </small>
+                    </label>
+                    <label className="field field-wide">
+                      <span>{t.email} ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
+                      <input
+                        className="input"
+                        type="email"
+                        value={userForm.email}
+                        onChange={(e) => setUserForm((f) => ({ ...f, email: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Telegram Chat ID ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
+                      <input
+                        className="input"
+                        value={userForm.telegramChatId}
+                        onChange={(e) => setUserForm((f) => ({ ...f, telegramChatId: e.target.value }))}
+                        placeholder={lang === "km" ? "ឧ. 123456789" : "Example: 123456789"}
+                      />
+                      <small className="tiny">
+                        {lang === "km"
+                          ? "នេះមិនមែនជាលេខទូរស័ព្ទទេ។ សូមបញ្ចូលលេខ Telegram Chat ID ដើម្បីឱ្យប្រព័ន្ធផ្ញើសារទៅបុគ្គលិកនោះដោយផ្ទាល់។"
+                          : "This is not a phone number. Enter the staff member's Telegram Chat ID so the system can message them directly."}
+                      </small>
+                    </label>
+                  </div>
+                  <div className="asset-actions" style={{ marginTop: 16 }}>
+                    <div className="tiny">{t.manageAssignableUsers}</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="tab" disabled={busy} onClick={closeUserSetupModal}>{t.cancelEdit}</button>
+                      <button className="btn-primary" disabled={busy || !isAdmin} onClick={createOrUpdateUser}>
+                        {editingUserId !== null ? t.updateUser : t.addUser}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            ) : null}
           </section>
           )}
 
