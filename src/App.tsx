@@ -55193,7 +55193,11 @@ export default function App() {
                           <td>{staffCampusList(u).length ? staffCampusList(u).map((campus) => campusLabel(campus)).join(", ") : "-"}</td>
                           <td>{u.email || "-"}</td>
                           <td>{u.telegramChatId || "-"}</td>
-                          <td><button className="tab" disabled={!isAdmin} onClick={() => startEditUser(u)}>{t.edit}</button></td>
+                          <td>
+                            <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startEditUser(u)} title={t.edit}>
+                              ✎
+                            </button>
+                          </td>
                           <td><button className="btn-danger" disabled={!isAdmin} onClick={() => deleteUser(u.id)}>X</button></td>
                         </tr>
                       ))
