@@ -452,6 +452,8 @@ type StaffUser = {
   id: number;
   fullName: string;
   position: string;
+  campus: string;
+  campuses?: string[];
   email: string;
   telegramChatId?: string;
 };
@@ -1938,6 +1940,55 @@ function workOrderAssignableUsers(users: StaffUser[], category: string, selected
     return keywords.some((keyword) => haystack.includes(keyword));
   });
   if (!filtered.length) return sortUsersByName(users);
+  if (selected && !filtered.some((user) => user.fullName === selected)) {
+    const selectedUser = users.find((user) => user.fullName === selected);
+    if (selectedUser) return sortUsersByName([...filtered, selectedUser]);
+  }
+  return sortUsersByName(filtered);
+}
+
+function normalizeStaffCampuses(input?: unknown) {
+  const selected = Array.isArray(input)
+    ? Array.from(
+        new Set(
+          input
+            .map((value) => String(value || "").trim())
+            .filter(Boolean)
+            .map((value) => {
+              const upper = value.toUpperCase();
+              if (CAMPUS_LIST.includes(value)) return value;
+              return CODE_TO_CAMPUS[value] || CODE_TO_CAMPUS[upper] || "";
+            })
+            .filter(Boolean)
+        )
+      )
+    : [];
+  return selected;
+}
+
+function staffCampusList(user: StaffUser) {
+  const campuses = normalizeStaffCampuses(user.campuses);
+  if (campuses.length) return campuses;
+  const singleCampus = String(user.campus || "").trim();
+  return singleCampus ? [singleCampus] : [];
+}
+
+function staffCampusSummary(user: StaffUser) {
+  const campuses = staffCampusList(user);
+  if (!campuses.length) return "";
+  return campuses.map((campus) => CAMPUS_CODE[campus] || campus).join(", ");
+}
+
+function staffUsersForCampus(users: StaffUser[], campusName = "", selectedName = "") {
+  const sortUsersByName = (list: StaffUser[]) =>
+    [...list].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || "")));
+  const campus = String(campusName || "").trim();
+  if (!campus) return sortUsersByName(users);
+  const filtered = users.filter((user) => {
+    const userCampuses = staffCampusList(user);
+    return !userCampuses.length || userCampuses.includes(campus);
+  });
+  const selected = String(selectedName || "").trim();
   if (selected && !filtered.some((user) => user.fullName === selected)) {
     const selectedUser = users.find((user) => user.fullName === selected);
     if (selectedUser) return sortUsersByName([...filtered, selectedUser]);
@@ -7407,7 +7458,9 @@ function UserPicker({
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return users;
-    return users.filter((u) => `${u.fullName} ${u.position} ${u.email || ""}`.toLowerCase().includes(q));
+    return users.filter((u) =>
+      `${u.fullName} ${u.position} ${staffCampusList(u).join(" ")} ${u.email || ""}`.toLowerCase().includes(q)
+    );
   }, [users, deferredSearch]);
 
   const selectUser = useCallback(
@@ -7430,7 +7483,7 @@ function UserPicker({
       >
         {selected ? (
           <span className="asset-picker-selected">
-            <span>{selected.fullName} - {selected.position}</span>
+            <span>{selected.fullName} - {selected.position}{staffCampusSummary(selected) ? ` • ${staffCampusSummary(selected)}` : ""}</span>
           </span>
         ) : (
           <span className="asset-picker-placeholder">{placeholder}</span>
@@ -7474,7 +7527,7 @@ function UserPicker({
                   }}
                   onClick={() => selectUser(u.fullName)}
                 >
-                  <span>{u.fullName} - {u.position}</span>
+                  <span>{u.fullName} - {u.position}{staffCampusSummary(u) ? ` • ${staffCampusSummary(u)}` : ""}</span>
                 </button>
               ))
             ) : (
@@ -10729,6 +10782,7 @@ export default function App() {
   const [userForm, setUserForm] = useState({
     fullName: "",
     position: "",
+    campuses: [CAMPUS_LIST[0]],
     email: "",
     telegramChatId: "",
   });
@@ -10769,6 +10823,7 @@ export default function App() {
       const haystack = [
         user.fullName,
         user.position,
+        ...staffCampusList(user),
         user.email || "",
         user.telegramChatId || "",
       ]
@@ -20118,9 +20173,11 @@ export default function App() {
     if (!requireAdminAction()) return;
     const fullName = userForm.fullName.trim();
     const position = userForm.position.trim();
+    const campuses = normalizeStaffCampuses(userForm.campuses);
+    const campus = campuses[0] || "";
     const email = userForm.email.trim().toLowerCase();
     const telegramChatId = userForm.telegramChatId.trim();
-    if (!fullName || !position) return;
+    if (!fullName || !position || !campus) return;
 
     const emailTaken = email
       ? users.some((u) => String(u.email || "").toLowerCase() === email && u.id !== editingUserId)
@@ -20136,7 +20193,7 @@ export default function App() {
       if (editingUserId !== null) {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>(`/api/staff-users/${editingUserId}`, {
           method: "PATCH",
-          body: JSON.stringify({ fullName, position, email, telegramChatId }),
+          body: JSON.stringify({ fullName, position, campus, campuses, email, telegramChatId }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -20145,7 +20202,7 @@ export default function App() {
         } else {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, email, telegramChatId } : u
+              u.id === editingUserId ? { ...u, fullName, position, campus, campuses, email, telegramChatId } : u
             )
           );
         }
@@ -20153,7 +20210,7 @@ export default function App() {
       } else {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>("/api/staff-users", {
           method: "POST",
-          body: JSON.stringify({ fullName, position, email, telegramChatId }),
+          body: JSON.stringify({ fullName, position, campus, campuses, email, telegramChatId }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -20162,6 +20219,8 @@ export default function App() {
         } else if (res.user) {
           const created = {
             ...res.user,
+            campus: String(res.user.campus || campus).trim(),
+            campuses: normalizeStaffCampuses(res.user.campuses || campuses),
             email: String(res.user.email || "").trim().toLowerCase(),
             telegramChatId: String(res.user.telegramChatId || "").trim(),
           };
@@ -20170,13 +20229,13 @@ export default function App() {
           await loadStaffUsers();
         }
       }
-      setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
+      setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         if (editingUserId !== null) {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, email, telegramChatId } : u
+              u.id === editingUserId ? { ...u, fullName, position, campus, campuses, email, telegramChatId } : u
             )
           );
           setEditingUserId(null);
@@ -20185,12 +20244,14 @@ export default function App() {
             id: Date.now() + Math.floor(Math.random() * 1000),
             fullName,
             position,
+            campus,
+            campuses,
             email,
             telegramChatId,
           };
           setUsers((prev) => [localUser, ...prev]);
         }
-        setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
+        setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
         setError("");
         return;
       }
@@ -21068,6 +21129,7 @@ export default function App() {
     setUserForm({
       fullName: user.fullName,
       position: user.position,
+      campuses: staffCampusList(user).length ? staffCampusList(user) : [CAMPUS_LIST[0]],
       email: user.email,
       telegramChatId: user.telegramChatId || "",
     });
@@ -21088,14 +21150,14 @@ export default function App() {
       }
       if (editingUserId === id) {
         setEditingUserId(null);
-        setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
+        setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
       }
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         setUsers((prev) => prev.filter((u) => u.id !== id));
         if (editingUserId === id) {
           setEditingUserId(null);
-          setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" });
+          setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
         }
         setError("");
         return;
@@ -38495,7 +38557,7 @@ export default function App() {
                       <span>{t.user}</span>
                       <UserPicker
                         value={assetForm.assignedTo}
-                        users={users}
+                        users={staffUsersForCampus(users, assetForm.campus, assetForm.assignedTo)}
                         placeholder={t.selectUser}
                         searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
                         emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
@@ -40517,7 +40579,7 @@ export default function App() {
                         <span>{t.user}</span>
                         <UserPicker
                           value={assetEditForm.assignedTo}
-                          users={users}
+                          users={staffUsersForCampus(users, editingAsset?.campus || "", assetEditForm.assignedTo)}
                           placeholder={t.selectUser}
                           searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
                           emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
@@ -41395,7 +41457,7 @@ export default function App() {
                           <span>Assign To Staff</span>
                           <UserPicker
                             value={transferForm.toAssignedTo}
-                            users={users}
+                            users={staffUsersForCampus(users, transferForm.toCampus, transferForm.toAssignedTo)}
                             onChange={(nextValue) =>
                               setTransferForm((f) => ({
                                 ...f,
@@ -42421,7 +42483,7 @@ export default function App() {
                     <span>Assign To</span>
                     <UserPicker
                       value={ticketForm.assignedTo}
-                      users={registerAssignableUsers}
+                      users={staffUsersForCampus(registerAssignableUsers, ticketForm.campus, ticketForm.assignedTo)}
                       onChange={(value) => setTicketForm((f) => ({ ...f, assignedTo: value }))}
                       placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
                       searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
@@ -42622,7 +42684,7 @@ export default function App() {
                           <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
                           <UserPicker
                             value={ticket.assignedTo || ""}
-                            users={workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "")}
+                            users={staffUsersForCampus(workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || ""), ticket.campus, ticket.assignedTo || "")}
                             disabled={!isAdmin || busy}
                             onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
                             placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
@@ -42737,7 +42799,7 @@ export default function App() {
                           <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
                           <UserPicker
                             value={ticket.assignedTo || ""}
-                            users={workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || "")}
+                            users={staffUsersForCampus(workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || ""), ticket.campus, ticket.assignedTo || "")}
                             disabled={!isAdmin || busy}
                             onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
                             placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
@@ -47540,7 +47602,7 @@ export default function App() {
                     <span>Assign To Staff</span>
                     <UserPicker
                       value={transferForm.toAssignedTo}
-                      users={users}
+                      users={staffUsersForCampus(users, transferForm.toCampus, transferForm.toAssignedTo)}
                       onChange={(nextValue) =>
                         setTransferForm((f) => ({
                           ...f,
@@ -47860,11 +47922,13 @@ export default function App() {
                         onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, fromUser: e.target.value } : f))}
                       >
                         <option value="">Unassigned / In Stock</option>
-                        {transferHistoryEdit.fromUser && !users.some((u) => u.fullName === transferHistoryEdit.fromUser) ? (
+                        {transferHistoryEdit.fromUser && !staffUsersForCampus(users, transferHistoryEdit.fromCampus, transferHistoryEdit.fromUser).some((u) => u.fullName === transferHistoryEdit.fromUser) ? (
                           <option value={transferHistoryEdit.fromUser}>{transferHistoryEdit.fromUser}</option>
                         ) : null}
-                        {users.map((u) => (
-                          <option key={`edit-transfer-from-user-${u.id}`} value={u.fullName}>{u.fullName}</option>
+                        {staffUsersForCampus(users, transferHistoryEdit.fromCampus, transferHistoryEdit.fromUser).map((u) => (
+                          <option key={`edit-transfer-from-user-${u.id}`} value={u.fullName}>
+                            {u.fullName}{staffCampusSummary(u) ? ` - ${staffCampusSummary(u)}` : ""}
+                          </option>
                         ))}
                       </select>
                     </label>
@@ -47882,11 +47946,13 @@ export default function App() {
                         }
                       >
                         <option value="">Unassigned / In Stock</option>
-                        {transferHistoryEdit.toUser && !users.some((u) => u.fullName === transferHistoryEdit.toUser) ? (
+                        {transferHistoryEdit.toUser && !staffUsersForCampus(users, transferHistoryEdit.toCampus, transferHistoryEdit.toUser).some((u) => u.fullName === transferHistoryEdit.toUser) ? (
                           <option value={transferHistoryEdit.toUser}>{transferHistoryEdit.toUser}</option>
                         ) : null}
-                        {users.map((u) => (
-                          <option key={`edit-transfer-to-user-${u.id}`} value={u.fullName}>{u.fullName}</option>
+                        {staffUsersForCampus(users, transferHistoryEdit.toCampus, transferHistoryEdit.toUser).map((u) => (
+                          <option key={`edit-transfer-to-user-${u.id}`} value={u.fullName}>
+                            {u.fullName}{staffCampusSummary(u) ? ` - ${staffCampusSummary(u)}` : ""}
+                          </option>
                         ))}
                       </select>
                     </label>
@@ -55048,6 +55114,31 @@ export default function App() {
                   onChange={(e) => setUserForm((f) => ({ ...f, position: e.target.value }))}
                 />
               </label>
+              <label className="field">
+                <span>{t.campus}</span>
+                <div className="filter-menu asset-picker-menu-static">
+                  {campusOptions.map((campus) => (
+                    <label key={`setup-user-campus-${campus}`} className="filter-menu-item">
+                      <input
+                        type="checkbox"
+                        checked={userForm.campuses.includes(campus)}
+                        onChange={(e) =>
+                          setUserForm((f) => ({
+                            ...f,
+                            campuses: toggleCampusAccess(f.campuses, campus, e.target.checked),
+                          }))
+                        }
+                      />
+                      <span>{campusLabel(campus)}</span>
+                    </label>
+                  ))}
+                </div>
+                <small className="tiny">
+                  {userForm.campuses.length === 1
+                    ? campusLabel(userForm.campuses[0])
+                    : `${userForm.campuses.length} campuses selected`}
+                </small>
+              </label>
               <label className="field field-wide">
                 <span>{t.email} ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
                 <input
@@ -55072,11 +55163,11 @@ export default function App() {
                 </small>
               </label>
             </div>
-            <div className="asset-actions">
+              <div className="asset-actions">
               <div className="tiny">{t.manageAssignableUsers}</div>
               <div style={{ display: "flex", gap: 8 }}>
                 {editingUserId !== null ? (
-                  <button className="tab" onClick={() => { setEditingUserId(null); setUserForm({ fullName: "", position: "", email: "", telegramChatId: "" }); }}>{t.cancelEdit}</button>
+                  <button className="tab" onClick={() => { setEditingUserId(null); setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" }); }}>{t.cancelEdit}</button>
                 ) : null}
                 <button className="btn-primary" disabled={busy || !isAdmin} onClick={createOrUpdateUser}>
                   {editingUserId !== null ? t.updateUser : t.addUser}
@@ -55092,8 +55183,8 @@ export default function App() {
                   onChange={(e) => setUserSetupSearch(e.target.value)}
                   placeholder={
                     lang === "km"
-                      ? "ស្វែងរកតាមឈ្មោះ តួនាទី អ៊ីមែល ឬ Telegram Chat ID"
-                      : "Search by name, position, email, or Telegram Chat ID"
+                      ? "ស្វែងរកតាមឈ្មោះ តួនាទី សាខា អ៊ីមែល ឬ Telegram Chat ID"
+                      : "Search by name, position, campus, email, or Telegram Chat ID"
                   }
                 />
               </label>
@@ -55110,9 +55201,10 @@ export default function App() {
                     <article className="setup-mobile-card" key={`user-mobile-${u.id}`}>
                       <div className="setup-mobile-head">
                         <strong>{u.fullName}</strong>
-                        <span>{u.position}</span>
+                        <span>{u.position}{staffCampusSummary(u) ? ` • ${staffCampusSummary(u)}` : ""}</span>
                       </div>
                       <div className="setup-mobile-grid">
+                        <div><small>{t.campus}</small><strong>{staffCampusList(u).length ? staffCampusList(u).map((campus) => campusLabel(campus)).join(", ") : "-"}</strong></div>
                         <div className="setup-mobile-wide"><small>{t.email}</small><strong>{u.email || "-"}</strong></div>
                         <div className="setup-mobile-wide"><small>Telegram Chat ID</small><strong>{u.telegramChatId || "-"}</strong></div>
                       </div>
@@ -55139,6 +55231,7 @@ export default function App() {
                     <tr>
                       <th>{t.staffFullName}</th>
                       <th>{t.position}</th>
+                      <th>{t.campus}</th>
                       <th>{t.email}</th>
                       <th>Telegram Chat ID</th>
                       <th>{t.edit}</th>
@@ -55151,6 +55244,7 @@ export default function App() {
                         <tr key={u.id}>
                           <td>{u.fullName}</td>
                           <td>{u.position}</td>
+                          <td>{staffCampusList(u).length ? staffCampusList(u).map((campus) => campusLabel(campus)).join(", ") : "-"}</td>
                           <td>{u.email || "-"}</td>
                           <td>{u.telegramChatId || "-"}</td>
                           <td><button className="tab" disabled={!isAdmin} onClick={() => startEditUser(u)}>{t.edit}</button></td>
@@ -55159,7 +55253,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           {userSetupSearch.trim()
                             ? lang === "km"
                               ? "រកមិនឃើញបុគ្គលិក។"

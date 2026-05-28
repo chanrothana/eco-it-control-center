@@ -5736,6 +5736,10 @@ function normalizeStaffUsers(input) {
     if (!row || typeof row !== "object") continue;
     const fullName = toText(row.fullName);
     const position = toText(row.position);
+    const campuses = normalizeCampusPermissions(
+      Array.isArray(row.campuses) && row.campuses.length ? row.campuses : (row.campus ? [row.campus] : [])
+    ).filter((campus) => campus !== "ALL");
+    const campus = campuses[0] || normalizeCampusInput(row.campus);
     const email = toText(row.email).toLowerCase();
     const telegramChatId = toText(row.telegramChatId);
     if (!fullName || !position) continue;
@@ -5749,6 +5753,8 @@ function normalizeStaffUsers(input) {
       id,
       fullName,
       position,
+      campus,
+      campuses,
       email,
       telegramChatId,
     });
@@ -5845,11 +5851,16 @@ function normalizeFurnitureModels(input) {
 function validateStaffUser(body) {
   const fullName = toText(body.fullName);
   const position = toText(body.position);
+  const campuses = normalizeCampusPermissions(
+    Array.isArray(body.campuses) && body.campuses.length ? body.campuses : (body.campus ? [body.campus] : [])
+  ).filter((campus) => campus !== "ALL");
+  const campus = campuses[0] || normalizeCampusInput(body.campus);
   const email = toText(body.email).toLowerCase();
   const telegramChatId = toText(body.telegramChatId);
   if (!fullName) return "Staff full name is required";
   if (!position) return "Position is required";
-  return { fullName, position, email, telegramChatId };
+  if (!campuses.length) return "At least one campus is required";
+  return { fullName, position, campus, campuses, email, telegramChatId };
 }
 
 function validateTicket(body) {
@@ -6879,6 +6890,8 @@ const server = http.createServer(async (req, res) => {
         id: Date.now() + Math.floor(Math.random() * 1000),
         fullName: cleaned.fullName,
         position: cleaned.position,
+        campus: cleaned.campus,
+        campuses: cleaned.campuses,
         email: cleaned.email,
         telegramChatId: cleaned.telegramChatId,
       };
@@ -6887,7 +6900,14 @@ const server = http.createServer(async (req, res) => {
         ...settings,
         staffUsers: nextUsers,
       };
-      appendAuditLog(db, admin, "CREATE", "staff_user", String(user.id), `${user.fullName} | ${user.email || "-"}`);
+      appendAuditLog(
+        db,
+        admin,
+        "CREATE",
+        "staff_user",
+        String(user.id),
+        `${user.fullName} | ${(user.campuses || []).join(", ") || user.campus || "-"} | ${user.email || "-"}`
+      );
       await writeDb(db);
       sendJson(res, 201, { user, users: nextUsers });
       return;
@@ -6929,7 +6949,14 @@ const server = http.createServer(async (req, res) => {
         ...settings,
         staffUsers: users,
       };
-      appendAuditLog(db, admin, "UPDATE", "staff_user", String(id), `${users[idx].fullName} | ${users[idx].email || "-"}`);
+      appendAuditLog(
+        db,
+        admin,
+        "UPDATE",
+        "staff_user",
+        String(id),
+        `${users[idx].fullName} | ${(users[idx].campuses || []).join(", ") || users[idx].campus || "-"} | ${users[idx].email || "-"}`
+      );
       await writeDb(db);
       sendJson(res, 200, { user: users[idx], users });
       return;
