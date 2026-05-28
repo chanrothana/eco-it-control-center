@@ -14169,6 +14169,17 @@ table {
   box-shadow: 0 12px 24px rgba(8, 22, 39, 0.12);
 }
 
+.asset-mobile-card .field > span,
+.asset-mobile-card .tiny {
+  color: #5c769a !important;
+}
+
+.asset-mobile-card .detail-value,
+.asset-mobile-card strong,
+.asset-mobile-card .asset-picker-selected > span:last-child {
+  color: #1d3556 !important;
+}
+
 .asset-mobile-card.row-asset-inactive {
   background: linear-gradient(180deg, #f2f6fc 0%, #e7eef8 100%);
 }
@@ -19526,12 +19537,12 @@ tr.row-maint-maintenance:hover td {
   .app-shell {
     --mobile-bg: #0d1828;
     --mobile-bg-2: #16283f;
-    --mobile-surface: #1a2b42;
-    --mobile-surface-soft: #223651;
-    --mobile-line: #344b69;
-    --mobile-line-strong: #58749b;
+    --mobile-surface: #1d314d;
+    --mobile-surface-soft: #28415f;
+    --mobile-line: #4a6488;
+    --mobile-line-strong: #6e8eb8;
     --mobile-text: #edf4ff;
-    --mobile-text-soft: #a7b9d3;
+    --mobile-text-soft: #c7d6ea;
     --mobile-brand: #3d7dff;
     --mobile-brand-strong: #255fc8;
     --mobile-shadow: 0 16px 32px rgba(5, 11, 21, 0.28);
@@ -20224,16 +20235,33 @@ tr.row-maint-maintenance:hover td {
   .textarea,
   .detail-value,
   .filter-menu {
-    border-color: var(--mobile-line) !important;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)) !important;
+    border-color: var(--mobile-line-strong) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.07)) !important;
     color: var(--mobile-text) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 0 0 1px rgba(110, 142, 184, 0.08);
   }
 
   .field span,
   .tiny,
   .main-nav-section-label,
-  .panel-note {
+  .panel-note,
+  .subhead {
     color: var(--mobile-text-soft) !important;
+  }
+
+  .workspace-main .field > span,
+  .workspace-main .panel .tiny,
+  .workspace-main .panel-note,
+  .workspace-main .subhead {
+    color: #d3def0 !important;
+  }
+
+  .workspace-main .input::placeholder,
+  .workspace-main .textarea::placeholder {
+    color: #bfd0e8 !important;
+    opacity: 1;
   }
 
   .eyebrow,
@@ -20502,11 +20530,13 @@ tr.row-maint-maintenance:hover td {
     font-family: var(--font-head);
     font-size: 14px;
     line-height: 1.2;
+    color: #234067;
   }
 
   .dashboard-stats-phone .stat-value {
     font-size: 27px;
     line-height: 1;
+    color: #173150;
   }
 
   .dashboard-stats-phone .stat-link {
@@ -20557,6 +20587,7 @@ tr.row-maint-maintenance:hover td {
     border-bottom: 1px solid rgba(182, 200, 229, 0.58);
     white-space: normal;
     word-break: break-word;
+    color: #22395d;
   }
 
   .vault-responsive-table td::before {
@@ -20608,7 +20639,7 @@ tr.row-maint-maintenance:hover td {
     justify-items: center;
     padding: 18px 14px;
     border-bottom: 0;
-    color: var(--mobile-text-soft);
+    color: #5d7698;
   }
 
   .vault-responsive-table .vault-table-empty-row td::before {
@@ -20638,7 +20669,7 @@ tr.row-maint-maintenance:hover td {
   }
 
   .vault-mobile-card-head strong {
-    color: var(--mobile-text);
+    color: #213656;
     font-size: 16px;
     line-height: 1.25;
   }
@@ -20721,7 +20752,7 @@ tr.row-maint-maintenance:hover td {
   border-radius: 16px;
   background: #ffffff;
   text-align: center;
-  color: var(--mobile-text-soft);
+  color: #5d7698;
 }
 
 .vault-record-grid {
@@ -21684,6 +21715,23 @@ tr.row-maint-maintenance:hover td {
     border-radius: 16px;
   }
 
+  .workspace-main .asset-picker-trigger.input {
+    border-color: var(--mobile-line-strong) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.07)) !important;
+    color: var(--mobile-text) !important;
+  }
+
+  .workspace-main .asset-picker-selected > span:last-child,
+  .workspace-main .parent-asset-picker-option-title {
+    color: var(--mobile-text) !important;
+  }
+
+  .workspace-main .parent-asset-picker-option-meta,
+  .workspace-main .asset-picker-placeholder,
+  .workspace-main .asset-picker-caret {
+    color: #c4d4ea !important;
+  }
+
   .workspace-main select.input,
   .workspace-main .status-select {
     appearance: none;
@@ -22551,6 +22599,11 @@ tr.row-maint-maintenance:hover td {
     gap: 8px;
   }
 
+  .public-asset-mobile-card .field > span,
+  .public-asset-mobile-card .tiny {
+    color: #d3def0 !important;
+  }
+
   .public-asset-mobile-head .detail-value {
     min-height: 44px;
     justify-content: center;
@@ -22569,6 +22622,7 @@ tr.row-maint-maintenance:hover td {
     min-width: 0;
     display: grid;
     gap: 4px;
+    color: var(--mobile-text);
   }
 
   .public-asset-mobile-name {
