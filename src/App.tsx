@@ -2086,20 +2086,12 @@ const MAINTENANCE_TYPE_OPTIONS = [
   "Corrective",
   "Repair",
   "Replacement",
-  "Inspection",
-  "Cleaning",
-  "Installation",
-  "Upgrade",
 ];
 const MAINTENANCE_TYPE_KM_LABEL: Record<string, string> = {
   Preventive: "ថែទាំបង្ការ",
   Corrective: "កែតម្រូវបញ្ហា",
   Repair: "ជួសជុល",
   Replacement: "ប្តូរថ្មី",
-  Inspection: "ត្រួតពិនិត្យ",
-  Cleaning: "សម្អាត",
-  Installation: "ដំឡើង",
-  Upgrade: "ធ្វើឱ្យប្រសើរ",
 };
 const MAINTENANCE_CONDITION_OPTIONS = [
   "Good",
@@ -11725,6 +11717,15 @@ export default function App() {
         })
       ),
     [rentalPrinters]
+  );
+  const maintenanceTypePickerOptions = useMemo(
+    () =>
+      MAINTENANCE_TYPE_OPTIONS.map((opt) => ({
+        value: opt,
+        label: maintenanceTypePublicLabel(opt),
+        searchText: opt,
+      })),
+    [lang]
   );
   const selectedRentalPrinter = useMemo(
     () => rentalPrinters.find((row) => Number(row.id) === Number(rentalCounterForm.rentalPrinterId)) || null,
@@ -49296,17 +49297,14 @@ function formatTicketRequestSource(value?: string) {
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "ប្រភេទការងារ" : "Maintenance Type"}</span>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={maintenanceRecordForm.type}
-                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, type: e.target.value }))}
-                  >
-                    {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
-                      <option key={`staff-quick-type-${opt}`} value={opt}>
-                        {maintenanceTypePublicLabel(opt)}
-                      </option>
-                    ))}
-                  </select>
+                    options={maintenanceTypePickerOptions}
+                    onChange={(nextValue) => setMaintenanceRecordForm((f) => ({ ...f, type: nextValue }))}
+                    placeholder={lang === "km" ? "ជ្រើសប្រភេទការងារ" : "Select maintenance type"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទការងារ..." : "Search maintenance type..."}
+                    emptyText={lang === "km" ? "មិនមានប្រភេទការងារ" : "No maintenance type found."}
+                  />
                 </label>
                 <label className="field field-wide">
                   <span>{lang === "km" ? "ការងារដែលបានធ្វើ" : "Work Done"}</span>
@@ -49667,15 +49665,14 @@ function formatTicketRequestSource(value?: string) {
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={maintenanceRecordForm.type}
-                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, type: e.target.value }))}
-                  >
-                    {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
-                      <option key={`record-type-${opt}`} value={opt}>{opt}</option>
-                    ))}
-                  </select>
+                    options={maintenanceTypePickerOptions}
+                    onChange={(nextValue) => setMaintenanceRecordForm((f) => ({ ...f, type: nextValue }))}
+                    placeholder={lang === "km" ? "ជ្រើសប្រភេទ" : "Select type"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search type..."}
+                    emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No type found."}
+                  />
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span>
