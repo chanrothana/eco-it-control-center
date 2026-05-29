@@ -9577,6 +9577,7 @@ export default function App() {
       .trim()
       .toUpperCase();
   });
+  const isPublicQrRentalPrinter = Boolean(pendingQrPrinterCode && !pendingQrAssetId);
   const [qrCodeMap, setQrCodeMap] = useState<Record<string, string>>({});
   const [publicQrAsset, setPublicQrAsset] = useState<PublicQrAsset | null>(null);
   const [publicQrBusy, setPublicQrBusy] = useState(false);
@@ -32834,7 +32835,7 @@ export default function App() {
   }, [reportType, qrFilteredRows, qrCodeMap, buildAssetQrUrl, buildRentalPrinterQrUrl]);
 
   useEffect(() => {
-    if (!pendingQrAssetId) return;
+    if (!pendingQrAssetId && !pendingQrPrinterCode) return;
     let cancelled = false;
     setPublicQrBusy(true);
     setPublicQrError("");
@@ -32844,14 +32845,21 @@ export default function App() {
     (async () => {
       try {
         const ts = Date.now();
+        const targetPath = pendingQrPrinterCode
+          ? `/api/public/printers/${encodeURIComponent(pendingQrPrinterCode)}?ts=${ts}`
+          : `/api/public/assets/${encodeURIComponent(pendingQrAssetId)}?ts=${ts}`;
         const res = await requestJson<{ asset: PublicQrAsset }>(
-          `/api/public/assets/${encodeURIComponent(pendingQrAssetId)}?ts=${ts}`
+          targetPath
         );
         if (cancelled) return;
         setPublicQrAsset(res.asset || null);
       } catch (err) {
         if (cancelled) return;
-        setPublicQrError(err instanceof Error ? err.message : "Asset not found");
+        setPublicQrError(
+          err instanceof Error
+            ? err.message
+            : (pendingQrPrinterCode ? "Rental printer not found" : "Asset not found")
+        );
       } finally {
         if (!cancelled) setPublicQrBusy(false);
       }
@@ -32859,7 +32867,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [pendingQrAssetId]);
+  }, [pendingQrAssetId, pendingQrPrinterCode]);
 
   useEffect(() => {
     setPublicQrRecordForm((prev) => {
@@ -32881,32 +32889,22 @@ export default function App() {
   }, [publicQrAsset, tonerInventoryItems, authUser?.displayName, authUser?.username]);
 
   useEffect(() => {
-    if (!pendingQrAssetId) return;
+    if (!pendingQrAssetId && !pendingQrPrinterCode) return;
     setPublicQrSectionsOpen({
       request: false,
       maintenance: false,
       toner: false,
       details: false,
     });
-  }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetId, publicQrAsset]);
+  }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetId, pendingQrPrinterCode, publicQrAsset]);
   useEffect(() => {
-    if (!pendingQrAssetId) return;
+    if (!pendingQrAssetId && !pendingQrPrinterCode) return;
     setMobileNotificationOpen(false);
-  }, [pendingQrAssetId]);
+  }, [pendingQrAssetId, pendingQrPrinterCode]);
   useEffect(() => {
-    if (!pendingQrAssetId || !authUser) return;
+    if ((!pendingQrAssetId && !pendingQrPrinterCode) || !authUser) return;
     setMobileMenuOpen(false);
-  }, [pendingQrAssetId, authUser]);
-  useEffect(() => {
-    if (!pendingQrPrinterCode || !authUser) return;
-    const printer = rentalPrinters.find(
-      (row) => String(row.machineCode || "").trim().toUpperCase() === pendingQrPrinterCode
-    );
-    if (!printer) return;
-    startEditRentalPrinter(printer);
-    setRentalPrinterMessage(`Opened rental printer from QR: ${printer.machineCode}`);
-    setMobileMenuOpen(false);
-  }, [authUser, pendingQrPrinterCode, rentalPrinters]);
+  }, [pendingQrAssetId, pendingQrPrinterCode, authUser]);
 
   async function printCurrentReport() {
     const generatedAt = formatDate(new Date().toISOString());
@@ -33970,6 +33968,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({
           assetId: asset.assetId,
+          printerCode: isPublicQrRentalPrinter ? asset.assetId : "",
           campus: asset.campus,
           category: asset.category,
           title,
@@ -33977,7 +33976,7 @@ export default function App() {
           requestedBy: publicQrRequestForm.requestedBy.trim(),
           requesterContact: publicQrRequestForm.requesterContact.trim(),
           priority: publicQrRequestForm.priority,
-          requestSource: "qr_asset",
+          requestSource: isPublicQrRentalPrinter ? "qr_printer" : "qr_asset",
           photo: publicQrRequestForm.photo || "",
         }),
       });
@@ -34105,14 +34104,16 @@ export default function App() {
     return <div className="public-asset-history-empty">{message}</div>;
   }
 
-  function isQrTicketSource(value?: string) {
-    const source = String(value || "").trim().toLowerCase();
-    return source === "qr_asset" || source === "qr_scan";
-  }
+function isQrTicketSource(value?: string) {
+  const source = String(value || "").trim().toLowerCase();
+  return source === "qr_asset" || source === "qr_scan" || source === "qr_printer";
+}
 
-  function formatTicketRequestSource(value?: string) {
-    return isQrTicketSource(value) ? "QR Asset Scan" : "Manual";
-  }
+function formatTicketRequestSource(value?: string) {
+  const source = String(value || "").trim().toLowerCase();
+  if (source === "qr_printer") return "QR Printer Scan";
+  return isQrTicketSource(value) ? "QR Asset Scan" : "Manual";
+}
 
   function maintenanceTypePublicLabel(value?: string) {
     const raw = String(value || "").trim();
@@ -34191,23 +34192,26 @@ export default function App() {
     });
   }
 
-  if (pendingQrAssetId) {
+  if (pendingQrAssetId || pendingQrPrinterCode) {
     const asset = publicQrAsset;
+    const publicQrEntityLabel = isPublicQrRentalPrinter
+      ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer")
+      : "Asset";
     const publicQrText = {
-      assetDetail: lang === "km" ? "ព័ត៌មាន Asset" : "Asset Detail",
-      qrAssetMenu: lang === "km" ? "ម៉ឺនុយ QR Asset" : "QR Asset Menu",
-      qrMenuHint: lang === "km" ? "ចូលប្រើគណនី ឬមើលស្ថានភាព Asset" : "Login or review this asset status.",
+      assetDetail: lang === "km" ? `ព័ត៌មាន${publicQrEntityLabel}` : `${publicQrEntityLabel} Detail`,
+      qrAssetMenu: lang === "km" ? `ម៉ឺនុយ QR ${publicQrEntityLabel}` : `QR ${publicQrEntityLabel} Menu`,
+      qrMenuHint: lang === "km" ? `ចូលប្រើគណនី ឬមើលស្ថានភាព${publicQrEntityLabel}` : `Login or review this ${publicQrEntityLabel.toLowerCase()} status.`,
       campusStatus: lang === "km" ? "ស្ថានភាពសាខា" : "Campus Status",
       quickAccess: lang === "km" ? "ចូលប្រើរហ័ស" : "Quick Access",
       language: lang === "km" ? "ភាសា" : "Language",
       currentUser: lang === "km" ? "អ្នកប្រើបច្ចុប្បន្ន" : "Current User",
       requestRepair: lang === "km" ? "ស្នើជួសជុល" : "Request Repair",
       maintenanceRecord: lang === "km" ? "កត់ត្រាថែទាំ" : "Maintenance Record",
-      assetDetails: lang === "km" ? "ព័ត៌មាន Asset" : "Asset Details",
-      assetDetailsHistory: lang === "km" ? "ព័ត៌មាន Asset និងប្រវត្តិ" : "Asset Details + History",
+      assetDetails: lang === "km" ? `ព័ត៌មាន${publicQrEntityLabel}` : `${publicQrEntityLabel} Details`,
+      assetDetailsHistory: lang === "km" ? `ព័ត៌មាន${publicQrEntityLabel} និងប្រវត្តិ` : `${publicQrEntityLabel} Details + History`,
       issueTitle: lang === "km" ? "ចំណងជើងបញ្ហា" : "Issue Title",
       description: lang === "km" ? "ពិពណ៌នាបញ្ហា" : "Description",
-      describeProblem: lang === "km" ? "សូមពិពណ៌នាបញ្ហារបស់ Asset នេះ។" : "Describe the problem with this asset.",
+      describeProblem: lang === "km" ? `សូមពិពណ៌នាបញ្ហារបស់${publicQrEntityLabel}នេះ។` : `Describe the problem with this ${publicQrEntityLabel.toLowerCase()}.`,
       requestedBy: lang === "km" ? "ស្នើដោយ" : "Requested By",
       contactRoom: lang === "km" ? "ទំនាក់ទំនង / បន្ទប់" : "Contact / Room",
       phoneTelegramRoom: lang === "km" ? "លេខទូរស័ព្ទ Telegram បន្ទប់..." : "Phone, Telegram, room...",
@@ -34223,8 +34227,8 @@ export default function App() {
           : "This creates a work order first. The technician can later convert it to maintenance history after fixing.",
       requestGroupHint:
         lang === "km"
-          ? "សម្រាប់បុគ្គលិក ឬអ្នកប្រើ ដែលចង់រាយការណ៍បញ្ហារបស់ Asset នេះ។"
-          : "For staff or users reporting a problem with this asset.",
+          ? `សម្រាប់បុគ្គលិក ឬអ្នកប្រើ ដែលចង់រាយការណ៍បញ្ហារបស់${publicQrEntityLabel}នេះ។`
+          : `For staff or users reporting a problem with this ${publicQrEntityLabel.toLowerCase()}.`,
       workStatus: lang === "km" ? "ស្ថានភាពការងារ" : "Work Status",
       condition: lang === "km" ? "លក្ខខណ្ឌ" : "Condition",
       note: lang === "km" ? "កំណត់ចំណាំ" : "Note",
@@ -34279,8 +34283,8 @@ export default function App() {
       noActivityHistory: lang === "km" ? "មិនទាន់មានប្រវត្តិសកម្មភាពទេ។" : "No activity history yet.",
       detailsGroupHint:
         lang === "km"
-          ? "មើលព័ត៌មាន និងប្រវត្តិ Asset សម្រាប់អ្នកប្រើទាំងអស់។"
-          : "Read-only asset details and history for all users.",
+          ? `មើលព័ត៌មាន និងប្រវត្តិ${publicQrEntityLabel}សម្រាប់អ្នកប្រើទាំងអស់។`
+          : `Read-only ${publicQrEntityLabel.toLowerCase()} details and history for all users.`,
     };
     const showPublicQrSetFields = asset?.category === "IT";
     const publicQrCampusAllowed = (authUser ? isAdminRole(authUser.role) : false) || (asset?.campus ? allowedCampuses.includes(asset.campus) : true);
@@ -53626,7 +53630,7 @@ export default function App() {
               <div className="panel-note">
                 <strong>{lang === "km" ? "ទិដ្ឋភាពស្លាក QR" : "QR label view"}:</strong>{" "}
                 {qrLabelEntityType === "rental_printer"
-                  ? (lang === "km" ? "ស្កេន QR ដើម្បីបើកកំណត់ត្រាម៉ាស៊ីនបោះពុម្ពជួលនេះ។" : "scan QR to open this rental printer record link.")
+                  ? (lang === "km" ? "ស្កេន QR ដើម្បីបើកទំព័រស្នើជួសជុលសម្រាប់ម៉ាស៊ីនបោះពុម្ពជួលនេះ។" : "scan QR to open the maintenance request page for this rental printer.")
                   : (lang === "km" ? "ស្កេន QR ដើម្បីបើកទំព័រព័ត៌មានទ្រព្យសម្បត្តិនេះដោយផ្ទាល់។" : "scan QR to open this asset detail page directly.")}
               </div>
             )}

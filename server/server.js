@@ -2850,14 +2850,16 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
 
 function formatTicketRequestSourceLabel(value) {
   const key = toText(value).toLowerCase();
-  if (key === "qr_scan" || key === "qr_asset") return "QR Scan";
+  if (key === "qr_scan" || key === "qr_asset") return "QR Asset Scan";
+  if (key === "qr_printer") return "QR Printer Scan";
   if (key === "manual") return "Manual";
   return toText(value) || "Manual";
 }
 
 function formatTicketRequestSourceKhmer(value) {
   const key = toText(value).toLowerCase();
-  if (key === "qr_scan" || key === "qr_asset") return "ស្កេន QR";
+  if (key === "qr_scan" || key === "qr_asset") return "ស្កេន QR Asset";
+  if (key === "qr_printer") return "ស្កេន QR ម៉ាស៊ីនបោះពុម្ព";
   if (key === "manual") return "បញ្ចូលដោយដៃ";
   if (key === "general") return "ទូទៅ";
   return toText(value) || "បញ្ចូលដោយដៃ";
@@ -6344,6 +6346,51 @@ function toPublicAssetView(asset, allAssets = []) {
   };
 }
 
+function toPublicRentalPrinterView(printer) {
+  const source = printer && typeof printer === "object" ? printer : {};
+  const machineCode = toText(source.machineCode).toUpperCase();
+  const machineName = toText(source.machineName);
+  const model = toText(source.model);
+  const vendor = toText(source.vendor);
+  const fixingHistory = toText(source.fixingHistory);
+  const note = toText(source.note);
+  const specs = [
+    vendor ? `Vendor: ${vendor}` : "",
+    model ? `Model: ${model}` : "",
+    toText(source.serialNumber) ? `Serial: ${toText(source.serialNumber)}` : "",
+    toText(source.ipAddress) ? `IP/Web: ${toText(source.ipAddress)}` : "",
+    toText(source.contractStart) ? `Contract Start: ${toText(source.contractStart)}` : "",
+    toText(source.contractEnd) ? `Contract End: ${toText(source.contractEnd)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const notes = [note, fixingHistory ? `Fixing History: ${fixingHistory}` : ""].filter(Boolean).join("\n\n");
+  return {
+    id: Number(source.id || 0),
+    assetId: machineCode,
+    campus: toText(source.campus),
+    category: "IT",
+    type: "PRN",
+    name: machineName || model || machineCode || "Rental Printer",
+    location: toText(source.location),
+    assignedTo: vendor,
+    brand: vendor,
+    model,
+    serialNumber: toText(source.serialNumber),
+    specs,
+    notes,
+    status: toText(source.status) || "Active",
+    photo: toText(source.photo),
+    photos: toText(source.photo) ? [toText(source.photo)] : [],
+    maintenanceHistory: [],
+    transferHistory: [],
+    statusHistory: [],
+    custodyHistory: [],
+    components: [],
+    created: toText(source.created),
+  };
+}
+
 function toMillis(value) {
   const time = Date.parse(String(value || ""));
   return Number.isFinite(time) ? time : 0;
@@ -6529,6 +6576,28 @@ const server = http.createServer(async (req, res) => {
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
       sendJson(res, 200, { asset: toPublicAssetView(found, assets) });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/public/printers/")) {
+      const rawMachineCode = decodeURIComponent(url.pathname.replace("/api/public/printers/", ""));
+      const machineCode = toText(rawMachineCode).toUpperCase();
+      if (!machineCode) {
+        sendJson(res, 400, { error: "Printer code is required" });
+        return;
+      }
+      const db = await readDb();
+      const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
+      const rentalPrinters = normalizeRentalPrinters(settings.rentalPrinters);
+      const found = rentalPrinters.find((row) => toText(row.machineCode).toUpperCase() === machineCode);
+      if (!found) {
+        sendJson(res, 404, { error: "Rental printer not found" });
+        return;
+      }
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      sendJson(res, 200, { asset: toPublicRentalPrinterView(found) });
       return;
     }
 
@@ -9582,22 +9651,37 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const db = await readDb();
       const assets = Array.isArray(db.assets) ? db.assets : [];
+      const settings = db.settings && typeof db.settings === "object" ? db.settings : {};
       const assetId = toText(body.assetId);
       const asset = assetId ? selectBestAssetByAssetId(assets, assetId) : null;
-      if (!asset) {
-        sendJson(res, 404, { error: "Asset not found" });
+      const rentalPrinters = normalizeRentalPrinters(settings.rentalPrinters);
+      const printerCode = toText(body.printerCode).toUpperCase();
+      const rentalPrinter = !asset && printerCode
+        ? rentalPrinters.find((row) => toText(row.machineCode).toUpperCase() === printerCode) || null
+        : null;
+      if (!asset && !rentalPrinter) {
+        sendJson(res, 404, { error: printerCode ? "Rental printer not found" : "Asset not found" });
         return;
       }
+      const sourceCategory = asset ? toText(asset.category) : "IT";
+      const sourceCampus = asset ? toText(asset.campus) : toText(rentalPrinter.campus);
+      const sourceAssetId = asset ? toText(asset.assetId) : toText(rentalPrinter.machineCode).toUpperCase();
+      const sourceAssetDbId = asset ? Number(asset.id) || 0 : 0;
+      const sourceAssetName = asset
+        ? (toText(asset.name) || toText(asset.assetId))
+        : (toText(rentalPrinter.machineName) || toText(rentalPrinter.model) || sourceAssetId);
+      const sourceAssetLocation = asset ? toText(asset.location) : toText(rentalPrinter.location);
+      const requestSource = printerCode && !asset ? "qr_printer" : "qr_asset";
       const cleaned = validateTicket({
         ...body,
-        campus: toText(body.campus) || toText(asset.campus),
-        category: toText(body.category) || toText(asset.category),
-        assetId: toText(asset.assetId),
-        assetDbId: Number(asset.id) || 0,
-        assetName: toText(asset.name) || toText(asset.assetId),
-        assetLocation: toText(asset.location),
-        title: toText(body.title) || `Repair request for ${toText(asset.assetId)}`,
-        requestSource: "qr_asset",
+        campus: toText(body.campus) || sourceCampus,
+        category: toText(body.category) || sourceCategory,
+        assetId: sourceAssetId,
+        assetDbId: sourceAssetDbId,
+        assetName: sourceAssetName,
+        assetLocation: sourceAssetLocation,
+        title: toText(body.title) || `Repair request for ${sourceAssetId}`,
+        requestSource,
         status: "Open",
       });
       if (typeof cleaned === "string") {
@@ -9615,7 +9699,7 @@ const server = http.createServer(async (req, res) => {
         ...cleaned,
       };
       db.tickets.unshift(ticket);
-      appendAuditLog(db, null, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title} | QR request`);
+      appendAuditLog(db, null, "CREATE", "ticket", ticket.ticketNo, `${ticket.campus} | ${ticket.title} | ${requestSource}`);
       await writeDb(db);
       try {
         const telegramReport = await sendTelegramWorkOrderCreatedAlert(ticket, db);
