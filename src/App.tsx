@@ -2264,6 +2264,7 @@ const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
 const REMOTE_TYPE_CODE = "RMT";
+const QR_OPTIONAL_COMPUTER_COMPONENT_TYPES = ["KBD", "MSE"] as const;
 const AIRCON_FRONT_UNIT_TYPE_CODE = "FPN";
 const AIRCON_OUTDOOR_UNIT_TYPE_CODE = "RPN";
 const WALKIE_CHARGER_TYPE_CODE = "ADP";
@@ -6294,6 +6295,21 @@ function showsIncludedComponentCards(category: string, type: string) {
 }
 
 type AirconComponentPhotoKey = "acRemotePhoto" | "acFrontUnitPhoto" | "acOutdoorPhoto";
+type AssetComponentCardRow = {
+  id: number;
+  assetId: string;
+  category: string;
+  type: string;
+  pcType: string;
+  name: string;
+  location: string;
+  parentAssetId: string;
+  componentRole: string;
+  assignedTo: string;
+  status: string;
+  photo: string;
+  photos: string[];
+};
 
 function airconComponentLabel(type: string) {
   const normalizedType = String(type || "").trim().toUpperCase();
@@ -6301,6 +6317,170 @@ function airconComponentLabel(type: string) {
   if (normalizedType === AIRCON_FRONT_UNIT_TYPE_CODE) return "Front Unit (Indoor)";
   if (normalizedType === AIRCON_OUTDOOR_UNIT_TYPE_CODE) return "Back Unit (Outdoor)";
   return normalizedType;
+}
+
+function isAirconComponentType(type: string) {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  return [
+    REMOTE_TYPE_CODE,
+    AIRCON_FRONT_UNIT_TYPE_CODE,
+    AIRCON_OUTDOOR_UNIT_TYPE_CODE,
+  ].includes(normalizedType);
+}
+
+function isLegacyBundledComponentAsset(
+  asset: Pick<Asset, "type" | "parentAssetId">,
+  parentAsset?: Pick<Asset, "category" | "type"> | null
+) {
+  if (!String(asset.parentAssetId || "").trim()) return false;
+  const normalizedType = String(asset.type || "").trim().toUpperCase();
+  if (!parentAsset) {
+    return isAirconComponentType(normalizedType) || normalizedType === REMOTE_TYPE_CODE;
+  }
+  if (isAirconAsset(parentAsset.category || "", parentAsset.type || "")) {
+    return isAirconComponentType(normalizedType);
+  }
+  if (String(parentAsset.category || "").trim().toUpperCase() === "IT" && String(parentAsset.type || "").trim().toUpperCase() === TV_TYPE_CODE) {
+    return normalizedType === REMOTE_TYPE_CODE;
+  }
+  return false;
+}
+
+function buildDerivedAirconComponentCards(asset: Partial<Asset>): AssetComponentCardRow[] {
+  const parsed = parseAirconSpecs(asset.specs || "");
+  const parentAssetId = String(asset.assetId || "").trim();
+  const location = String(asset.location || "").trim();
+  const status = String(asset.status || "Active").trim() || "Active";
+  const baseId = Number(asset.id || 0) * 10 || Date.now();
+  const rows: AssetComponentCardRow[] = [];
+  if (parsed.acHasRemote) {
+    rows.push({
+      id: baseId + 1,
+      assetId: parentAssetId ? `${parentAssetId}-REMOTE` : "AIRCON-REMOTE",
+      category: "IT",
+      type: REMOTE_TYPE_CODE,
+      pcType: "",
+      name: airconComponentLabel(REMOTE_TYPE_CODE),
+      location,
+      parentAssetId,
+      componentRole: "Remote",
+      assignedTo: "",
+      status,
+      photo: parsed.acRemotePhoto || "",
+      photos: parsed.acRemotePhoto ? [parsed.acRemotePhoto] : [],
+    });
+  }
+  if (parsed.acHasFrontPanel) {
+    rows.push({
+      id: baseId + 2,
+      assetId: parentAssetId ? `${parentAssetId}-FRONT` : "AIRCON-FRONT",
+      category: "FACILITY",
+      type: AIRCON_FRONT_UNIT_TYPE_CODE,
+      pcType: "",
+      name: airconComponentLabel(AIRCON_FRONT_UNIT_TYPE_CODE),
+      location,
+      parentAssetId,
+      componentRole: "Front Unit (Indoor)",
+      assignedTo: "",
+      status,
+      photo: parsed.acFrontUnitPhoto || "",
+      photos: parsed.acFrontUnitPhoto ? [parsed.acFrontUnitPhoto] : [],
+    });
+  }
+  if (parsed.acHasOutdoor) {
+    rows.push({
+      id: baseId + 3,
+      assetId: parentAssetId ? `${parentAssetId}-BACK` : "AIRCON-BACK",
+      category: "FACILITY",
+      type: AIRCON_OUTDOOR_UNIT_TYPE_CODE,
+      pcType: "",
+      name: airconComponentLabel(AIRCON_OUTDOOR_UNIT_TYPE_CODE),
+      location,
+      parentAssetId,
+      componentRole: "Back Unit (Outdoor)",
+      assignedTo: "",
+      status,
+      photo: parsed.acOutdoorPhoto || "",
+      photos: parsed.acOutdoorPhoto ? [parsed.acOutdoorPhoto] : [],
+    });
+  }
+  return rows;
+}
+
+function parseTvSpecs(specsRaw: string) {
+  const specs = String(specsRaw || "").trim();
+  if (!specs) {
+    return {
+      remoteCount: 1,
+      remotePhotos: [] as string[],
+      specs: "",
+    };
+  }
+  const countMatch = specs.match(/TV Remotes?:\s*(\d+)/i);
+  const remotePhoto1Match = specs.match(/TV Remote Photo 1:\s*([^\n|;]+)/i);
+  const remotePhoto2Match = specs.match(/TV Remote Photo 2:\s*([^\n|;]+)/i);
+  const remoteCount = Math.max(1, Math.min(2, Number(countMatch?.[1] || 1)));
+  const remotePhotos = [
+    String(remotePhoto1Match?.[1] || "").trim(),
+    String(remotePhoto2Match?.[1] || "").trim(),
+  ].filter(Boolean);
+  const cleanedSpecs = specs
+    .replace(/TV Remotes?:\s*\d+/gi, "")
+    .replace(/TV Remote Photo 1:\s*([^\n|;]+)/gi, "")
+    .replace(/TV Remote Photo 2:\s*([^\n|;]+)/gi, "")
+    .replace(/[|;]+/g, "\n")
+    .replace(/\n\s*,/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return {
+    remoteCount,
+    remotePhotos,
+    specs: cleanedSpecs,
+  };
+}
+
+function buildTvSpecs(baseSpecs: string, remoteCount: number, remotePhotos: string[]) {
+  const normalized = parseTvSpecs(baseSpecs);
+  const out: string[] = [];
+  const safeCount = Math.max(1, Math.min(2, Number(remoteCount || 1)));
+  const photos = remotePhotos
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  out.push(`TV Remotes: ${safeCount}`);
+  if (photos[0]) out.push(`TV Remote Photo 1: ${photos[0]}`);
+  if (photos[1]) out.push(`TV Remote Photo 2: ${photos[1]}`);
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
+}
+
+function buildDerivedTvComponentCards(asset: Partial<Asset>): AssetComponentCardRow[] {
+  const parsed = parseTvSpecs(asset.specs || "");
+  const parentAssetId = String(asset.assetId || "").trim();
+  const location = String(asset.location || "").trim();
+  const status = String(asset.status || "Active").trim() || "Active";
+  const baseId = Number(asset.id || 0) * 10 || Date.now();
+  const count = Math.max(1, Math.min(2, Number(parsed.remoteCount || 1)));
+  return Array.from({ length: count }, (_, index) => {
+    const label = count > 1 ? `Remote ${index + 1}` : "Remote";
+    const photo = String(parsed.remotePhotos[index] || "").trim();
+    return {
+      id: baseId + 20 + index,
+      assetId: parentAssetId ? `${parentAssetId}-REMOTE-${index + 1}` : `TV-REMOTE-${index + 1}`,
+      category: "IT",
+      type: REMOTE_TYPE_CODE,
+      pcType: "",
+      name: label,
+      location,
+      parentAssetId,
+      componentRole: label,
+      assignedTo: "",
+      status,
+      photo,
+      photos: photo ? [photo] : [],
+    };
+  });
 }
 
 function parseAirconSpecs(specsRaw: string) {
@@ -6313,6 +6493,9 @@ function parseAirconSpecs(specsRaw: string) {
       acHasFrontPanel: false,
       acHasOutdoor: false,
       acComponentNote: "",
+      acRemotePhoto: "",
+      acFrontUnitPhoto: "",
+      acOutdoorPhoto: "",
       specs: "",
     };
   }
@@ -6322,10 +6505,16 @@ function parseAirconSpecs(specsRaw: string) {
   let acHasFrontPanel = false;
   let acHasOutdoor = false;
   let acComponentNote = "";
+  let acRemotePhoto = "";
+  let acFrontUnitPhoto = "";
+  let acOutdoorPhoto = "";
   const typeMatch = specs.match(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Components? Note:|$))/i);
   const hpMatch = specs.match(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Components? Note:|$))/i);
   const includedMatch = specs.match(/Included:\s*([^|\n;]+?)(?=\s*(?:Components? Note:|$))/i);
   const componentNoteMatch = specs.match(/Components? Note:\s*([^\n|;]+)/i);
+  const remotePhotoMatch = specs.match(/Remote Photo:\s*([^\n|;]+)/i);
+  const frontPhotoMatch = specs.match(/Front Unit Photo:\s*([^\n|;]+)/i);
+  const outdoorPhotoMatch = specs.match(/Outdoor Unit Photo:\s*([^\n|;]+)/i);
   if (typeMatch?.[1]) acType = String(typeMatch[1]).trim();
   if (hpMatch?.[1]) acHp = String(hpMatch[1]).trim();
   if (includedMatch?.[1]) {
@@ -6342,11 +6531,17 @@ function parseAirconSpecs(specsRaw: string) {
     acHasOutdoor = true;
   }
   if (componentNoteMatch?.[1]) acComponentNote = String(componentNoteMatch[1]).trim();
+  if (remotePhotoMatch?.[1]) acRemotePhoto = String(remotePhotoMatch[1]).trim();
+  if (frontPhotoMatch?.[1]) acFrontUnitPhoto = String(frontPhotoMatch[1]).trim();
+  if (outdoorPhotoMatch?.[1]) acOutdoorPhoto = String(outdoorPhotoMatch[1]).trim();
   const cleanedSpecs = specs
     .replace(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Components? Note:|$))/gi, "")
     .replace(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Components? Note:|$))/gi, "")
     .replace(/Included:\s*([^|\n;]+?)(?=\s*(?:Components? Note:|$))/gi, "")
     .replace(/Components? Note:\s*([^\n|;]+)/gi, "")
+    .replace(/Remote Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Front Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Outdoor Unit Photo:\s*([^\n|;]+)/gi, "")
     .replace(/[|;]+/g, "\n")
     .replace(/\n\s*,/g, "\n")
     .replace(/\n{2,}/g, "\n")
@@ -6359,6 +6554,9 @@ function parseAirconSpecs(specsRaw: string) {
     acHasFrontPanel,
     acHasOutdoor,
     acComponentNote,
+    acRemotePhoto,
+    acFrontUnitPhoto,
+    acOutdoorPhoto,
     specs: cleanedSpecs,
   };
 }
@@ -6372,6 +6570,9 @@ function buildAirconSpecs(
     hasFrontPanel: boolean;
     hasOutdoor: boolean;
     componentNote: string;
+    remotePhoto?: string;
+    frontUnitPhoto?: string;
+    outdoorPhoto?: string;
   }
 ) {
   const normalized = parseAirconSpecs(baseSpecs);
@@ -6382,6 +6583,9 @@ function buildAirconSpecs(
   const hasFrontPanel = components ? Boolean(components.hasFrontPanel) : normalized.acHasFrontPanel;
   const hasOutdoor = components ? Boolean(components.hasOutdoor) : normalized.acHasOutdoor;
   const componentNote = components ? String(components.componentNote || "").trim() : normalized.acComponentNote;
+  const remotePhoto = components ? String(components.remotePhoto || "").trim() : normalized.acRemotePhoto;
+  const frontUnitPhoto = components ? String(components.frontUnitPhoto || "").trim() : normalized.acFrontUnitPhoto;
+  const outdoorPhoto = components ? String(components.outdoorPhoto || "").trim() : normalized.acOutdoorPhoto;
   if (type) out.push(`AC Type: ${type}`);
   if (hp) out.push(`Capacity: ${hp}`);
   const included: string[] = [];
@@ -6389,6 +6593,9 @@ function buildAirconSpecs(
   if (hasFrontPanel) included.push("Front Panel");
   if (hasOutdoor) included.push("Outdoor Unit");
   if (included.length) out.push(`Included: ${included.join(", ")}`);
+  if (remotePhoto) out.push(`Remote Photo: ${remotePhoto}`);
+  if (frontUnitPhoto) out.push(`Front Unit Photo: ${frontUnitPhoto}`);
+  if (outdoorPhoto) out.push(`Outdoor Unit Photo: ${outdoorPhoto}`);
   if (componentNote) out.push(`Components Note: ${componentNote}`);
   if (normalized.specs) out.push(normalized.specs);
   return out.join("\n").trim();
@@ -12562,7 +12769,15 @@ export default function App() {
     [lang, assetItemName, allTypeOptions]
   );
   const assetNameFilterSourceAssets = useMemo(() => {
+    const assetsById = new Map<string, Asset>();
+    for (const asset of assets) {
+      const assetId = String(asset.assetId || "").trim();
+      if (assetId) assetsById.set(assetId, asset);
+    }
     let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    list = list.filter(
+      (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
+    );
     if (!assetCampusMultiFilter.includes("ALL")) {
       list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
     }
@@ -12607,7 +12822,15 @@ export default function App() {
     []
   );
   const assetLocationFilterOptions = useMemo(() => {
+    const assetsById = new Map<string, Asset>();
+    for (const asset of assets) {
+      const assetId = String(asset.assetId || "").trim();
+      if (assetId) assetsById.set(assetId, asset);
+    }
     let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    list = list.filter(
+      (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
+    );
     if (!assetCampusMultiFilter.includes("ALL")) {
       list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
     }
@@ -12626,10 +12849,18 @@ export default function App() {
     ).sort((a, b) => a.localeCompare(b));
   }, [assets, assetCampusMultiFilter, assetCategoryMultiFilter, assetAssignedToMultiFilter]);
   const assetAssignedToFilterOptions = useMemo(() => {
+    const assetsById = new Map<string, Asset>();
+    for (const asset of assets) {
+      const assetId = String(asset.assetId || "").trim();
+      if (assetId) assetsById.set(assetId, asset);
+    }
     return Array.from(
       new Set(
         assets
           .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
+          .filter(
+            (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
+          )
           .map((asset) => String(asset.assignedTo || "").trim())
           .filter(Boolean)
       )
@@ -16843,48 +17074,28 @@ export default function App() {
     const createAssignedTo = userRequired ? assetForm.assignedTo.trim() : "";
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
     const createIsFan = isFanAsset(assetForm.category, assetForm.type);
-    const createAirconComponents = createIsAircon
-      ? [
-          ...(assetForm.acHasRemote
-            ? [{
-                category: "IT",
-                type: REMOTE_TYPE_CODE,
-                label: "Remote",
-                note: "Auto-created Air-Con remote",
-                photo: String(assetForm.acRemotePhoto || "").trim(),
-              }]
-            : []),
-          ...(assetForm.acHasFrontPanel
-            ? [{
-                category: "FACILITY",
-                type: AIRCON_FRONT_UNIT_TYPE_CODE,
-                label: "Front Unit (Indoor)",
-                note: "Auto-created Air-Con front unit",
-                photo: String(assetForm.acFrontUnitPhoto || "").trim(),
-              }]
-            : []),
-          ...(assetForm.acHasOutdoor
-            ? [{
-                category: "FACILITY",
-                type: AIRCON_OUTDOOR_UNIT_TYPE_CODE,
-                label: "Back Unit (Outdoor)",
-                note: "Auto-created Air-Con back unit",
-                photo: String(assetForm.acOutdoorPhoto || "").trim(),
-              }]
-            : []),
-        ]
+    const createTvRemotePhotos = isTvAsset
+      ? (assetForm.tvRemotePhotos || [])
+          .map((entry) => String(entry || "").trim())
+          .filter(Boolean)
+          .slice(0, 2)
       : [];
     if (createIsAircon && (!assetForm.acHasFrontPanel || !assetForm.acHasOutdoor)) {
       alert("Air-Con requires both Front Unit and Back Unit (Outdoor) components.");
       return;
     }
     const createSpecs = createIsAircon
-      ? buildAirconSpecs(assetForm.specs, assetForm.acType, assetForm.acHp, {
+        ? buildAirconSpecs(assetForm.specs, assetForm.acType, assetForm.acHp, {
           hasRemote: assetForm.acHasRemote,
           hasFrontPanel: assetForm.acHasFrontPanel,
           hasOutdoor: assetForm.acHasOutdoor,
           componentNote: assetForm.acComponentNote,
+          remotePhoto: assetForm.acRemotePhoto,
+          frontUnitPhoto: assetForm.acFrontUnitPhoto,
+          outdoorPhoto: assetForm.acOutdoorPhoto,
         })
+      : (isTvAsset
+          ? buildTvSpecs(assetForm.specs, createTvRemoteCount, createTvRemotePhotos)
       : (createIsFan
           ? buildFanSpecs(assetForm.specs, assetForm.fanType)
           : (String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
@@ -16905,7 +17116,7 @@ export default function App() {
                   quantity: assetForm.furnitureQuantity,
                   condition: assetForm.furnitureCondition,
                 })
-              : assetForm.specs)));
+              : assetForm.specs))));
     const mainSerial = assetForm.serialNumber.trim();
     const duplicateMain = findDuplicateAssetSerial(assets, mainSerial);
     if (duplicateMain) {
@@ -17151,67 +17362,6 @@ export default function App() {
               photo: componentPhotos[0] || "",
               photos: componentPhotos,
               status: draft.status || assetForm.status,
-            }),
-          });
-        }
-      }
-      if (createTvRemoteCount && created.asset?.assetId) {
-        for (let index = 1; index <= createTvRemoteCount; index += 1) {
-          const remotePhoto = String((assetForm.tvRemotePhotos || [])[index - 1] || "").trim();
-          await requestJson<{ asset: Asset }>("/api/assets", {
-            method: "POST",
-            body: JSON.stringify({
-              campus: assetForm.campus,
-              category: "IT",
-              type: REMOTE_TYPE_CODE,
-              location: assetForm.location,
-              setCode: "",
-              parentAssetId: created.asset.assetId,
-              assignedTo: "",
-              custodyStatus: "IN_STOCK",
-              brand: assetForm.brand,
-              model: "",
-              serialNumber: "",
-              specs: "",
-              purchaseDate: assetForm.purchaseDate,
-              warrantyUntil: assetForm.warrantyUntil,
-              vendor: assetForm.vendor,
-              notes: `Auto-created TV remote ${index}/${createTvRemoteCount} for ${created.asset.assetId}`,
-              nextMaintenanceDate: "",
-              scheduleNote: "",
-              photo: remotePhoto || "",
-              photos: remotePhoto ? [remotePhoto] : [],
-              status: assetForm.status,
-            }),
-          });
-        }
-      }
-      if (createAirconComponents.length && created.asset?.assetId) {
-        for (const component of createAirconComponents) {
-          await requestJson<{ asset: Asset }>("/api/assets", {
-            method: "POST",
-            body: JSON.stringify({
-              campus: assetForm.campus,
-              category: component.category,
-              type: component.type,
-              location: assetForm.location,
-              setCode: "",
-              parentAssetId: created.asset.assetId,
-              assignedTo: "",
-              custodyStatus: "IN_STOCK",
-              brand: assetForm.brand,
-              model: "",
-              serialNumber: "",
-              specs: "",
-              purchaseDate: assetForm.purchaseDate,
-              warrantyUntil: assetForm.warrantyUntil,
-              vendor: assetForm.vendor,
-              notes: `${component.note} for ${created.asset.assetId}`,
-              nextMaintenanceDate: "",
-              scheduleNote: "",
-              photo: component.photo || "",
-              photos: component.photo ? [component.photo] : [],
-              status: assetForm.status,
             }),
           });
         }
@@ -17670,113 +17820,6 @@ export default function App() {
               photo: componentPhotos[0] || "",
               photos: componentPhotos,
               status: draft.status || assetForm.status,
-              created: new Date().toISOString(),
-            };
-            nextLocal = [child, ...nextLocal];
-          }
-        }
-        if (createTvRemoteCount) {
-          for (let index = 1; index <= createTvRemoteCount; index += 1) {
-            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", REMOTE_TYPE_CODE);
-            const remotePhoto = String((assetForm.tvRemotePhotos || [])[index - 1] || "").trim();
-            const child: Asset = {
-              id: Date.now() + Math.floor(Math.random() * 10000),
-              campus: assetForm.campus,
-              category: "IT",
-              type: REMOTE_TYPE_CODE,
-              pcType: "",
-              seq: childSeq,
-              assetId: buildAssetId(assetForm.campus, "IT", REMOTE_TYPE_CODE, childSeq),
-              name: assetItemName("IT", REMOTE_TYPE_CODE),
-              location: assetForm.location,
-              setCode: "",
-              parentAssetId: newAsset.assetId,
-              assignedTo: "",
-              custodyStatus: "IN_STOCK",
-              brand: assetForm.brand,
-              model: "",
-              serialNumber: "",
-              specs: "",
-              purchaseDate: assetForm.purchaseDate,
-              warrantyUntil: assetForm.warrantyUntil,
-              vendor: assetForm.vendor,
-              notes: `Auto-created TV remote ${index}/${createTvRemoteCount} for ${newAsset.assetId}`,
-              nextMaintenanceDate: "",
-              nextVerificationDate: "",
-              verificationFrequency: "NONE",
-              scheduleNote: "",
-              repeatMode: "NONE",
-              repeatWeekOfMonth: 0,
-              repeatWeekday: 0,
-              maintenanceHistory: [],
-              verificationHistory: [],
-              transferHistory: [],
-              custodyHistory: [],
-              statusHistory: [
-                {
-                  id: Date.now(),
-                  date: new Date().toISOString(),
-                  fromStatus: "New",
-                  toStatus: assetForm.status,
-                  reason: "Asset created as TV remote",
-                },
-              ],
-              photo: remotePhoto || "",
-              photos: remotePhoto ? [remotePhoto] : [],
-              status: assetForm.status,
-              created: new Date().toISOString(),
-            };
-            nextLocal = [child, ...nextLocal];
-          }
-        }
-        if (createAirconComponents.length) {
-          for (const component of createAirconComponents) {
-            const childSeq = calcNextSeq(nextLocal, assetForm.campus, component.category, component.type);
-            const child: Asset = {
-              id: Date.now() + Math.floor(Math.random() * 10000),
-              campus: assetForm.campus,
-              category: component.category,
-              type: component.type,
-              pcType: "",
-              seq: childSeq,
-              assetId: buildAssetId(assetForm.campus, component.category, component.type, childSeq),
-              name: airconComponentLabel(component.type),
-              location: assetForm.location,
-              setCode: "",
-              parentAssetId: newAsset.assetId,
-              assignedTo: "",
-              custodyStatus: "IN_STOCK",
-              brand: assetForm.brand,
-              model: "",
-              serialNumber: "",
-              specs: "",
-              purchaseDate: assetForm.purchaseDate,
-              warrantyUntil: assetForm.warrantyUntil,
-              vendor: assetForm.vendor,
-              notes: `${component.note} for ${newAsset.assetId}`,
-              nextMaintenanceDate: "",
-              nextVerificationDate: "",
-              verificationFrequency: "NONE",
-              scheduleNote: "",
-              repeatMode: "NONE",
-              repeatWeekOfMonth: 0,
-              repeatWeekday: 0,
-              maintenanceHistory: [],
-              verificationHistory: [],
-              transferHistory: [],
-              custodyHistory: [],
-              statusHistory: [
-                {
-                  id: Date.now(),
-                  date: new Date().toISOString(),
-                  fromStatus: "New",
-                  toStatus: assetForm.status,
-                  reason: `Asset created as ${component.label}`,
-                },
-              ],
-              photo: component.photo || "",
-              photos: component.photo ? [component.photo] : [],
-              status: assetForm.status,
               created: new Date().toISOString(),
             };
             nextLocal = [child, ...nextLocal];
@@ -24100,6 +24143,9 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          acRemotePhoto: "",
+          acFrontUnitPhoto: "",
+          acOutdoorPhoto: "",
           specs: asset.specs || "",
         };
     const parsedFan = isFanAsset(asset.category, asset.type)
@@ -24143,9 +24189,9 @@ export default function App() {
       acHasFrontPanel: parsedAircon.acHasFrontPanel,
       acHasOutdoor: parsedAircon.acHasOutdoor,
       acComponentNote: parsedAircon.acComponentNote,
-      acRemotePhoto: normalizeAssetPhotos(airconRemoteChild || {})[0] || "",
-      acFrontUnitPhoto: normalizeAssetPhotos(airconFrontUnitChild || {})[0] || "",
-      acOutdoorPhoto: normalizeAssetPhotos(airconOutdoorChild || {})[0] || "",
+      acRemotePhoto: normalizeAssetPhotos(airconRemoteChild || {})[0] || parsedAircon.acRemotePhoto || "",
+      acFrontUnitPhoto: normalizeAssetPhotos(airconFrontUnitChild || {})[0] || parsedAircon.acFrontUnitPhoto || "",
+      acOutdoorPhoto: normalizeAssetPhotos(airconOutdoorChild || {})[0] || parsedAircon.acOutdoorPhoto || "",
       walkieHasCharger: parsedWalkie.hasCharger || Boolean(walkieChargerChild),
       walkieChargerDetail: parsedWalkie.chargerDetail,
       walkieChargerPhotos:
@@ -24687,6 +24733,9 @@ export default function App() {
             hasFrontPanel: assetEditForm.acHasFrontPanel,
             hasOutdoor: assetEditForm.acHasOutdoor,
             componentNote: assetEditForm.acComponentNote,
+            remotePhoto: assetEditForm.acRemotePhoto,
+            frontUnitPhoto: assetEditForm.acFrontUnitPhoto,
+            outdoorPhoto: assetEditForm.acOutdoorPhoto,
           })
         : (isFanAsset(editingAsset?.category || "", editingAsset?.type || "")
             ? buildFanSpecs(assetEditForm.specs.trim(), assetEditForm.fanType)
@@ -24966,35 +25015,6 @@ export default function App() {
         }
       }
       if (editingAsset && isAirconAsset(editingAsset.category, editingAsset.type) && editingAsset.assetId) {
-        const desiredAirconComponents = [
-          ...(assetEditForm.acHasRemote
-            ? [{
-                category: "IT",
-                type: REMOTE_TYPE_CODE,
-                label: "Remote",
-                note: "Auto-created Air-Con remote",
-                photo: String(assetEditForm.acRemotePhoto || "").trim(),
-              }]
-            : []),
-          ...(assetEditForm.acHasFrontPanel
-            ? [{
-                category: "FACILITY",
-                type: AIRCON_FRONT_UNIT_TYPE_CODE,
-                label: "Front Unit (Indoor)",
-                note: "Auto-created Air-Con front unit",
-                photo: String(assetEditForm.acFrontUnitPhoto || "").trim(),
-              }]
-            : []),
-          ...(assetEditForm.acHasOutdoor
-            ? [{
-                category: "FACILITY",
-                type: AIRCON_OUTDOOR_UNIT_TYPE_CODE,
-                label: "Back Unit (Outdoor)",
-                note: "Auto-created Air-Con back unit",
-                photo: String(assetEditForm.acOutdoorPhoto || "").trim(),
-              }]
-            : []),
-        ];
         const existingAirconChildren = nextLocal
           .filter(
             (asset) =>
@@ -25009,153 +25029,7 @@ export default function App() {
               (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
               String(a.assetId || "").localeCompare(String(b.assetId || ""))
           );
-        for (const component of desiredAirconComponents) {
-          const matches = existingAirconChildren.filter(
-            (asset) => String(asset.type || "").trim().toUpperCase() === component.type
-          );
-          const active = matches[0] || null;
-          const extras = matches.slice(1);
-          if (active) {
-            const updatedComponent: Asset = {
-              ...active,
-              campus: editingAsset.campus,
-              category: component.category,
-              type: component.type,
-              location: payload.location,
-              setCode: "",
-              parentAssetId: editingAsset.assetId,
-              assignedTo: "",
-              custodyStatus: "IN_STOCK",
-              brand: payload.brand,
-              model: "",
-              serialNumber: "",
-              specs: "",
-              purchaseDate: payload.purchaseDate,
-              warrantyUntil: payload.warrantyUntil,
-              vendor: payload.vendor,
-              notes: `${component.note} for ${editingAsset.assetId}`,
-              photo: component.photo || "",
-              photos: component.photo ? [component.photo] : [],
-              status: payload.status,
-            };
-            nextLocal = nextLocal.map((asset) => (asset.id === active.id ? updatedComponent : asset));
-            try {
-              await requestJson<{ asset: Asset }>(`/api/assets/${active.id}`, {
-                method: "PATCH",
-                body: JSON.stringify({
-                  location: payload.location,
-                  parentAssetId: editingAsset.assetId,
-                  brand: payload.brand,
-                  model: "",
-                  serialNumber: "",
-                  specs: "",
-                  purchaseDate: payload.purchaseDate,
-                  warrantyUntil: payload.warrantyUntil,
-                  vendor: payload.vendor,
-                  notes: `${component.note} for ${editingAsset.assetId}`,
-                  photo: component.photo || "",
-                  photos: component.photo ? [component.photo] : [],
-                  status: payload.status,
-                }),
-              });
-            } catch (err) {
-              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
-            }
-          } else {
-            try {
-              await requestJson<{ asset: Asset }>("/api/assets", {
-                method: "POST",
-                body: JSON.stringify({
-                  campus: editingAsset.campus,
-                  category: component.category,
-                  type: component.type,
-                  location: payload.location,
-                  setCode: "",
-                  parentAssetId: editingAsset.assetId,
-                  assignedTo: "",
-                  custodyStatus: "IN_STOCK",
-                  brand: payload.brand,
-                  model: "",
-                  serialNumber: "",
-                  specs: "",
-                  purchaseDate: payload.purchaseDate,
-                  warrantyUntil: payload.warrantyUntil,
-                  vendor: payload.vendor,
-                  notes: `${component.note} for ${editingAsset.assetId}`,
-                  nextMaintenanceDate: "",
-                  scheduleNote: "",
-                  photo: component.photo || "",
-                  photos: component.photo ? [component.photo] : [],
-                  status: payload.status,
-                }),
-              });
-            } catch (err) {
-              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
-            }
-            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, component.category, component.type);
-            const newComponent: Asset = {
-              id: Date.now() + Math.floor(Math.random() * 10000),
-              campus: editingAsset.campus,
-              category: component.category,
-              type: component.type,
-              pcType: "",
-              seq: childSeq,
-              assetId: buildAssetId(editingAsset.campus, component.category, component.type, childSeq),
-              name: airconComponentLabel(component.type),
-              location: payload.location,
-              setCode: "",
-              parentAssetId: editingAsset.assetId,
-              assignedTo: "",
-              custodyStatus: "IN_STOCK",
-              brand: payload.brand,
-              model: "",
-              serialNumber: "",
-              specs: "",
-              purchaseDate: payload.purchaseDate,
-              warrantyUntil: payload.warrantyUntil,
-              vendor: payload.vendor,
-              notes: `${component.note} for ${editingAsset.assetId}`,
-              nextMaintenanceDate: "",
-              nextVerificationDate: "",
-              verificationFrequency: "NONE",
-              scheduleNote: "",
-              repeatMode: "NONE",
-              repeatWeekOfMonth: 0,
-              repeatWeekday: 0,
-              maintenanceHistory: [],
-              verificationHistory: [],
-              transferHistory: [],
-              custodyHistory: [],
-              statusHistory: [
-                {
-                  id: Date.now(),
-                  date: new Date().toISOString(),
-                  fromStatus: "New",
-                  toStatus: payload.status,
-                  reason: `Asset created as ${component.label}`,
-                },
-              ],
-              photo: component.photo || "",
-              photos: component.photo ? [component.photo] : [],
-              status: payload.status,
-              created: new Date().toISOString(),
-            };
-            nextLocal = [newComponent, ...nextLocal];
-          }
-          for (const extra of extras) {
-            try {
-              await requestJson<{ ok: boolean }>(`/api/assets/${extra.id}`, { method: "DELETE" });
-            } catch (err) {
-              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
-            }
-            nextLocal = nextLocal.filter((asset) => asset.id !== extra.id);
-          }
-        }
-        const desiredTypeSet = new Set(desiredAirconComponents.map((component) => component.type));
-        const deleteTargets = existingAirconChildren.filter(
-          (asset) => !desiredTypeSet.has(String(asset.type || "").trim().toUpperCase())
-        );
-        for (const component of deleteTargets) {
+        for (const component of existingAirconChildren) {
           try {
             await requestJson<{ ok: boolean }>(`/api/assets/${component.id}`, { method: "DELETE" });
           } catch (err) {
@@ -27673,17 +27547,47 @@ export default function App() {
   const detailLinkedComponents = useMemo(
     () =>
       detailAsset
-        ? assets
-            .filter(
-              (asset) =>
-                asset.assetId !== detailAsset.assetId &&
-                String(asset.parentAssetId || "").trim() === String(detailAsset.assetId || "").trim()
-            )
-            .sort(
-              (a, b) =>
-                (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
-                String(a.assetId || "").localeCompare(String(b.assetId || ""))
-            )
+        ? (() => {
+            const linked = assets
+              .filter(
+                (asset) =>
+                  asset.assetId !== detailAsset.assetId &&
+                  String(asset.parentAssetId || "").trim() === String(detailAsset.assetId || "").trim()
+              )
+              .sort(
+                (a, b) =>
+                  (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+                  String(a.assetId || "").localeCompare(String(b.assetId || ""))
+              )
+              .map<AssetComponentCardRow>((asset) => ({
+                id: Number(asset.id || 0),
+                assetId: String(asset.assetId || ""),
+                category: String(asset.category || ""),
+                type: String(asset.type || ""),
+                pcType: String(asset.pcType || ""),
+                name: String(asset.name || ""),
+                location: String(asset.location || ""),
+                parentAssetId: String(asset.parentAssetId || ""),
+                componentRole: String(asset.componentRole || ""),
+                assignedTo: String(asset.assignedTo || ""),
+                status: String(asset.status || "Active"),
+                photo: String(asset.photo || ""),
+                photos: normalizeAssetPhotos(asset),
+              }));
+            if (String(detailAsset.category || "").trim().toUpperCase() === "IT" && String(detailAsset.type || "").trim().toUpperCase() === TV_TYPE_CODE) {
+              return linked.length ? linked : buildDerivedTvComponentCards(detailAsset);
+            }
+            if (!isAirconAsset(detailAsset.category, detailAsset.type)) return linked;
+            const merged = new Map<string, AssetComponentCardRow>();
+            for (const component of linked) {
+              merged.set(String(component.type || "").trim().toUpperCase(), component);
+            }
+            for (const component of buildDerivedAirconComponentCards(detailAsset)) {
+              const key = String(component.type || "").trim().toUpperCase();
+              if (!merged.has(key)) merged.set(key, component);
+            }
+            return Array.from(merged.values());
+          })()
         : [],
     [assets, detailAsset]
   );
@@ -28703,7 +28607,15 @@ export default function App() {
     verificationDateTo,
   ]);
   const assetListRows = useMemo(() => {
+    const assetsById = new Map<string, Asset>();
+    for (const asset of assets) {
+      const assetId = String(asset.assetId || "").trim();
+      if (assetId) assetsById.set(assetId, asset);
+    }
     let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    list = list.filter(
+      (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
+    );
     if (!assetCampusMultiFilter.includes("ALL")) {
       list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
     }
@@ -31000,6 +30912,9 @@ export default function App() {
     }
     return [...assets]
       .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
+      .filter(
+        (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
+      )
       .map((asset) => {
         const setCode = String(asset.setCode || "").trim() || "-";
         const parentAssetId = String(asset.parentAssetId || "").trim();
@@ -31150,18 +31065,20 @@ export default function App() {
 
   const qrAssetLabelRows = useMemo<QrLabelRow[]>(
     () =>
-      assetMasterSetRows.map((row) => ({
-        rowKey: `asset-${row.assetDbId}-${row.assetId}`,
-        labelId: row.assetId,
-        itemName: qrAssetItemName(row.category, row.type, row.pcType || "", row.itemName),
-        campus: row.campus,
-        category: row.category,
-        location: row.location,
-        assignedTo: row.assignedTo,
-        status: row.status,
-        serialNumber: row.serialNumber,
-        entityType: "asset",
-      })),
+      assetMasterSetRows
+        .filter((row) => !QR_OPTIONAL_COMPUTER_COMPONENT_TYPES.includes(String(row.type || "").trim().toUpperCase() as (typeof QR_OPTIONAL_COMPUTER_COMPONENT_TYPES)[number]))
+        .map((row) => ({
+          rowKey: `asset-${row.assetDbId}-${row.assetId}`,
+          labelId: row.assetId,
+          itemName: qrAssetItemName(row.category, row.type, row.pcType || "", row.itemName),
+          campus: row.campus,
+          category: row.category,
+          location: row.location,
+          assignedTo: row.assignedTo,
+          status: row.status,
+          serialNumber: row.serialNumber,
+          entityType: "asset",
+        })),
     [assetMasterSetRows, qrAssetItemName]
   );
   const qrPrinterLabelRows = useMemo<QrLabelRow[]>(
@@ -34317,9 +34234,39 @@ function formatTicketRequestSource(value?: string) {
     const publicStatusHistory = [...(asset?.statusHistory || [])].sort(
       (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
     );
-    const publicComponents = [...(asset?.components || [])].sort((a, b) =>
-      String(a.assetId || "").localeCompare(String(b.assetId || ""))
-    );
+    const publicComponents = (() => {
+      const linked = [...(asset?.components || [])]
+        .sort((a, b) => String(a.assetId || "").localeCompare(String(b.assetId || "")))
+        .map<AssetComponentCardRow>((component) => ({
+          id: Number(component.id || 0),
+          assetId: String(component.assetId || ""),
+          category: String(component.category || ""),
+          type: String(component.type || ""),
+          pcType: String(component.pcType || ""),
+          name: String(component.name || ""),
+          location: String(component.location || ""),
+          parentAssetId: String(component.parentAssetId || ""),
+          componentRole: String(component.componentRole || ""),
+          assignedTo: String(component.assignedTo || ""),
+          status: String(component.status || "Active"),
+          photo: String(component.photo || ""),
+          photos: Array.isArray(component.photos) ? component.photos.filter(Boolean) : (component.photo ? [component.photo] : []),
+        }));
+      if (!asset) return linked;
+      if (String(asset.category || "").trim().toUpperCase() === "IT" && String(asset.type || "").trim().toUpperCase() === TV_TYPE_CODE) {
+        return linked.length ? linked : buildDerivedTvComponentCards(asset);
+      }
+      if (!isAirconAsset(asset.category || "", asset.type || "")) return linked;
+      const merged = new Map<string, AssetComponentCardRow>();
+      for (const component of linked) {
+        merged.set(String(component.type || "").trim().toUpperCase(), component);
+      }
+      for (const component of buildDerivedAirconComponentCards(asset)) {
+        const key = String(component.type || "").trim().toUpperCase();
+        if (!merged.has(key)) merged.set(key, component);
+      }
+      return Array.from(merged.values());
+    })();
     const publicActivityHistory = (() => {
       type PublicActivityEvent = {
         id: string;
