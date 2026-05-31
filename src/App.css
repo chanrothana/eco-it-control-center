@@ -10479,6 +10479,7 @@ label.backup-action-btn {
   width: 100%;
   border-collapse: collapse;
   background: #ffffff;
+  table-layout: fixed;
 }
 
 .maintenance-logbook-table th,
@@ -10526,37 +10527,76 @@ label.backup-action-btn {
   background: rgba(224, 242, 226, 0.92);
 }
 
+.maintenance-logbook-table th:nth-child(1),
 .maintenance-logbook-table td:nth-child(1) {
   width: 56px;
   text-align: center;
 }
 
+.maintenance-logbook-table th:nth-child(2),
 .maintenance-logbook-table td:nth-child(2) {
-  width: 130px;
+  width: 162px;
   text-align: center;
 }
 
+.maintenance-logbook-table th:nth-child(3),
 .maintenance-logbook-table td:nth-child(3) {
   width: auto;
 }
 
+.maintenance-logbook-table th:nth-child(4),
 .maintenance-logbook-table td:nth-child(4) {
-  width: 120px;
+  width: 160px;
   text-align: center;
 }
 
+.maintenance-logbook-table th:nth-child(5),
 .maintenance-logbook-table td:nth-child(5) {
   width: 82px;
   text-align: center;
 }
 
+.maintenance-logbook-table th:nth-child(6),
 .maintenance-logbook-table td:nth-child(6) {
-  width: 120px;
+  width: 108px;
   text-align: center;
 }
 
 .maintenance-logbook-signature-name {
   min-height: 22px;
+}
+
+.maintenance-logbook-task-cell {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.maintenance-logbook-task-type {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.maintenance-logbook-task-asset,
+.maintenance-logbook-task-location,
+.maintenance-logbook-task-note,
+.maintenance-logbook-task-condition {
+  margin-top: 2px;
+}
+
+.maintenance-logbook-task-asset {
+  font-weight: 500;
+}
+
+.maintenance-logbook-task-label {
+  font-weight: 700;
+}
+
+.maintenance-logbook-task-note,
+.maintenance-logbook-task-condition {
+  line-height: 1.4;
 }
 
 .maintenance-logbook-mobile-card {
@@ -15885,6 +15925,14 @@ tr.row-maint-maintenance:hover td {
   justify-content: space-between;
   gap: 14px;
   margin: 16px 0 12px;
+}
+
+.asset-detail-section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .asset-detail-section-title {
@@ -22936,6 +22984,11 @@ tr.row-maint-maintenance:hover td {
     align-items: center;
     flex-direction: row;
     gap: 10px;
+  }
+
+  .asset-detail-section-actions {
+    width: auto;
+    justify-content: flex-end;
   }
 
   .asset-detail-section-toggle {
