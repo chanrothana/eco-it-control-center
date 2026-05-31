@@ -26879,7 +26879,7 @@ export default function App() {
   }
 
   async function deleteStatusHistoryEntryByAsset(assetDbId: number, entryId: number) {
-    if (!requireAdminAction()) return;
+    if (!isSuperAdmin) return;
     if (!assetDbId) return;
     if (!window.confirm("Delete this status timeline record?")) return;
 
@@ -26921,7 +26921,6 @@ export default function App() {
       setBusy(false);
     }
   }
-
 
   function openAssetStatusChangeDialog(id: number, status: string) {
     if (!requireAdminAction()) return;
@@ -27544,6 +27543,75 @@ export default function App() {
         : [],
     [detailAsset, sortByNewestDate]
   );
+  const detailMovementEntries = useMemo(() => {
+    const transferEntries = [...detailTransferEntries];
+    const custodyEntries = [...detailCustodyEntries];
+    const consumedCustodyIds = new Set<number>();
+    const rows: Array<{
+      id: string;
+      date: string;
+      title: string;
+      fromCampus: string;
+      toCampus: string;
+      fromLocation: string;
+      toLocation: string;
+      fromUser: string;
+      toUser: string;
+      ack: string;
+      by: string;
+      reason: string;
+      note: string;
+    }> = [];
+
+    for (const transfer of transferEntries) {
+      const matchedCustody =
+        custodyEntries.find(
+          (entry) =>
+            Number(entry.id || 0) > 0 &&
+            !consumedCustodyIds.has(Number(entry.id || 0)) &&
+            String(entry.date || "").slice(0, 10) === String(transfer.date || "").slice(0, 10) &&
+            String(entry.toCampus || "") === String(transfer.toCampus || "") &&
+            String(entry.toLocation || "") === String(transfer.toLocation || "")
+        ) || null;
+      if (matchedCustody?.id) consumedCustodyIds.add(Number(matchedCustody.id));
+      rows.push({
+        id: `transfer-${transfer.id}`,
+        date: transfer.date || "",
+        title: matchedCustody?.toUser || matchedCustody?.fromUser ? "Transfer & Assignment" : "Location Transfer",
+        fromCampus: transfer.fromCampus || "",
+        toCampus: transfer.toCampus || "",
+        fromLocation: transfer.fromLocation || "",
+        toLocation: transfer.toLocation || "",
+        fromUser: matchedCustody?.fromUser || "",
+        toUser: matchedCustody?.toUser || "",
+        ack: matchedCustody ? (matchedCustody.responsibilityAck ? "Yes" : "No") : "-",
+        by: transfer.by || matchedCustody?.by || "-",
+        reason: transfer.reason || "-",
+        note: matchedCustody?.note || "",
+      });
+    }
+
+    for (const custody of custodyEntries) {
+      if (consumedCustodyIds.has(Number(custody.id || 0))) continue;
+      rows.push({
+        id: `custody-${custody.id}`,
+        date: custody.date || "",
+        title: custody.action || "Assignment Change",
+        fromCampus: custody.fromCampus || "",
+        toCampus: custody.toCampus || "",
+        fromLocation: custody.fromLocation || "",
+        toLocation: custody.toLocation || "",
+        fromUser: custody.fromUser || "",
+        toUser: custody.toUser || "",
+        ack: custody.responsibilityAck ? "Yes" : "No",
+        by: custody.by || "-",
+        reason: "-",
+        note: custody.note || "-",
+      });
+    }
+
+    return rows.sort((a, b) => sortByNewestDate(a.date, b.date));
+  }, [detailCustodyEntries, detailTransferEntries, sortByNewestDate]);
   const detailLinkedComponents = useMemo(
     () =>
       detailAsset
@@ -27608,6 +27676,13 @@ export default function App() {
         ? detailTransferEntries
         : detailTransferEntries.slice(0, 1),
     [assetDetailSections.showAllTransfer, detailTransferEntries]
+  );
+  const detailMovementVisibleEntries = useMemo(
+    () =>
+      assetDetailSections.showAllTransfer
+        ? detailMovementEntries
+        : detailMovementEntries.slice(0, 1),
+    [assetDetailSections.showAllTransfer, detailMovementEntries]
   );
   useEffect(() => {
     if (!assetDetailId) return;
@@ -39640,25 +39715,79 @@ function formatTicketRequestSource(value?: string) {
                   style={classroomDetailRoomId !== null ? { position: "relative", zIndex: 1101 } : undefined}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="panel-row">
-                    <h2>Asset Detail - {detailAsset.assetId}</h2>
-                    <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
-                  </div>
-                  {isAdmin ? (
-                    <div className="asset-actions" style={{ justifyContent: "flex-start", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-                      <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
-                        {detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
-                      </button>
-                      <button type="button" className="tab btn-small" onClick={() => openTransferPageFromDetail(detailAsset)}>
-                        Open Transfer Page
-                      </button>
+                  <div className="asset-detail-modal-header">
+                    <div className="asset-detail-modal-title-block">
+                      <div className="asset-detail-hero">
+                        {!detailFurniture ? (
+                          <div className="asset-detail-hero-media">
+                            <div className="asset-detail-hero-media-frame">
+                              {assetDisplayPhoto(detailAsset) ? (
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={assetDisplayPhoto(detailAsset)}
+                                  alt={detailAsset.assetId}
+                                  className="asset-detail-hero-media-image"
+                                />
+                              ) : (
+                                <div className="asset-detail-hero-media-image asset-detail-modal-thumb-placeholder">{t.noPhoto}</div>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                        <div className="asset-detail-hero-main">
+                          <div className="asset-detail-hero-top">
+                            <div className="asset-detail-hero-copy">
+                              <div className="asset-detail-hero-eyebrow">Asset Detail</div>
+                              <h2>{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</h2>
+                              <div className="asset-detail-hero-meta">
+                                <span className="asset-detail-id-chip">{detailAsset.assetId}</span>
+                                <span className={`asset-detail-status-chip ${assetStatusRowClass(detailAsset.status || "")}`}>
+                                  {assetStatusLabel(detailAsset.status)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="asset-detail-modal-header-side">
+                              <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
+                            </div>
+                          </div>
+                          <div className="asset-detail-hero-summary">
+                            <div className="asset-detail-hero-summary-item">
+                              <span>{t.campus}</span>
+                              <strong>{campusLabel(detailAsset.campus)}</strong>
+                            </div>
+                            <div className="asset-detail-hero-summary-item">
+                              <span>{t.location}</span>
+                              <strong>{detailAsset.location || "-"}</strong>
+                            </div>
+                            <div className="asset-detail-hero-summary-item">
+                              <span>{t.user}</span>
+                              <strong>{detailAsset.assignedTo || "-"}</strong>
+                            </div>
+                            <div className="asset-detail-hero-summary-item">
+                              <span>Brand / Model</span>
+                              <strong>{[detailAsset.brand || "-", detailAsset.model || "-"].join(" / ")}</strong>
+                            </div>
+                          </div>
+                          {isAdmin ? (
+                            <div className="asset-actions asset-detail-hero-actions">
+                              <button type="button" className="tab btn-small" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
+                                {detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
+                              </button>
+                              <button type="button" className="tab btn-small" onClick={() => openTransferPageFromDetail(detailAsset)}>
+                                Open Transfer Page
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
-                  ) : null}
-                  <div className="panel-row" style={{ marginTop: 6 }}>
-                    <h3 className="section-title" style={{ margin: 0 }}>Asset Details</h3>
+                  </div>
+                  <div className="asset-detail-section-head asset-detail-overview-head">
+                    <h3 className="section-title asset-detail-section-title">Details</h3>
                     <button
                       type="button"
-                      className="tab btn-small"
+                      className="asset-detail-section-toggle"
                       onClick={() =>
                         setAssetDetailSections((prev) => ({
                           ...prev,
@@ -39670,22 +39799,36 @@ function formatTicketRequestSource(value?: string) {
                     </button>
                   </div>
                   {assetDetailSections.showDetails ? (
-                  <div className="form-grid asset-detail-grid">
-                    <div className="field"><span>{t.campus}</span><div className="detail-value">{campusLabel(detailAsset.campus)}</div></div>
-                    <div className="field"><span>{t.location}</span><div className="detail-value">{detailAsset.location || "-"}</div></div>
-                    <div className="field"><span>{t.status}</span><div className="detail-value">{assetStatusLabel(detailAsset.status)}</div></div>
-                    <div className="field"><span>{t.category}</span><div className="detail-value">{detailAsset.category}</div></div>
-                    <div className="field"><span>{t.typeCode}</span><div className="detail-value">{detailAsset.type}</div></div>
-                    <div className="field"><span>{t.name}</span><div className="detail-value">{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</div></div>
-                    {detailAsset.category === "IT" ? (
-                      <div className="field"><span>{t.user}</span><div className="detail-value">{detailAsset.assignedTo || "-"}</div></div>
-                    ) : null}
-                    {detailAsset.category === "IT" ? (
-                      <div className="field"><span>{t.setCode}</span><div className="detail-value">{detailAsset.setCode || "-"}</div></div>
-                    ) : null}
+                  <div className="asset-detail-overview-stack">
+                    <section className="asset-detail-info-section">
+                      <div className="asset-detail-info-head">
+                        <h4>Core Details</h4>
+                        <span>Reference information</span>
+                      </div>
+                      <div className="asset-detail-kv-grid">
+                        <div className="asset-detail-kv"><span>{t.category}</span><strong>{detailAsset.category}</strong></div>
+                        <div className="asset-detail-kv"><span>{t.typeCode}</span><strong>{detailAsset.type}</strong></div>
+                        <div className="asset-detail-kv"><span>{t.name}</span><strong>{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</strong></div>
+                        {detailAsset.category === "IT" ? (
+                          <div className="asset-detail-kv"><span>{t.setCode}</span><strong>{detailAsset.setCode || "-"}</strong></div>
+                        ) : null}
+                        {detailAsset.category === "IT" &&
+                        detailAsset.type !== "TAB" &&
+                        String(detailAsset.parentAssetId || "").trim() ? (
+                          <div className="asset-detail-kv"><span>{t.parentAssetId}</span><strong>{detailAsset.parentAssetId || "-"}</strong></div>
+                        ) : null}
+                        {!detailFurniture ? (
+                          <div className="asset-detail-kv"><span>Serial Number</span><strong>{detailAsset.serialNumber || "-"}</strong></div>
+                        ) : null}
+                      </div>
+                    </section>
+
                     {detailLinkedComponents.length ? (
-                      <div className="field field-wide">
-                        <span>{showsIncludedComponentCards(detailAsset.category, detailAsset.type) ? "Included Components / Remotes" : "Linked Components"}</span>
+                      <section className="asset-detail-info-section">
+                        <div className="asset-detail-info-head">
+                          <h4>{showsIncludedComponentCards(detailAsset.category, detailAsset.type) ? "Included Components / Remotes" : "Linked Components"}</h4>
+                          <span>{detailLinkedComponents.length} linked item(s)</span>
+                        </div>
                         {isPhoneView ? (
                           <div className="public-asset-component-section">
                             <div className="public-asset-component-list">
@@ -39756,86 +39899,118 @@ function formatTicketRequestSource(value?: string) {
                             })}
                           </div>
                         )}
-                      </div>
+                      </section>
                     ) : null}
-                    <div className="field"><span>Brand</span><div className="detail-value">{detailAsset.brand || "-"}</div></div>
-                    <div className="field"><span>Model</span><div className="detail-value">{detailAsset.model || "-"}</div></div>
-                    {!detailFurniture ? (
-                      <div className="field"><span>Serial Number</span><div className="detail-value">{detailAsset.serialNumber || "-"}</div></div>
-                    ) : null}
-                    {isFanAsset(detailAsset.category, detailAsset.type) ? (
-                      <div className="field"><span>Fan Type</span><div className="detail-value">{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</div></div>
-                    ) : null}
-                    <div className="field"><span>Vendor</span><div className="detail-value">{detailAsset.vendor || "-"}</div></div>
-                    <div className="field"><span>Purchase Date</span><div className="detail-value">{formatDate(detailAsset.purchaseDate || "-")}</div></div>
-                    {!detailFurniture ? (
-                      <div className="field"><span>Warranty Until</span><div className="detail-value">{formatDate(detailAsset.warrantyUntil || "-")}</div></div>
-                    ) : null}
-                    {detailFurniture ? (
-                      <>
-                        <div className="field"><span>Control Mode</span><div className="detail-value">{detailFurniture.trackingMode || "-"}</div></div>
-                        <div className="field"><span>Quantity</span><div className="detail-value">{detailFurniture.quantity || "1"}</div></div>
-                        <div className="field"><span>Standard Name</span><div className="detail-value">{detailFurniture.subtype || defaultFurnitureSubtype(detailAsset.type) || "-"}</div></div>
-                      </>
-                    ) : null}
-                    {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
-                      <div className="field"><span>{t.pcType}</span><div className="detail-value">{detailAsset.pcType || "-"}</div></div>
-                    ) : null}
-                    {detailAsset.category === "IT" &&
-                    detailAsset.type !== "TAB" &&
-                    String(detailAsset.parentAssetId || "").trim() ? (
-                      <div className="field"><span>{t.parentAssetId}</span><div className="detail-value">{detailAsset.parentAssetId || "-"}</div></div>
-                    ) : null}
-                    {detailAsset.parentAssetId ? (
-                      <div className="field"><span>{t.componentRole}</span><div className="detail-value">{detailAsset.componentRole || "-"}</div></div>
-                    ) : null}
-                    {detailAsset.parentAssetId ? (
-                      <div className="field"><span>{t.componentRequired}</span><div className="detail-value">{detailAsset.componentRequired ? "Yes" : "No"}</div></div>
-                    ) : null}
-                    {!detailFurniture ? (
-                      <div className="field field-wide"><span>Specs</span><div className="detail-value">{detailAsset.specs || "-"}</div></div>
-                    ) : null}
-                    <div className="field field-wide"><span>Notes</span><div className="detail-value">{detailAsset.notes || "-"}</div></div>
-                    {!detailFurniture ? (
-                      <div className="field"><span>Next Maintenance Date</span><div className="detail-value">{formatDate(detailAsset.nextMaintenanceDate || "-")}</div></div>
-                    ) : null}
-                    {!detailFurniture ? (
-                      <div className="field"><span>Schedule Note</span><div className="detail-value">{detailAsset.scheduleNote || "-"}</div></div>
-                    ) : null}
+
+                    <div className="asset-detail-info-grid asset-detail-info-grid-secondary">
+                      <section className="asset-detail-info-section">
+                        <div className="asset-detail-info-head">
+                          <h4>Technical Info</h4>
+                          <span>Hardware and identification</span>
+                        </div>
+                        <div className="asset-detail-kv-grid">
+                          {isFanAsset(detailAsset.category, detailAsset.type) ? (
+                            <div className="asset-detail-kv"><span>Fan Type</span><strong>{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</strong></div>
+                          ) : null}
+                          {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
+                            <div className="asset-detail-kv"><span>{t.pcType}</span><strong>{detailAsset.pcType || "-"}</strong></div>
+                          ) : null}
+                          {detailAsset.parentAssetId ? (
+                            <div className="asset-detail-kv"><span>{t.componentRole}</span><strong>{detailAsset.componentRole || "-"}</strong></div>
+                          ) : null}
+                          {detailAsset.parentAssetId ? (
+                            <div className="asset-detail-kv"><span>{t.componentRequired}</span><strong>{detailAsset.componentRequired ? "Yes" : "No"}</strong></div>
+                          ) : null}
+                          {detailFurniture ? (
+                            <>
+                              <div className="asset-detail-kv"><span>Control Mode</span><strong>{detailFurniture.trackingMode || "-"}</strong></div>
+                              <div className="asset-detail-kv"><span>Quantity</span><strong>{detailFurniture.quantity || "1"}</strong></div>
+                              <div className="asset-detail-kv"><span>Standard Name</span><strong>{detailFurniture.subtype || defaultFurnitureSubtype(detailAsset.type) || "-"}</strong></div>
+                            </>
+                          ) : null}
+                          <div className="asset-detail-kv"><span>Vendor</span><strong>{detailAsset.vendor || "-"}</strong></div>
+                        </div>
+                        {!detailFurniture ? (
+                          <div className="asset-detail-rich-block">
+                            <span>Specs</span>
+                            <div className="asset-detail-rich-value">{detailAsset.specs || "-"}</div>
+                          </div>
+                        ) : null}
+                      </section>
+
+                      <section className="asset-detail-info-section">
+                        <div className="asset-detail-info-head">
+                          <h4>Lifecycle</h4>
+                          <span>Purchase, warranty and schedule</span>
+                        </div>
+                        <div className="asset-detail-kv-grid">
+                          <div className="asset-detail-kv"><span>Purchase Date</span><strong>{formatDate(detailAsset.purchaseDate || "-")}</strong></div>
+                          {!detailFurniture ? (
+                            <div className="asset-detail-kv"><span>Warranty Until</span><strong>{formatDate(detailAsset.warrantyUntil || "-")}</strong></div>
+                          ) : null}
+                          {!detailFurniture ? (
+                            <div className="asset-detail-kv"><span>Next Maintenance Date</span><strong>{formatDate(detailAsset.nextMaintenanceDate || "-")}</strong></div>
+                          ) : null}
+                          {!detailFurniture ? (
+                            <div className="asset-detail-kv"><span>Schedule Note</span><strong>{detailAsset.scheduleNote || "-"}</strong></div>
+                          ) : null}
+                        </div>
+                      </section>
+                    </div>
+
                     {isPrinterAssetRow(detailAsset) ? (
-                      <>
-                        <div className="field"><span>Toner Model</span><div className="detail-value">{detailAsset.tonerModel || "-"}</div></div>
-                        <div className="field"><span>Linked Toner Stock</span><div className="detail-value">{detailTonerItem ? `${detailTonerItem.itemCode} (${detailTonerStock} ${detailTonerItem.unit})` : "-"}</div></div>
-                        <div className="field"><span>Last Toner Change</span><div className="detail-value">{formatDate(detailAsset.tonerLastChangedAt || "-")}</div></div>
-                        <div className="field"><span>Last Page Counter</span><div className="detail-value">{detailAsset.tonerLastPageCount || "-"}</div></div>
-                        <div className="field"><span>Min Toner Stock</span><div className="detail-value">{detailAsset.tonerMinStock || "-"}</div></div>
-                        <div className="field"><span>Expected Yield</span><div className="detail-value">{detailAsset.tonerExpectedYield ? `${detailAsset.tonerExpectedYield} pages` : "-"}</div></div>
-                        <div className="field field-wide"><span>Toner Note</span><div className="detail-value">{detailAsset.tonerNotes || "-"}</div></div>
-                      </>
+                      <section className="asset-detail-info-section">
+                        <div className="asset-detail-info-head">
+                          <h4>Toner Snapshot</h4>
+                          <span>Printer-specific reference</span>
+                        </div>
+                        <div className="asset-detail-kv-grid">
+                          <div className="asset-detail-kv"><span>Toner Model</span><strong>{detailAsset.tonerModel || "-"}</strong></div>
+                          <div className="asset-detail-kv"><span>Linked Toner Stock</span><strong>{detailTonerItem ? `${detailTonerItem.itemCode} (${detailTonerStock} ${detailTonerItem.unit})` : "-"}</strong></div>
+                          <div className="asset-detail-kv"><span>Last Toner Change</span><strong>{formatDate(detailAsset.tonerLastChangedAt || "-")}</strong></div>
+                          <div className="asset-detail-kv"><span>Last Page Counter</span><strong>{detailAsset.tonerLastPageCount || "-"}</strong></div>
+                          <div className="asset-detail-kv"><span>Min Toner Stock</span><strong>{detailAsset.tonerMinStock || "-"}</strong></div>
+                          <div className="asset-detail-kv"><span>Expected Yield</span><strong>{detailAsset.tonerExpectedYield ? `${detailAsset.tonerExpectedYield} pages` : "-"}</strong></div>
+                        </div>
+                        <div className="asset-detail-rich-block">
+                          <span>Toner Note</span>
+                          <div className="asset-detail-rich-value">{detailAsset.tonerNotes || "-"}</div>
+                        </div>
+                      </section>
                     ) : null}
                     {detailFurniture ? (
-                      <>
-                        <div className="field field-wide">
-                          <span>Model Photo</span>
-                          <div className="detail-value">
-                            {renderAssetPhoto(furnitureModelPhoto(detailAsset), `${detailAsset.assetId}-model`)}
+                      <section className="asset-detail-info-section">
+                        <div className="asset-detail-info-head">
+                          <h4>Reference Photos</h4>
+                          <span>Model and location</span>
+                        </div>
+                        <div className="asset-detail-photo-grid">
+                          <div className="asset-detail-rich-block">
+                            <span>Model Photo</span>
+                            <div className="asset-detail-rich-value asset-detail-rich-value-photo">
+                              {renderAssetPhoto(furnitureModelPhoto(detailAsset), `${detailAsset.assetId}-model`)}
+                            </div>
+                          </div>
+                          <div className="asset-detail-rich-block">
+                            <span>Location Photo</span>
+                            <div className="asset-detail-rich-value asset-detail-rich-value-photo">
+                              {renderAssetPhoto(detailAsset.photo || "", `${detailAsset.assetId}-location`)}
+                            </div>
                           </div>
                         </div>
-                        <div className="field field-wide">
-                          <span>Location Photo</span>
-                          <div className="detail-value">
-                            {renderAssetPhoto(detailAsset.photo || "", `${detailAsset.assetId}-location`)}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="field field-wide">
-                        <span>{t.photo}</span>
-                        <div className="detail-value">
-                          {renderAssetPhoto(detailAsset.photo || "", detailAsset.assetId)}
-                        </div>
+                      </section>
+                    ) : null}
+
+                    <section className="asset-detail-info-section">
+                      <div className="asset-detail-info-head">
+                        <h4>Notes</h4>
+                        <span>Extra context and remarks</span>
                       </div>
-                    )}
+                      <div className="asset-detail-rich-block">
+                        <span>Notes</span>
+                        <div className="asset-detail-rich-value">{detailAsset.notes || "-"}</div>
+                      </div>
+                    </section>
                   </div>
                   ) : null}
 
@@ -39937,12 +40112,12 @@ function formatTicketRequestSource(value?: string) {
                     </section>
                   ) : null}
 
-                  <div className="panel-row" style={{ marginTop: 8 }}>
-                    <h3 className="section-title" style={{ margin: 0 }}>{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
+                  <div className="asset-detail-section-head">
+                    <h3 className="section-title asset-detail-section-title">{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
                     {detailMaintenanceEntries.length > 1 ? (
                       <button
                         type="button"
-                        className="tab btn-small"
+                        className="asset-detail-section-toggle"
                         onClick={() =>
                           setAssetDetailSections((prev) => ({
                             ...prev,
@@ -39954,80 +40129,53 @@ function formatTicketRequestSource(value?: string) {
                       </button>
                     ) : null}
                   </div>
-                  {isPhoneView ? (
-                    <div className="asset-detail-maint-soft-list">
-                      {detailMaintenanceVisibleEntries.length ? (
-                        detailMaintenanceVisibleEntries.map((h) => (
-                          <article key={`detail-history-soft-${h.id}`} className="asset-detail-maint-soft-card">
-                            <div className="asset-detail-maint-soft-meta">
-                              <span><strong>Date:</strong> {formatDate(h.date || "-")}</span>
-                              <span><strong>{t.campus}:</strong> {CAMPUS_CODE[detailAsset.campus] || campusLabel(detailAsset.campus)}</span>
-                              <span><strong>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}:</strong> {h.type || "-"}</span>
-                              <span><strong>{lang === "km" ? "ស្ថានភាពការងារ" : "Status"}:</strong> {maintenanceCompletionText(h.completion || "-")}</span>
-                              <span><strong>Cost:</strong> {h.cost || "-"}</span>
-                              <span><strong>By:</strong> {h.by || "-"}</span>
+                  <div className="public-asset-history-section asset-detail-history-section">
+                    {detailMaintenanceVisibleEntries.length ? (
+                      <div className="public-asset-history-list">
+                        {detailMaintenanceVisibleEntries.map((h) => (
+                          <article className="public-asset-history-card asset-detail-history-card" key={`detail-history-${h.id}`}>
+                            <div className="public-asset-history-head">
+                              <div className="public-asset-history-title">{h.type || (detailFurniture ? "Fixing" : "Maintenance")}</div>
+                              <div className="public-asset-history-head-side">
+                                <div className="public-asset-history-date">{formatDate(h.date)}</div>
+                              </div>
                             </div>
-                            <p className="asset-detail-maint-soft-note">
-                              <strong>{t.notes}:</strong> {h.note || h.condition || "-"}
-                            </p>
-                            <div className="asset-detail-maint-soft-photo-row">
-                              {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, undefined, {
-                                className: "maintenance-history-photo-groups-two-col",
-                              })}
+                            <div className="public-asset-history-grid public-asset-history-grid-paired asset-detail-history-grid-compact">
+                              {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(h.completion || "-"))}
+                              {renderPublicHistoryMeta("Condition", h.condition || "-")}
+                              {renderPublicHistoryMeta("Cost", h.cost || "-")}
+                              {renderPublicHistoryMeta("By", h.by || "-")}
+                            </div>
+                            <div className="public-asset-history-note">
+                              <span className="public-asset-history-label">Noted</span>
+                              <p>{h.note || "-"}</p>
+                            </div>
+                            <div className="public-asset-history-photo-section">
+                              <span className="public-asset-history-label">Photos</span>
+                              <div className="public-asset-history-photo-groups">
+                                {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, {
+                                  before: "Before",
+                                  after: "After",
+                                }, {
+                                  maxPhotosPerGroup: 1,
+                                  className: "public-asset-history-photo-groups-two-col",
+                                })}
+                              </div>
                             </div>
                           </article>
-                        ))
-                      ) : (
-                        <div className="panel-note">{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="table-wrap maintenance-history-modal-table-wrap asset-detail-history-wrap">
-                      <table className="maintenance-history-modal-table">
-                        <thead>
-                          <tr>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th>Work Status</th>
-                            <th>Condition</th>
-                            <th>Note</th>
-                            <th>{lang === "km" ? "មុនថែទាំ" : "Before"}</th>
-                            <th>{lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After"}</th>
-                            <th>Cost</th>
-                            <th>By</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detailMaintenanceVisibleEntries.length ? (
-                            detailMaintenanceVisibleEntries.map((h) => (
-                              <tr key={`detail-history-${h.id}`}>
-                                <td data-label="Date">{formatDate(h.date)}</td>
-                                <td data-label="Type">{h.type}</td>
-                                <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
-                                <td data-label="Condition">{h.condition || "-"}</td>
-                                <td data-label="Noted">{h.note}</td>
-                                <td data-label="Before">{renderMaintenancePhotoColumn(h, "before", `asset-detail-history-${h.id}`)}</td>
-                                <td data-label="After">{renderMaintenancePhotoColumn(h, "after", `asset-detail-history-${h.id}`)}</td>
-                                <td data-label="Cost">{h.cost || "-"}</td>
-                                <td data-label="By">{h.by || "-"}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr className="asset-detail-empty-row">
-                              <td colSpan={9}>{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    ) : (
+                      renderPublicHistoryEmpty(detailFurniture ? "No fixing records yet." : "No maintenance records yet.")
+                    )}
+                  </div>
 
-                  <div className="panel-row" style={{ marginTop: 8 }}>
-                    <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
-                    {detailTransferEntries.length > 1 ? (
+                  <div className="asset-detail-section-head">
+                    <h3 className="section-title asset-detail-section-title">Movement & Assignment History</h3>
+                    {detailMovementEntries.length > 1 ? (
                       <button
                         type="button"
-                        className="tab btn-small"
+                        className="asset-detail-section-toggle"
                         onClick={() =>
                           setAssetDetailSections((prev) => ({
                             ...prev,
@@ -40039,132 +40187,102 @@ function formatTicketRequestSource(value?: string) {
                       </button>
                     ) : null}
                   </div>
-                  {useMobileCardLayout ? (
-                    <div className="asset-detail-transfer-soft-list">
-                      {detailTransferVisibleEntries.length ? (
-                        detailTransferVisibleEntries.map((h) => {
-                          const custody = detailCustodyEntries.find(
-                            (entry) =>
-                              String(entry.date || "").slice(0, 10) === String(h.date || "").slice(0, 10) &&
-                              String(entry.toCampus || "") === String(h.toCampus || "") &&
-                              String(entry.toLocation || "") === String(h.toLocation || "")
-                          );
-                          return (
-                            <article key={`detail-transfer-soft-${h.id}`} className="asset-detail-transfer-soft-card">
-                              <div className="asset-detail-transfer-soft-top">
-                                <strong className="asset-detail-transfer-soft-id">{detailAsset.assetId}</strong>
-                                <span className="asset-detail-transfer-soft-date">{formatDate(h.date || "-")}</span>
+                  <div className="asset-detail-movement-list">
+                    {detailMovementVisibleEntries.length ? (
+                      detailMovementVisibleEntries.map((entry) => (
+                        <article key={`detail-movement-${entry.id}`} className="asset-detail-movement-card">
+                          <div className="asset-detail-movement-head">
+                            <div className="asset-detail-movement-title">{entry.title}</div>
+                            <div className="asset-detail-movement-date">{formatDate(entry.date || "-")}</div>
+                          </div>
+                          <div className="asset-detail-movement-grid">
+                            <div className="asset-detail-movement-row">
+                              <div className="asset-detail-movement-chip">Route</div>
+                              <div className="asset-detail-movement-item">
+                                <span className="asset-detail-movement-key">From</span>
+                                <div className="asset-detail-movement-value">{campusLabel(entry.fromCampus || "-")} | {entry.fromLocation || "-"}</div>
                               </div>
-                              <div className="asset-detail-transfer-soft-meta">
-                                <span><strong>From:</strong> {campusLabel(h.fromCampus)} | {h.fromLocation || "-"}</span>
-                                <span><strong>To:</strong> {campusLabel(h.toCampus)} | {h.toLocation || "-"}</span>
-                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                  <span><strong>Staff:</strong> {custody?.fromUser || "-"} {"->"} {custody?.toUser || "-"}</span>
-                                ) : null}
-                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                  <span><strong>Ack:</strong> {custody?.responsibilityAck ? "Yes" : "No"}</span>
-                                ) : null}
-                                <span><strong>By:</strong> {h.by || "-"}</span>
+                              <div className="asset-detail-movement-item">
+                                <span className="asset-detail-movement-key">To</span>
+                                <div className="asset-detail-movement-value">{campusLabel(entry.toCampus || "-")} | {entry.toLocation || "-"}</div>
                               </div>
-                              <p className="asset-detail-transfer-soft-note">
-                                <strong>Reason:</strong> {h.reason || "-"}
-                              </p>
-                            </article>
-                          );
-                        })
-                      ) : (
-                        <div className="panel-note">No transfer location history yet.</div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="table-wrap asset-detail-history-wrap">
-                      <table className="asset-detail-transfer-table">
-                        <thead>
-                          <tr>
-                            <th>Date</th>
-                            <th>From Campus</th>
-                            <th>From Location</th>
-                            <th>To Campus</th>
-                            <th>To Location</th>
-                            {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? <th>From Staff</th> : null}
-                            {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? <th>To Staff</th> : null}
-                            {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? <th>Ack</th> : null}
-                            <th>Reason</th>
-                            <th>By</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detailTransferVisibleEntries.length ? (
-                            detailTransferVisibleEntries.map((h) => {
-                              const custody = detailCustodyEntries.find(
-                                (entry) =>
-                                  String(entry.date || "").slice(0, 10) === String(h.date || "").slice(0, 10) &&
-                                  String(entry.toCampus || "") === String(h.toCampus || "") &&
-                                  String(entry.toLocation || "") === String(h.toLocation || "")
-                              );
-                              return (
-                              <tr key={`detail-transfer-${h.id}`}>
-                                <td data-label="Date">{formatDate(h.date)}</td>
-                                <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
-                                <td data-label="From Location">{h.fromLocation || "-"}</td>
-                                <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
-                                <td data-label="To Location">{h.toLocation || "-"}</td>
-                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                  <td data-label="From Staff">{custody?.fromUser || "-"}</td>
-                                ) : null}
-                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                  <td data-label="To Staff">{custody?.toUser || "-"}</td>
-                                ) : null}
-                                {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                  <td data-label="Ack">{custody?.responsibilityAck ? "Yes" : "No"}</td>
-                                ) : null}
-                                <td data-label="Reason">{h.reason || "-"}</td>
-                                <td data-label="By">{h.by || "-"}</td>
-                              </tr>
-                            );
-                            })
-                          ) : (
-                            <tr className="asset-detail-empty-row">
-                              <td colSpan={hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? 7 : 10}>No transfer location history yet.</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                            </div>
+                            <div className="asset-detail-movement-row">
+                              <div className="asset-detail-movement-chip">People</div>
+                              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                                <div className="asset-detail-movement-item">
+                                  <span className="asset-detail-movement-key">Staff</span>
+                                  <div className="asset-detail-movement-value">{entry.fromUser || "-"} {"->"} {entry.toUser || "-"}</div>
+                                </div>
+                              ) : null}
+                              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                                <div className="asset-detail-movement-item">
+                                  <span className="asset-detail-movement-key">Ack</span>
+                                  <div className="asset-detail-movement-value">{entry.ack || "-"}</div>
+                                </div>
+                              ) : null}
+                              <div className="asset-detail-movement-item">
+                                <span className="asset-detail-movement-key">By</span>
+                                <div className="asset-detail-movement-value">{entry.by || "-"}</div>
+                              </div>
+                            </div>
+                            <div className="asset-detail-movement-row asset-detail-movement-row-note">
+                              <div className="asset-detail-movement-chip">Reason</div>
+                              <div className="asset-detail-movement-item">
+                                <span className="asset-detail-movement-key">Reason</span>
+                                <div className="asset-detail-movement-value">{entry.reason || "-"}</div>
+                              </div>
+                              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                                <div className="asset-detail-movement-item">
+                                  <span className="asset-detail-movement-key">Note</span>
+                                  <div className="asset-detail-movement-value">{entry.note || "-"}</div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">No movement or assignment history yet.</div>
+                    )}
+                  </div>
 
-                  {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                  {isSuperAdmin ? (
                     <>
-                      <h3 className="section-title">Assigned to History</h3>
+                      <h3 className="section-title">Status Timeline</h3>
                       <div className="table-wrap asset-detail-history-wrap">
-                        <table className="asset-detail-custody-table">
+                        <table className="asset-detail-status-table">
                           <thead>
                             <tr>
                               <th>Date</th>
-                              <th>Action</th>
-                              <th>From User</th>
-                              <th>To User</th>
-                              <th>Ack</th>
-                              <th>By</th>
-                              <th>Note</th>
+                              <th>From</th>
+                              <th>To</th>
+                              <th>Reason</th>
+                              <th>{t.delete}</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {detailCustodyEntries.length ? (
-                              detailCustodyEntries.map((h) => (
-                                <tr key={`detail-custody-${h.id}`}>
+                            {detailStatusEntries.length ? (
+                              detailStatusEntries.map((h) => (
+                                <tr key={`detail-status-${h.id}`}>
                                   <td data-label="Date">{formatDate(h.date)}</td>
-                                  <td data-label="Action">{h.action || "-"}</td>
-                                  <td data-label="From User">{h.fromUser || "-"}</td>
-                                  <td data-label="To User">{h.toUser || "-"}</td>
-                                  <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
-                                  <td data-label="By">{h.by || "-"}</td>
-                                  <td data-label="Note">{h.note || "-"}</td>
+                                  <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
+                                  <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
+                                  <td data-label="Reason">{h.reason || "-"}</td>
+                                  <td data-label={t.delete}>
+                                    <button
+                                      className="btn-danger"
+                                      disabled={busy}
+                                      onClick={() => void deleteStatusHistoryEntryByAsset(detailAsset.id, h.id)}
+                                    >
+                                      X
+                                    </button>
+                                  </td>
                                 </tr>
                               ))
                             ) : (
                               <tr className="asset-detail-empty-row">
-                                <td colSpan={7}>No assigned history yet.</td>
+                                <td colSpan={5}>No status timeline yet.</td>
                               </tr>
                             )}
                           </tbody>
@@ -40173,47 +40291,6 @@ function formatTicketRequestSource(value?: string) {
                     </>
                   ) : null}
 
-                  <h3 className="section-title">Status Timeline</h3>
-                  <div className="table-wrap asset-detail-history-wrap">
-                    <table className="asset-detail-status-table">
-                      <thead>
-                        <tr>
-                          <th>Date</th>
-                          <th>From</th>
-                          <th>To</th>
-                          <th>Reason</th>
-                          {isAdmin ? <th>{t.delete}</th> : null}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detailStatusEntries.length ? (
-                          detailStatusEntries.map((h) => (
-                            <tr key={`detail-status-${h.id}`}>
-                              <td data-label="Date">{formatDate(h.date)}</td>
-                              <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
-                              <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
-                              <td data-label="Reason">{h.reason || "-"}</td>
-                              {isAdmin ? (
-                                <td data-label={t.delete}>
-                                  <button
-                                    className="btn-danger"
-                                    disabled={busy}
-                                    onClick={() => void deleteStatusHistoryEntryByAsset(detailAsset.id, h.id)}
-                                  >
-                                    X
-                                  </button>
-                                </td>
-                              ) : null}
-                            </tr>
-                          ))
-                        ) : (
-                          <tr className="asset-detail-empty-row">
-                            <td colSpan={isAdmin ? 5 : 4}>No status timeline yet.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
                 </section>
               </div>
             )}
@@ -59145,12 +59222,12 @@ function formatTicketRequestSource(value?: string) {
               </div>
               ) : null}
 
-              <div className="panel-row" style={{ marginTop: 8 }}>
-                <h3 className="section-title" style={{ margin: 0 }}>{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
+              <div className="asset-detail-section-head">
+                <h3 className="section-title asset-detail-section-title">{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
                 {detailMaintenanceEntries.length > 1 ? (
                   <button
                     type="button"
-                    className="tab btn-small"
+                    className="asset-detail-section-toggle"
                     onClick={() =>
                       setAssetDetailSections((prev) => ({
                         ...prev,
@@ -59162,90 +59239,53 @@ function formatTicketRequestSource(value?: string) {
                   </button>
                 ) : null}
               </div>
-              {isPhoneView ? (
-                <div className="public-asset-history-section asset-detail-history-section">
-                  {detailMaintenanceVisibleEntries.length ? (
-                    <div className="public-asset-history-list">
-                      {detailMaintenanceVisibleEntries.map((h) => (
-                        <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-history-${h.id}`}>
-                          <div className="public-asset-history-head">
-                            <div className="public-asset-history-title">{h.type || (detailFurniture ? "Fixing" : "Maintenance")}</div>
-                            <div className="public-asset-history-head-side">
-                              <div className="public-asset-history-date">{formatDate(h.date)}</div>
-                            </div>
+              <div className="public-asset-history-section asset-detail-history-section">
+                {detailMaintenanceVisibleEntries.length ? (
+                  <div className="public-asset-history-list">
+                    {detailMaintenanceVisibleEntries.map((h) => (
+                      <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-history-${h.id}`}>
+                        <div className="public-asset-history-head">
+                          <div className="public-asset-history-title">{h.type || (detailFurniture ? "Fixing" : "Maintenance")}</div>
+                          <div className="public-asset-history-head-side">
+                            <div className="public-asset-history-date">{formatDate(h.date)}</div>
                           </div>
-                          <div className="public-asset-history-grid public-asset-history-grid-paired asset-detail-history-grid-compact">
-                            {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(h.completion || "-"))}
-                            {renderPublicHistoryMeta("Condition", h.condition || "-")}
-                            {renderPublicHistoryMeta("Cost", h.cost || "-")}
-                            {renderPublicHistoryMeta("By", h.by || "-")}
+                        </div>
+                        <div className="public-asset-history-grid public-asset-history-grid-paired asset-detail-history-grid-compact">
+                          {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(h.completion || "-"))}
+                          {renderPublicHistoryMeta("Condition", h.condition || "-")}
+                          {renderPublicHistoryMeta("Cost", h.cost || "-")}
+                          {renderPublicHistoryMeta("By", h.by || "-")}
+                        </div>
+                        <div className="public-asset-history-note">
+                          <span className="public-asset-history-label">Noted</span>
+                          <p>{h.note || "-"}</p>
+                        </div>
+                        <div className="public-asset-history-photo-section">
+                          <span className="public-asset-history-label">Photos</span>
+                          <div className="public-asset-history-photo-groups">
+                            {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, {
+                              before: "Before",
+                              after: "After",
+                            }, {
+                              maxPhotosPerGroup: 1,
+                              className: "public-asset-history-photo-groups-two-col",
+                            })}
                           </div>
-                          <div className="public-asset-history-note">
-                            <span className="public-asset-history-label">Noted</span>
-                            <p>{h.note || "-"}</p>
-                          </div>
-                          <div className="public-asset-history-photo-section">
-                            <span className="public-asset-history-label">Photos</span>
-                            <div className="public-asset-history-photo-groups">
-                              {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, {
-                                before: "Before",
-                                after: "After",
-                              }, {
-                                maxPhotosPerGroup: 1,
-                                className: "public-asset-history-photo-groups-two-col",
-                              })}
-                            </div>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    renderPublicHistoryEmpty(detailFurniture ? "No fixing records yet." : "No maintenance records yet.")
-                  )}
-                </div>
-              ) : (
-                <div className="table-wrap asset-detail-history-wrap">
-                  <table className="maintenance-history-modal-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Work Status</th>
-                        <th>Condition</th>
-                        <th>Note</th>
-                        <th>Cost</th>
-                        <th>By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailMaintenanceVisibleEntries.length ? (
-                        detailMaintenanceVisibleEntries.map((h) => (
-                          <tr key={`classroom-detail-history-${h.id}`}>
-                            <td data-label="Date">{formatDate(h.date)}</td>
-                            <td data-label="Type">{h.type}</td>
-                            <td data-label="Work Status">{maintenanceCompletionText(h.completion || "-")}</td>
-                            <td data-label="Condition">{h.condition || "-"}</td>
-                            <td data-label="Note">{h.note || "-"}</td>
-                            <td data-label="Cost">{h.cost || "-"}</td>
-                            <td data-label="By">{h.by || "-"}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr className="asset-detail-empty-row">
-                          <td colSpan={7}>{detailFurniture ? "No fixing records yet." : "No maintenance records yet."}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  renderPublicHistoryEmpty(detailFurniture ? "No fixing records yet." : "No maintenance records yet.")
+                )}
+              </div>
 
-              <div className="panel-row" style={{ marginTop: 8 }}>
-                <h3 className="section-title" style={{ margin: 0 }}>Transfer Location History</h3>
-                {detailTransferEntries.length > 1 ? (
+              <div className="asset-detail-section-head">
+                <h3 className="section-title asset-detail-section-title">Movement & Assignment History</h3>
+                {detailMovementEntries.length > 1 ? (
                   <button
                     type="button"
-                    className="tab btn-small"
+                    className="asset-detail-section-toggle"
                     onClick={() =>
                       setAssetDetailSections((prev) => ({
                         ...prev,
@@ -59257,202 +59297,132 @@ function formatTicketRequestSource(value?: string) {
                   </button>
                 ) : null}
               </div>
-              {isPhoneView ? (
-                <div className="public-asset-history-section asset-detail-history-section">
-                  {detailTransferVisibleEntries.length ? (
-                    <div className="public-asset-history-list">
-                      {detailTransferVisibleEntries.map((h) => (
-                        <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-transfer-${h.id}`}>
-                          <div className="public-asset-history-head">
-                            <div className="public-asset-history-title">Location Transfer</div>
-                            <div className="public-asset-history-head-side">
-                              <div className="public-asset-history-date">{formatDate(h.date)}</div>
+              <div className="asset-detail-movement-list">
+                {detailMovementVisibleEntries.length ? (
+                  detailMovementVisibleEntries.map((entry) => (
+                    <article key={`classroom-detail-movement-${entry.id}`} className="asset-detail-movement-card">
+                      <div className="asset-detail-movement-head">
+                        <div className="asset-detail-movement-title">{entry.title}</div>
+                        <div className="asset-detail-movement-date">{formatDate(entry.date || "-")}</div>
+                      </div>
+                      <div className="asset-detail-movement-grid">
+                        <div className="asset-detail-movement-row">
+                          <div className="asset-detail-movement-chip">Route</div>
+                          <div className="asset-detail-movement-item">
+                            <span className="asset-detail-movement-key">From</span>
+                            <div className="asset-detail-movement-value">{campusLabel(entry.fromCampus || "-")} | {entry.fromLocation || "-"}</div>
+                          </div>
+                          <div className="asset-detail-movement-item">
+                            <span className="asset-detail-movement-key">To</span>
+                            <div className="asset-detail-movement-value">{campusLabel(entry.toCampus || "-")} | {entry.toLocation || "-"}</div>
+                          </div>
+                        </div>
+                        <div className="asset-detail-movement-row">
+                          <div className="asset-detail-movement-chip">People</div>
+                          {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                            <div className="asset-detail-movement-item">
+                              <span className="asset-detail-movement-key">Staff</span>
+                              <div className="asset-detail-movement-value">{entry.fromUser || "-"} {"->"} {entry.toUser || "-"}</div>
                             </div>
+                          ) : null}
+                          {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                            <div className="asset-detail-movement-item">
+                              <span className="asset-detail-movement-key">Ack</span>
+                              <div className="asset-detail-movement-value">{entry.ack || "-"}</div>
+                            </div>
+                          ) : null}
+                          <div className="asset-detail-movement-item">
+                            <span className="asset-detail-movement-key">By</span>
+                            <div className="asset-detail-movement-value">{entry.by || "-"}</div>
                           </div>
-                          <div className="public-asset-history-grid">
-                            {renderPublicHistoryMeta("From Campus", campusLabel(h.fromCampus))}
-                            {renderPublicHistoryMeta("To Campus", campusLabel(h.toCampus))}
-                            {renderPublicHistoryMeta("From Location", h.fromLocation || "-")}
-                            {renderPublicHistoryMeta("To Location", h.toLocation || "-")}
-                            {renderPublicHistoryMeta("By", h.by || "-")}
+                        </div>
+                        <div className="asset-detail-movement-row asset-detail-movement-row-note">
+                          <div className="asset-detail-movement-chip">Reason</div>
+                          <div className="asset-detail-movement-item">
+                            <span className="asset-detail-movement-key">Reason</span>
+                            <div className="asset-detail-movement-value">{entry.reason || "-"}</div>
                           </div>
-                          <div className="public-asset-history-note">
-                            <span className="public-asset-history-label">Reason</span>
-                            <p>{h.reason || "-"}</p>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    renderPublicHistoryEmpty("No transfer location history yet.")
-                  )}
-                </div>
-              ) : (
-                <div className="table-wrap asset-detail-history-wrap">
-                  <table className="asset-detail-transfer-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>From Campus</th>
-                        <th>From Location</th>
-                        <th>To Campus</th>
-                        <th>To Location</th>
-                        <th>Reason</th>
-                        <th>By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailTransferVisibleEntries.length ? (
-                        detailTransferVisibleEntries.map((h) => (
-                          <tr key={`classroom-detail-transfer-${h.id}`}>
-                            <td data-label="Date">{formatDate(h.date)}</td>
-                            <td data-label="From Campus">{campusLabel(h.fromCampus)}</td>
-                            <td data-label="From Location">{h.fromLocation || "-"}</td>
-                            <td data-label="To Campus">{campusLabel(h.toCampus)}</td>
-                            <td data-label="To Location">{h.toLocation || "-"}</td>
-                            <td data-label="Reason">{h.reason || "-"}</td>
-                            <td data-label="By">{h.by || "-"}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr className="asset-detail-empty-row">
-                          <td colSpan={7}>No transfer location history yet.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                          {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                            <div className="asset-detail-movement-item">
+                              <span className="asset-detail-movement-key">Note</span>
+                              <div className="asset-detail-movement-value">{entry.note || "-"}</div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="panel-note">No movement or assignment history yet.</div>
+                )}
+              </div>
 
-              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                <>
-                  <h3 className="section-title">Assigned to History</h3>
-                  {isPhoneView ? (
+              {isSuperAdmin ? (
+                isPhoneView ? (
+                  <>
+                    <h3 className="section-title">Status Timeline</h3>
                     <div className="public-asset-history-section asset-detail-history-section">
-                      {detailCustodyEntries.length ? (
+                      {detailStatusEntries.length ? (
                         <div className="public-asset-history-list">
-                          {detailCustodyEntries.map((h) => (
-                            <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-custody-${h.id}`}>
+                          {detailStatusEntries.map((h) => (
+                            <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-status-${h.id}`}>
                               <div className="public-asset-history-head">
-                                <div className="public-asset-history-title">{h.action || "Assigned Change"}</div>
+                                <div className="public-asset-history-title">Status Change</div>
                                 <div className="public-asset-history-head-side">
                                   <div className="public-asset-history-date">{formatDate(h.date)}</div>
                                 </div>
                               </div>
                               <div className="public-asset-history-grid">
-                                {renderPublicHistoryMeta("From User", h.fromUser || "-")}
-                                {renderPublicHistoryMeta("To User", h.toUser || "-")}
-                                {renderPublicHistoryMeta("Ack", h.responsibilityAck ? "Yes" : "No")}
-                                {renderPublicHistoryMeta("By", h.by || "-")}
+                                {renderPublicHistoryMeta("From", assetStatusLabel(h.fromStatus))}
+                                {renderPublicHistoryMeta("To", assetStatusLabel(h.toStatus))}
                               </div>
                               <div className="public-asset-history-note">
-                                <span className="public-asset-history-label">Note</span>
-                                <p>{h.note || "-"}</p>
+                                <span className="public-asset-history-label">Reason</span>
+                                <p>{h.reason || "-"}</p>
                               </div>
                             </article>
                           ))}
                         </div>
                       ) : (
-                        renderPublicHistoryEmpty("No assigned history yet.")
+                        renderPublicHistoryEmpty("No status timeline yet.")
                       )}
                     </div>
-                  ) : (
+                  </>
+                ) : (
+                  <>
+                    <h3 className="section-title">Status Timeline</h3>
                     <div className="table-wrap asset-detail-history-wrap">
-                      <table className="asset-detail-custody-table">
+                      <table className="asset-detail-status-table">
                         <thead>
                           <tr>
                             <th>Date</th>
-                            <th>Action</th>
-                            <th>From User</th>
-                            <th>To User</th>
-                            <th>Ack</th>
-                            <th>By</th>
-                            <th>Note</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Reason</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {detailCustodyEntries.length ? (
-                            detailCustodyEntries.map((h) => (
-                              <tr key={`classroom-detail-custody-${h.id}`}>
+                          {detailStatusEntries.length ? (
+                            detailStatusEntries.map((h) => (
+                              <tr key={`classroom-detail-status-${h.id}`}>
                                 <td data-label="Date">{formatDate(h.date)}</td>
-                                <td data-label="Action">{h.action || "-"}</td>
-                                <td data-label="From User">{h.fromUser || "-"}</td>
-                                <td data-label="To User">{h.toUser || "-"}</td>
-                                <td data-label="Ack">{h.responsibilityAck ? "Yes" : "No"}</td>
-                                <td data-label="By">{h.by || "-"}</td>
-                                <td data-label="Note">{h.note || "-"}</td>
+                                <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
+                                <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
+                                <td data-label="Reason">{h.reason || "-"}</td>
                               </tr>
                             ))
                           ) : (
                             <tr className="asset-detail-empty-row">
-                              <td colSpan={7}>No assigned history yet.</td>
+                              <td colSpan={4}>No status timeline yet.</td>
                             </tr>
                           )}
                         </tbody>
                       </table>
                     </div>
-                  )}
-                </>
+                  </>
+                )
               ) : null}
 
-              <h3 className="section-title">Status Timeline</h3>
-              {isPhoneView ? (
-                <div className="public-asset-history-section asset-detail-history-section">
-                  {detailStatusEntries.length ? (
-                    <div className="public-asset-history-list">
-                      {detailStatusEntries.map((h) => (
-                        <article className="public-asset-history-card asset-detail-history-card" key={`classroom-detail-status-${h.id}`}>
-                          <div className="public-asset-history-head">
-                            <div className="public-asset-history-title">Status Change</div>
-                            <div className="public-asset-history-head-side">
-                              <div className="public-asset-history-date">{formatDate(h.date)}</div>
-                            </div>
-                          </div>
-                          <div className="public-asset-history-grid">
-                            {renderPublicHistoryMeta("From", assetStatusLabel(h.fromStatus))}
-                            {renderPublicHistoryMeta("To", assetStatusLabel(h.toStatus))}
-                          </div>
-                          <div className="public-asset-history-note">
-                            <span className="public-asset-history-label">Reason</span>
-                            <p>{h.reason || "-"}</p>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    renderPublicHistoryEmpty("No status timeline yet.")
-                  )}
-                </div>
-              ) : (
-                <div className="table-wrap asset-detail-history-wrap">
-                  <table className="asset-detail-status-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>From</th>
-                        <th>To</th>
-                        <th>Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailStatusEntries.length ? (
-                        detailStatusEntries.map((h) => (
-                          <tr key={`classroom-detail-status-${h.id}`}>
-                            <td data-label="Date">{formatDate(h.date)}</td>
-                            <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
-                            <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
-                            <td data-label="Reason">{h.reason || "-"}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr className="asset-detail-empty-row">
-                          <td colSpan={4}>No status timeline yet.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </section>
           </div>
         ) : null}
