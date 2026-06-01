@@ -28387,10 +28387,73 @@ export default function App() {
     maintenanceSearchQuery,
     campusLabel,
   ]);
+  const maintenanceMonthRange = useMemo(() => {
+    if (!maintenanceMonthFilter) {
+      return { from: maintenanceDateFrom, to: maintenanceDateTo };
+    }
+    const [yearText, monthText] = maintenanceMonthFilter.split("-");
+    const year = Number(yearText);
+    const monthIndex = Number(monthText) - 1;
+    if (Number.isNaN(year) || Number.isNaN(monthIndex)) {
+      return { from: maintenanceDateFrom, to: maintenanceDateTo };
+    }
+    const start = new Date(year, monthIndex, 1);
+    const end = new Date(year, monthIndex + 1, 0);
+    return { from: toYmd(start), to: toYmd(end) };
+  }, [maintenanceMonthFilter, maintenanceDateFrom, maintenanceDateTo]);
+  const filteredMaintenanceLogBookRows = useMemo(() => {
+    let rows = [...allMaintenanceRows];
+    if (!maintenanceCategoryFilter.includes("ALL")) {
+      rows = rows.filter((r) => maintenanceCategoryFilter.includes(r.category));
+    }
+    if (maintenanceTypeFilter !== "ALL") {
+      rows = rows.filter((r) => r.type === maintenanceTypeFilter);
+    }
+    if (maintenanceCampusFilter !== "ALL") {
+      rows = rows.filter((r) => r.campus === maintenanceCampusFilter);
+    }
+    if (maintenanceMonthRange.from) {
+      rows = rows.filter((r) => r.date && r.date >= maintenanceMonthRange.from);
+    }
+    if (maintenanceMonthRange.to) {
+      rows = rows.filter((r) => r.date && r.date <= maintenanceMonthRange.to);
+    }
+    if (maintenanceSearchQuery.trim()) {
+      const query = maintenanceSearchQuery.trim().toLowerCase();
+      rows = rows.filter((r) => {
+        const haystack = [
+          r.assetId,
+          r.itemName,
+          campusLabel(r.campus),
+          r.location,
+          r.type,
+          r.condition,
+          r.note,
+          r.by,
+          r.checkedBy,
+          r.category,
+          r.assetType,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+    return rows;
+  }, [
+    allMaintenanceRows,
+    maintenanceCategoryFilter,
+    maintenanceTypeFilter,
+    maintenanceCampusFilter,
+    maintenanceMonthRange,
+    maintenanceSearchQuery,
+    campusLabel,
+  ]);
   const sortedMaintenanceRows = useMemo(() => {
-    const rows = [...filteredMaintenanceRows];
-    const { key, direction } = maintenanceSort;
-    const sign = direction === "asc" ? 1 : -1;
+    const rows = [...filteredMaintenanceLogBookRows];
+    const key: MaintenanceSortKey = "date";
+    const sign = 1;
 
     rows.sort((a, b) => {
       if (key === "date") {
@@ -28413,8 +28476,8 @@ export default function App() {
       return 0;
     });
 
-    return rows;
-  }, [filteredMaintenanceRows, maintenanceSort]);
+      return rows;
+  }, [filteredMaintenanceLogBookRows]);
   const maintenanceLogBookRows = useMemo(
     () => sortedMaintenanceRows.map((row, index) => ({ ...row, bookNo: index + 1 })),
     [sortedMaintenanceRows]
@@ -49963,8 +50026,20 @@ function formatTicketRequestSource(value?: string) {
                 value={maintenanceMonthFilter}
                 onChange={(e) => setMaintenanceMonthFilter(e.target.value)}
               />
-              <input className="input" type="date" value={maintenanceDateFrom} onChange={(e) => setMaintenanceDateFrom(e.target.value)} />
-              <input className="input" type="date" value={maintenanceDateTo} onChange={(e) => setMaintenanceDateTo(e.target.value)} />
+              <input
+                className="input"
+                type="date"
+                value={maintenanceMonthRange.from}
+                readOnly
+                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
+              />
+              <input
+                className="input"
+                type="date"
+                value={maintenanceMonthRange.to}
+                readOnly
+                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
+              />
               <div className="maintenance-history-search-row">
                 <input
                   className="input"
@@ -50187,14 +50262,16 @@ function formatTicketRequestSource(value?: string) {
               <input
                 className="input"
                 type="date"
-                value={maintenanceDateFrom}
-                onChange={(e) => setMaintenanceDateFrom(e.target.value)}
+                value={maintenanceMonthRange.from}
+                readOnly
+                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
               />
               <input
                 className="input"
                 type="date"
-                value={maintenanceDateTo}
-                onChange={(e) => setMaintenanceDateTo(e.target.value)}
+                value={maintenanceMonthRange.to}
+                readOnly
+                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
               />
               <div className="maintenance-history-search-row">
                 <input
