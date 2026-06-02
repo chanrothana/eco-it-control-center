@@ -9885,6 +9885,14 @@ export default function App() {
   const [historyAssetId, setHistoryAssetId] = useState<number | null>(null);
   const [quickRecordAssetId, setQuickRecordAssetId] = useState<number | null>(null);
   const [transferQuickAssetId, setTransferQuickAssetId] = useState<number | null>(null);
+  const [maintenanceRecordFromDetail, setMaintenanceRecordFromDetail] = useState(false);
+  const [transferRecordFromDetail, setTransferRecordFromDetail] = useState(false);
+  const [detailLaunchReturnContext, setDetailLaunchReturnContext] = useState<{
+    assetId: number;
+    classroomRoomId: number | null;
+    tab: NavModule;
+    assetsView: "register" | "list" | "gallery";
+  } | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
   const [maintenanceRecordFileKey, setMaintenanceRecordFileKey] = useState(0);
   const [maintenanceRecordForm, setMaintenanceRecordForm] = useState(() =>
@@ -26606,12 +26614,28 @@ export default function App() {
   }
 
   function openMaintenancePageFromDetail(asset: Asset) {
+    setMaintenanceRecordFromDetail(true);
+    setTransferRecordFromDetail(false);
+    setDetailLaunchReturnContext({
+      assetId: asset.id,
+      classroomRoomId: classroomDetailRoomId,
+      tab,
+      assetsView,
+    });
     openMaintenanceRecordFromScheduleAsset(asset);
     setAssetDetailId(null);
     setClassroomDetailRoomId(null);
   }
 
   function openTransferPageFromDetail(asset: Asset) {
+    setTransferRecordFromDetail(true);
+    setMaintenanceRecordFromDetail(false);
+    setDetailLaunchReturnContext({
+      assetId: asset.id,
+      classroomRoomId: classroomDetailRoomId,
+      tab,
+      assetsView,
+    });
     setTab("transfer");
     setTransferView("record");
     setTransferFilterCampus("ALL");
@@ -27683,6 +27707,643 @@ export default function App() {
         ? detailMovementEntries
         : detailMovementEntries.slice(0, 1),
     [assetDetailSections.showAllTransfer, detailMovementEntries]
+  );
+  const maintenanceCompletionText = useCallback(
+    (completionRaw: string) => {
+      const isDone = String(completionRaw || "").trim().toLowerCase() === "done";
+      return `${isDone ? "✅" : "❌"} ${isDone ? t.alreadyDone : t.notYetDone}`;
+    },
+    [t.alreadyDone, t.notYetDone]
+  );
+  const renderAssetDetailModal = useCallback(
+    (fromClassroom = false) => {
+      if (!detailAsset) return null;
+      return (
+        <div
+          className="modal-backdrop"
+          style={fromClassroom ? { zIndex: 1100 } : undefined}
+          onClick={() => setAssetDetailId(null)}
+        >
+          <section
+            className="panel modal-panel"
+            style={fromClassroom ? { position: "relative", zIndex: 1101 } : undefined}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="asset-detail-modal-header">
+              <div className="asset-detail-modal-title-block">
+                <div className="asset-detail-hero">
+                  <div className="asset-detail-hero-media">
+                    <div className="asset-detail-hero-media-frame">
+                      {assetDisplayPhoto(detailAsset) ? (
+                        <img
+                          loading="lazy"
+                          decoding="async"
+                          src={assetDisplayPhoto(detailAsset)}
+                          alt={detailAsset.assetId}
+                          className="asset-detail-hero-media-image"
+                        />
+                      ) : (
+                        <div className="asset-detail-hero-media-image asset-detail-modal-thumb-placeholder">{t.noPhoto}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="asset-detail-hero-main">
+                    <div className="asset-detail-hero-top">
+                      <div className="asset-detail-hero-copy">
+                        <div className="asset-detail-hero-eyebrow">Asset Detail</div>
+                        <h2>{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</h2>
+                        <div className="asset-detail-hero-meta">
+                          <span className="asset-detail-id-chip">{detailAsset.assetId}</span>
+                          <span className={`asset-detail-status-chip ${assetStatusRowClass(detailAsset.status || "")}`}>
+                            {assetStatusLabel(detailAsset.status)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="asset-detail-hero-summary">
+                      <div className="asset-detail-hero-summary-item">
+                        <span>{t.campus}</span>
+                        <strong>{campusLabel(detailAsset.campus)}</strong>
+                      </div>
+                      <div className="asset-detail-hero-summary-item">
+                        <span>{t.location}</span>
+                        <strong>{detailAsset.location || "-"}</strong>
+                      </div>
+                      <div className="asset-detail-hero-summary-item">
+                        <span>{t.user}</span>
+                        <strong>{detailAsset.assignedTo || "-"}</strong>
+                      </div>
+                      <div className="asset-detail-hero-summary-item">
+                        <span>Brand / Model</span>
+                        <strong>{[detailAsset.brand || "-", detailAsset.model || "-"].join(" / ")}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="asset-detail-section-head asset-detail-overview-head">
+              {!isPhoneView ? (
+                <h3 className="section-title asset-detail-section-title">Details</h3>
+              ) : null}
+              <div className="asset-detail-section-actions">
+                {isAdmin ? (
+                  <>
+                    <button
+                      type="button"
+                      className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-maintenance"
+                      onClick={() => openMaintenancePageFromDetail(detailAsset)}
+                      title={detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
+                      aria-label={detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
+                    >
+                      <span aria-hidden={true}>🛠</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-transfer"
+                      onClick={() => openTransferPageFromDetail(detailAsset)}
+                      title="Open Transfer Page"
+                      aria-label="Open Transfer Page"
+                    >
+                      <span aria-hidden={true}>⇄</span>
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-toggle"
+                  onClick={() =>
+                    setAssetDetailSections((prev) => ({
+                      ...prev,
+                      showDetails: !prev.showDetails,
+                    }))
+                  }
+                  title={assetDetailSections.showDetails ? "Hide Details" : "View Details"}
+                  aria-label={assetDetailSections.showDetails ? "Hide Details" : "View Details"}
+                >
+                  <span aria-hidden={true}>{assetDetailSections.showDetails ? "▾" : "▸"}</span>
+                </button>
+                <button
+                  type="button"
+                  className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close"
+                  onClick={() => setAssetDetailId(null)}
+                  title="Close"
+                  aria-label="Close"
+                >
+                  <span aria-hidden={true}>✕</span>
+                </button>
+              </div>
+            </div>
+            {assetDetailSections.showDetails ? (
+            <div className="asset-detail-overview-stack">
+              <section className="asset-detail-info-section">
+                <div className="asset-detail-info-head">
+                  <h4>Core Details</h4>
+                  <span>Reference information</span>
+                </div>
+                <div className="asset-detail-kv-grid">
+                  <div className="asset-detail-kv"><span>{t.category}</span><strong>{detailAsset.category}</strong></div>
+                  <div className="asset-detail-kv"><span>{t.typeCode}</span><strong>{detailAsset.type}</strong></div>
+                  <div className="asset-detail-kv"><span>{t.name}</span><strong>{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</strong></div>
+                  {detailAsset.category === "IT" ? (
+                    <div className="asset-detail-kv"><span>{t.setCode}</span><strong>{detailAsset.setCode || "-"}</strong></div>
+                  ) : null}
+                  {detailAsset.category === "IT" &&
+                  detailAsset.type !== "TAB" &&
+                  String(detailAsset.parentAssetId || "").trim() ? (
+                    <div className="asset-detail-kv"><span>{t.parentAssetId}</span><strong>{detailAsset.parentAssetId || "-"}</strong></div>
+                  ) : null}
+                  {!detailFurniture ? (
+                    <div className="asset-detail-kv"><span>Serial Number</span><strong>{detailAsset.serialNumber || "-"}</strong></div>
+                  ) : null}
+                </div>
+              </section>
+
+              {detailLinkedComponents.length ? (
+                <section className="asset-detail-info-section">
+                  <div className="asset-detail-info-head">
+                    <h4>{showsIncludedComponentCards(detailAsset.category, detailAsset.type) ? "Included Components / Remotes" : "Linked Components"}</h4>
+                    <span>{detailLinkedComponents.length} linked item(s)</span>
+                  </div>
+                  {isPhoneView ? (
+                    <div className="public-asset-component-section">
+                      <div className="public-asset-component-list">
+                        {detailLinkedComponents.map((component) => {
+                          const componentPhotos = normalizeAssetPhotos(component);
+                          return (
+                            <article className="public-asset-component-card" key={`detail-component-phone-${component.id}-${component.assetId}`}>
+                              <div className="public-asset-component-photo-wrap">
+                                {componentPhotos[0] ? (
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={componentPhotos[0]}
+                                    alt={component.assetId || "component"}
+                                    className="public-asset-component-photo"
+                                  />
+                                ) : (
+                                  <div className="public-asset-component-photo public-asset-component-photo-placeholder">{t.noPhoto}</div>
+                                )}
+                              </div>
+                              <div className="public-asset-component-body">
+                                <div className="public-asset-component-id">{component.assetId || "-"}</div>
+                                <div className="public-asset-component-name">
+                                  {assetItemName(component.category, component.type, component.pcType || "")}
+                                </div>
+                                <div className="public-asset-component-meta">
+                                  <span><strong>Role:</strong> {component.componentRole || component.type || "-"}</span>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="asset-detail-component-columns"
+                      style={{
+                        gridTemplateColumns: `repeat(${Math.max(detailLinkedComponents.length, 1)}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {detailLinkedComponents.map((component) => {
+                        const componentPhotos = normalizeAssetPhotos(component);
+                        return (
+                          <article className="asset-detail-component-column" key={`detail-component-desktop-${component.id}-${component.assetId}`}>
+                            <div className="asset-detail-component-column-photo-wrap">
+                              {componentPhotos[0] ? (
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={componentPhotos[0]}
+                                  alt={component.assetId || "component"}
+                                  className="asset-detail-component-photo"
+                                />
+                              ) : (
+                                  <div className="asset-detail-component-photo asset-detail-component-photo-placeholder">{t.noPhoto}</div>
+                                )}
+                            </div>
+                            <div className="asset-detail-component-column-body">
+                              <div className="asset-detail-component-column-id">{component.assetId || "-"}</div>
+                              <div className="asset-detail-component-column-item">
+                                {assetItemName(component.category, component.type, component.pcType || "")}
+                              </div>
+                              <div className="asset-detail-component-column-meta"><strong>Role:</strong> {component.componentRole || component.type || "-"}</div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              ) : null}
+
+              <div className="asset-detail-info-grid asset-detail-info-grid-secondary">
+                <section className="asset-detail-info-section">
+                  <div className="asset-detail-info-head">
+                    <h4>Technical Info</h4>
+                    <span>Hardware and identification</span>
+                  </div>
+                  <div className="asset-detail-kv-grid">
+                    {isFanAsset(detailAsset.category, detailAsset.type) ? (
+                      <div className="asset-detail-kv"><span>Fan Type</span><strong>{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</strong></div>
+                    ) : null}
+                    {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
+                      <div className="asset-detail-kv"><span>{t.pcType}</span><strong>{detailAsset.pcType || "-"}</strong></div>
+                    ) : null}
+                    {detailAsset.parentAssetId ? (
+                      <div className="asset-detail-kv"><span>{t.componentRole}</span><strong>{detailAsset.componentRole || "-"}</strong></div>
+                    ) : null}
+                    {detailAsset.parentAssetId ? (
+                      <div className="asset-detail-kv"><span>{t.componentRequired}</span><strong>{detailAsset.componentRequired ? "Yes" : "No"}</strong></div>
+                    ) : null}
+                    {detailFurniture ? (
+                      <>
+                        <div className="asset-detail-kv"><span>Control Mode</span><strong>{detailFurniture.trackingMode || "-"}</strong></div>
+                        <div className="asset-detail-kv"><span>Quantity</span><strong>{detailFurniture.quantity || "1"}</strong></div>
+                        <div className="asset-detail-kv"><span>Standard Name</span><strong>{detailFurniture.subtype || defaultFurnitureSubtype(detailAsset.type) || "-"}</strong></div>
+                      </>
+                    ) : null}
+                    <div className="asset-detail-kv"><span>Vendor</span><strong>{detailAsset.vendor || "-"}</strong></div>
+                  </div>
+                  {!detailFurniture ? (
+                    <div className="asset-detail-rich-block">
+                      <span>Specs</span>
+                      <div className="asset-detail-rich-value">{detailAsset.specs || "-"}</div>
+                    </div>
+                  ) : null}
+                </section>
+
+                <section className="asset-detail-info-section">
+                  <div className="asset-detail-info-head">
+                    <h4>Lifecycle</h4>
+                    <span>Purchase, warranty and schedule</span>
+                  </div>
+                  <div className="asset-detail-kv-grid">
+                    <div className="asset-detail-kv"><span>Purchase Date</span><strong>{formatDate(detailAsset.purchaseDate || "-")}</strong></div>
+                    {!detailFurniture ? (
+                      <div className="asset-detail-kv"><span>Warranty Until</span><strong>{formatDate(detailAsset.warrantyUntil || "-")}</strong></div>
+                    ) : null}
+                    {!detailFurniture ? (
+                      <div className="asset-detail-kv"><span>Next Maintenance Date</span><strong>{formatDate(detailAsset.nextMaintenanceDate || "-")}</strong></div>
+                    ) : null}
+                    {!detailFurniture ? (
+                      <div className="asset-detail-kv"><span>Schedule Note</span><strong>{detailAsset.scheduleNote || "-"}</strong></div>
+                    ) : null}
+                  </div>
+                </section>
+              </div>
+
+              {isPrinterAssetRow(detailAsset) ? (
+                <section className="asset-detail-info-section">
+                  <div className="asset-detail-info-head">
+                    <h4>Toner Snapshot</h4>
+                    <span>Printer-specific reference</span>
+                  </div>
+                  <div className="asset-detail-kv-grid">
+                    <div className="asset-detail-kv"><span>Toner Model</span><strong>{detailAsset.tonerModel || "-"}</strong></div>
+                    <div className="asset-detail-kv"><span>Linked Toner Stock</span><strong>{detailTonerItem ? `${detailTonerItem.itemCode} (${detailTonerStock} ${detailTonerItem.unit})` : "-"}</strong></div>
+                    <div className="asset-detail-kv"><span>Last Toner Change</span><strong>{formatDate(detailAsset.tonerLastChangedAt || "-")}</strong></div>
+                    <div className="asset-detail-kv"><span>Last Page Counter</span><strong>{detailAsset.tonerLastPageCount || "-"}</strong></div>
+                    <div className="asset-detail-kv"><span>Min Toner Stock</span><strong>{detailAsset.tonerMinStock || "-"}</strong></div>
+                    <div className="asset-detail-kv"><span>Expected Yield</span><strong>{detailAsset.tonerExpectedYield ? `${detailAsset.tonerExpectedYield} pages` : "-"}</strong></div>
+                  </div>
+                  <div className="asset-detail-rich-block">
+                    <span>Toner Note</span>
+                    <div className="asset-detail-rich-value">{detailAsset.tonerNotes || "-"}</div>
+                  </div>
+                </section>
+              ) : null}
+              {detailFurniture ? (
+                <section className="asset-detail-info-section">
+                  <div className="asset-detail-info-head">
+                    <h4>Reference Photos</h4>
+                    <span>Model and location</span>
+                  </div>
+                  <div className="asset-detail-photo-grid">
+                    <div className="asset-detail-rich-block">
+                      <span>Model Photo</span>
+                      <div className="asset-detail-rich-value asset-detail-rich-value-photo">
+                        {renderAssetPhoto(furnitureModelPhoto(detailAsset), `${detailAsset.assetId}-model`)}
+                      </div>
+                    </div>
+                    <div className="asset-detail-rich-block">
+                      <span>Location Photo</span>
+                      <div className="asset-detail-rich-value asset-detail-rich-value-photo">
+                        {renderAssetPhoto(detailAsset.photo || "", `${detailAsset.assetId}-location`)}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+              <section className="asset-detail-info-section">
+                <div className="asset-detail-info-head">
+                  <h4>Notes</h4>
+                  <span>Extra context and remarks</span>
+                </div>
+                <div className="asset-detail-rich-block">
+                  <span>Notes</span>
+                  <div className="asset-detail-rich-value">{detailAsset.notes || "-"}</div>
+                </div>
+              </section>
+            </div>
+            ) : null}
+
+            {isPrinterAssetRow(detailAsset) ? (
+              <section className="panel" style={{ marginTop: 12 }}>
+                <div className="panel-row">
+                  <h3 className="section-title" style={{ margin: 0 }}>Toner Control</h3>
+                  <div className="row-actions">
+                    <span className="tiny">{detailTonerEntries.length} record(s)</span>
+                    <button
+                      type="button"
+                      className="tab btn-small"
+                      onClick={() => {
+                        setTab("inventory");
+                        setInventoryView("items");
+                        setAssetDetailId(null);
+                      }}
+                    >
+                      Open Toner Report
+                    </button>
+                  </div>
+                </div>
+                <div className="form-grid" style={{ marginBottom: 10 }}>
+                  <div className="field">
+                    <span>In Stock</span>
+                    <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.currentStock : detailTonerStock}</div>
+                  </div>
+                  <div className="field">
+                    <span>Used</span>
+                    <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.usedQty : detailTonerEntries.length}</div>
+                  </div>
+                  <div className="field">
+                    <span>Purchased</span>
+                    <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.purchaseQty : "-"}</div>
+                  </div>
+                </div>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Toner Item</span>
+                    <select className="input" value={assetDetailTonerForm.itemId} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, itemId: e.target.value }))}>
+                      <option value="">Select toner</option>
+                      {tonerInventoryItems
+                        .filter((item) => item.campus === detailAsset.campus)
+                        .map((item) => (
+                          <option key={`detail-toner-stock-${item.id}`} value={item.id}>
+                            {item.itemCode} - {inventoryDisplayName(item.itemName, lang)} ({calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns)} {item.unit})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Date</span>
+                    <input className="input" type="date" value={assetDetailTonerForm.date} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, date: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Qty Used</span>
+                    <input className="input" type="number" min="1" value={assetDetailTonerForm.qty} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, qty: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Old Toner Status</span>
+                    <select className="input" value={assetDetailTonerForm.oldTonerStatus} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, oldTonerStatus: e.target.value }))}>
+                      <option value="Empty">Empty</option>
+                      <option value="Low">Low</option>
+                      <option value="Leaking">Leaking</option>
+                      <option value="Defective">Defective</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Page Counter</span>
+                    <input className="input" type="number" min="0" value={assetDetailTonerForm.pageCounter} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, pageCounter: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>By</span>
+                    <input className="input" value={assetDetailTonerForm.by} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, by: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Cost</span>
+                    <input className="input" value={assetDetailTonerForm.cost} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, cost: e.target.value }))} />
+                  </label>
+                  <label className="field">
+                    <span>Condition</span>
+                    <input className="input" value={assetDetailTonerForm.condition} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, condition: e.target.value }))} />
+                  </label>
+                  <label className="field field-wide">
+                    <span>Note</span>
+                    <textarea className="textarea" value={assetDetailTonerForm.note} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, note: e.target.value }))} />
+                  </label>
+                  <label className="field field-wide">
+                    <span>{t.photo}</span>
+                    <input key={assetDetailTonerFileKey} type="file" accept="image/*" onChange={onAssetDetailTonerPhotoFile} />
+                    {assetDetailTonerForm.photo ? <img loading="lazy" decoding="async" src={assetDetailTonerForm.photo} alt="toner" className="photo-preview" /> : null}
+                  </label>
+                </div>
+                <div className="asset-actions">
+                  <button className="btn-primary" disabled={busy || !assetDetailTonerForm.note.trim() || !assetDetailTonerForm.itemId} onClick={() => void saveTonerChangeForAsset(detailAsset, assetDetailTonerForm, { setForm: setAssetDetailTonerForm, resetFileKey: () => setAssetDetailTonerFileKey((k) => k + 1) })}>
+                    Save Toner Change
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            <div className="asset-detail-section-head">
+              <h3 className="section-title asset-detail-section-title">{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
+              {detailMaintenanceEntries.length > 1 ? (
+                <button
+                  type="button"
+                  className={`asset-detail-section-toggle ${isPhoneView ? "asset-detail-section-icon-btn asset-detail-action-toggle" : ""}`}
+                  onClick={() =>
+                    setAssetDetailSections((prev) => ({
+                      ...prev,
+                      showAllMaintenance: !prev.showAllMaintenance,
+                    }))
+                  }
+                  title={assetDetailSections.showAllMaintenance ? "Show Latest" : "Show All"}
+                  aria-label={assetDetailSections.showAllMaintenance ? "Show Latest" : "Show All"}
+                >
+                  {isPhoneView ? (
+                    <span aria-hidden={true}>{assetDetailSections.showAllMaintenance ? "⤡" : "⤢"}</span>
+                  ) : (
+                    assetDetailSections.showAllMaintenance ? "Show Latest" : "Show All"
+                  )}
+                </button>
+              ) : null}
+            </div>
+            <div className="public-asset-history-section asset-detail-history-section">
+              {detailMaintenanceVisibleEntries.length ? (
+                <div className="public-asset-history-list">
+                  {detailMaintenanceVisibleEntries.map((h) => (
+                    <article className="public-asset-history-card asset-detail-history-card" key={`detail-history-${h.id}`}>
+                      <div className="public-asset-history-head">
+                        <div className="public-asset-history-title">{h.type || (detailFurniture ? "Fixing" : "Maintenance")}</div>
+                        <div className="public-asset-history-head-side">
+                          <div className="public-asset-history-date">{formatDate(h.date)}</div>
+                        </div>
+                      </div>
+                      <div className="public-asset-history-grid public-asset-history-grid-paired asset-detail-history-grid-compact">
+                        {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(h.completion || "-"))}
+                        {renderPublicHistoryMeta("Condition", h.condition || "-")}
+                        {renderPublicHistoryMeta("Cost", h.cost || "-")}
+                        {renderPublicHistoryMeta("By", h.by || "-")}
+                      </div>
+                      <div className="public-asset-history-note">
+                        <span className="public-asset-history-label">Noted</span>
+                        <p>{h.note || "-"}</p>
+                      </div>
+                      <div className="public-asset-history-photo-section">
+                        <span className="public-asset-history-label">Photos</span>
+                        <div className="public-asset-history-photo-groups">
+                          {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, {
+                            before: "Before",
+                            after: "After",
+                          }, {
+                            maxPhotosPerGroup: 1,
+                            className: "public-asset-history-photo-groups-two-col",
+                          })}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                renderPublicHistoryEmpty(detailFurniture ? "No fixing records yet." : "No maintenance records yet.")
+              )}
+            </div>
+
+            <div className="asset-detail-section-head">
+              <h3 className="section-title asset-detail-section-title">Movement & Assignment History</h3>
+              {detailMovementEntries.length > 1 ? (
+                <button
+                  type="button"
+                  className={`asset-detail-section-toggle ${isPhoneView ? "asset-detail-section-icon-btn asset-detail-action-toggle" : ""}`}
+                  onClick={() =>
+                    setAssetDetailSections((prev) => ({
+                      ...prev,
+                      showAllTransfer: !prev.showAllTransfer,
+                    }))
+                  }
+                  title={assetDetailSections.showAllTransfer ? "Show Latest" : "Show All"}
+                  aria-label={assetDetailSections.showAllTransfer ? "Show Latest" : "Show All"}
+                >
+                  {isPhoneView ? (
+                    <span aria-hidden={true}>{assetDetailSections.showAllTransfer ? "⤡" : "⤢"}</span>
+                  ) : (
+                    assetDetailSections.showAllTransfer ? "Show Latest" : "Show All"
+                  )}
+                </button>
+              ) : null}
+            </div>
+            <div className="asset-detail-movement-list">
+              {detailMovementVisibleEntries.length ? (
+                detailMovementVisibleEntries.map((entry) => (
+                  <article key={`detail-movement-${entry.id}`} className="asset-detail-movement-card">
+                    <div className="asset-detail-movement-head">
+                      <div className="asset-detail-movement-title">{entry.title}</div>
+                      <div className="asset-detail-movement-date">{formatDate(entry.date || "-")}</div>
+                    </div>
+                    <div className="asset-detail-movement-grid">
+                      <div className="asset-detail-movement-row">
+                        <div className="asset-detail-movement-chip">Route</div>
+                        <div className="asset-detail-movement-item">
+                          <span className="asset-detail-movement-key">From</span>
+                          <div className="asset-detail-movement-value">{campusLabel(entry.fromCampus || "-")} | {entry.fromLocation || "-"}</div>
+                        </div>
+                        <div className="asset-detail-movement-item">
+                          <span className="asset-detail-movement-key">To</span>
+                          <div className="asset-detail-movement-value">{campusLabel(entry.toCampus || "-")} | {entry.toLocation || "-"}</div>
+                        </div>
+                      </div>
+                      <div className="asset-detail-movement-row">
+                        <div className="asset-detail-movement-chip">People</div>
+                        {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                          <div className="asset-detail-movement-item">
+                            <span className="asset-detail-movement-key">Staff</span>
+                            <div className="asset-detail-movement-value">{entry.fromUser || "-"} {"->"} {entry.toUser || "-"}</div>
+                          </div>
+                        ) : null}
+                        {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                          <div className="asset-detail-movement-item">
+                            <span className="asset-detail-movement-key">Ack</span>
+                            <div className="asset-detail-movement-value">{entry.ack || "-"}</div>
+                          </div>
+                        ) : null}
+                        <div className="asset-detail-movement-item">
+                          <span className="asset-detail-movement-key">By</span>
+                          <div className="asset-detail-movement-value">{entry.by || "-"}</div>
+                        </div>
+                      </div>
+                      <div className="asset-detail-movement-row asset-detail-movement-row-note">
+                        <div className="asset-detail-movement-chip">Reason</div>
+                        <div className="asset-detail-movement-item">
+                          <span className="asset-detail-movement-key">Reason</span>
+                          <div className="asset-detail-movement-value">{entry.reason || "-"}</div>
+                        </div>
+                        {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
+                          <div className="asset-detail-movement-item">
+                            <span className="asset-detail-movement-key">Note</span>
+                            <div className="asset-detail-movement-value">{entry.note || "-"}</div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="panel-note">No movement or assignment history yet.</div>
+              )}
+            </div>
+
+            {isSuperAdmin ? (
+              <>
+                <h3 className="section-title">Status Timeline</h3>
+                <div className="table-wrap asset-detail-history-wrap">
+                  <table className="asset-detail-status-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Reason</th>
+                        <th>{t.delete}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailStatusEntries.length ? (
+                        detailStatusEntries.map((h) => (
+                          <tr key={`detail-status-${h.id}`}>
+                            <td data-label="Date">{formatDate(h.date)}</td>
+                            <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
+                            <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
+                            <td data-label="Reason">{h.reason || "-"}</td>
+                            <td data-label={t.delete}>
+                              <button
+                                className="btn-danger"
+                                disabled={busy}
+                                onClick={() => void deleteStatusHistoryEntryByAsset(detailAsset.id, h.id)}
+                              >
+                                X
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className="asset-detail-empty-row">
+                          <td colSpan={5}>No status timeline yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
+
+          </section>
+        </div>
+      );
+    },
+    [assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerFileKey, assetDetailTonerForm, assetDisplayPhoto, assetItemName, assetStatusLabel, busy, calcInventoryCurrentStockFromRows, campusLabel, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems]
   );
   useEffect(() => {
     if (!assetDetailId) return;
@@ -29191,13 +29852,6 @@ export default function App() {
       </div>
     );
   }
-  const maintenanceCompletionText = useCallback(
-    (completionRaw: string) => {
-      const isDone = String(completionRaw || "").trim().toLowerCase() === "done";
-      return `${isDone ? "✅" : "❌"} ${isDone ? t.alreadyDone : t.notYetDone}`;
-    },
-    [t.alreadyDone, t.notYetDone]
-  );
   useEffect(() => {
     if (maintenanceTypeFilter === "ALL") return;
     if (!maintenanceTypeOptions.includes(maintenanceTypeFilter)) {
@@ -29884,6 +30538,36 @@ export default function App() {
       }));
     }
   }, [assets, transferForm.assetId]);
+
+  function closeDetailLaunchedMaintenancePage() {
+    setMaintenanceRecordFromDetail(false);
+    setTransferRecordFromDetail(false);
+    if (detailLaunchReturnContext) {
+      setTab(detailLaunchReturnContext.tab);
+      setAssetsView(detailLaunchReturnContext.assetsView);
+      setClassroomDetailRoomId(detailLaunchReturnContext.classroomRoomId);
+      setAssetDetailId(detailLaunchReturnContext.assetId);
+      setDetailLaunchReturnContext(null);
+      return;
+    }
+    setTab("assets");
+    setAssetsView("list");
+  }
+
+  function closeDetailLaunchedTransferPage() {
+    setTransferRecordFromDetail(false);
+    setMaintenanceRecordFromDetail(false);
+    if (detailLaunchReturnContext) {
+      setTab(detailLaunchReturnContext.tab);
+      setAssetsView(detailLaunchReturnContext.assetsView);
+      setClassroomDetailRoomId(detailLaunchReturnContext.classroomRoomId);
+      setAssetDetailId(detailLaunchReturnContext.assetId);
+      setDetailLaunchReturnContext(null);
+      return;
+    }
+    setTab("assets");
+    setAssetsView("list");
+  }
 
   useEffect(() => {
     if (!transferForm.assetId) {
@@ -39770,596 +40454,7 @@ function formatTicketRequestSource(value?: string) {
               </section>
             )}
 
-            {((assetsView === "list" || assetsView === "gallery") || classroomDetailRoomId !== null) && detailAsset && (
-              <div
-                className="modal-backdrop"
-                style={classroomDetailRoomId !== null ? { zIndex: 1100 } : undefined}
-                onClick={() => setAssetDetailId(null)}
-              >
-                <section
-                  className="panel modal-panel"
-                  style={classroomDetailRoomId !== null ? { position: "relative", zIndex: 1101 } : undefined}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="asset-detail-modal-header">
-                    <div className="asset-detail-modal-title-block">
-                      <div className="asset-detail-hero">
-                        <div className="asset-detail-hero-media">
-                          <div className="asset-detail-hero-media-frame">
-                            {assetDisplayPhoto(detailAsset) ? (
-                              <img
-                                loading="lazy"
-                                decoding="async"
-                                src={assetDisplayPhoto(detailAsset)}
-                                alt={detailAsset.assetId}
-                                className="asset-detail-hero-media-image"
-                              />
-                            ) : (
-                              <div className="asset-detail-hero-media-image asset-detail-modal-thumb-placeholder">{t.noPhoto}</div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="asset-detail-hero-main">
-                          <div className="asset-detail-hero-top">
-                            <div className="asset-detail-hero-copy">
-                              <div className="asset-detail-hero-eyebrow">Asset Detail</div>
-                              <h2>{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</h2>
-                              <div className="asset-detail-hero-meta">
-                                <span className="asset-detail-id-chip">{detailAsset.assetId}</span>
-                                <span className={`asset-detail-status-chip ${assetStatusRowClass(detailAsset.status || "")}`}>
-                                  {assetStatusLabel(detailAsset.status)}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="asset-detail-modal-header-side">
-                              <button className="tab" onClick={() => setAssetDetailId(null)}>Close</button>
-                            </div>
-                          </div>
-                          <div className="asset-detail-hero-summary">
-                            <div className="asset-detail-hero-summary-item">
-                              <span>{t.campus}</span>
-                              <strong>{campusLabel(detailAsset.campus)}</strong>
-                            </div>
-                            <div className="asset-detail-hero-summary-item">
-                              <span>{t.location}</span>
-                              <strong>{detailAsset.location || "-"}</strong>
-                            </div>
-                            <div className="asset-detail-hero-summary-item">
-                              <span>{t.user}</span>
-                              <strong>{detailAsset.assignedTo || "-"}</strong>
-                            </div>
-                            <div className="asset-detail-hero-summary-item">
-                              <span>Brand / Model</span>
-                              <strong>{[detailAsset.brand || "-", detailAsset.model || "-"].join(" / ")}</strong>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="asset-detail-section-head asset-detail-overview-head">
-                    <h3 className="section-title asset-detail-section-title">Details</h3>
-                    <div className="asset-detail-section-actions">
-                      {isAdmin ? (
-                        <>
-                          <button type="button" className="asset-detail-section-toggle" onClick={() => openMaintenancePageFromDetail(detailAsset)}>
-                            {detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
-                          </button>
-                          <button type="button" className="asset-detail-section-toggle" onClick={() => openTransferPageFromDetail(detailAsset)}>
-                            Open Transfer Page
-                          </button>
-                        </>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="asset-detail-section-toggle"
-                        onClick={() =>
-                          setAssetDetailSections((prev) => ({
-                            ...prev,
-                            showDetails: !prev.showDetails,
-                          }))
-                        }
-                      >
-                        {assetDetailSections.showDetails ? "Hide Details" : "View Details"}
-                      </button>
-                    </div>
-                  </div>
-                  {assetDetailSections.showDetails ? (
-                  <div className="asset-detail-overview-stack">
-                    <section className="asset-detail-info-section">
-                      <div className="asset-detail-info-head">
-                        <h4>Core Details</h4>
-                        <span>Reference information</span>
-                      </div>
-                      <div className="asset-detail-kv-grid">
-                        <div className="asset-detail-kv"><span>{t.category}</span><strong>{detailAsset.category}</strong></div>
-                        <div className="asset-detail-kv"><span>{t.typeCode}</span><strong>{detailAsset.type}</strong></div>
-                        <div className="asset-detail-kv"><span>{t.name}</span><strong>{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</strong></div>
-                        {detailAsset.category === "IT" ? (
-                          <div className="asset-detail-kv"><span>{t.setCode}</span><strong>{detailAsset.setCode || "-"}</strong></div>
-                        ) : null}
-                        {detailAsset.category === "IT" &&
-                        detailAsset.type !== "TAB" &&
-                        String(detailAsset.parentAssetId || "").trim() ? (
-                          <div className="asset-detail-kv"><span>{t.parentAssetId}</span><strong>{detailAsset.parentAssetId || "-"}</strong></div>
-                        ) : null}
-                        {!detailFurniture ? (
-                          <div className="asset-detail-kv"><span>Serial Number</span><strong>{detailAsset.serialNumber || "-"}</strong></div>
-                        ) : null}
-                      </div>
-                    </section>
-
-                    {detailLinkedComponents.length ? (
-                      <section className="asset-detail-info-section">
-                        <div className="asset-detail-info-head">
-                          <h4>{showsIncludedComponentCards(detailAsset.category, detailAsset.type) ? "Included Components / Remotes" : "Linked Components"}</h4>
-                          <span>{detailLinkedComponents.length} linked item(s)</span>
-                        </div>
-                        {isPhoneView ? (
-                          <div className="public-asset-component-section">
-                            <div className="public-asset-component-list">
-                              {detailLinkedComponents.map((component) => {
-                                const componentPhotos = normalizeAssetPhotos(component);
-                                return (
-                                  <article className="public-asset-component-card" key={`detail-component-phone-${component.id}-${component.assetId}`}>
-                                    <div className="public-asset-component-photo-wrap">
-                                      {componentPhotos[0] ? (
-                                        <img
-                                          loading="lazy"
-                                          decoding="async"
-                                          src={componentPhotos[0]}
-                                          alt={component.assetId || "component"}
-                                          className="public-asset-component-photo"
-                                        />
-                                      ) : (
-                                        <div className="public-asset-component-photo public-asset-component-photo-placeholder">{t.noPhoto}</div>
-                                      )}
-                                    </div>
-                                    <div className="public-asset-component-body">
-                                      <div className="public-asset-component-id">{component.assetId || "-"}</div>
-                                      <div className="public-asset-component-name">
-                                        {assetItemName(component.category, component.type, component.pcType || "")}
-                                      </div>
-                                      <div className="public-asset-component-meta">
-                                        <span><strong>Role:</strong> {component.componentRole || component.type || "-"}</span>
-                                      </div>
-                                    </div>
-                                  </article>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <div
-                            className="asset-detail-component-columns"
-                            style={{
-                              gridTemplateColumns: `repeat(${Math.max(detailLinkedComponents.length, 1)}, minmax(0, 1fr))`,
-                            }}
-                          >
-                            {detailLinkedComponents.map((component) => {
-                              const componentPhotos = normalizeAssetPhotos(component);
-                              return (
-                                <article className="asset-detail-component-column" key={`detail-component-desktop-${component.id}-${component.assetId}`}>
-                                  <div className="asset-detail-component-column-photo-wrap">
-                                    {componentPhotos[0] ? (
-                                      <img
-                                        loading="lazy"
-                                        decoding="async"
-                                        src={componentPhotos[0]}
-                                        alt={component.assetId || "component"}
-                                        className="asset-detail-component-photo"
-                                      />
-                                    ) : (
-                                        <div className="asset-detail-component-photo asset-detail-component-photo-placeholder">{t.noPhoto}</div>
-                                      )}
-                                  </div>
-                                  <div className="asset-detail-component-column-body">
-                                    <div className="asset-detail-component-column-id">{component.assetId || "-"}</div>
-                                    <div className="asset-detail-component-column-item">
-                                      {assetItemName(component.category, component.type, component.pcType || "")}
-                                    </div>
-                                    <div className="asset-detail-component-column-meta"><strong>Role:</strong> {component.componentRole || component.type || "-"}</div>
-                                  </div>
-                                </article>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </section>
-                    ) : null}
-
-                    <div className="asset-detail-info-grid asset-detail-info-grid-secondary">
-                      <section className="asset-detail-info-section">
-                        <div className="asset-detail-info-head">
-                          <h4>Technical Info</h4>
-                          <span>Hardware and identification</span>
-                        </div>
-                        <div className="asset-detail-kv-grid">
-                          {isFanAsset(detailAsset.category, detailAsset.type) ? (
-                            <div className="asset-detail-kv"><span>Fan Type</span><strong>{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</strong></div>
-                          ) : null}
-                          {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
-                            <div className="asset-detail-kv"><span>{t.pcType}</span><strong>{detailAsset.pcType || "-"}</strong></div>
-                          ) : null}
-                          {detailAsset.parentAssetId ? (
-                            <div className="asset-detail-kv"><span>{t.componentRole}</span><strong>{detailAsset.componentRole || "-"}</strong></div>
-                          ) : null}
-                          {detailAsset.parentAssetId ? (
-                            <div className="asset-detail-kv"><span>{t.componentRequired}</span><strong>{detailAsset.componentRequired ? "Yes" : "No"}</strong></div>
-                          ) : null}
-                          {detailFurniture ? (
-                            <>
-                              <div className="asset-detail-kv"><span>Control Mode</span><strong>{detailFurniture.trackingMode || "-"}</strong></div>
-                              <div className="asset-detail-kv"><span>Quantity</span><strong>{detailFurniture.quantity || "1"}</strong></div>
-                              <div className="asset-detail-kv"><span>Standard Name</span><strong>{detailFurniture.subtype || defaultFurnitureSubtype(detailAsset.type) || "-"}</strong></div>
-                            </>
-                          ) : null}
-                          <div className="asset-detail-kv"><span>Vendor</span><strong>{detailAsset.vendor || "-"}</strong></div>
-                        </div>
-                        {!detailFurniture ? (
-                          <div className="asset-detail-rich-block">
-                            <span>Specs</span>
-                            <div className="asset-detail-rich-value">{detailAsset.specs || "-"}</div>
-                          </div>
-                        ) : null}
-                      </section>
-
-                      <section className="asset-detail-info-section">
-                        <div className="asset-detail-info-head">
-                          <h4>Lifecycle</h4>
-                          <span>Purchase, warranty and schedule</span>
-                        </div>
-                        <div className="asset-detail-kv-grid">
-                          <div className="asset-detail-kv"><span>Purchase Date</span><strong>{formatDate(detailAsset.purchaseDate || "-")}</strong></div>
-                          {!detailFurniture ? (
-                            <div className="asset-detail-kv"><span>Warranty Until</span><strong>{formatDate(detailAsset.warrantyUntil || "-")}</strong></div>
-                          ) : null}
-                          {!detailFurniture ? (
-                            <div className="asset-detail-kv"><span>Next Maintenance Date</span><strong>{formatDate(detailAsset.nextMaintenanceDate || "-")}</strong></div>
-                          ) : null}
-                          {!detailFurniture ? (
-                            <div className="asset-detail-kv"><span>Schedule Note</span><strong>{detailAsset.scheduleNote || "-"}</strong></div>
-                          ) : null}
-                        </div>
-                      </section>
-                    </div>
-
-                    {isPrinterAssetRow(detailAsset) ? (
-                      <section className="asset-detail-info-section">
-                        <div className="asset-detail-info-head">
-                          <h4>Toner Snapshot</h4>
-                          <span>Printer-specific reference</span>
-                        </div>
-                        <div className="asset-detail-kv-grid">
-                          <div className="asset-detail-kv"><span>Toner Model</span><strong>{detailAsset.tonerModel || "-"}</strong></div>
-                          <div className="asset-detail-kv"><span>Linked Toner Stock</span><strong>{detailTonerItem ? `${detailTonerItem.itemCode} (${detailTonerStock} ${detailTonerItem.unit})` : "-"}</strong></div>
-                          <div className="asset-detail-kv"><span>Last Toner Change</span><strong>{formatDate(detailAsset.tonerLastChangedAt || "-")}</strong></div>
-                          <div className="asset-detail-kv"><span>Last Page Counter</span><strong>{detailAsset.tonerLastPageCount || "-"}</strong></div>
-                          <div className="asset-detail-kv"><span>Min Toner Stock</span><strong>{detailAsset.tonerMinStock || "-"}</strong></div>
-                          <div className="asset-detail-kv"><span>Expected Yield</span><strong>{detailAsset.tonerExpectedYield ? `${detailAsset.tonerExpectedYield} pages` : "-"}</strong></div>
-                        </div>
-                        <div className="asset-detail-rich-block">
-                          <span>Toner Note</span>
-                          <div className="asset-detail-rich-value">{detailAsset.tonerNotes || "-"}</div>
-                        </div>
-                      </section>
-                    ) : null}
-                    {detailFurniture ? (
-                      <section className="asset-detail-info-section">
-                        <div className="asset-detail-info-head">
-                          <h4>Reference Photos</h4>
-                          <span>Model and location</span>
-                        </div>
-                        <div className="asset-detail-photo-grid">
-                          <div className="asset-detail-rich-block">
-                            <span>Model Photo</span>
-                            <div className="asset-detail-rich-value asset-detail-rich-value-photo">
-                              {renderAssetPhoto(furnitureModelPhoto(detailAsset), `${detailAsset.assetId}-model`)}
-                            </div>
-                          </div>
-                          <div className="asset-detail-rich-block">
-                            <span>Location Photo</span>
-                            <div className="asset-detail-rich-value asset-detail-rich-value-photo">
-                              {renderAssetPhoto(detailAsset.photo || "", `${detailAsset.assetId}-location`)}
-                            </div>
-                          </div>
-                        </div>
-                      </section>
-                    ) : null}
-
-                    <section className="asset-detail-info-section">
-                      <div className="asset-detail-info-head">
-                        <h4>Notes</h4>
-                        <span>Extra context and remarks</span>
-                      </div>
-                      <div className="asset-detail-rich-block">
-                        <span>Notes</span>
-                        <div className="asset-detail-rich-value">{detailAsset.notes || "-"}</div>
-                      </div>
-                    </section>
-                  </div>
-                  ) : null}
-
-                  {isPrinterAssetRow(detailAsset) ? (
-                    <section className="panel" style={{ marginTop: 12 }}>
-                      <div className="panel-row">
-                        <h3 className="section-title" style={{ margin: 0 }}>Toner Control</h3>
-                        <div className="row-actions">
-                          <span className="tiny">{detailTonerEntries.length} record(s)</span>
-                          <button
-                            type="button"
-                            className="tab btn-small"
-                            onClick={() => {
-                              setTab("inventory");
-                              setInventoryView("items");
-                              setAssetDetailId(null);
-                            }}
-                          >
-                            Open Toner Report
-                          </button>
-                        </div>
-                      </div>
-                      <div className="form-grid" style={{ marginBottom: 10 }}>
-                        <div className="field">
-                          <span>In Stock</span>
-                          <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.currentStock : detailTonerStock}</div>
-                        </div>
-                        <div className="field">
-                          <span>Used</span>
-                          <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.usedQty : detailTonerEntries.length}</div>
-                        </div>
-                        <div className="field">
-                          <span>Purchased</span>
-                          <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.purchaseQty : "-"}</div>
-                        </div>
-                      </div>
-                      <div className="form-grid">
-                        <label className="field">
-                          <span>Toner Item</span>
-                          <select className="input" value={assetDetailTonerForm.itemId} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, itemId: e.target.value }))}>
-                            <option value="">Select toner</option>
-                            {tonerInventoryItems
-                              .filter((item) => item.campus === detailAsset.campus)
-                              .map((item) => (
-                                <option key={`detail-toner-stock-${item.id}`} value={item.id}>
-                                  {item.itemCode} - {inventoryDisplayName(item.itemName, lang)} ({calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns)} {item.unit})
-                                </option>
-                              ))}
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Date</span>
-                          <input className="input" type="date" value={assetDetailTonerForm.date} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, date: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>Qty Used</span>
-                          <input className="input" type="number" min="1" value={assetDetailTonerForm.qty} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, qty: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>Old Toner Status</span>
-                          <select className="input" value={assetDetailTonerForm.oldTonerStatus} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, oldTonerStatus: e.target.value }))}>
-                            <option value="Empty">Empty</option>
-                            <option value="Low">Low</option>
-                            <option value="Leaking">Leaking</option>
-                            <option value="Defective">Defective</option>
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Page Counter</span>
-                          <input className="input" type="number" min="0" value={assetDetailTonerForm.pageCounter} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, pageCounter: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>By</span>
-                          <input className="input" value={assetDetailTonerForm.by} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, by: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>Cost</span>
-                          <input className="input" value={assetDetailTonerForm.cost} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, cost: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>Condition</span>
-                          <input className="input" value={assetDetailTonerForm.condition} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, condition: e.target.value }))} />
-                        </label>
-                        <label className="field field-wide">
-                          <span>Note</span>
-                          <textarea className="textarea" value={assetDetailTonerForm.note} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, note: e.target.value }))} />
-                        </label>
-                        <label className="field field-wide">
-                          <span>{t.photo}</span>
-                          <input key={assetDetailTonerFileKey} type="file" accept="image/*" onChange={onAssetDetailTonerPhotoFile} />
-                          {assetDetailTonerForm.photo ? <img loading="lazy" decoding="async" src={assetDetailTonerForm.photo} alt="toner" className="photo-preview" /> : null}
-                        </label>
-                      </div>
-                      <div className="asset-actions">
-                        <button className="btn-primary" disabled={busy || !assetDetailTonerForm.note.trim() || !assetDetailTonerForm.itemId} onClick={() => void saveTonerChangeForAsset(detailAsset, assetDetailTonerForm, { setForm: setAssetDetailTonerForm, resetFileKey: () => setAssetDetailTonerFileKey((k) => k + 1) })}>
-                          Save Toner Change
-                        </button>
-                      </div>
-                    </section>
-                  ) : null}
-
-                  <div className="asset-detail-section-head">
-                    <h3 className="section-title asset-detail-section-title">{detailFurniture ? "Fixing Record" : "Maintenance History"}</h3>
-                    {detailMaintenanceEntries.length > 1 ? (
-                      <button
-                        type="button"
-                        className="asset-detail-section-toggle"
-                        onClick={() =>
-                          setAssetDetailSections((prev) => ({
-                            ...prev,
-                            showAllMaintenance: !prev.showAllMaintenance,
-                          }))
-                        }
-                      >
-                        {assetDetailSections.showAllMaintenance ? "Show Latest" : "Show All"}
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="public-asset-history-section asset-detail-history-section">
-                    {detailMaintenanceVisibleEntries.length ? (
-                      <div className="public-asset-history-list">
-                        {detailMaintenanceVisibleEntries.map((h) => (
-                          <article className="public-asset-history-card asset-detail-history-card" key={`detail-history-${h.id}`}>
-                            <div className="public-asset-history-head">
-                              <div className="public-asset-history-title">{h.type || (detailFurniture ? "Fixing" : "Maintenance")}</div>
-                              <div className="public-asset-history-head-side">
-                                <div className="public-asset-history-date">{formatDate(h.date)}</div>
-                              </div>
-                            </div>
-                            <div className="public-asset-history-grid public-asset-history-grid-paired asset-detail-history-grid-compact">
-                              {renderPublicHistoryMeta("Work Status", maintenanceCompletionText(h.completion || "-"))}
-                              {renderPublicHistoryMeta("Condition", h.condition || "-")}
-                              {renderPublicHistoryMeta("Cost", h.cost || "-")}
-                              {renderPublicHistoryMeta("By", h.by || "-")}
-                            </div>
-                            <div className="public-asset-history-note">
-                              <span className="public-asset-history-label">Noted</span>
-                              <p>{h.note || "-"}</p>
-                            </div>
-                            <div className="public-asset-history-photo-section">
-                              <span className="public-asset-history-label">Photos</span>
-                              <div className="public-asset-history-photo-groups">
-                                {renderMaintenancePhotoGroups(h, `asset-detail-history-${h.id}`, {
-                                  before: "Before",
-                                  after: "After",
-                                }, {
-                                  maxPhotosPerGroup: 1,
-                                  className: "public-asset-history-photo-groups-two-col",
-                                })}
-                              </div>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      renderPublicHistoryEmpty(detailFurniture ? "No fixing records yet." : "No maintenance records yet.")
-                    )}
-                  </div>
-
-                  <div className="asset-detail-section-head">
-                    <h3 className="section-title asset-detail-section-title">Movement & Assignment History</h3>
-                    {detailMovementEntries.length > 1 ? (
-                      <button
-                        type="button"
-                        className="asset-detail-section-toggle"
-                        onClick={() =>
-                          setAssetDetailSections((prev) => ({
-                            ...prev,
-                            showAllTransfer: !prev.showAllTransfer,
-                          }))
-                        }
-                      >
-                        {assetDetailSections.showAllTransfer ? "Show Latest" : "Show All"}
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="asset-detail-movement-list">
-                    {detailMovementVisibleEntries.length ? (
-                      detailMovementVisibleEntries.map((entry) => (
-                        <article key={`detail-movement-${entry.id}`} className="asset-detail-movement-card">
-                          <div className="asset-detail-movement-head">
-                            <div className="asset-detail-movement-title">{entry.title}</div>
-                            <div className="asset-detail-movement-date">{formatDate(entry.date || "-")}</div>
-                          </div>
-                          <div className="asset-detail-movement-grid">
-                            <div className="asset-detail-movement-row">
-                              <div className="asset-detail-movement-chip">Route</div>
-                              <div className="asset-detail-movement-item">
-                                <span className="asset-detail-movement-key">From</span>
-                                <div className="asset-detail-movement-value">{campusLabel(entry.fromCampus || "-")} | {entry.fromLocation || "-"}</div>
-                              </div>
-                              <div className="asset-detail-movement-item">
-                                <span className="asset-detail-movement-key">To</span>
-                                <div className="asset-detail-movement-value">{campusLabel(entry.toCampus || "-")} | {entry.toLocation || "-"}</div>
-                              </div>
-                            </div>
-                            <div className="asset-detail-movement-row">
-                              <div className="asset-detail-movement-chip">People</div>
-                              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                <div className="asset-detail-movement-item">
-                                  <span className="asset-detail-movement-key">Staff</span>
-                                  <div className="asset-detail-movement-value">{entry.fromUser || "-"} {"->"} {entry.toUser || "-"}</div>
-                                </div>
-                              ) : null}
-                              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                <div className="asset-detail-movement-item">
-                                  <span className="asset-detail-movement-key">Ack</span>
-                                  <div className="asset-detail-movement-value">{entry.ack || "-"}</div>
-                                </div>
-                              ) : null}
-                              <div className="asset-detail-movement-item">
-                                <span className="asset-detail-movement-key">By</span>
-                                <div className="asset-detail-movement-value">{entry.by || "-"}</div>
-                              </div>
-                            </div>
-                            <div className="asset-detail-movement-row asset-detail-movement-row-note">
-                              <div className="asset-detail-movement-chip">Reason</div>
-                              <div className="asset-detail-movement-item">
-                                <span className="asset-detail-movement-key">Reason</span>
-                                <div className="asset-detail-movement-value">{entry.reason || "-"}</div>
-                              </div>
-                              {!hidesAssignmentHistory(detailAsset.category, detailAsset.type) ? (
-                                <div className="asset-detail-movement-item">
-                                  <span className="asset-detail-movement-key">Note</span>
-                                  <div className="asset-detail-movement-value">{entry.note || "-"}</div>
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </article>
-                      ))
-                    ) : (
-                      <div className="panel-note">No movement or assignment history yet.</div>
-                    )}
-                  </div>
-
-                  {isSuperAdmin ? (
-                    <>
-                      <h3 className="section-title">Status Timeline</h3>
-                      <div className="table-wrap asset-detail-history-wrap">
-                        <table className="asset-detail-status-table">
-                          <thead>
-                            <tr>
-                              <th>Date</th>
-                              <th>From</th>
-                              <th>To</th>
-                              <th>Reason</th>
-                              <th>{t.delete}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {detailStatusEntries.length ? (
-                              detailStatusEntries.map((h) => (
-                                <tr key={`detail-status-${h.id}`}>
-                                  <td data-label="Date">{formatDate(h.date)}</td>
-                                  <td data-label="From">{assetStatusLabel(h.fromStatus)}</td>
-                                  <td data-label="To">{assetStatusLabel(h.toStatus)}</td>
-                                  <td data-label="Reason">{h.reason || "-"}</td>
-                                  <td data-label={t.delete}>
-                                    <button
-                                      className="btn-danger"
-                                      disabled={busy}
-                                      onClick={() => void deleteStatusHistoryEntryByAsset(detailAsset.id, h.id)}
-                                    >
-                                      X
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr className="asset-detail-empty-row">
-                                <td colSpan={5}>No status timeline yet.</td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
-                  ) : null}
-
-                </section>
-              </div>
-            )}
+            {assetsView === "list" || assetsView === "gallery" ? renderAssetDetailModal(false) : null}
 
             {assetsView === "list" && editingAsset && (
               <div className="modal-backdrop">
@@ -41238,9 +41333,34 @@ function formatTicketRequestSource(value?: string) {
             {assetsView === "list" && historyAsset && (
               <div className="modal-backdrop" onClick={() => setHistoryAssetId(null)}>
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="panel-row">
+                  <div className={`panel-row ${isPhoneView ? "transfer-modal-header-mobile" : ""}`}>
                     <h2>{isFurnitureAsset(historyAsset.category) ? "Fixing History" : "Maintenance History"} - {historyAsset.assetId}</h2>
-                    <div className="row-actions">
+                    {isPhoneView ? (
+                      <button
+                        className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close transfer-modal-close-btn"
+                        onClick={() => setHistoryAssetId(null)}
+                        aria-label="Close history popup"
+                        title="Close"
+                      >
+                        <span aria-hidden={true}>✕</span>
+                      </button>
+                    ) : (
+                      <div className="row-actions">
+                        <button
+                          className="btn-primary btn-small"
+                          onClick={() => {
+                            setHistoryAssetId(null);
+                            openQuickRecordModal(historyAsset);
+                          }}
+                        >
+                          {isFurnitureAsset(historyAsset.category) ? "Record Fixing" : "Record"}
+                        </button>
+                        <button className="tab" onClick={() => setHistoryAssetId(null)}>Close</button>
+                      </div>
+                    )}
+                  </div>
+                  {isPhoneView ? (
+                    <div className="row-actions" style={{ marginTop: 8 }}>
                       <button
                         className="btn-primary btn-small"
                         onClick={() => {
@@ -41250,9 +41370,8 @@ function formatTicketRequestSource(value?: string) {
                       >
                         {isFurnitureAsset(historyAsset.category) ? "Record Fixing" : "Record"}
                       </button>
-                      <button className="tab" onClick={() => setHistoryAssetId(null)}>Close</button>
                     </div>
-                  </div>
+                  ) : null}
                   {!isFurnitureAsset(historyAsset.category) ? (
                     <p className="tiny">Purchase: {formatDate(historyAsset.purchaseDate || "-")} | Warranty: {formatDate(historyAsset.warrantyUntil || "-")}</p>
                   ) : null}
@@ -41301,9 +41420,28 @@ function formatTicketRequestSource(value?: string) {
             {quickRecordAsset && (
               <div className="modal-backdrop" onClick={() => setQuickRecordAssetId(null)}>
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="panel-row">
+                  {isPhoneView ? (
+                    <button
+                      className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close modal-corner-close-btn"
+                      onClick={() => setQuickRecordAssetId(null)}
+                      aria-label="Close maintenance result popup"
+                      title="Close"
+                    >
+                      <span aria-hidden={true}>✕</span>
+                    </button>
+                  ) : null}
+                  <div className={`panel-row ${isPhoneView ? "transfer-modal-header-mobile" : ""}`}>
                     <h2>{isFurnitureAsset(quickRecordAsset.category) ? "Record Fixing Result" : "Record Maintenance Result"} - {quickRecordAsset.assetId}</h2>
-                    <button className="tab" onClick={() => setQuickRecordAssetId(null)}>Close</button>
+                    {!isPhoneView ? (
+                      <button
+                        className="tab"
+                        onClick={() => setQuickRecordAssetId(null)}
+                        aria-label="Close maintenance result popup"
+                        title="Close"
+                      >
+                        Close
+                      </button>
+                    ) : null}
                   </div>
                   <div className="form-grid">
                     <label className="field">
@@ -41469,9 +41607,28 @@ function formatTicketRequestSource(value?: string) {
             {transferQuickAssetId && transferQuickAsset && (
               <div className="modal-backdrop" onClick={() => { setTransferQuickAssetId(null); }}>
                 <section className="panel modal-panel transfer-modal-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="panel-row">
+                  {isPhoneView ? (
+                    <button
+                      className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close modal-corner-close-btn"
+                      onClick={() => { setTransferQuickAssetId(null); }}
+                      aria-label="Close transfer popup"
+                      title="Close"
+                    >
+                      <span aria-hidden={true}>✕</span>
+                    </button>
+                  ) : null}
+                  <div className={`panel-row ${isPhoneView ? "transfer-modal-header-mobile" : ""}`}>
                     <h2>Transfer Asset - {transferQuickAsset.assetId}</h2>
-                    <button className="tab" onClick={() => { setTransferQuickAssetId(null); }}>Close</button>
+                    {!isPhoneView ? (
+                      <button
+                        className="tab"
+                        onClick={() => { setTransferQuickAssetId(null); }}
+                        aria-label="Close transfer popup"
+                        title="Close"
+                      >
+                        Close
+                      </button>
+                    ) : null}
                   </div>
                   <div className="transfer-location-strip">
                     <div className="transfer-location-card">
@@ -43407,7 +43564,7 @@ function formatTicketRequestSource(value?: string) {
                   }}
                 >
                   <select
-                    className="input"
+                    className="input classroom-campus-filter-input"
                     value={classroomCampusFilter}
                     onChange={(e) => setClassroomCampusFilter(e.target.value)}
                   >
@@ -43419,7 +43576,7 @@ function formatTicketRequestSource(value?: string) {
                     ))}
                   </select>
                   <input
-                    className="input"
+                    className="input classroom-location-search-input"
                     value={classroomQuery}
                     onChange={(e) => setClassroomQuery(e.target.value)}
                     placeholder={lang === "km" ? "ស្វែងរកឈ្មោះទីតាំង..." : "Search location name..."}
@@ -46734,7 +46891,7 @@ function formatTicketRequestSource(value?: string) {
             {scheduleView === "bulk" && (
               <>
             <h3 className="section-title">Bulk Campus Schedule (Easy)</h3>
-            <div className="form-grid">
+            <div className="form-grid transfer-record-grid">
               <label className="field">
                 <span>{t.campus}</span>
                 <LocationPicker
@@ -46947,7 +47104,7 @@ function formatTicketRequestSource(value?: string) {
             {scheduleView === "single" && (
               <>
             <h3 className="section-title">Fill Maintenance Schedule</h3>
-            <div className="form-grid">
+            <div className="form-grid transfer-record-grid">
               <label className="field field-wide">
                 <span>Asset</span>
                 <AssetPicker
@@ -47422,12 +47579,26 @@ function formatTicketRequestSource(value?: string) {
           <section className="panel">
             {transferView === "record" && (
               <>
+            <div className="panel-row transfer-record-head">
             <h3 className="section-title">Asset Transfer</h3>
+            {isPhoneView && transferRecordFromDetail ? (
+              <button
+                type="button"
+                className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close panel-corner-close-btn"
+                onClick={closeDetailLaunchedTransferPage}
+                aria-label="Close transfer page"
+                title="Close"
+              >
+                <span aria-hidden={true}>✕</span>
+              </button>
+            ) : null}
+            </div>
             <div className="form-grid">
               <label className="field">
                 <span>{t.campus}</span>
                 <select
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferFilterCampus}
                   onChange={(e) => {
                     setTransferFilterCampus(e.target.value);
@@ -47448,6 +47619,7 @@ function formatTicketRequestSource(value?: string) {
                 <span>{t.location}</span>
                 <select
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferFilterLocation}
                   onChange={(e) => {
                     setTransferFilterLocation(e.target.value);
@@ -47467,6 +47639,7 @@ function formatTicketRequestSource(value?: string) {
                 <span>{t.category}</span>
                 <select
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferFilterCategory}
                   onChange={(e) => {
                     setTransferFilterCategory(e.target.value);
@@ -47485,6 +47658,7 @@ function formatTicketRequestSource(value?: string) {
                 <span>{t.name}</span>
                 <select
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferFilterName}
                   onChange={(e) => setTransferFilterName(e.target.value)}
                 >
@@ -47578,6 +47752,7 @@ function formatTicketRequestSource(value?: string) {
                   <input
                     className="input"
                     type="text"
+                    style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                     readOnly
                     value={transferDisplayDate}
                     placeholder="dd/mm/yyyy"
@@ -47641,20 +47816,36 @@ function formatTicketRequestSource(value?: string) {
               </label>
               <label className="field">
                 <span>From Campus</span>
-                <input className="input" value={transferAsset ? campusLabel(transferAsset.campus) : "-"} readOnly />
+                <input
+                  className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
+                  value={transferAsset ? campusLabel(transferAsset.campus) : "-"}
+                  readOnly
+                />
               </label>
               <label className="field">
                 <span>From Location</span>
-                <input className="input" value={transferAsset?.location || "-"} readOnly />
+                <input
+                  className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
+                  value={transferAsset?.location || "-"}
+                  readOnly
+                />
               </label>
               <label className="field">
                 <span>Current Staff</span>
-                <input className="input" value={transferAsset?.assignedTo || "-"} readOnly />
+                <input
+                  className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
+                  value={transferAsset?.assignedTo || "-"}
+                  readOnly
+                />
               </label>
               <label className="field">
                 <span>To Campus</span>
                 <select
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferForm.toCampus}
                   onChange={(e) =>
                     setTransferForm((f) => ({
@@ -47675,6 +47866,7 @@ function formatTicketRequestSource(value?: string) {
                 <span>To Location</span>
                 <select
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferForm.toLocation}
                   onChange={(e) =>
                     setTransferForm((f) => {
@@ -47728,28 +47920,35 @@ function formatTicketRequestSource(value?: string) {
                       emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
                     />
                   </label>
-                  <label className="field check-field">
-                    <span>Staff responsibility confirm</span>
-                    <input
-                      type="checkbox"
-                      checked={transferForm.responsibilityConfirmed}
-                      onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
-                    />
-                  </label>
-                  <label className="field check-field">
-                    <span>Previous holder returned item</span>
-                    <input
-                      type="checkbox"
-                      checked={transferForm.returnConfirmed}
-                      onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
-                    />
-                  </label>
+                  <div className="transfer-confirm-row field-wide">
+                    <label className="field check-field transfer-confirm-card">
+                      <span className="transfer-confirm-label">
+                        <span>Staff responsibility confirm</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={transferForm.responsibilityConfirmed}
+                        onChange={(e) => setTransferForm((f) => ({ ...f, responsibilityConfirmed: e.target.checked }))}
+                      />
+                    </label>
+                    <label className="field check-field transfer-confirm-card">
+                      <span className="transfer-confirm-label">
+                        <span>Previous holder returned item</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={transferForm.returnConfirmed}
+                        onChange={(e) => setTransferForm((f) => ({ ...f, returnConfirmed: e.target.checked }))}
+                      />
+                    </label>
+                  </div>
                 </>
               )}
               <label className="field">
                 <span>Reason</span>
                 <input
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferForm.reason}
                   onChange={(e) => setTransferForm((f) => ({ ...f, reason: e.target.value }))}
                   placeholder="Example: Room move / Campus reallocation"
@@ -47759,6 +47958,7 @@ function formatTicketRequestSource(value?: string) {
                 <span>By</span>
                 <input
                   className="input"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferForm.by}
                   onChange={(e) => setTransferForm((f) => ({ ...f, by: e.target.value }))}
                 />
@@ -47785,12 +47985,13 @@ function formatTicketRequestSource(value?: string) {
                 <span>Note</span>
                 <textarea
                   className="textarea"
+                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferForm.note}
                   onChange={(e) => setTransferForm((f) => ({ ...f, note: e.target.value }))}
                 />
               </label>
             </div>
-            <div className="asset-actions">
+            <div className="asset-actions transfer-form-actions">
               <div className="tiny">
                 {transferIsGroupedFurniture
                   ? "Grouped furniture transfer moves quantity between room stock records."
@@ -49179,6 +49380,17 @@ function formatTicketRequestSource(value?: string) {
             <>
             <h3 className="section-title maintenance-staff-quick-title">{lang === "km" ? "កត់ត្រាការងារប្រចាំថ្ងៃ" : "Daily Maintenance Record"}</h3>
             <section className="panel maintenance-staff-quick-panel">
+              {isPhoneView && maintenanceRecordFromDetail ? (
+                <button
+                  type="button"
+                  className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close panel-corner-close-btn"
+                  onClick={closeDetailLaunchedMaintenancePage}
+                  aria-label="Close maintenance page"
+                  title="Close"
+                >
+                  <span aria-hidden={true}>✕</span>
+                </button>
+              ) : null}
               <div className="maintenance-staff-quick-head">
                 <div className="maintenance-staff-quick-head-copy">
                   <p className="maintenance-quick-kicker">{lang === "km" ? "សម្រាប់បុគ្គលិកថែទាំ" : "For Maintenance Staff"}</p>
@@ -49527,7 +49739,20 @@ function formatTicketRequestSource(value?: string) {
             </>
             ) : (
             <>
+            <div className="panel-row transfer-record-head">
             <h3 className="section-title">{lang === "km" ? "កត់ត្រាលទ្ធផលថែទាំ" : "Record Maintenance Result"}</h3>
+            {isPhoneView && maintenanceRecordFromDetail ? (
+              <button
+                type="button"
+                className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close panel-corner-close-btn"
+                onClick={closeDetailLaunchedMaintenancePage}
+                aria-label="Close maintenance page"
+                title="Close"
+              >
+                <span aria-hidden={true}>✕</span>
+              </button>
+            ) : null}
+            </div>
             <div className="form-grid maintenance-record-grid">
               {!maintenanceRecordScheduleJumpMode ? (
                 <>
@@ -58787,9 +59012,19 @@ function formatTicketRequestSource(value?: string) {
           </div>
         )}
 
+        {classroomDetailRoomId !== null ? renderAssetDetailModal(true) : null}
+
         {classroomDetailRoom ? (
-          <div className="modal-backdrop" onClick={() => setClassroomDetailRoomId(null)}>
-            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-backdrop"
+            style={assetDetailId !== null ? { zIndex: 1000 } : undefined}
+            onClick={() => setClassroomDetailRoomId(null)}
+          >
+            <section
+              className="panel modal-panel"
+              style={assetDetailId !== null ? { position: "relative", zIndex: 1001 } : undefined}
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="panel-row">
                 <div className="asset-check-room-modal-head">
                   <div className="asset-check-room-photo asset-check-room-photo-large">
