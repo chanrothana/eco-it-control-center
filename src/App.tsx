@@ -36776,13 +36776,13 @@ function formatTicketRequestSource(value?: string) {
                           >
                             <div className="mobile-notify-item-head">
                               <strong>{row.title}</strong>
-                              <span className="tiny">{formatDateTime(row.createdAt)}</span>
+                              <span className="mobile-notify-item-time">{formatDateTime(row.createdAt)}</span>
                             </div>
-                            <p className="tiny">{row.message}</p>
-                            <div className="row-actions">
+                            <p className="mobile-notify-message">{row.message}</p>
+                            <div className="mobile-notify-actions">
                               <button
                                 type="button"
-                                className="tab btn-small"
+                                className="btn-primary btn-small mobile-notify-open-btn"
                                 onClick={() => {
                                   if (!row.read) void markMaintenanceNotificationRead(row.id);
                                   openNotificationTarget(row);
@@ -36790,39 +36790,41 @@ function formatTicketRequestSource(value?: string) {
                               >
                                 {t.openMaintenance}
                               </button>
-                              {row.kind === "maintenance_done" ? (
-                                <button
-                                  type="button"
-                                  className="tab btn-small"
-                                  onClick={() => {
-                                    void closeMaintenanceNotification(row.id);
-                                  }}
-                                >
-                                  {lang === "km" ? "បានកត់សម្គាល់" : "Noted"}
-                                </button>
-                              ) : null}
-                              {row.kind === "maintenance_done" ? (
-                                <button
-                                  type="button"
-                                  className="tab btn-small"
-                                  onClick={() => {
-                                    void closeMaintenanceNotification(row.id);
-                                  }}
-                                >
-                                  {lang === "km" ? "បិទកិច្ចការ" : "Close Task"}
-                                </button>
-                              ) : null}
-                              {!row.read ? (
-                                <button
-                                  type="button"
-                                  className="tab btn-small"
-                                  onClick={() => {
-                                    void markMaintenanceNotificationRead(row.id);
-                                  }}
-                                >
-                                  {t.markRead}
-                                </button>
-                              ) : null}
+                              <div className="mobile-notify-actions-secondary">
+                                {row.kind === "maintenance_done" ? (
+                                  <button
+                                    type="button"
+                                    className="tab btn-small mobile-notify-soft-btn"
+                                    onClick={() => {
+                                      void closeMaintenanceNotification(row.id);
+                                    }}
+                                  >
+                                    {lang === "km" ? "បានកត់សម្គាល់" : "Noted"}
+                                  </button>
+                                ) : null}
+                                {row.kind === "maintenance_done" ? (
+                                  <button
+                                    type="button"
+                                    className="tab btn-small mobile-notify-soft-btn"
+                                    onClick={() => {
+                                      void closeMaintenanceNotification(row.id);
+                                    }}
+                                  >
+                                    {lang === "km" ? "បិទកិច្ចការ" : "Close Task"}
+                                  </button>
+                                ) : null}
+                                {!row.read ? (
+                                  <button
+                                    type="button"
+                                    className="tab btn-small mobile-notify-soft-btn"
+                                    onClick={() => {
+                                      void markMaintenanceNotificationRead(row.id);
+                                    }}
+                                  >
+                                    {t.markRead}
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                           </article>
                         )

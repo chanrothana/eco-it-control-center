@@ -959,6 +959,51 @@ body {
   gap: 8px;
 }
 
+.mobile-notify-item-time {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #9fb5d8;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mobile-notify-message {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cfdbef;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mobile-notify-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.mobile-notify-open-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.mobile-notify-actions-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-notify-soft-btn {
+  width: 100%;
+  min-height: 38px;
+  justify-content: center;
+}
+
 .mobile-notify-stock-card {
   gap: 10px;
   cursor: pointer;
@@ -20729,16 +20774,47 @@ tr.row-maint-maintenance:hover td {
   .mobile-notify-panel {
     position: fixed;
     top: calc(58px + env(safe-area-inset-top, 0px));
-    right: 0;
+    right: 10px;
     z-index: 93;
-    width: min(100vw, 430px);
+    width: min(calc(100vw - 20px), 430px);
     max-height: min(78vh, 620px);
     margin: 0;
-    border-radius: 10px;
-    border-color: var(--mobile-line);
-    box-shadow: var(--mobile-shadow);
-    background: var(--mobile-surface) !important;
+    padding: 12px;
+    border-radius: 22px;
+    border-color: rgba(112, 143, 189, 0.28);
+    box-shadow:
+      0 22px 48px rgba(5, 11, 21, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    background:
+      radial-gradient(circle at top right, rgba(82, 139, 245, 0.18), transparent 36%),
+      linear-gradient(180deg, rgba(28, 45, 70, 0.98), rgba(18, 30, 48, 0.98)) !important;
     overflow: hidden;
+  }
+
+  .mobile-notify-head {
+    align-items: center;
+    margin-bottom: 2px;
+  }
+
+  .mobile-notify-head strong {
+    color: #f4f8ff;
+    font-size: 18px;
+    letter-spacing: 0.01em;
+  }
+
+  .mobile-notify-head .tab.btn-small {
+    min-height: 36px;
+    padding-inline: 14px;
+    border-radius: 12px;
+    border-color: rgba(148, 179, 224, 0.36);
+    background: rgba(255, 255, 255, 0.94);
+    color: #29456d;
+    box-shadow: 0 10px 22px rgba(8, 18, 33, 0.16);
+  }
+
+  .mobile-notify-list {
+    gap: 12px;
+    padding-right: 2px;
   }
 
   .mobile-side-backdrop {
@@ -20899,13 +20975,38 @@ tr.row-maint-maintenance:hover td {
 }
 
   .mobile-notify-item {
-    border-color: var(--mobile-line) !important;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03)) !important;
+    padding: 14px;
+    gap: 10px;
+    border-radius: 18px;
+    border-color: rgba(112, 143, 189, 0.26) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.04)) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 10px 20px rgba(7, 17, 31, 0.16);
   }
 
   .mobile-notify-item-unread {
-    background: rgba(61, 125, 255, 0.14) !important;
-    border-color: #6c96da !important;
+    background:
+      radial-gradient(circle at top right, rgba(66, 126, 229, 0.18), transparent 40%),
+      linear-gradient(180deg, rgba(56, 98, 176, 0.2), rgba(255, 255, 255, 0.05)) !important;
+    border-color: rgba(112, 160, 241, 0.52) !important;
+  }
+
+  .mobile-notify-item-head strong {
+    color: #f2f7ff;
+    font-size: 15px;
+    line-height: 1.35;
+  }
+
+  .mobile-notify-actions-secondary:has(> :only-child) {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-notify-soft-btn {
+    border-color: rgba(141, 171, 214, 0.28);
+    background: rgba(255, 255, 255, 0.06);
+    color: #dce8fb;
   }
 
   .panel {
