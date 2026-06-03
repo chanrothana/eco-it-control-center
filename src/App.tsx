@@ -22500,6 +22500,190 @@ export default function App() {
       return nextOpen;
     });
   }
+  function EcoDateInput({
+    value,
+    onChange,
+    placeholder = "dd/mm/yyyy",
+    ariaLabel = "Open Eco Calendar",
+    minYmd,
+    disabled,
+  }: {
+    value: string;
+    onChange: (ymd: string) => void;
+    placeholder?: string;
+    ariaLabel?: string;
+    minYmd?: string;
+    disabled?: boolean;
+  }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLDivElement | null>(null);
+    const normalizedValue = normalizeYmdInput(value || "");
+    const [selectedDate, setSelectedDate] = useState(() => normalizedValue || todayYmd);
+    const [month, setMonth] = useState(() => {
+      const base = normalizedValue || todayYmd;
+      const parsed = new Date(`${base}T00:00:00`);
+      return Number.isNaN(parsed.getTime()) ? new Date() : new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+    });
+
+    useEffect(() => {
+      if (!open) return;
+      const onDocClick = (ev: MouseEvent) => {
+        if (!wrapRef.current) return;
+        if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+      };
+      const onKeyDown = (ev: KeyboardEvent) => {
+        if (ev.key === "Escape") setOpen(false);
+      };
+      document.addEventListener("mousedown", onDocClick);
+      document.addEventListener("keydown", onKeyDown);
+      return () => {
+        document.removeEventListener("mousedown", onDocClick);
+        document.removeEventListener("keydown", onKeyDown);
+      };
+    }, [open]);
+
+    useEffect(() => {
+      const next = normalizeYmdInput(value || "");
+      if (!next) return;
+      setSelectedDate(next);
+      const parsed = new Date(`${next}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        setMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+      }
+    }, [value]);
+
+    const displayValue = useMemo(() => {
+      const ymd = normalizeYmdInput(value || "");
+      if (!ymd) return "";
+      if (lang === "km") return formatKhmerDateYmd(ymd);
+      const date = new Date(`${ymd}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleDateString("en-US", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      });
+    }, [value]);
+
+    const monthLabel = useMemo(
+      () =>
+        lang === "km"
+          ? formatKhmerMonthYear(month)
+          : month.toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            }),
+      [month]
+    );
+
+    const gridDays = useMemo(() => {
+      const year = month.getFullYear();
+      const monthIndex = month.getMonth();
+      const firstDay = new Date(year, monthIndex, 1);
+      const lastDay = new Date(year, monthIndex + 1, 0);
+      const startOffset = firstDay.getDay();
+      const endOffset = 6 - lastDay.getDay();
+      const totalCells = startOffset + lastDay.getDate() + endOffset;
+      const startDate = new Date(year, monthIndex, 1 - startOffset);
+      return Array.from({ length: totalCells }, (_, i) => {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        const ymd = toYmd(d);
+        const holiday = getHolidayEvent(ymd);
+        return {
+          ymd,
+          day: d.getDate(),
+          weekday: d.getDay(),
+          inMonth: d.getMonth() === monthIndex,
+          hasItems: false,
+          holidayName: holiday.name,
+          holidayType: holiday.type,
+        };
+      });
+    }, [month, getHolidayEvent]);
+
+    const openPicker = () => {
+      if (disabled) return;
+      const base = normalizedValue || minYmd || todayYmd;
+      const parsed = new Date(`${base}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        setSelectedDate(base);
+        setMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+      }
+      setOpen((prev) => !prev);
+    };
+
+    return (
+      <div className="quickout-date-field eco-date-floating-field" ref={wrapRef}>
+        <div className="quickout-date-input-wrap">
+          <input
+            className="input"
+            type="text"
+            readOnly
+            disabled={disabled}
+            value={displayValue}
+            placeholder={placeholder}
+          />
+          <button
+            type="button"
+            className="quickout-date-icon-btn"
+            onClick={openPicker}
+            aria-label={ariaLabel}
+            disabled={disabled}
+          >
+            <Calendar size={18} />
+          </button>
+        </div>
+        {open ? (
+          <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+            <div className="quickout-eco-head maintenance-datetime-eco-head">
+              <strong className="quickout-eco-title">{monthLabel}</strong>
+              <div className="quickout-eco-nav">
+                <button
+                  type="button"
+                  className="quickout-eco-nav-btn"
+                  aria-label="Previous month"
+                  onClick={() => setMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                >
+                  {"<"}
+                </button>
+                <button
+                  type="button"
+                  className="quickout-eco-nav-btn"
+                  aria-label="Next month"
+                  onClick={() => setMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                >
+                  {">"}
+                </button>
+              </div>
+            </div>
+            <CalendarGridTemplate
+              weekdayLabels={calendarWeekdayLabels}
+              days={gridDays}
+              selectedDate={selectedDate}
+              todayYmd={todayYmd}
+              onSelectDate={(ymd) => {
+                setSelectedDate(ymd);
+                onChange(ymd);
+                setOpen(false);
+              }}
+              isDayDisabled={(d) => !d.inMonth || Boolean(minYmd && d.ymd < minYmd)}
+              gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
+              renderHolidayTag={(d) =>
+                d.holidayName ? (
+                  <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                    {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                  </em>
+                ) : null
+              }
+              headKeyPrefix="eco-date-head"
+              dayKeyPrefix="eco-date-day"
+            />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   function openInventoryQuickOut(item: InventoryItem) {
     const recorder = authUser?.displayName || authUser?.username || "";
     const today = toYmd(new Date());
@@ -41652,11 +41836,10 @@ function formatTicketRequestSource(value?: string) {
                     </label>
                     <label className="field">
                       <span>Transfer Date</span>
-                      <input
-                        type="date"
-                        className="input"
+                      <EcoDateInput
                         value={transferForm.date}
-                        onChange={(e) => setTransferForm((f) => ({ ...f, date: e.target.value }))}
+                        onChange={(ymd) => setTransferForm((f) => ({ ...f, date: ymd }))}
+                        ariaLabel="Open Transfer Calendar"
                       />
                     </label>
                     <label className="field">
@@ -41681,27 +41864,27 @@ function formatTicketRequestSource(value?: string) {
                     </label>
                     <label className="field">
                       <span>To Location</span>
-                      <select
-                        className="input"
+                      <LocationPicker
                         value={transferForm.toLocation}
-                        onChange={(e) =>
-                          setTransferForm((f) => {
-                            const nextLocation = e.target.value;
-                            return {
-                              ...f,
-                              toLocation: nextLocation,
-                              toAssignedTo: isSharedLocation(nextLocation) ? "" : f.toAssignedTo,
-                              responsibilityConfirmed: false,
-                              returnConfirmed: false,
-                            };
-                          })
+                        onChange={(value) =>
+                          setTransferForm((f) => ({
+                            ...f,
+                            toLocation: value,
+                            toAssignedTo: isSharedLocation(value) ? "" : f.toAssignedTo,
+                            responsibilityConfirmed: false,
+                            returnConfirmed: false,
+                          }))
                         }
-                      >
-                        <option value="">Select location</option>
-                        {transferLocationOptions.map((loc) => (
-                          <option key={`quick-to-location-${loc.id}`} value={loc.name}>{loc.name}</option>
-                        ))}
-                      </select>
+                        options={transferLocationOptions.map((loc) => ({
+                          value: loc.name,
+                          label: loc.name,
+                          description: `${loc.isClassroom ? "Classroom" : "Location"}${loc.campus ? ` • ${campusLabel(loc.campus)}` : ""}`,
+                          photo: loc.photo || undefined,
+                        }))}
+                        placeholder="Select location"
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                        emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                      />
                     </label>
                     {isGroupedFurnitureTransferAsset(transferQuickAsset) ? (
                       <label className="field">
@@ -47619,23 +47802,24 @@ function formatTicketRequestSource(value?: string) {
               </label>
               <label className="field">
                 <span>{t.location}</span>
-                <select
-                  className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
+                <LocationPicker
                   value={transferFilterLocation}
-                  onChange={(e) => {
-                    setTransferFilterLocation(e.target.value);
+                  onChange={(value) => {
+                    setTransferFilterLocation(value);
                     setTransferFilterCategory("ALL");
                     setTransferFilterName("ALL");
                   }}
-                >
-                  <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
-                  {transferFilterLocationOptions.map((location) => (
-                    <option key={`transfer-filter-location-${location}`} value={location}>
-                      {location}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "ALL", label: lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations" },
+                    ...transferFilterLocationOptions.map((location) => ({
+                      value: location,
+                      label: location,
+                    })),
+                  ]}
+                  placeholder={lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                  emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                />
               </label>
               <label className="field">
                 <span>{t.category}</span>
@@ -47658,19 +47842,20 @@ function formatTicketRequestSource(value?: string) {
               </label>
               <label className="field">
                 <span>{t.name}</span>
-                <select
-                  className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
+                <LocationPicker
                   value={transferFilterName}
-                  onChange={(e) => setTransferFilterName(e.target.value)}
-                >
-                  <option value="ALL">{lang === "km" ? "ឈ្មោះទាំងអស់" : "All Names"}</option>
-                  {transferFilterNameOptions.map((name) => (
-                    <option key={`transfer-filter-name-${name}`} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setTransferFilterName}
+                  options={[
+                    { value: "ALL", label: lang === "km" ? "ឈ្មោះទាំងអស់" : "All Names" },
+                    ...transferFilterNameOptions.map((name) => ({
+                      value: name,
+                      label: name,
+                    })),
+                  ]}
+                  placeholder={lang === "km" ? "ឈ្មោះទាំងអស់" : "All Names"}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
+                  emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No name found."}
+                />
               </label>
               <label className="field">
                 <span>Asset</span>
@@ -47866,28 +48051,27 @@ function formatTicketRequestSource(value?: string) {
               </label>
               <label className="field">
                 <span>To Location</span>
-                <select
-                  className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
+                <LocationPicker
                   value={transferForm.toLocation}
-                  onChange={(e) =>
-                    setTransferForm((f) => {
-                      const nextLocation = e.target.value;
-                      return {
-                        ...f,
-                        toLocation: nextLocation,
-                        toAssignedTo: isSharedLocation(nextLocation) ? "" : f.toAssignedTo,
-                        responsibilityConfirmed: false,
-                        returnConfirmed: false,
-                      };
-                    })
+                  onChange={(value) =>
+                    setTransferForm((f) => ({
+                      ...f,
+                      toLocation: value,
+                      toAssignedTo: isSharedLocation(value) ? "" : f.toAssignedTo,
+                      responsibilityConfirmed: false,
+                      returnConfirmed: false,
+                    }))
                   }
-                >
-                  <option value="">Select location</option>
-                  {transferLocationOptions.map((loc) => (
-                    <option key={`to-location-${loc.id}`} value={loc.name}>{loc.name}</option>
-                  ))}
-                </select>
+                  options={transferLocationOptions.map((loc) => ({
+                    value: loc.name,
+                    label: loc.name,
+                    description: `${loc.isClassroom ? "Classroom" : "Location"}${loc.campus ? ` • ${campusLabel(loc.campus)}` : ""}`,
+                    photo: loc.photo || undefined,
+                  }))}
+                  placeholder="Select location"
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                  emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                />
               </label>
               {transferIsGroupedFurniture ? (
                 <label className="field">
@@ -48059,11 +48243,10 @@ function formatTicketRequestSource(value?: string) {
               </label>
               <label className="field">
                 <span>{t.date}</span>
-                <input
-                  className="input"
-                  type="date"
+                <EcoDateInput
                   value={transferHistoryDateFilter}
-                  onChange={(e) => setTransferHistoryDateFilter(e.target.value)}
+                  onChange={setTransferHistoryDateFilter}
+                  ariaLabel="Open Transfer Filter Calendar"
                 />
               </label>
               <div className="transfer-history-filter-actions">
@@ -48171,11 +48354,10 @@ function formatTicketRequestSource(value?: string) {
                   <div className="form-grid">
                     <label className="field">
                       <span>Transfer Date</span>
-                      <input
-                        type="date"
-                        className="input"
+                      <EcoDateInput
                         value={transferHistoryEdit.date}
-                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, date: e.target.value } : f))}
+                        onChange={(ymd) => setTransferHistoryEdit((f) => (f ? { ...f, date: ymd } : f))}
+                        ariaLabel="Open Transfer History Calendar"
                       />
                     </label>
                     <label className="field">

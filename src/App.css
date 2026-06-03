@@ -8777,6 +8777,7 @@ label.backup-action-btn {
 
 .quickout-date-field {
   position: relative;
+  isolation: isolate;
 }
 
 .quickout-date-input-wrap .input {
@@ -8813,6 +8814,22 @@ label.backup-action-btn {
   background: #f8fbff;
   box-shadow: 0 12px 28px rgba(23, 52, 94, 0.2);
   max-height: min(62vh, 420px);
+  overflow: auto;
+}
+
+.eco-date-floating-field {
+  z-index: 3;
+}
+
+.eco-date-floating-field .eco-date-floating-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(100%, 420px);
+  min-width: 320px;
+  margin-top: 0;
+  z-index: 30;
+  max-height: min(62vh, 460px);
   overflow: auto;
 }
 
@@ -24180,6 +24197,11 @@ tr.row-maint-maintenance:hover td {
 }
 
 @media (max-width: 480px) {
+  .eco-date-floating-field .eco-date-floating-panel {
+    width: 100%;
+    min-width: 0;
+  }
+
   .app-card-layout {
     padding: calc(6px + env(safe-area-inset-top, 0px)) 8px calc(10px + env(safe-area-inset-bottom, 0px));
   }
