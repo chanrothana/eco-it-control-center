@@ -361,7 +361,8 @@ type ReportType =
   | "staff_borrowing"
   | "maintenance_completion"
   | "verification_summary"
-  | "qr_labels";
+  | "qr_labels"
+  | "it_vault";
 
 type QrLabelEntityType = "asset" | "rental_printer";
 type QrLabelRow = {
@@ -377,7 +378,7 @@ type QrLabelRow = {
   entityType: QrLabelEntityType;
 };
 
-type ReportSection = "asset" | "maintenance" | "inventory" | "transfer" | "verification";
+type ReportSection = "asset" | "maintenance" | "inventory" | "transfer" | "verification" | "vault";
 
 type MaintenanceReportColumnKey =
   | "date"
@@ -916,6 +917,26 @@ type VaultCredential = {
   recovery?: string;
   lastUpdated?: string;
   note?: string;
+  telegramDevices?: VaultTelegramDeviceEntry[];
+  passwordHistory?: VaultCredentialPasswordHistoryEntry[];
+  created: string;
+};
+type VaultTelegramDeviceEntry = {
+  id: number;
+  staffName: string;
+  role?: string;
+  deviceName: string;
+  status: "Active" | "Removed" | "Need Check";
+  lastConfirmed?: string;
+  note?: string;
+};
+type VaultCredentialPasswordHistoryEntry = {
+  id: number;
+  date: string;
+  oldPassword?: string;
+  newPassword?: string;
+  note?: string;
+  changedBy?: string;
   created: string;
 };
 type VaultDesignLink = {
@@ -938,6 +959,91 @@ type VaultNetworkDoc = {
   note?: string;
   created: string;
 };
+
+type VaultCredentialRecordLike = {
+  systemName?: string;
+  loginUrl?: string;
+  username?: string;
+  note?: string;
+};
+
+type VaultCredentialLabels = {
+  username: string;
+  password: string;
+  secretHint: string;
+  twoFa: string;
+  recovery: string;
+  lastUpdated: string;
+};
+
+function isTelegramCredentialRecord(record: VaultCredentialRecordLike): boolean {
+  const haystack = [record.systemName, record.loginUrl, record.username, record.note]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes("telegram") || haystack.includes("t.me") || haystack.includes("telegram.me");
+}
+
+function getVaultCredentialLabels(isTelegram: boolean): VaultCredentialLabels {
+  if (isTelegram) {
+    return {
+      username: "Mobile",
+      password: "Two-Step Verification",
+      secretHint: "Note",
+      twoFa: "Login Note",
+      recovery: "Recovery Email",
+      lastUpdated: "Password Updated Date",
+    };
+  }
+  return {
+    username: "Email / Username",
+    password: "Password",
+    secretHint: "Password Hint / Storage Note",
+    twoFa: "2FA / OTP",
+    recovery: "Recovery Email / Phone",
+    lastUpdated: "Password Updated Date",
+  };
+}
+
+function summarizeVaultCredentialPasswordHistory(entries?: VaultCredentialPasswordHistoryEntry[]) {
+  const history = normalizeArray<VaultCredentialPasswordHistoryEntry>(entries)
+    .filter((entry) => entry && typeof entry === "object")
+    .sort((a, b) => `${String(b.date || "")}-${String(b.created || "")}`.localeCompare(`${String(a.date || "")}-${String(a.created || "")}`));
+  if (!history.length) return "-";
+  return history
+    .slice(0, 3)
+    .map((entry) => {
+      const changedAt = formatDateTime(entry.created || entry.date || "-");
+      const changedBy = String(entry.changedBy || "").trim();
+      return changedBy ? `${changedAt} by ${changedBy}` : changedAt;
+    })
+    .join(" | ");
+}
+
+function summarizeVaultTelegramDevices(entries?: VaultTelegramDeviceEntry[]) {
+  const rows = normalizeArray<VaultTelegramDeviceEntry>(entries)
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      staffName: String(entry.staffName || "").trim(),
+      role: String(entry.role || "").trim(),
+      deviceName: String(entry.deviceName || "").trim(),
+      status: String(entry.status || "Active").trim() || "Active",
+      lastConfirmed: String(entry.lastConfirmed || "").trim(),
+      note: String(entry.note || "").trim(),
+    }))
+    .filter((entry) => entry.staffName || entry.deviceName);
+  if (!rows.length) return "-";
+  return rows
+    .map((entry) => `${entry.staffName || "Unknown"} - ${entry.deviceName || "Device"}${entry.status ? ` (${entry.status})` : ""}`)
+    .join(" | ");
+}
+
+function latestVaultCredentialPasswordChangeAt(row: VaultCredential) {
+  const history = normalizeArray<VaultCredentialPasswordHistoryEntry>(row.passwordHistory)
+    .filter((entry) => entry && typeof entry === "object")
+    .sort((a, b) => `${String(b.date || "")}-${String(b.created || "")}`.localeCompare(`${String(a.date || "")}-${String(a.created || "")}`));
+  return String(history[0]?.created || history[0]?.date || row.lastUpdated || row.created || "").trim();
+}
 type VaultCctvPasswordHistoryEntry = {
   id: number;
   date: string;
@@ -965,6 +1071,13 @@ type VaultCctvRecord = {
   passwordHistory?: VaultCctvPasswordHistoryEntry[];
   created: string;
 };
+
+function latestVaultCctvPasswordChangeAt(row: VaultCctvRecord) {
+  const history = normalizeArray<VaultCctvPasswordHistoryEntry>(row.passwordHistory)
+    .filter((entry) => entry && typeof entry === "object")
+    .sort((a, b) => `${String(b.date || "")}-${String(b.created || "")}`.localeCompare(`${String(a.date || "")}-${String(a.created || "")}`));
+  return String(history[0]?.created || history[0]?.date || row.created || "").trim();
+}
 type CctvCameraRecord = {
   id: number;
   campus: string;
@@ -1024,9 +1137,30 @@ type VaultSearchEntry = {
   fields: VaultSearchField[];
   searchText: string;
 };
+type VaultTabKey = "dashboard" | "report" | "accounts" | "credentials" | "design" | "network" | "cctv";
+type VaultControlItem = {
+  id: string;
+  tab: VaultTabKey;
+  section: string;
+  title: string;
+  summary: string;
+  detail?: string;
+  dateValue?: string;
+  copyText: string;
+};
+
+function buildVaultSearchEntryText(entry: VaultSearchEntry) {
+  return [
+    `Section: ${entry.section}`,
+    `Title: ${entry.title}`,
+    ...(entry.subtitle ? [`Subtitle: ${entry.subtitle}`] : []),
+    ...entry.fields.map((field) => `${field.label}: ${field.value || "-"}`),
+  ].join("\n");
+}
+
 type VaultReportRow = {
   id: string;
-  section: "Access Systems" | "Web Services";
+  section: "Access Systems" | "Web Services" | "Design Folders" | "Network & WiFi Docs" | "CCTV Systems";
   system: string;
   account: string;
   username: string;
@@ -1037,7 +1171,10 @@ type VaultReportRow = {
   reviewDate: string;
   loginUrl: string;
   password: string;
+  recovery: string;
+  extra: string;
   note: string;
+  reportText: string;
 };
 type CalendarEventType =
   | "public"
@@ -1226,6 +1363,7 @@ const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
   inventory: ["inventory_balance"],
   transfer: ["transfer"],
   verification: ["verification_summary"],
+  vault: ["it_vault"],
 };
 const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
   asset_master: "asset",
@@ -1239,6 +1377,7 @@ const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
   maintenance_completion: "maintenance",
   verification_summary: "verification",
   qr_labels: "asset",
+  it_vault: "vault",
 };
 const POOL_CLEANING_SCHEDULE_FALLBACK_KEY = "it_pool_cleaning_schedule_v1";
 const POOL_EQUIPMENT_FALLBACK_KEY = "it_pool_equipment_v1";
@@ -1686,6 +1825,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.maintenance_completion", labelEn: "Maintenance Completion", labelKm: "លទ្ធផលបញ្ចប់ការថែទាំ" },
       { key: "reports.verification_summary", labelEn: "Asset Check Summary", labelKm: "សង្ខេបលទ្ធផលពិនិត្យទ្រព្យ" },
       { key: "reports.qr_labels", labelEn: "Asset ID + QR Labels", labelKm: "លេខទ្រព្យ + QR" },
+      { key: "reports.it_vault", labelEn: "IT Vault Report", labelKm: "របាយការណ៍ IT Vault" },
     ],
   },
   {
@@ -4238,19 +4378,50 @@ function normalizeVaultAccounts(input: unknown): VaultAccount[] {
 function normalizeVaultCredentials(input: unknown): VaultCredential[] {
   return normalizeArray<VaultCredential>(input)
     .filter((row) => row && typeof row === "object")
-    .map((row) => ({
-      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
-      systemName: String(row.systemName || "").trim(),
-      loginUrl: String(row.loginUrl || "").trim(),
-      username: String(row.username || "").trim(),
-      password: String((row as { password?: unknown }).password || row.secretHint || "").trim(),
-      secretHint: String(row.secretHint || "").trim(),
-      twoFa: String(row.twoFa || "").trim(),
-      recovery: String(row.recovery || "").trim(),
-      lastUpdated: String(row.lastUpdated || "").trim(),
-      note: String(row.note || "").trim(),
-      created: String(row.created || "").trim() || new Date().toISOString(),
-    }));
+    .map((row) => {
+      const telegramDevices = normalizeArray<VaultTelegramDeviceEntry>((row as { telegramDevices?: unknown }).telegramDevices)
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => ({
+          id: Number(entry.id) || Date.now() + Math.floor(Math.random() * 1000),
+          staffName: String(entry.staffName || "").trim(),
+          role: String(entry.role || "").trim(),
+          deviceName: String(entry.deviceName || "").trim(),
+          status: String(entry.status || "Active").trim() as VaultTelegramDeviceEntry["status"] || "Active",
+          lastConfirmed: String(entry.lastConfirmed || "").trim(),
+          note: String(entry.note || "").trim(),
+        }))
+        .filter((entry) => entry.staffName || entry.deviceName);
+      const passwordHistory = normalizeArray<VaultCredentialPasswordHistoryEntry>((row as { passwordHistory?: unknown }).passwordHistory)
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => ({
+          id: Number(entry.id) || Date.now() + Math.floor(Math.random() * 1000),
+          date: String(entry.date || "").trim(),
+          oldPassword: String(entry.oldPassword || "").trim(),
+          newPassword: String(entry.newPassword || "").trim(),
+          note: String(entry.note || "").trim(),
+          changedBy: String(entry.changedBy || "").trim(),
+          created: String(entry.created || "").trim() || new Date().toISOString(),
+        }))
+        .sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`));
+      const password =
+        String((row as { password?: unknown }).password || "").trim() ||
+        String(passwordHistory.find((entry) => String(entry.newPassword || "").trim())?.newPassword || row.secretHint || "").trim();
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        systemName: String(row.systemName || "").trim(),
+        loginUrl: String(row.loginUrl || "").trim(),
+        username: String(row.username || "").trim(),
+        password,
+        secretHint: String(row.secretHint || "").trim(),
+        twoFa: String(row.twoFa || "").trim(),
+        recovery: String(row.recovery || "").trim(),
+        lastUpdated: String(row.lastUpdated || "").trim(),
+        note: String(row.note || "").trim(),
+        telegramDevices,
+        passwordHistory,
+        created: String(row.created || "").trim() || new Date().toISOString(),
+      };
+    });
 }
 
 function normalizeVaultDesignLinks(input: unknown): VaultDesignLink[] {
@@ -8339,7 +8510,7 @@ export default function App() {
   }>(null);
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
   const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "furnitureModels" | "locations" | "calendar">("campus");
-  const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "stock" | "balance" | "daily">("dashboard");
+  const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "list" | "stock" | "balance" | "daily">("dashboard");
   const [inventoryDashboardGroup, setInventoryDashboardGroup] = useState<InventoryBusinessGroup>("SUPPLY");
   const [utilitiesView, setUtilitiesView] = useState<
     "entry" | "history" | "monthly" | "yearly"
@@ -8359,7 +8530,7 @@ export default function App() {
   const openInventorySection = useCallback(
     (
       group: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL",
-      view: "dashboard" | "items" | "daily" | "stock" = "dashboard"
+      view: "dashboard" | "items" | "list" | "daily" | "stock" = "dashboard"
     ) => {
       startTabTransition(() => {
         setInventoryDashboardGroup(group);
@@ -8529,10 +8700,18 @@ export default function App() {
                     }]),
                 {
                   key: `inventory.group.${group}.items`,
-                  label: lang === "km" ? "រៀបចំមុខទំនិញ" : "Item Setup",
+                  label: lang === "km" ? "រៀបចំមុខទំនិញ" : group === "SUPPLY" ? "Item Setup" : "Tool Setup",
                   active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "items",
                   onSelect: () => openInventorySection(group, "items"),
                 },
+                ...(group === "SUPPLY"
+                  ? []
+                  : [{
+                      key: `inventory.group.${group}.list`,
+                      label: lang === "km" ? "បញ្ជីឧបករណ៍" : "Tools List",
+                      active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "list",
+                      onSelect: () => openInventorySection(group, "list"),
+                    }]),
                 ...(hasDailyFlow
                   ? [
                       {
@@ -9056,6 +9235,7 @@ export default function App() {
                   inventory: "ស្តុក",
                   transfer: "ផ្ទេរ",
                   verification: "ត្រួតពិនិត្យ",
+                  vault: "IT Vault",
                 }
               : {
                   asset: "Asset",
@@ -9063,8 +9243,9 @@ export default function App() {
                   inventory: "Inventory",
                   transfer: "Transfer",
                   verification: "Verification",
+                  vault: "IT Vault",
                 };
-          return (["asset", "maintenance", "inventory", "transfer", "verification"] as ReportSection[])
+          return (["asset", "maintenance", "inventory", "transfer", "verification", "vault"] as ReportSection[])
             .filter((section) =>
               REPORT_SECTION_TYPE_MAP[section].some((type) => canAccessMenu(`reports.${type}` as MenuAccessKey, "reports"))
             )
@@ -10237,7 +10418,7 @@ export default function App() {
   const [vaultSearchQuery, setVaultSearchQuery] = useState("");
   const [vaultCopiedEntryId, setVaultCopiedEntryId] = useState<string | null>(null);
   const [vaultReportQuery, setVaultReportQuery] = useState("");
-  const [vaultReportSectionFilter, setVaultReportSectionFilter] = useState<"ALL" | "Access Systems" | "Web Services">("ALL");
+  const [vaultReportSectionFilter, setVaultReportSectionFilter] = useState<"ALL" | "Access Systems" | "Web Services" | "Design Folders" | "Network & WiFi Docs" | "CCTV Systems">("ALL");
   const [vaultReportStatusFilter, setVaultReportStatusFilter] = useState("ALL");
   const [vaultReportOwnerFilter, setVaultReportOwnerFilter] = useState("ALL");
   const [vaultReportShowSensitive, setVaultReportShowSensitive] = useState(false);
@@ -10280,6 +10461,10 @@ export default function App() {
     lastUpdated: "",
     note: "",
   });
+  const [vaultCredentialTelegramDevices, setVaultCredentialTelegramDevices] = useState<VaultTelegramDeviceEntry[]>([]);
+  const [vaultCredentialPasswordHistory, setVaultCredentialPasswordHistory] = useState<VaultCredentialPasswordHistoryEntry[]>([]);
+  const vaultCredentialFormIsTelegram = isTelegramCredentialRecord(vaultCredentialForm);
+  const vaultCredentialFormLabels = getVaultCredentialLabels(vaultCredentialFormIsTelegram);
   const [vaultDesignForm, setVaultDesignForm] = useState({
     title: "",
     folderUrl: "",
@@ -10718,15 +10903,19 @@ export default function App() {
 
     if (canAccessMenu("vault.credentials", "vault")) {
       for (const row of vaultCredentials) {
+        const isTelegram = isTelegramCredentialRecord(row);
+        const labels = getVaultCredentialLabels(isTelegram);
         const fields: VaultSearchField[] = [
           { label: "System / Account", value: row.systemName || "-" },
           { label: "Login URL", value: row.loginUrl || "-", link: row.loginUrl || undefined },
-          { label: "Email / Username", value: row.username || "-" },
-          { label: "Password", value: row.password || "-" },
-          { label: "Password Hint / Storage Note", value: row.secretHint || "-" },
-          { label: "2FA / OTP", value: row.twoFa || "-" },
-          { label: "Recovery", value: row.recovery || "-" },
-          { label: "Password Updated", value: row.lastUpdated || "-" },
+          { label: labels.username, value: row.username || "-" },
+          { label: labels.password, value: row.password || (isTelegram ? "Not enabled / not recorded" : "-") },
+          { label: labels.secretHint, value: row.secretHint || "-" },
+          ...(isTelegram ? [] : [{ label: labels.twoFa, value: row.twoFa || "-" }]),
+          { label: labels.recovery, value: row.recovery || "-" },
+          ...(isTelegram ? [{ label: "Logged-in Devices", value: summarizeVaultTelegramDevices(row.telegramDevices) }] : []),
+          { label: labels.lastUpdated, value: row.lastUpdated || "-" },
+          { label: "Password History", value: summarizeVaultCredentialPasswordHistory(row.passwordHistory) },
           { label: "Note", value: row.note || "-" },
         ];
         entries.push({
@@ -10814,18 +11003,597 @@ export default function App() {
         : vaultSearchEntries,
     [deferredVaultSearchQuery, vaultSearchEntries]
   );
+  const vaultTodayYmd = toYmd(new Date());
+  const vaultDateTimestamp = useCallback((value?: string) => {
+    const raw = String(value || "").trim();
+    if (!raw) return 0;
+    const normalized = normalizeYmdInput(raw);
+    const date = normalized ? new Date(`${normalized}T00:00:00`) : new Date(raw);
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }, []);
+  const vaultIsDatePast = useCallback((value?: string) => {
+    const normalized = normalizeYmdInput(String(value || "").trim());
+    return normalized ? normalized < vaultTodayYmd : false;
+  }, [vaultTodayYmd]);
+  const vaultIsDateOlderThanDays = useCallback((value: string | undefined, days: number) => {
+    const stamp = vaultDateTimestamp(value);
+    if (!stamp) return false;
+    return stamp <= Date.now() - days * 24 * 60 * 60 * 1000;
+  }, [vaultDateTimestamp]);
+  const vaultTelegramRecordCount = useMemo(
+    () => vaultCredentials.filter((row) => isTelegramCredentialRecord(row)).length,
+    [vaultCredentials]
+  );
+  const vaultNeedsReviewItems = useMemo<VaultControlItem[]>(() => {
+    const items: VaultControlItem[] = [];
+
+    for (const row of vaultAccounts) {
+      if (!vaultIsDatePast(row.reviewDate)) continue;
+      items.push({
+        id: `review-account-${row.id}`,
+        tab: "accounts",
+        section: "Access Systems",
+        title: row.accountName || row.systemName || "Access record",
+        summary: `Review date passed on ${formatDate(row.reviewDate)}`,
+        detail: row.owner ? `Owner: ${row.owner}` : row.host || row.systemName || "",
+        dateValue: row.reviewDate,
+        copyText: `Needs Review\nSection: Access Systems\nRecord: ${row.accountName || row.systemName || "-"}\nReview Date: ${row.reviewDate || "-"}\nOwner: ${row.owner || "-"}\nHost: ${row.host || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultCredentials) {
+      if (!vaultIsDateOlderThanDays(row.lastUpdated, 180)) continue;
+      items.push({
+        id: `review-credential-${row.id}`,
+        tab: "credentials",
+        section: "Web Services",
+        title: row.systemName || "Web service record",
+        summary: `Password record is old since ${formatDate(row.lastUpdated || "-")}`,
+        detail: row.username || row.recovery || "",
+        dateValue: row.lastUpdated,
+        copyText: `Needs Review\nSection: Web Services\nRecord: ${row.systemName || "-"}\nUsername: ${row.username || "-"}\nLast Updated: ${row.lastUpdated || "-"}\nRecovery: ${row.recovery || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultDesignLinks) {
+      if (!vaultIsDateOlderThanDays(row.lastReview, 180)) continue;
+      items.push({
+        id: `review-design-${row.id}`,
+        tab: "design",
+        section: "Design Folders",
+        title: row.title || "Design folder",
+        summary: `Last reviewed on ${formatDate(row.lastReview || "-")}`,
+        detail: row.owner || "",
+        dateValue: row.lastReview,
+        copyText: `Needs Review\nSection: Design Folders\nRecord: ${row.title || "-"}\nLast Review: ${row.lastReview || "-"}\nOwner: ${row.owner || "-"}\nFolder: ${row.folderUrl || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultNetworkDocs) {
+      if (!vaultIsDateOlderThanDays(row.lastReview, 180)) continue;
+      items.push({
+        id: `review-network-${row.id}`,
+        tab: "network",
+        section: "Network & WiFi Docs",
+        title: row.title || "Network document",
+        summary: `Last reviewed on ${formatDate(row.lastReview || "-")}`,
+        detail: row.owner || row.docType || "",
+        dateValue: row.lastReview,
+        copyText: `Needs Review\nSection: Network & WiFi Docs\nRecord: ${row.title || "-"}\nLast Review: ${row.lastReview || "-"}\nOwner: ${row.owner || "-"}\nFile: ${row.fileUrl || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultCctvRecords) {
+      if (!vaultIsDateOlderThanDays(row.lastAngleReview, 90)) continue;
+      items.push({
+        id: `review-cctv-${row.id}`,
+        tab: "cctv",
+        section: "CCTV Systems",
+        title: row.nvrName || row.site || "CCTV record",
+        summary: `Angle review is old since ${formatDate(row.lastAngleReview || "-")}`,
+        detail: row.site || row.cameraGroup || "",
+        dateValue: row.lastAngleReview,
+        copyText: `Needs Review\nSection: CCTV Systems\nRecord: ${row.nvrName || row.site || "-"}\nLast Angle Review: ${row.lastAngleReview || "-"}\nSite: ${row.site || "-"}\nCamera Group: ${row.cameraGroup || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    return items.sort((a, b) => vaultDateTimestamp(a.dateValue) - vaultDateTimestamp(b.dateValue));
+  }, [vaultAccounts, vaultCredentials, vaultDesignLinks, vaultNetworkDocs, vaultCctvRecords, vaultDateTimestamp, vaultIsDateOlderThanDays, vaultIsDatePast]);
+  const vaultMissingInfoItems = useMemo<VaultControlItem[]>(() => {
+    const items: VaultControlItem[] = [];
+
+    for (const row of vaultAccounts) {
+      const missing = [
+        !String(row.owner || "").trim() ? "owner" : "",
+        !String(row.username || "").trim() ? "username" : "",
+        !String(row.password || "").trim() ? "password" : "",
+        !String(row.reviewDate || "").trim() ? "review date" : "",
+      ].filter(Boolean);
+      if (!missing.length) continue;
+      items.push({
+        id: `missing-account-${row.id}`,
+        tab: "accounts",
+        section: "Access Systems",
+        title: row.accountName || row.systemName || "Access record",
+        summary: `Missing: ${missing.join(", ")}`,
+        detail: row.host || row.systemName || "",
+        copyText: `Missing Info\nSection: Access Systems\nRecord: ${row.accountName || row.systemName || "-"}\nMissing: ${missing.join(", ")}\nHost: ${row.host || "-"}\nOwner: ${row.owner || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultCredentials) {
+      const isTelegram = isTelegramCredentialRecord(row);
+      const missing = [
+        !String(row.systemName || "").trim() ? "service name" : "",
+        !String(row.username || "").trim() ? (isTelegram ? "mobile / username" : "email / username") : "",
+        !isTelegram && !String(row.password || "").trim() ? "password" : "",
+        isTelegram && !String(row.loginUrl || "").trim() ? "link" : "",
+        !String(row.recovery || "").trim() ? "recovery" : "",
+        isTelegram && !normalizeArray<VaultTelegramDeviceEntry>(row.telegramDevices).some((entry) => String(entry.staffName || "").trim() || String(entry.deviceName || "").trim()) ? "logged-in devices" : "",
+        !String(row.lastUpdated || "").trim() && !isTelegram ? "password updated date" : "",
+      ].filter(Boolean);
+      if (!missing.length) continue;
+      items.push({
+        id: `missing-credential-${row.id}`,
+        tab: "credentials",
+        section: "Web Services",
+        title: row.systemName || "Web service record",
+        summary: `Missing: ${missing.join(", ")}`,
+        detail: row.username || "",
+        copyText: `Missing Info\nSection: Web Services\nRecord: ${row.systemName || "-"}\nMissing: ${missing.join(", ")}\nUsername: ${row.username || "-"}\nLink: ${row.loginUrl || "-"}\nRecovery: ${row.recovery || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultDesignLinks) {
+      const missing = [
+        !String(row.folderUrl || "").trim() ? "folder link" : "",
+        !String(row.owner || "").trim() ? "owner" : "",
+        !String(row.lastReview || "").trim() ? "last review" : "",
+      ].filter(Boolean);
+      if (!missing.length) continue;
+      items.push({
+        id: `missing-design-${row.id}`,
+        tab: "design",
+        section: "Design Folders",
+        title: row.title || "Design folder",
+        summary: `Missing: ${missing.join(", ")}`,
+        detail: row.owner || "",
+        copyText: `Missing Info\nSection: Design Folders\nRecord: ${row.title || "-"}\nMissing: ${missing.join(", ")}\nFolder: ${row.folderUrl || "-"}\nOwner: ${row.owner || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultNetworkDocs) {
+      const missing = [
+        !String(row.fileUrl || "").trim() ? "file link" : "",
+        !String(row.owner || "").trim() ? "owner" : "",
+        !String(row.lastReview || "").trim() ? "last review" : "",
+      ].filter(Boolean);
+      if (!missing.length) continue;
+      items.push({
+        id: `missing-network-${row.id}`,
+        tab: "network",
+        section: "Network & WiFi Docs",
+        title: row.title || "Network document",
+        summary: `Missing: ${missing.join(", ")}`,
+        detail: row.docType || "",
+        copyText: `Missing Info\nSection: Network & WiFi Docs\nRecord: ${row.title || "-"}\nMissing: ${missing.join(", ")}\nFile: ${row.fileUrl || "-"}\nOwner: ${row.owner || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultCctvRecords) {
+      const missing = [
+        !String(row.username || "").trim() ? "username" : "",
+        !String(row.password || "").trim() ? "password" : "",
+        !String(row.lastAngleReview || "").trim() ? "last angle review" : "",
+      ].filter(Boolean);
+      if (!missing.length) continue;
+      items.push({
+        id: `missing-cctv-${row.id}`,
+        tab: "cctv",
+        section: "CCTV Systems",
+        title: row.nvrName || row.site || "CCTV record",
+        summary: `Missing: ${missing.join(", ")}`,
+        detail: row.site || "",
+        copyText: `Missing Info\nSection: CCTV Systems\nRecord: ${row.nvrName || row.site || "-"}\nMissing: ${missing.join(", ")}\nSite: ${row.site || "-"}\nLogin URL: ${row.loginUrl || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    return items.sort((a, b) => a.section.localeCompare(b.section) || a.title.localeCompare(b.title));
+  }, [vaultAccounts, vaultCredentials, vaultDesignLinks, vaultNetworkDocs, vaultCctvRecords]);
+  const vaultRecentChangeItems = useMemo<VaultControlItem[]>(() => {
+    const items: VaultControlItem[] = [];
+
+    for (const row of vaultAccounts) {
+      const dateValue = row.lastUpdated || row.created;
+      if (!vaultDateTimestamp(dateValue)) continue;
+      items.push({
+        id: `recent-account-${row.id}`,
+        tab: "accounts",
+        section: "Access Systems",
+        title: row.accountName || row.systemName || "Access record",
+        summary: `Updated ${formatDate(dateValue)}`,
+        detail: row.owner || row.systemName || "",
+        dateValue,
+        copyText: `Recent Change\nSection: Access Systems\nRecord: ${row.accountName || row.systemName || "-"}\nUpdated: ${dateValue || "-"}\nOwner: ${row.owner || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultCredentials) {
+      const dateValue = latestVaultCredentialPasswordChangeAt(row);
+      if (!vaultDateTimestamp(dateValue)) continue;
+      items.push({
+        id: `recent-credential-${row.id}`,
+        tab: "credentials",
+        section: "Web Services",
+        title: row.systemName || "Web service record",
+        summary: `Password updated ${formatDateTime(dateValue)}`,
+        detail: row.username || "",
+        dateValue,
+        copyText: `Recent Change\nSection: Web Services\nRecord: ${row.systemName || "-"}\nPassword Updated: ${dateValue || "-"}\nUsername: ${row.username || "-"}\nRecovery: ${row.recovery || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultDesignLinks) {
+      const dateValue = row.lastReview || row.created;
+      if (!vaultDateTimestamp(dateValue)) continue;
+      items.push({
+        id: `recent-design-${row.id}`,
+        tab: "design",
+        section: "Design Folders",
+        title: row.title || "Design folder",
+        summary: `Reviewed ${formatDate(dateValue)}`,
+        detail: row.owner || "",
+        dateValue,
+        copyText: `Recent Change\nSection: Design Folders\nRecord: ${row.title || "-"}\nReviewed: ${dateValue || "-"}\nOwner: ${row.owner || "-"}\nFolder: ${row.folderUrl || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultNetworkDocs) {
+      const dateValue = row.lastReview || row.created;
+      if (!vaultDateTimestamp(dateValue)) continue;
+      items.push({
+        id: `recent-network-${row.id}`,
+        tab: "network",
+        section: "Network & WiFi Docs",
+        title: row.title || "Network document",
+        summary: `Reviewed ${formatDate(dateValue)}`,
+        detail: row.owner || row.docType || "",
+        dateValue,
+        copyText: `Recent Change\nSection: Network & WiFi Docs\nRecord: ${row.title || "-"}\nReviewed: ${dateValue || "-"}\nOwner: ${row.owner || "-"}\nFile: ${row.fileUrl || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    for (const row of vaultCctvRecords) {
+      const passwordChangedAt = latestVaultCctvPasswordChangeAt(row);
+      const dateValue = vaultDateTimestamp(passwordChangedAt) >= vaultDateTimestamp(row.lastAngleReview) ? passwordChangedAt : row.lastAngleReview || row.created;
+      if (!vaultDateTimestamp(dateValue)) continue;
+      const summary =
+        vaultDateTimestamp(passwordChangedAt) >= vaultDateTimestamp(row.lastAngleReview)
+          ? `Password changed ${formatDateTime(passwordChangedAt)}`
+          : `Angle reviewed ${formatDate(row.lastAngleReview || "-")}`;
+      items.push({
+        id: `recent-cctv-${row.id}`,
+        tab: "cctv",
+        section: "CCTV Systems",
+        title: row.nvrName || row.site || "CCTV record",
+        summary,
+        detail: row.site || "",
+        dateValue,
+        copyText: `Recent Change\nSection: CCTV Systems\nRecord: ${row.nvrName || row.site || "-"}\nRecent Activity: ${summary}\nSite: ${row.site || "-"}\nNote: ${row.note || "-"}`,
+      });
+    }
+
+    return items
+      .sort((a, b) => vaultDateTimestamp(b.dateValue) - vaultDateTimestamp(a.dateValue))
+      .slice(0, 8);
+  }, [vaultAccounts, vaultCredentials, vaultDesignLinks, vaultNetworkDocs, vaultCctvRecords, vaultDateTimestamp]);
+  const vaultVisibleReportText = useMemo(() => {
+    const heading = [
+      "IT Vault Visible Report",
+      `Generated: ${formatDateTime(new Date().toISOString())}`,
+      `Total Records: ${vaultSearchResults.length}`,
+      "",
+    ];
+    const body = vaultSearchResults.flatMap((entry, index) => [
+      `${index + 1}.`,
+      ...buildVaultSearchEntryText(entry).split("\n"),
+      "",
+    ]);
+    return [...heading, ...body].join("\n").trim();
+  }, [vaultSearchResults]);
+  const vaultNeedsReviewReportText = useMemo(() => {
+    const heading = [
+      "IT Vault Needs Review Queue",
+      `Generated: ${formatDateTime(new Date().toISOString())}`,
+      `Items: ${vaultNeedsReviewItems.length}`,
+      "",
+    ];
+    const body = vaultNeedsReviewItems.flatMap((item, index) => [
+      `${index + 1}. ${item.section} - ${item.title}`,
+      `Issue: ${item.summary}`,
+      ...(item.detail ? [`Detail: ${item.detail}`] : []),
+      "",
+    ]);
+    return [...heading, ...body].join("\n").trim();
+  }, [vaultNeedsReviewItems]);
+  const vaultNeedsReviewIdSet = useMemo(() => new Set(vaultNeedsReviewItems.map((item) => item.id.replace(/^review-/, ""))), [vaultNeedsReviewItems]);
+  const vaultMissingInfoIdSet = useMemo(() => new Set(vaultMissingInfoItems.map((item) => item.id.replace(/^missing-/, ""))), [vaultMissingInfoItems]);
+  const vaultReportRows = useMemo<VaultReportRow[]>(() => {
+    const rows: VaultReportRow[] = [];
+
+    for (const row of vaultAccounts) {
+      const reportId = `account-${row.id}`;
+      const reportText = [
+        "IT Vault Report",
+        "Section: Access Systems",
+        `System: ${row.systemName || "-"}`,
+        `Account: ${row.accountName || "-"}`,
+        `Username: ${row.username || "-"}`,
+        `Password: ${row.password || "-"}`,
+        `Owner: ${row.owner || "-"}`,
+        `Role: ${row.role || "-"}`,
+        `Status: ${row.status || "-"}`,
+        `Host: ${row.host || "-"}`,
+        `Login URL: ${row.loginUrl || "-"}`,
+        `Review Date: ${row.reviewDate || "-"}`,
+        `Last Updated: ${row.lastUpdated || "-"}`,
+        `Note: ${row.note || "-"}`,
+      ].join("\n");
+      rows.push({
+        id: reportId,
+        section: "Access Systems",
+        system: row.systemName || "-",
+        account: row.accountName || "-",
+        username: row.username || "-",
+        owner: row.owner || "-",
+        role: row.role || "-",
+        status: vaultMissingInfoIdSet.has(reportId) ? "Missing Info" : vaultNeedsReviewIdSet.has(reportId) ? "Needs Review" : "Ready",
+        lastUpdated: row.lastUpdated || row.created || "",
+        reviewDate: row.reviewDate || "",
+        loginUrl: row.loginUrl || "",
+        password: row.password || "",
+        recovery: "",
+        extra: [row.host, row.model].filter(Boolean).join(" | "),
+        note: row.note || "",
+        reportText,
+      });
+    }
+
+    for (const row of vaultCredentials) {
+      const reportId = `credential-${row.id}`;
+      const isTelegram = isTelegramCredentialRecord(row);
+      const reportText = [
+        "IT Vault Report",
+        "Section: Web Services",
+        `System: ${row.systemName || "-"}`,
+        `Username / Mobile: ${row.username || "-"}`,
+        `Link: ${row.loginUrl || "-"}`,
+        `Password: ${row.password || (isTelegram ? "Not enabled / not recorded" : "-")}`,
+        `Recovery: ${row.recovery || "-"}`,
+        `Last Updated: ${row.lastUpdated || "-"}`,
+        `Password History: ${summarizeVaultCredentialPasswordHistory(row.passwordHistory)}`,
+        ...(isTelegram ? [`Logged-in Devices: ${summarizeVaultTelegramDevices(row.telegramDevices)}`] : [`2FA / OTP: ${row.twoFa || "-"}`]),
+        `Note: ${row.note || "-"}`,
+      ].join("\n");
+      rows.push({
+        id: reportId,
+        section: "Web Services",
+        system: row.systemName || "-",
+        account: row.systemName || "-",
+        username: row.username || "-",
+        owner: "-",
+        role: isTelegram ? "Telegram Account" : "Web Service",
+        status: vaultMissingInfoIdSet.has(reportId) ? "Missing Info" : vaultNeedsReviewIdSet.has(reportId) ? "Needs Review" : "Ready",
+        lastUpdated: row.lastUpdated || row.created || "",
+        reviewDate: "",
+        loginUrl: row.loginUrl || "",
+        password: row.password || "",
+        recovery: row.recovery || "",
+        extra: isTelegram ? summarizeVaultTelegramDevices(row.telegramDevices) : [row.twoFa, row.secretHint].filter(Boolean).join(" | "),
+        note: row.note || "",
+        reportText,
+      });
+    }
+
+    for (const row of vaultDesignLinks) {
+      const reportId = `design-${row.id}`;
+      const reportText = [
+        "IT Vault Report",
+        "Section: Design Folders",
+        `Title: ${row.title || "-"}`,
+        `Folder: ${row.folderUrl || "-"}`,
+        `Owner: ${row.owner || "-"}`,
+        `Last Review: ${row.lastReview || "-"}`,
+        `Note: ${row.note || "-"}`,
+      ].join("\n");
+      rows.push({
+        id: reportId,
+        section: "Design Folders",
+        system: row.title || "-",
+        account: row.title || "-",
+        username: "",
+        owner: row.owner || "-",
+        role: "Folder",
+        status: vaultMissingInfoIdSet.has(reportId) ? "Missing Info" : vaultNeedsReviewIdSet.has(reportId) ? "Needs Review" : "Ready",
+        lastUpdated: row.lastReview || row.created || "",
+        reviewDate: row.lastReview || "",
+        loginUrl: row.folderUrl || "",
+        password: "",
+        recovery: "",
+        extra: "Shared design folder",
+        note: row.note || "",
+        reportText,
+      });
+    }
+
+    for (const row of vaultNetworkDocs) {
+      const reportId = `network-${row.id}`;
+      const reportText = [
+        "IT Vault Report",
+        "Section: Network & WiFi Docs",
+        `Title: ${row.title || "-"}`,
+        `Type: ${row.docType || "-"}`,
+        `File: ${row.fileUrl || "-"}`,
+        `Version: ${row.version || "-"}`,
+        `Owner: ${row.owner || "-"}`,
+        `Last Review: ${row.lastReview || "-"}`,
+        `Note: ${row.note || "-"}`,
+      ].join("\n");
+      rows.push({
+        id: reportId,
+        section: "Network & WiFi Docs",
+        system: row.title || "-",
+        account: row.title || "-",
+        username: "",
+        owner: row.owner || "-",
+        role: row.docType || "Document",
+        status: vaultMissingInfoIdSet.has(reportId) ? "Missing Info" : vaultNeedsReviewIdSet.has(reportId) ? "Needs Review" : "Ready",
+        lastUpdated: row.lastReview || row.created || "",
+        reviewDate: row.lastReview || "",
+        loginUrl: row.fileUrl || "",
+        password: "",
+        recovery: "",
+        extra: row.version || "",
+        note: row.note || "",
+        reportText,
+      });
+    }
+
+    for (const row of vaultCctvRecords) {
+      const reportId = `cctv-${row.id}`;
+      const reportText = [
+        "IT Vault Report",
+        "Section: CCTV Systems",
+        `Site: ${row.site || "-"}`,
+        `NVR: ${row.nvrName || "-"}`,
+        `Login URL: ${row.loginUrl || "-"}`,
+        `Username: ${row.username || "-"}`,
+        `Password: ${row.password || "-"}`,
+        `Camera Group: ${row.cameraGroup || "-"}`,
+        `Retention: ${row.retentionDays != null ? `${row.retentionDays} days` : "-"}`,
+        `Last Angle Review: ${row.lastAngleReview || "-"}`,
+        `Password History: ${row.passwordHistory?.length ? formatDate(row.passwordHistory[0]?.date || "-") : "-"}`,
+        `Note: ${row.note || "-"}`,
+      ].join("\n");
+      rows.push({
+        id: reportId,
+        section: "CCTV Systems",
+        system: row.nvrName || row.site || "-",
+        account: row.nvrName || row.site || "-",
+        username: row.username || "-",
+        owner: "-",
+        role: "Recorder",
+        status: vaultMissingInfoIdSet.has(reportId) ? "Missing Info" : vaultNeedsReviewIdSet.has(reportId) ? "Needs Review" : "Ready",
+        lastUpdated: latestVaultCctvPasswordChangeAt(row) || row.created || "",
+        reviewDate: row.lastAngleReview || "",
+        loginUrl: row.loginUrl || "",
+        password: row.password || "",
+        recovery: "",
+        extra: [row.site, row.cameraGroup].filter(Boolean).join(" | "),
+        note: row.note || "",
+        reportText,
+      });
+    }
+
+    return rows.sort((a, b) => a.section.localeCompare(b.section) || a.system.localeCompare(b.system));
+  }, [vaultAccounts, vaultCredentials, vaultDesignLinks, vaultNetworkDocs, vaultCctvRecords, vaultMissingInfoIdSet, vaultNeedsReviewIdSet]);
+  const vaultReportOwnerOptions = useMemo(
+    () => Array.from(new Set(vaultReportRows.map((row) => row.owner).filter((value) => value && value !== "-"))).sort((a, b) => a.localeCompare(b)),
+    [vaultReportRows]
+  );
+  const vaultReportRowsFiltered = useMemo(() => {
+    const query = vaultReportQuery.trim().toLowerCase();
+    return vaultReportRows.filter((row) => {
+      if (vaultReportSectionFilter !== "ALL" && row.section !== vaultReportSectionFilter) return false;
+      if (vaultReportStatusFilter !== "ALL" && row.status !== vaultReportStatusFilter) return false;
+      if (vaultReportOwnerFilter !== "ALL" && row.owner !== vaultReportOwnerFilter) return false;
+      if (!query) return true;
+      return [
+        row.section,
+        row.system,
+        row.account,
+        row.username,
+        row.owner,
+        row.role,
+        row.loginUrl,
+        row.recovery,
+        row.extra,
+        row.note,
+        row.reportText,
+      ].join(" ").toLowerCase().includes(query);
+    });
+  }, [vaultReportOwnerFilter, vaultReportQuery, vaultReportRows, vaultReportSectionFilter, vaultReportStatusFilter]);
+  const vaultActiveSectionMeta = useMemo(() => {
+    switch (vaultTab) {
+      case "dashboard":
+        return {
+          title: "Vault Dashboard",
+          description: "Review the full vault, move into the correct workspace, and prepare records for quick reporting.",
+          metricLabel: "Visible Records",
+          metricValue: String(vaultSearchResults.length),
+        };
+      case "accounts":
+        return {
+          title: "Access Systems",
+          description: "Manage infrastructure, controller, printer, router, WiFi, and system-level admin access.",
+          metricLabel: "System Records",
+          metricValue: String(vaultAccounts.length),
+        };
+      case "credentials":
+        return {
+          title: "Web Services",
+          description: "Manage email, website, SaaS, and Telegram account records with recovery and password history.",
+          metricLabel: "Service Records",
+          metricValue: String(vaultCredentials.length),
+        };
+      case "design":
+        return {
+          title: "Design Folders",
+          description: "Store shared folder links, ownership details, and design reference locations for the team.",
+          metricLabel: "Folder Records",
+          metricValue: String(vaultDesignLinks.length),
+        };
+      case "network":
+        return {
+          title: "Network & WiFi Docs",
+          description: "Keep topology, ISP, WiFi, VLAN, and infrastructure reference documents in one place.",
+          metricLabel: "Document Records",
+          metricValue: String(vaultNetworkDocs.length),
+        };
+      case "cctv":
+        return {
+          title: "CCTV Systems",
+          description: "Track recorder access, site mapping, retention, review dates, and surveillance system details.",
+          metricLabel: "CCTV Records",
+          metricValue: String(vaultCctvRecords.length),
+        };
+      default:
+        return {
+          title: "IT Vault",
+          description: "Secure operational records for school IT administration.",
+          metricLabel: "Records",
+          metricValue: "0",
+        };
+    }
+  }, [vaultTab, vaultSearchResults.length, vaultAccounts.length, vaultCredentials.length, vaultDesignLinks.length, vaultNetworkDocs.length, vaultCctvRecords.length]);
   const copyVaultSearchEntry = useCallback(async (entry: VaultSearchEntry) => {
-    const text = [
-      `Section: ${entry.section}`,
-      `Title: ${entry.title}`,
-      ...(entry.subtitle ? [`Subtitle: ${entry.subtitle}`] : []),
-      ...entry.fields.map((field) => `${field.label}: ${field.value || "-"}`),
-    ].join("\n");
+    const text = buildVaultSearchEntryText(entry);
     try {
       await navigator.clipboard.writeText(text);
       setVaultCopiedEntryId(entry.id);
       window.setTimeout(() => {
         setVaultCopiedEntryId((current) => (current === entry.id ? null : current));
+      }, 1800);
+    } catch {
+      setVaultCopiedEntryId(null);
+    }
+  }, []);
+  const copyVaultText = useCallback(async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setVaultCopiedEntryId(id);
+      window.setTimeout(() => {
+        setVaultCopiedEntryId((current) => (current === id ? null : current));
       }, 1800);
     } catch {
       setVaultCopiedEntryId(null);
@@ -10864,6 +11632,8 @@ export default function App() {
       lastUpdated: "",
       note: "",
     });
+    setVaultCredentialTelegramDevices([]);
+    setVaultCredentialPasswordHistory([]);
     setVaultCredentialFormPasswordVisible(false);
     setEditingVaultCredentialId(null);
     setVaultCredentialPageTab("records");
@@ -11229,6 +11999,8 @@ export default function App() {
   const [inventoryItemFilterCampus, setInventoryItemFilterCampus] = useState("ALL");
   const [inventoryItemFilterGroup, setInventoryItemFilterGroup] = useState("ALL");
   const [inventoryItemFilterQuery, setInventoryItemFilterQuery] = useState("");
+  const [inventoryToolListLocationFilter, setInventoryToolListLocationFilter] = useState("ALL");
+  const [inventoryToolListStatusFilter, setInventoryToolListStatusFilter] = useState<"ALL" | "READY" | "LOW" | "ZERO">("ALL");
   const [inventoryItemSort, setInventoryItemSort] = useState<{
     key:
       | "itemCode"
@@ -13218,6 +13990,40 @@ export default function App() {
     inventoryCampusLabel,
     lang,
   ]);
+  const inventoryToolListLocationOptions = useMemo(() => {
+    const rows = inventoryBalanceRows.filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup);
+    const values = new Set<string>();
+    for (const row of rows) {
+      const location = String(row.location || "").trim();
+      if (location) values.add(location);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [inventoryBalanceRows, inventoryDashboardGroup]);
+  const inventoryToolListRows = useMemo(() => {
+    return inventoryItemRows.filter((row) => {
+      if (inventoryToolListLocationFilter !== "ALL" && String(row.location || "").trim() !== inventoryToolListLocationFilter) {
+        return false;
+      }
+      if (inventoryToolListStatusFilter === "READY") return row.currentStock > Number(row.minStock || 0);
+      if (inventoryToolListStatusFilter === "LOW") return row.currentStock > 0 && row.currentStock <= Number(row.minStock || 0);
+      if (inventoryToolListStatusFilter === "ZERO") return row.currentStock <= 0;
+      return true;
+    });
+  }, [inventoryItemRows, inventoryToolListLocationFilter, inventoryToolListStatusFilter]);
+  const inventoryToolListSummary = useMemo(() => {
+    const rows = inventoryToolListRows;
+    const totalUnits = rows.reduce((sum, row) => sum + Number(row.currentStock || 0), 0);
+    const lowRows = rows.filter((row) => row.currentStock > 0 && row.currentStock <= Number(row.minStock || 0)).length;
+    const zeroRows = rows.filter((row) => row.currentStock <= 0).length;
+    const locations = new Set(rows.map((row) => String(row.location || "").trim()).filter(Boolean)).size;
+    return {
+      totalTypes: rows.length,
+      totalUnits,
+      lowRows,
+      zeroRows,
+      locations,
+    };
+  }, [inventoryToolListRows]);
   const inventoryLowStockRows = useMemo(
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
@@ -19395,23 +20201,72 @@ export default function App() {
 
   async function addVaultCredential() {
     if (!requireAdminAction()) return;
-    if (!vaultCredentialForm.systemName.trim() || !vaultCredentialForm.username.trim() || !vaultCredentialForm.password.trim()) {
-      setError("System name, username, and password are required.");
+    if (!vaultCredentialForm.systemName.trim() || !vaultCredentialForm.username.trim()) {
+      setError(
+        vaultCredentialFormIsTelegram
+          ? "System name and Telegram phone / username are required."
+          : "System name and username are required."
+      );
       return;
     }
+    if (!vaultCredentialFormIsTelegram && !vaultCredentialForm.password.trim()) {
+      setError("Password is required for non-Telegram web service records.");
+      return;
+    }
+    const existingRow = editingVaultCredentialId
+      ? vaultCredentials.find((item) => item.id === editingVaultCredentialId) || null
+      : null;
+    const nextPassword = vaultCredentialForm.password.trim();
+    const previousPassword = String(existingRow?.password || "").trim();
+    const passwordChanged = editingVaultCredentialId
+      ? nextPassword !== previousPassword
+      : Boolean(nextPassword);
+    const nextPasswordHistory = [...vaultCredentialPasswordHistory];
+    if (passwordChanged && nextPassword) {
+      nextPasswordHistory.unshift({
+        id: Date.now(),
+        date: toYmd(new Date()),
+        oldPassword: previousPassword,
+        newPassword: nextPassword,
+        note: editingVaultCredentialId
+          ? "Auto-recorded when the saved password was updated."
+          : "Initial saved password.",
+        changedBy: authUser?.displayName || authUser?.username || "",
+        created: new Date().toISOString(),
+      });
+    }
+    const normalizedPasswordHistory = nextPasswordHistory
+      .filter((entry) => String(entry.newPassword || "").trim())
+      .sort((a, b) => `${b.date}-${b.created}`.localeCompare(`${a.date}-${a.created}`));
+    const normalizedTelegramDevices = vaultCredentialTelegramDevices
+      .map((entry) => ({
+        id: Number(entry.id) || Date.now() + Math.floor(Math.random() * 1000),
+        staffName: String(entry.staffName || "").trim(),
+        role: String(entry.role || "").trim(),
+        deviceName: String(entry.deviceName || "").trim(),
+        status: (String(entry.status || "Active").trim() as VaultTelegramDeviceEntry["status"]) || "Active",
+        lastConfirmed: String(entry.lastConfirmed || "").trim(),
+        note: String(entry.note || "").trim(),
+      }))
+      .filter((entry) => entry.staffName || entry.deviceName);
+    const effectiveLastUpdated = passwordChanged
+      ? toYmd(new Date())
+      : vaultCredentialForm.lastUpdated;
     const row: VaultCredential = {
       id: editingVaultCredentialId || Date.now(),
       systemName: vaultCredentialForm.systemName.trim(),
       loginUrl: vaultCredentialForm.loginUrl.trim(),
       username: vaultCredentialForm.username.trim(),
-      password: vaultCredentialForm.password.trim(),
+      password: nextPassword,
       secretHint: vaultCredentialForm.secretHint.trim(),
       twoFa: vaultCredentialForm.twoFa.trim(),
       recovery: vaultCredentialForm.recovery.trim(),
-      lastUpdated: vaultCredentialForm.lastUpdated,
+      lastUpdated: effectiveLastUpdated,
       note: vaultCredentialForm.note.trim(),
+      telegramDevices: normalizedTelegramDevices,
+      passwordHistory: normalizedPasswordHistory,
       created: editingVaultCredentialId
-        ? vaultCredentials.find((item) => item.id === editingVaultCredentialId)?.created || new Date().toISOString()
+        ? existingRow?.created || new Date().toISOString()
         : new Date().toISOString(),
     };
     const baseRows = editingVaultCredentialId ? vaultCredentials.filter((item) => item.id !== editingVaultCredentialId) : vaultCredentials;
@@ -20028,6 +20883,44 @@ export default function App() {
       lastUpdated: row.lastUpdated || "",
       note: row.note || "",
     });
+    setVaultCredentialTelegramDevices(Array.isArray(row.telegramDevices) ? [...row.telegramDevices] : []);
+    setVaultCredentialPasswordHistory(Array.isArray(row.passwordHistory) ? [...row.passwordHistory] : []);
+  }
+
+  function addVaultTelegramDeviceRow() {
+    setVaultCredentialTelegramDevices((rows) => [
+      ...rows,
+      {
+        id: Date.now() + rows.length,
+        staffName: "",
+        role: "",
+        deviceName: "",
+        status: "Active",
+        lastConfirmed: "",
+        note: "",
+      },
+    ]);
+  }
+
+  function updateVaultTelegramDeviceRow(
+    id: number,
+    field: keyof VaultTelegramDeviceEntry,
+    value: string
+  ) {
+    setVaultCredentialTelegramDevices((rows) =>
+      rows.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              [field]: field === "status" ? (value as VaultTelegramDeviceEntry["status"]) : value,
+            }
+          : row
+      )
+    );
+  }
+
+  function removeVaultTelegramDeviceRow(id: number) {
+    setVaultCredentialTelegramDevices((rows) => rows.filter((row) => row.id !== id));
   }
 
   function startEditVaultDesign(row: VaultDesignLink) {
@@ -32431,6 +33324,7 @@ export default function App() {
             { value: "inventory", label: "ស្តុក" },
             { value: "transfer", label: "ផ្ទេរ" },
             { value: "verification", label: "ត្រួតពិនិត្យ" },
+            { value: "vault", label: "IT Vault" },
           ]
         : [
             { value: "asset", label: "Asset" },
@@ -32438,6 +33332,7 @@ export default function App() {
             { value: "inventory", label: "Inventory" },
             { value: "transfer", label: "Transfer" },
             { value: "verification", label: "Verification" },
+            { value: "vault", label: "IT Vault" },
           ],
     [lang]
   );
@@ -32457,6 +33352,7 @@ export default function App() {
               { value: "maintenance_completion" as ReportType, label: "លទ្ធផលបញ្ចប់ការថែទាំ" },
               { value: "verification_summary" as ReportType, label: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
               { value: "qr_labels" as ReportType, label: "លេខទ្រព្យ + QR" },
+              { value: "it_vault" as ReportType, label: "របាយការណ៍ IT Vault" },
             ]
           : [
               { value: "asset_master" as ReportType, label: "Asset Master Register" },
@@ -32470,6 +33366,7 @@ export default function App() {
               { value: "maintenance_completion" as ReportType, label: "Maintenance Completion" },
               { value: "verification_summary" as ReportType, label: "Verification Summary" },
               { value: "qr_labels" as ReportType, label: "Asset ID + QR Labels" },
+              { value: "it_vault" as ReportType, label: "IT Vault Report" },
             ]
       ).filter((option) => canAccessMenu(`reports.${option.value}`, "reports")),
     [lang, canAccessMenu]
@@ -32557,6 +33454,7 @@ export default function App() {
             maintenance_completion: "តាមដានលទ្ធផលថែទាំក្នុងចន្លោះកាលបរិច្ឆេទ។",
             verification_summary: "សង្ខេបលទ្ធផលត្រួតពិនិត្យតាមខែ ឬត្រីមាស។",
             qr_labels: "បោះពុម្ពស្លាក QR សម្រាប់ទ្រព្យសម្បត្តិ ឬម៉ាស៊ីនបោះពុម្ពជួល។",
+            it_vault: "មើល និងបោះពុម្ពកំណត់ត្រា IT Vault រួមទាំង Telegram និងឧបករណ៍ដែលបានចូលប្រើ។",
           }
         : {
             asset_master: "Detailed asset list based on selected filters.",
@@ -32570,6 +33468,7 @@ export default function App() {
             maintenance_completion: "Maintenance completion records in selected date range.",
             verification_summary: "Verification summary by month or term.",
             qr_labels: "Print QR labels for selected assets or rental printers.",
+            it_vault: "Review and print IT Vault records including Telegram access and logged-in devices.",
           };
     return guides[reportType];
   }, [lang, reportType]);
@@ -32592,7 +33491,8 @@ export default function App() {
       reportType === "inventory_balance" ||
       reportType === "maintenance_completion" ||
       reportType === "verification_summary" ||
-      reportType === "qr_labels",
+      reportType === "qr_labels" ||
+      reportType === "it_vault",
     [reportType]
   );
   const resetAssetMasterReportFilters = useCallback(() => {
@@ -32667,6 +33567,14 @@ export default function App() {
       setQrLabelEntityType("asset");
       return;
     }
+    if (reportType === "it_vault") {
+      setVaultReportQuery("");
+      setVaultReportSectionFilter("ALL");
+      setVaultReportStatusFilter("ALL");
+      setVaultReportOwnerFilter("ALL");
+      setVaultReportShowSensitive(false);
+      return;
+    }
     if (reportType === "asset_by_location") {
       setAssetByLocationCampusFilter("ALL");
       setAssetByLocationLocationFilter("ALL");
@@ -32692,6 +33600,11 @@ export default function App() {
     setQrStatusFilter(["ALL"]);
     setQrItemFilter(["ALL"]);
     setQrLabelSize("2cm");
+    setVaultReportQuery("");
+    setVaultReportSectionFilter("ALL");
+    setVaultReportStatusFilter("ALL");
+    setVaultReportOwnerFilter("ALL");
+    setVaultReportShowSensitive(false);
     setAssetByLocationCampusFilter("ALL");
     setAssetByLocationLocationFilter("ALL");
     setFurnitureControlCampusFilter(["ALL"]);
@@ -34089,6 +35002,22 @@ export default function App() {
         r.note || "-",
         r.by || "-",
       ]);
+    } else if (reportType === "it_vault") {
+      title = "School IT Vault Access and Control Report";
+      columns = ["Section", "System", "Account", "Username / Mobile", "Owner", "Control Status", "Updated / Review", "Link", "Recovery / Extra", "Password", "Note"];
+      rows = vaultReportRowsFiltered.map((row) => [
+        row.section,
+        row.system || "-",
+        row.account || "-",
+        row.username || "-",
+        row.owner || "-",
+        row.status || "-",
+        row.reviewDate ? formatDate(row.reviewDate) : formatDate(row.lastUpdated || "-"),
+        row.loginUrl || "-",
+        [row.recovery, row.extra].filter(Boolean).join(" | ") || "-",
+        vaultReportShowSensitive ? (row.password || "-") : (row.password ? "Hidden" : "-"),
+        row.note || "-",
+      ]);
     } else {
       title =
         qrLabelEntityType === "rental_printer"
@@ -34219,6 +35148,8 @@ export default function App() {
               ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer")
               : (lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset")
           )} | <strong>${escapeHtml(lang === "km" ? "ទំហំ QR" : "QR Size")}:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
+        : reportType === "it_vault"
+        ? `<p><strong>Total Records:</strong> ${vaultReportRowsFiltered.length} | <strong>Needs Review:</strong> ${vaultNeedsReviewItems.length} | <strong>Missing Info:</strong> ${vaultMissingInfoItems.length} | <strong>Sensitive Visible:</strong> ${vaultReportShowSensitive ? "Yes" : "No"}</p>`
         : "";
     const printMetaHtml =
       reportType === "asset_master"
@@ -34235,6 +35166,12 @@ export default function App() {
               `<p class="meta">${escapeHtml(lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of")}: ${escapeHtml(itemText)}</p>`,
             ].join("");
           })()
+        : reportType === "it_vault"
+        ? [
+            `<p class="meta">Department: Eco International School | IT and Facility Control Center</p>`,
+            `<p class="meta">Document: Internal IT Vault access and control report</p>`,
+            `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Section: ${escapeHtml(vaultReportSectionFilter)} | Status: ${escapeHtml(vaultReportStatusFilter)} | Owner: ${escapeHtml(vaultReportOwnerFilter)} | Query: ${escapeHtml(vaultReportQuery || "-")}</p>`,
+          ].join("")
         : reportType === "furniture_control"
         ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus Filter: ${escapeHtml(
             furnitureControlCampusFilter.includes("ALL")
@@ -44344,6 +45281,156 @@ function formatTicketRequestSource(value?: string) {
               </section>
             )}
 
+            {!maintenanceQuickMode && inventoryDashboardGroup !== "SUPPLY" && inventoryView === "list" && (
+              <section className="panel inventory-tool-list-panel">
+                <div className="panel-row">
+                  <div>
+                    <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} List</h2>
+                    <p className="tiny inventory-tool-list-subhead">
+                      {inventoryDashboardGroup === "CLEAN_TOOL"
+                        ? "Operational view for cleaning tool availability, storage, and follow-up."
+                        : "Operational view for maintenance tool readiness, storage, and follow-up."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="stats-grid inventory-tool-list-stats">
+                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-neutral">
+                    <div className="stat-label">{inventoryDashboardGroup === "CLEAN_TOOL" ? "Cleaning Tool Types" : "Maintenance Tool Types"}</div>
+                    <div className="stat-value">{inventoryToolListSummary.totalTypes}</div>
+                  </div>
+                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-primary">
+                    <div className="stat-label">Units Available</div>
+                    <div className="stat-value">{inventoryToolListSummary.totalUnits}</div>
+                  </div>
+                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-alert">
+                    <div className="stat-label">Low Coverage</div>
+                    <div className="stat-value">{inventoryToolListSummary.lowRows}</div>
+                  </div>
+                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-danger">
+                    <div className="stat-label">Zero Available</div>
+                    <div className="stat-value">{inventoryToolListSummary.zeroRows}</div>
+                  </div>
+                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-secondary">
+                    <div className="stat-label">Locations</div>
+                    <div className="stat-value">{inventoryToolListSummary.locations}</div>
+                  </div>
+                </div>
+
+                <div className="panel-filters inventory-tool-list-filter-bar">
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <select
+                      className="input"
+                      value={inventoryItemFilterCampus}
+                      onChange={(e) => setInventoryItemFilterCampus(e.target.value)}
+                    >
+                      <option value="ALL">All Campuses</option>
+                      {inventoryItemCampusOptions.map((campus) => (
+                        <option key={`inventory-tool-list-campus-${campus}`} value={campus}>
+                          {inventoryCampusLabel(campus)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>{t.location}</span>
+                    <select
+                      className="input"
+                      value={inventoryToolListLocationFilter}
+                      onChange={(e) => setInventoryToolListLocationFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Locations</option>
+                      {inventoryToolListLocationOptions.map((location) => (
+                        <option key={`inventory-tool-list-location-${location}`} value={location}>
+                          {location}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Status</span>
+                    <select
+                      className="input"
+                      value={inventoryToolListStatusFilter}
+                      onChange={(e) => setInventoryToolListStatusFilter(e.target.value as "ALL" | "READY" | "LOW" | "ZERO")}
+                    >
+                      <option value="ALL">All Status</option>
+                      <option value="READY">Ready</option>
+                      <option value="LOW">Low Coverage</option>
+                      <option value="ZERO">Zero Available</option>
+                    </select>
+                  </label>
+                  <label className="field field-wide">
+                    <span>Search</span>
+                    <input
+                      className="input"
+                      placeholder="Search code, tool name, location, vendor..."
+                      value={inventoryItemFilterQuery}
+                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="inventory-tool-list-cards">
+                  {inventoryToolListRows.length ? (
+                    inventoryToolListRows.map((row) => {
+                      const status =
+                        row.currentStock <= 0 ? "ZERO" : row.currentStock <= Number(row.minStock || 0) ? "LOW" : "READY";
+                      const statusLabel =
+                        status === "ZERO" ? "Zero Available" : status === "LOW" ? "Low Coverage" : "Ready";
+                      return (
+                        <article key={`inventory-tool-card-${row.id}`} className={`inventory-tool-card inventory-tool-card-${status.toLowerCase()}`}>
+                          <div className="inventory-tool-card-photo">
+                            {renderAssetPhoto(row.photo || "", row.itemCode)}
+                          </div>
+                          <div className="inventory-tool-card-main">
+                            <div className="inventory-tool-card-head">
+                              <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                              <span className={`inventory-tool-card-status inventory-tool-card-status-${status.toLowerCase()}`}>{statusLabel}</span>
+                            </div>
+                            <div className="inventory-tool-card-meta">
+                              <span><strong>Code:</strong> {row.itemCode}</span>
+                              <span><strong>Campus:</strong> {inventoryCampusLabel(row.campus)}</span>
+                              <span><strong>Location:</strong> {row.location || "-"}</span>
+                              <span><strong>Unit:</strong> {row.unit || "-"}</span>
+                              <span><strong>Vendor:</strong> {row.vendor || "-"}</span>
+                            </div>
+                          </div>
+                          <div className="inventory-tool-card-side">
+                            <div className="inventory-tool-card-qty">
+                              <span>Current</span>
+                              <strong>{row.currentStock}</strong>
+                            </div>
+                            <div className="inventory-tool-card-qty inventory-tool-card-qty-min">
+                              <span>Min</span>
+                              <strong>{row.minStock}</strong>
+                            </div>
+                            <button
+                              className="tab btn-small"
+                              disabled={!isAdmin}
+                              onClick={() => {
+                                setInventoryView("items");
+                                startEditInventoryItem(row);
+                              }}
+                            >
+                              Edit Setup
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })
+                  ) : (
+                    <div className="panel-note">
+                      {inventoryBalanceRows.length
+                        ? "No tools match the current filters."
+                        : "No tools recorded yet."}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
             {!maintenanceQuickMode && inventoryBusinessGroupHasDailyStockFlow(inventoryDashboardGroup) && inventoryView === "stock" && (
               <section className="panel">
                 <div className="panel-head panel-head-compact">
@@ -53452,20 +54539,61 @@ function formatTicketRequestSource(value?: string) {
         )}
 
         {tab === "reports" && (
-          <section className="panel">
-            <div className="report-title-row">
-              <h2>{t.reports}</h2>
-              <button
-                className="btn-primary report-print-btn report-title-print-btn"
-                onClick={() => {
-                  setReportMobileFiltersOpen(false);
-                  printCurrentReport();
-                }}
-              >
-                <Printer size={16} aria-hidden={true} />
-                <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
-              </button>
+          <section className={`panel ${reportType === "it_vault" ? "report-panel-it-vault" : ""}`}>
+            <div className={`report-title-row ${reportType === "it_vault" ? "report-title-row-it-vault" : ""}`}>
+              <h2>{reportType === "it_vault" ? "IT Vault Formal Report" : t.reports}</h2>
+              <div className="report-title-actions">
+                <button
+                  className="btn-primary report-print-btn report-title-print-btn"
+                  onClick={() => {
+                    setReportMobileFiltersOpen(false);
+                    printCurrentReport();
+                  }}
+                >
+                  <Printer size={16} aria-hidden={true} />
+                  <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
+                </button>
+              </div>
             </div>
+            {reportType === "it_vault" && (
+              <div className="report-it-vault-masthead">
+                <div className="report-it-vault-brand">
+                  <img src={ECO_LOGO_URL} alt="Eco International School" className="report-it-vault-logo" />
+                  <div className="report-it-vault-brand-copy">
+                    <span>Eco International School</span>
+                    <strong>IT and Facility Control Center</strong>
+                    <h3>School IT Vault Access and Control Report</h3>
+                    <p>Official review report for school web services, communication accounts, CCTV access, WiFi systems, and Telegram logged-in staff devices.</p>
+                  </div>
+                </div>
+                <div className="report-it-vault-meta">
+                  <div className="report-it-vault-meta-card">
+                    <span>Prepared On</span>
+                    <strong>{formatReportSlashLongDate(new Date())}</strong>
+                  </div>
+                  <div className="report-it-vault-meta-card">
+                    <span>Document Type</span>
+                    <strong>Internal Control Report</strong>
+                  </div>
+                  <div className="report-it-vault-meta-card">
+                    <span>Sensitivity</span>
+                    <strong>{vaultReportShowSensitive ? "Sensitive View Enabled" : "Standard Protected View"}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+            {reportType === "it_vault" && (
+              <div className="report-it-vault-guide">
+                <div className="report-it-vault-guide-card">
+                  <strong>How To Read This Report</strong>
+                  <span>Each row combines account identity, ownership, review status, and access details in one place for faster checking and reporting.</span>
+                </div>
+                <div className="report-it-vault-guide-card">
+                  <strong>Best Use</strong>
+                  <span>Use filters below for section, owner, or control status. Use print when ED needs a formal school report version.</span>
+                </div>
+              </div>
+            )}
             {reportType === "maintenance_completion" && (
               <div className="stats-grid" style={{ marginBottom: 10 }}>
                 <article className="stat-card">
@@ -53510,6 +54638,26 @@ function formatTicketRequestSource(value?: string) {
                 </article>
               </div>
             )}
+            {reportType === "it_vault" && (
+              <div className="stats-grid report-it-vault-stats" style={{ marginBottom: 10 }}>
+                <article className="stat-card">
+                  <div className="stat-label">Visible Records</div>
+                  <div className="stat-value">{vaultReportRowsFiltered.length}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Needs Review</div>
+                  <div className="stat-value">{vaultNeedsReviewItems.length}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Missing Info</div>
+                  <div className="stat-value">{vaultMissingInfoItems.length}</div>
+                </article>
+                <article className="stat-card">
+                  <div className="stat-label">Telegram Records</div>
+                  <div className="stat-value">{vaultTelegramRecordCount}</div>
+                </article>
+              </div>
+            )}
             {reportType === "maintenance_completion" ? (
               <div className="tiny" style={{ marginBottom: 10 }}>
                 ED Filter: {maintenanceCompletionFilterLabel}
@@ -53520,7 +54668,7 @@ function formatTicketRequestSource(value?: string) {
                 Standard print mode: {reportInventoryModeLabel}
               </div>
             ) : null}
-            <div className="report-builder">
+            <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""}`}>
               <div className="report-builder-top">
                 <label className="field report-type-field">
                   <span>{lang === "km" ? "ជំហានទី 1៖ ជ្រើសប្រភេទរបាយការណ៍" : "Step 1: Choose Report Type"}</span>
@@ -53570,7 +54718,7 @@ function formatTicketRequestSource(value?: string) {
                   <div
                     className={`report-mobile-filter-sheet ${
                       isPhoneView && reportMobileFiltersOpen ? "report-mobile-filter-sheet-open" : ""
-                    }`}
+                    } ${reportType === "it_vault" ? "report-mobile-filter-sheet-it-vault" : ""}`}
                   >
                     <div className="report-mobile-filter-head">
                       <strong>{lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters"}</strong>
@@ -53578,7 +54726,7 @@ function formatTicketRequestSource(value?: string) {
                         {lang === "km" ? "រួចរាល់" : "Done"}
                       </button>
                     </div>
-                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" ? "report-filter-row-qr" : ""}`}>
+                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""}`}>
               {reportType === "maintenance_completion" ? (
                 <>
                   <input
@@ -53718,6 +54866,73 @@ function formatTicketRequestSource(value?: string) {
                       />
                     </>
                   ) : null}
+                </>
+              ) : null}
+              {reportType === "it_vault" ? (
+                <>
+                  <label className="report-inline-field report-inline-field-search">
+                    <span>Search Record</span>
+                    <input
+                      className="input"
+                      value={vaultReportQuery}
+                      onChange={(e) => setVaultReportQuery(e.target.value)}
+                      placeholder="Search system, account, mobile, owner..."
+                    />
+                  </label>
+                  <label className="report-inline-field">
+                    <span>Section</span>
+                    <select
+                      className="input"
+                      value={vaultReportSectionFilter}
+                      onChange={(e) => setVaultReportSectionFilter(e.target.value as typeof vaultReportSectionFilter)}
+                    >
+                      <option value="ALL">All Sections</option>
+                      <option value="Access Systems">Access Systems</option>
+                      <option value="Web Services">Web Services</option>
+                      <option value="Design Folders">Design Folders</option>
+                      <option value="Network & WiFi Docs">Network & WiFi Docs</option>
+                      <option value="CCTV Systems">CCTV Systems</option>
+                    </select>
+                  </label>
+                  <label className="report-inline-field">
+                    <span>Control Status</span>
+                    <select
+                      className="input"
+                      value={vaultReportStatusFilter}
+                      onChange={(e) => setVaultReportStatusFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Control Status</option>
+                      <option value="Ready">Ready</option>
+                      <option value="Needs Review">Needs Review</option>
+                      <option value="Missing Info">Missing Info</option>
+                    </select>
+                  </label>
+                  <label className="report-inline-field">
+                    <span>Owner</span>
+                    <select
+                      className="input"
+                      value={vaultReportOwnerFilter}
+                      onChange={(e) => setVaultReportOwnerFilter(e.target.value)}
+                    >
+                      <option value="ALL">All Owners</option>
+                      {vaultReportOwnerOptions.map((owner) => (
+                        <option key={`vault-report-owner-${owner}`} value={owner}>
+                          {owner}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="report-inline-field report-inline-field-check">
+                    <span>Sensitive Fields</span>
+                    <span className="report-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={vaultReportShowSensitive}
+                        onChange={(e) => setVaultReportShowSensitive(e.target.checked)}
+                      />
+                      <span>Show passwords</span>
+                    </span>
+                  </label>
                 </>
               ) : null}
               {reportType === "qr_labels" ? (
@@ -55044,6 +56259,102 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 )}
               </div>
+            )}
+
+            {reportType === "it_vault" && (
+              <>
+                {isPhoneView ? (
+                  <div className="report-mobile-only report-card-list">
+                    {vaultReportRowsFiltered.length ? (
+                      vaultReportRowsFiltered.map((row) => (
+                        <article key={`report-vault-mobile-${row.id}`} className="report-card">
+                          <div className="report-card-head">
+                            <div className="report-card-title">
+                              <strong className="report-card-id">{row.system}</strong>
+                              <div className="tiny report-card-sub">{row.section}</div>
+                            </div>
+                          </div>
+                          <div className="report-card-meta">
+                            <div><strong>Account:</strong> {row.account || "-"}</div>
+                            <div><strong>Username / Mobile:</strong> {row.username || "-"}</div>
+                            <div><strong>Owner:</strong> {row.owner || "-"}</div>
+                            <div><strong>Status:</strong> {row.status || "-"}</div>
+                            <div><strong>Updated / Review:</strong> {formatDate(row.reviewDate || row.lastUpdated || "-")}</div>
+                            <div><strong>Link:</strong> {row.loginUrl || "-"}</div>
+                            <div><strong>Recovery / Extra:</strong> {[row.recovery, row.extra].filter(Boolean).join(" | ") || "-"}</div>
+                            <div><strong>Password:</strong> {vaultReportShowSensitive ? (row.password || "-") : (row.password ? "Hidden" : "-")}</div>
+                            <div className="report-card-row-wide"><strong>Note:</strong> {row.note || "-"}</div>
+                            <div className="report-card-row-wide">
+                              <button type="button" className="tab btn-small" onClick={() => void copyVaultText(`vault-report-row-${row.id}`, row.reportText)}>
+                                {vaultCopiedEntryId === `vault-report-row-${row.id}` ? "Copied" : "Copy Record"}
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">No IT Vault records matched the selected report filters.</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="report-it-vault-record-list" style={{ marginTop: 12 }}>
+                    {vaultReportRowsFiltered.length ? (
+                      vaultReportRowsFiltered.map((row) => (
+                        <article key={`report-vault-${row.id}`} className="report-it-vault-record-card">
+                          <div className="report-it-vault-record-head">
+                            <div className="report-it-vault-record-title">
+                              <span className="report-it-vault-record-section">{row.section}</span>
+                              <strong>{row.system || "-"}</strong>
+                              <div className="report-it-vault-record-account">{row.account || "-"}</div>
+                              <div className="report-it-vault-record-login">{row.username || "-"}</div>
+                            </div>
+                            <div className="report-it-vault-record-head-side">
+                              <span className={`report-it-vault-status-badge report-it-vault-status-${String(row.status || "ready").toLowerCase().replace(/\s+/g, "-")}`}>
+                                {row.status || "-"}
+                              </span>
+                              <button type="button" className="tab btn-small" onClick={() => void copyVaultText(`vault-report-row-${row.id}`, row.reportText)}>
+                                {vaultCopiedEntryId === `vault-report-row-${row.id}` ? "Copied" : "Copy"}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="report-it-vault-record-grid">
+                            <div className="report-it-vault-record-item">
+                              <span>Owner</span>
+                              <strong>{row.owner || "-"}</strong>
+                            </div>
+                            <div className="report-it-vault-record-item">
+                              <span>Updated / Review</span>
+                              <strong>{formatDate(row.reviewDate || row.lastUpdated || "-")}</strong>
+                            </div>
+                            <div className="report-it-vault-record-item report-it-vault-record-item-wide">
+                              <span>Link</span>
+                              <strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong>
+                            </div>
+                            <div className="report-it-vault-record-item">
+                              <span>Recovery</span>
+                              <strong>{row.recovery || "-"}</strong>
+                            </div>
+                            <div className="report-it-vault-record-item">
+                              <span>Extra</span>
+                              <strong>{row.extra || "-"}</strong>
+                            </div>
+                            <div className="report-it-vault-record-item">
+                              <span>Password</span>
+                              <strong>{vaultReportShowSensitive ? (row.password || "-") : (row.password ? "Hidden" : "-")}</strong>
+                            </div>
+                            <div className="report-it-vault-record-item report-it-vault-record-item-full">
+                              <span>Note</span>
+                              <strong>{row.note || "-"}</strong>
+                            </div>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="panel-note">No IT Vault records matched the selected report filters.</div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
             {reportType === "maintenance_completion" && (
@@ -57626,146 +58937,272 @@ function formatTicketRequestSource(value?: string) {
           )}
 
           {tab === "vault" && canAccessMenu("vault.dashboard", "vault") && (
-          <section className="panel">
-            <h2>IT Operations Vault</h2>
-            <p className="tiny">Central place for school IT operations records with linked documentation (Google Drive / external links).</p>
+          <section className="panel vault-shell">
+            <div className="vault-hero">
+              <div className="vault-hero-main">
+                <span className="vault-hero-kicker">IT Vault</span>
+                <h2>IT Operations Vault</h2>
+                <p className="tiny">Secure access, service accounts, infrastructure references, and reporting records in one place.</p>
+              </div>
+            </div>
+            <div className="vault-main-nav">
+              <div className="vault-main-tabs vault-main-tabs-compact">
+                {canAccessMenu("vault.dashboard", "vault") ? (
+                  <button className={`tab ${vaultTab === "dashboard" ? "tab-active" : ""}`} onClick={() => setVaultTab("dashboard")}>Dashboard</button>
+                ) : null}
+                {canAccessMenu("vault.accounts", "vault") ? (
+                  <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>Access Systems</button>
+                ) : null}
+                {canAccessMenu("vault.credentials", "vault") ? (
+                  <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>Web Services</button>
+                ) : null}
+                {canAccessMenu("vault.network", "vault") ? (
+                  <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>Network & WiFi Docs</button>
+                ) : null}
+                {canAccessMenu("vault.cctv", "vault") ? (
+                  <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>CCTV Systems</button>
+                ) : null}
+                {canAccessMenu("vault.design", "vault") ? (
+                  <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>Design Folders</button>
+                ) : null}
+              </div>
+            </div>
+            <div className="vault-stage">
+            <div className="vault-stage-head">
+              <div className="vault-stage-head-copy">
+                <span>Active Workspace</span>
+                <h3>{vaultActiveSectionMeta.title}</h3>
+                <p>{vaultActiveSectionMeta.description}</p>
+              </div>
+              <div className="vault-stage-head-stat">
+                <strong>{vaultActiveSectionMeta.metricValue}</strong>
+                <small>{vaultActiveSectionMeta.metricLabel}</small>
+              </div>
+            </div>
             {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
-              <div className="panel" style={{ padding: 12, marginBottom: 12 }}>
-                <h3 className="section-title" style={{ marginTop: 0 }}>Vault Overview</h3>
-                <p className="tiny" style={{ marginBottom: 10 }}>
-                  Use this page as a filing guide first: device and controller access goes to <strong>Access Systems</strong>, SaaS and online services go to <strong>Web Services</strong>, infrastructure reference goes to <strong>Network & WiFi Docs</strong>, and recorder/site mapping goes to <strong>CCTV Systems</strong>.
-                </p>
-                <div className="vault-guide-grid" style={{ marginBottom: 12 }}>
+              <div className="panel vault-overview-panel" style={{ padding: 12, marginBottom: 12 }}>
+                <div className="vault-overview-intro">
+                  <div>
+                    <h3 className="section-title" style={{ marginTop: 0 }}>Vault Overview</h3>
+                    <p className="tiny" style={{ marginBottom: 0 }}>
+                      Use this page as your filing guide: controller access goes to <strong>Access Systems</strong>, SaaS and online services go to <strong>Web Services</strong>, infrastructure reference goes to <strong>Network & WiFi Docs</strong>, and recorder or site mapping goes to <strong>CCTV Systems</strong>.
+                    </p>
+                  </div>
+                  <div className="vault-overview-aside">
+                    <span>Workspace Rule</span>
+                    <strong>One record in one correct section.</strong>
+                  </div>
+                </div>
+                <div className="vault-guide-grid vault-guide-grid-simple" style={{ marginBottom: 12 }}>
                   <button className="vault-guide-card" onClick={() => setVaultTab("accounts")}>
-                    <em className="vault-guide-count">{vaultAccounts.length}</em>
+                    <div className="vault-guide-card-top">
+                      <span className="vault-guide-icon"><Shield size={18} /></span>
+                      <em className="vault-guide-count">{vaultAccounts.length}</em>
+                    </div>
                     <strong>Access Systems</strong>
-                    <span>Printers, MikroTik, UniFi, WiFi admin, CCTV admin</span>
+                    <span>Printers, routers, WiFi, admin systems</span>
                   </button>
                   <button className="vault-guide-card" onClick={() => setVaultTab("credentials")}>
-                    <em className="vault-guide-count">{vaultCredentials.length}</em>
+                    <div className="vault-guide-card-top">
+                      <span className="vault-guide-icon"><Monitor size={18} /></span>
+                      <em className="vault-guide-count">{vaultCredentials.length}</em>
+                    </div>
                     <strong>Web Services</strong>
-                    <span>Twinkl, Gmail, HostGator, WordPress, Telegram</span>
+                    <span>Email, SaaS, websites, Telegram</span>
                   </button>
                   <button className="vault-guide-card" onClick={() => setVaultTab("network")}>
-                    <em className="vault-guide-count">{vaultNetworkDocs.length}</em>
+                    <div className="vault-guide-card-top">
+                      <span className="vault-guide-icon"><Wifi size={18} /></span>
+                      <em className="vault-guide-count">{vaultNetworkDocs.length}</em>
+                    </div>
                     <strong>Network & WiFi Docs</strong>
-                    <span>Topology, VLAN, AP map, ISP details, config backups</span>
+                    <span>Topology, ISP, WiFi and config docs</span>
                   </button>
                   <button className="vault-guide-card" onClick={() => setVaultTab("cctv")}>
-                    <em className="vault-guide-count">{vaultCctvRecords.length}</em>
+                    <div className="vault-guide-card-top">
+                      <span className="vault-guide-icon"><Camera size={18} /></span>
+                      <em className="vault-guide-count">{vaultCctvRecords.length}</em>
+                    </div>
                     <strong>CCTV Systems</strong>
-                    <span>Recorder links, site map, camera area, retention, reviews</span>
+                    <span>Recorder access, review, retention</span>
                   </button>
                   <button className="vault-guide-card" onClick={() => setVaultTab("design")}>
-                    <em className="vault-guide-count">{vaultDesignLinks.length}</em>
+                    <div className="vault-guide-card-top">
+                      <span className="vault-guide-icon"><FileText size={18} /></span>
+                      <em className="vault-guide-count">{vaultDesignLinks.length}</em>
+                    </div>
                     <strong>Design Folders</strong>
-                    <span>Drive folders, ownership, review dates, design references</span>
+                    <span>Drive folders and shared references</span>
                   </button>
                 </div>
                 <div className="vault-dashboard-note">
                   <div>
                     <strong>Vault Notice</strong>
-                    <p>Keep each record in one correct section only to avoid duplicate entries. Use the search bar below to scan all IT Vault records in one full-detail list by system name, account, IP, URL, owner, note, or site.</p>
+                    <p>Keep each record in one correct section only to avoid duplicate entries. Use the control queue below when ED asks for urgent updates or missing account details.</p>
+                  </div>
+                  <div className="vault-dashboard-actions">
+                    <button type="button" className="btn-primary btn-small" onClick={() => void copyVaultText("vault-visible-report", vaultVisibleReportText)}>
+                      {vaultCopiedEntryId === "vault-visible-report" ? "Copied Report" : "Copy Visible Report"}
+                    </button>
+                    <button type="button" className="tab btn-small" onClick={() => void copyVaultText("vault-review-report", vaultNeedsReviewReportText)}>
+                      {vaultCopiedEntryId === "vault-review-report" ? "Copied Queue" : "Copy Review Queue"}
+                    </button>
                   </div>
                 </div>
-                <div className="vault-section-head" style={{ marginTop: 16 }}>
-                  <div>
-                    <h3 className="section-title" style={{ margin: 0 }}>Search All IT Vault Data</h3>
-                    <p className="tiny">Everything from Access Systems, Web Services, Design Folders, Network & WiFi Docs, and CCTV Systems is listed here.</p>
-                  </div>
-                  <span className="vault-section-count">{vaultSearchResults.length} records</span>
+                <div className="vault-control-summary-grid">
+                  <article className="vault-control-summary-card">
+                    <span>Needs Review</span>
+                    <strong>{vaultNeedsReviewItems.length}</strong>
+                    <p>Past-due review dates and old password records.</p>
+                  </article>
+                  <article className="vault-control-summary-card">
+                    <span>Missing Info</span>
+                    <strong>{vaultMissingInfoItems.length}</strong>
+                    <p>Records missing owner, password, recovery, or review detail.</p>
+                  </article>
+                  <article className="vault-control-summary-card">
+                    <span>Recent Changes</span>
+                    <strong>{vaultRecentChangeItems.length}</strong>
+                    <p>Latest password updates and review activity across the vault.</p>
+                  </article>
+                  <article className="vault-control-summary-card">
+                    <span>Telegram Records</span>
+                    <strong>{vaultTelegramRecordCount}</strong>
+                    <p>Communication accounts currently stored inside Web Services.</p>
+                  </article>
                 </div>
-                <div className="vault-search-toolbar">
-                  <label className="field vault-search-field">
-                    <span>Search All Records</span>
-                    <div className="vault-search-input-wrap">
-                      <Search size={18} />
-                      <input
-                        className="input"
-                        value={vaultSearchQuery}
-                        onChange={(e) => setVaultSearchQuery(e.target.value)}
-                        placeholder="Search by system, username, IP, URL, owner, note, site..."
-                      />
+                <div className="vault-control-board">
+                  <section className="vault-control-card">
+                    <div className="vault-control-card-head">
+                      <div>
+                        <h4>Needs Review</h4>
+                        <p>Focus on overdue records first.</p>
+                      </div>
+                      <span>{vaultNeedsReviewItems.length}</span>
                     </div>
-                  </label>
+                    <div className="vault-control-list">
+                      {vaultNeedsReviewItems.length ? vaultNeedsReviewItems.slice(0, 5).map((item) => (
+                        <article className="vault-control-list-item" key={item.id}>
+                          <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
+                            <strong>{item.title}</strong>
+                            <span>{item.section}</span>
+                          </button>
+                          <p>{item.summary}</p>
+                          {item.detail ? <small>{item.detail}</small> : null}
+                        </article>
+                      )) : (
+                        <div className="vault-mobile-empty">No overdue review items right now.</div>
+                      )}
+                    </div>
+                  </section>
+                  <section className="vault-control-card">
+                    <div className="vault-control-card-head">
+                      <div>
+                        <h4>Missing Info</h4>
+                        <p>These records should be completed for reporting.</p>
+                      </div>
+                      <span>{vaultMissingInfoItems.length}</span>
+                    </div>
+                    <div className="vault-control-list">
+                      {vaultMissingInfoItems.length ? vaultMissingInfoItems.slice(0, 5).map((item) => (
+                        <article className="vault-control-list-item" key={item.id}>
+                          <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
+                            <strong>{item.title}</strong>
+                            <span>{item.section}</span>
+                          </button>
+                          <p>{item.summary}</p>
+                          {item.detail ? <small>{item.detail}</small> : null}
+                        </article>
+                      )) : (
+                        <div className="vault-mobile-empty">All records have the core fields filled in.</div>
+                      )}
+                    </div>
+                  </section>
+                  <section className="vault-control-card">
+                    <div className="vault-control-card-head">
+                      <div>
+                        <h4>Recent Changes</h4>
+                        <p>Use this to see what changed most recently.</p>
+                      </div>
+                      <span>{vaultRecentChangeItems.length}</span>
+                    </div>
+                    <div className="vault-control-list">
+                      {vaultRecentChangeItems.length ? vaultRecentChangeItems.slice(0, 5).map((item) => (
+                        <article className="vault-control-list-item" key={item.id}>
+                          <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
+                            <strong>{item.title}</strong>
+                            <span>{item.section}</span>
+                          </button>
+                          <p>{item.summary}</p>
+                          {item.detail ? <small>{item.detail}</small> : null}
+                        </article>
+                      )) : (
+                        <div className="vault-mobile-empty">No recent change records available yet.</div>
+                      )}
+                    </div>
+                  </section>
                 </div>
-                <div className="vault-search-list">
-                  {vaultSearchResults.length ? vaultSearchResults.map((entry) => (
-                    <article className="vault-search-card" key={entry.id}>
-                      <div className="vault-search-card-head">
-                        <div>
-                          <span className="vault-search-badge">{entry.section}</span>
-                          <h4>{entry.title}</h4>
-                          {entry.subtitle ? <p>{entry.subtitle}</p> : null}
-                        </div>
-                        <button
-                          type="button"
-                          className={`vault-search-copy-btn ${vaultCopiedEntryId === entry.id ? "is-copied" : ""}`}
-                          onClick={() => void copyVaultSearchEntry(entry)}
-                          aria-label={`Copy ${entry.title}`}
-                          title={vaultCopiedEntryId === entry.id ? "Copied" : "Copy record"}
-                        >
-                          <Copy size={16} />
-                        </button>
+                <div className="vault-search-shell">
+                  <div className="vault-section-head" style={{ marginTop: 16 }}>
+                    <div>
+                      <h3 className="section-title" style={{ margin: 0 }}>Search All IT Vault Data</h3>
+                      <p className="tiny">Everything from Access Systems, Web Services, Design Folders, Network & WiFi Docs, and CCTV Systems is listed here.</p>
+                    </div>
+                    <span className="vault-section-count">{vaultSearchResults.length} records</span>
+                  </div>
+                  <div className="vault-search-toolbar">
+                    <label className="field vault-search-field">
+                      <span>Search All Records</span>
+                      <div className="vault-search-input-wrap">
+                        <Search size={18} />
+                        <input
+                          className="input"
+                          value={vaultSearchQuery}
+                          onChange={(e) => setVaultSearchQuery(e.target.value)}
+                          placeholder="Search by system, username, IP, URL, owner, note, site..."
+                        />
                       </div>
-                      <div className="vault-search-grid">
-                        {entry.fields.map((field) => (
-                          <div className="vault-search-item" key={`${entry.id}-${field.label}`}>
-                            <span>{field.label}</span>
-                            {field.link && field.value !== "-" ? (
-                              <strong><a href={field.link} target="_blank" rel="noreferrer">Open Link</a></strong>
-                            ) : (
-                              <strong>{field.value || "-"}</strong>
-                            )}
+                    </label>
+                  </div>
+                  <div className="vault-search-list">
+                    {vaultSearchResults.length ? vaultSearchResults.map((entry) => (
+                      <article className="vault-search-card" key={entry.id}>
+                        <div className="vault-search-card-head">
+                          <div>
+                            <span className="vault-search-badge">{entry.section}</span>
+                            <h4>{entry.title}</h4>
+                            {entry.subtitle ? <p>{entry.subtitle}</p> : null}
                           </div>
-                        ))}
-                      </div>
-                    </article>
-                  )) : (
-                    <div className="vault-mobile-empty">No IT Vault records matched your search.</div>
-                  )}
+                          <button
+                            type="button"
+                            className={`vault-search-copy-btn ${vaultCopiedEntryId === entry.id ? "is-copied" : ""}`}
+                            onClick={() => void copyVaultSearchEntry(entry)}
+                            aria-label={`Copy ${entry.title}`}
+                            title={vaultCopiedEntryId === entry.id ? "Copied" : "Copy record"}
+                          >
+                            <Copy size={16} />
+                          </button>
+                        </div>
+                        <div className="vault-search-grid">
+                          {entry.fields.map((field) => (
+                            <div className="vault-search-item" key={`${entry.id}-${field.label}`}>
+                              <span>{field.label}</span>
+                              {field.link && field.value !== "-" ? (
+                                <strong><a href={field.link} target="_blank" rel="noreferrer">Open Link</a></strong>
+                              ) : (
+                                <strong>{field.value || "-"}</strong>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    )) : (
+                      <div className="vault-mobile-empty">No IT Vault records matched your search.</div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
-
-            {vaultTab !== "dashboard" ? (
-              <div className="vault-main-nav" style={{ marginBottom: 10 }}>
-                {canAccessMenu("vault.dashboard", "vault") ? (
-                  <div className="vault-main-nav-action">
-                    <button className="tab vault-back-tab" onClick={() => setVaultTab("dashboard")}>
-                      Back To Dashboard
-                    </button>
-                  </div>
-                ) : null}
-                <div className="row-actions setup-tabs-row vault-main-tabs">
-                  {canAccessMenu("vault.accounts", "vault") ? (
-                  <button className={`tab ${vaultTab === "accounts" ? "tab-active" : ""}`} onClick={() => setVaultTab("accounts")}>
-                    Access Systems
-                  </button>
-                  ) : null}
-                  {canAccessMenu("vault.credentials", "vault") ? (
-                  <button className={`tab ${vaultTab === "credentials" ? "tab-active" : ""}`} onClick={() => setVaultTab("credentials")}>
-                    Web Services
-                  </button>
-                  ) : null}
-                  {canAccessMenu("vault.design", "vault") ? (
-                  <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>
-                    Design Folders
-                  </button>
-                  ) : null}
-                  {canAccessMenu("vault.network", "vault") ? (
-                  <button className={`tab ${vaultTab === "network" ? "tab-active" : ""}`} onClick={() => setVaultTab("network")}>
-                    Network & WiFi Docs
-                  </button>
-                  ) : null}
-                  {canAccessMenu("vault.cctv", "vault") ? (
-                  <button className={`tab ${vaultTab === "cctv" ? "tab-active" : ""}`} onClick={() => setVaultTab("cctv")}>
-                    CCTV Systems
-                  </button>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
 
             {vaultTab === "accounts" && canAccessMenu("vault.accounts", "vault") && (
               <>
@@ -57890,7 +59327,8 @@ function formatTicketRequestSource(value?: string) {
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>Website Logins</strong> for SaaS and web-based services such as Twinkl, Gmail, Telegram Bot, hosting panel, and domain registrar.<br />
                   Example record: <strong>System</strong> = School Main Email, <strong>Email / Username</strong> = `info@eis-edu.com`,
-                  <strong> Password</strong> = stored credential, <strong>Password Updated Date</strong> = `25-Dec-2024`.
+                  <strong> Password</strong> = stored credential, <strong>Password Updated Date</strong> = `25-Dec-2024`.<br />
+                  For <strong>Telegram user accounts</strong>, keep the record simple: account name, mobile number, link, two-step verification password, recovery email, and short note.
                 </div>
                 <div className="vault-subtabs vault-credential-subtabs">
                   <button
@@ -57913,24 +59351,96 @@ function formatTicketRequestSource(value?: string) {
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
                     {vaultCredentials.length ? vaultCredentials.map((row) => (
                       <article className="vault-mobile-card" key={`vault-credential-mobile-${row.id}`}>
+                        {(() => {
+                          const isTelegram = isTelegramCredentialRecord(row);
+                          const labels = getVaultCredentialLabels(isTelegram);
+                          return (
+                            <>
                         <div className="vault-mobile-card-head">
                           <strong>{row.systemName || "-"}</strong>
                           <span>{formatDate(row.lastUpdated || "-")}</span>
                         </div>
                         <div className="vault-mobile-fields">
-                          <div className="vault-mobile-field"><span>Login URL</span><strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
-                          <div className="vault-mobile-field"><span>Email / Username</span><strong>{row.username || "-"}</strong></div>
-                          <div className="vault-mobile-field"><span>Password</span><strong>{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"}</strong></div>
-                          <div className="vault-mobile-field"><span>2FA / OTP</span><strong>{row.twoFa || "-"}</strong></div>
-                          <div className="vault-mobile-field"><span>Recovery</span><strong>{row.recovery || "-"}</strong></div>
-                          <div className="vault-mobile-field"><span>Password Updated</span><strong>{formatDate(row.lastUpdated || "-")}</strong></div>
-                          <div className="vault-mobile-field vault-mobile-field-wide"><span>Password Hint / Storage Note</span><strong>{row.secretHint || "-"}</strong></div>
+                          <div className="vault-mobile-field vault-mobile-field-wide">
+                            <span>Link</span>
+                            <strong className="vault-link-row">
+                              {row.loginUrl ? (
+                                <a
+                                  href={row.loginUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={isTelegram ? "vault-plain-link" : undefined}
+                                >
+                                  {isTelegram ? row.loginUrl : "Open Link"}
+                                </a>
+                              ) : "-"}
+                            </strong>
+                          </div>
+                          <div className="vault-mobile-field"><span>{labels.username}</span><strong>{row.username || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>{labels.password}</span><strong>{row.password ? (vaultVisiblePasswordId === row.id ? row.password : "••••••••") : (isTelegram ? "Not enabled / not recorded" : "-")}</strong></div>
+                          {!isTelegram ? <div className="vault-mobile-field"><span>{labels.twoFa}</span><strong>{row.twoFa || "-"}</strong></div> : null}
+                          <div className="vault-mobile-field"><span>{labels.recovery}</span><strong>{row.recovery || "-"}</strong></div>
+                          <div className="vault-mobile-field"><span>{labels.lastUpdated}</span><strong>{formatDate(row.lastUpdated || "-")}</strong></div>
+                          <div className="vault-mobile-field"><span>Password Changed</span><strong>{row.passwordHistory?.[0]?.created ? formatDateTime(row.passwordHistory[0].created) : "-"}</strong></div>
+                          {isTelegram ? (
+                            <div className="vault-mobile-field vault-mobile-field-wide">
+                              <span>Logged-in Devices</span>
+                              <div className="vault-telegram-device-list">
+                                {row.telegramDevices?.length ? row.telegramDevices.map((entry) => (
+                                  <article className="vault-telegram-device-item" key={`vault-telegram-mobile-device-${row.id}-${entry.id}`}>
+                                    <strong>{entry.staffName || "-"}</strong>
+                                    <span>{[entry.role, entry.deviceName, entry.status].filter(Boolean).join(" • ") || "-"}</span>
+                                    <small>{entry.lastConfirmed ? `Last confirmed: ${formatDate(entry.lastConfirmed)}` : "Last confirmed: -"}</small>
+                                    {entry.note ? <small>{entry.note}</small> : null}
+                                  </article>
+                                )) : <strong>No staff device recorded yet.</strong>}
+                              </div>
+                            </div>
+                          ) : null}
+                          <div className="vault-mobile-field vault-mobile-field-wide"><span>{labels.secretHint}</span><strong>{row.secretHint || "-"}</strong></div>
                         </div>
                         <div className="vault-mobile-actions">
-                          <button className="tab" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide Password" : "View Password"}</button>
-                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button>
-                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>{t.delete}</button>
+                          <button
+                            className={`tab vault-icon-action ${vaultCopiedEntryId === `vault-credential-link-mobile-${row.id}` ? "tab-active" : ""}`}
+                            type="button"
+                            disabled={!row.loginUrl}
+                            onClick={() => (row.loginUrl ? void copyVaultText(`vault-credential-link-mobile-${row.id}`, row.loginUrl) : undefined)}
+                            aria-label={vaultCopiedEntryId === `vault-credential-link-mobile-${row.id}` ? "Copied link" : "Copy link"}
+                            title={vaultCopiedEntryId === `vault-credential-link-mobile-${row.id}` ? "Copied link" : "Copy link"}
+                          >
+                            <Copy size={18} />
+                          </button>
+                          <button
+                            className="tab vault-icon-action"
+                            disabled={!row.password}
+                            onClick={() => (row.password ? setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id)) : undefined)}
+                            aria-label={vaultVisiblePasswordId === row.id ? "Hide password" : "View password"}
+                            title={vaultVisiblePasswordId === row.id ? "Hide password" : "View password"}
+                          >
+                            {vaultVisiblePasswordId === row.id ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                          <button
+                            className="tab vault-icon-action"
+                            disabled={!isAdmin || busy}
+                            onClick={() => startEditVaultCredential(row)}
+                            aria-label={t.edit}
+                            title={t.edit}
+                          >
+                            <Pencil size={18} />
+                          </button>
+                          <button
+                            className="btn-danger vault-icon-action"
+                            disabled={!isAdmin || busy}
+                            onClick={() => void removeVaultRow("credentials", row.id)}
+                            aria-label={t.delete}
+                            title={t.delete}
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
+                            </>
+                          );
+                        })()}
                       </article>
                     )) : <div className="vault-mobile-empty">No website login records yet.</div>}
                   </div>
@@ -57938,40 +59448,114 @@ function formatTicketRequestSource(value?: string) {
                   <div className="vault-record-grid" style={{ marginTop: 12 }}>
                     {vaultCredentials.length ? vaultCredentials.map((row) => (
                       <article className="vault-record-card" key={`vault-credential-desktop-${row.id}`}>
+                        {(() => {
+                          const isTelegram = isTelegramCredentialRecord(row);
+                          const labels = getVaultCredentialLabels(isTelegram);
+                          return (
+                            <>
                         <div className="vault-record-card-head">
                           <div>
                             <strong>{row.systemName || "-"}</strong>
-                            <p>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "No login URL"}</p>
+                            <p className="vault-link-row">
+                              {row.loginUrl ? (
+                                <a
+                                  href={row.loginUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={isTelegram ? "vault-plain-link" : undefined}
+                                >
+                                  {isTelegram ? row.loginUrl : "Open Link"}
+                                </a>
+                              ) : "No login URL"}
+                            </p>
                           </div>
                           <span>{formatDate(row.lastUpdated || "-")}</span>
                         </div>
                         <div className="vault-record-fields">
                           <div className="vault-record-field">
-                            <span>Email / Username</span>
+                            <span>{labels.username}</span>
                             <strong>{row.username || "-"}</strong>
                           </div>
                           <div className="vault-record-field">
-                            <span>Password</span>
-                            <strong>{vaultVisiblePasswordId === row.id ? (row.password || "-") : "••••••••"}</strong>
+                            <span>{labels.password}</span>
+                            <strong>{row.password ? (vaultVisiblePasswordId === row.id ? row.password : "••••••••") : (isTelegram ? "Not enabled / not recorded" : "-")}</strong>
                           </div>
+                          {!isTelegram ? (
+                            <div className="vault-record-field">
+                              <span>{labels.twoFa}</span>
+                              <strong>{row.twoFa || "-"}</strong>
+                            </div>
+                          ) : null}
                           <div className="vault-record-field">
-                            <span>2FA / OTP</span>
-                            <strong>{row.twoFa || "-"}</strong>
+                            <span>Password Changed</span>
+                            <strong>{row.passwordHistory?.[0]?.created ? formatDateTime(row.passwordHistory[0].created) : "-"}</strong>
                           </div>
+                          {isTelegram ? (
+                            <div className="vault-record-field vault-record-field-wide">
+                              <span>Logged-in Devices</span>
+                              <div className="vault-telegram-device-list">
+                                {row.telegramDevices?.length ? row.telegramDevices.map((entry) => (
+                                  <article className="vault-telegram-device-item" key={`vault-telegram-desktop-device-${row.id}-${entry.id}`}>
+                                    <strong>{entry.staffName || "-"}</strong>
+                                    <span>{[entry.role, entry.deviceName, entry.status].filter(Boolean).join(" • ") || "-"}</span>
+                                    <small>{entry.lastConfirmed ? `Last confirmed: ${formatDate(entry.lastConfirmed)}` : "Last confirmed: -"}</small>
+                                    {entry.note ? <small>{entry.note}</small> : null}
+                                  </article>
+                                )) : <strong>No staff device recorded yet.</strong>}
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="vault-record-field vault-record-field-wide">
-                            <span>Password Hint / Storage Note</span>
+                            <span>{labels.secretHint}</span>
                             <strong>{row.secretHint || "-"}</strong>
                           </div>
                           <div className="vault-record-field vault-record-field-wide">
-                            <span>Recovery</span>
+                            <span>{labels.recovery}</span>
                             <strong>{row.recovery || "-"}</strong>
                           </div>
                         </div>
                         <div className="vault-record-actions">
-                          <button className="tab" onClick={() => setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisiblePasswordId === row.id ? "Hide Password" : "View Password"}</button>
-                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultCredential(row)}>{t.edit}</button>
-                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("credentials", row.id)}>{t.delete}</button>
+                          <button
+                            className={`tab vault-icon-action ${vaultCopiedEntryId === `vault-credential-link-desktop-${row.id}` ? "tab-active" : ""}`}
+                            type="button"
+                            disabled={!row.loginUrl}
+                            onClick={() => (row.loginUrl ? void copyVaultText(`vault-credential-link-desktop-${row.id}`, row.loginUrl) : undefined)}
+                            aria-label={vaultCopiedEntryId === `vault-credential-link-desktop-${row.id}` ? "Copied link" : "Copy link"}
+                            title={vaultCopiedEntryId === `vault-credential-link-desktop-${row.id}` ? "Copied link" : "Copy link"}
+                          >
+                            <Copy size={18} />
+                          </button>
+                          <button
+                            className="tab vault-icon-action"
+                            disabled={!row.password}
+                            onClick={() => (row.password ? setVaultVisiblePasswordId((prev) => (prev === row.id ? null : row.id)) : undefined)}
+                            aria-label={vaultVisiblePasswordId === row.id ? "Hide password" : "View password"}
+                            title={vaultVisiblePasswordId === row.id ? "Hide password" : "View password"}
+                          >
+                            {vaultVisiblePasswordId === row.id ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                          <button
+                            className="tab vault-icon-action"
+                            disabled={!isAdmin || busy}
+                            onClick={() => startEditVaultCredential(row)}
+                            aria-label={t.edit}
+                            title={t.edit}
+                          >
+                            <Pencil size={18} />
+                          </button>
+                          <button
+                            className="btn-danger vault-icon-action"
+                            disabled={!isAdmin || busy}
+                            onClick={() => void removeVaultRow("credentials", row.id)}
+                            aria-label={t.delete}
+                            title={t.delete}
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
+                            </>
+                          );
+                        })()}
                       </article>
                     )) : <div className="vault-mobile-empty">No website login records yet.</div>}
                   </div>
@@ -57981,31 +59565,126 @@ function formatTicketRequestSource(value?: string) {
                   <h4>{editingVaultCredentialId ? "Edit Web Service Record" : "Register Web Service Record"}</h4>
                   <p>{editingVaultCredentialId ? "Update the selected login record, then save it back to the list." : "Add a new website or service login record here."}</p>
                 </div>
+                {vaultCredentialFormIsTelegram ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 14,
+                      borderRadius: 16,
+                      border: "1px solid rgba(94, 126, 173, 0.4)",
+                      background: "linear-gradient(180deg, rgba(31, 52, 83, 0.78), rgba(23, 39, 63, 0.88))",
+                    }}
+                  >
+                    <strong style={{ display: "block", marginBottom: 6 }}>Telegram record guidance</strong>
+                    <div className="tiny" style={{ margin: 0 }}>
+                      Follow your old record style: mobile number, link, two-step verification password, recovery email, and a short note.
+                      Password change history is still saved automatically when you update the password.
+                    </div>
+                  </div>
+                ) : null}
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>System / Account Name</span><input className="input" value={vaultCredentialForm.systemName} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="School Main Email / Telegram Bot / Hosting Panel" /></label>
-                  <label className="field"><span>Login URL</span><input className="input" value={vaultCredentialForm.loginUrl} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder="https://mail.google.com/ or other login page" /></label>
-                  <label className="field"><span>Email / Username</span><input className="input" value={vaultCredentialForm.username} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, username: e.target.value }))} placeholder="info@eis-edu.com" /></label>
+                  <label className="field"><span>Login URL</span><input className="input" value={vaultCredentialForm.loginUrl} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, loginUrl: e.target.value }))} placeholder={vaultCredentialFormIsTelegram ? "https://t.me/... or Telegram profile link" : "https://mail.google.com/ or other login page"} /></label>
+                  <label className="field"><span>{vaultCredentialFormLabels.username}</span><input className="input" value={vaultCredentialForm.username} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, username: e.target.value }))} placeholder={vaultCredentialFormIsTelegram ? "+855 87 456 776" : "info@eis-edu.com"} /></label>
                   <label className="field">
-                    <span>Password</span>
+                    <span>{vaultCredentialFormLabels.password}</span>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <input
                         className="input"
                         type={vaultCredentialFormPasswordVisible ? "text" : "password"}
                         value={vaultCredentialForm.password}
                         onChange={(e) => setVaultCredentialForm((f) => ({ ...f, password: e.target.value }))}
-                        placeholder="Website / email password"
+                        placeholder={vaultCredentialFormIsTelegram ? "Telegram two-step verification password" : "Website / email password"}
                       />
                       <button type="button" className="tab btn-small" onClick={() => setVaultCredentialFormPasswordVisible((v) => !v)}>
                         {vaultCredentialFormPasswordVisible ? "Hide" : "Show"}
                       </button>
                     </div>
                   </label>
-                  <label className="field"><span>Password Hint / Storage Note</span><input className="input" value={vaultCredentialForm.secretHint} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, secretHint: e.target.value }))} placeholder="Optional: where backup code or sealed note is stored" /></label>
-                  <label className="field"><span>2FA / OTP</span><input className="input" value={vaultCredentialForm.twoFa} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, twoFa: e.target.value }))} placeholder="App, phone number, authenticator..." /></label>
-                  <label className="field"><span>Recovery Email / Phone</span><input className="input" value={vaultCredentialForm.recovery} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, recovery: e.target.value }))} /></label>
-                  <label className="field"><span>Password Updated Date</span><input type="date" className="input" value={vaultCredentialForm.lastUpdated} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, lastUpdated: e.target.value }))} /></label>
-                  <label className="field field-wide"><span>Note</span><textarea className="textarea" value={vaultCredentialForm.note} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, note: e.target.value }))} placeholder="Example: Password updated on 25-Dec-2024 by Admin." /></label>
+                  <label className="field"><span>{vaultCredentialFormLabels.secretHint}</span><input className="input" value={vaultCredentialForm.secretHint} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, secretHint: e.target.value }))} placeholder={vaultCredentialFormIsTelegram ? "Campus 1 school Telegram account." : "Optional: where backup code or sealed note is stored"} /></label>
+                  {!vaultCredentialFormIsTelegram ? <label className="field"><span>{vaultCredentialFormLabels.twoFa}</span><input className="input" value={vaultCredentialForm.twoFa} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, twoFa: e.target.value }))} placeholder="App, phone number, authenticator..." /></label> : null}
+                  <label className="field"><span>{vaultCredentialFormLabels.recovery}</span><input className="input" value={vaultCredentialForm.recovery} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, recovery: e.target.value }))} placeholder={vaultCredentialFormIsTelegram ? "info@eis-edu.com" : ""} /></label>
+                  <label className="field"><span>{vaultCredentialFormLabels.lastUpdated}</span><input type="date" className="input" value={vaultCredentialForm.lastUpdated} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, lastUpdated: e.target.value }))} /></label>
+                  <label className="field field-wide"><span>{vaultCredentialFormIsTelegram ? "Extra Note" : "Note"}</span><textarea className="textarea" value={vaultCredentialForm.note} onChange={(e) => setVaultCredentialForm((f) => ({ ...f, note: e.target.value }))} placeholder={vaultCredentialFormIsTelegram ? "Optional extra note" : "Example: Password updated on 25-Dec-2024 by Admin."} /></label>
                 </div>
+                {vaultCredentialFormIsTelegram ? (
+                  <div className="panel vault-telegram-device-panel" style={{ marginTop: 12, padding: 14 }}>
+                    <div className="panel-row" style={{ marginBottom: 10 }}>
+                      <div>
+                        <strong>Logged-in Staff Devices</strong>
+                        <div className="tiny">Record every staff device that is currently logged in to this Telegram account.</div>
+                      </div>
+                      <button type="button" className="tab btn-small" onClick={addVaultTelegramDeviceRow}>Add Device</button>
+                    </div>
+                    <div className="vault-telegram-device-editor">
+                      {vaultCredentialTelegramDevices.length ? vaultCredentialTelegramDevices.map((entry, index) => (
+                        <article className="vault-telegram-device-editor-card" key={`vault-telegram-device-editor-${entry.id}`}>
+                          <div className="vault-telegram-device-editor-head">
+                            <strong>Device Entry {index + 1}</strong>
+                            <button type="button" className="tab btn-small vault-telegram-device-remove" onClick={() => removeVaultTelegramDeviceRow(entry.id)}>Remove</button>
+                          </div>
+                          <div className="vault-telegram-device-editor-grid">
+                            <label className="field">
+                              <span>Staff Name</span>
+                              <input className="input" value={entry.staffName} onChange={(e) => updateVaultTelegramDeviceRow(entry.id, "staffName", e.target.value)} placeholder="Dara" />
+                            </label>
+                            <label className="field">
+                              <span>Role</span>
+                              <input className="input" value={entry.role || ""} onChange={(e) => updateVaultTelegramDeviceRow(entry.id, "role", e.target.value)} placeholder="IT Officer" />
+                            </label>
+                            <label className="field">
+                              <span>Device</span>
+                              <input className="input" value={entry.deviceName} onChange={(e) => updateVaultTelegramDeviceRow(entry.id, "deviceName", e.target.value)} placeholder="iPhone 13 / MacBook Air" />
+                            </label>
+                            <label className="field">
+                              <span>Status</span>
+                              <select className="input" value={entry.status} onChange={(e) => updateVaultTelegramDeviceRow(entry.id, "status", e.target.value)}>
+                                <option value="Active">Active</option>
+                                <option value="Need Check">Need Check</option>
+                                <option value="Removed">Removed</option>
+                              </select>
+                            </label>
+                            <label className="field">
+                              <span>Last Confirmed</span>
+                              <input type="date" className="input" value={entry.lastConfirmed || ""} onChange={(e) => updateVaultTelegramDeviceRow(entry.id, "lastConfirmed", e.target.value)} />
+                            </label>
+                            <label className="field field-wide">
+                              <span>Note</span>
+                              <input className="input" value={entry.note || ""} onChange={(e) => updateVaultTelegramDeviceRow(entry.id, "note", e.target.value)} placeholder="Main school Telegram operator" />
+                            </label>
+                          </div>
+                        </article>
+                      )) : (
+                        <div className="vault-mobile-empty">No staff device added yet.</div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+                {vaultCredentialPasswordHistory.length ? (
+                  <div className="panel" style={{ marginTop: 12, padding: 14 }}>
+                    <div className="panel-row" style={{ marginBottom: 10 }}>
+                      <div>
+                        <strong>Password Change History</strong>
+                        <div className="tiny">A new record is added automatically whenever the saved password changes.</div>
+                      </div>
+                    </div>
+                    <div className="vault-cctv-password-history-list">
+                      {vaultCredentialPasswordHistory.map((entry) => (
+                        <article className="vault-cctv-password-history-card" key={`vault-credential-passhist-${entry.id}`}>
+                          <div className="vault-cctv-password-history-head">
+                            <strong>{formatDateTime(entry.created || entry.date || "-")}</strong>
+                          </div>
+                          <div className="vault-cctv-password-history-grid">
+                            <div><span>Old</span><strong>{entry.oldPassword || "-"}</strong></div>
+                            <div><span>New</span><strong>{entry.newPassword || "-"}</strong></div>
+                            <div><span>Changed By</span><strong>{entry.changedBy || "-"}</strong></div>
+                            <div className="vault-cctv-password-history-note"><span>Note</span><strong>{entry.note || "-"}</strong></div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="asset-actions">
                   <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultCredential}>{editingVaultCredentialId ? "Update Website Login" : "Add Website Login"}</button>
                   {editingVaultCredentialId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultCredentialForm}>Cancel Edit</button> : null}
@@ -58341,6 +60020,7 @@ function formatTicketRequestSource(value?: string) {
                 ) : null}
               </>
             )}
+            </div>
           </section>
           )}
           </>
