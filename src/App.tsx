@@ -51791,8 +51791,8 @@ function formatTicketRequestSource(value?: string) {
             </div>
             {isPhoneView ? (
               <div className="report-mobile-only report-card-list">
-                {sortedMaintenanceRows.length ? (
-                  sortedMaintenanceRows.map((row) => (
+                        {filteredMaintenanceRows.length ? (
+                          filteredMaintenanceRows.map((row) => (
                     <article key={`maint-history-mobile-${row.rowId}`} className="report-card maintenance-mobile-asset-card">
                       <div className="maintenance-mobile-asset-head">
                         <span className="tiny report-card-sub">
@@ -51870,8 +51870,8 @@ function formatTicketRequestSource(value?: string) {
               </div>
             ) : (
               <div className="maintenance-history-grid maintenance-history-grid-desktop">
-                {sortedMaintenanceRows.length ? (
-                  sortedMaintenanceRows.map((row) => (
+                      {filteredMaintenanceRows.length ? (
+                        filteredMaintenanceRows.map((row) => (
                     <article
                       key={`maint-history-desktop-${row.rowId}`}
                       className={`maintenance-history-card maintenance-history-card-desktop ${maintenanceHistoryRowClass(
