@@ -5744,6 +5744,8 @@ function normalizeStaffUsers(input) {
     const campus = campuses[0] || normalizeCampusInput(row.campus);
     const email = toText(row.email).toLowerCase();
     const telegramChatId = toText(row.telegramChatId);
+    const photo = toText(row.photo);
+    const sex = toText(row.sex).toLowerCase() === "female" ? "Female" : "Male";
     if (!fullName || !position) continue;
     if (email) {
       if (usedEmails.has(email)) continue;
@@ -5759,6 +5761,8 @@ function normalizeStaffUsers(input) {
       campuses,
       email,
       telegramChatId,
+      photo,
+      sex,
     });
   }
   return out;
@@ -5859,10 +5863,12 @@ function validateStaffUser(body) {
   const campus = campuses[0] || normalizeCampusInput(body.campus);
   const email = toText(body.email).toLowerCase();
   const telegramChatId = toText(body.telegramChatId);
+  const photo = toText(body.photo);
+  const sex = toText(body.sex).toLowerCase() === "female" ? "Female" : "Male";
   if (!fullName) return "Staff full name is required";
   if (!position) return "Position is required";
   if (!campuses.length) return "At least one campus is required";
-  return { fullName, position, campus, campuses, email, telegramChatId };
+  return { fullName, position, campus, campuses, email, telegramChatId, photo, sex };
 }
 
 function validateTicket(body) {
@@ -6963,6 +6969,8 @@ const server = http.createServer(async (req, res) => {
         campuses: cleaned.campuses,
         email: cleaned.email,
         telegramChatId: cleaned.telegramChatId,
+        photo: cleaned.photo,
+        sex: cleaned.sex,
       };
       const nextUsers = [user, ...users];
       db.settings = {

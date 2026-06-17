@@ -457,10 +457,12 @@ type StaffUser = {
   id: number;
   fullName: string;
   position: string;
+  sex?: "Male" | "Female";
   campus: string;
   campuses?: string[];
   email: string;
   telegramChatId?: string;
+  photo?: string;
 };
 type InventoryItem = {
   id: number;
@@ -2133,6 +2135,21 @@ function staffCampusSummary(user: StaffUser) {
   return campuses.map((campus) => CAMPUS_CODE[campus] || campus).join(", ");
 }
 
+function staffInitials(name = "") {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  const letters = words.slice(0, 2).map((word) => word[0] || "").join("");
+  return letters.toUpperCase() || "?";
+}
+
+function normalizeStaffSex(value?: unknown): "Male" | "Female" {
+  return String(value || "").trim().toLowerCase() === "female" ? "Female" : "Male";
+}
+
+function staffSexTemplateLabel(sex?: unknown) {
+  return normalizeStaffSex(sex) === "Female" ? "Women" : "Men";
+}
+
 function staffUsersForCampus(users: StaffUser[], campusName = "", selectedName = "") {
   const sortUsersByName = (list: StaffUser[]) =>
     [...list].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || "")));
@@ -2148,6 +2165,43 @@ function staffUsersForCampus(users: StaffUser[], campusName = "", selectedName =
     if (selectedUser) return sortUsersByName([...filtered, selectedUser]);
   }
   return sortUsersByName(filtered);
+}
+
+function renderStaffAvatar(photo: string | undefined, fullName: string, sex: unknown, className = "staff-user-avatar") {
+  if (String(photo || "").trim()) {
+    return <img loading="lazy" decoding="async" src={String(photo || "").trim()} alt={fullName} className={className} />;
+  }
+  const normalizedSex = normalizeStaffSex(sex);
+  return (
+    <div
+      className={`${className} staff-user-avatar-fallback staff-user-avatar-template ${
+        normalizedSex === "Female" ? "staff-user-avatar-template-female" : "staff-user-avatar-template-male"
+      }`}
+      aria-label={`${staffSexTemplateLabel(normalizedSex)} template`}
+      title={`${staffSexTemplateLabel(normalizedSex)} template`}
+    >
+      <span className="staff-user-avatar-template-badge">{staffSexTemplateLabel(normalizedSex)}</span>
+      <strong>{staffInitials(fullName)}</strong>
+    </div>
+  );
+}
+
+function renderStaffNameWithAvatar(
+  users: StaffUser[],
+  fullName: string | undefined,
+  className = "staff-inline-chip",
+  emptyLabel = "-"
+) {
+  const name = String(fullName || "").trim();
+  if (!name) return <span>{emptyLabel}</span>;
+  const matched = users.find((user) => user.fullName === name);
+  if (!matched) return <span>{name}</span>;
+  return (
+    <span className={className}>
+      {renderStaffAvatar(matched.photo, matched.fullName, matched.sex, "asset-picker-thumb")}
+      <span>{matched.fullName}</span>
+    </span>
+  );
 }
 
 const ASSET_STATUS_OPTIONS = [
@@ -3362,7 +3416,12 @@ function readUserFallback(): StaffUser[] {
           id: Number.isFinite(parsedId) && parsedId > 0 ? parsedId : Date.now() + i,
           fullName: String(user.fullName || "").trim(),
           position: String(user.position || "").trim(),
+          sex: normalizeStaffSex(user.sex),
+          campus: String(user.campus || "").trim(),
+          campuses: Array.isArray(user.campuses) ? normalizeStaffCampuses(user.campuses) : [],
           email: String(user.email || "").trim().toLowerCase(),
+          telegramChatId: String(user.telegramChatId || "").trim(),
+          photo: String(user.photo || "").trim(),
         } as StaffUser;
       })
       .filter((u) => u.fullName && u.position);
@@ -5931,6 +5990,16 @@ async function optimizePhotoDataUrl(file: File, options?: { timestampText?: stri
   return compressImageDataUrl(source, 1280, 1280, 0.75, String(options?.timestampText || "").trim());
 }
 
+async function uploadPhotoDataUrl(photo: string, folder: string) {
+  const res = await requestJson<{ photo?: string; error?: string }>("/api/upload-photo", {
+    method: "POST",
+    body: JSON.stringify({ photo, folder }),
+  });
+  const saved = String(res.photo || "").trim();
+  if (!saved) throw new Error(res.error || "Photo upload failed.");
+  return saved;
+}
+
 async function cropImageDataUrl(
   dataUrl: string,
   crop: { x: number; y: number; width: number; height: number }
@@ -7437,6 +7506,7 @@ type SearchableMultiSelectOption = {
   label: string;
   description?: string;
   photo?: string;
+  sex?: "Male" | "Female";
   searchText?: string;
 };
 type SearchableMultiSelectPickerProps = {
@@ -7790,7 +7860,7 @@ function SearchableMultiSelectPicker({
                     checked={selectedValues.includes(opt.value)}
                     onChange={(e) => onToggleValue(opt.value, e.target.checked)}
                   />
-                  {opt.photo ? <img src={opt.photo} alt={opt.label} className="asset-picker-thumb" /> : null}
+                  {(opt.photo || opt.sex) ? renderStaffAvatar(opt.photo, opt.label, opt.sex, "asset-picker-thumb") : null}
                   <span className={opt.description ? "parent-asset-picker-option-content asset-picker-option-label" : "asset-picker-option-label"}>
                     <span className="parent-asset-picker-option-title">{opt.label}</span>
                     {opt.description ? (
@@ -7854,7 +7924,7 @@ function UserPicker({
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return users;
     return users.filter((u) =>
-      `${u.fullName} ${u.position} ${staffCampusList(u).join(" ")} ${u.email || ""}`.toLowerCase().includes(q)
+      `${u.fullName} ${u.position} ${normalizeStaffSex(u.sex)} ${staffCampusList(u).join(" ")} ${u.email || ""}`.toLowerCase().includes(q)
     );
   }, [users, deferredSearch]);
 
@@ -7878,6 +7948,7 @@ function UserPicker({
       >
         {selected ? (
           <span className="asset-picker-selected">
+            {renderStaffAvatar(selected.photo, selected.fullName, selected.sex, "asset-picker-thumb")}
             <span>{selected.fullName} - {selected.position}{staffCampusSummary(selected) ? ` • ${staffCampusSummary(selected)}` : ""}</span>
           </span>
         ) : (
@@ -7922,6 +7993,7 @@ function UserPicker({
                   }}
                   onClick={() => selectUser(u.fullName)}
                 >
+                  {renderStaffAvatar(u.photo, u.fullName, u.sex, "asset-picker-thumb")}
                   <span>{u.fullName} - {u.position}{staffCampusSummary(u) ? ` • ${staffCampusSummary(u)}` : ""}</span>
                 </button>
               ))
@@ -11793,10 +11865,13 @@ export default function App() {
   const [userForm, setUserForm] = useState({
     fullName: "",
     position: "",
+    sex: "Male" as "Male" | "Female",
     campuses: [CAMPUS_LIST[0]],
     email: "",
     telegramChatId: "",
+    photo: "",
   });
+  const [userPhotoFileKey, setUserPhotoFileKey] = useState(0);
   const [userSetupSearch, setUserSetupSearch] = useState("");
   const [newItemTypeForm, setNewItemTypeForm] = useState({
     category: "IT",
@@ -11835,6 +11910,7 @@ export default function App() {
       const haystack = [
         user.fullName,
         user.position,
+        normalizeStaffSex(user.sex),
         ...staffCampusList(user),
         user.email || "",
         user.telegramChatId || "",
@@ -13691,6 +13767,20 @@ export default function App() {
       )
     ).sort((a, b) => a.localeCompare(b));
   }, [assets, assetCampusMultiFilter]);
+  const assetAssignedToFilterPickerOptions = useMemo(
+    () =>
+      assetAssignedToFilterOptions.map((name) => {
+        const user = users.find((row) => String(row.fullName || "").trim() === name) || null;
+        return {
+          value: name,
+          label: name,
+          photo: user?.photo || "",
+          sex: user ? normalizeStaffSex(user.sex) : undefined,
+          description: user ? [user.position, staffCampusSummary(user)].filter(Boolean).join(" • ") : "",
+        };
+      }),
+    [assetAssignedToFilterOptions, users]
+  );
   const applyMultiFilterSelection = useCallback(
     (
       prev: string[],
@@ -21204,6 +21294,8 @@ export default function App() {
     const campus = campuses[0] || "";
     const email = userForm.email.trim().toLowerCase();
     const telegramChatId = userForm.telegramChatId.trim();
+    const photo = String(userForm.photo || "").trim();
+    const sex = normalizeStaffSex(userForm.sex);
     if (!fullName || !position || !campus) return;
 
     const emailTaken = email
@@ -21220,7 +21312,7 @@ export default function App() {
       if (editingUserId !== null) {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>(`/api/staff-users/${editingUserId}`, {
           method: "PATCH",
-          body: JSON.stringify({ fullName, position, campus, campuses, email, telegramChatId }),
+          body: JSON.stringify({ fullName, position, sex, campus, campuses, email, telegramChatId, photo }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -21229,7 +21321,7 @@ export default function App() {
         } else {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, campus, campuses, email, telegramChatId } : u
+              u.id === editingUserId ? { ...u, fullName, position, sex, campus, campuses, email, telegramChatId, photo } : u
             )
           );
         }
@@ -21237,7 +21329,7 @@ export default function App() {
       } else {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>("/api/staff-users", {
           method: "POST",
-          body: JSON.stringify({ fullName, position, campus, campuses, email, telegramChatId }),
+          body: JSON.stringify({ fullName, position, sex, campus, campuses, email, telegramChatId, photo }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -21250,6 +21342,8 @@ export default function App() {
             campuses: normalizeStaffCampuses(res.user.campuses || campuses),
             email: String(res.user.email || "").trim().toLowerCase(),
             telegramChatId: String(res.user.telegramChatId || "").trim(),
+            photo: String(res.user.photo || "").trim(),
+            sex: normalizeStaffSex(res.user.sex),
           };
           setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
         } else {
@@ -21261,23 +21355,27 @@ export default function App() {
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         if (editingUserId !== null) {
-          setUsers((prev) =>
-            prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, campus, campuses, email, telegramChatId } : u
-            )
+          const nextUsers = users.map((u) =>
+            u.id === editingUserId ? { ...u, fullName, position, sex, campus, campuses, email, telegramChatId, photo } : u
           );
+          setUsers(nextUsers);
+          writeUserFallback(nextUsers);
           setEditingUserId(null);
         } else {
           const localUser: StaffUser = {
             id: Date.now() + Math.floor(Math.random() * 1000),
             fullName,
             position,
+            sex,
             campus,
             campuses,
             email,
             telegramChatId,
+            photo,
           };
-          setUsers((prev) => [localUser, ...prev]);
+          const nextUsers = [localUser, ...users];
+          setUsers(nextUsers);
+          writeUserFallback(nextUsers);
         }
         resetUserSetupForm();
         setUserSetupModalOpen(false);
@@ -21285,6 +21383,27 @@ export default function App() {
         return;
       }
       setError(err instanceof Error ? err.message : "Failed to save user");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onUserPhotoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!requireAdminAction()) {
+      setUserPhotoFileKey((n) => n + 1);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const optimized = await optimizePhotoDataUrl(file);
+      const photo = await uploadPhotoDataUrl(optimized, "staff");
+      setUserForm((f) => ({ ...f, photo }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload staff photo");
+      setUserPhotoFileKey((n) => n + 1);
     } finally {
       setBusy(false);
     }
@@ -22155,7 +22274,8 @@ export default function App() {
 
   function resetUserSetupForm() {
     setEditingUserId(null);
-    setUserForm({ fullName: "", position: "", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "" });
+    setUserForm({ fullName: "", position: "", sex: "Male", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "", photo: "" });
+    setUserPhotoFileKey((n) => n + 1);
   }
 
   function closeUserSetupModal() {
@@ -22173,10 +22293,13 @@ export default function App() {
     setUserForm({
       fullName: user.fullName,
       position: user.position,
+      sex: normalizeStaffSex(user.sex),
       campuses: staffCampusList(user).length ? staffCampusList(user) : [CAMPUS_LIST[0]],
       email: user.email,
       telegramChatId: user.telegramChatId || "",
+      photo: user.photo || "",
     });
+    setUserPhotoFileKey((n) => n + 1);
     setUserSetupModalOpen(true);
   }
 
@@ -28981,7 +29104,7 @@ export default function App() {
                       </div>
                       <div className="asset-detail-hero-summary-item">
                         <span>{t.user}</span>
-                        <strong>{detailAsset.assignedTo || "-"}</strong>
+                        <strong>{renderStaffNameWithAvatar(users, detailAsset.assignedTo, "staff-inline-chip staff-inline-chip-strong")}</strong>
                       </div>
                       <div className="asset-detail-hero-summary-item">
                         <span>Brand / Model</span>
@@ -41257,7 +41380,7 @@ function formatTicketRequestSource(value?: string) {
                   {!hideAssetAssignedStaffFilter ? (
                     <SearchableMultiSelectPicker
                       summary={assetAssignedFilterSummary}
-                      options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
+                      options={assetAssignedToFilterPickerOptions}
                       selectedValues={assetAssignedToMultiFilter}
                       allOptionLabel={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
                       allOptionChecked={assetAssignedToMultiFilter.includes("ALL")}
@@ -41315,7 +41438,7 @@ function formatTicketRequestSource(value?: string) {
                                   <div><strong>Qty:</strong> {furnitureAssetQuantity(asset) || 1}</div>
                                 ) : null}
                                 {!assetListFurnitureOnly && String(asset.assignedTo || "").trim() ? (
-                                  <div><strong>Assigned Staff:</strong> {asset.assignedTo}</div>
+                                  <div><strong>Assigned Staff:</strong> {renderStaffNameWithAvatar(users, asset.assignedTo)}</div>
                                 ) : null}
                               </div>
                             </div>
@@ -41500,7 +41623,7 @@ function formatTicketRequestSource(value?: string) {
                                 assetListFurnitureOnly ? (
                                   <td>{String(asset.photo || "").trim() ? renderAssetPhoto(String(asset.photo || "").trim(), `${asset.assetId}-location`) : "-"}</td>
                                 ) : (
-                                  <td>{asset.assignedTo || "-"}</td>
+                                  <td>{renderStaffNameWithAvatar(users, asset.assignedTo)}</td>
                                 )
                               ) : null}
                               <td>
@@ -41641,7 +41764,7 @@ function formatTicketRequestSource(value?: string) {
                   {!hideAssetAssignedStaffFilter ? (
                     <SearchableMultiSelectPicker
                       summary={assetAssignedFilterSummary}
-                      options={assetAssignedToFilterOptions.map((name) => ({ value: name, label: name }))}
+                      options={assetAssignedToFilterPickerOptions}
                       selectedValues={assetAssignedToMultiFilter}
                       allOptionLabel={lang === "km" ? "អ្នកប្រើទាំងអស់" : "All Assigned Staff"}
                       allOptionChecked={assetAssignedToMultiFilter.includes("ALL")}
@@ -57204,15 +57327,15 @@ function formatTicketRequestSource(value?: string) {
           )}
 
           {tab === "setup" && setupView === "users" && canAccessMenu("setup.users", "setup") && (
-          <section className="panel">
+          <section className="panel user-setup-panel">
             <h2>{t.userSetup}</h2>
-            <div className="asset-actions">
+            <div className="asset-actions user-setup-actions">
               <div className="tiny">{t.manageAssignableUsers}</div>
               <button className="btn-primary" disabled={!isAdmin} onClick={openCreateUserModal}>
                 {t.addUser}
               </button>
             </div>
-            <div className="asset-actions" style={{ marginTop: 12, gap: 12 }}>
+            <div className="asset-actions user-setup-search-row" style={{ marginTop: 12, gap: 12 }}>
               <label className="field user-setup-search-field" style={{ margin: 0 }}>
                 <span>{lang === "km" ? "ស្វែងរកបុគ្គលិក" : "Search Staff"}</span>
                 <input
@@ -57235,23 +57358,55 @@ function formatTicketRequestSource(value?: string) {
             {isPhoneView ? (
               filteredSetupUsers.length ? (
                 <div className="setup-mobile-list" style={{ marginTop: 12 }}>
-                  {filteredSetupUsers.map((u) => (
-                    <article className="setup-mobile-card" key={`user-mobile-${u.id}`}>
-                      <div className="setup-mobile-head">
-                        <strong>{u.fullName}</strong>
-                        <span>{u.position}{staffCampusSummary(u) ? ` • ${staffCampusSummary(u)}` : ""}</span>
-                      </div>
-                      <div className="setup-mobile-grid">
-                        <div><small>{t.campus}</small><strong>{staffCampusList(u).length ? staffCampusList(u).map((campus) => campusLabel(campus)).join(", ") : "-"}</strong></div>
-                        <div className="setup-mobile-wide"><small>{t.email}</small><strong>{u.email || "-"}</strong></div>
-                        <div className="setup-mobile-wide"><small>Telegram Chat ID</small><strong>{u.telegramChatId || "-"}</strong></div>
-                      </div>
-                      <div className="setup-mobile-actions">
-                        <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startEditUser(u)} title={t.edit}>✎</button>
-                        <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteUser(u.id)} title={t.delete}>X</button>
-                      </div>
-                    </article>
-                  ))}
+                  {filteredSetupUsers.map((u) => {
+                    const sexLabel = normalizeStaffSex(u.sex);
+                    const campuses = staffCampusList(u);
+                    const campusText = campuses.length ? campuses.map((campus) => campusLabel(campus)).join(", ") : "-";
+                    return (
+                      <article className="setup-mobile-card staff-user-mobile-card" key={`user-mobile-${u.id}`}>
+                        <div className="staff-user-mobile-hero-card">
+                          <div className="staff-user-mobile-photo-wrap">
+                            {renderStaffAvatar(u.photo, u.fullName, u.sex, "staff-user-avatar staff-user-avatar-hero")}
+                          </div>
+                          <div className="staff-user-mobile-hero-copy">
+                            <div className="staff-user-mobile-eyebrow">Staff</div>
+                            <div className="staff-user-card-copy">
+                              <strong>{u.fullName}</strong>
+                              <span>{u.position || "-"}</span>
+                            </div>
+                            <div className="staff-user-mobile-tags">
+                              <span className="staff-user-mobile-tag">{sexLabel}</span>
+                              <span className="staff-user-mobile-tag staff-user-mobile-tag-campus">{staffCampusSummary(u) || t.allCampuses}</span>
+                            </div>
+                            <div className="staff-user-mobile-summary">
+                              <small>{t.campus}</small>
+                              <strong>{campusText}</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="staff-user-mobile-body">
+                          <div className="staff-user-mobile-detail-grid">
+                            <div className="staff-user-mobile-row staff-user-mobile-field">
+                              <div className="staff-user-mobile-row-copy">
+                                <small>{t.email}</small>
+                                <strong>{u.email || "-"}</strong>
+                              </div>
+                            </div>
+                            <div className="staff-user-mobile-row staff-user-mobile-field">
+                              <div className="staff-user-mobile-row-copy">
+                                <small>Telegram Chat ID</small>
+                                <strong>{u.telegramChatId || "-"}</strong>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="staff-user-mobile-actions-row">
+                            <button className="btn-icon-edit staff-user-mobile-action-btn" disabled={!isAdmin} onClick={() => startEditUser(u)} title={t.edit} aria-label={t.edit}>✎</button>
+                            <button className="btn-danger staff-user-mobile-action-btn" disabled={!isAdmin} onClick={() => deleteUser(u.id)} title={t.delete} aria-label={t.delete}>✕</button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>
@@ -57263,49 +57418,56 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               )
             ) : (
-              <div className="table-wrap setup-user-table-wrap" style={{ marginTop: 12 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>{t.staffFullName}</th>
-                      <th>{t.position}</th>
-                      <th>{t.campus}</th>
-                      <th>{t.email}</th>
-                      <th>Telegram Chat ID</th>
-                      <th>{t.edit}</th>
-                      <th>{t.delete}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredSetupUsers.length ? (
-                      filteredSetupUsers.map((u) => (
-                        <tr key={u.id}>
-                          <td>{u.fullName}</td>
-                          <td>{u.position}</td>
-                          <td>{staffCampusList(u).length ? staffCampusList(u).map((campus) => campusLabel(campus)).join(", ") : "-"}</td>
-                          <td>{u.email || "-"}</td>
-                          <td>{u.telegramChatId || "-"}</td>
-                          <td>
-                            <button className="btn-icon-edit" disabled={!isAdmin} onClick={() => startEditUser(u)} title={t.edit}>
-                              ✎
-                            </button>
-                          </td>
-                          <td><button className="btn-danger" disabled={!isAdmin} onClick={() => deleteUser(u.id)}>X</button></td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7}>
-                          {userSetupSearch.trim()
-                            ? lang === "km"
-                              ? "រកមិនឃើញបុគ្គលិក។"
-                              : "No staff found."
-                            : t.noUsersYet}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="setup-user-desktop-list" style={{ marginTop: 12 }}>
+                {filteredSetupUsers.length ? (
+                  filteredSetupUsers.map((u) => (
+                    <article className="staff-user-desktop-card" key={`user-desktop-${u.id}`}>
+                      <div className="staff-user-desktop-main">
+                        {renderStaffAvatar(u.photo, u.fullName, u.sex, "staff-user-avatar staff-user-avatar-desktop")}
+                        <div className="staff-user-desktop-copy">
+                          <div className="staff-user-desktop-name-row">
+                            <strong>{u.fullName}</strong>
+                            <div className="staff-user-desktop-tags">
+                              <span className="staff-user-desktop-tag">{normalizeStaffSex(u.sex)}</span>
+                              <span className="staff-user-desktop-tag">{staffCampusSummary(u) || t.allCampuses}</span>
+                            </div>
+                          </div>
+                          <span className="staff-user-desktop-position">{u.position || "-"}</span>
+                          <div className="staff-user-desktop-meta">
+                            <div className="staff-user-desktop-meta-item">
+                              <small>{t.campus}</small>
+                              <strong>{staffCampusList(u).length ? staffCampusList(u).map((campus) => campusLabel(campus)).join(", ") : "-"}</strong>
+                            </div>
+                            <div className="staff-user-desktop-meta-item">
+                              <small>{t.email}</small>
+                              <strong>{u.email || "-"}</strong>
+                            </div>
+                            <div className="staff-user-desktop-meta-item">
+                              <small>Telegram Chat ID</small>
+                              <strong>{u.telegramChatId || "-"}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="staff-user-desktop-actions">
+                        <button className="btn-icon-edit staff-user-desktop-action-btn" disabled={!isAdmin} onClick={() => startEditUser(u)} title={t.edit} aria-label={t.edit}>
+                          ✎
+                        </button>
+                        <button className="btn-danger staff-user-desktop-action-btn" disabled={!isAdmin} onClick={() => deleteUser(u.id)} title={t.delete} aria-label={t.delete}>
+                          ✕
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="utility-history-mobile-empty">
+                    {userSetupSearch.trim()
+                      ? lang === "km"
+                        ? "រកមិនឃើញបុគ្គលិក។"
+                        : "No staff found."
+                      : t.noUsersYet}
+                  </div>
+                )}
               </div>
             )}
             {userSetupModalOpen ? (
@@ -57331,6 +57493,54 @@ function formatTicketRequestSource(value?: string) {
                         value={userForm.position}
                         onChange={(e) => setUserForm((f) => ({ ...f, position: e.target.value }))}
                       />
+                    </label>
+                    <label className="field">
+                      <span>Sex</span>
+                      <select
+                        className="input"
+                        value={userForm.sex}
+                        onChange={(e) => setUserForm((f) => ({ ...f, sex: normalizeStaffSex(e.target.value) }))}
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    </label>
+                    <label className="field field-wide">
+                      <span>{t.photo} ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
+                      <input
+                        key={`staff-photo-${userPhotoFileKey}`}
+                        className="input"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => void onUserPhotoFileChange(e)}
+                      />
+                      {userForm.photo ? (
+                        <div className="staff-user-photo-preview">
+                          {renderStaffAvatar(userForm.photo, userForm.fullName || "staff", userForm.sex, "staff-user-avatar staff-user-avatar-preview")}
+                          <div className="staff-user-photo-preview-copy">
+                            <strong>{userForm.fullName || (lang === "km" ? "រូបបុគ្គលិក" : "Staff Photo")}</strong>
+                            <span>{lang === "km" ? "រូបនេះនឹងបង្ហាញក្នុង Staff Setup និង User Picker" : "This will appear in Staff Setup and user pickers."}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="tab"
+                            onClick={() => {
+                              setUserForm((f) => ({ ...f, photo: "" }));
+                              setUserPhotoFileKey((n) => n + 1);
+                            }}
+                          >
+                            {lang === "km" ? "លុបរូប" : "Remove Photo"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="staff-user-photo-preview">
+                          {renderStaffAvatar("", userForm.fullName || "staff", userForm.sex, "staff-user-avatar staff-user-avatar-preview")}
+                          <div className="staff-user-photo-preview-copy">
+                            <strong>{normalizeStaffSex(userForm.sex)} Template</strong>
+                            <span>{lang === "km" ? "ប្រសិនបើមិនទាន់អាប់ឡូដរូប នឹងប្រើ template នេះសិន។" : "This template will be used until a real staff photo is uploaded."}</span>
+                          </div>
+                        </div>
+                      )}
                     </label>
                     <label className="field field-wide">
                       <span>{t.campus}</span>
