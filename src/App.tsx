@@ -9,6 +9,7 @@ import {
   Camera,
   CheckCircle2,
   ClipboardList,
+  Clock3,
   Copy,
   Eye,
   EyeOff,
@@ -19,6 +20,7 @@ import {
   Laptop,
   Lightbulb,
   Monitor,
+  Mic,
   Mouse,
   Package,
   PcCase,
@@ -199,8 +201,10 @@ type TransferEntry = {
   date: string;
   fromCampus: string;
   fromLocation: string;
+  fromLocationPhoto?: string;
   toCampus: string;
   toLocation: string;
+  toLocationPhoto?: string;
   quantity?: number;
   photo?: string;
   reason?: string;
@@ -2087,6 +2091,16 @@ function workOrderAssignableUsers(users: StaffUser[], category: string, selected
   return sortUsersByName(filtered);
 }
 
+function visibleNewEntryTypeOptions(
+  allOptions: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>>,
+  category: string
+) {
+  const normalizedCategory = String(category || "").trim().toUpperCase();
+  const base = allOptions[normalizedCategory] || allOptions.IT || TYPE_OPTIONS.IT;
+  const hidden = new Set((NEW_ENTRY_HIDDEN_TYPE_CODES[normalizedCategory] || []).map((code) => code.toUpperCase()));
+  return base.filter((option) => !hidden.has(String(option.code || "").trim().toUpperCase()));
+}
+
 function normalizeStaffCampuses(input?: unknown) {
   const selected = Array.isArray(input)
     ? Array.from(
@@ -2367,6 +2381,11 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Webcam", itemKm: "កាមេរ៉ាវិប", code: "WBC" },
     { itemEn: "TV", itemKm: "ទូរទស្សន៍", code: "TV" },
     { itemEn: "Speaker", itemKm: "ឧបករណ៍បំពងសំឡេង", code: "SPK" },
+    { itemEn: "Microphone", itemKm: "មីក្រូហ្វូន", code: "MIC" },
+    { itemEn: "Amplifier", itemKm: "អំព្លីហ្វាយអ័រ", code: "AMP" },
+    { itemEn: "Mixer", itemKm: "ឧបករណ៍លាយសំឡេង", code: "MIX" },
+    { itemEn: "Audio Receiver", itemKm: "ឧបករណ៍ទទួលសំឡេង", code: "AVR" },
+    { itemEn: "Wireless Mic Receiver", itemKm: "ឧបករណ៍ទទួលមីក្រូឥតខ្សែ", code: "WMR" },
     { itemEn: "Printer", itemKm: "ម៉ាស៊ីនបោះពុម្ព", code: "PRN" },
     { itemEn: "Switch", itemKm: "ស្វិច", code: "SW" },
     { itemEn: "Access Point", itemKm: "ឧបករណ៍ចែកសញ្ញា", code: "AP" },
@@ -2383,6 +2402,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
     { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
+    { itemEn: "Wall Clock", itemKm: "នាឡិកាជញ្ជាំង", code: "WCL" },
     { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
     { itemEn: "Walkie Talkie", itemKm: "វិទ្យុទាក់ទង", code: "WTK" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
@@ -2396,6 +2416,11 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Cabinet", itemKm: "ទូ", code: "CAB" },
     { itemEn: "Nap Bed", itemKm: "គ្រែគេងកុមារ", code: "NBD" },
   ],
+};
+
+const NEW_ENTRY_HIDDEN_TYPE_CODES: Record<string, string[]> = {
+  IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC"],
+  FACILITY: ["TBL", "CHR", "PNO"],
 };
 
 const WALKIE_TALKIE_TYPE_CODE = "WTK";
@@ -5252,7 +5277,7 @@ function buildInventoryItemCode(
 }
 
 function defaultTypeForCategory(category: string) {
-  return (TYPE_OPTIONS[category] || TYPE_OPTIONS.IT)[0];
+  return visibleNewEntryTypeOptions(TYPE_OPTIONS, category)[0] || (TYPE_OPTIONS[category] || TYPE_OPTIONS.IT)[0];
 }
 
 function isSharedLocation(location: string) {
@@ -10172,6 +10197,8 @@ export default function App() {
     date: toYmd(new Date()),
     toCampus: CAMPUS_LIST[0],
     toLocation: "",
+    fromLocationPhoto: "",
+    toLocationPhoto: "",
     quantity: "1",
     toAssignedTo: "",
     responsibilityConfirmed: false,
@@ -10181,6 +10208,8 @@ export default function App() {
     by: "",
     note: "",
   });
+  const [transferFromPhotoFileKey, setTransferFromPhotoFileKey] = useState(0);
+  const [transferToPhotoFileKey, setTransferToPhotoFileKey] = useState(0);
   const [transferPhotoFileKey, setTransferPhotoFileKey] = useState(0);
   const [transferHistoryEdit, setTransferHistoryEdit] = useState<TransferHistoryEditForm | null>(null);
   const [transferDatePickerOpen, setTransferDatePickerOpen] = useState(false);
@@ -11523,6 +11552,10 @@ export default function App() {
       ].join(" ").toLowerCase().includes(query);
     });
   }, [vaultReportOwnerFilter, vaultReportQuery, vaultReportRows, vaultReportSectionFilter, vaultReportStatusFilter]);
+  const vaultTotalRecordCount = useMemo(
+    () => vaultAccounts.length + vaultCredentials.length + vaultDesignLinks.length + vaultNetworkDocs.length + vaultCctvRecords.length,
+    [vaultAccounts.length, vaultCredentials.length, vaultDesignLinks.length, vaultNetworkDocs.length, vaultCctvRecords.length]
+  );
   const vaultActiveSectionMeta = useMemo(() => {
     switch (vaultTab) {
       case "dashboard":
@@ -12580,6 +12613,14 @@ export default function App() {
     return out;
   }, [customTypeOptions]);
 
+  const newEntryTypeOptions = useMemo(() => {
+    const out: Record<string, Array<{ itemEn: string; itemKm: string; code: string }>> = {};
+    for (const category of Object.keys(TYPE_OPTIONS)) {
+      out[category] = visibleNewEntryTypeOptions(allTypeOptions, category);
+    }
+    return out;
+  }, [allTypeOptions]);
+
   const utilityMeterOptions = useMemo(
     () =>
       [...utilityMeters].sort((a, b) =>
@@ -12922,7 +12963,7 @@ export default function App() {
 
   const currentTypeOptions = useMemo(
     () => {
-      const base = allTypeOptions[assetForm.category] || allTypeOptions.IT || TYPE_OPTIONS.IT;
+      const base = newEntryTypeOptions[assetForm.category] || newEntryTypeOptions.IT || TYPE_OPTIONS.IT;
       if (assetForm.category !== "IT") return base;
       return base.filter(
         (opt) =>
@@ -12930,7 +12971,7 @@ export default function App() {
           !PROJECTOR_COMPONENT_TYPES.includes(opt.code as (typeof PROJECTOR_COMPONENT_TYPES)[number])
       );
     },
-    [assetForm.category, allTypeOptions]
+    [assetForm.category, newEntryTypeOptions]
   );
 
   const campusLabel = useCallback(
@@ -13634,18 +13675,22 @@ export default function App() {
       const assetId = String(asset.assetId || "").trim();
       if (assetId) assetsById.set(assetId, asset);
     }
+    let list = assets
+      .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
+      .filter(
+        (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
+      );
+    if (!assetCampusMultiFilter.includes("ALL")) {
+      list = list.filter((asset) => assetCampusMultiFilter.includes(asset.campus));
+    }
     return Array.from(
       new Set(
-        assets
-          .filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset))
-          .filter(
-            (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
-          )
+        list
           .map((asset) => String(asset.assignedTo || "").trim())
           .filter(Boolean)
       )
     ).sort((a, b) => a.localeCompare(b));
-  }, [assets]);
+  }, [assets, assetCampusMultiFilter]);
   const applyMultiFilterSelection = useCallback(
     (
       prev: string[],
@@ -15673,6 +15718,41 @@ export default function App() {
       };
     });
   }, [transferDateMonth, getHolidayEvent]);
+  const locationPhotoForTransfer = useCallback((campus: string, locationName: string) => {
+    const normalizedCampus = String(campus || "").trim();
+    const normalizedLocation = String(locationName || "").trim();
+    if (!normalizedCampus || !normalizedLocation) return "";
+    const match = locations.find(
+      (row) =>
+        String(row.campus || "").trim() === normalizedCampus &&
+        String(row.name || "").trim() === normalizedLocation
+    );
+    return String(match?.photo || "").trim();
+  }, [locations]);
+  async function onTransferFromLocationPhotoFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const optimized = await optimizePhotoDataUrl(file, { timestampText: formatUploadPhotoTimestamp(new Date()) });
+      setTransferForm((f) => ({ ...f, fromLocationPhoto: optimized }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to read from location photo");
+    } finally {
+      setTransferFromPhotoFileKey((n) => n + 1);
+    }
+  }
+  async function onTransferToLocationPhotoFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const optimized = await optimizePhotoDataUrl(file, { timestampText: formatUploadPhotoTimestamp(new Date()) });
+      setTransferForm((f) => ({ ...f, toLocationPhoto: optimized }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to read to location photo");
+    } finally {
+      setTransferToPhotoFileKey((n) => n + 1);
+    }
+  }
   async function onTransferPhotoFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -16548,8 +16628,8 @@ export default function App() {
     return Array.from(out).sort((a, b) => a.localeCompare(b));
   }, [assets, itemTemplates]);
   const itemTemplateTypeOptions = useMemo(
-    () => allTypeOptions[itemTemplateForm.category] || allTypeOptions.IT || TYPE_OPTIONS.IT,
-    [allTypeOptions, itemTemplateForm.category]
+    () => newEntryTypeOptions[itemTemplateForm.category] || newEntryTypeOptions.IT || TYPE_OPTIONS.IT,
+    [newEntryTypeOptions, itemTemplateForm.category]
   );
   const createTemplateOptions = useMemo(
     () =>
@@ -23400,17 +23480,31 @@ export default function App() {
     ariaLabel = "Open Eco Calendar",
     minYmd,
     disabled,
+    mode = "date",
+    showLegend = false,
+    className = "",
   }: {
     value: string;
-    onChange: (ymd: string) => void;
+    onChange: (value: string) => void;
     placeholder?: string;
     ariaLabel?: string;
     minYmd?: string;
     disabled?: boolean;
+    mode?: "date" | "month";
+    showLegend?: boolean;
+    className?: string;
   }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef<HTMLDivElement | null>(null);
-    const normalizedValue = normalizeYmdInput(value || "");
+    const normalizedValue = useMemo(() => {
+      if (mode === "month") {
+        const monthText = String(value || "").trim();
+        if (/^\d{4}-\d{2}$/.test(monthText)) {
+          return `${monthText}-01`;
+        }
+      }
+      return normalizeYmdInput(value || "");
+    }, [mode, value]);
     const [selectedDate, setSelectedDate] = useState(() => normalizedValue || todayYmd);
     const [month, setMonth] = useState(() => {
       const base = normalizedValue || todayYmd;
@@ -23446,17 +23540,25 @@ export default function App() {
     }, [value]);
 
     const displayValue = useMemo(() => {
-      const ymd = normalizeYmdInput(value || "");
+      const ymd = normalizedValue;
       if (!ymd) return "";
-      if (lang === "km") return formatKhmerDateYmd(ymd);
       const date = new Date(`${ymd}T00:00:00`);
       if (Number.isNaN(date.getTime())) return value;
+      if (mode === "month") {
+        return lang === "km"
+          ? formatKhmerMonthYear(date)
+          : date.toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            });
+      }
+      if (lang === "km") return formatKhmerDateYmd(ymd);
       return date.toLocaleDateString("en-US", {
         day: "2-digit",
         month: "long",
         year: "numeric",
       });
-    }, [value]);
+    }, [lang, mode, normalizedValue, value]);
 
     const monthLabel = useMemo(
       () =>
@@ -23466,7 +23568,7 @@ export default function App() {
               month: "long",
               year: "numeric",
             }),
-      [month]
+      [lang, month]
     );
 
     const gridDays = useMemo(() => {
@@ -23507,7 +23609,7 @@ export default function App() {
     };
 
     return (
-      <div className="quickout-date-field eco-date-floating-field" ref={wrapRef}>
+      <div className={`quickout-date-field eco-date-floating-field ${className}`.trim()} ref={wrapRef}>
         <div className="quickout-date-input-wrap">
           <input
             className="input"
@@ -23550,14 +23652,24 @@ export default function App() {
                 </button>
               </div>
             </div>
+            {showLegend ? (
+              <div className="calendar-type-legend eco-date-legend">
+                {CALENDAR_EVENT_TYPE_OPTIONS.map((opt) => (
+                  <span key={`eco-date-legend-${opt.value}`} className={`calendar-type-badge calendar-type-${opt.value}`}>
+                    {calendarEventBadgeLabel(opt.value)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <CalendarGridTemplate
               weekdayLabels={calendarWeekdayLabels}
               days={gridDays}
               selectedDate={selectedDate}
               todayYmd={todayYmd}
               onSelectDate={(ymd) => {
-                setSelectedDate(ymd);
-                onChange(ymd);
+                const nextValue = mode === "month" ? ymd.slice(0, 7) : ymd;
+                setSelectedDate(mode === "month" ? `${ymd.slice(0, 7)}-01` : ymd);
+                onChange(nextValue);
                 setOpen(false);
               }}
               isDayDisabled={(d) => !d.inMonth || Boolean(minYmd && d.ymd < minYmd)}
@@ -27157,6 +27269,8 @@ export default function App() {
     if (!current) return false;
     const groupedFurniture = groupedFurnitureTransferMeta(current);
     const destinationLocation = transferForm.toLocation.trim();
+    const fromLocationPhoto = String(transferForm.fromLocationPhoto || "").trim() || locationPhotoForTransfer(current.campus, current.location || "-");
+    const toLocationPhoto = String(transferForm.toLocationPhoto || "").trim() || locationPhotoForTransfer(transferForm.toCampus, destinationLocation);
     if (
       groupedFurniture &&
       current.campus === transferForm.toCampus &&
@@ -27191,8 +27305,10 @@ export default function App() {
       date: transferForm.date || toYmd(new Date()),
       fromCampus: current.campus,
       fromLocation: current.location || "-",
+      fromLocationPhoto,
       toCampus: transferForm.toCampus,
       toLocation: destinationLocation,
+      toLocationPhoto,
       ...(groupedFurniture ? { quantity: transferQty } : {}),
       photo: String(transferForm.photo || "").trim(),
       reason: transferForm.reason.trim(),
@@ -27392,13 +27508,19 @@ export default function App() {
         setTransferForm((f) => ({
           ...f,
           date: "",
+          fromLocationPhoto: "",
+          toLocationPhoto: "",
           quantity: "1",
           responsibilityConfirmed: false,
           returnConfirmed: false,
+          photo: "",
           reason: "",
           by: "",
           note: "",
         }));
+        setTransferFromPhotoFileKey((n) => n + 1);
+        setTransferToPhotoFileKey((n) => n + 1);
+        setTransferPhotoFileKey((n) => n + 1);
         await loadData();
         setTransferView("history");
         return true;
@@ -27441,6 +27563,8 @@ export default function App() {
       setTransferForm((f) => ({
         ...f,
         date: "",
+        fromLocationPhoto: "",
+        toLocationPhoto: "",
         quantity: "1",
         responsibilityConfirmed: false,
         returnConfirmed: false,
@@ -27449,6 +27573,8 @@ export default function App() {
         by: "",
         note: "",
       }));
+      setTransferFromPhotoFileKey((n) => n + 1);
+      setTransferToPhotoFileKey((n) => n + 1);
       setTransferPhotoFileKey((n) => n + 1);
       await loadData();
       setTransferView("history");
@@ -27660,16 +27786,20 @@ export default function App() {
 
   function openTransferFromAsset(asset: Asset) {
     const groupedFurniture = groupedFurnitureTransferMeta(asset);
+    const sourcePhoto = locationPhotoForTransfer(asset.campus, asset.location || "-");
     setTransferForm((prev) => ({
       ...prev,
       assetId: String(asset.id),
       date: toYmd(new Date()),
       toCampus: asset.campus,
       toLocation: asset.location || "",
+      fromLocationPhoto: sourcePhoto,
+      toLocationPhoto: sourcePhoto,
       quantity: "1",
       toAssignedTo: isSharedLocation(asset.location || "") ? "" : (asset.assignedTo || ""),
       responsibilityConfirmed: false,
       returnConfirmed: false,
+      photo: "",
       reason: "",
       by: "",
       note: "",
@@ -27726,10 +27856,13 @@ export default function App() {
       date: toYmd(new Date()),
       toCampus: asset.campus,
       toLocation: asset.location || "",
+      fromLocationPhoto: locationPhotoForTransfer(asset.campus, asset.location || "-"),
+      toLocationPhoto: locationPhotoForTransfer(asset.campus, asset.location || "-"),
       quantity: "1",
       toAssignedTo: isSharedLocation(asset.location || "") ? "" : (asset.assignedTo || ""),
       responsibilityConfirmed: false,
       returnConfirmed: false,
+      photo: "",
       reason: "",
       by: prev.by || authUser?.displayName || authUser?.username || "",
       note: "",
@@ -28877,7 +29010,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-transfer"
+                      className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-transfer btn-icon-transfer"
                       onClick={() => openTransferPageFromDetail(detailAsset)}
                       title="Open Transfer Page"
                       aria-label="Open Transfer Page"
@@ -31611,10 +31744,12 @@ export default function App() {
         ...f,
         assetId: String(first.id),
         toCampus: first.campus,
+        fromLocationPhoto: locationPhotoForTransfer(first.campus, first.location || "-"),
+        toLocationPhoto: locationPhotoForTransfer(first.campus, first.location || "-"),
         toAssignedTo: first.assignedTo || "",
       }));
     }
-  }, [assets, transferForm.assetId]);
+  }, [assets, locationPhotoForTransfer, transferForm.assetId]);
 
   function closeDetailLaunchedMaintenancePage() {
     setMaintenanceRecordFromDetail(false);
@@ -31676,9 +31811,9 @@ export default function App() {
         );
         const fromCampus = String(entry.fromCampus || "").trim();
         const fromLocation = String(entry.fromLocation || "").trim();
-        const toCampus = String(entry.toCampus || "").trim();
-        const toLocation = String(entry.toLocation || "").trim();
-        rows.push({
+      const toCampus = String(entry.toCampus || "").trim();
+      const toLocation = String(entry.toLocation || "").trim();
+      rows.push({
           rowId: `${asset.id}-${entry.id}`,
           assetDbId: asset.id,
           transferEntryId: Number(entry.id || 0),
@@ -31690,10 +31825,10 @@ export default function App() {
           date: entry.date || "",
           fromCampus,
           fromLocation,
-          fromLocationPhoto: locationPhotoMap.get(`${fromCampus}::${fromLocation}`) || "",
+          fromLocationPhoto: String(entry.fromLocationPhoto || "").trim() || locationPhotoMap.get(`${fromCampus}::${fromLocation}`) || "",
           toCampus,
           toLocation,
-          toLocationPhoto: locationPhotoMap.get(`${toCampus}::${toLocation}`) || "",
+          toLocationPhoto: String(entry.toLocationPhoto || "").trim() || locationPhotoMap.get(`${toCampus}::${toLocation}`) || "",
           transferPhoto: String(entry.photo || "").trim(),
           fromUser: matchedCustody?.fromUser || "",
           toUser: matchedCustody?.toUser || "",
@@ -34048,6 +34183,11 @@ export default function App() {
     if (code === "SLP" || name.includes("projector")) return icon(Monitor);
     if (code === "TV" || name.includes("tv")) return icon(Tv);
     if (code === "SPK" || name.includes("speaker")) return icon(Volume2);
+    if (code === "MIC" || name.includes("microphone") || name.includes("mic")) return icon(Mic);
+    if (code === "AMP" || name.includes("amplifier") || name.includes("amp")) return icon(Volume2);
+    if (code === "MIX" || name.includes("mixer") || name.includes("mixing")) return icon(Settings);
+    if (code === "AVR" || name.includes("audio receiver") || name.includes("receiver")) return icon(Radio);
+    if (code === "WMR" || name.includes("wireless mic receiver")) return icon(Radio);
     if (code === "FGP" || name.includes("finger print") || name.includes("fingerprint")) return icon(Shield);
     if (code === "UWF" || name.includes("usb wifi")) return icon(Usb);
     if (code === "RMT" || name.includes("remote")) return icon(Settings);
@@ -34060,6 +34200,7 @@ export default function App() {
     if (code === "FCP" || name.includes("control panel")) return icon(Settings);
 
     if (code === "AC" || name.includes("air conditioner") || name.includes("air-con")) return icon(Snowflake);
+    if (code === "WCL" || name.includes("wall clock") || name.includes("clock")) return icon(Clock3);
     if (
       code === "FAN" ||
       code === "WFN" ||
@@ -42792,7 +42933,7 @@ function formatTicketRequestSource(value?: string) {
                       <select
                         className="input"
                         value={transferForm.toCampus}
-                        onChange={(e) => setTransferForm((f) => ({ ...f, toCampus: e.target.value, toLocation: "" }))}
+                        onChange={(e) => setTransferForm((f) => ({ ...f, toCampus: e.target.value, toLocation: "", toLocationPhoto: "" }))}
                       >
                         {campusOptions.map((campus) => (
                           <option key={`quick-to-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
@@ -42807,6 +42948,7 @@ function formatTicketRequestSource(value?: string) {
                           setTransferForm((f) => ({
                             ...f,
                             toLocation: value,
+                            toLocationPhoto: locationPhotoForTransfer(f.toCampus, value),
                             toAssignedTo: isSharedLocation(value) ? "" : f.toAssignedTo,
                             responsibilityConfirmed: false,
                             returnConfirmed: false,
@@ -42896,6 +43038,42 @@ function formatTicketRequestSource(value?: string) {
                         value={transferForm.by}
                         onChange={(e) => setTransferForm((f) => ({ ...f, by: e.target.value }))}
                       />
+                    </label>
+                    <label className="field">
+                      <span>From Location Photo</span>
+                      <input key={`quick-transfer-from-photo-${transferFromPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={(e) => void onTransferFromLocationPhotoFile(e)} />
+                      {transferForm.fromLocationPhoto ? (
+                        <div className="transfer-preview" style={{ marginTop: 8 }}>
+                          <div className="transfer-preview-photo">
+                            <img loading="lazy" decoding="async" src={transferForm.fromLocationPhoto} alt="From location" className="asset-picker-thumb" />
+                          </div>
+                          <div className="transfer-preview-meta">
+                            <strong>From location snapshot</strong>
+                            <span>Saved into transfer history</span>
+                            <button type="button" className="tab" onClick={() => { setTransferForm((f) => ({ ...f, fromLocationPhoto: "" })); setTransferFromPhotoFileKey((n) => n + 1); }}>
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </label>
+                    <label className="field">
+                      <span>To Location Photo</span>
+                      <input key={`quick-transfer-to-photo-${transferToPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={(e) => void onTransferToLocationPhotoFile(e)} />
+                      {transferForm.toLocationPhoto ? (
+                        <div className="transfer-preview" style={{ marginTop: 8 }}>
+                          <div className="transfer-preview-photo">
+                            <img loading="lazy" decoding="async" src={transferForm.toLocationPhoto} alt="To location" className="asset-picker-thumb" />
+                          </div>
+                          <div className="transfer-preview-meta">
+                            <strong>To location snapshot</strong>
+                            <span>Saved into transfer history</span>
+                            <button type="button" className="tab" onClick={() => { setTransferForm((f) => ({ ...f, toLocationPhoto: "" })); setTransferToPhotoFileKey((n) => n + 1); }}>
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </label>
                     <label className="field field-wide">
                       <span>Transfer Photo</span>
@@ -48853,7 +49031,7 @@ function formatTicketRequestSource(value?: string) {
               <>
             <div className="panel-row transfer-record-head">
             <h3 className="section-title">Asset Transfer</h3>
-            {isPhoneView && transferRecordFromDetail ? (
+            {transferRecordFromDetail ? (
               <button
                 type="button"
                 className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close panel-corner-close-btn"
@@ -48870,7 +49048,6 @@ function formatTicketRequestSource(value?: string) {
                 <span>{t.campus}</span>
                 <select
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferFilterCampus}
                   onChange={(e) => {
                     setTransferFilterCampus(e.target.value);
@@ -48912,7 +49089,6 @@ function formatTicketRequestSource(value?: string) {
                 <span>{t.category}</span>
                 <select
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferFilterCategory}
                   onChange={(e) => {
                     setTransferFilterCategory(e.target.value);
@@ -48958,10 +49134,16 @@ function formatTicketRequestSource(value?: string) {
                         assetId,
                         toCampus: asset?.campus || f.toCampus,
                         toLocation: asset?.location || "",
+                        fromLocationPhoto: asset ? locationPhotoForTransfer(asset.campus, asset.location || "-") : "",
+                        toLocationPhoto: asset ? locationPhotoForTransfer(asset.campus, asset.location || "-") : "",
                         toAssignedTo: asset?.assignedTo || "",
                         responsibilityConfirmed: false,
                         returnConfirmed: false,
+                        photo: "",
                       }));
+                      setTransferFromPhotoFileKey((n) => n + 1);
+                      setTransferToPhotoFileKey((n) => n + 1);
+                      setTransferPhotoFileKey((n) => n + 1);
                       setShowTransferAssetPicker(false);
                     }}
                     placeholder={lang === "km" ? "ជ្រើស Asset តាមតម្រង" : "Select filtered asset"}
@@ -49026,7 +49208,6 @@ function formatTicketRequestSource(value?: string) {
                   <input
                     className="input"
                     type="text"
-                    style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                     readOnly
                     value={transferDisplayDate}
                     placeholder="dd/mm/yyyy"
@@ -49092,7 +49273,6 @@ function formatTicketRequestSource(value?: string) {
                 <span>From Campus</span>
                 <input
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferAsset ? campusLabel(transferAsset.campus) : "-"}
                   readOnly
                 />
@@ -49101,7 +49281,6 @@ function formatTicketRequestSource(value?: string) {
                 <span>From Location</span>
                 <input
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferAsset?.location || "-"}
                   readOnly
                 />
@@ -49110,7 +49289,6 @@ function formatTicketRequestSource(value?: string) {
                 <span>Current Staff</span>
                 <input
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferAsset?.assignedTo || "-"}
                   readOnly
                 />
@@ -49119,13 +49297,13 @@ function formatTicketRequestSource(value?: string) {
                 <span>To Campus</span>
                 <select
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff" }}
                   value={transferForm.toCampus}
                   onChange={(e) =>
                     setTransferForm((f) => ({
                       ...f,
                       toCampus: e.target.value,
                       toLocation: "",
+                      toLocationPhoto: "",
                     }))
                   }
                 >
@@ -49144,6 +49322,7 @@ function formatTicketRequestSource(value?: string) {
                     setTransferForm((f) => ({
                       ...f,
                       toLocation: value,
+                      toLocationPhoto: locationPhotoForTransfer(f.toCampus, value),
                       toAssignedTo: isSharedLocation(value) ? "" : f.toAssignedTo,
                       responsibilityConfirmed: false,
                       returnConfirmed: false,
@@ -49221,7 +49400,6 @@ function formatTicketRequestSource(value?: string) {
                 <span>Reason</span>
                 <input
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferForm.reason}
                   onChange={(e) => setTransferForm((f) => ({ ...f, reason: e.target.value }))}
                   placeholder="Example: Room move / Campus reallocation"
@@ -49231,10 +49409,45 @@ function formatTicketRequestSource(value?: string) {
                 <span>By</span>
                 <input
                   className="input"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferForm.by}
                   onChange={(e) => setTransferForm((f) => ({ ...f, by: e.target.value }))}
                 />
+              </label>
+              <label className="field">
+                <span>From Location Photo</span>
+                <input key={`transfer-from-photo-${transferFromPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={(e) => void onTransferFromLocationPhotoFile(e)} />
+                {transferForm.fromLocationPhoto ? (
+                  <div className="transfer-preview" style={{ marginTop: 8 }}>
+                    <div className="transfer-preview-photo">
+                      <img loading="lazy" decoding="async" src={transferForm.fromLocationPhoto} alt="From location" className="asset-picker-thumb" />
+                    </div>
+                    <div className="transfer-preview-meta">
+                      <strong>From location snapshot</strong>
+                      <span>Saved into transfer history</span>
+                      <button type="button" className="tab" onClick={() => { setTransferForm((f) => ({ ...f, fromLocationPhoto: "" })); setTransferFromPhotoFileKey((n) => n + 1); }}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </label>
+              <label className="field">
+                <span>To Location Photo</span>
+                <input key={`transfer-to-photo-${transferToPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={(e) => void onTransferToLocationPhotoFile(e)} />
+                {transferForm.toLocationPhoto ? (
+                  <div className="transfer-preview" style={{ marginTop: 8 }}>
+                    <div className="transfer-preview-photo">
+                      <img loading="lazy" decoding="async" src={transferForm.toLocationPhoto} alt="To location" className="asset-picker-thumb" />
+                    </div>
+                    <div className="transfer-preview-meta">
+                      <strong>To location snapshot</strong>
+                      <span>Saved into transfer history</span>
+                      <button type="button" className="tab" onClick={() => { setTransferForm((f) => ({ ...f, toLocationPhoto: "" })); setTransferToPhotoFileKey((n) => n + 1); }}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </label>
               <label className="field field-wide">
                 <span>Transfer Photo</span>
@@ -49258,7 +49471,6 @@ function formatTicketRequestSource(value?: string) {
                 <span>Note</span>
                 <textarea
                   className="textarea"
-                  style={{ color: "#edf4ff", WebkitTextFillColor: "#edf4ff", caretColor: "#edf4ff" }}
                   value={transferForm.note}
                   onChange={(e) => setTransferForm((f) => ({ ...f, note: e.target.value }))}
                 />
@@ -49354,43 +49566,77 @@ function formatTicketRequestSource(value?: string) {
               {filteredTransferRows.length ? (
                 filteredTransferRows.map((row) => (
                   <article key={`transfer-history-card-${row.rowId}`} className="transfer-history-card">
-                    <div className="transfer-history-card-main">
-                      <div className="transfer-history-card-head">
+                    <div className="transfer-history-card-head">
+                      <div className="transfer-history-chip-row">
                         <span className="transfer-history-date-pill">{formatDate(row.date || "-")}</span>
                         <strong className="transfer-history-asset-pill">{row.assetId}</strong>
                         <span className="transfer-history-category-pill">{row.category || "-"}</span>
                       </div>
-                      <div className="transfer-history-card-grid">
-                        <div className="transfer-history-asset">
-                          <div className="transfer-history-photo-frame">
-                            {renderAssetPhoto(row.assetPhoto || "", row.assetId)}
-                          </div>
-                          <div className="transfer-history-asset-meta">
-                            <span>Asset</span>
-                            <strong>{row.itemName || row.assetId}</strong>
-                            <small>{row.assetId}</small>
-                          </div>
+                      {isSuperAdmin ? (
+                        <div className="transfer-history-head-actions">
+                          <button
+                            className="tab transfer-history-icon-btn"
+                            disabled={busy}
+                            onClick={() => openTransferHistoryEdit(row)}
+                            aria-label={t.edit}
+                            title={t.edit}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            className="btn-danger transfer-history-icon-btn"
+                            disabled={busy}
+                            onClick={() => void deleteTransferHistoryRow(row)}
+                            aria-label="Delete"
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
-                        <div className="transfer-history-route">
-                          <div className="transfer-history-stop">
+                      ) : null}
+                    </div>
+                    <div className="transfer-history-card-layout transfer-history-card-layout-simple">
+                      <section className="transfer-history-simple-asset">
+                        <div className="transfer-history-photo-frame">
+                          {renderAssetPhoto(row.assetPhoto || "", `${row.assetId}-asset`)}
+                        </div>
+                        <div className="transfer-history-simple-copy">
+                          <span>Asset</span>
+                          <strong>{row.itemName || row.assetId}</strong>
+                          <small>{row.assetId}</small>
+                        </div>
+                      </section>
+                      <section className="transfer-history-simple-route">
+                        <div className="transfer-history-simple-stop">
+                          <div className="transfer-history-stop-photo transfer-history-simple-stop-photo">
+                            {renderAssetPhoto(row.fromLocationPhoto || "", `${row.assetId}-from-location`)}
+                          </div>
+                          <div className="transfer-history-simple-stop-copy">
                             <span>From</span>
-                            <div className="transfer-history-stop-photo">
-                              {renderAssetPhoto(row.fromLocationPhoto || "", `${row.assetId}-from-location`)}
-                            </div>
                             <strong>{campusLabel(row.fromCampus)}</strong>
                             <small>{row.fromLocation || "-"}</small>
                           </div>
-                          <div className="transfer-history-route-arrow">→</div>
-                          <div className="transfer-history-stop">
+                        </div>
+                        <div className="transfer-history-simple-track">
+                          <div className="transfer-history-simple-arrow">→</div>
+                        </div>
+                        <div className="transfer-history-simple-stop">
+                          <div className="transfer-history-stop-photo transfer-history-simple-stop-photo">
+                            {renderAssetPhoto(row.toLocationPhoto || "", `${row.assetId}-to-location`)}
+                          </div>
+                          <div className="transfer-history-simple-stop-copy">
                             <span>To</span>
-                            <div className="transfer-history-stop-photo">
-                              {renderAssetPhoto(row.toLocationPhoto || "", `${row.assetId}-to-location`)}
-                            </div>
                             <strong>{campusLabel(row.toCampus)}</strong>
                             <small>{row.toLocation || "-"}</small>
                           </div>
                         </div>
-                        <div className="transfer-history-staff">
+                      </section>
+                      <section className="transfer-history-simple-detail">
+                        <div className="transfer-history-mini-block transfer-history-simple-reason">
+                          <span>Reason</span>
+                          <strong>{row.reason || "-"}</strong>
+                        </div>
+                        <div className="transfer-history-simple-meta">
                           <div className="transfer-history-mini-block">
                             <span>Staff</span>
                             <strong>{row.fromUser || "-"}</strong>
@@ -49399,32 +49645,31 @@ function formatTicketRequestSource(value?: string) {
                           <div className="transfer-history-mini-block">
                             <span>Ack</span>
                             <strong>{row.responsibilityAck}</strong>
-                            <small>{row.by || "-"}</small>
+                          </div>
+                          <div className="transfer-history-mini-block">
+                            <span>By</span>
+                            <strong>{row.by || "-"}</strong>
                           </div>
                         </div>
-                        <div className="transfer-history-detail">
+                      </section>
+                      <section className="transfer-history-simple-proof">
+                        <p className="transfer-history-note transfer-history-note-simple">{row.note || "-"}</p>
+                        <div className="transfer-history-simple-proof-box">
                           <div className="transfer-history-mini-block">
-                            <span>Reason</span>
-                            <strong>{row.reason || "-"}</strong>
+                            <span>Proof</span>
                           </div>
                           {row.transferPhoto ? (
-                            <div className="transfer-history-mini-block">
-                              <span>Transfer Photo</span>
-                              <div className="transfer-history-stop-photo">
-                                {renderAssetPhoto(row.transferPhoto, `${row.assetId}-transfer-photo`)}
-                              </div>
+                            <div className="transfer-history-stop-photo transfer-history-proof-photo transfer-history-proof-photo-simple">
+                              {renderAssetPhoto(row.transferPhoto, `${row.assetId}-transfer-photo`)}
                             </div>
-                          ) : null}
-                          <p className="transfer-history-note">{row.note || "-"}</p>
+                          ) : (
+                            <div className="transfer-history-proof transfer-history-proof-placeholder transfer-history-proof-placeholder-simple">
+                              <strong>-</strong>
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      </section>
                     </div>
-                    {isSuperAdmin ? (
-                      <div className="transfer-history-actions">
-                        <button className="tab" disabled={busy} onClick={() => openTransferHistoryEdit(row)}>{t.edit}</button>
-                        <button className="btn-danger" disabled={busy} onClick={() => void deleteTransferHistoryRow(row)}>Delete</button>
-                      </div>
-                    ) : null}
                   </article>
                 ))
               ) : (
@@ -51012,7 +51257,7 @@ function formatTicketRequestSource(value?: string) {
             <>
             <div className="panel-row transfer-record-head">
             <h3 className="section-title">{lang === "km" ? "កត់ត្រាលទ្ធផលថែទាំ" : "Record Maintenance Result"}</h3>
-            {isPhoneView && maintenanceRecordFromDetail ? (
+            {maintenanceRecordFromDetail ? (
               <button
                 type="button"
                 className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close panel-corner-close-btn"
@@ -51749,11 +51994,14 @@ function formatTicketRequestSource(value?: string) {
                   </option>
                 ))}
               </select>
-              <input
-                className="input"
-                type="month"
+              <EcoDateInput
                 value={maintenanceMonthFilter}
-                onChange={(e) => setMaintenanceMonthFilter(e.target.value)}
+                onChange={setMaintenanceMonthFilter}
+                mode="month"
+                placeholder={lang === "km" ? "ជ្រើសខែ" : "Choose month"}
+                ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
+                showLegend
+                className="maintenance-history-eco-calendar"
               />
               <input
                 className="input"
@@ -56709,7 +56957,7 @@ function formatTicketRequestSource(value?: string) {
                       setItemTemplateForm((f) => ({
                         ...f,
                         category: e.target.value,
-                        type: (allTypeOptions[e.target.value] || allTypeOptions.IT || TYPE_OPTIONS.IT)[0]?.code || "",
+                        type: (newEntryTypeOptions[e.target.value] || newEntryTypeOptions.IT || TYPE_OPTIONS.IT)[0]?.code || "",
                       }))
                     }
                   >
@@ -58938,14 +59186,67 @@ function formatTicketRequestSource(value?: string) {
 
           {tab === "vault" && canAccessMenu("vault.dashboard", "vault") && (
           <section className="panel vault-shell">
-            <div className="vault-hero">
-              <div className="vault-hero-main">
-                <span className="vault-hero-kicker">IT Vault</span>
-                <h2>IT Operations Vault</h2>
-                <p className="tiny">Secure access, service accounts, infrastructure references, and reporting records in one place.</p>
+            <div className="vault-hero vault-hero-reimagined">
+              <div className="vault-command-deck">
+                <div className="vault-command-hero-panel">
+                  <div className="vault-command-headline">
+                    <span className="vault-hero-kicker">IT Vault</span>
+                    <span className="vault-command-status">Controlled Access Layer</span>
+                  </div>
+                  <h2>IT Vault Mission Control</h2>
+                  <p className="tiny">A command-center workspace for credentials, infrastructure references, service accounts, design access, and urgent reporting requests.</p>
+                  <div className="vault-hero-tags vault-hero-tags-reimagined">
+                    <span><Shield size={14} /> Sensitive Records</span>
+                    <span><Radio size={14} /> Live Review Queue</span>
+                    <span><Boxes size={14} /> Section-Based Filing</span>
+                  </div>
+                  <div className="vault-dashboard-actions vault-command-actions">
+                    <button type="button" className="btn-primary btn-small" onClick={() => void copyVaultText("vault-visible-report", vaultVisibleReportText)}>
+                      {vaultCopiedEntryId === "vault-visible-report" ? "Copied Report" : "Copy Visible Report"}
+                    </button>
+                    <button type="button" className="tab btn-small" onClick={() => void copyVaultText("vault-review-report", vaultNeedsReviewReportText)}>
+                      {vaultCopiedEntryId === "vault-review-report" ? "Copied Queue" : "Copy Review Queue"}
+                    </button>
+                  </div>
+                </div>
+                <div className="vault-command-metric-wall">
+                  <article className="vault-command-metric-card vault-command-metric-card-primary">
+                    <span>Total Records</span>
+                    <strong>{vaultTotalRecordCount}</strong>
+                    <p>All active entries across the vault.</p>
+                  </article>
+                  <article className="vault-command-metric-card">
+                    <span>Needs Review</span>
+                    <strong>{vaultNeedsReviewItems.length}</strong>
+                    <p>Records waiting for an update check.</p>
+                  </article>
+                  <article className="vault-command-metric-card">
+                    <span>Missing Info</span>
+                    <strong>{vaultMissingInfoItems.length}</strong>
+                    <p>Entries missing owner, recovery, or review data.</p>
+                  </article>
+                  <article className="vault-command-metric-card">
+                    <span>Telegram Records</span>
+                    <strong>{vaultTelegramRecordCount}</strong>
+                    <p>Communication accounts filed in Web Services.</p>
+                  </article>
+                </div>
               </div>
             </div>
             <div className="vault-main-nav">
+              <div className="vault-main-nav-top">
+                <div className="vault-main-nav-meta">
+                  <span>Workspace Map</span>
+                  <strong>Choose the correct lane before saving a record.</strong>
+                  <p className="tiny">Infrastructure access belongs in system sections, online accounts stay in web services, and reference materials stay in document-based workspaces.</p>
+                </div>
+                <div className="vault-main-nav-action">
+                  <div className="vault-main-nav-pulse">
+                    <span>All Records</span>
+                    <strong>{vaultTotalRecordCount}</strong>
+                  </div>
+                </div>
+              </div>
               <div className="vault-main-tabs vault-main-tabs-compact">
                 {canAccessMenu("vault.dashboard", "vault") ? (
                   <button className={`tab ${vaultTab === "dashboard" ? "tab-active" : ""}`} onClick={() => setVaultTab("dashboard")}>Dashboard</button>
@@ -58968,37 +59269,46 @@ function formatTicketRequestSource(value?: string) {
               </div>
             </div>
             <div className="vault-stage">
-            <div className="vault-stage-head">
+            <div className="vault-stage-head vault-stage-head-reimagined">
               <div className="vault-stage-head-copy">
                 <span>Active Workspace</span>
                 <h3>{vaultActiveSectionMeta.title}</h3>
                 <p>{vaultActiveSectionMeta.description}</p>
               </div>
-              <div className="vault-stage-head-stat">
-                <strong>{vaultActiveSectionMeta.metricValue}</strong>
-                <small>{vaultActiveSectionMeta.metricLabel}</small>
+              <div className="vault-stage-head-side">
+                <div className="vault-stage-head-stat">
+                  <strong>{vaultActiveSectionMeta.metricValue}</strong>
+                  <small>{vaultActiveSectionMeta.metricLabel}</small>
+                </div>
+                <div className="vault-stage-head-note">
+                  <span>Control Rule</span>
+                  <strong>One record. One owner. One correct section.</strong>
+                </div>
               </div>
             </div>
             {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
-              <div className="panel vault-overview-panel" style={{ padding: 12, marginBottom: 12 }}>
-                <div className="vault-overview-intro">
-                  <div>
-                    <h3 className="section-title" style={{ marginTop: 0 }}>Vault Overview</h3>
+              <div className="panel vault-overview-panel vault-overview-panel-reimagined" style={{ padding: 12, marginBottom: 12 }}>
+                <div className="vault-overview-intro vault-overview-intro-reimagined">
+                  <div className="vault-overview-story">
+                    <span className="vault-overview-kicker">Routing Guide</span>
+                    <h3 className="section-title" style={{ marginTop: 0 }}>Choose the right workspace before storing access.</h3>
                     <p className="tiny" style={{ marginBottom: 0 }}>
                       Use this page as your filing guide: controller access goes to <strong>Access Systems</strong>, SaaS and online services go to <strong>Web Services</strong>, infrastructure reference goes to <strong>Network & WiFi Docs</strong>, and recorder or site mapping goes to <strong>CCTV Systems</strong>.
                     </p>
                   </div>
                   <div className="vault-overview-aside">
-                    <span>Workspace Rule</span>
-                    <strong>One record in one correct section.</strong>
+                    <span>Filing Rule</span>
+                    <strong>Each entry should live in one clear workspace only.</strong>
+                    <p>That keeps reporting faster, avoids duplicate passwords, and reduces confusion during urgent requests.</p>
                   </div>
                 </div>
-                <div className="vault-guide-grid vault-guide-grid-simple" style={{ marginBottom: 12 }}>
+                <div className="vault-guide-grid vault-guide-grid-simple vault-guide-grid-reimagined" style={{ marginBottom: 12 }}>
                   <button className="vault-guide-card" onClick={() => setVaultTab("accounts")}>
                     <div className="vault-guide-card-top">
                       <span className="vault-guide-icon"><Shield size={18} /></span>
                       <em className="vault-guide-count">{vaultAccounts.length}</em>
                     </div>
+                    <small>System Lane</small>
                     <strong>Access Systems</strong>
                     <span>Printers, routers, WiFi, admin systems</span>
                   </button>
@@ -59007,6 +59317,7 @@ function formatTicketRequestSource(value?: string) {
                       <span className="vault-guide-icon"><Monitor size={18} /></span>
                       <em className="vault-guide-count">{vaultCredentials.length}</em>
                     </div>
+                    <small>Service Lane</small>
                     <strong>Web Services</strong>
                     <span>Email, SaaS, websites, Telegram</span>
                   </button>
@@ -59015,6 +59326,7 @@ function formatTicketRequestSource(value?: string) {
                       <span className="vault-guide-icon"><Wifi size={18} /></span>
                       <em className="vault-guide-count">{vaultNetworkDocs.length}</em>
                     </div>
+                    <small>Reference Lane</small>
                     <strong>Network & WiFi Docs</strong>
                     <span>Topology, ISP, WiFi and config docs</span>
                   </button>
@@ -59023,6 +59335,7 @@ function formatTicketRequestSource(value?: string) {
                       <span className="vault-guide-icon"><Camera size={18} /></span>
                       <em className="vault-guide-count">{vaultCctvRecords.length}</em>
                     </div>
+                    <small>Security Lane</small>
                     <strong>CCTV Systems</strong>
                     <span>Recorder access, review, retention</span>
                   </button>
@@ -59031,116 +59344,124 @@ function formatTicketRequestSource(value?: string) {
                       <span className="vault-guide-icon"><FileText size={18} /></span>
                       <em className="vault-guide-count">{vaultDesignLinks.length}</em>
                     </div>
+                    <small>Share Lane</small>
                     <strong>Design Folders</strong>
                     <span>Drive folders and shared references</span>
                   </button>
                 </div>
-                <div className="vault-dashboard-note">
-                  <div>
-                    <strong>Vault Notice</strong>
-                    <p>Keep each record in one correct section only to avoid duplicate entries. Use the control queue below when ED asks for urgent updates or missing account details.</p>
+                <div className="vault-dashboard-grid vault-dashboard-grid-reimagined">
+                  <div className="vault-dashboard-primary">
+                    <div className="vault-control-summary-grid">
+                      <article className="vault-control-summary-card">
+                        <span>Needs Review</span>
+                        <strong>{vaultNeedsReviewItems.length}</strong>
+                        <p>Past-due review dates and old password records.</p>
+                      </article>
+                      <article className="vault-control-summary-card">
+                        <span>Missing Info</span>
+                        <strong>{vaultMissingInfoItems.length}</strong>
+                        <p>Records missing owner, password, recovery, or review detail.</p>
+                      </article>
+                      <article className="vault-control-summary-card">
+                        <span>Recent Changes</span>
+                        <strong>{vaultRecentChangeItems.length}</strong>
+                        <p>Latest password updates and review activity across the vault.</p>
+                      </article>
+                      <article className="vault-control-summary-card">
+                        <span>Telegram Records</span>
+                        <strong>{vaultTelegramRecordCount}</strong>
+                        <p>Communication accounts currently stored inside Web Services.</p>
+                      </article>
+                    </div>
+                    <div className="vault-control-board">
+                      <section className="vault-control-card">
+                        <div className="vault-control-card-head">
+                          <div>
+                            <h4>Needs Review</h4>
+                            <p>Focus on overdue records first.</p>
+                          </div>
+                          <span>{vaultNeedsReviewItems.length}</span>
+                        </div>
+                        <div className="vault-control-list">
+                          {vaultNeedsReviewItems.length ? vaultNeedsReviewItems.slice(0, 5).map((item) => (
+                            <article className="vault-control-list-item" key={item.id}>
+                              <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
+                                <strong>{item.title}</strong>
+                                <span>{item.section}</span>
+                              </button>
+                              <p>{item.summary}</p>
+                              {item.detail ? <small>{item.detail}</small> : null}
+                            </article>
+                          )) : (
+                            <div className="vault-mobile-empty">No overdue review items right now.</div>
+                          )}
+                        </div>
+                      </section>
+                      <section className="vault-control-card">
+                        <div className="vault-control-card-head">
+                          <div>
+                            <h4>Missing Info</h4>
+                            <p>These records should be completed for reporting.</p>
+                          </div>
+                          <span>{vaultMissingInfoItems.length}</span>
+                        </div>
+                        <div className="vault-control-list">
+                          {vaultMissingInfoItems.length ? vaultMissingInfoItems.slice(0, 5).map((item) => (
+                            <article className="vault-control-list-item" key={item.id}>
+                              <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
+                                <strong>{item.title}</strong>
+                                <span>{item.section}</span>
+                              </button>
+                              <p>{item.summary}</p>
+                              {item.detail ? <small>{item.detail}</small> : null}
+                            </article>
+                          )) : (
+                            <div className="vault-mobile-empty">All records have the core fields filled in.</div>
+                          )}
+                        </div>
+                      </section>
+                      <section className="vault-control-card">
+                        <div className="vault-control-card-head">
+                          <div>
+                            <h4>Recent Changes</h4>
+                            <p>Use this to see what changed most recently.</p>
+                          </div>
+                          <span>{vaultRecentChangeItems.length}</span>
+                        </div>
+                        <div className="vault-control-list">
+                          {vaultRecentChangeItems.length ? vaultRecentChangeItems.slice(0, 5).map((item) => (
+                            <article className="vault-control-list-item" key={item.id}>
+                              <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
+                                <strong>{item.title}</strong>
+                                <span>{item.section}</span>
+                              </button>
+                              <p>{item.summary}</p>
+                              {item.detail ? <small>{item.detail}</small> : null}
+                            </article>
+                          )) : (
+                            <div className="vault-mobile-empty">No recent change records available yet.</div>
+                          )}
+                        </div>
+                      </section>
+                    </div>
                   </div>
-                  <div className="vault-dashboard-actions">
-                    <button type="button" className="btn-primary btn-small" onClick={() => void copyVaultText("vault-visible-report", vaultVisibleReportText)}>
-                      {vaultCopiedEntryId === "vault-visible-report" ? "Copied Report" : "Copy Visible Report"}
-                    </button>
-                    <button type="button" className="tab btn-small" onClick={() => void copyVaultText("vault-review-report", vaultNeedsReviewReportText)}>
-                      {vaultCopiedEntryId === "vault-review-report" ? "Copied Queue" : "Copy Review Queue"}
-                    </button>
-                  </div>
-                </div>
-                <div className="vault-control-summary-grid">
-                  <article className="vault-control-summary-card">
-                    <span>Needs Review</span>
-                    <strong>{vaultNeedsReviewItems.length}</strong>
-                    <p>Past-due review dates and old password records.</p>
-                  </article>
-                  <article className="vault-control-summary-card">
-                    <span>Missing Info</span>
-                    <strong>{vaultMissingInfoItems.length}</strong>
-                    <p>Records missing owner, password, recovery, or review detail.</p>
-                  </article>
-                  <article className="vault-control-summary-card">
-                    <span>Recent Changes</span>
-                    <strong>{vaultRecentChangeItems.length}</strong>
-                    <p>Latest password updates and review activity across the vault.</p>
-                  </article>
-                  <article className="vault-control-summary-card">
-                    <span>Telegram Records</span>
-                    <strong>{vaultTelegramRecordCount}</strong>
-                    <p>Communication accounts currently stored inside Web Services.</p>
-                  </article>
-                </div>
-                <div className="vault-control-board">
-                  <section className="vault-control-card">
-                    <div className="vault-control-card-head">
-                      <div>
-                        <h4>Needs Review</h4>
-                        <p>Focus on overdue records first.</p>
-                      </div>
-                      <span>{vaultNeedsReviewItems.length}</span>
-                    </div>
-                    <div className="vault-control-list">
-                      {vaultNeedsReviewItems.length ? vaultNeedsReviewItems.slice(0, 5).map((item) => (
-                        <article className="vault-control-list-item" key={item.id}>
-                          <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
-                            <strong>{item.title}</strong>
-                            <span>{item.section}</span>
-                          </button>
-                          <p>{item.summary}</p>
-                          {item.detail ? <small>{item.detail}</small> : null}
-                        </article>
-                      )) : (
-                        <div className="vault-mobile-empty">No overdue review items right now.</div>
-                      )}
-                    </div>
-                  </section>
-                  <section className="vault-control-card">
-                    <div className="vault-control-card-head">
-                      <div>
-                        <h4>Missing Info</h4>
-                        <p>These records should be completed for reporting.</p>
-                      </div>
-                      <span>{vaultMissingInfoItems.length}</span>
-                    </div>
-                    <div className="vault-control-list">
-                      {vaultMissingInfoItems.length ? vaultMissingInfoItems.slice(0, 5).map((item) => (
-                        <article className="vault-control-list-item" key={item.id}>
-                          <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
-                            <strong>{item.title}</strong>
-                            <span>{item.section}</span>
-                          </button>
-                          <p>{item.summary}</p>
-                          {item.detail ? <small>{item.detail}</small> : null}
-                        </article>
-                      )) : (
-                        <div className="vault-mobile-empty">All records have the core fields filled in.</div>
-                      )}
-                    </div>
-                  </section>
-                  <section className="vault-control-card">
-                    <div className="vault-control-card-head">
-                      <div>
-                        <h4>Recent Changes</h4>
-                        <p>Use this to see what changed most recently.</p>
-                      </div>
-                      <span>{vaultRecentChangeItems.length}</span>
-                    </div>
-                    <div className="vault-control-list">
-                      {vaultRecentChangeItems.length ? vaultRecentChangeItems.slice(0, 5).map((item) => (
-                        <article className="vault-control-list-item" key={item.id}>
-                          <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
-                            <strong>{item.title}</strong>
-                            <span>{item.section}</span>
-                          </button>
-                          <p>{item.summary}</p>
-                          {item.detail ? <small>{item.detail}</small> : null}
-                        </article>
-                      )) : (
-                        <div className="vault-mobile-empty">No recent change records available yet.</div>
-                      )}
-                    </div>
-                  </section>
+                  <aside className="vault-dashboard-sidebar">
+                    <article className="vault-side-card vault-side-card-accent">
+                      <span>Command Note</span>
+                      <strong>Keep urgent reporting simple.</strong>
+                      <p>When ED asks for a fast summary, use the report copy tools first, then move into the section that owns the record.</p>
+                    </article>
+                    <article className="vault-side-card">
+                      <span>Quick Protocol</span>
+                      <strong>Store account access only once.</strong>
+                      <p>If the same login appears in multiple sections, reporting becomes unreliable and password ownership becomes unclear.</p>
+                    </article>
+                    <article className="vault-side-card">
+                      <span>Search Scope</span>
+                      <strong>{vaultSearchResults.length} visible dashboard records</strong>
+                      <p>The search board below scans every vault section together so you can cross-check before adding new records.</p>
+                    </article>
+                  </aside>
                 </div>
                 <div className="vault-search-shell">
                   <div className="vault-section-head" style={{ marginTop: 16 }}>

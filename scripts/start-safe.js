@@ -6,10 +6,11 @@ const path = require("path");
 const WEB_PORT = 3000;
 const API_PORT = 4000;
 const isPhoneMode = process.argv.includes("--phone");
-// Local mode should bind to loopback explicitly. Using `127.0.0.1` avoids
-// environments where `localhost` resolves to IPv6 (`::1`) and CRA fails to bind.
+// Keep the API loopback-only in local mode, but let the CRA dev server bind to
+// all local interfaces so `localhost`, `127.0.0.1`, and LAN-hosted testing all
+// work consistently across environments.
 const apiHost = process.env.API_HOST || (isPhoneMode ? "0.0.0.0" : "127.0.0.1");
-const webHost = process.env.HOST || (isPhoneMode ? "0.0.0.0" : "127.0.0.1");
+const webHost = process.env.HOST || "0.0.0.0";
 const children = [];
 let shuttingDown = false;
 
