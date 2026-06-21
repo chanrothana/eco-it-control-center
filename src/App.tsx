@@ -29104,7 +29104,7 @@ export default function App() {
                       </div>
                       <div className="asset-detail-hero-summary-item">
                         <span>{t.user}</span>
-                        <strong>{renderStaffNameWithAvatar(users, detailAsset.assignedTo, "staff-inline-chip staff-inline-chip-strong")}</strong>
+                        <strong>{renderStaffNameWithAvatar(users, detailAsset.assignedTo, "staff-inline-chip staff-inline-chip-strong staff-inline-chip-detail")}</strong>
                       </div>
                       <div className="asset-detail-hero-summary-item">
                         <span>Brand / Model</span>
@@ -49687,7 +49687,17 @@ function formatTicketRequestSource(value?: string) {
             </div>
             <div className="transfer-history-list">
               {filteredTransferRows.length ? (
-                filteredTransferRows.map((row) => (
+                filteredTransferRows.map((row) => {
+                  const hasFromStaff = Boolean(String(row.fromUser || "").trim() && String(row.fromUser || "").trim() !== "-");
+                  const hasToStaff = Boolean(String(row.toUser || "").trim() && String(row.toUser || "").trim() !== "-");
+                  const hasAck = Boolean(String(row.responsibilityAck || "").trim() && String(row.responsibilityAck || "").trim() !== "-");
+                  const hasBy = Boolean(String(row.by || "").trim() && String(row.by || "").trim() !== "-");
+                  const hasNote = Boolean(String(row.note || "").trim() && String(row.note || "").trim() !== "-");
+                  const hasProof = Boolean(String(row.transferPhoto || "").trim());
+                  const showMeta = hasFromStaff || hasToStaff || hasAck || hasBy;
+                  const showProofSection = hasNote || hasProof;
+
+                  return (
                   <article key={`transfer-history-card-${row.rowId}`} className="transfer-history-card">
                     <div className="transfer-history-card-head">
                       <div className="transfer-history-chip-row">
@@ -49759,42 +49769,56 @@ function formatTicketRequestSource(value?: string) {
                           <span>Reason</span>
                           <strong>{row.reason || "-"}</strong>
                         </div>
-                        <div className="transfer-history-simple-meta">
-                          <div className="transfer-history-mini-block">
-                            <span>Staff</span>
-                            <strong>{row.fromUser || "-"}</strong>
-                            <small>{row.toUser || "-"}</small>
+                        {showMeta ? (
+                          <div className="transfer-history-simple-meta">
+                            {hasFromStaff ? (
+                              <div className="transfer-history-mini-block">
+                                <span>From Staff</span>
+                                <strong>{row.fromUser}</strong>
+                              </div>
+                            ) : null}
+                            {hasToStaff ? (
+                              <div className="transfer-history-mini-block">
+                                <span>To Staff</span>
+                                <strong>{row.toUser}</strong>
+                              </div>
+                            ) : null}
+                            {hasAck ? (
+                              <div className="transfer-history-mini-block">
+                                <span>Ack</span>
+                                <strong>{row.responsibilityAck}</strong>
+                              </div>
+                            ) : null}
+                            {hasBy ? (
+                              <div className="transfer-history-mini-block">
+                                <span>By</span>
+                                <strong>{row.by}</strong>
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="transfer-history-mini-block">
-                            <span>Ack</span>
-                            <strong>{row.responsibilityAck}</strong>
-                          </div>
-                          <div className="transfer-history-mini-block">
-                            <span>By</span>
-                            <strong>{row.by || "-"}</strong>
-                          </div>
-                        </div>
+                        ) : null}
                       </section>
-                      <section className="transfer-history-simple-proof">
-                        <p className="transfer-history-note transfer-history-note-simple">{row.note || "-"}</p>
-                        <div className="transfer-history-simple-proof-box">
-                          <div className="transfer-history-mini-block">
-                            <span>Proof</span>
-                          </div>
-                          {row.transferPhoto ? (
-                            <div className="transfer-history-stop-photo transfer-history-proof-photo transfer-history-proof-photo-simple">
-                              {renderAssetPhoto(row.transferPhoto, `${row.assetId}-transfer-photo`)}
+                      {showProofSection ? (
+                        <section className="transfer-history-simple-proof">
+                          {hasNote ? (
+                            <p className="transfer-history-note transfer-history-note-simple">{row.note}</p>
+                          ) : null}
+                          {hasProof ? (
+                            <div className="transfer-history-simple-proof-box">
+                              <div className="transfer-history-mini-block">
+                                <span>Proof</span>
+                              </div>
+                              <div className="transfer-history-stop-photo transfer-history-proof-photo transfer-history-proof-photo-simple">
+                                {renderAssetPhoto(row.transferPhoto, `${row.assetId}-transfer-photo`)}
+                              </div>
                             </div>
-                          ) : (
-                            <div className="transfer-history-proof transfer-history-proof-placeholder transfer-history-proof-placeholder-simple">
-                              <strong>-</strong>
-                            </div>
-                          )}
-                        </div>
-                      </section>
+                          ) : null}
+                        </section>
+                      ) : null}
                     </div>
                   </article>
-                ))
+                  );
+                })
               ) : (
                 <div className="panel-note">No transfer history found for the current filters.</div>
               )}
