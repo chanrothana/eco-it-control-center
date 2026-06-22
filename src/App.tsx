@@ -25122,17 +25122,23 @@ export default function App() {
       return;
     }
 
+    const previousLocation = editingLocationId
+      ? locations.find((loc) => loc.id === editingLocationId) || null
+      : null;
+    const nextLocationCampus = locationCampus;
+    const nextLocationName = locationName.trim();
+
     setBusy(true);
     setError("");
     try {
       let nextLocal = readLocationFallback();
       try {
         if (editingLocationId) {
-          await requestJson<{ location: LocationEntry }>(`/api/locations/${editingLocationId}`, {
+          await requestJson<{ location: LocationEntry; cascadedAssets?: number; cascadedTransferEntries?: number; cascadedCustodyEntries?: number }>(`/api/locations/${editingLocationId}`, {
             method: "PATCH",
             body: JSON.stringify({
-              campus: locationCampus,
-              name: locationName.trim(),
+              campus: nextLocationCampus,
+              name: nextLocationName,
               isClassroom: locationIsClassroom,
               currentStudents: Number(locationCurrentStudents || 0),
               studentCapacity: 0,
@@ -25161,8 +25167,8 @@ export default function App() {
             loc.id === editingLocationId
               ? {
                   ...loc,
-                  campus: locationCampus,
-                  name: locationName.trim(),
+                  campus: nextLocationCampus,
+                  name: nextLocationName,
                   isClassroom: locationIsClassroom,
                   currentStudents: Number(locationCurrentStudents || 0),
                   studentCapacity: 0,
@@ -25176,8 +25182,8 @@ export default function App() {
           nextLocal = [
             {
               id: Date.now(),
-              campus: locationCampus,
-              name: locationName.trim(),
+              campus: nextLocationCampus,
+              name: nextLocationName,
               isClassroom: locationIsClassroom,
               currentStudents: Number(locationCurrentStudents || 0),
               studentCapacity: 0,
@@ -25196,8 +25202,8 @@ export default function App() {
             loc.id === editingLocationId
               ? {
                   ...loc,
-                  campus: locationCampus,
-                  name: locationName.trim(),
+                  campus: nextLocationCampus,
+                  name: nextLocationName,
                   isClassroom: locationIsClassroom,
                   currentStudents: Number(locationCurrentStudents || 0),
                   studentCapacity: 0,
@@ -25211,8 +25217,8 @@ export default function App() {
           nextLocal = [
             {
               id: Date.now(),
-              campus: locationCampus,
-              name: locationName.trim(),
+              campus: nextLocationCampus,
+              name: nextLocationName,
               isClassroom: locationIsClassroom,
               currentStudents: Number(locationCurrentStudents || 0),
               studentCapacity: 0,
@@ -25227,11 +25233,80 @@ export default function App() {
       nextLocal = mergeLocations(nextLocal, []);
       writeLocationFallback(nextLocal);
       setLocations(nextLocal);
+      if (previousLocation) {
+        const previousCampus = String(previousLocation.campus || "").trim();
+        const previousName = String(previousLocation.name || "").trim();
+        setAssets((prev) =>
+          prev.map((asset) => {
+            const nextAsset = { ...asset };
+            let changed = false;
+            if (
+              String(asset.campus || "").trim() === previousCampus &&
+              String(asset.location || "").trim() === previousName
+            ) {
+              nextAsset.campus = nextLocationCampus;
+              nextAsset.location = nextLocationName;
+              changed = true;
+            }
+            if (Array.isArray(asset.transferHistory)) {
+              const nextTransferHistory = asset.transferHistory.map((entry) => {
+                let entryChanged = false;
+                const nextEntry = { ...entry };
+                if (
+                  String(entry.fromCampus || "").trim() === previousCampus &&
+                  String(entry.fromLocation || "").trim() === previousName
+                ) {
+                  nextEntry.fromCampus = nextLocationCampus;
+                  nextEntry.fromLocation = nextLocationName;
+                  entryChanged = true;
+                }
+                if (
+                  String(entry.toCampus || "").trim() === previousCampus &&
+                  String(entry.toLocation || "").trim() === previousName
+                ) {
+                  nextEntry.toCampus = nextLocationCampus;
+                  nextEntry.toLocation = nextLocationName;
+                  entryChanged = true;
+                }
+                if (entryChanged) changed = true;
+                return entryChanged ? nextEntry : entry;
+              });
+              if (changed) nextAsset.transferHistory = nextTransferHistory;
+            }
+            if (Array.isArray(asset.custodyHistory)) {
+              const nextCustodyHistory = asset.custodyHistory.map((entry) => {
+                let entryChanged = false;
+                const nextEntry = { ...entry };
+                if (
+                  String(entry.fromCampus || "").trim() === previousCampus &&
+                  String(entry.fromLocation || "").trim() === previousName
+                ) {
+                  nextEntry.fromCampus = nextLocationCampus;
+                  nextEntry.fromLocation = nextLocationName;
+                  entryChanged = true;
+                }
+                if (
+                  String(entry.toCampus || "").trim() === previousCampus &&
+                  String(entry.toLocation || "").trim() === previousName
+                ) {
+                  nextEntry.toCampus = nextLocationCampus;
+                  nextEntry.toLocation = nextLocationName;
+                  entryChanged = true;
+                }
+                if (entryChanged) changed = true;
+                return entryChanged ? nextEntry : entry;
+              });
+              if (changed) nextAsset.custodyHistory = nextCustodyHistory;
+            }
+            return changed ? nextAsset : asset;
+          })
+        );
+      }
       appendUiAudit(
         editingLocationId ? "UPDATE" : "CREATE",
         "location",
         editingLocationId ? String(editingLocationId) : String(nextLocal[0]?.id || ""),
-        `${locationCampus} | ${locationName.trim()}`
+        `${nextLocationCampus} | ${nextLocationName}`
       );
 
       setLocationName("");

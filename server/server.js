@@ -8831,6 +8831,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const previous = {
+        campus: toText(db.locations[idx].campus),
+        name: toText(db.locations[idx].name),
+      };
       db.locations[idx].campus = cleaned.campus;
       db.locations[idx].name = cleaned.name;
       db.locations[idx].isClassroom = cleaned.isClassroom;
@@ -8839,9 +8843,74 @@ const server = http.createServer(async (req, res) => {
       db.locations[idx].tableSeatsPerTable = cleaned.tableSeatsPerTable;
       db.locations[idx].notes = cleaned.notes;
       db.locations[idx].photo = cleaned.photo;
+
+      let cascadedAssets = 0;
+      let cascadedTransferEntries = 0;
+      let cascadedCustodyEntries = 0;
+      for (const asset of Array.isArray(db.assets) ? db.assets : []) {
+        if (!asset || typeof asset !== "object") continue;
+        if (
+          toText(asset.campus) === previous.campus &&
+          toText(asset.location) === previous.name
+        ) {
+          asset.campus = cleaned.campus;
+          asset.location = cleaned.name;
+          cascadedAssets += 1;
+        }
+
+        if (Array.isArray(asset.transferHistory)) {
+          for (const entry of asset.transferHistory) {
+            if (!entry || typeof entry !== "object") continue;
+            if (
+              toText(entry.fromCampus) === previous.campus &&
+              toText(entry.fromLocation) === previous.name
+            ) {
+              entry.fromCampus = cleaned.campus;
+              entry.fromLocation = cleaned.name;
+              cascadedTransferEntries += 1;
+            }
+            if (
+              toText(entry.toCampus) === previous.campus &&
+              toText(entry.toLocation) === previous.name
+            ) {
+              entry.toCampus = cleaned.campus;
+              entry.toLocation = cleaned.name;
+              cascadedTransferEntries += 1;
+            }
+          }
+        }
+
+        if (Array.isArray(asset.custodyHistory)) {
+          for (const entry of asset.custodyHistory) {
+            if (!entry || typeof entry !== "object") continue;
+            if (
+              toText(entry.fromCampus) === previous.campus &&
+              toText(entry.fromLocation) === previous.name
+            ) {
+              entry.fromCampus = cleaned.campus;
+              entry.fromLocation = cleaned.name;
+              cascadedCustodyEntries += 1;
+            }
+            if (
+              toText(entry.toCampus) === previous.campus &&
+              toText(entry.toLocation) === previous.name
+            ) {
+              entry.toCampus = cleaned.campus;
+              entry.toLocation = cleaned.name;
+              cascadedCustodyEntries += 1;
+            }
+          }
+        }
+      }
+
       appendAuditLog(db, admin, "UPDATE", "location", String(id), `${cleaned.campus} | ${cleaned.name}`);
       await writeDb(db);
-      sendJson(res, 200, { location: db.locations[idx] });
+      sendJson(res, 200, {
+        location: db.locations[idx],
+        cascadedAssets,
+        cascadedTransferEntries,
+        cascadedCustodyEntries,
+      });
       return;
     }
 
