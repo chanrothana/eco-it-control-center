@@ -1174,6 +1174,7 @@ function normalizeInventoryItems(input) {
       minStock: Number(row.minStock || 0),
       location: toText(row.location),
       vendor: toText(row.vendor),
+      responsibleParty: toText(row.responsibleParty),
       notes: toText(row.notes),
       itemGroup: toUpper(row.itemGroup) || "GENERAL",
       compatibleAssetTypes: Array.isArray(row.compatibleAssetTypes)
@@ -1186,6 +1187,33 @@ function normalizeInventoryItems(input) {
       photo: toText(row.photo),
       created: toText(row.created) || new Date().toISOString(),
     }));
+}
+
+function normalizeToolReviewReports(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now(),
+      month: toText(row.month),
+      itemId: Number(row.itemId) || 0,
+      itemCode: toText(row.itemCode),
+      itemName: toText(row.itemName),
+      category: toText(row.category),
+      campus: toText(row.campus),
+      location: toText(row.location),
+      expectedQty: Math.max(0, Number(row.expectedQty || 0)),
+      countedQty: Math.max(0, Number(row.countedQty || 0)),
+      unit: toText(row.unit),
+      condition: toText(row.condition),
+      reviewedBy: toText(row.reviewedBy),
+      supervisor: toText(row.supervisor),
+      note: toText(row.note),
+      photo: toText(row.photo),
+      created: toText(row.created) || new Date().toISOString(),
+      updated: toText(row.updated),
+    }))
+    .filter((row) => row.month && row.itemId && row.itemCode && row.itemName && row.campus);
 }
 
 function normalizeInventoryTxns(input) {
@@ -1339,7 +1367,7 @@ function normalizeItemTypeOptions(input) {
   return out;
 }
 
-const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL"]);
+const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL", "GARDEN_TOOL", "SERVICE_TOOL"]);
 const INVENTORY_TXN_TYPE_SET = new Set(["IN", "OUT", "SET", "BORROW_OUT", "BORROW_IN", "BORROW_CONSUME"]);
 
 function normalizeInventoryCategory(value) {
@@ -1966,6 +1994,7 @@ function normalizeImportedDb(input) {
   const telegramMaintenanceChatIds = normalizeTelegramChatIds(settings.telegramMaintenanceChatIds);
   const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
   const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
+  const toolReviewReports = normalizeToolReviewReports(settings.toolReviewReports);
   const rentalPrinters = normalizeRentalPrinters(settings.rentalPrinters);
   const rentalPrinterCounters = normalizeRentalPrinterCounters(settings.rentalPrinterCounters);
   const vaultAccounts = normalizeVaultAccounts(settings.vaultAccounts);
@@ -2014,6 +2043,7 @@ function normalizeImportedDb(input) {
       telegramMaintenanceChatIds,
       inventoryItems,
       inventoryTxns,
+      toolReviewReports,
       rentalPrinters,
       rentalPrinterCounters,
       poolCleaningSchedules,
@@ -6780,6 +6810,7 @@ const server = http.createServer(async (req, res) => {
           calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
           inventoryItems: normalizeInventoryItems(settings.inventoryItems),
           inventoryTxns: normalizeInventoryTxns(settings.inventoryTxns),
+          toolReviewReports: normalizeToolReviewReports(settings.toolReviewReports),
           rentalPrinters: normalizeRentalPrinters(settings.rentalPrinters),
           rentalPrinterCounters: normalizeRentalPrinterCounters(settings.rentalPrinterCounters),
           poolCleaningSchedules: normalizePoolCleaningSchedules(settings.poolCleaningSchedules),
@@ -6860,6 +6891,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryTxns")
           ? normalizeInventoryTxns(incoming.inventoryTxns)
           : normalizeInventoryTxns(current.inventoryTxns);
+      const nextToolReviewReports =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "toolReviewReports")
+          ? normalizeToolReviewReports(incoming.toolReviewReports)
+          : normalizeToolReviewReports(current.toolReviewReports);
       const nextRentalPrinters =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "rentalPrinters")
           ? normalizeRentalPrinters(incoming.rentalPrinters)
@@ -6934,6 +6969,7 @@ const server = http.createServer(async (req, res) => {
         telegramMaintenanceChatIds: nextTelegramMaintenanceChatIds,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
+        toolReviewReports: nextToolReviewReports,
         rentalPrinters: nextRentalPrinters,
         rentalPrinterCounters: nextRentalPrinterCounters,
         poolCleaningSchedules: nextPoolCleaningSchedules,
@@ -7677,6 +7713,7 @@ const server = http.createServer(async (req, res) => {
       const openingQty = Math.max(0, Number(body.openingQty || 0));
       const minStock = Math.max(0, Number(body.minStock || 0));
       const vendor = toText(body.vendor);
+      const responsibleParty = toText(body.responsibleParty);
       const notes = toText(body.notes);
       if (!campus || !category || !itemCode || !itemName || !unit || !location) {
         sendJson(res, 400, { error: "campus, category, itemCode, itemName, unit, location are required" });
@@ -7722,6 +7759,7 @@ const server = http.createServer(async (req, res) => {
         minStock,
         location,
         vendor,
+        responsibleParty,
         notes,
         itemGroup,
         compatibleAssetTypes,
@@ -7765,6 +7803,7 @@ const server = http.createServer(async (req, res) => {
       const openingQty = Math.max(0, Number(body.openingQty ?? current.openingQty ?? 0));
       const minStock = Math.max(0, Number(body.minStock ?? current.minStock ?? 0));
       const vendor = toText(body.vendor ?? current.vendor);
+      const responsibleParty = toText(body.responsibleParty ?? current.responsibleParty);
       const notes = toText(body.notes ?? current.notes);
       const itemGroup = toUpper(body.itemGroup ?? current.itemGroup) || "GENERAL";
       const compatibleAssetTypes = Array.isArray(body.compatibleAssetTypes)
@@ -7818,6 +7857,7 @@ const server = http.createServer(async (req, res) => {
         minStock,
         location,
         vendor,
+        responsibleParty,
         notes,
         itemGroup,
         compatibleAssetTypes,
