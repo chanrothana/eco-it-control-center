@@ -321,6 +321,19 @@ type PublicQrAsset = {
   custodyHistory?: CustodyEntry[];
   statusHistory?: StatusEntry[];
   components?: PublicQrAssetComponent[];
+  openWorkOrder?: {
+    id: number;
+    ticketNo?: string;
+    title?: string;
+    description?: string;
+    requestedBy?: string;
+    requesterContact?: string;
+    priority?: string;
+    status?: string;
+    assignedTo?: string;
+    requestSource?: string;
+    created?: string;
+  } | null;
   created?: string;
 };
 type PublicQrAssetComponent = {
@@ -35066,6 +35079,31 @@ export default function App() {
       pageCounter: prev.pageCounter || (publicQrAsset.tonerLastPageCount ? String(publicQrAsset.tonerLastPageCount) : ""),
     }));
   }, [publicQrAsset, tonerInventoryItems, authUser?.displayName, authUser?.username]);
+  useEffect(() => {
+    const openWorkOrder = publicQrAsset?.openWorkOrder;
+    if (!openWorkOrder) return;
+    setPublicQrRecordForm((prev) => {
+      const nextType =
+        !String(prev.type || "").trim() || prev.type === "Preventive"
+          ? "Corrective"
+          : prev.type;
+      const nextBy = String(prev.by || "").trim() || authUser?.displayName || authUser?.username || "";
+      const nextNote = String(prev.note || "").trim()
+        ? prev.note
+        : [openWorkOrder.ticketNo, openWorkOrder.title, openWorkOrder.description]
+            .filter((value) => String(value || "").trim())
+            .join(" | ");
+      if (nextType === prev.type && nextBy === prev.by && nextNote === prev.note) {
+        return prev;
+      }
+      return {
+        ...prev,
+        type: nextType,
+        by: nextBy,
+        note: nextNote,
+      };
+    });
+  }, [publicQrAsset?.openWorkOrder, authUser?.displayName, authUser?.username]);
 
   useEffect(() => {
     if (!pendingQrAssetId && !pendingQrPrinterCode) return;
@@ -36275,6 +36313,86 @@ export default function App() {
     }
   }
 
+  async function submitPublicQrMaintenanceFlow(asset: PublicQrAsset) {
+    const openWorkOrderId = Number(asset?.openWorkOrder?.id || 0);
+    if (!openWorkOrderId) {
+      await addMaintenanceRecordFromPublicQr(asset);
+      return;
+    }
+    if (
+      !asset?.id ||
+      !publicQrRecordForm.date ||
+      !publicQrRecordForm.type.trim() ||
+      !publicQrRecordForm.note.trim() ||
+      !(publicQrRecordForm.beforePhotos || []).length ||
+      !(publicQrRecordForm.afterPhotos || []).length
+    ) {
+      setPublicQrRecordError("Date, type, note, before photo, and after photo are required.");
+      return;
+    }
+    if (publicQrRecordForm.date < todayYmd) {
+      setPublicQrRecordError("Cannot set maintenance date to a past date.");
+      return;
+    }
+    setPublicQrRecordBusy(true);
+    setPublicQrRecordError("");
+    setPublicQrRecordMessage("");
+    try {
+      const normalizedBeforePhotos = normalizeMaintenancePhotoList(publicQrRecordForm.beforePhotos || []);
+      const normalizedAfterPhotos = normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []);
+      const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
+        normalizedBeforePhotos[0] || "",
+        normalizedAfterPhotos[0] || ""
+      );
+      await requestJson<{ ticket: Ticket; asset: PublicQrAsset; entry: MaintenanceEntry }>(
+        `/api/tickets/${openWorkOrderId}/complete-maintenance`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            date: publicQrRecordForm.date,
+            type: publicQrRecordForm.type.trim(),
+            completion: publicQrRecordForm.completion,
+            condition: publicQrRecordForm.condition.trim(),
+            note: publicQrRecordForm.note.trim(),
+            cost: publicQrRecordForm.cost.trim(),
+            by: publicQrRecordForm.by.trim(),
+            beforePhotos: normalizedBeforePhotos,
+            afterPhotos: normalizedAfterPhotos,
+            photo: normalizedAfterPhotos[0] || publicQrRecordForm.photo || "",
+            photos: normalizedAfterPhotos,
+            telegramPhoto,
+            ticketStatus: publicQrRecordForm.completion === "Done" ? "Done" : "In Progress",
+          }),
+        }
+      );
+      const ts = Date.now();
+      const refreshed = await requestJson<{ asset: PublicQrAsset }>(
+        `/api/public/assets/${encodeURIComponent(asset.assetId)}?ts=${ts}`
+      );
+      setPublicQrAsset(refreshed.asset || null);
+      setPublicQrRecordForm({
+        date: toYmd(new Date()),
+        type: "Preventive",
+        completion: "Done",
+        condition: "Good",
+        note: "",
+        cost: "",
+        by: authUser?.displayName || "",
+        photo: "",
+        photos: [],
+        beforePhotos: [],
+        afterPhotos: [],
+      });
+      setPublicQrRecordFileKey((k) => k + 1);
+      setPublicQrSectionsOpen((prev) => ({ ...prev, maintenance: false }));
+      setPublicQrRecordMessage("Work order updated and maintenance record saved.");
+    } catch (err) {
+      setPublicQrRecordError(err instanceof Error ? err.message : "Failed to save maintenance record");
+    } finally {
+      setPublicQrRecordBusy(false);
+    }
+  }
+
   async function addTonerRecordFromPublicQr(asset: PublicQrAsset) {
     setPublicQrRecordBusy(true);
     const ok = await saveTonerChangeForAsset(
@@ -36424,6 +36542,12 @@ function formatTicketRequestSource(value?: string) {
           : "You can add a problem photo to help maintenance staff prepare parts or tools before they come.",
       submitRequest: lang === "km" ? "ស្នើជួសជុល / បង្កើតការងារ" : "Request Fix / Create Work Order",
       submitting: lang === "km" ? "កំពុងផ្ញើ..." : "Submitting...",
+      fixOpenWorkOrder: lang === "km" ? "ជួសជុល Ticket កំពុងបើក" : "Fix Open Work Order",
+      fixOpenWorkOrderHint:
+        lang === "km"
+          ? "ប្រសិនបើសម្ភារៈនេះមាន ticket កំពុងបើក បុគ្គលិកថែទាំអាចកត់ត្រាការជួសជុល ហើយអាប់ដេត ticket តែម្តង។"
+          : "If this asset already has an open work order, maintenance staff can record the fix and update that ticket in one step.",
+      linkedWorkOrder: lang === "km" ? "Ticket កំពុងបើក" : "Open Work Order",
       workOrderHint:
         lang === "km"
           ? "ប្រព័ន្ធនឹងបង្កើតការងារមុនសិន។ បច្ចេកទេសអាចបម្លែងវាជាប្រវត្តិថែទាំ បន្ទាប់ពីជួសជុលរួច។"
@@ -36498,6 +36622,7 @@ function formatTicketRequestSource(value?: string) {
       (isAdminRole(authUser.role) || canAccessMenu("maintenance.record", "maintenance"))
     );
     const publicQrCanViewDetails = Boolean(asset);
+    const publicQrOpenWorkOrder = asset?.openWorkOrder || null;
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
       : asset?.photo
@@ -36948,8 +37073,31 @@ function formatTicketRequestSource(value?: string) {
                   {publicQrCanRecordMaintenance
                     ? renderPublicQrGroup(
                         "maintenance",
-                        publicQrText.maintenanceRecord,
+                        publicQrOpenWorkOrder ? publicQrText.fixOpenWorkOrder : publicQrText.maintenanceRecord,
                         <>
+                          {publicQrOpenWorkOrder ? (
+                            <div className="public-asset-history-card" style={{ marginBottom: 12 }}>
+                              <div className="public-asset-history-title">{publicQrText.linkedWorkOrder}</div>
+                              <div className="public-asset-history-meta-grid">
+                                {renderPublicHistoryMeta(publicQrText.workOrder, publicQrOpenWorkOrder.ticketNo || "-")}
+                                {renderPublicHistoryMeta(publicQrText.requestedByLabel, publicQrOpenWorkOrder.requestedBy || "-")}
+                                {renderPublicHistoryMeta(publicQrText.workStatus, publicQrOpenWorkOrder.status || "-")}
+                                {renderPublicHistoryMeta(publicQrText.requestedSource, formatTicketRequestSource(publicQrOpenWorkOrder.requestSource))}
+                              </div>
+                              {publicQrOpenWorkOrder.title ? (
+                                <div className="public-asset-history-note">
+                                  <span className="public-asset-history-label">{publicQrText.issueTitle}</span>
+                                  <p>{publicQrOpenWorkOrder.title}</p>
+                                </div>
+                              ) : null}
+                              {publicQrOpenWorkOrder.description ? (
+                                <div className="public-asset-history-note">
+                                  <span className="public-asset-history-label">{publicQrText.description}</span>
+                                  <p>{publicQrOpenWorkOrder.description}</p>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                           <div className="form-grid">
                             <label className="field public-asset-date-field">
                               <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
@@ -37123,16 +37271,20 @@ function formatTicketRequestSource(value?: string) {
                                   !(publicQrRecordForm.beforePhotos || []).length ||
                                   !(publicQrRecordForm.afterPhotos || []).length
                                 }
-                                onClick={() => void addMaintenanceRecordFromPublicQr(asset)}
+                                onClick={() => void submitPublicQrMaintenanceFlow(asset)}
                               >
-                                {publicQrRecordBusy ? publicQrText.saving : publicQrText.saveMaintenanceRecord}
+                                {publicQrRecordBusy
+                                  ? publicQrText.saving
+                                  : publicQrOpenWorkOrder
+                                    ? publicQrText.fixOpenWorkOrder
+                                    : publicQrText.saveMaintenanceRecord}
                               </button>
                             </div>
                           </div>
                           {publicQrRecordError ? <p className="alert alert-error">{publicQrRecordError}</p> : null}
                           {publicQrRecordMessage ? <p className="alert">{publicQrRecordMessage}</p> : null}
                         </>,
-                        publicQrText.maintenanceGroupHint
+                        publicQrOpenWorkOrder ? publicQrText.fixOpenWorkOrderHint : publicQrText.maintenanceGroupHint
                       )
                     : null}
                   {publicQrCanRecordMaintenance && isPrinterAssetRow(asset)
@@ -44395,248 +44547,250 @@ function formatTicketRequestSource(value?: string) {
                   ? `បង្ហាញ ${ticketDashboardSummary.visible} ticket តាមតម្រងបច្ចុប្បន្ន។`
                   : `Showing ${ticketDashboardSummary.visible} ticket(s) for the current dashboard filters.`}
               </div>
-              <div className="report-mobile-only report-card-list ticket-dashboard-mobile-list">
-                {ticketDashboardRows.length ? (
-                  ticketDashboardRows.map((ticket) => (
-                    <article key={`ticket-mobile-${ticket.id}`} className="report-card ticket-dashboard-mobile-card">
-                      <div className="ticket-dashboard-mobile-topline">
-                        <strong>{ticket.ticketNo}</strong>
-                        <span>{formatDate(ticket.created)}</span>
-                      </div>
-
-                      <div className="ticket-dashboard-mobile-ticket">
-                        <h3>{ticket.title}</h3>
-                        <div className="ticket-dashboard-mobile-badges">
-                          <span className="maintenance-history-badge">{ticket.category}</span>
-                          <span className="maintenance-history-badge">
-                            {(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}
-                          </span>
-                          <span className="maintenance-history-badge">{formatTicketRequestSource(ticket.requestSource)}</span>
-                          <span className="maintenance-history-badge">{ticket.status || "Open"}</span>
+              {isPhoneView ? (
+                <div className="report-mobile-only report-card-list ticket-dashboard-mobile-list">
+                  {ticketDashboardRows.length ? (
+                    ticketDashboardRows.map((ticket) => (
+                      <article key={`ticket-mobile-${ticket.id}`} className="report-card ticket-dashboard-mobile-card">
+                        <div className="ticket-dashboard-mobile-topline">
+                          <strong>{ticket.ticketNo}</strong>
+                          <span>{formatDate(ticket.created)}</span>
                         </div>
-                        <div className="ticket-dashboard-mobile-assetline">
-                          <span>{t.asset}</span>
-                          <strong>{ticket.assetId || "-"}</strong>
-                        </div>
-                      </div>
 
-                      <div className="ticket-dashboard-mobile-meta">
-                        <article className="ticket-dashboard-mobile-meta-card">
-                          <small>{t.campus}</small>
-                          <strong>{campusLabel(ticket.campus)}</strong>
-                        </article>
-                        <article className="ticket-dashboard-mobile-meta-card">
-                          <small>{t.requestedBy}</small>
-                          <strong>{ticket.requestedBy || "-"}</strong>
-                        </article>
-                        <article className="ticket-dashboard-mobile-meta-card">
-                          <small>Contact</small>
-                          <strong>{ticket.requesterContact || "-"}</strong>
-                        </article>
-                        <article className="ticket-dashboard-mobile-meta-card">
-                          <small>{lang === "km" ? "អ្នកទទួលការងារបច្ចុប្បន្ន" : "Current Assignee"}</small>
-                          <strong>{ticket.assignedTo || (lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned")}</strong>
-                        </article>
-                      </div>
-
-                      {ticket.description ? (
-                        <div className="ticket-dashboard-mobile-note">
-                          <small>{t.description}</small>
-                          <p>{ticket.description}</p>
-                        </div>
-                      ) : null}
-
-                      <div className="ticket-dashboard-mobile-controls">
-                        <label className="field">
-                          <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
-                          <UserPicker
-                            value={ticket.assignedTo || ""}
-                            users={staffUsersForCampus(workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || ""), ticket.campus, ticket.assignedTo || "")}
-                            disabled={!isAdmin || busy}
-                            onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
-                            placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
-                            searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
-                            emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>{t.status}</span>
-                          <select className="status-select" disabled={!isAdmin} value={ticket.status || "Open"} onChange={(e) => changeTicketStatus(ticket.id, e.target.value)}>
-                            {TICKET_STATUS_OPTIONS.map((status) => (
-                              <option key={`ticket-mobile-status-${ticket.id}-${status.value}`} value={status.value}>{lang === "km" ? status.km : status.en}</option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-
-                      <div className="asset-actions ticket-dashboard-actions ticket-dashboard-mobile-actions">
-                        {ticket.assetId ? (
-                          <button className="tab btn-small" type="button" onClick={() => {
-                            setAssetCampusMultiFilter(["ALL"]);
-                            setAssetNameMultiFilter(["ALL"]);
-                            setAssetLocationMultiFilter(["ALL"]);
-                            setAssetAssignedToMultiFilter(["ALL"]);
-                            setAssetsView("list");
-                            setTab("assets");
-                            setSearch(ticket.assetId);
-                          }}>
-                            Open Asset
-                          </button>
-                        ) : null}
-                        {isSuperAdmin ? (
-                          <button
-                            className="tab btn-small"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => openTicketEditModal(ticket)}
-                          >
-                            Edit
-                          </button>
-                        ) : null}
-                        {ticket.assetDbId ? (
-                          <button
-                            className="btn-primary btn-small"
-                            type="button"
-                            disabled={busy || ticket.status === "Done" || ticket.status === "Cancelled"}
-                            onClick={() => openTicketMaintenanceModal(ticket)}
-                          >
-                            Complete & Record
-                          </button>
-                        ) : null}
-                        {isSuperAdmin ? (
-                          <button
-                            className="btn-danger btn-small"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void deleteTicketRow(ticket)}
-                          >
-                            Delete
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <article className="report-card ticket-dashboard-mobile-card">
-                    <strong>{t.noWorkOrders}</strong>
-                  </article>
-                )}
-              </div>
-
-              <div className="report-desktop-only ticket-dashboard-desktop-list">
-                {ticketDashboardRows.length ? (
-                  ticketDashboardRows.map((ticket) => (
-                    <article key={`ticket-desktop-${ticket.id}`} className="ticket-dashboard-desktop-card">
-                      <div className="ticket-dashboard-desktop-top">
-                        <div className="ticket-dashboard-desktop-title">
-                          <div className="ticket-dashboard-desktop-ticketno">{ticket.ticketNo}</div>
+                        <div className="ticket-dashboard-mobile-ticket">
                           <h3>{ticket.title}</h3>
-                          {ticket.assetId ? <p>{t.asset}: {ticket.assetId}</p> : null}
+                          <div className="ticket-dashboard-mobile-badges">
+                            <span className="maintenance-history-badge">{ticket.category}</span>
+                            <span className="maintenance-history-badge">
+                              {(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}
+                            </span>
+                            <span className="maintenance-history-badge">{formatTicketRequestSource(ticket.requestSource)}</span>
+                            <span className="maintenance-history-badge">{ticket.status || "Open"}</span>
+                          </div>
+                          <div className="ticket-dashboard-mobile-assetline">
+                            <span>{t.asset}</span>
+                            <strong>{ticket.assetId || "-"}</strong>
+                          </div>
                         </div>
-                        <div className="ticket-dashboard-desktop-badges">
-                          <span className="maintenance-history-badge">{ticket.category}</span>
-                          <span className="maintenance-history-badge">
-                            {(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}
-                          </span>
-                          <span className="maintenance-history-badge">{formatTicketRequestSource(ticket.requestSource)}</span>
-                        </div>
-                      </div>
 
-                      <div className="ticket-dashboard-desktop-meta">
-                        <div>
-                          <small>{t.campus}</small>
-                          <strong>{campusLabel(ticket.campus)}</strong>
+                        <div className="ticket-dashboard-mobile-meta">
+                          <article className="ticket-dashboard-mobile-meta-card">
+                            <small>{t.campus}</small>
+                            <strong>{campusLabel(ticket.campus)}</strong>
+                          </article>
+                          <article className="ticket-dashboard-mobile-meta-card">
+                            <small>{t.requestedBy}</small>
+                            <strong>{ticket.requestedBy || "-"}</strong>
+                          </article>
+                          <article className="ticket-dashboard-mobile-meta-card">
+                            <small>Contact</small>
+                            <strong>{ticket.requesterContact || "-"}</strong>
+                          </article>
+                          <article className="ticket-dashboard-mobile-meta-card">
+                            <small>{lang === "km" ? "អ្នកទទួលការងារបច្ចុប្បន្ន" : "Current Assignee"}</small>
+                            <strong>{ticket.assignedTo || (lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned")}</strong>
+                          </article>
                         </div>
-                        <div>
-                          <small>{t.requestedBy}</small>
-                          <strong>{ticket.requestedBy || "-"}</strong>
-                        </div>
-                        <div>
-                          <small>Contact</small>
-                          <strong>{ticket.requesterContact || "-"}</strong>
-                        </div>
-                        <div>
-                          <small>{t.created}</small>
-                          <strong>{formatDate(ticket.created)}</strong>
-                        </div>
-                      </div>
 
-                      <div className="ticket-dashboard-desktop-controls">
-                        <label className="field">
-                          <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
-                          <UserPicker
-                            value={ticket.assignedTo || ""}
-                            users={staffUsersForCampus(workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || ""), ticket.campus, ticket.assignedTo || "")}
-                            disabled={!isAdmin || busy}
-                            onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
-                            placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
-                            searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
-                            emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>{t.status}</span>
-                          <select className="status-select" disabled={!isAdmin} value={ticket.status || "Open"} onChange={(e) => changeTicketStatus(ticket.id, e.target.value)}>
-                            {TICKET_STATUS_OPTIONS.map((status) => (
-                              <option key={`ticket-desktop-status-${ticket.id}-${status.value}`} value={status.value}>{lang === "km" ? status.km : status.en}</option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
+                        {ticket.description ? (
+                          <div className="ticket-dashboard-mobile-note">
+                            <small>{t.description}</small>
+                            <p>{ticket.description}</p>
+                          </div>
+                        ) : null}
 
-                      <div className="asset-actions ticket-dashboard-actions ticket-dashboard-desktop-actions">
-                        {ticket.assetId ? (
-                          <button className="tab btn-small" type="button" onClick={() => {
-                            setAssetCampusMultiFilter(["ALL"]);
-                            setAssetNameMultiFilter(["ALL"]);
-                            setAssetLocationMultiFilter(["ALL"]);
-                            setAssetAssignedToMultiFilter(["ALL"]);
-                            setAssetsView("list");
-                            setTab("assets");
-                            setSearch(ticket.assetId);
-                          }}>
-                            Open Asset
-                          </button>
-                        ) : null}
-                        {isSuperAdmin ? (
-                          <button
-                            className="tab btn-small"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => openTicketEditModal(ticket)}
-                          >
-                            Edit
-                          </button>
-                        ) : null}
-                        {ticket.assetDbId ? (
-                          <button
-                            className="btn-primary btn-small"
-                            type="button"
-                            disabled={busy || ticket.status === "Done" || ticket.status === "Cancelled"}
-                            onClick={() => openTicketMaintenanceModal(ticket)}
-                          >
-                            Complete & Record
-                          </button>
-                        ) : null}
-                        {isSuperAdmin ? (
-                          <button
-                            className="btn-danger btn-small"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void deleteTicketRow(ticket)}
-                          >
-                            Delete
-                          </button>
-                        ) : null}
-                      </div>
+                        <div className="ticket-dashboard-mobile-controls">
+                          <label className="field">
+                            <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
+                            <UserPicker
+                              value={ticket.assignedTo || ""}
+                              users={staffUsersForCampus(workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || ""), ticket.campus, ticket.assignedTo || "")}
+                              disabled={!isAdmin || busy}
+                              onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
+                              placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
+                              searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                              emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>{t.status}</span>
+                            <select className="status-select" disabled={!isAdmin} value={ticket.status || "Open"} onChange={(e) => changeTicketStatus(ticket.id, e.target.value)}>
+                              {TICKET_STATUS_OPTIONS.map((status) => (
+                                <option key={`ticket-mobile-status-${ticket.id}-${status.value}`} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        <div className="asset-actions ticket-dashboard-actions ticket-dashboard-mobile-actions">
+                          {ticket.assetId ? (
+                            <button className="tab btn-small" type="button" onClick={() => {
+                              setAssetCampusMultiFilter(["ALL"]);
+                              setAssetNameMultiFilter(["ALL"]);
+                              setAssetLocationMultiFilter(["ALL"]);
+                              setAssetAssignedToMultiFilter(["ALL"]);
+                              setAssetsView("list");
+                              setTab("assets");
+                              setSearch(ticket.assetId);
+                            }}>
+                              Open Asset
+                            </button>
+                          ) : null}
+                          {isSuperAdmin ? (
+                            <button
+                              className="tab btn-small"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => openTicketEditModal(ticket)}
+                            >
+                              Edit
+                            </button>
+                          ) : null}
+                          {ticket.assetDbId ? (
+                            <button
+                              className="btn-primary btn-small"
+                              type="button"
+                              disabled={busy || ticket.status === "Done" || ticket.status === "Cancelled"}
+                              onClick={() => openTicketMaintenanceModal(ticket)}
+                            >
+                              Complete & Record
+                            </button>
+                          ) : null}
+                          {isSuperAdmin ? (
+                            <button
+                              className="btn-danger btn-small"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void deleteTicketRow(ticket)}
+                            >
+                              Delete
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="report-card ticket-dashboard-mobile-card">
+                      <strong>{t.noWorkOrders}</strong>
                     </article>
-                  ))
-                ) : (
-                  <article className="ticket-dashboard-desktop-card ticket-dashboard-desktop-empty">
-                    <strong>{t.noWorkOrders}</strong>
-                  </article>
-                )}
-              </div>
+                  )}
+                </div>
+              ) : (
+                <div className="report-desktop-only ticket-dashboard-desktop-list">
+                  {ticketDashboardRows.length ? (
+                    ticketDashboardRows.map((ticket) => (
+                      <article key={`ticket-desktop-${ticket.id}`} className="ticket-dashboard-desktop-card">
+                        <div className="ticket-dashboard-desktop-top">
+                          <div className="ticket-dashboard-desktop-title">
+                            <div className="ticket-dashboard-desktop-ticketno">{ticket.ticketNo}</div>
+                            <h3>{ticket.title}</h3>
+                            {ticket.assetId ? <p>{t.asset}: {ticket.assetId}</p> : null}
+                          </div>
+                          <div className="ticket-dashboard-desktop-badges">
+                            <span className="maintenance-history-badge">{ticket.category}</span>
+                            <span className="maintenance-history-badge">
+                              {(lang === "km" ? PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.km : PRIORITY_OPTIONS.find((p) => p.value === ticket.priority)?.en) || ticket.priority}
+                            </span>
+                            <span className="maintenance-history-badge">{formatTicketRequestSource(ticket.requestSource)}</span>
+                          </div>
+                        </div>
+
+                        <div className="ticket-dashboard-desktop-meta">
+                          <div>
+                            <small>{t.campus}</small>
+                            <strong>{campusLabel(ticket.campus)}</strong>
+                          </div>
+                          <div>
+                            <small>{t.requestedBy}</small>
+                            <strong>{ticket.requestedBy || "-"}</strong>
+                          </div>
+                          <div>
+                            <small>Contact</small>
+                            <strong>{ticket.requesterContact || "-"}</strong>
+                          </div>
+                          <div>
+                            <small>{t.created}</small>
+                            <strong>{formatDate(ticket.created)}</strong>
+                          </div>
+                        </div>
+
+                        <div className="ticket-dashboard-desktop-controls">
+                          <label className="field">
+                            <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
+                            <UserPicker
+                              value={ticket.assignedTo || ""}
+                              users={staffUsersForCampus(workOrderAssignableUsers(users, ticket.category, ticket.assignedTo || ""), ticket.campus, ticket.assignedTo || "")}
+                              disabled={!isAdmin || busy}
+                              onChange={(value) => void updateTicketRow(ticket, { assignedTo: value, status: value ? "Assigned" : ticket.status })}
+                              placeholder={lang === "km" ? "មិនទាន់ចាត់ចែង" : "Unassigned"}
+                              searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                              emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>{t.status}</span>
+                            <select className="status-select" disabled={!isAdmin} value={ticket.status || "Open"} onChange={(e) => changeTicketStatus(ticket.id, e.target.value)}>
+                              {TICKET_STATUS_OPTIONS.map((status) => (
+                                <option key={`ticket-desktop-status-${ticket.id}-${status.value}`} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        <div className="asset-actions ticket-dashboard-actions ticket-dashboard-desktop-actions">
+                          {ticket.assetId ? (
+                            <button className="tab btn-small" type="button" onClick={() => {
+                              setAssetCampusMultiFilter(["ALL"]);
+                              setAssetNameMultiFilter(["ALL"]);
+                              setAssetLocationMultiFilter(["ALL"]);
+                              setAssetAssignedToMultiFilter(["ALL"]);
+                              setAssetsView("list");
+                              setTab("assets");
+                              setSearch(ticket.assetId);
+                            }}>
+                              Open Asset
+                            </button>
+                          ) : null}
+                          {isSuperAdmin ? (
+                            <button
+                              className="tab btn-small"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => openTicketEditModal(ticket)}
+                            >
+                              Edit
+                            </button>
+                          ) : null}
+                          {ticket.assetDbId ? (
+                            <button
+                              className="btn-primary btn-small"
+                              type="button"
+                              disabled={busy || ticket.status === "Done" || ticket.status === "Cancelled"}
+                              onClick={() => openTicketMaintenanceModal(ticket)}
+                            >
+                              Complete & Record
+                            </button>
+                          ) : null}
+                          {isSuperAdmin ? (
+                            <button
+                              className="btn-danger btn-small"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void deleteTicketRow(ticket)}
+                            >
+                              Delete
+                            </button>
+                          ) : null}
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <article className="ticket-dashboard-desktop-card ticket-dashboard-desktop-empty">
+                      <strong>{t.noWorkOrders}</strong>
+                    </article>
+                  )}
+                </div>
+              )}
             </section>
             )}
           </>

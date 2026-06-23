@@ -6230,7 +6230,7 @@ function toPublicAssetComponentView(asset) {
   };
 }
 
-function toPublicAssetView(asset, allAssets = []) {
+function toPublicAssetView(asset, allAssets = [], allTickets = []) {
   const source = asset && typeof asset === "object" ? asset : {};
   const maintenanceHistory = Array.isArray(source.maintenanceHistory)
     ? source.maintenanceHistory.map((entry) => ({
@@ -6310,6 +6310,18 @@ function toPublicAssetView(asset, allAssets = []) {
         )
         .map((row) => toPublicAssetComponentView(row))
     : [];
+  const openWorkOrder = normalizeTickets(allTickets)
+    .filter((ticket) => {
+      const status = toText(ticket.status).toLowerCase();
+      if (["done", "cancelled", "resolved"].includes(status)) return false;
+      if (Number(ticket.assetDbId) && Number(ticket.assetDbId) === Number(source.id || 0)) return true;
+      return toText(ticket.assetId) && toText(ticket.assetId) === toText(source.assetId);
+    })
+    .sort(
+      (a, b) =>
+        Date.parse(toText(b.updatedAt) || toText(b.created) || "") -
+        Date.parse(toText(a.updatedAt) || toText(a.created) || "")
+    )[0] || null;
   return {
     id: Number(source.id || 0),
     assetId: toText(source.assetId),
@@ -6348,6 +6360,21 @@ function toPublicAssetView(asset, allAssets = []) {
     statusHistory,
     custodyHistory,
     components,
+    openWorkOrder: openWorkOrder
+      ? {
+          id: Number(openWorkOrder.id) || 0,
+          ticketNo: toText(openWorkOrder.ticketNo),
+          title: toText(openWorkOrder.title),
+          description: toText(openWorkOrder.description),
+          requestedBy: toText(openWorkOrder.requestedBy),
+          requesterContact: toText(openWorkOrder.requesterContact),
+          priority: toText(openWorkOrder.priority),
+          status: toText(openWorkOrder.status),
+          assignedTo: toText(openWorkOrder.assignedTo),
+          requestSource: toText(openWorkOrder.requestSource),
+          created: toText(openWorkOrder.created),
+        }
+      : null,
     created: toText(source.created),
   };
 }
@@ -6581,7 +6608,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
-      sendJson(res, 200, { asset: toPublicAssetView(found, assets) });
+      sendJson(res, 200, { asset: toPublicAssetView(found, assets, db.tickets) });
       return;
     }
 
