@@ -37187,79 +37187,81 @@ function formatTicketRequestSource(value?: string) {
                                 onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, by: e.target.value }))}
                               />
                             </label>
-                            <label className="field">
-                              <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
-                              <input
-                                key={`${publicQrRecordFileKey}-before`}
-                                className="file-input"
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={(e) => void onPublicQrRecordPhotoFile(e, "before")}
-                              />
-                              {publicQrRecordForm.beforePhotos.length ? (
-                                <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                                  {publicQrRecordForm.beforePhotos.map((url, index) => (
-                                    <div key={`public-qr-before-${index}`} className="asset-photo-chip">
-                                      <img loading="lazy" decoding="async" src={url} alt={`public-qr-before-${index + 1}`} className="asset-photo-chip-img" />
-                                      <div className="asset-photo-chip-actions">
-                                        <button
-                                          type="button"
-                                          className="tab"
-                                          onClick={() =>
-                                            setPublicQrRecordForm((f) => ({
-                                              ...f,
-                                              beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
-                                            }))
-                                          }
-                                        >
-                                          {publicQrText.remove}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </label>
-                            <label className="field">
-                              <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
-                              <input
-                                key={`${publicQrRecordFileKey}-after`}
-                                className="file-input"
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                onChange={(e) => void onPublicQrRecordPhotoFile(e, "after")}
-                              />
-                              {publicQrRecordForm.afterPhotos.length ? (
-                                <div className="asset-photo-gallery" style={{ marginTop: 8 }}>
-                                  {publicQrRecordForm.afterPhotos.map((url, index) => (
-                                    <div key={`public-qr-after-${index}`} className="asset-photo-chip">
-                                      <img loading="lazy" decoding="async" src={url} alt={`public-qr-after-${index + 1}`} className="asset-photo-chip-img" />
-                                      <div className="asset-photo-chip-actions">
-                                        <button
-                                          type="button"
-                                          className="tab"
-                                          onClick={() =>
-                                            setPublicQrRecordForm((f) => {
-                                              const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
-                                              return {
+                            <div className="field field-wide public-qr-photo-pair">
+                              <div className="public-qr-photo-column">
+                                <span>{lang === "km" ? "រូបភាពមុនធ្វើ ឬ ជួសជុល" : "Before Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                                <input
+                                  key={`${publicQrRecordFileKey}-before`}
+                                  className="file-input"
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={(e) => void onPublicQrRecordPhotoFile(e, "before")}
+                                />
+                                {publicQrRecordForm.beforePhotos.length ? (
+                                  <div className="asset-photo-gallery public-qr-photo-gallery" style={{ marginTop: 8 }}>
+                                    {publicQrRecordForm.beforePhotos.map((url, index) => (
+                                      <div key={`public-qr-before-${index}`} className="asset-photo-chip">
+                                        <img loading="lazy" decoding="async" src={url} alt={`public-qr-before-${index + 1}`} className="asset-photo-chip-img" />
+                                        <div className="asset-photo-chip-actions">
+                                          <button
+                                            type="button"
+                                            className="tab"
+                                            onClick={() =>
+                                              setPublicQrRecordForm((f) => ({
                                                 ...f,
-                                                afterPhotos: nextAfter,
-                                                photo: nextAfter[0] || "",
-                                                photos: nextAfter,
-                                              };
-                                            })
-                                          }
-                                        >
-                                          {publicQrText.remove}
-                                        </button>
+                                                beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                                              }))
+                                            }
+                                          >
+                                            {publicQrText.remove}
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </label>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div className="public-qr-photo-column">
+                                <span>{lang === "km" ? "រូបភាពក្រោយធ្វើ ឬ ជួសជុល" : "After Photos"} ({MAX_MAINTENANCE_PHOTOS} max)</span>
+                                <input
+                                  key={`${publicQrRecordFileKey}-after`}
+                                  className="file-input"
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={(e) => void onPublicQrRecordPhotoFile(e, "after")}
+                                />
+                                {publicQrRecordForm.afterPhotos.length ? (
+                                  <div className="asset-photo-gallery public-qr-photo-gallery" style={{ marginTop: 8 }}>
+                                    {publicQrRecordForm.afterPhotos.map((url, index) => (
+                                      <div key={`public-qr-after-${index}`} className="asset-photo-chip">
+                                        <img loading="lazy" decoding="async" src={url} alt={`public-qr-after-${index + 1}`} className="asset-photo-chip-img" />
+                                        <div className="asset-photo-chip-actions">
+                                          <button
+                                            type="button"
+                                            className="tab"
+                                            onClick={() =>
+                                              setPublicQrRecordForm((f) => {
+                                                const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                                return {
+                                                  ...f,
+                                                  afterPhotos: nextAfter,
+                                                  photo: nextAfter[0] || "",
+                                                  photos: nextAfter,
+                                                };
+                                              })
+                                            }
+                                          >
+                                            {publicQrText.remove}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
                             <div className="field field-wide">
                               <button
                                 className="btn-primary"

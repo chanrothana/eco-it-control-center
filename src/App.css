@@ -22925,6 +22925,23 @@ tr.row-maint-maintenance:hover td {
   color: #5c442d;
 }
 
+.public-qr-photo-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.public-qr-photo-column {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.public-qr-photo-gallery {
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+}
+
 .public-asset-group-body .tiny {
   color: #7a5c3b !important;
 }
@@ -27209,6 +27226,27 @@ tr.row-maint-maintenance:hover td {
 
   .public-asset-grid .field {
     gap: 4px;
+  }
+
+  .public-qr-photo-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .public-qr-photo-column .file-input {
+    width: 100%;
+  }
+
+  .public-qr-photo-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .public-qr-photo-gallery .asset-photo-chip {
+    padding: 10px;
+  }
+
+  .public-qr-photo-gallery .asset-photo-chip-img {
+    height: 112px;
   }
 
   .public-asset-mobile-card {
