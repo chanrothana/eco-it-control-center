@@ -7055,6 +7055,13 @@ function buildAirconSpecs(
   return out.join("\n").trim();
 }
 
+function getVisibleSpecsTextareaValue(category: string, type: string, specs: string) {
+  if (isAirconAsset(category, type)) {
+    return parseAirconSpecs(specs).specs;
+  }
+  return String(specs || "");
+}
+
 function parseFanSpecs(specsRaw: string) {
   const specs = String(specsRaw || "").trim();
   if (!specs) {
@@ -42247,7 +42254,28 @@ function formatTicketRequestSource(value?: string) {
                   {!isFurnitureAsset(assetForm.category) ? (
                     <label className="field field-wide">
                       <span>{t.specs}</span>
-                      <textarea className="textarea" value={assetForm.specs} onChange={(e) => setAssetForm((f) => ({ ...f, specs: e.target.value }))} />
+                      <textarea
+                        className="textarea"
+                        value={getVisibleSpecsTextareaValue(assetForm.category, assetForm.type, assetForm.specs)}
+                        onChange={(e) =>
+                          setAssetForm((f) =>
+                            isAirconAsset(f.category, f.type)
+                              ? {
+                                  ...f,
+                                  specs: buildAirconSpecs(e.target.value, f.acType, f.acHp, {
+                                    hasRemote: Boolean(f.acHasRemote),
+                                    hasFrontPanel: Boolean(f.acHasFrontPanel),
+                                    hasOutdoor: Boolean(f.acHasOutdoor),
+                                    componentNote: String(f.acComponentNote || ""),
+                                    remotePhoto: String(f.acRemotePhoto || ""),
+                                    frontUnitPhoto: String(f.acFrontUnitPhoto || ""),
+                                    outdoorPhoto: String(f.acOutdoorPhoto || ""),
+                                  }),
+                                }
+                              : { ...f, specs: e.target.value }
+                          )
+                        }
+                      />
                     </label>
                   ) : null}
                   <label className="field field-wide">
@@ -43679,7 +43707,28 @@ function formatTicketRequestSource(value?: string) {
                     {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field field-wide">
                         <span>Specs</span>
-                        <textarea className="textarea" value={assetEditForm.specs} onChange={(e) => setAssetEditForm((f) => ({ ...f, specs: e.target.value }))} />
+                        <textarea
+                          className="textarea"
+                          value={getVisibleSpecsTextareaValue(editingAsset?.category || "", editingAsset?.type || "", assetEditForm.specs)}
+                          onChange={(e) =>
+                            setAssetEditForm((f) =>
+                              isAirconAsset(editingAsset?.category || "", editingAsset?.type || "")
+                                ? {
+                                    ...f,
+                                    specs: buildAirconSpecs(e.target.value, f.acType, f.acHp, {
+                                      hasRemote: Boolean(f.acHasRemote),
+                                      hasFrontPanel: Boolean(f.acHasFrontPanel),
+                                      hasOutdoor: Boolean(f.acHasOutdoor),
+                                      componentNote: String(f.acComponentNote || ""),
+                                      remotePhoto: String(f.acRemotePhoto || ""),
+                                      frontUnitPhoto: String(f.acFrontUnitPhoto || ""),
+                                      outdoorPhoto: String(f.acOutdoorPhoto || ""),
+                                    }),
+                                  }
+                                : { ...f, specs: e.target.value }
+                            )
+                          }
+                        />
                       </label>
                     ) : null}
                     <label className="field field-wide">
@@ -57786,89 +57835,170 @@ function formatTicketRequestSource(value?: string) {
             )}
 
             {reportType === "asset_full_record" && (
-              <div className="report-asset-full-record" style={{ display: "grid", gap: 16, marginTop: 12 }}>
+              <div className="report-asset-full-record">
                 {focusedReportAsset ? (
-                  <>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: isPhoneView ? "1fr" : "220px 1fr",
-                        gap: 16,
-                        alignItems: "start",
-                      }}
-                    >
-                      <div className="panel-note" style={{ margin: 0 }}>
-                        <div style={{ display: "grid", placeItems: "center" }}>
+                  <section className="report-formal-sheet">
+                    <header className="report-formal-header">
+                      <div>
+                        <div className="report-formal-kicker">Official Asset Report</div>
+                        <h3>Full Asset Record</h3>
+                        <p className="report-formal-subtitle">
+                          Complete asset profile with core details, assignment status, maintenance history, transfer history, and verification records.
+                        </p>
+                      </div>
+                      <div className="report-formal-header-tags">
+                        <span>Asset ID: {focusedReportAsset.assetId || "-"}</span>
+                        <span>Status: {focusedReportAsset.status || "-"}</span>
+                      </div>
+                    </header>
+
+                    <div className="report-formal-hero">
+                      <div className="report-formal-photo-card">
+                        <div className="report-formal-photo-frame">
                           {renderAssetPhoto(focusedReportAsset.photo || "", focusedReportAsset.assetId)}
                         </div>
                       </div>
-                      <div className="stats-grid" style={{ marginBottom: 0 }}>
-                        <article className="stat-card">
-                          <div className="stat-label">Asset ID</div>
-                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{focusedReportAsset.assetId}</div>
+                      <div className="report-formal-summary-grid">
+                        <article className="report-formal-summary-card">
+                          <span>Item</span>
+                          <strong>{assetItemName(focusedReportAsset.category, focusedReportAsset.type, focusedReportAsset.pcType || "") || focusedReportAsset.name || "-"}</strong>
                         </article>
-                        <article className="stat-card">
-                          <div className="stat-label">Status</div>
-                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{focusedReportAsset.status || "-"}</div>
+                        <article className="report-formal-summary-card">
+                          <span>Campus</span>
+                          <strong>{reportCampusName(focusedReportAsset.campus)}</strong>
                         </article>
-                        <article className="stat-card">
-                          <div className="stat-label">Campus</div>
-                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{reportCampusName(focusedReportAsset.campus)}</div>
+                        <article className="report-formal-summary-card">
+                          <span>Location</span>
+                          <strong>{focusedReportAsset.location || "-"}</strong>
                         </article>
-                        <article className="stat-card">
-                          <div className="stat-label">Location</div>
-                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{focusedReportAsset.location || "-"}</div>
+                        <article className="report-formal-summary-card">
+                          <span>Assigned To</span>
+                          <strong>{focusedReportAsset.assignedTo || "-"}</strong>
                         </article>
                       </div>
                     </div>
 
-                    <div className="table-wrap report-table-wrap">
-                      <table>
-                        <tbody>
-                          <tr>
-                            <th>Item</th>
-                            <td>{focusedReportAsset.name || "-"}</td>
-                            <th>Category</th>
-                            <td>{focusedReportAsset.category || "-"}</td>
-                          </tr>
-                          <tr>
-                            <th>Assigned To</th>
-                            <td>{focusedReportAsset.assignedTo || "-"}</td>
-                            <th>Brand / Model</th>
-                            <td>{[focusedReportAsset.brand || "-", focusedReportAsset.model || "-"].join(" / ")}</td>
-                          </tr>
-                          <tr>
-                            <th>Serial Number</th>
-                            <td>{focusedReportAsset.serialNumber || "-"}</td>
-                            <th>Purchase Date</th>
-                            <td>{formatDate(focusedReportAsset.purchaseDate || "-")}</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                    <div className="report-formal-detail-grid">
+                      <section className="report-formal-section">
+                        <div className="report-formal-section-head">
+                          <h4>General Information</h4>
+                        </div>
+                        <div className="table-wrap report-table-wrap report-full-record-table-wrap">
+                          <table className="report-full-record-table">
+                            <tbody>
+                              <tr>
+                                <th>Asset ID</th>
+                                <td><strong>{focusedReportAsset.assetId || "-"}</strong></td>
+                                <th>Recorded Name</th>
+                                <td>{focusedReportAsset.name || "-"}</td>
+                              </tr>
+                              <tr>
+                                <th>Category</th>
+                                <td>{focusedReportAsset.category || "-"}</td>
+                                <th>Type</th>
+                                <td>{focusedReportAsset.type || "-"}</td>
+                              </tr>
+                              <tr>
+                                <th>Status</th>
+                                <td>{focusedReportAsset.status || "-"}</td>
+                                <th>Campus</th>
+                                <td>{reportCampusName(focusedReportAsset.campus)}</td>
+                              </tr>
+                              <tr>
+                                <th>Location</th>
+                                <td>{focusedReportAsset.location || "-"}</td>
+                                <th>Assigned To</th>
+                                <td>{focusedReportAsset.assignedTo || "-"}</td>
+                              </tr>
+                              <tr>
+                                <th>Set Code</th>
+                                <td>{focusedReportAsset.setCode || "-"}</td>
+                                <th>Parent Asset ID</th>
+                                <td>{focusedReportAsset.parentAssetId || "-"}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+
+                      <section className="report-formal-section">
+                        <div className="report-formal-section-head">
+                          <h4>Technical and Purchase Details</h4>
+                        </div>
+                        <div className="table-wrap report-table-wrap report-full-record-table-wrap">
+                          <table className="report-full-record-table">
+                            <tbody>
+                              <tr>
+                                <th>Brand / Model</th>
+                                <td>{[focusedReportAsset.brand || "-", focusedReportAsset.model || "-"].join(" / ")}</td>
+                                <th>Serial Number</th>
+                                <td>{focusedReportAsset.serialNumber || "-"}</td>
+                              </tr>
+                              <tr>
+                                <th>Purchase Date</th>
+                                <td>{formatDate(focusedReportAsset.purchaseDate || "-")}</td>
+                                <th>Warranty Until</th>
+                                <td>{formatDate(focusedReportAsset.warrantyUntil || "-")}</td>
+                              </tr>
+                              <tr>
+                                <th>Vendor</th>
+                                <td>{focusedReportAsset.vendor || "-"}</td>
+                                <th>Schedule Mode</th>
+                                <td>{focusedReportAsset.repeatMode || "-"}</td>
+                              </tr>
+                              <tr>
+                                <th>PC Type</th>
+                                <td>{focusedReportAsset.pcType || "-"}</td>
+                                <th>Custody Status</th>
+                                <td>{focusedReportAsset.custodyStatus || "-"}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
                     </div>
 
-                    <div className="stats-grid" style={{ marginBottom: 0 }}>
-                      <article className="stat-card">
-                        <div className="stat-label">Maintenance Records</div>
-                        <div className="stat-value">{assetFullRecordMaintenanceRows.length}</div>
+                    {(focusedReportAsset.specs || focusedReportAsset.notes) ? (
+                      <section className="report-formal-section">
+                        <div className="report-formal-section-head">
+                          <h4>Additional Notes</h4>
+                        </div>
+                        <div className="report-formal-note-grid">
+                          <div className="report-formal-note-card">
+                            <span>Specifications</span>
+                            <p>{focusedReportAsset.specs || "-"}</p>
+                          </div>
+                          <div className="report-formal-note-card">
+                            <span>Notes</span>
+                            <p>{focusedReportAsset.notes || "-"}</p>
+                          </div>
+                        </div>
+                      </section>
+                    ) : null}
+
+                    <div className="report-formal-count-grid">
+                      <article className="report-formal-count-card">
+                        <span>Maintenance Records</span>
+                        <strong>{assetFullRecordMaintenanceRows.length}</strong>
                       </article>
-                      <article className="stat-card">
-                        <div className="stat-label">Transfer Records</div>
-                        <div className="stat-value">{assetFullRecordTransferRows.length}</div>
+                      <article className="report-formal-count-card">
+                        <span>Transfer Records</span>
+                        <strong>{assetFullRecordTransferRows.length}</strong>
                       </article>
-                      <article className="stat-card">
-                        <div className="stat-label">Verification Records</div>
-                        <div className="stat-value">{assetFullRecordVerificationRows.length}</div>
+                      <article className="report-formal-count-card">
+                        <span>Verification Records</span>
+                        <strong>{assetFullRecordVerificationRows.length}</strong>
                       </article>
                     </div>
 
                     {assetFullRecordAssignmentRows.length ? (
-                      <div className="table-wrap report-table-wrap">
+                      <section className="report-formal-section">
+                        <div className="report-formal-section-head">
+                          <h4>Current Assignment</h4>
+                        </div>
+                        <div className="table-wrap report-table-wrap report-full-record-table-wrap">
                         <table>
                           <thead>
-                            <tr>
-                              <th colSpan={7}>Current Assignment</th>
-                            </tr>
                             <tr>
                               <th>Asset ID</th>
                               <th>Item</th>
@@ -57893,16 +58023,20 @@ function formatTicketRequestSource(value?: string) {
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                        </div>
+                      </section>
                     ) : null}
 
-                    <div className="table-wrap report-table-wrap">
+                    <section className="report-formal-section">
+                      <div className="report-formal-section-head">
+                        <h4>Maintenance History</h4>
+                        <span>{assetFullRecordMaintenanceRows.length} record{assetFullRecordMaintenanceRows.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="table-wrap report-table-wrap report-full-record-table-wrap">
                       <table>
                         <thead>
                           <tr>
-                            <th colSpan={7}>Maintenance History</th>
-                          </tr>
-                          <tr>
+                            <th>No.</th>
                             <th>Date</th>
                             <th>Type</th>
                             <th>Status</th>
@@ -57914,8 +58048,9 @@ function formatTicketRequestSource(value?: string) {
                         </thead>
                         <tbody>
                           {assetFullRecordMaintenanceRows.length ? (
-                            assetFullRecordMaintenanceRows.map((row) => (
+                            assetFullRecordMaintenanceRows.map((row, index) => (
                               <tr key={`asset-full-maint-${row.id}`}>
+                                <td>{index + 1}</td>
                                 <td>{formatDate(row.date || "-")}</td>
                                 <td>{row.type || "-"}</td>
                                 <td>{row.completion || "-"}</td>
@@ -57927,20 +58062,24 @@ function formatTicketRequestSource(value?: string) {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={7}>No maintenance history.</td>
+                              <td colSpan={8}>No maintenance history.</td>
                             </tr>
                           )}
                         </tbody>
                       </table>
-                    </div>
+                      </div>
+                    </section>
 
-                    <div className="table-wrap report-table-wrap">
+                    <section className="report-formal-section">
+                      <div className="report-formal-section-head">
+                        <h4>Transfer History</h4>
+                        <span>{assetFullRecordTransferRows.length} record{assetFullRecordTransferRows.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="table-wrap report-table-wrap report-full-record-table-wrap">
                       <table>
                         <thead>
                           <tr>
-                            <th colSpan={9}>Transfer History</th>
-                          </tr>
-                          <tr>
+                            <th>No.</th>
                             <th>Date</th>
                             <th>From Campus</th>
                             <th>From Location</th>
@@ -57954,8 +58093,9 @@ function formatTicketRequestSource(value?: string) {
                         </thead>
                         <tbody>
                           {assetFullRecordTransferRows.length ? (
-                            assetFullRecordTransferRows.map((row) => (
+                            assetFullRecordTransferRows.map((row, index) => (
                               <tr key={`asset-full-transfer-${row.rowId}`}>
+                                <td>{index + 1}</td>
                                 <td>{formatDate(row.date || "-")}</td>
                                 <td>{reportCampusName(row.fromCampus)}</td>
                                 <td>{row.fromLocation || "-"}</td>
@@ -57969,20 +58109,24 @@ function formatTicketRequestSource(value?: string) {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={9}>No transfer history.</td>
+                              <td colSpan={10}>No transfer history.</td>
                             </tr>
                           )}
                         </tbody>
                       </table>
-                    </div>
+                      </div>
+                    </section>
 
-                    <div className="table-wrap report-table-wrap">
+                    <section className="report-formal-section">
+                      <div className="report-formal-section-head">
+                        <h4>Verification History</h4>
+                        <span>{assetFullRecordVerificationRows.length} record{assetFullRecordVerificationRows.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="table-wrap report-table-wrap report-full-record-table-wrap">
                       <table>
                         <thead>
                           <tr>
-                            <th colSpan={6}>Verification History</th>
-                          </tr>
-                          <tr>
+                            <th>No.</th>
                             <th>Date</th>
                             <th>Result</th>
                             <th>Condition</th>
@@ -57993,8 +58137,9 @@ function formatTicketRequestSource(value?: string) {
                         </thead>
                         <tbody>
                           {assetFullRecordVerificationRows.length ? (
-                            assetFullRecordVerificationRows.map((row) => (
+                            assetFullRecordVerificationRows.map((row, index) => (
                               <tr key={`asset-full-verify-${row.rowId}`}>
+                                <td>{index + 1}</td>
                                 <td>{formatDate(row.date || "-")}</td>
                                 <td>{row.result || "-"}</td>
                                 <td>{row.condition || "-"}</td>
@@ -58005,13 +58150,14 @@ function formatTicketRequestSource(value?: string) {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={6}>No verification history.</td>
+                              <td colSpan={7}>No verification history.</td>
                             </tr>
                           )}
                         </tbody>
                       </table>
-                    </div>
-                  </>
+                      </div>
+                    </section>
+                  </section>
                 ) : (
                   <div className="panel-note">No asset selected for this full record report.</div>
                 )}
