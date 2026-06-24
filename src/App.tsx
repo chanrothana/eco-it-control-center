@@ -368,6 +368,7 @@ type PublicQrAssetComponent = {
   photos?: string[];
 };
 type ReportType =
+  | "asset_full_record"
   | "asset_master"
   | "set_code"
   | "asset_by_location"
@@ -486,8 +487,10 @@ type InventoryItem = {
   unit: string;
   openingQty: number;
   minStock: number;
+  area?: string;
   location: string;
   vendor?: string;
+  ownerType?: ToolOwnerType;
   responsibleParty?: string;
   notes?: string;
   itemGroup?: "GENERAL" | "TONER";
@@ -497,6 +500,12 @@ type InventoryItem = {
   photo?: string;
   created: string;
 };
+type ToolOwnerType =
+  | "SCHOOL"
+  | "COMPUTER_PROVIDER"
+  | "CLEANING_PROVIDER"
+  | "GARDEN_PROVIDER"
+  | "OTHER_PROVIDER";
 type ToolReviewCondition =
   | "Good"
   | "Fair"
@@ -511,10 +520,13 @@ type ToolReviewReport = {
   itemName: string;
   category: InventoryItem["category"];
   campus: string;
+  area?: string;
   location: string;
   expectedQty: number;
   countedQty: number;
   unit: string;
+  ownerType?: ToolOwnerType;
+  responsibleParty?: string;
   condition: ToolReviewCondition;
   reviewedBy: string;
   supervisor: string;
@@ -721,6 +733,29 @@ type DashboardStats = {
   openTickets: number;
   byCampus: Array<{ campus: string; assets: number; openTickets: number }>;
 };
+
+type BootstrapPayload = {
+  assets?: Asset[];
+  tickets?: Ticket[];
+  stats?: DashboardStats;
+  locations?: LocationEntry[];
+};
+
+function tabNeedsAssetDataset(tab: NavModule) {
+  switch (tab) {
+    case "assets":
+    case "classroom":
+    case "tickets":
+    case "schedule":
+    case "transfer":
+    case "maintenance":
+    case "verification":
+    case "reports":
+      return true;
+    default:
+      return false;
+  }
+}
 
 type ApiError = { error?: string };
 type Lang = "en" | "km";
@@ -1405,7 +1440,7 @@ const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
 const DUPLICATE_PHOTO_UPLOAD_ERROR = "duplicate-photo-upload";
 const PHOTO_USAGE_FIELD_KEYS = new Set(["photo", "photos", "beforePhotos", "afterPhotos"]);
 const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
-  asset: ["asset_master", "set_code", "asset_by_location", "furniture_control", "staff_borrowing", "qr_labels"],
+  asset: ["asset_full_record", "asset_master", "set_code", "asset_by_location", "furniture_control", "staff_borrowing", "qr_labels"],
   maintenance: ["maintenance_completion", "overdue"],
   inventory: ["inventory_balance"],
   transfer: ["transfer"],
@@ -1413,6 +1448,7 @@ const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
   vault: ["it_vault"],
 };
 const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
+  asset_full_record: "asset",
   asset_master: "asset",
   set_code: "asset",
   asset_by_location: "asset",
@@ -1645,7 +1681,10 @@ const INVENTORY_BULK_TEMPLATE_HEADERS = [
   "unit",
   "opening_qty",
   "min_stock",
+  "area",
   "location",
+  "owner_type",
+  "responsible_party",
   "vendor",
   "notes",
 ] as const;
@@ -2003,6 +2042,11 @@ const ALLOW_LOCAL_AUTH_BYPASS =
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 let runtimeAuthToken = "";
 
+function isLocalDevHost(hostname: string) {
+  const host = String(hostname || "").trim().toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
 function getAutoApiBaseForHost() {
   if (typeof window === "undefined") return "";
   return "";
@@ -2011,7 +2055,16 @@ function getAutoApiBaseForHost() {
 function getStoredApiBaseOverride() {
   if (typeof window === "undefined") return "";
   try {
-    return String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "").trim().replace(/\/+$/, "");
+    const stored = String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "").trim().replace(/\/+$/, "");
+    if (!stored) return "";
+    if (!isLocalDevHost(window.location.hostname)) return stored;
+    try {
+      const parsed = new URL(stored);
+      if (isLocalDevHost(parsed.hostname)) return stored;
+      return "";
+    } catch {
+      return stored.startsWith("/") ? stored : "";
+    }
   } catch {
     return "";
   }
@@ -2363,6 +2416,13 @@ const TOOL_REVIEW_CONDITION_OPTIONS: ToolReviewCondition[] = [
   "Damaged",
   "Missing",
   "Need Replacement",
+];
+const TOOL_OWNER_TYPE_OPTIONS: Array<{ value: ToolOwnerType; label: string }> = [
+  { value: "SCHOOL", label: "School" },
+  { value: "COMPUTER_PROVIDER", label: "Computer Provider" },
+  { value: "CLEANING_PROVIDER", label: "Cleaning Provider" },
+  { value: "GARDEN_PROVIDER", label: "Garden Provider" },
+  { value: "OTHER_PROVIDER", label: "Other Provider" },
 ];
 const INVENTORY_TXN_TYPE_OPTIONS = [
   { value: "IN", label: "Stock In" },
@@ -3243,6 +3303,7 @@ function getWdpFilterCycleNote(step: number) {
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const authToken = localStorage.getItem(AUTH_TOKEN_KEY) || runtimeAuthToken;
+  const REQUEST_TIMEOUT_MS = 12000;
   const requestInit: RequestInit = {
     headers: {
       "Content-Type": "application/json",
@@ -3253,7 +3314,31 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   };
 
   async function run(endpoint: string) {
-    const res = await fetch(endpoint, requestInit);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const externalSignal = init?.signal;
+    const abortFromExternal = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener("abort", abortFromExternal, { once: true });
+    }
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        ...requestInit,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error("API request timed out. Please check local server/API connection.");
+      }
+      throw err;
+    } finally {
+      window.clearTimeout(timeout);
+      if (externalSignal) {
+        externalSignal.removeEventListener("abort", abortFromExternal);
+      }
+    }
     const data = (await res.json().catch(() => ({}))) as T & ApiError;
     return { res, data };
   }
@@ -5135,6 +5220,10 @@ function inventoryBusinessGroupHasDailyStockFlow(value: InventoryBusinessGroup) 
 function inventoryToolGroupNeedsMonthlyReview(value: InventoryBusinessGroup) {
   return value === "CLEAN_TOOL" || value === "MAINT_TOOL" || value === "GARDEN_TOOL" || value === "SERVICE_TOOL";
 }
+function toolOwnerTypeLabel(value?: string) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return TOOL_OWNER_TYPE_OPTIONS.find((option) => option.value === normalized)?.label || (normalized || "School");
+}
 function normalizeToolReviewReportsClient(input: unknown): ToolReviewReport[] {
   return normalizeArray<ToolReviewReport>(input).map((row) => ({
     id: Number(row.id) || Date.now(),
@@ -5144,10 +5233,13 @@ function normalizeToolReviewReportsClient(input: unknown): ToolReviewReport[] {
     itemName: String(row.itemName || "").trim(),
     category: (String(row.category || "").trim().toUpperCase() as InventoryItem["category"]) || "CLEAN_TOOL",
     campus: String(row.campus || "").trim(),
+    area: String(row.area || "").trim(),
     location: String(row.location || "").trim(),
     expectedQty: Math.max(0, Number(row.expectedQty || 0)),
     countedQty: Math.max(0, Number(row.countedQty || 0)),
     unit: String(row.unit || "").trim(),
+    ownerType: (String(row.ownerType || "").trim().toUpperCase() as ToolOwnerType) || "SCHOOL",
+    responsibleParty: String(row.responsibleParty || "").trim(),
     condition: (String(row.condition || "").trim() as ToolReviewCondition) || "Good",
     reviewedBy: String(row.reviewedBy || "").trim(),
     supervisor: String(row.supervisor || "").trim(),
@@ -8708,11 +8800,11 @@ export default function App() {
   const openInventorySection = useCallback(
     (
       group: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL",
-      view: "dashboard" | "items" | "list" | "daily" | "stock" | "review" = "dashboard"
+      view?: "dashboard" | "items" | "list" | "daily" | "stock" | "review"
     ) => {
       startTabTransition(() => {
         setInventoryDashboardGroup(group);
-        setInventoryView(view);
+        setInventoryView(view || (group === "SUPPLY" ? "dashboard" : "review"));
         setTab("inventory");
       });
     },
@@ -8868,16 +8960,8 @@ export default function App() {
               key: `inventory.group.${group}`,
               label: lang === "km" ? inventoryNavLabelsKm[group] : inventoryBusinessGroupLabel(group),
               active: tab === "inventory" && inventoryDashboardGroup === group,
-              onSelect: () => openInventorySection(group, "dashboard"),
+              onSelect: () => openInventorySection(group),
               children: [
-                ...(group === "SUPPLY"
-                  ? []
-                  : [{
-                      key: `inventory.group.${group}.dashboard`,
-                      label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
-                      active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "dashboard",
-                      onSelect: () => openInventorySection(group, "dashboard"),
-                    }]),
                 {
                   key: `inventory.group.${group}.items`,
                   label: lang === "km" ? "រៀបចំមុខទំនិញ" : group === "SUPPLY" ? "Item Setup" : "Tool Setup",
@@ -8886,18 +8970,20 @@ export default function App() {
                 },
                 ...(group === "SUPPLY"
                   ? []
-                  : [{
+                  : [
+                    {
+                      key: `inventory.group.${group}.review`,
+                      label: lang === "km" ? "ពិនិត្យប្រចាំខែ" : "Monthly Check",
+                      active: tab === "inventory" && inventoryDashboardGroup === group && (inventoryView === "review" || inventoryView === "dashboard"),
+                      onSelect: () => openInventorySection(group, "review"),
+                    },
+                    {
                       key: `inventory.group.${group}.list`,
                       label: lang === "km" ? "បញ្ជីឧបករណ៍" : "Tools List",
                       active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "list",
                       onSelect: () => openInventorySection(group, "list"),
                     },
-                    {
-                      key: `inventory.group.${group}.review`,
-                      label: lang === "km" ? "របាយការណ៍ត្រួតពិនិត្យប្រចាំខែ" : "Monthly Review",
-                      active: tab === "inventory" && inventoryDashboardGroup === group && inventoryView === "review",
-                      onSelect: () => openInventorySection(group, "review"),
-                    }]),
+                  ]),
                 ...(hasDailyFlow
                   ? [
                       {
@@ -9772,22 +9858,18 @@ export default function App() {
   const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
   const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
+  const [reportAssetIdFilter, setReportAssetIdFilter] = useState("");
   const [maintenanceReportVisibleColumns, setMaintenanceReportVisibleColumns] = useState<MaintenanceReportColumnKey[]>([
     "date",
     "assetId",
-    "itemName",
-    "beforePhoto",
-    "afterPhoto",
-    "campus",
     "location",
     "type",
     "completion",
     "condition",
-    "cost",
     "by",
-    "reportFile",
-    "note",
   ]);
+  const [maintenanceReportExpandedRows, setMaintenanceReportExpandedRows] = useState<Record<string, boolean>>({});
+  const [maintenanceReportFiltersCollapsed, setMaintenanceReportFiltersCollapsed] = useState(false);
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
   const [reportYear, setReportYear] = useState(String(new Date().getFullYear()));
   const [reportTerm, setReportTerm] = useState<"Term 1" | "Term 2" | "Term 3">("Term 1");
@@ -9936,11 +10018,21 @@ export default function App() {
     () => maintenanceNotifications.filter((row) => !row.read),
     [maintenanceNotifications]
   );
+  const assetDataLoadedRef = useRef(false);
+  const tabRef = useRef<NavModule>("dashboard");
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [appVersionBadge, setAppVersionBadge] = useState(APP_VERSION);
+  const [assetDataLoaded, setAssetDataLoaded] = useState(false);
+  const hasPrimaryDataLoaded =
+    assets.length > 0 ||
+    tickets.length > 0 ||
+    locations.length > 0 ||
+    stats.totalAssets > 0 ||
+    stats.openTickets > 0;
+  const showLoadingBanner = loading && !hasPrimaryDataLoaded;
 
   const [assetForm, setAssetForm] = useState({
     campus: CAMPUS_LIST[0],
@@ -12134,8 +12226,10 @@ export default function App() {
     unit: "pcs",
     openingQty: "0",
     minStock: "",
+    area: "",
     location: "",
     vendor: "",
+    ownerType: "SCHOOL" as ToolOwnerType,
     responsibleParty: "",
     notes: "",
     photo: "",
@@ -12200,9 +12294,11 @@ export default function App() {
   const [inventoryItemFilterGroup, setInventoryItemFilterGroup] = useState("ALL");
   const [inventoryItemFilterQuery, setInventoryItemFilterQuery] = useState("");
   const [inventoryToolListLocationFilter, setInventoryToolListLocationFilter] = useState("ALL");
+  const [inventoryToolListAreaFilter, setInventoryToolListAreaFilter] = useState("ALL");
   const [inventoryToolListStatusFilter, setInventoryToolListStatusFilter] = useState<"ALL" | "READY" | "LOW" | "ZERO">("ALL");
   const [toolReviewMonth, setToolReviewMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [toolReviewCampusFilter, setToolReviewCampusFilter] = useState("ALL");
+  const [toolReviewAreaFilter, setToolReviewAreaFilter] = useState("ALL");
   const [toolReviewLocationFilter, setToolReviewLocationFilter] = useState("ALL");
   const [toolReviewSupervisorFilter, setToolReviewSupervisorFilter] = useState("ALL");
   const [toolReviewPhotoFileKey, setToolReviewPhotoFileKey] = useState(0);
@@ -12440,6 +12536,7 @@ export default function App() {
       }
       if (mounted && cachedUser) {
         setAuthUser(cachedUser);
+        setAuthLoading(false);
       }
       runtimeAuthToken = token;
       if (ALLOW_LOCAL_AUTH_BYPASS && token === LOCAL_ADMIN_TOKEN) {
@@ -14142,7 +14239,7 @@ export default function App() {
     const q = inventorySearch.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
-        `${r.itemCode} ${r.itemName} ${inventoryAliasText(r.itemName)} ${r.location} ${r.vendor || ""} ${r.responsibleParty || ""}`.toLowerCase().includes(q)
+        `${r.itemCode} ${r.itemName} ${inventoryAliasText(r.itemName)} ${r.area || ""} ${r.location} ${toolOwnerTypeLabel(r.ownerType)} ${r.vendor || ""} ${r.responsibleParty || ""}`.toLowerCase().includes(q)
       );
     }
     return rows.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
@@ -14174,7 +14271,7 @@ export default function App() {
         return false;
       }
       if (!query) return true;
-      return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.location || ""} ${row.unit || ""} ${row.vendor || ""} ${row.responsibleParty || ""} ${row.notes || ""}`
+      return `${row.itemCode} ${row.itemName} ${inventoryAliasText(row.itemName)} ${row.area || ""} ${row.location || ""} ${toolOwnerTypeLabel(row.ownerType)} ${row.unit || ""} ${row.vendor || ""} ${row.responsibleParty || ""} ${row.notes || ""}`
         .toLowerCase()
         .includes(query);
     });
@@ -14239,8 +14336,31 @@ export default function App() {
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [inventoryBalanceRows, inventoryDashboardGroup]);
+  const inventoryToolListAreaOptions = useMemo(() => {
+    const rows = inventoryBalanceRows.filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup);
+    const values = new Set<string>();
+    for (const row of rows) {
+      if (inventoryItemFilterCampus !== "ALL" && String(row.campus || "").trim() !== inventoryItemFilterCampus) continue;
+      const area = String(row.area || "").trim();
+      if (area) values.add(area);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  }, [inventoryBalanceRows, inventoryDashboardGroup, inventoryItemFilterCampus]);
+  const toolReviewAreaOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of inventoryBalanceRows) {
+      if (inventoryBusinessGroupValue(row) !== inventoryDashboardGroup) continue;
+      if (toolReviewCampusFilter !== "ALL" && String(row.campus || "").trim() !== toolReviewCampusFilter) continue;
+      const area = String(row.area || "").trim();
+      if (area) values.add(area);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter]);
   const inventoryToolListRows = useMemo(() => {
     return inventoryItemRows.filter((row) => {
+      if (inventoryToolListAreaFilter !== "ALL" && String(row.area || "").trim() !== inventoryToolListAreaFilter) {
+        return false;
+      }
       if (inventoryToolListLocationFilter !== "ALL" && String(row.location || "").trim() !== inventoryToolListLocationFilter) {
         return false;
       }
@@ -14249,29 +14369,55 @@ export default function App() {
       if (inventoryToolListStatusFilter === "ZERO") return row.currentStock <= 0;
       return true;
     });
-  }, [inventoryItemRows, inventoryToolListLocationFilter, inventoryToolListStatusFilter]);
+  }, [inventoryItemRows, inventoryToolListAreaFilter, inventoryToolListLocationFilter, inventoryToolListStatusFilter]);
   const inventoryToolListSummary = useMemo(() => {
-    const rows = inventoryToolListRows;
-    const totalUnits = rows.reduce((sum, row) => sum + Number(row.currentStock || 0), 0);
-    const lowRows = rows.filter((row) => row.currentStock > 0 && row.currentStock <= Number(row.minStock || 0)).length;
-    const zeroRows = rows.filter((row) => row.currentStock <= 0).length;
-    const locations = new Set(rows.map((row) => String(row.location || "").trim()).filter(Boolean)).size;
+    const locations = new Set<string>();
+    let totalUnits = 0;
+    let lowRows = 0;
+    let zeroRows = 0;
+
+    for (const row of inventoryToolListRows) {
+      totalUnits += Number(row.currentStock || 0);
+      if (row.currentStock <= 0) {
+        zeroRows += 1;
+      } else if (row.currentStock <= Number(row.minStock || 0)) {
+        lowRows += 1;
+      }
+      const location = String(row.location || "").trim();
+      if (location) locations.add(location);
+    }
+
     return {
-      totalTypes: rows.length,
+      totalTypes: inventoryToolListRows.length,
       totalUnits,
       lowRows,
       zeroRows,
-      locations,
+      locations: locations.size,
     };
   }, [inventoryToolListRows]);
+  const latestToolReviewByItemId = useMemo(() => {
+    const map = new Map<number, ToolReviewReport>();
+    for (const row of toolReviewReports) {
+      const itemId = Number(row.itemId || 0);
+      if (!itemId) continue;
+      const current = map.get(itemId);
+      const currentStamp = String(current?.updated || current?.created || "");
+      const nextStamp = String(row.updated || row.created || "");
+      if (!current || nextStamp > currentStamp) {
+        map.set(itemId, row);
+      }
+    }
+    return map;
+  }, [toolReviewReports]);
   const toolReviewItemOptions = useMemo(() => {
     return inventoryBalanceRows
       .filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup)
       .filter((row) => inventoryToolGroupNeedsMonthlyReview(inventoryBusinessGroupValue(row)))
       .filter((row) => (toolReviewCampusFilter === "ALL" ? true : String(row.campus || "").trim() === toolReviewCampusFilter))
+      .filter((row) => (toolReviewAreaFilter === "ALL" ? true : String(row.area || "").trim() === toolReviewAreaFilter))
       .filter((row) => (toolReviewLocationFilter === "ALL" ? true : String(row.location || "").trim() === toolReviewLocationFilter))
       .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewLocationFilter]);
+  }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewAreaFilter, toolReviewLocationFilter]);
   const toolReviewSelectedItem = useMemo(
     () => toolReviewItemOptions.find((row) => String(row.id) === String(toolReviewForm.itemId || "")) || null,
     [toolReviewItemOptions, toolReviewForm.itemId]
@@ -14291,10 +14437,11 @@ export default function App() {
       .filter((row) => row.month === toolReviewMonth)
       .filter((row) => row.category === inventoryDashboardGroup)
       .filter((row) => (toolReviewCampusFilter === "ALL" ? true : String(row.campus || "").trim() === toolReviewCampusFilter))
+      .filter((row) => (toolReviewAreaFilter === "ALL" ? true : String(row.area || "").trim() === toolReviewAreaFilter))
       .filter((row) => (toolReviewLocationFilter === "ALL" ? true : String(row.location || "").trim() === toolReviewLocationFilter))
       .filter((row) => (toolReviewSupervisorFilter === "ALL" ? true : String(row.supervisor || "").trim() === toolReviewSupervisorFilter))
       .sort((a, b) => String(b.updated || b.created || "").localeCompare(String(a.updated || a.created || "")));
-  }, [toolReviewReports, toolReviewMonth, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewLocationFilter, toolReviewSupervisorFilter]);
+  }, [toolReviewReports, toolReviewMonth, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewAreaFilter, toolReviewLocationFilter, toolReviewSupervisorFilter]);
   const toolReviewSupervisorOptions = useMemo(() => {
     const values = new Set<string>();
     for (const row of toolReviewReports) {
@@ -17582,6 +17729,14 @@ export default function App() {
     if (tab === "setup" && setupView === "calendar" && !canAccessMenu("setup.calendar", "setup")) setSetupView("campus");
   }, [tab, setupView, canAccessMenu]);
   useEffect(() => {
+    assetDataLoadedRef.current = assetDataLoaded;
+  }, [assetDataLoaded]);
+
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
+  useEffect(() => {
     if (tab !== "vault") return;
     if (vaultTab === "dashboard" && !canAccessMenu("vault.dashboard", "vault")) setVaultTab("credentials");
     if (vaultTab === "accounts" && !canAccessMenu("vault.accounts", "vault")) setVaultTab("credentials");
@@ -17681,13 +17836,11 @@ export default function App() {
     try {
       const params = new URLSearchParams();
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
-      const [ticketRes, statsRes] = await Promise.all([
-        requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
-        requestJson<{ stats: DashboardStats }>(`/api/dashboard?${params.toString()}`),
-      ]);
-      setTickets(normalizeArray<Ticket>(ticketRes.tickets));
-      if (statsRes.stats) {
-        setStats(statsRes.stats);
+      params.set("include", "tickets,stats");
+      const res = await requestJson<BootstrapPayload>(`/api/bootstrap?${params.toString()}`);
+      setTickets(normalizeArray<Ticket>(res.tickets));
+      if (res.stats) {
+        setStats(res.stats);
       }
     } catch (err) {
       if (
@@ -17701,23 +17854,85 @@ export default function App() {
     }
   }, [authUser, campusFilter]);
 
-  const loadData = useCallback(async () => {
+  const loadAssetsDataset = useCallback(async () => {
+    try {
+      const fallbackAssets = readAssetFallback();
+      if (fallbackAssets.length) {
+        setAssets((current) => (current.length ? current : fallbackAssets));
+      }
+      const assetRes = await requestJson<{ assets: Asset[] }>("/api/assets");
+      const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
+      setAssets(serverAssets);
+      if (serverAssets.length > 0) {
+        writeAssetFallback(serverAssets);
+        setFurnitureModels((prev) =>
+          enrichFurnitureModelsWithAssetPhotos(
+            mergeFurnitureModelLists(deriveFurnitureModelsFromAssets(serverAssets), prev),
+            serverAssets
+          )
+        );
+      }
+      setAssetDataLoaded(true);
+    } catch (err) {
+      if (
+        isApiUnavailableError(err) ||
+        isMissingRouteError(err) ||
+        isUnauthorizedError(err)
+      ) {
+        const fallbackAssets = readAssetFallback();
+        if (fallbackAssets.length) {
+          setAssets(fallbackAssets);
+          setAssetDataLoaded(true);
+        }
+        return;
+      }
+      console.warn("Failed to load assets dataset", err);
+    }
+  }, []);
+
+  const loadData = useCallback(async (options?: { includeAssets?: boolean }) => {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
+      const shouldIncludeAssets =
+        options?.includeAssets ?? (tabNeedsAssetDataset(tabRef.current) || assetDataLoadedRef.current);
+      params.set("include", shouldIncludeAssets ? "assets,tickets,stats,locations" : "tickets,stats,locations");
+      if (shouldIncludeAssets) {
+        params.set("asset_scope", "all");
+      }
 
-      const [assetRes, ticketRes, statsRes, settingsResult, locationRes] = await Promise.all([
-        requestJson<{ assets: Asset[] }>(`/api/assets`),
-        requestJson<{ tickets: Ticket[] }>(`/api/tickets?${params.toString()}`),
-        requestJson<{ stats: DashboardStats }>(`/api/dashboard?${params.toString()}`),
-        requestJson<{ settings?: ServerSettings }>("/api/settings")
-          .then((settings) => ({ ok: true as const, settings }))
-          .catch(() => ({ ok: false as const })),
-        requestJson<{ locations: LocationEntry[] }>("/api/locations"),
-      ]);
-      const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
+      const settingsPromise = requestJson<{ settings?: ServerSettings }>("/api/settings")
+        .then((settings) => ({ ok: true as const, settings }))
+        .catch(() => ({ ok: false as const }));
+      const bootstrapRes = await requestJson<BootstrapPayload>(`/api/bootstrap?${params.toString()}`);
+      const serverAssets = shouldIncludeAssets
+        ? normalizeArray<Asset>(bootstrapRes.assets).map(normalizeAssetForUi)
+        : [];
+      const locationList = normalizeLocationEntries(bootstrapRes.locations);
+      const serverStats =
+        bootstrapRes.stats || {
+          totalAssets: 0,
+          itAssets: 0,
+          safetyAssets: 0,
+          openTickets: 0,
+          byCampus: [],
+        };
+      if (shouldIncludeAssets) {
+        setAssets(serverAssets);
+        if (serverAssets.length > 0) {
+          writeAssetFallback(serverAssets);
+        }
+        setAssetDataLoaded(true);
+      }
+
+      setTickets(normalizeArray<Ticket>(bootstrapRes.tickets));
+      setLocations(locationList);
+      setStats(serverStats);
+      setLoading(false);
+
+      const settingsResult = await settingsPromise;
       if (settingsResult.ok) {
         const settingsRes = settingsResult.settings;
         const fromServer = settingsRes.settings?.campusNames || {};
@@ -17811,7 +18026,8 @@ export default function App() {
         const serverPoolOperationRecords = normalizePoolOperationRecords(settingsRes.settings?.poolOperationRecords);
         const serverPoolComplaints = normalizePoolComplaints(settingsRes.settings?.poolComplaints);
         const fallbackFurnitureModels = readFurnitureModelFallback();
-        const derivedFurnitureModels = deriveFurnitureModelsFromAssets(serverAssets);
+        const assetSourceForSetup = readAssetFallback();
+        const derivedFurnitureModels = deriveFurnitureModelsFromAssets(assetSourceForSetup);
         const fallbackInventoryItems = readInventoryItemFallback();
         const fallbackInventoryTxns = readInventoryTxnFallback();
         const fallbackUtilityMeters = readUtilityMeterFallback();
@@ -17957,7 +18173,7 @@ export default function App() {
         );
         const mergedFurnitureModels = enrichFurnitureModelsWithAssetPhotos(
           mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels, serverFurnitureModels),
-          serverAssets
+          assetSourceForSetup
         );
         const hasServerFurnitureModels = Object.prototype.hasOwnProperty.call(settingsObj, "furnitureModels");
         if (hasServerFurnitureModels) {
@@ -17976,7 +18192,7 @@ export default function App() {
         } else {
           setFurnitureModels(enrichFurnitureModelsWithAssetPhotos(
             mergeFurnitureModelLists(derivedFurnitureModels, fallbackFurnitureModels),
-            serverAssets
+            assetSourceForSetup
           ));
         }
       } else {
@@ -18012,25 +18228,6 @@ export default function App() {
           readAssetFallback()
         ));
       }
-
-      const locationList = normalizeLocationEntries(locationRes.locations);
-
-      // Server-first sync: when API is reachable, use server data as single source of truth.
-      writeAssetFallback(serverAssets);
-      setAssets(serverAssets);
-      setTickets(normalizeArray<Ticket>(ticketRes.tickets));
-      setLocations(locationList);
-      const serverStats =
-        statsRes.stats || {
-          totalAssets: 0,
-          itAssets: 0,
-          safetyAssets: 0,
-          openTickets: 0,
-          byCampus: [],
-        };
-      setStats(
-        serverStats
-      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Cannot load data");
     } finally {
@@ -18039,12 +18236,21 @@ export default function App() {
   }, [
     campusFilter,
     defaultCalendarEvents,
-    loadMaintenanceNotifications,
   ]);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    void loadData({ includeAssets: false });
+  }, [campusFilter, defaultCalendarEvents, loadData]);
+
+  useEffect(() => {
+    if (!authUser) {
+      setAssetDataLoaded(false);
+      setAssets([]);
+      return;
+    }
+    if (!tabNeedsAssetDataset(tab) || assetDataLoaded) return;
+    void loadAssetsDataset();
+  }, [authUser, tab, assetDataLoaded, loadAssetsDataset]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -22999,7 +23205,9 @@ export default function App() {
       unit,
       openingQty: Math.max(0, Math.round(openingQty)),
       minStock: Math.max(0, Math.round(minStock)),
+      area: inventoryItemForm.area.trim(),
       location,
+      ownerType: inventoryItemForm.ownerType,
       responsibleParty: inventoryItemForm.responsibleParty.trim(),
       vendor: inventoryItemForm.vendor.trim(),
       notes: inventoryItemForm.notes.trim(),
@@ -23020,7 +23228,9 @@ export default function App() {
             unit: row.unit,
             openingQty: row.openingQty,
             minStock: row.minStock,
+            area: row.area || "",
             location: row.location,
+            ownerType: row.ownerType || "SCHOOL",
             responsibleParty: row.responsibleParty || "",
             vendor: row.vendor || "",
             notes: row.notes || "",
@@ -23072,7 +23282,10 @@ export default function App() {
         templateCategory === "SUPPLY" ? "bottle" : "pcs",
         templateCategory === "SUPPLY" ? "0" : "1",
         "0",
+        "",
         inventoryItemForm.location || inventoryLocations[0]?.name || "",
+        "SCHOOL",
+        "",
         "",
         "",
       ]
@@ -23150,7 +23363,10 @@ export default function App() {
     const unitIndex = findIndex("unit");
     const openingQtyIndex = findIndex("opening_qty", "opening", "openingqty");
     const minStockIndex = findIndex("min_stock", "min", "minstock");
+    const areaIndex = findIndex("area", "zone", "section");
     const locationIndex = findIndex("location");
+    const ownerTypeIndex = findIndex("owner_type", "owner", "ownership");
+    const responsiblePartyIndex = findIndex("responsible_party", "responsible", "provider");
     const vendorIndex = findIndex("vendor");
     const notesIndex = findIndex("notes", "note");
     const defaultLocation =
@@ -23176,7 +23392,10 @@ export default function App() {
           continue;
         }
         const unit = String((unitIndex >= 0 ? rowCells[unitIndex] : "") || "pcs").trim() || "pcs";
+        const area = String(areaIndex >= 0 ? rowCells[areaIndex] || "" : "").trim();
         const location = String((locationIndex >= 0 ? rowCells[locationIndex] : "") || defaultLocation).trim() || defaultLocation;
+        const ownerType = (String(ownerTypeIndex >= 0 ? rowCells[ownerTypeIndex] || "" : "SCHOOL").trim().toUpperCase() as ToolOwnerType) || "SCHOOL";
+        const responsibleParty = String(responsiblePartyIndex >= 0 ? rowCells[responsiblePartyIndex] || "" : "").trim();
         const openingQty = Math.max(0, Number((openingQtyIndex >= 0 ? rowCells[openingQtyIndex] : "") || 0));
         const minStock = Math.max(0, Number((minStockIndex >= 0 ? rowCells[minStockIndex] : "") || 0));
         const vendor = String(vendorIndex >= 0 ? rowCells[vendorIndex] || "" : "").trim();
@@ -23201,8 +23420,10 @@ export default function App() {
           unit,
           openingQty: Math.round(openingQty),
           minStock: Math.round(minStock),
+          area,
           location,
-          responsibleParty: "",
+          ownerType,
+          responsibleParty,
           vendor,
           notes,
           photo: "",
@@ -23219,8 +23440,10 @@ export default function App() {
               unit: newRow.unit,
               openingQty: newRow.openingQty,
               minStock: newRow.minStock,
+              area: newRow.area || "",
               location: newRow.location,
-              responsibleParty: "",
+              ownerType: newRow.ownerType || "SCHOOL",
+              responsibleParty: newRow.responsibleParty || "",
               vendor: newRow.vendor || "",
               notes: newRow.notes || "",
               photo: "",
@@ -23259,7 +23482,9 @@ export default function App() {
       unit: row.unit,
       openingQty: String(row.openingQty || 0),
       minStock: String(row.minStock || 0),
+      area: row.area || "",
       location: row.location,
+      ownerType: row.ownerType || "SCHOOL",
       responsibleParty: row.responsibleParty || "",
       vendor: row.vendor || "",
       notes: row.notes || "",
@@ -23278,7 +23503,9 @@ export default function App() {
       unit: "pcs",
       openingQty: "0",
       minStock: "",
+      area: "",
       location: "",
+      ownerType: "SCHOOL",
       responsibleParty: "",
       vendor: "",
       notes: "",
@@ -23323,9 +23550,11 @@ export default function App() {
           itemCode,
           itemName,
           unit,
+          area: inventoryItemForm.area.trim(),
           location,
           openingQty: Math.max(0, Math.round(openingQty)),
           minStock: Math.max(0, Math.round(minStock)),
+          ownerType: inventoryItemForm.ownerType,
           responsibleParty: inventoryItemForm.responsibleParty.trim(),
           vendor: inventoryItemForm.vendor.trim(),
           notes: inventoryItemForm.notes.trim(),
@@ -28366,6 +28595,17 @@ export default function App() {
     setClassroomDetailRoomId(null);
   }
 
+  function openFullAssetRecordFromDetail(asset: Asset) {
+    const normalizedAssetId = String(asset.assetId || "").trim();
+    setReportAssetIdFilter(normalizedAssetId);
+    setReportSection("asset");
+    setReportType("asset_full_record");
+    setReportMobileFiltersOpen(false);
+    setTab("reports");
+    setAssetDetailId(null);
+    setClassroomDetailRoomId(null);
+  }
+
   function startMaintenanceEntryEdit(entry: MaintenanceEntry) {
     const normalizedPhotos = normalizeMaintenanceEntryPhotos(entry);
     setMaintenanceEditingEntryId(entry.id);
@@ -29492,6 +29732,19 @@ export default function App() {
                 <h3 className="section-title asset-detail-section-title">Details</h3>
               ) : null}
               <div className="asset-detail-section-actions">
+                {canAccessMenu("reports.asset_master", "reports") ||
+                canAccessMenu("reports.maintenance_completion", "reports") ||
+                canAccessMenu("reports.transfer", "reports") ||
+                canAccessMenu("reports.verification_summary", "reports") ||
+                canAccessMenu("reports.staff_borrowing", "reports") ? (
+                  <button
+                    type="button"
+                    className="asset-detail-section-toggle asset-detail-export-trigger"
+                    onClick={() => openFullAssetRecordFromDetail(detailAsset)}
+                  >
+                    Export / Print
+                  </button>
+                ) : null}
                 {isAdmin ? (
                   <>
                     <button
@@ -30048,7 +30301,7 @@ export default function App() {
         </div>
       );
     },
-    [assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerFileKey, assetDetailTonerForm, assetDisplayPhoto, assetItemName, assetStatusLabel, busy, calcInventoryCurrentStockFromRows, campusLabel, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems]
+    [assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerFileKey, assetDetailTonerForm, assetDisplayPhoto, assetItemName, assetStatusLabel, busy, calcInventoryCurrentStockFromRows, campusLabel, canAccessMenu, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openFullAssetRecordFromDetail, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems]
   );
   useEffect(() => {
     if (!assetDetailId) return;
@@ -30753,20 +31006,10 @@ export default function App() {
     maintenanceSearchQuery,
     campusLabel,
   ]);
-  const maintenanceMonthRange = useMemo(() => {
-    if (!maintenanceMonthFilter) {
-      return { from: maintenanceDateFrom, to: maintenanceDateTo };
-    }
-    const [yearText, monthText] = maintenanceMonthFilter.split("-");
-    const year = Number(yearText);
-    const monthIndex = Number(monthText) - 1;
-    if (Number.isNaN(year) || Number.isNaN(monthIndex)) {
-      return { from: maintenanceDateFrom, to: maintenanceDateTo };
-    }
-    const start = new Date(year, monthIndex, 1);
-    const end = new Date(year, monthIndex + 1, 0);
-    return { from: toYmd(start), to: toYmd(end) };
-  }, [maintenanceMonthFilter, maintenanceDateFrom, maintenanceDateTo]);
+  const maintenanceMonthRange = useMemo(
+    () => ({ from: maintenanceDateFrom, to: maintenanceDateTo }),
+    [maintenanceDateFrom, maintenanceDateTo]
+  );
   const filteredMaintenanceLogBookRows = useMemo(() => {
     let rows = [...allMaintenanceRows];
     if (!maintenanceCategoryFilter.includes("ALL")) {
@@ -30849,11 +31092,16 @@ export default function App() {
     [sortedMaintenanceRows]
   );
   const maintenanceMonthLabel = useMemo(() => {
-    if (!maintenanceMonthFilter) return "គ្រប់ខែ";
+    if (!maintenanceMonthFilter) {
+      if (maintenanceDateFrom || maintenanceDateTo) {
+        return `${maintenanceDateFrom || "..." } ${lang === "km" ? "ដល់" : "to"} ${maintenanceDateTo || "..."}`;
+      }
+      return lang === "km" ? "គ្រប់ខែ" : "All Months";
+    }
     const parsed = new Date(`${maintenanceMonthFilter}-01T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return maintenanceMonthFilter;
     return formatKhmerMonthYear(parsed);
-  }, [maintenanceMonthFilter]);
+  }, [maintenanceMonthFilter, maintenanceDateFrom, maintenanceDateTo, lang]);
   const latestMaintenanceRows = useMemo(
     () => allMaintenanceRows.slice(0, 5),
     [allMaintenanceRows]
@@ -31119,8 +31367,8 @@ export default function App() {
       const assetId = String(asset.assetId || "").trim();
       if (assetId) assetsById.set(assetId, asset);
     }
-    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
-    list = list.filter(
+    const baseAssetList = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    let list = baseAssetList.filter(
       (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
     );
     if (!assetCampusMultiFilter.includes("ALL")) {
@@ -31157,6 +31405,17 @@ export default function App() {
           .toLowerCase()
           .includes(q);
       });
+    }
+    const hasDefaultFilters =
+      assetCampusMultiFilter.includes("ALL") &&
+      assetCategoryMultiFilter.includes("ALL") &&
+      assetNameMultiFilter.includes("ALL") &&
+      assetLocationMultiFilter.includes("ALL") &&
+      assetAssignedToMultiFilter.includes("ALL") &&
+      !q;
+    if (!list.length && baseAssetList.length && hasDefaultFilters) {
+      // Fail open for the main asset table if component-hiding logic would otherwise blank the whole screen.
+      list = [...baseAssetList];
     }
     const { key, direction } = assetListSort;
     const sign = direction === "asc" ? 1 : -1;
@@ -32365,6 +32624,34 @@ export default function App() {
       return true;
     });
   }, [allTransferRows, transferHistoryCampusFilter, transferHistoryCategoryFilter, transferHistoryDateFilter]);
+  const reportTransferRows = useMemo(
+    () =>
+      allTransferRows.filter((row) =>
+        reportAssetIdFilter ? String(row.assetId || "").trim() === reportAssetIdFilter : true
+      ),
+    [allTransferRows, reportAssetIdFilter]
+  );
+  const focusedReportAsset = useMemo(
+    () => assets.find((asset) => String(asset.assetId || "").trim() === reportAssetIdFilter) || null,
+    [assets, reportAssetIdFilter]
+  );
+  const assetFullRecordMaintenanceRows = useMemo(
+    () =>
+      normalizeArray<MaintenanceEntry>(focusedReportAsset?.maintenanceHistory)
+        .slice()
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+    [focusedReportAsset]
+  );
+  const assetFullRecordTransferRows = useMemo(
+    () => reportTransferRows.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+    [reportTransferRows]
+  );
+  const assetFullRecordVerificationRows = useMemo(
+    () => allVerificationRows
+      .filter((row) => (reportAssetIdFilter ? String(row.assetId || "").trim() === reportAssetIdFilter : false))
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+    [allVerificationRows, reportAssetIdFilter]
+  );
   useEffect(() => {
     if (transferHistoryCampusFilter === "ALL") return;
     if (!transferHistoryCampusOptions.includes(transferHistoryCampusFilter)) {
@@ -32380,6 +32667,7 @@ export default function App() {
   const staffBorrowingRows = useMemo(() => {
     return assets
       .filter((asset) => String(asset.assignedTo || "").trim())
+      .filter((asset) => (reportAssetIdFilter ? String(asset.assetId || "").trim() === reportAssetIdFilter : true))
       .map((asset) => {
         const latestCustody = [...(asset.custodyHistory || [])].sort((a, b) =>
           String(b.date || "").localeCompare(String(a.date || ""))
@@ -32399,7 +32687,7 @@ export default function App() {
         };
       })
       .sort((a, b) => a.assignedTo.localeCompare(b.assignedTo) || a.assetId.localeCompare(b.assetId));
-  }, [assets, assetItemName]);
+  }, [assets, assetItemName, reportAssetIdFilter]);
   const sortedStaffBorrowingRows = useMemo(() => {
     const direction = staffBorrowingSort.direction === "asc" ? 1 : -1;
     const text = (value: string) => String(value || "").toLowerCase();
@@ -32429,9 +32717,14 @@ export default function App() {
       return text(aValue || "").localeCompare(text(bValue || "")) * direction;
     });
   }, [staffBorrowingRows, staffBorrowingSort, campusLabel]);
+  const assetFullRecordAssignmentRows = useMemo(
+    () => sortedStaffBorrowingRows.filter((row) => String(row.assetId || "").trim() === reportAssetIdFilter),
+    [sortedStaffBorrowingRows, reportAssetIdFilter]
+  );
 
   const maintenanceCompletionRows = useMemo(() => {
     return allMaintenanceRows.filter((row) => {
+      if (reportAssetIdFilter && String(row.assetId || "").trim() !== reportAssetIdFilter) return false;
       if (!row.date) return false;
       if (reportDateFrom && row.date < reportDateFrom) return false;
       if (reportDateTo && row.date > reportDateTo) return false;
@@ -32442,6 +32735,7 @@ export default function App() {
     });
   }, [
     allMaintenanceRows,
+    reportAssetIdFilter,
     reportDateFrom,
     reportDateTo,
     reportMaintenanceCampusFilter,
@@ -32465,11 +32759,32 @@ export default function App() {
       setReportMaintenanceItemFilter("ALL");
     }
   }, [reportMaintenanceItemFilter, reportMaintenanceItemOptions]);
+  useEffect(() => {
+    setMaintenanceReportExpandedRows((prev) => {
+      const allowed = new Set(maintenanceCompletionRows.map((row) => row.rowId));
+      const next = Object.fromEntries(Object.entries(prev).filter(([rowId, open]) => open && allowed.has(rowId)));
+      if (Object.keys(next).length === Object.keys(prev).length) return prev;
+      return next;
+    });
+  }, [maintenanceCompletionRows]);
 
   const maintenanceCompletionSummary = useMemo(() => {
     const done = maintenanceCompletionRows.filter((r) => r.completion === "Done").length;
     const notYet = maintenanceCompletionRows.filter((r) => r.completion !== "Done").length;
-    return { done, notYet, total: maintenanceCompletionRows.length };
+    const withEvidence = maintenanceCompletionRows.filter(
+      (r) =>
+        Boolean(String(r.reportFile || "").trim()) ||
+        Boolean(String((r.beforePhotos || [])[0] || "").trim()) ||
+        Boolean(String((r.afterPhotos || [])[0] || "").trim())
+    ).length;
+    const totalCost = maintenanceCompletionRows.reduce((sum, row) => {
+      const normalized = String(row.cost || "")
+        .replace(/,/g, "")
+        .replace(/[^\d.-]/g, "");
+      const value = Number(normalized);
+      return Number.isFinite(value) ? sum + value : sum;
+    }, 0);
+    return { done, notYet, total: maintenanceCompletionRows.length, withEvidence, totalCost };
   }, [maintenanceCompletionRows]);
   const maintenanceCompletionRangeLabel = useMemo(() => {
     const from = reportDateFrom || "-";
@@ -32490,14 +32805,45 @@ export default function App() {
     t.allCampuses,
     t.allCategories,
   ]);
+  const reportAssetFilterLabel = useMemo(
+    () => (reportAssetIdFilter ? `Focused Asset: ${reportAssetIdFilter}` : ""),
+    [reportAssetIdFilter]
+  );
+  const maintenanceCompletionSummaryChips = useMemo(
+    () => [
+      `${lang === "km" ? "សាខា" : "Campus"}: ${
+        reportMaintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(reportMaintenanceCampusFilter)
+      }`,
+      `${lang === "km" ? "ប្រភេទ" : "Category"}: ${
+        reportMaintenanceCategoryFilter === "ALL" ? t.allCategories : reportMaintenanceCategoryFilter
+      }`,
+      `${lang === "km" ? "ឈ្មោះ" : "Item"}: ${
+        reportMaintenanceItemFilter === "ALL" ? (lang === "km" ? "ទាំងអស់" : "All Items") : reportMaintenanceItemFilter
+      }`,
+      `${lang === "km" ? "រយៈពេល" : "Range"}: ${maintenanceCompletionRangeLabel}`,
+    ],
+    [
+      lang,
+      reportMaintenanceCampusFilter,
+      reportMaintenanceCategoryFilter,
+      reportMaintenanceItemFilter,
+      t.allCampuses,
+      t.allCategories,
+      campusLabel,
+      maintenanceCompletionRangeLabel,
+    ]
+  );
   const verificationSummaryRows = useMemo(() => {
+    if (reportAssetIdFilter) {
+      return allVerificationRows.filter((row) => String(row.assetId || "").trim() === reportAssetIdFilter);
+    }
     const year = Number(reportYear) || new Date().getFullYear();
     const range =
       reportPeriodMode === "month"
         ? { from: `${reportMonth}-01`, to: `${reportMonth}-31` }
         : getTermRange(year, reportTerm);
     return allVerificationRows.filter((row) => row.date && row.date >= range.from && row.date <= range.to);
-  }, [allVerificationRows, reportMonth, reportPeriodMode, reportTerm, reportYear]);
+  }, [allVerificationRows, reportAssetIdFilter, reportMonth, reportPeriodMode, reportTerm, reportYear]);
   const verificationSummary = useMemo(() => {
     const verified = verificationSummaryRows.filter((r) => r.result === "Verified").length;
     const issue = verificationSummaryRows.filter((r) => r.result === "Issue Found").length;
@@ -33669,12 +34015,13 @@ export default function App() {
 
   const filteredAssetMasterRows = useMemo(() => {
     return assetMasterSetRows.filter((row) => {
+      if (reportAssetIdFilter && String(row.assetId || "").trim() !== reportAssetIdFilter) return false;
       if (!assetMasterCampusFilter.includes("ALL") && !assetMasterCampusFilter.includes(row.campus)) return false;
       if (!assetMasterCategoryFilter.includes("ALL") && !assetMasterCategoryFilter.includes(row.category)) return false;
       if (!assetMasterItemFilter.includes("ALL") && !assetMasterItemFilter.includes(row.itemName)) return false;
       return true;
     });
-  }, [assetMasterSetRows, assetMasterCampusFilter, assetMasterCategoryFilter, assetMasterItemFilter]);
+  }, [assetMasterSetRows, reportAssetIdFilter, assetMasterCampusFilter, assetMasterCategoryFilter, assetMasterItemFilter]);
 
   const sortedAssetMasterRows = useMemo(() => {
     const direction = assetMasterSort.direction === "asc" ? 1 : -1;
@@ -33972,6 +34319,7 @@ export default function App() {
         lang === "km"
           ? [
               { value: "asset_master" as ReportType, label: "បញ្ជីទ្រព្យសម្បត្តិ" },
+              { value: "asset_full_record" as ReportType, label: "កំណត់ត្រាទ្រព្យសម្បត្តិពេញលេញ" },
               { value: "set_code" as ReportType, label: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
               { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
               { value: "furniture_control" as ReportType, label: "គ្រប់គ្រងកៅអី និងតុ" },
@@ -33986,6 +34334,7 @@ export default function App() {
             ]
           : [
               { value: "asset_master" as ReportType, label: "Asset Master Register" },
+              { value: "asset_full_record" as ReportType, label: "Full Asset Record" },
               { value: "set_code" as ReportType, label: "Computer Set Detail" },
               { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
               { value: "furniture_control" as ReportType, label: "Chair/Table Control" },
@@ -33998,8 +34347,14 @@ export default function App() {
               { value: "qr_labels" as ReportType, label: "Asset ID + QR Labels" },
               { value: "it_vault" as ReportType, label: "IT Vault Report" },
             ]
-      ).filter((option) => canAccessMenu(`reports.${option.value}`, "reports")),
-    [lang, canAccessMenu]
+      )
+        .filter((option) => (option.value === "asset_full_record" ? Boolean(reportAssetIdFilter) : true))
+        .filter((option) =>
+          option.value === "asset_full_record"
+            ? canAccessMenu("reports.asset_master", "reports")
+            : canAccessMenu(`reports.${option.value}`, "reports")
+        ),
+    [lang, canAccessMenu, reportAssetIdFilter]
   );
   const availableReportSections = useMemo(
     () =>
@@ -34059,6 +34414,11 @@ export default function App() {
     return assetMasterItemFilter.join(", ");
   }, [assetMasterItemFilter, lang]);
   const selectedReportDisplayTitle = useMemo(() => {
+    if (reportType === "asset_full_record") {
+      return reportAssetIdFilter
+        ? `${selectedReportTypeLabel} - ${reportAssetIdFilter}`
+        : selectedReportTypeLabel;
+    }
     if (reportType === "asset_master") {
       return `${selectedReportTypeLabel} - ${assetMasterCampusTitle}`;
     }
@@ -34068,11 +34428,12 @@ export default function App() {
         : selectedReportTypeLabel;
     }
     return selectedReportTypeLabel;
-  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, lang, qrLabelEntityType]);
+  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, lang, qrLabelEntityType, reportAssetIdFilter]);
   const reportTypeGuideText = useMemo(() => {
     const guides: Record<ReportType, string> =
       lang === "km"
         ? {
+            asset_full_record: "របាយការណ៍ទ្រព្យមួយជាកញ្ចប់តែមួយ រួមទាំងព័ត៌មានសង្ខេប ថែទាំ ផ្ទេរ និងត្រួតពិនិត្យ។",
             asset_master: "បញ្ជីទ្រព្យសម្បត្តិលម្អិត តាមអ្វីដែលបានជ្រើស។",
             set_code: "មើលក្រុមឧបករណ៍ និងសមាសភាគដែលភ្ជាប់ជាមួយគ្នា។",
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
@@ -34087,6 +34448,7 @@ export default function App() {
             it_vault: "មើល និងបោះពុម្ពកំណត់ត្រា IT Vault រួមទាំង Telegram និងឧបករណ៍ដែលបានចូលប្រើ។",
           }
         : {
+            asset_full_record: "One combined report for a single asset with summary, maintenance, transfer, and verification history.",
             asset_master: "Detailed asset list based on selected filters.",
             set_code: "View each computer set with all connected items.",
             asset_by_location: "Summary count by campus and location.",
@@ -34105,6 +34467,11 @@ export default function App() {
   const selectedReportDisplayGuide = useMemo(() => {
     if (reportType === "asset_master") {
       return `${lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"}: ${assetMasterItemTitle}`;
+    }
+    if (reportType === "asset_full_record") {
+      return lang === "km"
+        ? "បើករបាយការណ៍ទ្រព្យសម្បត្តិពេញលេញសម្រាប់ទ្រព្យដែលបានជ្រើស។"
+        : "Open one complete printable record for the selected asset.";
     }
     if (reportType === "qr_labels") {
       return qrLabelEntityType === "rental_printer"
@@ -34126,6 +34493,7 @@ export default function App() {
     [reportType]
   );
   const resetAssetMasterReportFilters = useCallback(() => {
+    setReportAssetIdFilter("");
     setAssetMasterCampusFilter(["ALL"]);
     setAssetMasterCategoryFilter(["ALL"]);
     setAssetMasterItemFilter(["ALL"]);
@@ -34145,6 +34513,12 @@ export default function App() {
     ]);
   }, []);
   const resetReportFilters = useCallback(() => {
+    if (reportType === "asset_full_record") {
+      setReportAssetIdFilter("");
+      setReportSection("asset");
+      setReportType("asset_master");
+      return;
+    }
     if (reportType === "asset_master") {
       resetAssetMasterReportFilters();
       return;
@@ -34154,33 +34528,31 @@ export default function App() {
       const ymd = toYmd(today);
       setReportDateFrom(`${ymd.slice(0, 7)}-01`);
       setReportDateTo(ymd);
+      setReportAssetIdFilter("");
       setReportMaintenanceCampusFilter("ALL");
       setReportMaintenanceCategoryFilter("ALL");
       setReportMaintenanceItemFilter("ALL");
       setMaintenanceReportVisibleColumns([
         "date",
         "assetId",
-        "itemName",
-        "beforePhoto",
-        "afterPhoto",
-        "campus",
         "location",
         "type",
         "completion",
         "condition",
-        "cost",
         "by",
-        "reportFile",
-        "note",
       ]);
+      setMaintenanceReportExpandedRows({});
+      setMaintenanceReportFiltersCollapsed(false);
       return;
     }
     if (reportType === "inventory_balance") {
+      setReportAssetIdFilter("");
       setReportInventoryMode("all");
       return;
     }
     if (reportType === "verification_summary") {
       const today = new Date();
+      setReportAssetIdFilter("");
       setReportPeriodMode("month");
       setReportMonth(toYmd(today).slice(0, 7));
       setReportYear(String(today.getFullYear()));
@@ -34188,6 +34560,7 @@ export default function App() {
       return;
     }
     if (reportType === "qr_labels") {
+      setReportAssetIdFilter("");
       setQrCampusFilter(["ALL"]);
       setQrLocationFilter(["ALL"]);
       setQrCategoryFilter(["ALL"]);
@@ -34198,6 +34571,7 @@ export default function App() {
       return;
     }
     if (reportType === "it_vault") {
+      setReportAssetIdFilter("");
       setVaultReportQuery("");
       setVaultReportSectionFilter("ALL");
       setVaultReportStatusFilter("ALL");
@@ -34206,11 +34580,13 @@ export default function App() {
       return;
     }
     if (reportType === "asset_by_location") {
+      setReportAssetIdFilter("");
       setAssetByLocationCampusFilter("ALL");
       setAssetByLocationLocationFilter("ALL");
       return;
     }
     if (reportType === "furniture_control") {
+      setReportAssetIdFilter("");
       setFurnitureControlCampusFilter(["ALL"]);
       setFurnitureControlLocationFilter(["ALL"]);
       setFurnitureControlItemFilter(["ALL"]);
@@ -34222,6 +34598,7 @@ export default function App() {
     const ymd = toYmd(today);
     setReportSection("asset");
     setReportType("asset_master");
+    setReportAssetIdFilter("");
     setReportInventoryMode("all");
     resetAssetMasterReportFilters();
     setQrCampusFilter(["ALL"]);
@@ -35445,7 +35822,13 @@ export default function App() {
       return widths.map((width) => (width / total) * 100);
     };
 
-    if (reportType === "asset_master") {
+    if (reportType === "asset_full_record") {
+      title = focusedReportAsset
+        ? `Full Asset Record - ${focusedReportAsset.assetId}`
+        : "Full Asset Record";
+      columns = [];
+      rows = [];
+    } else if (reportType === "asset_master") {
       const campusTitle = assetMasterCampusFilter.includes("ALL")
         ? t.allCampuses
         : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", ");
@@ -35572,7 +35955,7 @@ export default function App() {
     } else if (reportType === "transfer") {
       title = "Asset Transfer Log Report";
       columns = ["Date", "Asset ID", "Photo", "From Campus", "From Location", "To Campus", "To Location", "From Staff", "To Staff", "Ack", "By", "Reason"];
-      rows = allTransferRows.map((r) => [
+      rows = reportTransferRows.map((r) => [
         r.date ? formatDate(r.date) : "-",
         r.assetId,
         toPrintablePhotoUrl(r.assetPhoto || ""),
@@ -35720,7 +36103,7 @@ export default function App() {
       ]);
     }
 
-    if (reportType !== "qr_labels") {
+    if (reportType !== "qr_labels" && reportType !== "asset_full_record") {
       columns = ["No.", ...columns];
       rows = rows.map((row, index) => [String(index + 1), ...row]);
     }
@@ -35761,7 +36144,9 @@ export default function App() {
       : `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
 
     const summaryHtml =
-      reportType === "maintenance_completion"
+      reportType === "asset_full_record"
+        ? `<p><strong>Maintenance Records:</strong> ${assetFullRecordMaintenanceRows.length} | <strong>Transfer Records:</strong> ${assetFullRecordTransferRows.length} | <strong>Verification Records:</strong> ${assetFullRecordVerificationRows.length}</p>`
+        : reportType === "maintenance_completion"
         ? `<p><strong>Filter:</strong> ${escapeHtml(maintenanceCompletionFilterLabel)}</p><p><strong>Total:</strong> ${maintenanceCompletionSummary.total} | <strong>Done:</strong> ${maintenanceCompletionSummary.done} | <strong>Not Yet:</strong> ${maintenanceCompletionSummary.notYet}</p>`
         : reportType === "verification_summary"
         ? `<p><strong>Total:</strong> ${verificationSummary.total} | <strong>Verified:</strong> ${verificationSummary.verified} | <strong>Issue Found:</strong> ${verificationSummary.issue} | <strong>Missing:</strong> ${verificationSummary.missing}</p>`
@@ -35813,7 +36198,9 @@ export default function App() {
         ? `<p><strong>Total Records:</strong> ${vaultReportRowsFiltered.length} | <strong>Needs Review:</strong> ${vaultNeedsReviewItems.length} | <strong>Missing Info:</strong> ${vaultMissingInfoItems.length} | <strong>Sensitive Visible:</strong> ${vaultReportShowSensitive ? "Yes" : "No"}</p>`
         : "";
     const printMetaHtml =
-      reportType === "asset_master"
+      reportType === "asset_full_record"
+        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Focused Asset: ${escapeHtml(reportAssetIdFilter || "-")}</p>`
+        : reportType === "asset_master"
         ? (() => {
             const campusText = assetMasterCampusFilter.includes("ALL")
               ? t.allCampuses
@@ -35874,7 +36261,124 @@ export default function App() {
         : `@page { size: A4 landscape; margin: 3mm; }`;
 
     const reportContentHtml =
-      reportType === "qr_labels"
+      reportType === "asset_full_record"
+        ? (() => {
+            const assetPhoto = toPrintablePhotoUrl(String(focusedReportAsset?.photo || ""));
+            const maintenanceRowsHtml = assetFullRecordMaintenanceRows.length
+              ? assetFullRecordMaintenanceRows
+                  .map(
+                    (row, index) => `<tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(formatDate(row.date || "-"))}</td>
+                      <td>${escapeHtml(row.type || "-")}</td>
+                      <td>${escapeHtml(row.completion || "-")}</td>
+                      <td>${escapeHtml(row.condition || "-")}</td>
+                      <td>${escapeHtml(row.by || "-")}</td>
+                      <td>${escapeHtml(row.note || "-")}</td>
+                    </tr>`
+                  )
+                  .join("")
+              : `<tr><td colspan="7">No maintenance history.</td></tr>`;
+            const transferRowsHtml = assetFullRecordTransferRows.length
+              ? assetFullRecordTransferRows
+                  .map(
+                    (row, index) => `<tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(formatDate(row.date || "-"))}</td>
+                      <td>${escapeHtml(reportCampusName(row.fromCampus))}</td>
+                      <td>${escapeHtml(row.fromLocation || "-")}</td>
+                      <td>${escapeHtml(reportCampusName(row.toCampus))}</td>
+                      <td>${escapeHtml(row.toLocation || "-")}</td>
+                      <td>${escapeHtml(row.toUser || "-")}</td>
+                      <td>${escapeHtml(row.by || "-")}</td>
+                      <td>${escapeHtml(row.reason || "-")}</td>
+                    </tr>`
+                  )
+                  .join("")
+              : `<tr><td colspan="9">No transfer history.</td></tr>`;
+            const verificationRowsHtml = assetFullRecordVerificationRows.length
+              ? assetFullRecordVerificationRows
+                  .map(
+                    (row, index) => `<tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(formatDate(row.date || "-"))}</td>
+                      <td>${escapeHtml(row.result || "-")}</td>
+                      <td>${escapeHtml(row.condition || "-")}</td>
+                      <td>${escapeHtml(row.by || "-")}</td>
+                      <td>${escapeHtml(row.note || "-")}</td>
+                    </tr>`
+                  )
+                  .join("")
+              : `<tr><td colspan="6">No verification history.</td></tr>`;
+            return `<div class="asset-full-print">
+              <div class="asset-full-print-head">
+                <div class="asset-full-print-photo">${
+                  assetPhoto
+                    ? `<img src="${assetPhoto}" alt="${escapeHtml(focusedReportAsset?.assetId || "asset")}" />`
+                    : `<div class="asset-full-print-photo-empty">No Photo</div>`
+                }</div>
+                <div class="asset-full-print-summary">
+                  <div class="asset-full-print-grid">
+                    <div><span>Asset ID</span><strong>${escapeHtml(focusedReportAsset?.assetId || "-")}</strong></div>
+                    <div><span>Status</span><strong>${escapeHtml(focusedReportAsset?.status || "-")}</strong></div>
+                    <div><span>Item</span><strong>${escapeHtml(focusedReportAsset?.name || "-")}</strong></div>
+                    <div><span>Category</span><strong>${escapeHtml(focusedReportAsset?.category || "-")}</strong></div>
+                    <div><span>Campus</span><strong>${escapeHtml(reportCampusName(focusedReportAsset?.campus || "-"))}</strong></div>
+                    <div><span>Location</span><strong>${escapeHtml(focusedReportAsset?.location || "-")}</strong></div>
+                    <div><span>Assigned To</span><strong>${escapeHtml(focusedReportAsset?.assignedTo || "-")}</strong></div>
+                    <div><span>Brand / Model</span><strong>${escapeHtml([focusedReportAsset?.brand || "-", focusedReportAsset?.model || "-"].join(" / "))}</strong></div>
+                    <div><span>Serial Number</span><strong>${escapeHtml(focusedReportAsset?.serialNumber || "-")}</strong></div>
+                    <div><span>Purchase Date</span><strong>${escapeHtml(formatDate(focusedReportAsset?.purchaseDate || "-"))}</strong></div>
+                  </div>
+                </div>
+              </div>
+              <div class="asset-full-print-block">
+                <h2>Current Assignment</h2>
+                ${
+                  assetFullRecordAssignmentRows.length
+                    ? `<table class="preview-report-table">
+                        <thead><tr><th>Asset ID</th><th>Item</th><th>Campus</th><th>Location</th><th>Assigned To</th><th>Since</th><th>Ack</th></tr></thead>
+                        <tbody>${assetFullRecordAssignmentRows
+                          .map(
+                            (row) => `<tr>
+                              <td>${escapeHtml(row.assetId)}</td>
+                              <td>${escapeHtml(row.itemName || "-")}</td>
+                              <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                              <td>${escapeHtml(row.location || "-")}</td>
+                              <td>${escapeHtml(row.assignedTo || "-")}</td>
+                              <td>${escapeHtml(formatDate(row.sinceDate || "-"))}</td>
+                              <td>${escapeHtml(row.responsibilityAck || "-")}</td>
+                            </tr>`
+                          )
+                          .join("")}</tbody>
+                      </table>`
+                    : `<p>No current assignment history.</p>`
+                }
+              </div>
+              <div class="asset-full-print-block">
+                <h2>Maintenance History</h2>
+                <table class="preview-report-table">
+                  <thead><tr><th>No.</th><th>Date</th><th>Type</th><th>Status</th><th>Condition</th><th>By</th><th>Note</th></tr></thead>
+                  <tbody>${maintenanceRowsHtml}</tbody>
+                </table>
+              </div>
+              <div class="asset-full-print-block">
+                <h2>Transfer History</h2>
+                <table class="preview-report-table">
+                  <thead><tr><th>No.</th><th>Date</th><th>From Campus</th><th>From Location</th><th>To Campus</th><th>To Location</th><th>To Staff</th><th>By</th><th>Reason</th></tr></thead>
+                  <tbody>${transferRowsHtml}</tbody>
+                </table>
+              </div>
+              <div class="asset-full-print-block">
+                <h2>Verification History</h2>
+                <table class="preview-report-table">
+                  <thead><tr><th>No.</th><th>Date</th><th>Result</th><th>Condition</th><th>By</th><th>Note</th></tr></thead>
+                  <tbody>${verificationRowsHtml}</tbody>
+                </table>
+              </div>
+            </div>`;
+          })()
+        : reportType === "qr_labels"
         ? qrFilteredRows.length
           ? `<div class="qr-sticker-grid qr-sticker-grid-${qrPrintVariant}">${qrFilteredRows
               .map((row) => {
@@ -36052,6 +36556,13 @@ export default function App() {
           .preview-furniture-qty-label { font-size: 10px; font-weight: 700; color: #4d5f54; margin-bottom: 2px; }
           .preview-furniture-qty-item { margin: 1px 0; }
           .preview-furniture-qty-empty { color: #6f7d73; }
+          .asset-full-print { display: grid; gap: 18px; }
+          .asset-full-print-head { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: start; }
+          .asset-full-print-photo img, .asset-full-print-photo-empty { width: 180px; height: 180px; object-fit: cover; border-radius: 14px; border: 1px solid #cfded0; background: #fff; display: grid; place-items: center; color: #6f7d73; font-weight: 700; }
+          .asset-full-print-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; background: #fff; border: 1px solid #cfded0; border-radius: 14px; padding: 16px; }
+          .asset-full-print-grid span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #6f7d73; margin-bottom: 4px; }
+          .asset-full-print-grid strong { font-size: 14px; color: #1b2d23; }
+          .asset-full-print-block { display: grid; gap: 8px; }
           .preview-column-resizer {
             position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; user-select: none; z-index: 2;
           }
@@ -38854,7 +39365,7 @@ function formatTicketRequestSource(value?: string) {
             ) : null}
             {error ? <p className="alert alert-error">{error}</p> : null}
             {!isAdmin && !(maintenanceQuickMode && canAccessMenu("maintenance.record", "maintenance")) ? <p className="alert">{t.viewerMode}</p> : null}
-            {loading ? <p className="alert">{t.loading}</p> : null}
+            {showLoadingBanner ? <p className="alert">{t.loading}</p> : null}
 
         {tab === "dashboard" && (
           <section className="panel dashboard-panel">
@@ -52652,16 +53163,22 @@ function formatTicketRequestSource(value?: string) {
               <input
                 className="input"
                 type="date"
-                value={maintenanceMonthRange.from}
-                readOnly
-                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
+                value={maintenanceDateFrom}
+                onChange={(e) => {
+                  setMaintenanceDateFrom(e.target.value);
+                  setMaintenanceMonthFilter("");
+                }}
+                title={lang === "km" ? "ជ្រើសថ្ងៃចាប់ផ្តើម" : "Choose start date"}
               />
               <input
                 className="input"
                 type="date"
-                value={maintenanceMonthRange.to}
-                readOnly
-                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
+                value={maintenanceDateTo}
+                onChange={(e) => {
+                  setMaintenanceDateTo(e.target.value);
+                  setMaintenanceMonthFilter("");
+                }}
+                title={lang === "km" ? "ជ្រើសថ្ងៃបញ្ចប់" : "Choose end date"}
               />
               <div className="maintenance-history-search-row">
                 <input
@@ -52888,16 +53405,22 @@ function formatTicketRequestSource(value?: string) {
               <input
                 className="input"
                 type="date"
-                value={maintenanceMonthRange.from}
-                readOnly
-                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
+                value={maintenanceDateFrom}
+                onChange={(e) => {
+                  setMaintenanceDateFrom(e.target.value);
+                  setMaintenanceMonthFilter("");
+                }}
+                title={lang === "km" ? "ជ្រើសថ្ងៃចាប់ផ្តើម" : "Choose start date"}
               />
               <input
                 className="input"
                 type="date"
-                value={maintenanceMonthRange.to}
-                readOnly
-                title={lang === "km" ? "កំណត់ស្វ័យប្រវត្តិពីខែដែលបានជ្រើស" : "Auto-set from selected month"}
+                value={maintenanceDateTo}
+                onChange={(e) => {
+                  setMaintenanceDateTo(e.target.value);
+                  setMaintenanceMonthFilter("");
+                }}
+                title={lang === "km" ? "ជ្រើសថ្ងៃបញ្ចប់" : "Choose end date"}
               />
               <div className="maintenance-history-search-row">
                 <input
@@ -55724,22 +56247,6 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               </div>
             )}
-            {reportType === "maintenance_completion" && (
-              <div className="stats-grid" style={{ marginBottom: 10 }}>
-                <article className="stat-card">
-                  <div className="stat-label">Total Records ({maintenanceCompletionRangeLabel})</div>
-                  <div className="stat-value">{maintenanceCompletionSummary.total}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Done</div>
-                  <div className="stat-value">{maintenanceCompletionSummary.done}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Not Yet</div>
-                  <div className="stat-value">{maintenanceCompletionSummary.notYet}</div>
-                </article>
-              </div>
-            )}
             {reportType === "inventory_balance" && (
               <div className="stats-grid" style={{ marginBottom: 10 }}>
                 <article className="stat-card">
@@ -55789,8 +56296,36 @@ function formatTicketRequestSource(value?: string) {
               </div>
             )}
             {reportType === "maintenance_completion" ? (
+              <div className="report-maintenance-toolbar">
+                <div className="report-maintenance-toolbar-copy">
+                  <div className="tiny">ED Filter: {maintenanceCompletionFilterLabel}</div>
+                  <div className="report-maintenance-chip-row">
+                    {maintenanceCompletionSummaryChips.map((chip) => (
+                      <span key={chip} className="report-maintenance-chip">
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {!isPhoneView ? (
+                  <div className="report-maintenance-toolbar-actions">
+                    <button
+                      type="button"
+                      className="tab"
+                      onClick={() => setMaintenanceReportFiltersCollapsed((value) => !value)}
+                    >
+                      {maintenanceReportFiltersCollapsed ? "Show Filters" : "Hide Filters"}
+                    </button>
+                    <button type="button" className="tab" onClick={resetReportFilters}>
+                      Reset Filters
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {reportAssetFilterLabel ? (
               <div className="tiny" style={{ marginBottom: 10 }}>
-                ED Filter: {maintenanceCompletionFilterLabel}
+                {reportAssetFilterLabel}
               </div>
             ) : null}
             {reportType === "inventory_balance" ? (
@@ -55834,7 +56369,13 @@ function formatTicketRequestSource(value?: string) {
               </div>
               {hasReportFilters ? (
                 <>
-                  <div className="tiny report-filters-title">
+                  <div
+                    className={`tiny report-filters-title ${
+                      reportType === "maintenance_completion" && maintenanceReportFiltersCollapsed && !isPhoneView
+                        ? "report-filters-title-collapsed"
+                        : ""
+                    }`}
+                  >
                     {lang === "km" ? "ជំហានទី 2៖ ជ្រើសតម្រង (បើចាំបាច់)" : "Step 2: Set Filters (if needed)"}
                   </div>
                   {isPhoneView && reportMobileFiltersOpen ? (
@@ -55848,7 +56389,11 @@ function formatTicketRequestSource(value?: string) {
                   <div
                     className={`report-mobile-filter-sheet ${
                       isPhoneView && reportMobileFiltersOpen ? "report-mobile-filter-sheet-open" : ""
-                    } ${reportType === "it_vault" ? "report-mobile-filter-sheet-it-vault" : ""}`}
+                    } ${reportType === "it_vault" ? "report-mobile-filter-sheet-it-vault" : ""} ${
+                      reportType === "maintenance_completion" && maintenanceReportFiltersCollapsed && !isPhoneView
+                        ? "report-mobile-filter-sheet-collapsed"
+                        : ""
+                    }`}
                   >
                     <div className="report-mobile-filter-head">
                       <strong>{lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters"}</strong>
@@ -57198,6 +57743,239 @@ function formatTicketRequestSource(value?: string) {
               </div>
             )}
 
+            {reportType === "asset_full_record" && (
+              <div className="report-asset-full-record" style={{ display: "grid", gap: 16, marginTop: 12 }}>
+                {focusedReportAsset ? (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: isPhoneView ? "1fr" : "220px 1fr",
+                        gap: 16,
+                        alignItems: "start",
+                      }}
+                    >
+                      <div className="panel-note" style={{ margin: 0 }}>
+                        <div style={{ display: "grid", placeItems: "center" }}>
+                          {renderAssetPhoto(focusedReportAsset.photo || "", focusedReportAsset.assetId)}
+                        </div>
+                      </div>
+                      <div className="stats-grid" style={{ marginBottom: 0 }}>
+                        <article className="stat-card">
+                          <div className="stat-label">Asset ID</div>
+                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{focusedReportAsset.assetId}</div>
+                        </article>
+                        <article className="stat-card">
+                          <div className="stat-label">Status</div>
+                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{focusedReportAsset.status || "-"}</div>
+                        </article>
+                        <article className="stat-card">
+                          <div className="stat-label">Campus</div>
+                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{reportCampusName(focusedReportAsset.campus)}</div>
+                        </article>
+                        <article className="stat-card">
+                          <div className="stat-label">Location</div>
+                          <div className="stat-value" style={{ fontSize: isPhoneView ? 24 : 28 }}>{focusedReportAsset.location || "-"}</div>
+                        </article>
+                      </div>
+                    </div>
+
+                    <div className="table-wrap report-table-wrap">
+                      <table>
+                        <tbody>
+                          <tr>
+                            <th>Item</th>
+                            <td>{focusedReportAsset.name || "-"}</td>
+                            <th>Category</th>
+                            <td>{focusedReportAsset.category || "-"}</td>
+                          </tr>
+                          <tr>
+                            <th>Assigned To</th>
+                            <td>{focusedReportAsset.assignedTo || "-"}</td>
+                            <th>Brand / Model</th>
+                            <td>{[focusedReportAsset.brand || "-", focusedReportAsset.model || "-"].join(" / ")}</td>
+                          </tr>
+                          <tr>
+                            <th>Serial Number</th>
+                            <td>{focusedReportAsset.serialNumber || "-"}</td>
+                            <th>Purchase Date</th>
+                            <td>{formatDate(focusedReportAsset.purchaseDate || "-")}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="stats-grid" style={{ marginBottom: 0 }}>
+                      <article className="stat-card">
+                        <div className="stat-label">Maintenance Records</div>
+                        <div className="stat-value">{assetFullRecordMaintenanceRows.length}</div>
+                      </article>
+                      <article className="stat-card">
+                        <div className="stat-label">Transfer Records</div>
+                        <div className="stat-value">{assetFullRecordTransferRows.length}</div>
+                      </article>
+                      <article className="stat-card">
+                        <div className="stat-label">Verification Records</div>
+                        <div className="stat-value">{assetFullRecordVerificationRows.length}</div>
+                      </article>
+                    </div>
+
+                    {assetFullRecordAssignmentRows.length ? (
+                      <div className="table-wrap report-table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th colSpan={7}>Current Assignment</th>
+                            </tr>
+                            <tr>
+                              <th>Asset ID</th>
+                              <th>Item</th>
+                              <th>Campus</th>
+                              <th>Location</th>
+                              <th>Assigned To</th>
+                              <th>Since</th>
+                              <th>Ack</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {assetFullRecordAssignmentRows.map((row) => (
+                              <tr key={`asset-full-assignment-${row.assetDbId}`}>
+                                <td><strong>{row.assetId}</strong></td>
+                                <td>{row.itemName || "-"}</td>
+                                <td>{reportCampusName(row.campus)}</td>
+                                <td>{row.location || "-"}</td>
+                                <td>{row.assignedTo || "-"}</td>
+                                <td>{formatDate(row.sinceDate || "-")}</td>
+                                <td>{row.responsibilityAck || "-"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+
+                    <div className="table-wrap report-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th colSpan={7}>Maintenance History</th>
+                          </tr>
+                          <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Condition</th>
+                            <th>Cost</th>
+                            <th>By</th>
+                            <th>Note</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {assetFullRecordMaintenanceRows.length ? (
+                            assetFullRecordMaintenanceRows.map((row) => (
+                              <tr key={`asset-full-maint-${row.id}`}>
+                                <td>{formatDate(row.date || "-")}</td>
+                                <td>{row.type || "-"}</td>
+                                <td>{row.completion || "-"}</td>
+                                <td>{row.condition || "-"}</td>
+                                <td>{row.cost || "-"}</td>
+                                <td>{row.by || "-"}</td>
+                                <td>{row.note || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7}>No maintenance history.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="table-wrap report-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th colSpan={9}>Transfer History</th>
+                          </tr>
+                          <tr>
+                            <th>Date</th>
+                            <th>From Campus</th>
+                            <th>From Location</th>
+                            <th>To Campus</th>
+                            <th>To Location</th>
+                            <th>From Staff</th>
+                            <th>To Staff</th>
+                            <th>By</th>
+                            <th>Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {assetFullRecordTransferRows.length ? (
+                            assetFullRecordTransferRows.map((row) => (
+                              <tr key={`asset-full-transfer-${row.rowId}`}>
+                                <td>{formatDate(row.date || "-")}</td>
+                                <td>{reportCampusName(row.fromCampus)}</td>
+                                <td>{row.fromLocation || "-"}</td>
+                                <td>{reportCampusName(row.toCampus)}</td>
+                                <td>{row.toLocation || "-"}</td>
+                                <td>{row.fromUser || "-"}</td>
+                                <td>{row.toUser || "-"}</td>
+                                <td>{row.by || "-"}</td>
+                                <td>{row.reason || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={9}>No transfer history.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="table-wrap report-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th colSpan={6}>Verification History</th>
+                          </tr>
+                          <tr>
+                            <th>Date</th>
+                            <th>Result</th>
+                            <th>Condition</th>
+                            <th>By</th>
+                            <th>Note</th>
+                            <th>Photo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {assetFullRecordVerificationRows.length ? (
+                            assetFullRecordVerificationRows.map((row) => (
+                              <tr key={`asset-full-verify-${row.rowId}`}>
+                                <td>{formatDate(row.date || "-")}</td>
+                                <td>{row.result || "-"}</td>
+                                <td>{row.condition || "-"}</td>
+                                <td>{row.by || "-"}</td>
+                                <td>{row.note || "-"}</td>
+                                <td>{renderAssetPhoto(row.photo || "", `${row.assetId}-verification`)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6}>No verification history.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="panel-note">No asset selected for this full record report.</div>
+                )}
+              </div>
+            )}
+
             {reportType === "transfer" && (
               <div className="table-wrap report-table-wrap">
                 <table>
@@ -57218,8 +57996,8 @@ function formatTicketRequestSource(value?: string) {
                     </tr>
                   </thead>
                   <tbody>
-                    {allTransferRows.length ? (
-                      allTransferRows.map((r) => (
+                    {reportTransferRows.length ? (
+                      reportTransferRows.map((r) => (
                         <tr key={`report-transfer-${r.rowId}`}>
                           <td>{r.date ? formatDate(r.date) : "-"}</td>
                           <td><strong>{r.assetId}</strong></td>
@@ -57542,81 +58320,160 @@ function formatTicketRequestSource(value?: string) {
                     )}
                   </div>
                 ) : (
-                  <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
+                  <div className="table-wrap report-table-wrap report-maintenance-table-wrap" style={{ marginTop: 12 }}>
                     <table>
                       <thead>
                         <tr>
                           {visibleMaintenanceReportColumnDefs.map((column) => (
                             <th key={`maintenance-report-head-${column.key}`}>{column.label}</th>
                           ))}
+                          <th>Details</th>
                         </tr>
                       </thead>
                       <tbody>
                         {maintenanceCompletionRows.length ? (
-                          maintenanceCompletionRows.map((r) => (
-                            <tr key={`report-completion-${r.rowId}`}>
-                              {visibleMaintenanceReportColumnDefs.map((column) => {
-                                switch (column.key) {
-                                  case "date":
-                                    return <td key={`${r.rowId}-${column.key}`}>{formatDate(r.date || "-")}</td>;
-                                  case "assetId":
-                                    return <td key={`${r.rowId}-${column.key}`}><strong>{r.assetId}</strong></td>;
-                                  case "itemName":
-                                    return <td key={`${r.rowId}-${column.key}`}>{r.itemName || "-"}</td>;
-                                  case "beforePhoto":
-                                    return (
-                                      <td key={`${r.rowId}-${column.key}`}>
-                                        {String((r.beforePhotos || [])[0] || "").trim()
-                                          ? renderAssetPhoto(String((r.beforePhotos || [])[0] || ""), `${r.assetId}-before`)
-                                          : "-"}
-                                      </td>
-                                    );
-                                  case "afterPhoto":
-                                    return (
-                                      <td key={`${r.rowId}-${column.key}`}>
-                                        {String((r.afterPhotos || [])[0] || "").trim()
-                                          ? renderAssetPhoto(String((r.afterPhotos || [])[0] || ""), `${r.assetId}-after`)
-                                          : "-"}
-                                      </td>
-                                    );
-                                  case "campus":
-                                    return <td key={`${r.rowId}-${column.key}`}>{reportCampusName(r.campus)}</td>;
-                                  case "location":
-                                    return <td key={`${r.rowId}-${column.key}`}>{r.location || "-"}</td>;
-                                  case "type":
-                                    return <td key={`${r.rowId}-${column.key}`}>{r.type || "-"}</td>;
-                                  case "completion":
-                                    return <td key={`${r.rowId}-${column.key}`}>{maintenanceCompletionText(r.completion || "-")}</td>;
-                                  case "condition":
-                                    return <td key={`${r.rowId}-${column.key}`}>{r.condition || "-"}</td>;
-                                  case "cost":
-                                    return <td key={`${r.rowId}-${column.key}`}>{r.cost || "-"}</td>;
-                                  case "by":
-                                    return <td key={`${r.rowId}-${column.key}`}>{r.by || "-"}</td>;
-                                  case "reportFile":
-                                    return (
-                                      <td key={`${r.rowId}-${column.key}`}>
-                                        {renderMaintenanceReportFileLink(
-                                          normalizeMaintenanceReportFile({
-                                            url: r.reportFile || "",
-                                            name: r.reportFileName || "",
-                                            mimeType: r.reportFileType || "",
-                                          }),
-                                          `report-maint-file-${r.rowId}`
-                                        )}
-                                      </td>
-                                    );
-                                  case "note":
-                                    return <td key={`${r.rowId}-${column.key}`}>{r.note || "-"}</td>;
-                                  default:
-                                    return <td key={`${r.rowId}-${column.key}`}>-</td>;
-                                }
-                              })}
-                            </tr>
-                          ))
+                          maintenanceCompletionRows.map((r) => {
+                            const isExpanded = Boolean(maintenanceReportExpandedRows[r.rowId]);
+                            return (
+                              <React.Fragment key={`report-completion-${r.rowId}`}>
+                                <tr className={isExpanded ? "report-maintenance-row-expanded" : ""}>
+                                  {visibleMaintenanceReportColumnDefs.map((column) => {
+                                    switch (column.key) {
+                                      case "date":
+                                        return <td key={`${r.rowId}-${column.key}`}>{formatDate(r.date || "-")}</td>;
+                                      case "assetId":
+                                        return <td key={`${r.rowId}-${column.key}`}><strong>{r.assetId}</strong></td>;
+                                      case "itemName":
+                                        return <td key={`${r.rowId}-${column.key}`}>{r.itemName || "-"}</td>;
+                                      case "beforePhoto":
+                                        return (
+                                          <td key={`${r.rowId}-${column.key}`}>
+                                            {String((r.beforePhotos || [])[0] || "").trim()
+                                              ? renderAssetPhoto(String((r.beforePhotos || [])[0] || ""), `${r.assetId}-before`)
+                                              : "-"}
+                                          </td>
+                                        );
+                                      case "afterPhoto":
+                                        return (
+                                          <td key={`${r.rowId}-${column.key}`}>
+                                            {String((r.afterPhotos || [])[0] || "").trim()
+                                              ? renderAssetPhoto(String((r.afterPhotos || [])[0] || ""), `${r.assetId}-after`)
+                                              : "-"}
+                                          </td>
+                                        );
+                                      case "campus":
+                                        return <td key={`${r.rowId}-${column.key}`}>{reportCampusName(r.campus)}</td>;
+                                      case "location":
+                                        return <td key={`${r.rowId}-${column.key}`}>{r.location || "-"}</td>;
+                                      case "type":
+                                        return <td key={`${r.rowId}-${column.key}`}>{r.type || "-"}</td>;
+                                      case "completion":
+                                        return <td key={`${r.rowId}-${column.key}`}>{maintenanceCompletionText(r.completion || "-")}</td>;
+                                      case "condition":
+                                        return <td key={`${r.rowId}-${column.key}`}>{r.condition || "-"}</td>;
+                                      case "cost":
+                                        return <td key={`${r.rowId}-${column.key}`}>{r.cost || "-"}</td>;
+                                      case "by":
+                                        return <td key={`${r.rowId}-${column.key}`}>{r.by || "-"}</td>;
+                                      case "reportFile":
+                                        return (
+                                          <td key={`${r.rowId}-${column.key}`}>
+                                            {renderMaintenanceReportFileLink(
+                                              normalizeMaintenanceReportFile({
+                                                url: r.reportFile || "",
+                                                name: r.reportFileName || "",
+                                                mimeType: r.reportFileType || "",
+                                              }),
+                                              `report-maint-file-${r.rowId}`
+                                            )}
+                                          </td>
+                                        );
+                                      case "note":
+                                        return <td key={`${r.rowId}-${column.key}`}>{r.note || "-"}</td>;
+                                      default:
+                                        return <td key={`${r.rowId}-${column.key}`}>-</td>;
+                                    }
+                                  })}
+                                  <td className="report-maintenance-detail-toggle-cell">
+                                    <button
+                                      type="button"
+                                      className="tab report-maintenance-detail-toggle"
+                                      onClick={() =>
+                                        setMaintenanceReportExpandedRows((prev) => ({
+                                          ...prev,
+                                          [r.rowId]: !prev[r.rowId],
+                                        }))
+                                      }
+                                    >
+                                      {isExpanded ? "Hide" : "Open"}
+                                    </button>
+                                  </td>
+                                </tr>
+                                {isExpanded ? (
+                                  <tr className="report-maintenance-detail-row">
+                                    <td colSpan={visibleMaintenanceReportColumnDefs.length + 1}>
+                                      <div className="report-maintenance-detail-grid">
+                                        <div className="report-maintenance-detail-card">
+                                          <span>Asset</span>
+                                          <strong>{r.assetId}</strong>
+                                          <p>{r.itemName || "-"}</p>
+                                        </div>
+                                        <div className="report-maintenance-detail-card">
+                                          <span>Campus</span>
+                                          <strong>{reportCampusName(r.campus)}</strong>
+                                          <p>{r.location || "-"}</p>
+                                        </div>
+                                        <div className="report-maintenance-detail-card">
+                                          <span>Technician</span>
+                                          <strong>{r.by || "-"}</strong>
+                                          <p>{r.checkedBy || "-"}</p>
+                                        </div>
+                                        <div className="report-maintenance-detail-card">
+                                          <span>Cost</span>
+                                          <strong>{r.cost || "-"}</strong>
+                                          <p>{r.condition || "-"}</p>
+                                        </div>
+                                        <div className="report-maintenance-detail-card report-maintenance-detail-card-wide">
+                                          <span>Note</span>
+                                          <p>{r.note || "-"}</p>
+                                        </div>
+                                        <div className="report-maintenance-detail-card report-maintenance-detail-card-wide">
+                                          <span>Report File</span>
+                                          <div>
+                                            {renderMaintenanceReportFileLink(
+                                              normalizeMaintenanceReportFile({
+                                                url: r.reportFile || "",
+                                                name: r.reportFileName || "",
+                                                mimeType: r.reportFileType || "",
+                                              }),
+                                              `report-maint-file-detail-${r.rowId}`
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="report-maintenance-photo-strip">
+                                          <div className="report-maintenance-photo-card">
+                                            <span>Before</span>
+                                            {String((r.beforePhotos || [])[0] || "").trim()
+                                              ? renderAssetPhoto(String((r.beforePhotos || [])[0] || ""), `${r.assetId}-before-expanded`)
+                                              : "-"}
+                                          </div>
+                                          <div className="report-maintenance-photo-card">
+                                            <span>After</span>
+                                            {String((r.afterPhotos || [])[0] || "").trim()
+                                              ? renderAssetPhoto(String((r.afterPhotos || [])[0] || ""), `${r.assetId}-after-expanded`)
+                                              : "-"}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ) : null}
+                              </React.Fragment>
+                            );
+                          })
                         ) : (
                           <tr>
-                            <td colSpan={Math.max(visibleMaintenanceReportColumnDefs.length, 1)}>No maintenance records in selected range.</td>
+                            <td colSpan={Math.max(visibleMaintenanceReportColumnDefs.length + 1, 1)}>No maintenance records in selected range.</td>
                           </tr>
                         )}
                       </tbody>

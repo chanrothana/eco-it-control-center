@@ -1172,8 +1172,10 @@ function normalizeInventoryItems(input) {
       unit: toText(row.unit),
       openingQty: Number(row.openingQty || 0),
       minStock: Number(row.minStock || 0),
+      area: toText(row.area),
       location: toText(row.location),
       vendor: toText(row.vendor),
+      ownerType: toUpper(row.ownerType) || "SCHOOL",
       responsibleParty: toText(row.responsibleParty),
       notes: toText(row.notes),
       itemGroup: toUpper(row.itemGroup) || "GENERAL",
@@ -1201,10 +1203,13 @@ function normalizeToolReviewReports(input) {
       itemName: toText(row.itemName),
       category: toText(row.category),
       campus: toText(row.campus),
+      area: toText(row.area),
       location: toText(row.location),
       expectedQty: Math.max(0, Number(row.expectedQty || 0)),
       countedQty: Math.max(0, Number(row.countedQty || 0)),
       unit: toText(row.unit),
+      ownerType: toUpper(row.ownerType) || "SCHOOL",
+      responsibleParty: toText(row.responsibleParty),
       condition: toText(row.condition),
       reviewedBy: toText(row.reviewedBy),
       supervisor: toText(row.supervisor),
@@ -6232,6 +6237,49 @@ function dashboard(db, campus) {
   return { totalAssets, itAssets, safetyAssets, openTickets, byCampus };
 }
 
+async function buildBootstrapResponse(db, user, options = {}) {
+  const campus = normalizeCampusInput(options.campus);
+  const includeAssets = Boolean(options.includeAssets);
+  const includeLocations = Boolean(options.includeLocations);
+  const includeTickets = options.includeTickets !== false;
+  const includeStats = options.includeStats !== false;
+  const scopeAssetsToCampus = options.scopeAssetsToCampus !== false;
+
+  const scopedAssets = filterByCampusPermission(db.assets, user, (a) => a.campus);
+  const scopedTickets = filterByCampusPermission(db.tickets, user, (t) => t.campus);
+  const scopedLocations = filterByCampusPermission(db.locations, user, (row) => row.campus);
+  const selectedCampus =
+    campus && userCanAccessCampus(user, campus) ? campus : "";
+
+  let assets = scopedAssets;
+  let tickets = scopedTickets;
+  let locations = scopedLocations;
+
+  if (selectedCampus) {
+    if (scopeAssetsToCampus) {
+      assets = assets.filter((row) => row.campus === selectedCampus);
+    }
+    tickets = tickets.filter((row) => row.campus === selectedCampus);
+    locations = locations.filter((row) => row.campus === selectedCampus);
+  }
+
+  const response = {};
+  if (includeAssets) {
+    response.assets = await normalizeAssetsForResponse(assets);
+  }
+  if (includeTickets) {
+    response.tickets = tickets;
+  }
+  if (includeLocations) {
+    response.locations = locations;
+  }
+  if (includeStats) {
+    const statsDb = { ...db, assets: scopedAssets, tickets: scopedTickets };
+    response.stats = dashboard(statsDb, selectedCampus || "");
+  }
+  return response;
+}
+
 function toPublicAssetComponentView(asset) {
   const source = asset && typeof asset === "object" ? asset : {};
   return {
@@ -7545,6 +7593,31 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/bootstrap") {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const db = await readDb();
+      const includeParam = toText(url.searchParams.get("include")).toLowerCase();
+      const includeSet = new Set(
+        (includeParam ? includeParam.split(",") : ["assets", "tickets", "stats", "locations"])
+          .map((value) => value.trim())
+          .filter(Boolean)
+      );
+      const payload = await buildBootstrapResponse(db, user, {
+        campus: url.searchParams.get("campus"),
+        includeAssets: includeSet.has("assets"),
+        includeTickets: includeSet.has("tickets"),
+        includeStats: includeSet.has("stats"),
+        includeLocations: includeSet.has("locations"),
+        scopeAssetsToCampus: toText(url.searchParams.get("asset_scope")).toLowerCase() !== "all",
+      });
+      sendJson(res, 200, payload);
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/notifications") {
       const user = getAuthUser(req);
       if (!user) {
@@ -7710,9 +7783,11 @@ const server = http.createServer(async (req, res) => {
       const itemName = toText(body.itemName);
       const unit = toText(body.unit);
       const location = toText(body.location);
+      const area = toText(body.area);
       const openingQty = Math.max(0, Number(body.openingQty || 0));
       const minStock = Math.max(0, Number(body.minStock || 0));
       const vendor = toText(body.vendor);
+      const ownerType = toUpper(body.ownerType) || "SCHOOL";
       const responsibleParty = toText(body.responsibleParty);
       const notes = toText(body.notes);
       if (!campus || !category || !itemCode || !itemName || !unit || !location) {
@@ -7757,8 +7832,10 @@ const server = http.createServer(async (req, res) => {
         unit,
         openingQty,
         minStock,
+        area,
         location,
         vendor,
+        ownerType,
         responsibleParty,
         notes,
         itemGroup,
@@ -7800,9 +7877,11 @@ const server = http.createServer(async (req, res) => {
       const itemName = toText(body.itemName || current.itemName);
       const unit = toText(body.unit || current.unit);
       const location = toText(body.location || current.location);
+      const area = toText(body.area ?? current.area);
       const openingQty = Math.max(0, Number(body.openingQty ?? current.openingQty ?? 0));
       const minStock = Math.max(0, Number(body.minStock ?? current.minStock ?? 0));
       const vendor = toText(body.vendor ?? current.vendor);
+      const ownerType = toUpper(body.ownerType ?? current.ownerType) || "SCHOOL";
       const responsibleParty = toText(body.responsibleParty ?? current.responsibleParty);
       const notes = toText(body.notes ?? current.notes);
       const itemGroup = toUpper(body.itemGroup ?? current.itemGroup) || "GENERAL";
@@ -7855,8 +7934,10 @@ const server = http.createServer(async (req, res) => {
         unit,
         openingQty,
         minStock,
+        area,
         location,
         vendor,
+        ownerType,
         responsibleParty,
         notes,
         itemGroup,
