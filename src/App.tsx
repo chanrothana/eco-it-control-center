@@ -56,6 +56,7 @@ const PURCHASE_ORDER_LOGO_URL = EISLogo;
 const APP_ICON_FALLBACK_URL = publicAssetUrl("/logo192.png");
 const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
 const MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY = "maintenance_notification_read_map_v1";
+const ASSET_DATA_REQUEST_TIMEOUT_MS = 45000;
 
 type Asset = {
   id: number;
@@ -739,6 +740,10 @@ type BootstrapPayload = {
   tickets?: Ticket[];
   stats?: DashboardStats;
   locations?: LocationEntry[];
+};
+
+type ApiRequestInit = RequestInit & {
+  timeoutMs?: number;
 };
 
 function tabNeedsAssetDataset(tab: NavModule) {
@@ -3301,9 +3306,9 @@ function getWdpFilterCycleNote(step: number) {
   return Number(step || 1) === 2 ? "Change all 4 filters" : "Change 2 filters";
 }
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function requestJson<T>(url: string, init?: ApiRequestInit): Promise<T> {
   const authToken = localStorage.getItem(AUTH_TOKEN_KEY) || runtimeAuthToken;
-  const REQUEST_TIMEOUT_MS = 12000;
+  const REQUEST_TIMEOUT_MS = Math.max(1000, Number(init?.timeoutMs || 12000));
   const requestInit: RequestInit = {
     headers: {
       "Content-Type": "application/json",
@@ -17860,7 +17865,9 @@ export default function App() {
       if (fallbackAssets.length) {
         setAssets((current) => (current.length ? current : fallbackAssets));
       }
-      const assetRes = await requestJson<{ assets: Asset[] }>("/api/assets");
+      const assetRes = await requestJson<{ assets: Asset[] }>("/api/assets", {
+        timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
+      });
       const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
       setAssets(serverAssets);
       if (serverAssets.length > 0) {
@@ -17906,7 +17913,9 @@ export default function App() {
       const settingsPromise = requestJson<{ settings?: ServerSettings }>("/api/settings")
         .then((settings) => ({ ok: true as const, settings }))
         .catch(() => ({ ok: false as const }));
-      const bootstrapRes = await requestJson<BootstrapPayload>(`/api/bootstrap?${params.toString()}`);
+      const bootstrapRes = await requestJson<BootstrapPayload>(`/api/bootstrap?${params.toString()}`, {
+        timeoutMs: shouldIncludeAssets ? ASSET_DATA_REQUEST_TIMEOUT_MS : 12000,
+      });
       const serverAssets = shouldIncludeAssets
         ? normalizeArray<Asset>(bootstrapRes.assets).map(normalizeAssetForUi)
         : [];
