@@ -101,6 +101,7 @@ const DB_PATH = resolveStoragePath(process.env.DB_PATH, "db.json");
 const SQLITE_PATH = resolveStoragePath(process.env.SQLITE_PATH, "data.sqlite");
 const UPLOADS_DIR = resolveStoragePath(process.env.UPLOADS_DIR, "uploads");
 const BACKUPS_DIR = resolveStoragePath(process.env.BACKUPS_DIR, "backups");
+const BUNDLED_DB_PATH = path.join(__dirname, "db.json");
 const UTILITY_INVOICE_OCR_SCRIPT = path.join(__dirname, "scripts", "utility_invoice_ocr.swift");
 const DB_MIRROR_PATH = process.env.DB_MIRROR_PATH ? resolveStoragePath(process.env.DB_MIRROR_PATH, "db-mirror.json") : "";
 const BACKUP_MIRROR_DIR = process.env.BACKUP_MIRROR_DIR ? resolveStoragePath(process.env.BACKUP_MIRROR_DIR, "backup-mirror") : "";
@@ -440,6 +441,21 @@ function readLegacyJsonDbSync() {
   }
 }
 
+function readBundledSeedDbSync() {
+  try {
+    if (path.resolve(BUNDLED_DB_PATH) === path.resolve(DB_PATH)) {
+      return null;
+    }
+    if (!fsSync.existsSync(BUNDLED_DB_PATH)) {
+      return null;
+    }
+    const raw = fsSync.readFileSync(BUNDLED_DB_PATH, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function readLatestBackupDbSync() {
   try {
     if (!fsSync.existsSync(BACKUPS_DIR)) return null;
@@ -516,8 +532,12 @@ function disableSqliteRuntime(reason) {
 function initJsonStorageSync() {
   fsSync.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   if (!fsSync.existsSync(DB_PATH)) {
-    const initial = normalizeImportedDb({});
+    const bundled = readBundledSeedDbSync();
+    const initial = bundled ? normalizeImportedDb(bundled) : normalizeImportedDb({});
     fsSync.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2), "utf8");
+    if (bundled) {
+      console.log(`[STORAGE] Seeded JSON storage from bundled snapshot ${BUNDLED_DB_PATH}`);
+    }
     return;
   }
   try {
@@ -753,6 +773,10 @@ function initStorageSync() {
     const legacy = readLegacyJsonDbSync();
     if (legacy) {
       candidates.push({ label: "legacy JSON", db: normalizeImportedDb(legacy) });
+    }
+    const bundled = readBundledSeedDbSync();
+    if (bundled) {
+      candidates.push({ label: "bundled snapshot", db: normalizeImportedDb(bundled) });
     }
     const backup = readLatestBackupDbSync();
     if (backup && backup.db) {
