@@ -3983,11 +3983,17 @@ async function normalizeStoredMaintenanceEntryMedia(entry) {
   };
 }
 
-async function normalizeAssetsForResponse(assets) {
+async function normalizeAssetsForResponse(assets, options = {}) {
   if (!Array.isArray(assets)) return [];
+  const includeHistory = options.includeHistory !== false;
   const out = [];
   for (const asset of assets) {
     const source = asset && typeof asset === "object" ? asset : {};
+    if (!includeHistory) {
+      const { maintenanceHistory, verificationHistory, transferHistory, custodyHistory, statusHistory, ...summary } = source;
+      out.push(summary);
+      continue;
+    }
     const maintenanceHistory = Array.isArray(source.maintenanceHistory)
       ? await Promise.all(source.maintenanceHistory.map((entry) => normalizeStoredMaintenanceEntryMedia(entry)))
       : [];
@@ -6264,6 +6270,7 @@ function dashboard(db, campus) {
 async function buildBootstrapResponse(db, user, options = {}) {
   const campus = normalizeCampusInput(options.campus);
   const includeAssets = Boolean(options.includeAssets);
+  const assetDetail = toText(options.assetDetail).toLowerCase() === "summary" ? "summary" : "full";
   const includeLocations = Boolean(options.includeLocations);
   const includeTickets = options.includeTickets !== false;
   const includeStats = options.includeStats !== false;
@@ -6289,7 +6296,9 @@ async function buildBootstrapResponse(db, user, options = {}) {
 
   const response = {};
   if (includeAssets) {
-    response.assets = await normalizeAssetsForResponse(assets);
+    response.assets = await normalizeAssetsForResponse(assets, {
+      includeHistory: assetDetail !== "summary",
+    });
   }
   if (includeTickets) {
     response.tickets = tickets;
@@ -7636,6 +7645,7 @@ const server = http.createServer(async (req, res) => {
         includeTickets: includeSet.has("tickets"),
         includeStats: includeSet.has("stats"),
         includeLocations: includeSet.has("locations"),
+        assetDetail: url.searchParams.get("asset_detail"),
         scopeAssetsToCampus: toText(url.searchParams.get("asset_scope")).toLowerCase() !== "all",
       });
       sendJson(res, 200, payload);
@@ -8812,6 +8822,7 @@ const server = http.createServer(async (req, res) => {
       const campus = normalizeCampusInput(url.searchParams.get("campus"));
       const category = toUpper(url.searchParams.get("category"));
       const search = toText(url.searchParams.get("q")).toLowerCase();
+      const detail = toText(url.searchParams.get("detail")).toLowerCase() === "summary" ? "summary" : "full";
 
       const db = await readDb();
       let assets = filterByCampusPermission(db.assets, user, (a) => a.campus);
@@ -8827,7 +8838,11 @@ const server = http.createServer(async (req, res) => {
           return hay.includes(search);
         });
       }
-      sendJson(res, 200, { assets: await normalizeAssetsForResponse(assets) });
+      sendJson(res, 200, {
+        assets: await normalizeAssetsForResponse(assets, {
+          includeHistory: detail !== "summary",
+        }),
+      });
       return;
     }
 

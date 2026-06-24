@@ -762,6 +762,17 @@ function tabNeedsAssetDataset(tab: NavModule) {
   }
 }
 
+function tabNeedsFullAssetDetail(tab: NavModule) {
+  switch (tab) {
+    case "maintenance":
+    case "verification":
+    case "reports":
+      return true;
+    default:
+      return false;
+  }
+}
+
 type ApiError = { error?: string };
 type Lang = "en" | "km";
 type UiTheme = "dark" | "light";
@@ -17865,7 +17876,8 @@ export default function App() {
       if (fallbackAssets.length) {
         setAssets((current) => (current.length ? current : fallbackAssets));
       }
-      const assetRes = await requestJson<{ assets: Asset[] }>("/api/assets", {
+      const detail = tabNeedsFullAssetDetail(tabRef.current) ? "full" : "summary";
+      const assetRes = await requestJson<{ assets: Asset[] }>(`/api/assets?detail=${detail}`, {
         timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
       });
       const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
@@ -17905,9 +17917,11 @@ export default function App() {
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
       const shouldIncludeAssets =
         options?.includeAssets ?? (tabNeedsAssetDataset(tabRef.current) || assetDataLoadedRef.current);
+      const assetDetail = tabNeedsFullAssetDetail(tabRef.current) ? "full" : "summary";
       params.set("include", shouldIncludeAssets ? "assets,tickets,stats,locations" : "tickets,stats,locations");
       if (shouldIncludeAssets) {
         params.set("asset_scope", "all");
+        params.set("asset_detail", assetDetail);
       }
 
       const settingsPromise = requestJson<{ settings?: ServerSettings }>("/api/settings")
