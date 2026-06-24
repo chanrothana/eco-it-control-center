@@ -8542,7 +8542,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const mode = String(params.get("mode") || "").toLowerCase();
     return mode === "maintenance" || mode === "staff";
-  }, [campusFilter]);
+  }, []);
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [, startTabTransition] = useTransition();
@@ -17926,7 +17926,7 @@ export default function App() {
       }
       console.warn("Failed to load assets dataset", err);
     }
-  }, []);
+  }, [campusFilter]);
 
   const loadData = useCallback(async (options?: { includeAssets?: boolean }) => {
     setLoading(true);
