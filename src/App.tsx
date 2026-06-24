@@ -8542,7 +8542,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const mode = String(params.get("mode") || "").toLowerCase();
     return mode === "maintenance" || mode === "staff";
-  }, []);
+  }, [campusFilter]);
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [, startTabTransition] = useTransition();
@@ -17877,10 +17877,29 @@ export default function App() {
         setAssets((current) => (current.length ? current : fallbackAssets));
       }
       const detail = tabNeedsFullAssetDetail(tabRef.current) ? "full" : "summary";
-      const assetRes = await requestJson<{ assets: Asset[] }>(`/api/assets?detail=${detail}`, {
-        timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
-      });
-      const serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
+      const bootstrapParams = new URLSearchParams();
+      bootstrapParams.set("include", "assets");
+      bootstrapParams.set("asset_scope", "all");
+      bootstrapParams.set("asset_detail", detail);
+      if (campusFilter !== "ALL") {
+        bootstrapParams.set("campus", campusFilter);
+      }
+
+      let serverAssets = normalizeArray<Asset>(
+        (
+          await requestJson<BootstrapPayload>(`/api/bootstrap?${bootstrapParams.toString()}`, {
+            timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
+          })
+        ).assets
+      ).map(normalizeAssetForUi);
+
+      if (!serverAssets.length) {
+        const assetRes = await requestJson<{ assets: Asset[] }>(`/api/assets?detail=${detail}`, {
+          timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
+        });
+        serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
+      }
+
       setAssets(serverAssets);
       if (serverAssets.length > 0) {
         writeAssetFallback(serverAssets);
