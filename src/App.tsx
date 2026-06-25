@@ -6974,7 +6974,7 @@ function parseAirconSpecs(specsRaw: string) {
   const componentNoteMatch = specs.match(/Components? Note:\s*([^\n|;]+)/i);
   const remotePhotoMatch = specs.match(/Remote Photo:\s*([^\n|;]+)/i);
   const frontPhotoMatch = specs.match(/Front Unit Photo:\s*([^\n|;]+)/i);
-  const outdoorPhotoMatch = specs.match(/Outdoor Unit Photo:\s*([^\n|;]+)/i);
+  const outdoorPhotoMatch = specs.match(/(?:Outdoor|Back) Unit Photo:\s*([^\n|;]+)/i);
   if (typeMatch?.[1]) acType = String(typeMatch[1]).trim();
   if (hpMatch?.[1]) acHp = String(hpMatch[1]).trim();
   if (includedMatch?.[1]) {
@@ -7001,7 +7001,8 @@ function parseAirconSpecs(specsRaw: string) {
     .replace(/Components? Note:\s*([^\n|;]+)/gi, "")
     .replace(/Remote Photo:\s*([^\n|;]+)/gi, "")
     .replace(/Front Unit Photo:\s*([^\n|;]+)/gi, "")
-    .replace(/Outdoor Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/(?:Outdoor|Back) Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/\b(?:data:image\/[a-z0-9.+-]+;)?base64,[A-Za-z0-9+/=\s]+/gi, "")
     .replace(/[|;]+/g, "\n")
     .replace(/\n\s*,/g, "\n")
     .replace(/\n{2,}/g, "\n")
