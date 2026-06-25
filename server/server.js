@@ -1384,6 +1384,7 @@ function normalizeItemTypeOptions(input) {
   for (const [rawCategory, rawRows] of Object.entries(input)) {
     const category = toUpper(rawCategory);
     if (!category) continue;
+    const seenCodes = new Set();
     out[category] = normalizeArray(rawRows)
       .filter((row) => row && typeof row === "object")
       .map((row) => ({
@@ -1391,7 +1392,12 @@ function normalizeItemTypeOptions(input) {
         itemKm: toText(row.itemKm || row.item_km || row.itemEn || row.item_en).trim(),
         code: toUpper(row.code),
       }))
-      .filter((row) => row.code && row.itemEn);
+      .filter((row) => {
+        if (!row.code || !row.itemEn) return false;
+        if (seenCodes.has(row.code)) return false;
+        seenCodes.add(row.code);
+        return true;
+      });
   }
   return out;
 }
@@ -3986,11 +3992,15 @@ async function normalizeStoredMaintenanceEntryMedia(entry) {
 async function normalizeAssetsForResponse(assets, options = {}) {
   if (!Array.isArray(assets)) return [];
   const includeHistory = options.includeHistory !== false;
+  const compact = options.compact === true;
   const out = [];
   for (const asset of assets) {
     const source = asset && typeof asset === "object" ? asset : {};
     if (!includeHistory) {
       const { maintenanceHistory, verificationHistory, transferHistory, custodyHistory, statusHistory, ...summary } = source;
+      if (compact) {
+        summary.specs = compactAssetSpecsForSummary(summary.specs);
+      }
       out.push(summary);
       continue;
     }
@@ -4003,6 +4013,22 @@ async function normalizeAssetsForResponse(assets, options = {}) {
     });
   }
   return out;
+}
+
+function compactAssetSpecsForSummary(raw) {
+  const text = toText(raw);
+  if (!text) return "";
+  return text
+    .replace(/TV Remote Photo 1:\s*([^\n|;]+)/gi, "")
+    .replace(/TV Remote Photo 2:\s*([^\n|;]+)/gi, "")
+    .replace(/Remote Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Front Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Back Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/\bdata:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi, "")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[|;][ \t]*[|;]+/g, "|")
+    .trim();
 }
 
 function fileNameFromUploadUrl(raw, fallback = "attachment") {
@@ -5662,11 +5688,21 @@ function assetItemName(category, typeCode, pcType = "") {
   return base;
 }
 
+function allowedTypeCodesForCategory(category, settings) {
+  const normalizedCategory = normalizeCategoryInput(category);
+  const baseCodes = Array.isArray(TYPE_CODES[normalizedCategory]) ? TYPE_CODES[normalizedCategory] : [];
+  const customTypeOptions = normalizeItemTypeOptions(settings && settings.itemTypeOptions);
+  const customCodes = Array.isArray(customTypeOptions[normalizedCategory])
+    ? customTypeOptions[normalizedCategory].map((row) => toUpper(row && row.code)).filter(Boolean)
+    : [];
+  return Array.from(new Set([...baseCodes, ...customCodes]));
+}
+
 function normalizeSerialKey(value) {
   return toUpper(value);
 }
 
-function validateAsset(body) {
+function validateAsset(body, settings) {
   const campus = normalizeCampusInput(body.campus);
   const category = normalizeCategoryInput(body.category);
   const type = toUpper(body.type);
@@ -5713,7 +5749,7 @@ function validateAsset(body) {
   if (!category) return "Category is required";
   if (!TYPE_CODES[category]) return "Category must be IT, SAFETY, FACILITY, or FURNITURE";
   if (!type) return "Type code is required";
-  if (!TYPE_CODES[category].includes(type)) {
+  if (!allowedTypeCodesForCategory(category, settings).includes(type)) {
     return `Type code '${type}' is not allowed for ${category}`;
   }
   if (requiresUser && !sharedLocation && !assignedTo) {
@@ -6271,6 +6307,7 @@ async function buildBootstrapResponse(db, user, options = {}) {
   const campus = normalizeCampusInput(options.campus);
   const includeAssets = Boolean(options.includeAssets);
   const assetDetail = toText(options.assetDetail).toLowerCase() === "summary" ? "summary" : "full";
+  const compactAssets = options.compactAssets === true;
   const includeLocations = Boolean(options.includeLocations);
   const includeTickets = options.includeTickets !== false;
   const includeStats = options.includeStats !== false;
@@ -6298,6 +6335,7 @@ async function buildBootstrapResponse(db, user, options = {}) {
   if (includeAssets) {
     response.assets = await normalizeAssetsForResponse(assets, {
       includeHistory: assetDetail !== "summary",
+      compact: compactAssets && assetDetail === "summary",
     });
   }
   if (includeTickets) {
@@ -7646,6 +7684,7 @@ const server = http.createServer(async (req, res) => {
         includeStats: includeSet.has("stats"),
         includeLocations: includeSet.has("locations"),
         assetDetail: url.searchParams.get("asset_detail"),
+        compactAssets: toText(url.searchParams.get("compact")) === "1",
         scopeAssetsToCampus: toText(url.searchParams.get("asset_scope")).toLowerCase() !== "all",
       });
       sendJson(res, 200, payload);
@@ -8841,6 +8880,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         assets: await normalizeAssetsForResponse(assets, {
           includeHistory: detail !== "summary",
+          compact: toText(url.searchParams.get("compact")) === "1" && detail === "summary",
         }),
       });
       return;
@@ -8860,7 +8900,7 @@ const server = http.createServer(async (req, res) => {
               custodyStatus: parentAssignment.custodyStatus,
             }
           : body;
-      const cleaned = validateAsset(bodyWithParentAssignment);
+      const cleaned = validateAsset(bodyWithParentAssignment, db.settings);
       if (typeof cleaned === "string") {
         sendJson(res, 400, { error: cleaned });
         return;
@@ -9444,7 +9484,7 @@ const server = http.createServer(async (req, res) => {
       const cleaned = validateAsset({
         ...current,
         ...body,
-      });
+      }, db.settings);
       if (typeof cleaned === "string") {
         sendJson(res, 400, { error: cleaned });
         return;

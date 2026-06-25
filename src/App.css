@@ -18897,6 +18897,12 @@ tr.row-maint-maintenance:hover td {
   line-height: 1;
 }
 
+.asset-detail-section-icon-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.2;
+}
+
 .asset-detail-action-maintenance {
   color: #8a4c00;
   border-color: rgba(218, 164, 84, 0.52);
@@ -20923,6 +20929,8 @@ tr.row-maint-maintenance:hover td {
   font-family: var(--font-ui-standard);
   font-size: 14px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .asset-detail-photo-grid {
@@ -26963,6 +26971,36 @@ tr.row-maint-maintenance:hover td {
     line-height: 1.4;
   }
 
+  .asset-detail-component-columns {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  .asset-detail-component-column {
+    grid-template-columns: 68px minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+    border-radius: 16px;
+  }
+
+  .asset-detail-component-photo,
+  .asset-detail-component-photo-placeholder {
+    width: 68px;
+    height: 68px;
+    border-radius: 12px;
+  }
+
+  .asset-detail-component-column-id,
+  .asset-detail-component-column-item {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .asset-detail-component-column-meta {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
   .asset-detail-modal-header-side {
     width: auto;
     justify-content: flex-end;
@@ -26994,7 +27032,7 @@ tr.row-maint-maintenance:hover td {
   .asset-detail-overview-head .asset-detail-section-actions {
     width: 100%;
     justify-content: stretch;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .asset-detail-section-toggle {

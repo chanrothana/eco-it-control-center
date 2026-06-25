@@ -44,6 +44,7 @@ import {
   Wifi,
   Droplets,
   Wrench,
+  X,
 } from "lucide-react";
 import QRCode from "qrcode";
 import "./App.css";
@@ -2062,6 +2063,11 @@ function isLocalDevHost(hostname: string) {
   const host = String(hostname || "").trim().toLowerCase();
   return host === "localhost" || host === "127.0.0.1";
 }
+
+const LOCALHOST_FAST_ASSET_MODE =
+  typeof window !== "undefined" && isLocalDevHost(window.location.hostname);
+const LOCALHOST_PHONE_ASSET_INITIAL_LIMIT = 80;
+const LOCALHOST_PHONE_ASSET_LOAD_MORE_STEP = 80;
 
 function getAutoApiBaseForHost() {
   if (typeof window === "undefined") return "";
@@ -9817,6 +9823,9 @@ export default function App() {
     key: "assetId",
     direction: "asc",
   });
+  const [assetMobileVisibleCount, setAssetMobileVisibleCount] = useState(
+    LOCALHOST_FAST_ASSET_MODE ? LOCALHOST_PHONE_ASSET_INITIAL_LIMIT : Number.MAX_SAFE_INTEGER
+  );
   const [assetListColumnWidths, setAssetListColumnWidths] = useState<number[]>(DEFAULT_ASSET_LIST_COLUMN_WIDTHS);
   const [staffBorrowingSort, setStaffBorrowingSort] = useState<{
     key: StaffBorrowingSortKey;
@@ -17888,6 +17897,9 @@ export default function App() {
       bootstrapParams.set("include", "assets");
       bootstrapParams.set("asset_scope", "all");
       bootstrapParams.set("asset_detail", detail);
+      if (LOCALHOST_FAST_ASSET_MODE && detail === "summary") {
+        bootstrapParams.set("compact", "1");
+      }
       if (campusFilter !== "ALL") {
         bootstrapParams.set("campus", campusFilter);
       }
@@ -17901,7 +17913,12 @@ export default function App() {
       ).map(normalizeAssetForUi);
 
       if (!serverAssets.length) {
-        const assetRes = await requestJson<{ assets: Asset[] }>(`/api/assets?detail=${detail}`, {
+        const assetFallbackParams = new URLSearchParams();
+        assetFallbackParams.set("detail", detail);
+        if (LOCALHOST_FAST_ASSET_MODE && detail === "summary") {
+          assetFallbackParams.set("compact", "1");
+        }
+        const assetRes = await requestJson<{ assets: Asset[] }>(`/api/assets?${assetFallbackParams.toString()}`, {
           timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
         });
         serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
@@ -17948,6 +17965,9 @@ export default function App() {
       if (shouldIncludeAssets) {
         params.set("asset_scope", "all");
         params.set("asset_detail", assetDetail);
+        if (LOCALHOST_FAST_ASSET_MODE && assetDetail === "summary") {
+          params.set("compact", "1");
+        }
       }
 
       const settingsPromise = requestJson<{ settings?: ServerSettings }>("/api/settings")
@@ -22447,6 +22467,15 @@ export default function App() {
     const exists = (allTypeOptions[category] || []).some((item) => item.code === code);
     if (exists) {
       setError(`Type code ${code} already exists in ${category}.`);
+      return;
+    }
+    const duplicateName = itemSetupRows.some(
+      (row) =>
+        row.category === category &&
+        String(itemNames[row.key] || "").trim().toLowerCase() === name.toLowerCase()
+    );
+    if (duplicateName) {
+      setError(`Item name '${name}' already exists in ${category}.`);
       return;
     }
     setCustomTypeOptions((prev) => ({
@@ -29788,10 +29817,12 @@ export default function App() {
                 canAccessMenu("reports.staff_borrowing", "reports") ? (
                   <button
                     type="button"
-                    className="asset-detail-section-toggle asset-detail-export-trigger"
+                    className={`asset-detail-section-toggle asset-detail-export-trigger ${isPhoneView ? "asset-detail-section-icon-btn" : ""}`}
                     onClick={() => openFullAssetRecordFromDetail(detailAsset)}
+                    title="Export / Print"
+                    aria-label="Export / Print"
                   >
-                    Export / Print
+                    {isPhoneView ? <Printer size={18} aria-hidden={true} /> : "Export / Print"}
                   </button>
                 ) : null}
                 {isAdmin ? (
@@ -29803,7 +29834,7 @@ export default function App() {
                       title={detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
                       aria-label={detailFurniture ? "Open Fixing Page" : "Open Maintenance Page"}
                     >
-                      <span aria-hidden={true}>🛠</span>
+                      <Wrench size={18} aria-hidden={true} />
                     </button>
                     <button
                       type="button"
@@ -29812,7 +29843,7 @@ export default function App() {
                       title="Open Transfer Page"
                       aria-label="Open Transfer Page"
                     >
-                      <span aria-hidden={true}>⇄</span>
+                      <ArrowLeftRight size={18} aria-hidden={true} />
                     </button>
                   </>
                 ) : null}
@@ -29828,7 +29859,7 @@ export default function App() {
                   title={assetDetailSections.showDetails ? "Hide Details" : "View Details"}
                   aria-label={assetDetailSections.showDetails ? "Hide Details" : "View Details"}
                 >
-                  <span aria-hidden={true}>{assetDetailSections.showDetails ? "▾" : "▸"}</span>
+                  {assetDetailSections.showDetails ? <EyeOff size={18} aria-hidden={true} /> : <Eye size={18} aria-hidden={true} />}
                 </button>
                 <button
                   type="button"
@@ -29837,7 +29868,7 @@ export default function App() {
                   title="Close"
                   aria-label="Close"
                 >
-                  <span aria-hidden={true}>✕</span>
+                  <X size={18} aria-hidden={true} />
                 </button>
               </div>
             </div>
@@ -29976,7 +30007,9 @@ export default function App() {
                   {!detailFurniture ? (
                     <div className="asset-detail-rich-block">
                       <span>Specs</span>
-                      <div className="asset-detail-rich-value">{detailAsset.specs || "-"}</div>
+                      <div className="asset-detail-rich-value">
+                        {getVisibleSpecsTextareaValue(detailAsset.category || "", detailAsset.type || "", detailAsset.specs || "") || "-"}
+                      </div>
                     </div>
                   ) : null}
                 </section>
@@ -31517,6 +31550,22 @@ export default function App() {
     () => assetCategoryMultiFilter.length === 1 && assetCategoryMultiFilter[0] === "FURNITURE",
     [assetCategoryMultiFilter]
   );
+  const assetMobileRows = useMemo(() => {
+    if (!(LOCALHOST_FAST_ASSET_MODE && isPhoneView)) return assetListRows;
+    return assetListRows.slice(0, assetMobileVisibleCount);
+  }, [assetListRows, assetMobileVisibleCount, isPhoneView]);
+  useEffect(() => {
+    if (!LOCALHOST_FAST_ASSET_MODE) return;
+    setAssetMobileVisibleCount(LOCALHOST_PHONE_ASSET_INITIAL_LIMIT);
+  }, [
+    assetCampusMultiFilter,
+    assetCategoryMultiFilter,
+    assetNameMultiFilter,
+    assetLocationMultiFilter,
+    assetAssignedToMultiFilter,
+    search,
+    isPhoneView,
+  ]);
   const hideAssetAssignedStaffColumn = useMemo(
     () => assetCategoryMultiFilter.length === 1 && assetCategoryMultiFilter[0] === "SAFETY",
     [assetCategoryMultiFilter]
@@ -38237,7 +38286,12 @@ function formatTicketRequestSource(value?: string) {
                           <div className="field"><span>{t.vendor}</span><div className="detail-value">{asset.vendor || "-"}</div></div>
                           <div className="field"><span>{t.purchaseDate}</span><div className="detail-value">{formatDate(asset.purchaseDate || "-")}</div></div>
                           <div className="field"><span>{t.warrantyUntil}</span><div className="detail-value">{formatDate(asset.warrantyUntil || "-")}</div></div>
-                          <div className="field field-wide"><span>{t.specs}</span><div className="detail-value">{asset.specs || "-"}</div></div>
+                          <div className="field field-wide">
+                            <span>{t.specs}</span>
+                            <div className="detail-value">
+                              {getVisibleSpecsTextareaValue(asset.category || "", asset.type || "", asset.specs || "") || "-"}
+                            </div>
+                          </div>
                           <div className="field field-wide"><span>{t.notes}</span><div className="detail-value">{asset.notes || "-"}</div></div>
                           <div className="field field-wide public-asset-dup-mobile">
                             <span>{t.photo}</span>
@@ -42500,7 +42554,7 @@ function formatTicketRequestSource(value?: string) {
                 {isPhoneView ? (
                   <div className="asset-mobile-list">
                     {assetListRows.length ? (
-                      assetListRows.map((asset) => (
+                      assetMobileRows.map((asset) => (
                         <article key={`asset-mobile-${asset.id}`} className={`asset-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
                           <div className="asset-mobile-head">
                             <button
@@ -42585,6 +42639,18 @@ function formatTicketRequestSource(value?: string) {
                     ) : (
                       <div className="panel-note">{t.noAssets}</div>
                     )}
+                    {LOCALHOST_FAST_ASSET_MODE && assetMobileRows.length < assetListRows.length ? (
+                      <button
+                        type="button"
+                        className="tab"
+                        style={{ width: "100%" }}
+                        onClick={() =>
+                          setAssetMobileVisibleCount((prev) => prev + LOCALHOST_PHONE_ASSET_LOAD_MORE_STEP)
+                        }
+                      >
+                        Load more assets ({assetMobileRows.length}/{assetListRows.length})
+                      </button>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="table-wrap asset-list-scroll" ref={assetListTableWrapRef}>
