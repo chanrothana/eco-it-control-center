@@ -5024,6 +5024,15 @@ function formatDate(value: string) {
   return `${day}-${month}-${year}`;
 }
 
+function formatMateDateInput(value: string) {
+  const normalized = normalizeYmdInput(String(value || "").trim());
+  if (!normalized) return String(value || "").trim();
+  const [year, month, day] = normalized.split("-");
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthIndex = Math.max(0, Math.min(11, Number(month) - 1));
+  return `${day}/${monthNames[monthIndex]}/${year}`;
+}
+
 function formatMonthYear(value: string) {
   if (!value || value === "-") return "-";
   const normalized = /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : value;
@@ -5623,6 +5632,23 @@ function normalizeYmdInput(raw: string) {
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return "";
   return toYmd(parsed);
+}
+
+function normalizeMateDateInput(raw: string) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  const monthMatch = text.match(/^(\d{1,2})[/-]([A-Za-z]{3,})[/-](\d{4})$/);
+  if (monthMatch) {
+    const day = Number(monthMatch[1]);
+    const monthToken = monthMatch[2].slice(0, 3).toLowerCase();
+    const year = Number(monthMatch[3]);
+    const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    const monthIndex = months.indexOf(monthToken);
+    if (year >= 1900 && monthIndex >= 0 && day >= 1 && day <= 31) {
+      return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  return normalizeYmdInput(text);
 }
 
 function shiftYmd(ymd: string, days: number) {
@@ -6953,6 +6979,9 @@ function parseAirconSpecs(specsRaw: string) {
       acHasFrontPanel: false,
       acHasOutdoor: false,
       acComponentNote: "",
+      acRemoteSerial: "",
+      acFrontUnitSerial: "",
+      acOutdoorSerial: "",
       acRemotePhoto: "",
       acFrontUnitPhoto: "",
       acOutdoorPhoto: "",
@@ -6965,12 +6994,18 @@ function parseAirconSpecs(specsRaw: string) {
   let acHasFrontPanel = false;
   let acHasOutdoor = false;
   let acComponentNote = "";
+  let acRemoteSerial = "";
+  let acFrontUnitSerial = "";
+  let acOutdoorSerial = "";
   let acRemotePhoto = "";
   let acFrontUnitPhoto = "";
   let acOutdoorPhoto = "";
-  const typeMatch = specs.match(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Components? Note:|$))/i);
-  const hpMatch = specs.match(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Components? Note:|$))/i);
-  const includedMatch = specs.match(/Included:\s*([^|\n;]+?)(?=\s*(?:Components? Note:|$))/i);
+  const typeMatch = specs.match(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/i);
+  const hpMatch = specs.match(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/i);
+  const includedMatch = specs.match(/Included:\s*([^|\n;]+?)(?=\s*(?:Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/i);
+  const remoteSerialMatch = specs.match(/Remote S\/N:\s*([^\n|;]+)/i);
+  const frontSerialMatch = specs.match(/Front Unit S\/N:\s*([^\n|;]+)/i);
+  const outdoorSerialMatch = specs.match(/Back Unit S\/N:\s*([^\n|;]+)/i);
   const componentNoteMatch = specs.match(/Components? Note:\s*([^\n|;]+)/i);
   const remotePhotoMatch = specs.match(/Remote Photo:\s*([^\n|;]+)/i);
   const frontPhotoMatch = specs.match(/Front Unit Photo:\s*([^\n|;]+)/i);
@@ -6990,14 +7025,20 @@ function parseAirconSpecs(specsRaw: string) {
     acHasFrontPanel = true;
     acHasOutdoor = true;
   }
+  if (remoteSerialMatch?.[1]) acRemoteSerial = String(remoteSerialMatch[1]).trim();
+  if (frontSerialMatch?.[1]) acFrontUnitSerial = String(frontSerialMatch[1]).trim();
+  if (outdoorSerialMatch?.[1]) acOutdoorSerial = String(outdoorSerialMatch[1]).trim();
   if (componentNoteMatch?.[1]) acComponentNote = String(componentNoteMatch[1]).trim();
   if (remotePhotoMatch?.[1]) acRemotePhoto = String(remotePhotoMatch[1]).trim();
   if (frontPhotoMatch?.[1]) acFrontUnitPhoto = String(frontPhotoMatch[1]).trim();
   if (outdoorPhotoMatch?.[1]) acOutdoorPhoto = String(outdoorPhotoMatch[1]).trim();
   const cleanedSpecs = specs
-    .replace(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Components? Note:|$))/gi, "")
-    .replace(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Components? Note:|$))/gi, "")
-    .replace(/Included:\s*([^|\n;]+?)(?=\s*(?:Components? Note:|$))/gi, "")
+    .replace(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/gi, "")
+    .replace(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/gi, "")
+    .replace(/Included:\s*([^|\n;]+?)(?=\s*(?:Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/gi, "")
+    .replace(/Remote S\/N:\s*([^\n|;]+)/gi, "")
+    .replace(/Front Unit S\/N:\s*([^\n|;]+)/gi, "")
+    .replace(/Back Unit S\/N:\s*([^\n|;]+)/gi, "")
     .replace(/Components? Note:\s*([^\n|;]+)/gi, "")
     .replace(/Remote Photo:\s*([^\n|;]+)/gi, "")
     .replace(/Front Unit Photo:\s*([^\n|;]+)/gi, "")
@@ -7015,6 +7056,9 @@ function parseAirconSpecs(specsRaw: string) {
     acHasFrontPanel,
     acHasOutdoor,
     acComponentNote,
+    acRemoteSerial,
+    acFrontUnitSerial,
+    acOutdoorSerial,
     acRemotePhoto,
     acFrontUnitPhoto,
     acOutdoorPhoto,
@@ -7031,6 +7075,9 @@ function buildAirconSpecs(
     hasFrontPanel: boolean;
     hasOutdoor: boolean;
     componentNote: string;
+    remoteSerial?: string;
+    frontUnitSerial?: string;
+    outdoorSerial?: string;
     remotePhoto?: string;
     frontUnitPhoto?: string;
     outdoorPhoto?: string;
@@ -7044,6 +7091,9 @@ function buildAirconSpecs(
   const hasFrontPanel = components ? Boolean(components.hasFrontPanel) : normalized.acHasFrontPanel;
   const hasOutdoor = components ? Boolean(components.hasOutdoor) : normalized.acHasOutdoor;
   const componentNote = components ? String(components.componentNote || "").trim() : normalized.acComponentNote;
+  const remoteSerial = components ? String(components.remoteSerial || "").trim() : normalized.acRemoteSerial;
+  const frontUnitSerial = components ? String(components.frontUnitSerial || "").trim() : normalized.acFrontUnitSerial;
+  const outdoorSerial = components ? String(components.outdoorSerial || "").trim() : normalized.acOutdoorSerial;
   const remotePhoto = components ? String(components.remotePhoto || "").trim() : normalized.acRemotePhoto;
   const frontUnitPhoto = components ? String(components.frontUnitPhoto || "").trim() : normalized.acFrontUnitPhoto;
   const outdoorPhoto = components ? String(components.outdoorPhoto || "").trim() : normalized.acOutdoorPhoto;
@@ -7054,6 +7104,9 @@ function buildAirconSpecs(
   if (hasFrontPanel) included.push("Front Panel");
   if (hasOutdoor) included.push("Outdoor Unit");
   if (included.length) out.push(`Included: ${included.join(", ")}`);
+  if (hasRemote && remoteSerial) out.push(`Remote S/N: ${remoteSerial}`);
+  if (hasFrontPanel && frontUnitSerial) out.push(`Front Unit S/N: ${frontUnitSerial}`);
+  if (hasOutdoor && outdoorSerial) out.push(`Back Unit S/N: ${outdoorSerial}`);
   if (remotePhoto) out.push(`Remote Photo: ${remotePhoto}`);
   if (frontUnitPhoto) out.push(`Front Unit Photo: ${frontUnitPhoto}`);
   if (outdoorPhoto) out.push(`Outdoor Unit Photo: ${outdoorPhoto}`);
@@ -7062,9 +7115,101 @@ function buildAirconSpecs(
   return out.join("\n").trim();
 }
 
+function stripAirconVisibleSpecsTextareaInput(raw: string) {
+  return String(raw || "")
+    .replace(/^\s*Included Components:\s*$/gim, "")
+    .replace(/^\s*(Remote|Front Unit \(Indoor\)|Back Unit \(Outdoor\))\s*$/gim, "")
+    .replace(/^\s*Included:\s*(?:Remote|Front Panel|Outdoor Unit|Back Unit(?: \(Outdoor\))?)(?:\s*,\s*(?:Remote|Front Panel|Outdoor Unit|Back Unit(?: \(Outdoor\))?))*\s*$/gim, "")
+    .replace(/^\s*:\s*(?:Remote|Front Panel|Outdoor Unit|Back Unit(?: \(Outdoor\))?)(?:\s*,\s*(?:Remote|Front Panel|Outdoor Unit|Back Unit(?: \(Outdoor\))?))*\s*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function syncCreateAirconFormSpecs<T extends {
+  category: string;
+  type: string;
+  specs: string;
+  acType: string;
+  acHp: string;
+  acHasRemote: boolean;
+  acHasFrontPanel: boolean;
+  acHasOutdoor: boolean;
+  acComponentNote: string;
+  acRemoteSerial: string;
+  acFrontUnitSerial: string;
+  acOutdoorSerial: string;
+  acRemotePhoto: string;
+  acFrontUnitPhoto: string;
+  acOutdoorPhoto: string;
+}>(next: T): T {
+  if (!isAirconAsset(next.category, next.type)) return next;
+  return {
+    ...next,
+    specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(next.specs), next.acType, next.acHp, {
+      hasRemote: Boolean(next.acHasRemote),
+      hasFrontPanel: Boolean(next.acHasFrontPanel),
+      hasOutdoor: Boolean(next.acHasOutdoor),
+      componentNote: String(next.acComponentNote || ""),
+      remoteSerial: String(next.acRemoteSerial || ""),
+      frontUnitSerial: String(next.acFrontUnitSerial || ""),
+      outdoorSerial: String(next.acOutdoorSerial || ""),
+      remotePhoto: String(next.acRemotePhoto || ""),
+      frontUnitPhoto: String(next.acFrontUnitPhoto || ""),
+      outdoorPhoto: String(next.acOutdoorPhoto || ""),
+    }),
+  };
+}
+
+function syncEditAirconFormSpecs<T extends {
+  specs: string;
+  acType: string;
+  acHp: string;
+  acHasRemote: boolean;
+  acHasFrontPanel: boolean;
+  acHasOutdoor: boolean;
+  acComponentNote: string;
+  acRemoteSerial: string;
+  acFrontUnitSerial: string;
+  acOutdoorSerial: string;
+  acRemotePhoto: string;
+  acFrontUnitPhoto: string;
+  acOutdoorPhoto: string;
+}>(category: string, type: string, next: T): T {
+  if (!isAirconAsset(category, type)) return next;
+  return {
+    ...next,
+    specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(next.specs), next.acType, next.acHp, {
+      hasRemote: Boolean(next.acHasRemote),
+      hasFrontPanel: Boolean(next.acHasFrontPanel),
+      hasOutdoor: Boolean(next.acHasOutdoor),
+      componentNote: String(next.acComponentNote || ""),
+      remoteSerial: String(next.acRemoteSerial || ""),
+      frontUnitSerial: String(next.acFrontUnitSerial || ""),
+      outdoorSerial: String(next.acOutdoorSerial || ""),
+      remotePhoto: String(next.acRemotePhoto || ""),
+      frontUnitPhoto: String(next.acFrontUnitPhoto || ""),
+      outdoorPhoto: String(next.acOutdoorPhoto || ""),
+    }),
+  };
+}
+
 function getVisibleSpecsTextareaValue(category: string, type: string, specs: string) {
   if (isAirconAsset(category, type)) {
-    return parseAirconSpecs(specs).specs;
+    const parsed = parseAirconSpecs(specs);
+    const lines: string[] = [];
+    const included: string[] = [];
+    if (parsed.acHasRemote) included.push("Remote");
+    if (parsed.acHasFrontPanel) included.push("Front Unit (Indoor)");
+    if (parsed.acHasOutdoor) included.push("Back Unit (Outdoor)");
+    if (included.length) {
+      lines.push("Included Components:");
+      lines.push(...included);
+    }
+    if (parsed.specs) {
+      if (lines.length) lines.push("");
+      lines.push(parsed.specs);
+    }
+    return lines.join("\n").trim();
   }
   return String(specs || "");
 }
@@ -10090,6 +10235,9 @@ export default function App() {
     acHasFrontPanel: false,
     acHasOutdoor: false,
     acComponentNote: "",
+    acRemoteSerial: "",
+    acFrontUnitSerial: "",
+    acOutdoorSerial: "",
     acRemotePhoto: "",
     acFrontUnitPhoto: "",
     acOutdoorPhoto: "",
@@ -10345,6 +10493,9 @@ export default function App() {
     acHasFrontPanel: false,
     acHasOutdoor: false,
     acComponentNote: "",
+    acRemoteSerial: "",
+    acFrontUnitSerial: "",
+    acOutdoorSerial: "",
     acRemotePhoto: "",
     acFrontUnitPhoto: "",
     acOutdoorPhoto: "",
@@ -10373,6 +10524,14 @@ export default function App() {
     photo: "",
     photos: [] as string[],
     status: "Active",
+  });
+  const [assetFormDateDrafts, setAssetFormDateDrafts] = useState({
+    purchaseDate: "",
+    warrantyUntil: "",
+  });
+  const [assetEditDateDrafts, setAssetEditDateDrafts] = useState({
+    purchaseDate: "",
+    warrantyUntil: "",
   });
   const editPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [historyAssetId, setHistoryAssetId] = useState<number | null>(null);
@@ -17232,6 +17391,9 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          acRemoteSerial: "",
+          acFrontUnitSerial: "",
+          acOutdoorSerial: "",
           acRemotePhoto: "",
           acFrontUnitPhoto: "",
           acOutdoorPhoto: "",
@@ -18549,6 +18711,9 @@ export default function App() {
           hasFrontPanel: assetForm.acHasFrontPanel,
           hasOutdoor: assetForm.acHasOutdoor,
           componentNote: assetForm.acComponentNote,
+          remoteSerial: assetForm.acRemoteSerial,
+          frontUnitSerial: assetForm.acFrontUnitSerial,
+          outdoorSerial: assetForm.acOutdoorSerial,
           remotePhoto: assetForm.acRemotePhoto,
           frontUnitPhoto: assetForm.acFrontUnitPhoto,
           outdoorPhoto: assetForm.acOutdoorPhoto,
@@ -18877,6 +19042,9 @@ export default function App() {
         acHasFrontPanel: false,
         acHasOutdoor: false,
         acComponentNote: "",
+        acRemoteSerial: "",
+        acFrontUnitSerial: "",
+        acOutdoorSerial: "",
         acRemotePhoto: "",
         acFrontUnitPhoto: "",
         acOutdoorPhoto: "",
@@ -19364,6 +19532,9 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          acRemoteSerial: "",
+          acFrontUnitSerial: "",
+          acOutdoorSerial: "",
           acRemotePhoto: "",
           acFrontUnitPhoto: "",
           acOutdoorPhoto: "",
@@ -26143,6 +26314,9 @@ export default function App() {
           acHasFrontPanel: false,
           acHasOutdoor: false,
           acComponentNote: "",
+          acRemoteSerial: "",
+          acFrontUnitSerial: "",
+          acOutdoorSerial: "",
           acRemotePhoto: "",
           acFrontUnitPhoto: "",
           acOutdoorPhoto: "",
@@ -26189,6 +26363,9 @@ export default function App() {
       acHasFrontPanel: parsedAircon.acHasFrontPanel,
       acHasOutdoor: parsedAircon.acHasOutdoor,
       acComponentNote: parsedAircon.acComponentNote,
+      acRemoteSerial: parsedAircon.acRemoteSerial,
+      acFrontUnitSerial: parsedAircon.acFrontUnitSerial,
+      acOutdoorSerial: parsedAircon.acOutdoorSerial,
       acRemotePhoto: normalizeAssetPhotos(airconRemoteChild || {})[0] || parsedAircon.acRemotePhoto || "",
       acFrontUnitPhoto: normalizeAssetPhotos(airconFrontUnitChild || {})[0] || parsedAircon.acFrontUnitPhoto || "",
       acOutdoorPhoto: normalizeAssetPhotos(airconOutdoorChild || {})[0] || parsedAircon.acOutdoorPhoto || "",
@@ -26733,6 +26910,9 @@ export default function App() {
             hasFrontPanel: assetEditForm.acHasFrontPanel,
             hasOutdoor: assetEditForm.acHasOutdoor,
             componentNote: assetEditForm.acComponentNote,
+            remoteSerial: assetEditForm.acRemoteSerial,
+            frontUnitSerial: assetEditForm.acFrontUnitSerial,
+            outdoorSerial: assetEditForm.acOutdoorSerial,
             remotePhoto: assetEditForm.acRemotePhoto,
             frontUnitPhoto: assetEditForm.acFrontUnitPhoto,
             outdoorPhoto: assetEditForm.acOutdoorPhoto,
@@ -29179,7 +29359,7 @@ export default function App() {
     }
     try {
       const optimized = await optimizeUploadPhoto(file);
-      setAssetForm((f) => ({ ...f, [key]: optimized }));
+      setAssetForm((f) => syncCreateAirconFormSpecs({ ...f, [key]: optimized }));
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
@@ -29339,7 +29519,9 @@ export default function App() {
     }
     try {
       const optimized = await optimizeUploadPhoto(file);
-      setAssetEditForm((f) => ({ ...f, [key]: optimized }));
+      setAssetEditForm((f) =>
+        syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", { ...f, [key]: optimized })
+      );
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
@@ -30446,6 +30628,13 @@ export default function App() {
     () => String(assetEditForm.status || "").trim().toLowerCase() === "active",
     [assetEditForm.status]
   );
+  const editingShowUserField = useMemo(
+    () =>
+      !!editingAsset &&
+      !isFurnitureAsset(editingAsset.category || "") &&
+      !isAirconAsset(editingAsset.category || "", editingAsset.type || ""),
+    [editingAsset]
+  );
   const createFurnitureReferencePhoto = useMemo(
     () =>
       isFurnitureAsset(assetForm.category)
@@ -30588,6 +30777,22 @@ export default function App() {
     if (editingStatusActive) return;
     setAssetEditForm((prev) => (prev.assignedTo ? { ...prev, assignedTo: "" } : prev));
   }, [editingStatusActive]);
+  useEffect(() => {
+    setAssetFormDateDrafts({
+      purchaseDate: formatMateDateInput(assetForm.purchaseDate),
+      warrantyUntil: formatMateDateInput(assetForm.warrantyUntil),
+    });
+  }, [assetForm.purchaseDate, assetForm.warrantyUntil]);
+  useEffect(() => {
+    setAssetEditDateDrafts({
+      purchaseDate: formatMateDateInput(assetEditForm.purchaseDate),
+      warrantyUntil: formatMateDateInput(assetEditForm.warrantyUntil),
+    });
+  }, [assetEditForm.purchaseDate, assetEditForm.warrantyUntil]);
+  useEffect(() => {
+    if (editingShowUserField) return;
+    setAssetEditForm((prev) => (prev.assignedTo ? { ...prev, assignedTo: "" } : prev));
+  }, [editingShowUserField]);
   const maintenanceDetailAsset = useMemo(
     () => assets.find((a) => a.id === maintenanceDetailAssetId) || null,
     [assets, maintenanceDetailAssetId]
@@ -41919,40 +42124,36 @@ function formatTicketRequestSource(value?: string) {
                   ) : null}
                   {isAirconAsset(assetForm.category, assetForm.type) ? (
                     <>
-                      <label className="field">
-                        <span>AC Type</span>
-                        <select
-                          className="input"
-                          value={assetForm.acType}
-                          onChange={(e) => setAssetForm((f) => ({ ...f, acType: e.target.value }))}
-                        >
-                          <option value="">Select AC type</option>
-                          {AIRCON_TYPE_OPTIONS.map((option) => (
-                            <option key={`ac-type-${option}`} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Capacity (HP)</span>
-                        <select
-                          className="input"
-                          value={assetForm.acHp}
-                          onChange={(e) => setAssetForm((f) => ({ ...f, acHp: e.target.value }))}
-                        >
-                          <option value="">Select HP</option>
-                          {AIRCON_HP_OPTIONS.map((option) => (
-                            <option key={`ac-hp-${option}`} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>{t.vendor}</span>
-                        <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
-                      </label>
+                      <div className="field field-wide">
+                        <span>AC Type / Capacity / Vendor</span>
+                        <div className="aircon-inline-triple">
+                          <select
+                            className="input"
+                            value={assetForm.acType}
+                            onChange={(e) => setAssetForm((f) => syncCreateAirconFormSpecs({ ...f, acType: e.target.value }))}
+                          >
+                            <option value="">Select AC type</option>
+                            {AIRCON_TYPE_OPTIONS.map((option) => (
+                              <option key={`ac-type-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="input"
+                            value={assetForm.acHp}
+                            onChange={(e) => setAssetForm((f) => syncCreateAirconFormSpecs({ ...f, acHp: e.target.value }))}
+                          >
+                            <option value="">Select HP</option>
+                            {AIRCON_HP_OPTIONS.map((option) => (
+                              <option key={`ac-hp-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} placeholder="Vendor" />
+                        </div>
+                      </div>
                       <label className="field field-wide">
                         <span>Included Components</span>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
@@ -41970,7 +42171,16 @@ function formatTicketRequestSource(value?: string) {
                                 <input
                                   type="checkbox"
                                   checked={assetForm.acHasRemote}
-                                  onChange={(e) => setAssetForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
+                                  onChange={(e) =>
+                                    setAssetForm((f) =>
+                                      syncCreateAirconFormSpecs({
+                                        ...f,
+                                        acHasRemote: e.target.checked,
+                                        acRemoteSerial: e.target.checked ? f.acRemoteSerial : "",
+                                        acRemotePhoto: e.target.checked ? f.acRemotePhoto : "",
+                                      })
+                                    )
+                                  }
                                   style={{ marginRight: 8 }}
                                 />
                                 Remote
@@ -41979,7 +42189,7 @@ function formatTicketRequestSource(value?: string) {
                                 String(assetForm.acRemotePhoto || "").trim() ? (
                                   <>
                                     <img loading="lazy" decoding="async" src={String(assetForm.acRemotePhoto || "")} alt="aircon-remote" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
-                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => ({ ...f, acRemotePhoto: "" }))}>Remove</button>
+                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => syncCreateAirconFormSpecs({ ...f, acRemotePhoto: "" }))}>Remove</button>
                                   </>
                                 ) : (
                                   <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-remote-create-upload")?.click()}>
@@ -41988,6 +42198,21 @@ function formatTicketRequestSource(value?: string) {
                                 )
                               ) : null}
                             </div>
+                            {assetForm.acHasRemote ? (
+                              <input
+                                className="input"
+                                value={assetForm.acRemoteSerial}
+                                onChange={(e) =>
+                                  setAssetForm((f) =>
+                                    syncCreateAirconFormSpecs({
+                                      ...f,
+                                      acRemoteSerial: e.target.value,
+                                    })
+                                  )
+                                }
+                                placeholder="Remote S/N"
+                              />
+                            ) : null}
                           </div>
                           <input
                             id="aircon-front-create-upload"
@@ -42003,7 +42228,16 @@ function formatTicketRequestSource(value?: string) {
                                 <input
                                   type="checkbox"
                                   checked={assetForm.acHasFrontPanel}
-                                  onChange={(e) => setAssetForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
+                                  onChange={(e) =>
+                                    setAssetForm((f) =>
+                                      syncCreateAirconFormSpecs({
+                                        ...f,
+                                        acHasFrontPanel: e.target.checked,
+                                        acFrontUnitSerial: e.target.checked ? f.acFrontUnitSerial : "",
+                                        acFrontUnitPhoto: e.target.checked ? f.acFrontUnitPhoto : "",
+                                      })
+                                    )
+                                  }
                                   style={{ marginRight: 8 }}
                                 />
                                 Front Unit (Indoor)
@@ -42012,7 +42246,7 @@ function formatTicketRequestSource(value?: string) {
                                 String(assetForm.acFrontUnitPhoto || "").trim() ? (
                                   <>
                                     <img loading="lazy" decoding="async" src={String(assetForm.acFrontUnitPhoto || "")} alt="aircon-front-unit" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
-                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => ({ ...f, acFrontUnitPhoto: "" }))}>Remove</button>
+                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => syncCreateAirconFormSpecs({ ...f, acFrontUnitPhoto: "" }))}>Remove</button>
                                   </>
                                 ) : (
                                   <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-front-create-upload")?.click()}>
@@ -42021,6 +42255,21 @@ function formatTicketRequestSource(value?: string) {
                                 )
                               ) : null}
                             </div>
+                            {assetForm.acHasFrontPanel ? (
+                              <input
+                                className="input"
+                                value={assetForm.acFrontUnitSerial}
+                                onChange={(e) =>
+                                  setAssetForm((f) =>
+                                    syncCreateAirconFormSpecs({
+                                      ...f,
+                                      acFrontUnitSerial: e.target.value,
+                                    })
+                                  )
+                                }
+                                placeholder="Front Unit S/N"
+                              />
+                            ) : null}
                           </div>
                           <input
                             id="aircon-outdoor-create-upload"
@@ -42036,7 +42285,16 @@ function formatTicketRequestSource(value?: string) {
                                 <input
                                   type="checkbox"
                                   checked={assetForm.acHasOutdoor}
-                                  onChange={(e) => setAssetForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
+                                  onChange={(e) =>
+                                    setAssetForm((f) =>
+                                      syncCreateAirconFormSpecs({
+                                        ...f,
+                                        acHasOutdoor: e.target.checked,
+                                        acOutdoorSerial: e.target.checked ? f.acOutdoorSerial : "",
+                                        acOutdoorPhoto: e.target.checked ? f.acOutdoorPhoto : "",
+                                      })
+                                    )
+                                  }
                                   style={{ marginRight: 8 }}
                                 />
                                 Back Unit (Outdoor)
@@ -42045,7 +42303,7 @@ function formatTicketRequestSource(value?: string) {
                                 String(assetForm.acOutdoorPhoto || "").trim() ? (
                                   <>
                                     <img loading="lazy" decoding="async" src={String(assetForm.acOutdoorPhoto || "")} alt="aircon-back-unit" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
-                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => ({ ...f, acOutdoorPhoto: "" }))}>Remove</button>
+                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => syncCreateAirconFormSpecs({ ...f, acOutdoorPhoto: "" }))}>Remove</button>
                                   </>
                                 ) : (
                                   <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-outdoor-create-upload")?.click()}>
@@ -42054,6 +42312,21 @@ function formatTicketRequestSource(value?: string) {
                                 )
                               ) : null}
                             </div>
+                            {assetForm.acHasOutdoor ? (
+                              <input
+                                className="input"
+                                value={assetForm.acOutdoorSerial}
+                                onChange={(e) =>
+                                  setAssetForm((f) =>
+                                    syncCreateAirconFormSpecs({
+                                      ...f,
+                                      acOutdoorSerial: e.target.value,
+                                    })
+                                  )
+                                }
+                                placeholder="Back Unit S/N"
+                              />
+                            ) : null}
                           </div>
                         </div>
                       </label>
@@ -42258,13 +42531,41 @@ function formatTicketRequestSource(value?: string) {
                   {!isFurnitureAsset(assetForm.category) ? (
                     <label className="field">
                       <span>{t.purchaseDate}</span>
-                      <input type="date" className="input" value={assetForm.purchaseDate} onChange={(e) => setAssetForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="dd/Mon/yyyy"
+                        value={assetFormDateDrafts.purchaseDate}
+                        onChange={(e) => setAssetFormDateDrafts((prev) => ({ ...prev, purchaseDate: e.target.value }))}
+                        onBlur={() => {
+                          const normalized = normalizeMateDateInput(assetFormDateDrafts.purchaseDate);
+                          setAssetForm((f) => ({ ...f, purchaseDate: normalized }));
+                          setAssetFormDateDrafts((prev) => ({
+                            ...prev,
+                            purchaseDate: normalized ? formatMateDateInput(normalized) : String(prev.purchaseDate || "").trim(),
+                          }));
+                        }}
+                      />
                     </label>
                   ) : null}
                   {!isFurnitureAsset(assetForm.category) ? (
                     <label className="field">
                       <span>{t.warrantyUntil}</span>
-                      <input type="date" className="input" value={assetForm.warrantyUntil} onChange={(e) => setAssetForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="dd/Mon/yyyy"
+                        value={assetFormDateDrafts.warrantyUntil}
+                        onChange={(e) => setAssetFormDateDrafts((prev) => ({ ...prev, warrantyUntil: e.target.value }))}
+                        onBlur={() => {
+                          const normalized = normalizeMateDateInput(assetFormDateDrafts.warrantyUntil);
+                          setAssetForm((f) => ({ ...f, warrantyUntil: normalized }));
+                          setAssetFormDateDrafts((prev) => ({
+                            ...prev,
+                            warrantyUntil: normalized ? formatMateDateInput(normalized) : String(prev.warrantyUntil || "").trim(),
+                          }));
+                        }}
+                      />
                     </label>
                   ) : null}
                   {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) ? (
@@ -42317,7 +42618,7 @@ function formatTicketRequestSource(value?: string) {
                             isAirconAsset(f.category, f.type)
                               ? {
                                   ...f,
-                                  specs: buildAirconSpecs(e.target.value, f.acType, f.acHp, {
+                                  specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(e.target.value), f.acType, f.acHp, {
                                     hasRemote: Boolean(f.acHasRemote),
                                     hasFrontPanel: Boolean(f.acHasFrontPanel),
                                     hasOutdoor: Boolean(f.acHasOutdoor),
@@ -43007,15 +43308,30 @@ function formatTicketRequestSource(value?: string) {
             {assetsView === "list" && editingAsset && (
               <div className="modal-backdrop">
                 <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="asset-detail-section-toggle asset-detail-section-icon-btn asset-detail-action-close modal-corner-close-btn"
+                    onClick={cancelEditAsset}
+                    aria-label="Close edit asset"
+                  >
+                    <X size={18} aria-hidden={true} />
+                  </button>
                   <div className="panel-row">
                     <h2>Edit Asset - {editingAsset.assetId}</h2>
-                    <button className="tab" onClick={cancelEditAsset}>Close</button>
                   </div>
                   <div className="form-grid">
                     <div className="field">
                       <span>{t.campus}</span>
                       <div className="detail-value">{campusLabel(editingAsset.campus)}</div>
                     </div>
+                    <label className="field">
+                      <span>{t.location}</span>
+                      <input
+                        className="input"
+                        value={assetEditForm.location}
+                        onChange={(e) => setAssetEditForm((f) => ({ ...f, location: e.target.value }))}
+                      />
+                    </label>
                     <div className="field">
                       <span>{t.category}</span>
                       <div className="detail-value">{editingAsset.category}</div>
@@ -43051,16 +43367,8 @@ function formatTicketRequestSource(value?: string) {
                           <option key={status.value} value={status.value}>
                             {lang === "km" ? status.km : status.en}
                           </option>
-                        ))}
+                          ))}
                       </select>
-                    </label>
-                    <label className="field">
-                      <span>{t.location}</span>
-                      <input
-                        className="input"
-                        value={assetEditForm.location}
-                        onChange={(e) => setAssetEditForm((f) => ({ ...f, location: e.target.value }))}
-                      />
                     </label>
                     {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
                       <label className="field field-wide">
@@ -43329,7 +43637,7 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                       </div>
                     ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") && editingStatusActive ? (
+                    {editingShowUserField && editingStatusActive ? (
                       <label className="field field-wide">
                         <span>{t.user}</span>
                         <UserPicker
@@ -43342,7 +43650,7 @@ function formatTicketRequestSource(value?: string) {
                         />
                         {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
                       </label>
-                    ) : !isFurnitureAsset(editingAsset?.category || "") ? (
+                    ) : editingShowUserField ? (
                       <div className="field field-wide">
                         <span>{t.user}</span>
                         <div className="detail-value">-</div>
@@ -43379,36 +43687,44 @@ function formatTicketRequestSource(value?: string) {
                     ) : null}
                     {isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
                       <>
-                        <label className="field">
-                          <span>AC Type</span>
-                          <select
-                            className="input"
-                            value={assetEditForm.acType}
-                            onChange={(e) => setAssetEditForm((f) => ({ ...f, acType: e.target.value }))}
-                          >
-                            <option value="">Select AC type</option>
-                            {AIRCON_TYPE_OPTIONS.map((option) => (
-                              <option key={`edit-ac-type-${option}`} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="field">
-                          <span>Capacity (HP)</span>
-                          <select
-                            className="input"
-                            value={assetEditForm.acHp}
-                            onChange={(e) => setAssetEditForm((f) => ({ ...f, acHp: e.target.value }))}
-                          >
-                            <option value="">Select HP</option>
-                            {AIRCON_HP_OPTIONS.map((option) => (
-                              <option key={`edit-ac-hp-${option}`} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                        <div className="field field-wide">
+                          <span>AC Type / Capacity / Vendor</span>
+                          <div className="aircon-inline-triple">
+                            <select
+                              className="input"
+                              value={assetEditForm.acType}
+                              onChange={(e) =>
+                                setAssetEditForm((f) =>
+                                  syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", { ...f, acType: e.target.value })
+                                )
+                              }
+                            >
+                              <option value="">Select AC type</option>
+                              {AIRCON_TYPE_OPTIONS.map((option) => (
+                                <option key={`edit-ac-type-${option}`} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className="input"
+                              value={assetEditForm.acHp}
+                              onChange={(e) =>
+                                setAssetEditForm((f) =>
+                                  syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", { ...f, acHp: e.target.value })
+                                )
+                              }
+                            >
+                              <option value="">Select HP</option>
+                              {AIRCON_HP_OPTIONS.map((option) => (
+                                <option key={`edit-ac-hp-${option}`} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                            <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} placeholder="Vendor" />
+                          </div>
+                        </div>
                         <label className="field field-wide">
                           <span>Included Components</span>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
@@ -43426,7 +43742,16 @@ function formatTicketRequestSource(value?: string) {
                                   <input
                                     type="checkbox"
                                     checked={assetEditForm.acHasRemote}
-                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasRemote: e.target.checked }))}
+                                    onChange={(e) =>
+                                      setAssetEditForm((f) =>
+                                        syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", {
+                                          ...f,
+                                          acHasRemote: e.target.checked,
+                                          acRemoteSerial: e.target.checked ? f.acRemoteSerial : "",
+                                          acRemotePhoto: e.target.checked ? f.acRemotePhoto : "",
+                                        })
+                                      )
+                                    }
                                     style={{ marginRight: 8 }}
                                   />
                                   Remote
@@ -43435,7 +43760,7 @@ function formatTicketRequestSource(value?: string) {
                                   String(assetEditForm.acRemotePhoto || "").trim() ? (
                                     <>
                                       <img loading="lazy" decoding="async" src={String(assetEditForm.acRemotePhoto || "")} alt="edit-aircon-remote" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
-                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => ({ ...f, acRemotePhoto: "" }))}>Remove</button>
+                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", { ...f, acRemotePhoto: "" }))}>Remove</button>
                                     </>
                                   ) : (
                                     <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-remote-edit-upload")?.click()}>
@@ -43444,6 +43769,21 @@ function formatTicketRequestSource(value?: string) {
                                   )
                                 ) : null}
                               </div>
+                              {assetEditForm.acHasRemote ? (
+                                <input
+                                  className="input"
+                                  value={assetEditForm.acRemoteSerial}
+                                  onChange={(e) =>
+                                    setAssetEditForm((f) =>
+                                      syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", {
+                                        ...f,
+                                        acRemoteSerial: e.target.value,
+                                      })
+                                    )
+                                  }
+                                  placeholder="Remote S/N"
+                                />
+                              ) : null}
                             </div>
                             <input
                               id="aircon-front-edit-upload"
@@ -43459,7 +43799,16 @@ function formatTicketRequestSource(value?: string) {
                                   <input
                                     type="checkbox"
                                     checked={assetEditForm.acHasFrontPanel}
-                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasFrontPanel: e.target.checked }))}
+                                    onChange={(e) =>
+                                      setAssetEditForm((f) =>
+                                        syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", {
+                                          ...f,
+                                          acHasFrontPanel: e.target.checked,
+                                          acFrontUnitSerial: e.target.checked ? f.acFrontUnitSerial : "",
+                                          acFrontUnitPhoto: e.target.checked ? f.acFrontUnitPhoto : "",
+                                        })
+                                      )
+                                    }
                                     style={{ marginRight: 8 }}
                                   />
                                   Front Unit (Indoor)
@@ -43468,7 +43817,7 @@ function formatTicketRequestSource(value?: string) {
                                   String(assetEditForm.acFrontUnitPhoto || "").trim() ? (
                                     <>
                                       <img loading="lazy" decoding="async" src={String(assetEditForm.acFrontUnitPhoto || "")} alt="edit-aircon-front" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
-                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => ({ ...f, acFrontUnitPhoto: "" }))}>Remove</button>
+                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", { ...f, acFrontUnitPhoto: "" }))}>Remove</button>
                                     </>
                                   ) : (
                                     <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-front-edit-upload")?.click()}>
@@ -43477,6 +43826,21 @@ function formatTicketRequestSource(value?: string) {
                                   )
                                 ) : null}
                               </div>
+                              {assetEditForm.acHasFrontPanel ? (
+                                <input
+                                  className="input"
+                                  value={assetEditForm.acFrontUnitSerial}
+                                  onChange={(e) =>
+                                    setAssetEditForm((f) =>
+                                      syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", {
+                                        ...f,
+                                        acFrontUnitSerial: e.target.value,
+                                      })
+                                    )
+                                  }
+                                  placeholder="Front Unit S/N"
+                                />
+                              ) : null}
                             </div>
                             <input
                               id="aircon-outdoor-edit-upload"
@@ -43492,7 +43856,16 @@ function formatTicketRequestSource(value?: string) {
                                   <input
                                     type="checkbox"
                                     checked={assetEditForm.acHasOutdoor}
-                                    onChange={(e) => setAssetEditForm((f) => ({ ...f, acHasOutdoor: e.target.checked }))}
+                                    onChange={(e) =>
+                                      setAssetEditForm((f) =>
+                                        syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", {
+                                          ...f,
+                                          acHasOutdoor: e.target.checked,
+                                          acOutdoorSerial: e.target.checked ? f.acOutdoorSerial : "",
+                                          acOutdoorPhoto: e.target.checked ? f.acOutdoorPhoto : "",
+                                        })
+                                      )
+                                    }
                                     style={{ marginRight: 8 }}
                                   />
                                   Back Unit (Outdoor)
@@ -43501,7 +43874,7 @@ function formatTicketRequestSource(value?: string) {
                                   String(assetEditForm.acOutdoorPhoto || "").trim() ? (
                                     <>
                                       <img loading="lazy" decoding="async" src={String(assetEditForm.acOutdoorPhoto || "")} alt="edit-aircon-back" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
-                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => ({ ...f, acOutdoorPhoto: "" }))}>Remove</button>
+                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", { ...f, acOutdoorPhoto: "" }))}>Remove</button>
                                     </>
                                   ) : (
                                     <button type="button" className="tab btn-small" onClick={() => document.getElementById("aircon-outdoor-edit-upload")?.click()}>
@@ -43510,17 +43883,23 @@ function formatTicketRequestSource(value?: string) {
                                   )
                                 ) : null}
                               </div>
+                              {assetEditForm.acHasOutdoor ? (
+                                <input
+                                  className="input"
+                                  value={assetEditForm.acOutdoorSerial}
+                                  onChange={(e) =>
+                                    setAssetEditForm((f) =>
+                                      syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", {
+                                        ...f,
+                                        acOutdoorSerial: e.target.value,
+                                      })
+                                    )
+                                  }
+                                  placeholder="Back Unit S/N"
+                                />
+                              ) : null}
                             </div>
                           </div>
-                        </label>
-                        <label className="field field-wide">
-                          <span>Components Note</span>
-                          <input
-                            className="input"
-                            value={assetEditForm.acComponentNote}
-                            onChange={(e) => setAssetEditForm((f) => ({ ...f, acComponentNote: e.target.value }))}
-                            placeholder="Remote model/serial, indoor/outdoor serial, missing parts..."
-                          />
                         </label>
                       </>
                     ) : null}
@@ -43723,16 +44102,44 @@ function formatTicketRequestSource(value?: string) {
                     {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">
                         <span>Purchase Date</span>
-                        <input type="date" className="input" value={assetEditForm.purchaseDate} onChange={(e) => setAssetEditForm((f) => ({ ...f, purchaseDate: e.target.value }))} />
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="dd/Mon/yyyy"
+                          value={assetEditDateDrafts.purchaseDate}
+                          onChange={(e) => setAssetEditDateDrafts((prev) => ({ ...prev, purchaseDate: e.target.value }))}
+                          onBlur={() => {
+                            const normalized = normalizeMateDateInput(assetEditDateDrafts.purchaseDate);
+                            setAssetEditForm((f) => ({ ...f, purchaseDate: normalized }));
+                            setAssetEditDateDrafts((prev) => ({
+                              ...prev,
+                              purchaseDate: normalized ? formatMateDateInput(normalized) : String(prev.purchaseDate || "").trim(),
+                            }));
+                          }}
+                        />
                       </label>
                     ) : null}
                     {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">
                         <span>Warranty Until</span>
-                        <input type="date" className="input" value={assetEditForm.warrantyUntil} onChange={(e) => setAssetEditForm((f) => ({ ...f, warrantyUntil: e.target.value }))} />
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="dd/Mon/yyyy"
+                          value={assetEditDateDrafts.warrantyUntil}
+                          onChange={(e) => setAssetEditDateDrafts((prev) => ({ ...prev, warrantyUntil: e.target.value }))}
+                          onBlur={() => {
+                            const normalized = normalizeMateDateInput(assetEditDateDrafts.warrantyUntil);
+                            setAssetEditForm((f) => ({ ...f, warrantyUntil: normalized }));
+                            setAssetEditDateDrafts((prev) => ({
+                              ...prev,
+                              warrantyUntil: normalized ? formatMateDateInput(normalized) : String(prev.warrantyUntil || "").trim(),
+                            }));
+                          }}
+                        />
                       </label>
                     ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                    {!isFurnitureAsset(editingAsset?.category || "") && !isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
                       <label className="field">
                         <span>Vendor</span>
                         <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
@@ -43782,7 +44189,7 @@ function formatTicketRequestSource(value?: string) {
                               isAirconAsset(editingAsset?.category || "", editingAsset?.type || "")
                                 ? {
                                     ...f,
-                                    specs: buildAirconSpecs(e.target.value, f.acType, f.acHp, {
+                                    specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(e.target.value), f.acType, f.acHp, {
                                       hasRemote: Boolean(f.acHasRemote),
                                       hasFrontPanel: Boolean(f.acHasFrontPanel),
                                       hasOutdoor: Boolean(f.acHasOutdoor),

@@ -6541,6 +6541,12 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.aircon-inline-triple {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .inventory-item-create-grid {
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.7fr) minmax(190px, 0.7fr);
 }
@@ -28110,6 +28116,10 @@ tr.row-maint-maintenance:hover td {
   .app-card-workorders-phone .form-grid {
     gap: 10px;
     margin-bottom: 10px !important;
+  }
+
+  .aircon-inline-triple {
+    grid-template-columns: 1fr;
   }
 
   .app-card-workorders-phone .ticket-dashboard-mobile-card {
