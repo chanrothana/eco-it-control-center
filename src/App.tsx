@@ -8,6 +8,8 @@ import {
   Calendar,
   Camera,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   Clock3,
   Copy,
@@ -2432,6 +2434,12 @@ const INVENTORY_CATEGORY_OPTIONS = [
   { value: "GARDEN_TOOL", label: "Garden Tools" },
   { value: "SERVICE_TOOL", label: "Service Provider Tools" },
 ] as const;
+const INVENTORY_REPORT_GROUP_ORDER: InventoryBusinessGroup[] = [
+  "SUPPLY",
+  "CLEAN_TOOL",
+  "MAINT_TOOL",
+  "GARDEN_TOOL",
+];
 const TOOL_REVIEW_CONDITION_OPTIONS: ToolReviewCondition[] = [
   "Good",
   "Fair",
@@ -8971,6 +8979,7 @@ export default function App() {
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
+  const [reportInventoryGroupFilter, setReportInventoryGroupFilter] = useState<"ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL">("ALL");
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -9122,14 +9131,19 @@ export default function App() {
               : []),
           ];
         case "inventory":
-          const inventoryNavLabelsKm: Record<"SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL", string> = {
+          const inventoryNavLabelsKm: Record<"SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL", string> = {
             SUPPLY: "សម្ភារៈសម្អាត",
             CLEAN_TOOL: "ឧបករណ៍សម្អាត",
             MAINT_TOOL: "ឧបករណ៍ថែទាំ",
             GARDEN_TOOL: "ឧបករណ៍ថែសួន",
-            SERVICE_TOOL: "ឧបករណ៍ក្រុមហ៊ុនសេវាកម្ម",
           };
-          return INVENTORY_OPERATIONAL_GROUP_ORDER.map((group) => {
+          const inventorySidebarGroups: Array<"SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL"> = [
+            "SUPPLY",
+            "CLEAN_TOOL",
+            "MAINT_TOOL",
+            "GARDEN_TOOL",
+          ];
+          return inventorySidebarGroups.map((group) => {
             const hasDailyFlow = inventoryBusinessGroupHasDailyStockFlow(group);
             return {
               key: `inventory.group.${group}`,
@@ -9859,16 +9873,33 @@ export default function App() {
       verificationView,
     ]
   );
+  const isNavSubItemActive = useCallback(
+    (moduleId: NavModule, item: NavSubItem) => tab === moduleId && item.active,
+    [tab]
+  );
+  const hasActiveNavSubtree = useCallback(
+    (moduleId: NavModule, subItems: NavSubItem[]) => {
+      const walk = (items: NavSubItem[]): boolean =>
+        items.some(
+          (item) =>
+            isNavSubItemActive(moduleId, item) ||
+            (Array.isArray(item.children) && item.children.length > 0 && walk(item.children))
+        );
+      return walk(subItems);
+    },
+    [isNavSubItemActive]
+  );
   const renderNavSubItems = useCallback(
     (moduleId: NavModule, subItems: NavSubItem[], level = 1) =>
       subItems.map((sub) => {
         const hasChildren = Array.isArray(sub.children) && sub.children.length > 0;
-        const isExpanded = expandedNavSubKey === sub.key || sub.children?.some((child) => child.active);
+        const isActive = isNavSubItemActive(moduleId, sub);
+        const isExpanded = expandedNavSubKey === sub.key || hasActiveNavSubtree(moduleId, sub.children || []);
         return (
           <div key={`main-nav-sub-${moduleId}-${sub.key}`} className={`main-nav-subitem-group main-nav-subitem-level-${level}`}>
             <button
               type="button"
-              className={`main-nav-sub-btn ${sub.active ? "main-nav-sub-btn-active" : ""} ${hasChildren ? "main-nav-sub-btn-parent" : ""}`}
+              className={`main-nav-sub-btn ${isActive ? "main-nav-sub-btn-active" : ""} ${hasChildren ? "main-nav-sub-btn-parent" : ""}`}
               onClick={() => {
                 if (hasChildren) {
                   setExpandedNavSubKey((prev) => (prev === sub.key ? null : sub.key));
@@ -9886,18 +9917,19 @@ export default function App() {
           </div>
         );
       }),
-    [expandedNavSubKey]
+    [expandedNavSubKey, hasActiveNavSubtree, isNavSubItemActive]
   );
   const renderMobileNavSubItems = useCallback(
     (moduleId: NavModule, subItems: NavSubItem[], level = 1) =>
       subItems.map((sub) => {
         const hasChildren = Array.isArray(sub.children) && sub.children.length > 0;
-        const isExpanded = expandedNavSubKey === sub.key || sub.children?.some((child) => child.active);
+        const isActive = isNavSubItemActive(moduleId, sub);
+        const isExpanded = expandedNavSubKey === sub.key || hasActiveNavSubtree(moduleId, sub.children || []);
         return (
           <div key={`mobile-nav-sub-${moduleId}-${sub.key}`} className={`mobile-menu-subitem-group mobile-menu-subitem-level-${level}`}>
             <button
               type="button"
-              className={`mobile-menu-sub-btn ${sub.active ? "mobile-menu-sub-btn-active" : ""} ${hasChildren ? "mobile-menu-sub-btn-parent" : ""}`}
+              className={`mobile-menu-sub-btn ${isActive ? "mobile-menu-sub-btn-active" : ""} ${hasChildren ? "mobile-menu-sub-btn-parent" : ""}`}
               onClick={() => {
                 if (hasChildren) {
                   setExpandedNavSubKey((prev) => (prev === sub.key ? null : sub.key));
@@ -9918,7 +9950,7 @@ export default function App() {
           </div>
         );
       }),
-    [expandedNavSubKey]
+    [expandedNavSubKey, hasActiveNavSubtree, isNavSubItemActive]
   );
   const handlePhoneLogoHome = useCallback(() => {
     setTab("dashboard");
@@ -14754,16 +14786,68 @@ export default function App() {
     () => (inventoryBalanceMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
     [inventoryBalanceMode, inventoryLowStockRows, inventoryBalanceRows]
   );
-  const reportInventoryRows = useMemo(
+  const reportInventoryBaseRows = useMemo(
     () => (reportInventoryMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
     [reportInventoryMode, inventoryLowStockRows, inventoryBalanceRows]
   );
+  const reportInventoryRows = useMemo(
+    () =>
+      reportInventoryGroupFilter === "ALL"
+        ? reportInventoryBaseRows
+        : reportInventoryBaseRows.filter((row) => inventoryBusinessGroupValue(row) === reportInventoryGroupFilter),
+    [reportInventoryBaseRows, reportInventoryGroupFilter]
+  );
+  const reportInventoryGroupedRows = useMemo(() => {
+    const byGroup = new Map<InventoryBusinessGroup, typeof reportInventoryRows>();
+    for (const row of reportInventoryRows) {
+      const group = inventoryBusinessGroupValue(row);
+      const current = byGroup.get(group) || [];
+      current.push(row);
+      byGroup.set(group, current);
+    }
+    const ordered: Array<{ group: InventoryBusinessGroup; label: string; rows: typeof reportInventoryRows }> = [];
+    for (const group of INVENTORY_REPORT_GROUP_ORDER) {
+      const rows = byGroup.get(group) || [];
+      if (!rows.length) continue;
+      ordered.push({
+        group,
+        label: inventoryBusinessGroupLabel(group),
+        rows,
+      });
+      byGroup.delete(group);
+    }
+    for (const [group, rows] of Array.from(byGroup.entries())) {
+      if (!rows.length) continue;
+      ordered.push({
+        group,
+        label: inventoryBusinessGroupLabel(group),
+        rows,
+      });
+    }
+    return ordered;
+  }, [reportInventoryRows]);
   const reportInventoryModeLabel = useMemo(
     () =>
       reportInventoryMode === "low"
         ? (lang === "km" ? "ស្តុកទាបតែប៉ុណ្ណោះ" : "Low Stock Only")
         : (lang === "km" ? "ស្តុកទាំងអស់" : "All Stock Items"),
     [reportInventoryMode, lang]
+  );
+  const reportInventoryGroupFilterLabel = useMemo(() => {
+    if (reportInventoryGroupFilter === "ALL") {
+      return lang === "km" ? "គ្រប់ក្រុម" : "All Groups";
+    }
+    return inventoryBusinessGroupLabel(reportInventoryGroupFilter);
+  }, [lang, reportInventoryGroupFilter]);
+  const reportInventoryGroupTabs = useMemo(
+    () => [
+      { value: "ALL" as const, label: lang === "km" ? "ទាំងអស់" : "All" },
+      { value: "SUPPLY" as const, label: lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies" },
+      { value: "CLEAN_TOOL" as const, label: lang === "km" ? "ឧបករណ៍សម្អាត" : "Cleaning Tools" },
+      { value: "MAINT_TOOL" as const, label: lang === "km" ? "ឧបករណ៍ថែទាំ" : "Maintenance Tools" },
+      { value: "GARDEN_TOOL" as const, label: lang === "km" ? "ឧបករណ៍ថែសួន" : "Garden Tools" },
+    ],
+    [lang]
   );
   const inventoryVisibleItemLookup = useMemo(() => {
     const out = new Map<number, InventoryItem>();
@@ -34852,6 +34936,7 @@ export default function App() {
     if (reportType === "inventory_balance") {
       setReportAssetIdFilter("");
       setReportInventoryMode("all");
+      setReportInventoryGroupFilter("ALL");
       return;
     }
     if (reportType === "verification_summary") {
@@ -36230,7 +36315,7 @@ export default function App() {
         row.notes || "-",
       ]);
     } else if (reportType === "inventory_balance") {
-      title = `Inventory Stock Balance Report - ${reportInventoryModeLabel}`;
+      title = `Inventory Stock Balance Report - ${reportInventoryModeLabel} - ${reportInventoryGroupFilterLabel}`;
       columns = ["Code", "Photo", "Name", "Category", "Campus", "Location", "Unit", "Stock In", "Stock Out", "Current", "Min", "Alert"];
       rows = reportInventoryRows.map((row) => [
         row.itemCode,
@@ -36427,25 +36512,69 @@ export default function App() {
       return columns.map(() => 100 / columns.length);
     })();
 
-    const tableHtml = rows.length
-      ? rows
-          .map(
-            (row) =>
-              `<tr>${row
-                .map((cell) => {
-                  const text = String(cell || "");
-                  if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
-                    return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
-                  }
-                  if (text.startsWith("<div")) {
-                    return `<td>${text}</td>`;
-                  }
-                  return `<td>${escapeHtml(text || "-")}</td>`;
-                })
-                .join("")}</tr>`
-          )
-          .join("")
-      : `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
+    const tableHtml =
+      reportType === "inventory_balance"
+        ? (() => {
+            if (!reportInventoryGroupedRows.length) {
+              return `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
+            }
+            let runningIndex = 1;
+            return reportInventoryGroupedRows
+              .map((section) => {
+                const sectionRows = section.rows
+                  .map((row) => {
+                    const cells = [
+                      String(runningIndex++),
+                      row.itemCode,
+                      toPrintablePhotoUrl(row.photo || ""),
+                      inventoryDisplayName(row.itemName, lang),
+                      inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row)),
+                      inventoryCampusLabel(row.campus),
+                      row.location || "-",
+                      row.unit || "-",
+                      String(row.stockIn ?? 0),
+                      String(row.stockOut ?? 0),
+                      String(row.currentStock ?? 0),
+                      String(row.minStock ?? 0),
+                      row.lowStock ? "Low" : "OK",
+                    ];
+                    return `<tr>${cells
+                      .map((cell) => {
+                        const text = String(cell || "");
+                        if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
+                          return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
+                        }
+                        if (text.startsWith("<div")) {
+                          return `<td>${text}</td>`;
+                        }
+                        return `<td>${escapeHtml(text || "-")}</td>`;
+                      })
+                      .join("")}</tr>`;
+                  })
+                  .join("");
+                return `<tr class="report-section-row"><td colspan="${columns.length}">${escapeHtml(section.label)}</td></tr>${sectionRows}`;
+              })
+              .join("");
+          })()
+        : rows.length
+          ? rows
+              .map(
+                (row) =>
+                  `<tr>${row
+                    .map((cell) => {
+                      const text = String(cell || "");
+                      if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
+                        return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
+                      }
+                      if (text.startsWith("<div")) {
+                        return `<td>${text}</td>`;
+                      }
+                      return `<td>${escapeHtml(text || "-")}</td>`;
+                    })
+                    .join("")}</tr>`
+              )
+              .join("")
+          : `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
 
     const summaryHtml =
       reportType === "asset_full_record"
@@ -36459,7 +36588,7 @@ export default function App() {
         : reportType === "furniture_control"
         ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Locations:</strong> ${furnitureControlGapSummary.rooms}</p>`
         : reportType === "inventory_balance"
-        ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${inventoryLowStockRows.length}</p>`
+        ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Group:</strong> ${escapeHtml(reportInventoryGroupFilterLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${reportInventoryRows.filter((row) => row.lowStock).length}</p>`
         : reportType === "staff_borrowing"
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
         : reportType === "asset_master"
@@ -39047,7 +39176,8 @@ function formatTicketRequestSource(value?: string) {
                   {section.items.map((item) => {
                     const subItems = getNavSubItems(item.id);
                     const hasSubmenu = subItems.length > 0;
-                    const showSubmenu = expandedNavModule === item.id && hasSubmenu;
+                    const hasActiveSubmenu = hasSubmenu && hasActiveNavSubtree(item.id, subItems);
+                    const showSubmenu = hasSubmenu && (expandedNavModule === item.id || hasActiveSubmenu);
                     return (
                       <div key={item.id} className="main-nav-item-group">
                         <button
@@ -39059,14 +39189,23 @@ function formatTicketRequestSource(value?: string) {
                             if (navCollapsed && hasSubmenu) {
                               setNavCollapsed(false);
                               setExpandedNavModule(item.id);
-                            } else {
-                              setExpandedNavModule((prev) => (hasSubmenu ? (prev === item.id ? null : item.id) : null));
+                              return;
                             }
+                            if (hasSubmenu) {
+                              setExpandedNavModule((prev) => (hasSubmenu ? (prev === item.id ? null : item.id) : null));
+                              return;
+                            }
+                            setExpandedNavModule(null);
                             handleNavChange(item.id);
                           }}
                         >
                           <span className="main-nav-btn-icon" aria-hidden={true}>{navIcon(item.id)}</span>
                           <span className="main-nav-btn-label">{item.label}</span>
+                          {hasSubmenu ? (
+                            <span className="main-nav-btn-caret" aria-hidden={true}>
+                              {showSubmenu ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </span>
+                          ) : null}
                         </button>
                         {showSubmenu ? (
                           <div className="main-nav-sublist">
@@ -39180,7 +39319,8 @@ function formatTicketRequestSource(value?: string) {
                         {section.items.map((item) => {
                           const subItems = getNavSubItems(item.id);
                           const hasSubmenu = subItems.length > 0;
-                          const showSubmenu = expandedNavModule === item.id && hasSubmenu;
+                          const hasActiveSubmenu = hasSubmenu && hasActiveNavSubtree(item.id, subItems);
+                          const showSubmenu = hasSubmenu && (expandedNavModule === item.id || hasActiveSubmenu);
                           return (
                             <div key={`mobile-nav-item-${item.id}`} className="mobile-menu-item-group">
                               <button
@@ -56812,22 +56952,6 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               </div>
             )}
-            {reportType === "inventory_balance" && (
-              <div className="stats-grid" style={{ marginBottom: 10 }}>
-                <article className="stat-card">
-                  <div className="stat-label">Total Inventory Items</div>
-                  <div className="stat-value">{inventoryBalanceRows.length}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Visible in Report</div>
-                  <div className="stat-value">{reportInventoryRows.length}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Low Stock Alerts</div>
-                  <div className="stat-value">{inventoryLowStockRows.length}</div>
-                </article>
-              </div>
-            )}
             {reportType === "furniture_control" && (
               <div className="stats-grid" style={{ marginBottom: 10 }}>
                 <article className="stat-card">
@@ -56895,7 +57019,26 @@ function formatTicketRequestSource(value?: string) {
             ) : null}
             {reportType === "inventory_balance" ? (
               <div className="tiny" style={{ marginBottom: 10 }}>
-                Standard print mode: {reportInventoryModeLabel}
+                Standard print mode: {reportInventoryModeLabel} | Group: {reportInventoryGroupFilterLabel}
+              </div>
+            ) : null}
+            {reportType === "inventory_balance" ? (
+              <div className="report-inventory-group-tabs" role="tablist" aria-label="Inventory report groups">
+                {reportInventoryGroupTabs.map((tabOption) => {
+                  const active = reportInventoryGroupFilter === tabOption.value;
+                  return (
+                    <button
+                      key={`report-inventory-group-tab-${tabOption.value}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={`report-inventory-group-tab ${active ? "report-inventory-group-tab-active" : ""}`}
+                      onClick={() => setReportInventoryGroupFilter(tabOption.value)}
+                    >
+                      {tabOption.label}
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
             <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""}`}>
@@ -58279,23 +58422,32 @@ function formatTicketRequestSource(value?: string) {
                     </tr>
                   </thead>
                   <tbody>
-                    {reportInventoryRows.length ? (
-                      reportInventoryRows.map((row) => (
-                        <tr key={`report-inventory-balance-${row.id}`}>
-                          <td><strong>{row.itemCode}</strong></td>
-                          <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                          <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                          <td>{inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}</td>
-                          <td>{inventoryCampusLabel(row.campus)}</td>
-                          <td>{row.location || "-"}</td>
-                          <td>{row.unit || "-"}</td>
-                          <td>{row.stockIn}</td>
-                          <td>{row.stockOut}</td>
-                          <td><strong>{row.currentStock}</strong></td>
-                          <td>{row.minStock}</td>
-                          <td>{row.lowStock ? "Low" : "OK"}</td>
-                        </tr>
-                      ))
+                    {reportInventoryGroupedRows.length ? (
+                      reportInventoryGroupedRows.flatMap((section) => [
+                        (
+                          <tr key={`report-inventory-section-${section.group}`} className="report-section-row">
+                            <td colSpan={12}>
+                              <strong>{section.label}</strong>
+                            </td>
+                          </tr>
+                        ),
+                        ...section.rows.map((row) => (
+                          <tr key={`report-inventory-balance-${section.group}-${row.id}`}>
+                            <td><strong>{row.itemCode}</strong></td>
+                            <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
+                            <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                            <td>{inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}</td>
+                            <td>{inventoryCampusLabel(row.campus)}</td>
+                            <td>{row.location || "-"}</td>
+                            <td>{row.unit || "-"}</td>
+                            <td>{row.stockIn}</td>
+                            <td>{row.stockOut}</td>
+                            <td><strong>{row.currentStock}</strong></td>
+                            <td>{row.minStock}</td>
+                            <td>{row.lowStock ? "Low" : "OK"}</td>
+                          </tr>
+                        )),
+                      ])
                     ) : (
                       <tr>
                         <td colSpan={12}>

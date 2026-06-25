@@ -545,6 +545,15 @@ body {
   min-width: 0;
 }
 
+.main-nav-btn-caret {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  opacity: 0.88;
+}
+
 .main-nav-btn:hover {
   transform: translateX(2px);
   border-color: #78a9f4;
@@ -4018,6 +4027,38 @@ h2 {
 .report-quick-status-retired {
   background: linear-gradient(180deg, #fff6ef 0%, #ffeddf 100%);
   border-color: #f0d3b4;
+}
+
+.report-inventory-group-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.report-inventory-group-tab {
+  border: 1px solid rgba(120, 169, 244, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #dce8fb;
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: 140ms ease;
+}
+
+.report-inventory-group-tab:hover {
+  border-color: #78a9f4;
+  background: rgba(82, 125, 193, 0.18);
+}
+
+.report-inventory-group-tab-active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(47, 124, 246, 0.22);
 }
 
 .report-quick-count-groups {
@@ -19190,6 +19231,18 @@ tr.row-maint-maintenance:hover td {
 
 .report-table-wrap td strong {
   display: inline-block;
+}
+
+.report-table-wrap .report-section-row td {
+  padding: 12px 14px;
+  background: rgba(120, 150, 198, 0.14);
+  color: #dfeaff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-top: 1px solid rgba(150, 178, 224, 0.36);
+  border-bottom: 1px solid rgba(150, 178, 224, 0.24);
 }
 
 .report-table-wrap .furniture-qty-cell {
