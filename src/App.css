@@ -4036,6 +4036,85 @@ h2 {
   margin: 0 0 14px;
 }
 
+.report-inventory-shell {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.report-inventory-hero {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.2fr) minmax(320px, 1fr);
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(120, 150, 198, 0.18);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at top left, rgba(74, 132, 233, 0.18), transparent 38%);
+  box-shadow: inset 0 1px 0 rgba(210, 226, 249, 0.05);
+}
+
+.report-inventory-hero-copy {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.report-inventory-kicker {
+  color: #8fa8cf;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.report-inventory-hero-copy h3 {
+  margin: 0;
+  color: #f4f8ff;
+  font-family: var(--font-head);
+  font-size: clamp(24px, 2vw, 32px);
+  line-height: 1.05;
+}
+
+.report-inventory-hero-copy p {
+  margin: 0;
+  color: #a9bddb;
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 58ch;
+}
+
+.report-inventory-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-inventory-meta-card {
+  border: 1px solid rgba(146, 174, 220, 0.18);
+  border-radius: 18px;
+  background: rgba(14, 24, 38, 0.28);
+  padding: 14px 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.report-inventory-meta-card span {
+  color: #8ea5ca;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.report-inventory-meta-card strong {
+  color: #f4f8ff;
+  font-family: var(--font-head);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
 .report-inventory-group-tab {
   border: 1px solid rgba(120, 169, 244, 0.22);
   border-radius: 999px;
@@ -4182,6 +4261,17 @@ h2 {
   margin-bottom: 10px;
 }
 
+.report-builder-inventory {
+  gap: 12px;
+  padding: 16px 18px 18px;
+  border: 1px solid rgba(120, 150, 198, 0.18);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015)),
+    radial-gradient(circle at top right, rgba(74, 132, 233, 0.12), transparent 34%);
+  box-shadow: inset 0 1px 0 rgba(210, 226, 249, 0.05);
+}
+
 .report-builder-top {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) auto;
@@ -4267,6 +4357,12 @@ h2 {
   gap: 12px;
 }
 
+.report-filter-row-inventory {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-content: start;
+  align-items: end;
+}
+
 .report-filters {
   margin-left: 0;
   flex-wrap: nowrap;
@@ -4276,6 +4372,15 @@ h2 {
   scrollbar-width: thin;
   gap: 8px;
   width: 100%;
+}
+
+.report-builder-inventory .report-filters-title {
+  margin-bottom: 2px;
+}
+
+.report-filter-reset-btn-inline {
+  width: 100%;
+  min-height: var(--control-height);
 }
 
 .report-checkbox {
@@ -10478,6 +10583,282 @@ label.backup-action-btn {
   max-width: 720px;
 }
 
+.tool-review-gallery-panel {
+  margin-top: 16px;
+}
+
+.tool-review-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+
+.tool-review-card {
+  align-items: stretch;
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.tool-review-card.is-selected {
+  border-color: #6fa2f3;
+  box-shadow: 0 12px 28px rgba(29, 94, 200, 0.18);
+}
+
+.tool-review-card.is-reviewed {
+  background: linear-gradient(180deg, #f9fcff 0%, #eef5ff 100%);
+}
+
+.tool-review-card.is-pending {
+  background: linear-gradient(180deg, #fdfefe 0%, #f3f7fc 100%);
+}
+
+.tool-review-card-photo {
+  width: 58px;
+  height: 58px;
+  justify-self: center;
+}
+
+.tool-review-card-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  border: 1px solid #d8e3f2;
+  background: #ffffff;
+  display: inline-grid;
+  place-items: center;
+  justify-self: center;
+}
+
+.tool-review-card-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.tool-review-card-status.is-reviewed {
+  background: rgba(56, 121, 222, 0.14);
+  color: #275cb8;
+}
+
+.tool-review-card-status.is-pending {
+  background: rgba(201, 140, 63, 0.16);
+  color: #9d5f16;
+}
+
+.tool-review-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  margin-top: 16px;
+  align-items: start;
+}
+
+.tool-review-detail-panel,
+.tool-review-history-panel {
+  border: 1px solid rgba(110, 142, 186, 0.28);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(28, 45, 70, 0.96), rgba(23, 37, 58, 0.98));
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.tool-review-selected-hero {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.tool-review-selected-photo {
+  width: 82px;
+  height: 82px;
+  border-radius: 18px;
+  border: 1px solid rgba(146, 174, 216, 0.32);
+  background: rgba(255, 255, 255, 0.08);
+  object-fit: cover;
+}
+
+.tool-review-selected-photo-empty {
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+}
+
+.tool-review-selected-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tool-review-selected-copy strong {
+  font-size: 22px;
+  line-height: 1.15;
+  color: #f1f6ff;
+}
+
+.tool-review-selected-copy span {
+  color: #b1c3de;
+  overflow-wrap: anywhere;
+}
+
+.tool-review-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tool-review-meta-card {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(133, 163, 205, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.tool-review-meta-card small {
+  color: #9eb7da;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tool-review-meta-card strong {
+  color: #f2f7ff;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tool-review-form-grid {
+  align-items: start;
+}
+
+.tool-review-proof-preview {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.tool-review-history-list {
+  display: grid;
+  gap: 10px;
+  max-height: 720px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.tool-review-history-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(146, 174, 216, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tool-review-history-card.is-selected {
+  border-color: #7ea8e7;
+  background: rgba(58, 109, 194, 0.14);
+}
+
+.tool-review-history-main,
+.tool-review-history-side {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tool-review-history-main strong,
+.tool-review-history-main span,
+.tool-review-history-main small,
+.tool-review-history-side small {
+  overflow-wrap: anywhere;
+}
+
+.tool-review-history-main strong {
+  color: #f2f7ff;
+}
+
+.tool-review-history-main span,
+.tool-review-history-main small,
+.tool-review-history-side small {
+  color: #abc0de;
+}
+
+.tool-review-history-side {
+  justify-items: end;
+}
+
+.tool-review-modal-panel {
+  width: min(520px, calc(100vw - 24px));
+}
+
+.tool-review-selected-hero-modal {
+  margin-top: 4px;
+}
+
+.tool-review-modal-proof {
+  width: 100%;
+  max-width: 260px;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 160, 220, 0.35);
+  object-fit: cover;
+}
+
+@media (max-width: 980px) {
+  .tool-review-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-review-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-review-history-list {
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .tool-review-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tool-review-modal-panel {
+    width: min(100vw - 16px, 520px);
+  }
+
+  .tool-review-selected-hero {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .tool-review-selected-copy {
+    justify-items: center;
+  }
+
+  .tool-review-history-card {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-review-history-side {
+    justify-items: start;
+  }
+}
+
 .inventory-quickout-hero-icon-wrap {
   display: flex;
   justify-content: center;
@@ -15150,6 +15531,23 @@ label.backup-action-btn {
   white-space: nowrap;
 }
 
+.maintenance-asset-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.maintenance-asset-picker-main {
+  min-width: 0;
+}
+
+.maintenance-qr-inline-btn {
+  min-height: var(--control-height);
+  align-self: stretch;
+  white-space: nowrap;
+}
+
 .maintenance-quick-summary-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -17626,6 +18024,15 @@ table {
     align-items: stretch;
   }
 
+  .maintenance-asset-picker-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .maintenance-qr-inline-btn {
+    padding-inline: 12px;
+  }
+
   .backup-action-row {
     display: grid;
     grid-template-columns: 1fr;
@@ -19229,6 +19636,26 @@ tr.row-maint-maintenance:hover td {
   min-width: 1240px;
 }
 
+.report-table-wrap-inventory {
+  border: 1px solid rgba(129, 156, 196, 0.2);
+  border-radius: 22px;
+  background: rgba(15, 23, 37, 0.3);
+  box-shadow: inset 0 1px 0 rgba(210, 226, 249, 0.05);
+}
+
+.report-table-wrap-inventory table {
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.report-table-wrap-inventory th,
+.report-table-wrap-inventory td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .report-table-wrap td strong {
   display: inline-block;
 }
@@ -19243,6 +19670,131 @@ tr.row-maint-maintenance:hover td {
   text-transform: uppercase;
   border-top: 1px solid rgba(150, 178, 224, 0.36);
   border-bottom: 1px solid rgba(150, 178, 224, 0.24);
+}
+
+.report-inventory-pages {
+  display: grid;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.report-inventory-page-card {
+  border: 1px solid rgba(129, 156, 196, 0.22);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(41, 57, 84, 0.92), rgba(31, 43, 66, 0.96));
+  box-shadow: inset 0 1px 0 rgba(214, 228, 249, 0.05);
+  padding: 18px;
+}
+
+.report-inventory-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.report-inventory-page-kicker {
+  color: #95a9ca;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.report-inventory-page-head h4 {
+  margin: 0;
+  color: #f3f7ff;
+  font-size: 28px;
+  line-height: 1.05;
+}
+
+.report-inventory-page-copy {
+  margin: 10px 0 0;
+  color: #afc0de;
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 760px;
+}
+
+.report-inventory-page-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.report-inventory-page-stats span {
+  border: 1px solid rgba(146, 172, 214, 0.24);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #d5e2fb;
+  background: rgba(16, 24, 39, 0.28);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-table-wrap-inventory-page {
+  margin-top: 0;
+}
+
+.report-inventory-page-sections {
+  display: grid;
+  gap: 16px;
+}
+
+.report-inventory-subsection {
+  border: 1px solid rgba(144, 169, 206, 0.18);
+  border-radius: 20px;
+  background: rgba(15, 22, 35, 0.2);
+  padding: 14px;
+}
+
+.report-inventory-subsection-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.report-inventory-subsection-head h5 {
+  margin: 0;
+  color: #eef4ff;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.report-inventory-subsection-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-inventory-subsection-stats span {
+  border: 1px solid rgba(146, 172, 214, 0.24);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #cddaf2;
+  background: rgba(17, 25, 40, 0.34);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .report-inventory-page-head {
+    flex-direction: column;
+  }
+
+  .report-inventory-page-head h4 {
+    font-size: 24px;
+  }
+
+  .report-inventory-subsection-head {
+    flex-direction: column;
+  }
 }
 
 .report-table-wrap .furniture-qty-cell {

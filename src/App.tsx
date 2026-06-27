@@ -417,6 +417,22 @@ type MaintenanceReportColumnKey =
   | "by"
   | "reportFile"
   | "note";
+type InventoryReportColumnKey =
+  | "code"
+  | "photo"
+  | "name"
+  | "category"
+  | "campus"
+  | "location"
+  | "owner"
+  | "responsible"
+  | "unit"
+  | "amount"
+  | "stockIn"
+  | "stockOut"
+  | "current"
+  | "min"
+  | "alert";
 type EdAssetTemplate = "ALL" | "computer" | "ipad" | "speaker" | "tv" | "aircon" | "monitor" | "walkie" | "peripheral";
 
 type Ticket = {
@@ -2439,6 +2455,13 @@ const INVENTORY_REPORT_GROUP_ORDER: InventoryBusinessGroup[] = [
   "CLEAN_TOOL",
   "MAINT_TOOL",
   "GARDEN_TOOL",
+  "SERVICE_TOOL",
+];
+const INVENTORY_REPORT_TOOL_GROUPS: InventoryBusinessGroup[] = [
+  "CLEAN_TOOL",
+  "MAINT_TOOL",
+  "GARDEN_TOOL",
+  "SERVICE_TOOL",
 ];
 const TOOL_REVIEW_CONDITION_OPTIONS: ToolReviewCondition[] = [
   "Good",
@@ -7797,6 +7820,19 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
   );
 }
 
+function extractAssetIdFromQrText(raw: string) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  try {
+    const url = new URL(text);
+    const fromQuery = url.searchParams.get("assetId") || url.searchParams.get("asset") || "";
+    if (fromQuery.trim()) return fromQuery.trim().toUpperCase();
+  } catch {
+    // Not a URL, continue with plain text.
+  }
+  return text.toUpperCase();
+}
+
 type InventoryItemPickerProps = {
   value: string;
   items: InventoryItem[];
@@ -8979,7 +9015,10 @@ export default function App() {
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
-  const [reportInventoryGroupFilter, setReportInventoryGroupFilter] = useState<"ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL">("ALL");
+  const [reportInventoryGroupFilter, setReportInventoryGroupFilter] = useState<
+    "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
+  >("CLEAN_TOOL");
+  const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState("ALL");
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -9023,6 +9062,29 @@ export default function App() {
       setTab("maintenance");
     });
   }, []);
+  const openToolReviewItem = useCallback(
+    (
+      row: {
+        id: number;
+        currentStock?: number;
+      },
+      reviewedEntry?: ToolReviewReport | null
+    ) => {
+      setToolReviewForm((prev) => ({
+        ...prev,
+        itemId: String(row.id),
+        countedQty: reviewedEntry ? String(reviewedEntry.countedQty) : String(Number(row.currentStock || 0)),
+        condition: reviewedEntry?.condition || "Good",
+        supervisor: reviewedEntry?.supervisor || "",
+        note: reviewedEntry?.note || "",
+        photo: reviewedEntry?.photo || "",
+      }));
+      if (maintenanceQuickMode) {
+        setToolReviewModalOpen(true);
+      }
+    },
+    [maintenanceQuickMode]
+  );
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
       if (nextTab === "classroom") setClassroomView("gallery");
@@ -9042,10 +9104,28 @@ export default function App() {
         onSelect: () => openMaintenanceQuickRecord(),
       },
       {
-        id: "inventory" as const,
+        id: "inventory-supply" as const,
         label: lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies",
-        active: tab === "inventory",
+        active: tab === "inventory" && inventoryDashboardGroup === "SUPPLY",
         onSelect: () => openMaintenanceQuickSupplies(),
+      },
+      {
+        id: "inventory-clean-tool" as const,
+        label: lang === "km" ? "ឧបករណ៍សម្អាត" : "Cleaning Tools",
+        active: tab === "inventory" && inventoryDashboardGroup === "CLEAN_TOOL",
+        onSelect: () => openInventorySection("CLEAN_TOOL", "review"),
+      },
+      {
+        id: "inventory-maint-tool" as const,
+        label: lang === "km" ? "ឧបករណ៍ថែទាំ" : "Maintenance Tools",
+        active: tab === "inventory" && inventoryDashboardGroup === "MAINT_TOOL",
+        onSelect: () => openInventorySection("MAINT_TOOL", "review"),
+      },
+      {
+        id: "inventory-garden-tool" as const,
+        label: lang === "km" ? "ឧបករណ៍សួន" : "Garden Tools",
+        active: tab === "inventory" && inventoryDashboardGroup === "GARDEN_TOOL",
+        onSelect: () => openInventorySection("GARDEN_TOOL", "review"),
       },
       {
         id: "verification" as const,
@@ -9054,7 +9134,7 @@ export default function App() {
         onSelect: () => openMaintenanceQuickAssetCheck(),
       },
     ],
-    [lang, openMaintenanceQuickAssetCheck, openMaintenanceQuickRecord, openMaintenanceQuickSupplies, tab]
+    [inventoryDashboardGroup, lang, openInventorySection, openMaintenanceQuickAssetCheck, openMaintenanceQuickRecord, openMaintenanceQuickSupplies, tab]
   );
   const handleMobileNavChange = useCallback(
     (nextTab: NavModule, options?: { closeMenu?: boolean }) => {
@@ -10078,6 +10158,15 @@ export default function App() {
     "condition",
     "by",
   ]);
+  const [inventoryReportVisibleColumns, setInventoryReportVisibleColumns] = useState<InventoryReportColumnKey[]>([
+    "code",
+    "photo",
+    "name",
+    "campus",
+    "location",
+    "unit",
+    "amount",
+  ]);
   const [maintenanceReportExpandedRows, setMaintenanceReportExpandedRows] = useState<Record<string, boolean>>({});
   const [maintenanceReportFiltersCollapsed, setMaintenanceReportFiltersCollapsed] = useState(false);
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
@@ -10582,6 +10671,11 @@ export default function App() {
   const [maintenanceRecordForm, setMaintenanceRecordForm] = useState(() =>
     createMaintenanceRecordForm(undefined, toYmd(new Date()), "")
   );
+  const [maintenanceQrModalOpen, setMaintenanceQrModalOpen] = useState(false);
+  const [maintenanceQrManualCode, setMaintenanceQrManualCode] = useState("");
+  const [maintenanceQrBusy, setMaintenanceQrBusy] = useState(false);
+  const [maintenanceQrError, setMaintenanceQrError] = useState("");
+  const [maintenanceQrFileKey, setMaintenanceQrFileKey] = useState(0);
   const maintenanceRecordSaveLockRef = useRef(false);
   const [maintenanceRecordSaving, setMaintenanceRecordSaving] = useState(false);
   const [maintenanceRecordMessage, setMaintenanceRecordMessage] = useState("");
@@ -12526,6 +12620,7 @@ export default function App() {
   const [toolReviewLocationFilter, setToolReviewLocationFilter] = useState("ALL");
   const [toolReviewSupervisorFilter, setToolReviewSupervisorFilter] = useState("ALL");
   const [toolReviewPhotoFileKey, setToolReviewPhotoFileKey] = useState(0);
+  const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
   const [toolReviewForm, setToolReviewForm] = useState({
     itemId: "",
     countedQty: "",
@@ -14666,6 +14761,13 @@ export default function App() {
       .filter((row) => (toolReviewSupervisorFilter === "ALL" ? true : String(row.supervisor || "").trim() === toolReviewSupervisorFilter))
       .sort((a, b) => String(b.updated || b.created || "").localeCompare(String(a.updated || a.created || "")));
   }, [toolReviewReports, toolReviewMonth, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewAreaFilter, toolReviewLocationFilter, toolReviewSupervisorFilter]);
+  const toolReviewMonthReportByItemId = useMemo(() => {
+    const map = new Map<string, ToolReviewReport>();
+    for (const row of toolReviewMonthReports) {
+      map.set(String(row.itemId), row);
+    }
+    return map;
+  }, [toolReviewMonthReports]);
   const toolReviewSupervisorOptions = useMemo(() => {
     const values = new Set<string>();
     for (const row of toolReviewReports) {
@@ -14792,10 +14894,21 @@ export default function App() {
   );
   const reportInventoryRows = useMemo(
     () =>
-      reportInventoryGroupFilter === "ALL"
-        ? reportInventoryBaseRows
-        : reportInventoryBaseRows.filter((row) => inventoryBusinessGroupValue(row) === reportInventoryGroupFilter),
-    [reportInventoryBaseRows, reportInventoryGroupFilter]
+      reportInventoryBaseRows.filter((row) => {
+        const rowGroup = inventoryBusinessGroupValue(row);
+        if (reportInventoryGroupFilter === "ALL") {
+          if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
+            return false;
+          }
+        } else if (rowGroup !== reportInventoryGroupFilter) {
+          return false;
+        }
+        if (reportInventoryCampusFilter !== "ALL" && String(row.campus || "") !== reportInventoryCampusFilter) {
+          return false;
+        }
+        return true;
+      }),
+    [reportInventoryBaseRows, reportInventoryCampusFilter, reportInventoryGroupFilter]
   );
   const reportInventoryGroupedRows = useMemo(() => {
     const byGroup = new Map<InventoryBusinessGroup, typeof reportInventoryRows>();
@@ -14835,20 +14948,92 @@ export default function App() {
   );
   const reportInventoryGroupFilterLabel = useMemo(() => {
     if (reportInventoryGroupFilter === "ALL") {
-      return lang === "km" ? "គ្រប់ក្រុម" : "All Groups";
+      return lang === "km" ? "ឧបករណ៍គ្រប់ប្រភេទ" : "All Tool Categories";
     }
     return inventoryBusinessGroupLabel(reportInventoryGroupFilter);
   }, [lang, reportInventoryGroupFilter]);
+  const reportInventoryCampusFilterLabel = useMemo(
+    () => (reportInventoryCampusFilter === "ALL" ? t.allCampuses : inventoryCampusLabel(reportInventoryCampusFilter)),
+    [inventoryCampusLabel, reportInventoryCampusFilter, t.allCampuses]
+  );
+  const reportInventoryCampusOptions = useMemo(() => {
+    return allowedCampusOptions;
+  }, [allowedCampusOptions]);
   const reportInventoryGroupTabs = useMemo(
     () => [
-      { value: "ALL" as const, label: lang === "km" ? "ទាំងអស់" : "All" },
       { value: "SUPPLY" as const, label: lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies" },
       { value: "CLEAN_TOOL" as const, label: lang === "km" ? "ឧបករណ៍សម្អាត" : "Cleaning Tools" },
       { value: "MAINT_TOOL" as const, label: lang === "km" ? "ឧបករណ៍ថែទាំ" : "Maintenance Tools" },
       { value: "GARDEN_TOOL" as const, label: lang === "km" ? "ឧបករណ៍ថែសួន" : "Garden Tools" },
+      { value: "SERVICE_TOOL" as const, label: lang === "km" ? "ឧបករណ៍ក្រុមហ៊ុនសេវាកម្ម" : "Service Provider Tools" },
     ],
     [lang]
   );
+  const reportInventoryIsToolGroup = useMemo(
+    () =>
+      reportInventoryGroupFilter === "ALL" ||
+      reportInventoryGroupFilter === "CLEAN_TOOL" ||
+      reportInventoryGroupFilter === "MAINT_TOOL" ||
+      reportInventoryGroupFilter === "GARDEN_TOOL" ||
+      reportInventoryGroupFilter === "SERVICE_TOOL",
+    [reportInventoryGroupFilter]
+  );
+  const reportInventorySplitByCategoryPages = useMemo(
+    () => reportInventoryGroupFilter === "ALL" && reportInventoryIsToolGroup,
+    [reportInventoryGroupFilter, reportInventoryIsToolGroup]
+  );
+  useEffect(() => {
+    if (reportInventoryGroupFilter === "ALL") {
+      setReportInventoryGroupFilter("CLEAN_TOOL");
+    }
+  }, [reportInventoryGroupFilter]);
+  const reportInventoryToolPages = useMemo(() => {
+    if (!reportInventorySplitByCategoryPages) return [];
+
+    const cleaningRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "CLEAN_TOOL");
+    const maintenanceRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "MAINT_TOOL");
+    const gardenRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "GARDEN_TOOL");
+    const serviceProviderRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "SERVICE_TOOL");
+
+    return [
+      {
+        key: "cleaning",
+        title: "Cleaning Tools",
+        description: "Cleaning tools listed on their own report page.",
+        rows: cleaningRows,
+        sections: [
+          { key: "cleaning", title: "Cleaning Tools", rows: cleaningRows },
+        ],
+      },
+      {
+        key: "maintenance",
+        title: "Maintenance Tools",
+        description: "Campus maintenance tools listed on their own report page.",
+        rows: maintenanceRows,
+        sections: [
+          { key: "maintenance", title: "Maintenance Tools", rows: maintenanceRows },
+        ],
+      },
+      {
+        key: "garden",
+        title: "Garden Tools",
+        description: "Garden tools listed on their own report page.",
+        rows: gardenRows,
+        sections: [
+          { key: "garden", title: "Garden Tools", rows: gardenRows },
+        ],
+      },
+      {
+        key: "service-provider",
+        title: "Service Provider Tools",
+        description: "Service provider company tools listed on their own report page.",
+        rows: serviceProviderRows,
+        sections: [
+          { key: "service-provider", title: "Service Provider Tools", rows: serviceProviderRows },
+        ],
+      },
+    ].filter((page) => page.rows.length);
+  }, [reportInventoryRows, reportInventorySplitByCategoryPages]);
   const inventoryVisibleItemLookup = useMemo(() => {
     const out = new Map<number, InventoryItem>();
     for (const item of inventoryVisibleItems) out.set(Number(item.id), item);
@@ -16865,7 +17050,9 @@ export default function App() {
       if (tx.date < inventoryPurchaseWindow.startYmd || tx.date > inventoryPurchaseWindow.endYmd) continue;
       outByItem.set(tx.itemId, (outByItem.get(tx.itemId) || 0) + tx.qty);
     }
-    let list = inventoryVisibleItems.map((item) => {
+    let list = inventoryVisibleItems
+      .filter((item) => inventoryBusinessGroupValue(item) === "SUPPLY")
+      .map((item) => {
       const currentStock = inventoryStockMap.get(item.id) || 0;
       const usedQty = outByItem.get(item.id) || 0;
       const min = Number(item.minStock || 0);
@@ -17868,9 +18055,13 @@ export default function App() {
     setToolReviewForm((prev) => {
       if (!prev.itemId) return prev;
       if (!toolReviewExistingEntry) {
+        const defaultQty =
+          toolReviewSelectedItem && String(toolReviewSelectedItem.id) === String(prev.itemId)
+            ? String(Number(toolReviewSelectedItem.currentStock || 0))
+            : "";
         return {
           ...prev,
-          countedQty: "",
+          countedQty: defaultQty,
           condition: "Good",
           supervisor: "",
           note: "",
@@ -17888,7 +18079,7 @@ export default function App() {
         photo: toolReviewExistingEntry.photo || "",
       };
     });
-  }, [toolReviewExistingEntry]);
+  }, [toolReviewExistingEntry, toolReviewSelectedItem]);
   useEffect(() => {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
@@ -23484,6 +23675,7 @@ export default function App() {
         nextEntry.itemCode,
         `${nextEntry.month} | ${nextEntry.condition} | ${nextEntry.reviewedBy}`
       );
+      setToolReviewModalOpen(false);
       setToolReviewForm((prev) => ({
         ...prev,
         countedQty: "",
@@ -29619,6 +29811,101 @@ export default function App() {
     setQuickRecordAssetId(asset.id);
   }
 
+  const applyMaintenanceRecordAssetSelection = useCallback(
+    (selectedAsset: Asset | null) => {
+      setMaintenanceRecordForm((f) => ({
+        ...f,
+        assetId: selectedAsset ? String(selectedAsset.id) : "",
+        workflow: {
+          ...normalizeMaintenanceWorkflow(f.workflow),
+          template: getMaintenanceTemplateKey(selectedAsset),
+          checklist: [],
+        },
+      }));
+    },
+    []
+  );
+
+  const matchMaintenanceAssetFromQr = useCallback(
+    (raw: string) => {
+      const assetCode = extractAssetIdFromQrText(raw);
+      if (!assetCode) return null;
+      const normalizeAssetCode = (value: string) => String(value || "").trim().toUpperCase();
+      const scopedCampus =
+        maintenanceQuickMode && maintenanceQuickActiveCampus
+          ? maintenanceQuickActiveCampus
+          : maintenanceRecordCampusFilter !== "ALL"
+            ? maintenanceRecordCampusFilter
+            : "";
+      const campusScopedAssets = scopedCampus
+        ? assets.filter((asset) => String(asset.campus || "").trim() === scopedCampus)
+        : assets;
+      return (
+        campusScopedAssets.find((asset) => normalizeAssetCode(asset.assetId) === assetCode) ||
+        assets.find((asset) => normalizeAssetCode(asset.assetId) === assetCode) ||
+        null
+      );
+    },
+    [assets, maintenanceQuickMode, maintenanceQuickActiveCampus, maintenanceRecordCampusFilter]
+  );
+
+  const submitMaintenanceQrCode = useCallback(
+    (raw: string) => {
+      const selectedAsset = matchMaintenanceAssetFromQr(raw);
+      if (!selectedAsset) {
+        setMaintenanceQrError(
+          lang === "km"
+            ? "រកមិនឃើញ Asset តាម QR នេះទេ។"
+            : "Asset not found from this QR code."
+        );
+        return false;
+      }
+      applyMaintenanceRecordAssetSelection(selectedAsset);
+      setMaintenanceQuickGeneralTask(false);
+      setMaintenanceQrModalOpen(false);
+      setMaintenanceQrManualCode("");
+      setMaintenanceQrError("");
+      return true;
+    },
+    [applyMaintenanceRecordAssetSelection, lang, matchMaintenanceAssetFromQr]
+  );
+
+  const onMaintenanceQrFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setMaintenanceQrBusy(true);
+      setMaintenanceQrError("");
+      try {
+        const DetectorCtor = (window as typeof window & {
+          BarcodeDetector?: new (options?: { formats?: string[] }) => { detect: (source: ImageBitmap) => Promise<Array<{ rawValue?: string }>> };
+        }).BarcodeDetector;
+        if (!DetectorCtor) {
+          throw new Error(lang === "km" ? "Browser នេះមិនគាំទ្រ QR scan ទេ។ សូមវាយលេខ Asset ដោយដៃ។" : "This browser does not support QR scan yet. Please enter the asset code manually.");
+        }
+        const bitmap = await createImageBitmap(file);
+        try {
+          const detector = new DetectorCtor({ formats: ["qr_code"] });
+          const results = await detector.detect(bitmap);
+          const rawValue = String(results[0]?.rawValue || "").trim();
+          if (!rawValue) {
+            throw new Error(lang === "km" ? "មិនអាចអាន QR ពីរូបនេះបានទេ។" : "Could not read a QR code from this image.");
+          }
+          submitMaintenanceQrCode(rawValue);
+        } finally {
+          bitmap.close();
+        }
+      } catch (err) {
+        setMaintenanceQrError(err instanceof Error ? err.message : "Failed to scan QR code.");
+      } finally {
+        setMaintenanceQrBusy(false);
+        e.target.value = "";
+        setMaintenanceQrFileKey((key) => key + 1);
+      }
+    },
+    [lang, submitMaintenanceQrCode]
+  );
+
   function openMaintenanceRecordFromScheduleAsset(asset: Asset, scheduledDate?: string) {
     const preferredDate = String(scheduledDate || asset.nextMaintenanceDate || "").trim() || toYmd(new Date());
     setTab("maintenance");
@@ -34791,6 +35078,107 @@ export default function App() {
     () => maintenanceReportColumnDefs.filter((column) => maintenanceReportVisibleColumns.includes(column.key)),
     [maintenanceReportColumnDefs, maintenanceReportVisibleColumns]
   );
+  const inventoryReportColumnDefs = useMemo<Array<{ key: InventoryReportColumnKey; label: string }>>(
+    () =>
+      reportInventoryIsToolGroup
+        ? [
+            { key: "code", label: "Code" },
+            { key: "photo", label: t.photo },
+            { key: "name", label: "Name" },
+            { key: "campus", label: t.campus },
+            { key: "location", label: t.location },
+            { key: "owner", label: "Owner" },
+            { key: "responsible", label: "Responsible" },
+            { key: "unit", label: "Unit" },
+            { key: "amount", label: "Amount" },
+          ]
+        : [
+            { key: "code", label: "Code" },
+            { key: "photo", label: t.photo },
+            { key: "name", label: "Name" },
+            { key: "category", label: "Category" },
+            { key: "campus", label: t.campus },
+            { key: "location", label: t.location },
+            { key: "unit", label: "Unit" },
+            { key: "stockIn", label: "Stock In" },
+            { key: "stockOut", label: "Stock Out" },
+            { key: "current", label: "Current" },
+            { key: "min", label: "Min" },
+            { key: "alert", label: "Alert" },
+          ],
+    [reportInventoryIsToolGroup, t.photo, t.campus, t.location]
+  );
+  useEffect(() => {
+    setInventoryReportVisibleColumns((prev) => {
+      const allowed: InventoryReportColumnKey[] = inventoryReportColumnDefs.map((column) => column.key);
+      let filtered: InventoryReportColumnKey[] = prev.filter((key) => allowed.includes(key));
+      if (reportInventoryIsToolGroup && !filtered.includes("amount")) {
+        const amountIndex = allowed.indexOf("amount");
+        if (amountIndex >= 0) {
+          filtered = [...filtered, "amount" as InventoryReportColumnKey].sort(
+            (a, b) => allowed.indexOf(a) - allowed.indexOf(b)
+          );
+        }
+      }
+      if (filtered.length) return filtered;
+      return allowed;
+    });
+  }, [inventoryReportColumnDefs, reportInventoryIsToolGroup]);
+  const visibleInventoryReportColumnDefs = useMemo(
+    () => inventoryReportColumnDefs.filter((column) => inventoryReportVisibleColumns.includes(column.key)),
+    [inventoryReportColumnDefs, inventoryReportVisibleColumns]
+  );
+  const updateInventoryReportColumnSelection = useCallback((column: InventoryReportColumnKey) => {
+    setInventoryReportVisibleColumns((prev) => {
+      const exists = prev.includes(column);
+      if (exists) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((item) => item !== column);
+      }
+      const withColumn = [...prev, column];
+      const order = inventoryReportColumnDefs.map((d) => d.key);
+      return [...withColumn].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    });
+  }, [inventoryReportColumnDefs]);
+  const inventoryReportCellText = useCallback(
+    (row: (typeof reportInventoryRows)[number], key: InventoryReportColumnKey) => {
+      switch (key) {
+        case "code":
+          return row.itemCode;
+        case "photo":
+          return String(row.photo || "");
+        case "name":
+          return inventoryDisplayName(row.itemName, lang);
+        case "category":
+          return inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row));
+        case "campus":
+          return inventoryCampusLabel(row.campus);
+        case "location":
+          return row.location || "-";
+        case "owner":
+          return toolOwnerTypeLabel(row.ownerType);
+        case "responsible":
+          return row.responsibleParty || "-";
+        case "unit":
+          return row.unit || "-";
+        case "amount":
+          return String(row.currentStock ?? 0);
+        case "stockIn":
+          return String(row.stockIn ?? 0);
+        case "stockOut":
+          return String(row.stockOut ?? 0);
+        case "current":
+          return String(row.currentStock ?? 0);
+        case "min":
+          return String(row.minStock ?? 0);
+        case "alert":
+          return row.lowStock ? "Low" : "OK";
+        default:
+          return "-";
+      }
+    },
+    [inventoryCampusLabel, lang]
+  );
   const assetMasterCampusTitle = useMemo(() => {
     if (assetMasterCampusFilter.includes("ALL")) return t.allCampuses;
     if (!assetMasterCampusFilter.length) return "-";
@@ -34936,7 +35324,17 @@ export default function App() {
     if (reportType === "inventory_balance") {
       setReportAssetIdFilter("");
       setReportInventoryMode("all");
-      setReportInventoryGroupFilter("ALL");
+      setReportInventoryGroupFilter("CLEAN_TOOL");
+      setReportInventoryCampusFilter("ALL");
+      setInventoryReportVisibleColumns([
+        "code",
+        "photo",
+        "name",
+        "campus",
+        "location",
+        "unit",
+        "amount",
+      ]);
       return;
     }
     if (reportType === "verification_summary") {
@@ -36315,21 +36713,10 @@ export default function App() {
         row.notes || "-",
       ]);
     } else if (reportType === "inventory_balance") {
-      title = `Inventory Stock Balance Report - ${reportInventoryModeLabel} - ${reportInventoryGroupFilterLabel}`;
-      columns = ["Code", "Photo", "Name", "Category", "Campus", "Location", "Unit", "Stock In", "Stock Out", "Current", "Min", "Alert"];
+      title = `${reportInventoryIsToolGroup ? "Inventory Tool Balance Report" : "Inventory Stock Balance Report"} - ${reportInventoryModeLabel} - ${reportInventoryGroupFilterLabel} - ${reportInventoryCampusFilterLabel}`;
+      columns = visibleInventoryReportColumnDefs.map((column) => column.label);
       rows = reportInventoryRows.map((row) => [
-        row.itemCode,
-        toPrintablePhotoUrl(row.photo || ""),
-        inventoryDisplayName(row.itemName, lang),
-        inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row)),
-        inventoryCampusLabel(row.campus),
-        row.location || "-",
-        row.unit || "-",
-        String(row.stockIn ?? 0),
-        String(row.stockOut ?? 0),
-        String(row.currentStock ?? 0),
-        String(row.minStock ?? 0),
-        row.lowStock ? "Low" : "OK",
+        ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
       ]);
     } else if (reportType === "overdue") {
       title = "Overdue Maintenance Report";
@@ -36525,18 +36912,7 @@ export default function App() {
                   .map((row) => {
                     const cells = [
                       String(runningIndex++),
-                      row.itemCode,
-                      toPrintablePhotoUrl(row.photo || ""),
-                      inventoryDisplayName(row.itemName, lang),
-                      inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row)),
-                      inventoryCampusLabel(row.campus),
-                      row.location || "-",
-                      row.unit || "-",
-                      String(row.stockIn ?? 0),
-                      String(row.stockOut ?? 0),
-                      String(row.currentStock ?? 0),
-                      String(row.minStock ?? 0),
-                      row.lowStock ? "Low" : "OK",
+                      ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
                     ];
                     return `<tr>${cells
                       .map((cell) => {
@@ -36588,7 +36964,13 @@ export default function App() {
         : reportType === "furniture_control"
         ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Locations:</strong> ${furnitureControlGapSummary.rooms}</p>`
         : reportType === "inventory_balance"
-        ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Group:</strong> ${escapeHtml(reportInventoryGroupFilterLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${reportInventoryRows.filter((row) => row.lowStock).length}</p>`
+        ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Group:</strong> ${escapeHtml(reportInventoryGroupFilterLabel)} | <strong>Campus:</strong> ${escapeHtml(reportInventoryCampusFilterLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${reportInventoryRows.filter((row) => row.lowStock).length}${
+            reportInventorySplitByCategoryPages
+              ? " | <strong>Layout:</strong> Each tool category prints on its own separate page."
+              : reportInventoryIsToolGroup
+                ? " | <strong>Tool Process:</strong> Campus-owned tools use opening/current quantity, with review, repair, and cross-campus borrow handled separately."
+                : ""
+          }</p>`
         : reportType === "staff_borrowing"
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
         : reportType === "asset_master"
@@ -36934,6 +37316,69 @@ export default function App() {
               </tbody>
             </table>
           </div>`
+        : reportType === "inventory_balance" && reportInventorySplitByCategoryPages
+        ? reportInventoryToolPages.length
+          ? reportInventoryToolPages
+              .map((page, pageIndex) => {
+                const pageSectionsHtml = page.sections
+                  .map((section) => {
+                    const sectionRowsHtml = section.rows.length
+                      ? section.rows
+                          .map((row, rowIndex) => {
+                            const cells = [
+                              String(rowIndex + 1),
+                              ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
+                            ];
+                            return `<tr>${cells
+                              .map((cell) => {
+                                const text = String(cell || "");
+                                if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
+                                  return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
+                                }
+                                return `<td>${escapeHtml(text || "-")}</td>`;
+                              })
+                              .join("")}</tr>`;
+                          })
+                          .join("")
+                      : `<tr><td colspan="${visibleInventoryReportColumnDefs.length + 1}">No tools in this section.</td></tr>`;
+                    return `<section class="inventory-preview-subsection">
+                      <div class="inventory-preview-subsection-head">
+                        <h4>${escapeHtml(section.title)}</h4>
+                        <div class="inventory-preview-page-meta">
+                          <span>Items: ${section.rows.length}</span>
+                          <span>Low Stock: ${section.rows.filter((row) => row.lowStock).length}</span>
+                        </div>
+                      </div>
+                      <div class="preview-table-wrap inventory-preview-table-wrap">
+                        <table class="preview-report-table inventory-preview-report-table">
+                          <thead><tr><th>No.</th>${visibleInventoryReportColumnDefs.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
+                          <tbody>${sectionRowsHtml}</tbody>
+                        </table>
+                      </div>
+                    </section>`;
+                  })
+                  .join("");
+                return `<section class="inventory-preview-page${pageIndex < reportInventoryToolPages.length - 1 ? " inventory-preview-page-break" : ""}">
+                  <div class="inventory-preview-page-head">
+                    <div>
+                      <div class="inventory-preview-page-kicker">Tool Report Page ${pageIndex + 1}</div>
+                      <h3>${escapeHtml(page.title)}</h3>
+                      <p>${escapeHtml(page.description)}</p>
+                    </div>
+                    <div class="inventory-preview-page-meta">
+                      <span>Items: ${page.rows.length}</span>
+                      <span>Low Stock: ${page.rows.filter((row) => row.lowStock).length}</span>
+                    </div>
+                  </div>
+                  ${pageSectionsHtml}
+                </section>`;
+              })
+              .join("")
+          : `<div class="preview-table-wrap">
+              <table class="preview-report-table">
+                <tbody><tr><td>${escapeHtml(reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data.")}</td></tr></tbody>
+              </table>
+            </div>`
         : `<div class="preview-table-wrap">
           <table class="preview-report-table">
           <colgroup>${initialColumnWidths.map((width) => `<col style="width:${width}%;" />`).join("")}</colgroup>
@@ -36983,6 +37428,83 @@ export default function App() {
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
           .preview-report-table th,
           .preview-report-table td { word-break: normal; overflow-wrap: break-word; hyphens: auto; }
+          .inventory-preview-page {
+            border: 1px solid #d8dfeb;
+            border-radius: 18px;
+            background: #fff;
+            padding: 16px 16px 10px;
+            margin-bottom: 18px;
+          }
+          .inventory-preview-page-break {
+            break-after: page;
+            page-break-after: always;
+          }
+          .inventory-preview-page-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
+          }
+          .inventory-preview-page-kicker {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #70809a;
+            margin-bottom: 6px;
+          }
+          .inventory-preview-page-head h3 {
+            margin: 0;
+            font-size: 24px;
+            color: #17304d;
+          }
+          .inventory-preview-page-head p {
+            margin: 8px 0 0;
+            font-size: 13px;
+            color: #61728b;
+            line-height: 1.45;
+            max-width: 720px;
+          }
+          .inventory-preview-page-meta {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+          }
+          .inventory-preview-page-meta span {
+            border: 1px solid #d8dfeb;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #425775;
+            background: #f5f8fd;
+          }
+          .inventory-preview-table-wrap {
+            margin-top: 0;
+          }
+          .inventory-preview-subsection {
+            border-top: 1px solid #e3e9f3;
+            padding-top: 12px;
+            margin-top: 12px;
+          }
+          .inventory-preview-subsection:first-of-type {
+            border-top: 0;
+            padding-top: 0;
+            margin-top: 0;
+          }
+          .inventory-preview-subsection-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+          }
+          .inventory-preview-subsection-head h4 {
+            margin: 0;
+            font-size: 16px;
+            color: #29415e;
+          }
           .preview-furniture-qty { line-height: 1.3; }
           .preview-furniture-qty-total { font-weight: 800; }
           .preview-furniture-qty-divider { margin: 3px 0 4px; border-top: 1px solid #cfded0; }
@@ -39302,7 +39824,11 @@ function formatTicketRequestSource(value?: string) {
                               }}
                             >
                               <span className="mobile-menu-nav-icon" aria-hidden={true}>
-                                {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
+                                {item.id === "maintenance"
+                                  ? navIcon("maintenance")
+                                  : item.id === "verification"
+                                    ? navIcon("verification")
+                                    : navIcon("inventory")}
                               </span>
                               <span className="mobile-menu-nav-label">{item.label}</span>
                             </button>
@@ -39770,7 +40296,11 @@ function formatTicketRequestSource(value?: string) {
                           onClick={item.onSelect}
                         >
                           <span className="maintenance-quick-nav-icon" aria-hidden={true}>
-                            {item.id === "inventory" ? navIcon("inventory") : item.id === "maintenance" ? navIcon("maintenance") : navIcon("verification")}
+                            {item.id === "maintenance"
+                              ? navIcon("maintenance")
+                              : item.id === "verification"
+                                ? navIcon("verification")
+                                : navIcon("inventory")}
                           </span>
                           <span>{item.label}</span>
                         </button>
@@ -47479,36 +48009,38 @@ function formatTicketRequestSource(value?: string) {
               </section>
             )}
 
-            {!maintenanceQuickMode && inventoryDashboardGroup !== "SUPPLY" && inventoryView === "review" && (
+            {inventoryDashboardGroup !== "SUPPLY" && inventoryView === "review" && (
               <section className="panel">
                 <div className="panel-row">
                   <div>
-                    <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} Monthly Review</h2>
+                    <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} Monthly Verification</h2>
                     <p className="tiny">
-                      Count actual tools, retake a proof photo, and record condition every month for audit and follow-up.
+                      Phone-friendly monthly checking for staff. Tap one tool card, confirm the amount, and save the condition.
                     </p>
                   </div>
                   <div className="detail-value">{toolReviewMonth}</div>
                 </div>
 
-                <div className="stats-grid" style={{ marginBottom: 16 }}>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-neutral">
-                    <div className="stat-label">Tools In Scope</div>
-                    <div className="stat-value">{toolReviewSummary.totalTools}</div>
+                {!(maintenanceQuickMode && isPhoneView) ? (
+                  <div className="stats-grid" style={{ marginBottom: 16 }}>
+                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-neutral">
+                      <div className="stat-label">Tools In Scope</div>
+                      <div className="stat-value">{toolReviewSummary.totalTools}</div>
+                    </div>
+                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-primary">
+                      <div className="stat-label">Reviewed</div>
+                      <div className="stat-value">{toolReviewSummary.reviewed}</div>
+                    </div>
+                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-alert">
+                      <div className="stat-label">Pending</div>
+                      <div className="stat-value">{toolReviewSummary.pending}</div>
+                    </div>
+                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-danger">
+                      <div className="stat-label">Issues</div>
+                      <div className="stat-value">{toolReviewSummary.issues}</div>
+                    </div>
                   </div>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-primary">
-                    <div className="stat-label">Reviewed</div>
-                    <div className="stat-value">{toolReviewSummary.reviewed}</div>
-                  </div>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-alert">
-                    <div className="stat-label">Pending</div>
-                    <div className="stat-value">{toolReviewSummary.pending}</div>
-                  </div>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-danger">
-                    <div className="stat-label">Issues</div>
-                    <div className="stat-value">{toolReviewSummary.issues}</div>
-                  </div>
-                </div>
+                ) : null}
 
                 <div className="panel-filters" style={{ marginBottom: 16 }}>
                   <label className="field">
@@ -47527,6 +48059,17 @@ function formatTicketRequestSource(value?: string) {
                     </select>
                   </label>
                   <label className="field">
+                    <span>Area</span>
+                    <select className="input" value={toolReviewAreaFilter} onChange={(e) => setToolReviewAreaFilter(e.target.value)}>
+                      <option value="ALL">All Areas</option>
+                      {toolReviewAreaOptions.map((area) => (
+                        <option key={`tool-review-area-${area}`} value={area}>
+                          {area}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
                     <span>{t.location}</span>
                     <select className="input" value={toolReviewLocationFilter} onChange={(e) => setToolReviewLocationFilter(e.target.value)}>
                       <option value="ALL">All Locations</option>
@@ -47538,7 +48081,7 @@ function formatTicketRequestSource(value?: string) {
                     </select>
                   </label>
                   <label className="field">
-                    <span>Supervisor Filter</span>
+                    <span>Supervisor</span>
                     <select className="input" value={toolReviewSupervisorFilter} onChange={(e) => setToolReviewSupervisorFilter(e.target.value)}>
                       <option value="ALL">All Supervisors</option>
                       {toolReviewSupervisorOptions.map((supervisor) => (
@@ -47550,136 +48093,197 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                 </div>
 
-                <div className="form-grid">
-                  <label className="field field-wide">
-                    <span>Tool Item</span>
-                    <select
-                      className="input"
-                      value={toolReviewForm.itemId}
-                      onChange={(e) =>
-                        setToolReviewForm((prev) => ({
-                          ...prev,
-                          itemId: e.target.value,
-                          countedQty: "",
-                          condition: "Good",
-                          supervisor: "",
-                          note: "",
-                          photo: "",
-                        }))
-                      }
-                    >
-                      <option value="">Select tool item</option>
-                      {toolReviewItemOptions.map((row) => (
-                        <option key={`tool-review-item-${row.id}`} value={row.id}>
-                          {row.itemCode} - {inventoryDisplayName(row.itemName, lang)} • {inventoryCampusLabel(row.campus)} • {row.location}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Counted Qty</span>
-                    <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Condition</span>
-                    <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
-                      {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
-                        <option key={`tool-review-condition-${option}`} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Reviewed By</span>
-                    <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Supervisor</span>
-                    <input className="input" value={toolReviewForm.supervisor} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, supervisor: e.target.value }))} />
-                  </label>
-                  <label className="field field-wide">
-                    <span>Monthly Photo Proof</span>
-                    <input key={`tool-review-photo-${toolReviewPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={onToolReviewPhotoFile} />
-                  </label>
-                  <label className="field field-wide">
-                    <span>Note</span>
-                    <textarea className="textarea" value={toolReviewForm.note} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Missing pieces, damaged parts, borrowed tools, replacement needed..." />
-                  </label>
-                </div>
-
-                {toolReviewSelectedItem ? (
-                  <div className="panel-note" style={{ marginTop: 12, marginBottom: 16 }}>
-                    <strong>{toolReviewSelectedItem.itemCode}</strong> • {inventoryDisplayName(toolReviewSelectedItem.itemName, lang)} • Expected stock: <strong>{toolReviewSelectedItem.currentStock} {toolReviewSelectedItem.unit}</strong> • {inventoryDashboardGroup === "SERVICE_TOOL" ? "Provider" : "Responsible"}: <strong>{toolReviewSelectedItem.responsibleParty || "-"}</strong>
+                <article className="panel inventory-daily-gallery-panel tool-review-gallery-panel">
+                  <div className="panel-row">
+                    <h3 className="section-title">Monthly Verification Gallery</h3>
+                    <div className="tiny">
+                      Tap a card to verify it. Reviewed this month: {toolReviewSummary.reviewed} / {toolReviewSummary.totalTools}
+                    </div>
                   </div>
-                ) : null}
 
-                {toolReviewForm.photo ? (
-                  <div style={{ marginBottom: 16 }}>
-                    <img
-                      src={toolReviewForm.photo}
-                      alt="Tool review proof"
-                      style={{ width: isPhoneView ? "100%" : 220, maxWidth: "100%", borderRadius: 16, border: "1px solid rgba(120,160,220,0.35)", objectFit: "cover" }}
-                    />
-                  </div>
-                ) : null}
+                  {toolReviewItemOptions.length ? (
+                    <div className="inventory-daily-gallery-grid tool-review-card-grid">
+                      {toolReviewItemOptions.map((row) => {
+                        const reviewedEntry = toolReviewMonthReportByItemId.get(String(row.id));
+                        const selected = String(toolReviewForm.itemId || "") === String(row.id);
+                        return (
+                          <button
+                            type="button"
+                            key={`tool-review-gallery-${row.id}`}
+                            className={`inventory-daily-gallery-card tool-review-card ${selected ? "is-selected" : ""} ${reviewedEntry ? "is-reviewed" : "is-pending"}`}
+                            onClick={() => openToolReviewItem(row, reviewedEntry)}
+                          >
+                            {row.photo ? (
+                              <img loading="lazy" decoding="async" src={row.photo} alt={row.itemCode} className="inventory-daily-gallery-photo tool-review-card-photo" />
+                            ) : (
+                              <span className="inventory-daily-gallery-icon tool-review-card-icon" aria-hidden={true}>
+                                🧰
+                              </span>
+                            )}
+                            <span className="inventory-daily-gallery-name">{inventoryDisplayName(row.itemName, lang)}</span>
+                            <span className="inventory-daily-gallery-meta">
+                              {row.itemCode} | {inventoryCampusLabel(row.campus)}
+                              <br />
+                              {row.location || "-"} | Amount: {Number(row.currentStock || 0)} {row.unit || "pcs"}
+                            </span>
+                            <span className={`tool-review-card-status ${reviewedEntry ? "is-reviewed" : "is-pending"}`}>
+                              {reviewedEntry ? reviewedEntry.condition : "Pending"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="panel-note">No tool items match the current monthly verification filters.</div>
+                  )}
+                </article>
 
-                <div className="asset-actions">
-                  <div className="tiny">
-                    Save one review per month for each tool item. If you save the same month and tool again, the record will update.
-                  </div>
-                  <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
-                    {toolReviewExistingEntry ? "Update Monthly Review" : "Save Monthly Review"}
-                  </button>
-                </div>
+                {!maintenanceQuickMode ? (
+                <div className="tool-review-workspace">
+                  <section className="tool-review-detail-panel">
+                    <div className="panel-row">
+                      <div>
+                        <h3 className="section-title">Verification Form</h3>
+                        <p className="tiny">Choose one tool card, then confirm amount and condition.</p>
+                      </div>
+                      {toolReviewSelectedItem ? (
+                        <span className={`tool-review-card-status ${toolReviewExistingEntry ? "is-reviewed" : "is-pending"}`}>
+                          {toolReviewExistingEntry ? "Already Reviewed" : "Waiting Review"}
+                        </span>
+                      ) : null}
+                    </div>
 
-                <div className="table-wrap" style={{ marginTop: 16 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Month</th>
-                        <th>Tool</th>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
-                        <th>Expected</th>
-                        <th>Counted</th>
-                        <th>Condition</th>
-                        <th>Reviewed By</th>
-                        <th>Supervisor</th>
-                        <th>{t.photo}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {toolReviewMonthReports.length ? (
-                        toolReviewMonthReports.map((row) => (
-                          <tr key={`tool-review-row-${row.id}`}>
-                            <td>{row.month}</td>
-                            <td>
+                    {toolReviewSelectedItem ? (
+                      <>
+                        <div className="tool-review-selected-hero">
+                          {toolReviewSelectedItem.photo ? (
+                            <img
+                              loading="lazy"
+                              decoding="async"
+                              src={toolReviewSelectedItem.photo}
+                              alt={toolReviewSelectedItem.itemCode}
+                              className="tool-review-selected-photo"
+                            />
+                          ) : (
+                            <div className="tool-review-selected-photo tool-review-selected-photo-empty">🧰</div>
+                          )}
+                          <div className="tool-review-selected-copy">
+                            <strong>{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
+                            <span>{toolReviewSelectedItem.itemCode}</span>
+                            <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)} • {toolReviewSelectedItem.location || "-"}</span>
+                          </div>
+                        </div>
+
+                        <div className="tool-review-meta-grid">
+                          <article className="tool-review-meta-card">
+                            <small>Expected Amount</small>
+                            <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
+                          </article>
+                          <article className="tool-review-meta-card">
+                            <small>{inventoryDashboardGroup === "SERVICE_TOOL" ? "Provider" : "Responsible"}</small>
+                            <strong>{toolReviewSelectedItem.responsibleParty || "-"}</strong>
+                          </article>
+                          <article className="tool-review-meta-card">
+                            <small>Last Update</small>
+                            <strong>{toolReviewExistingEntry?.updated ? formatDateTime(toolReviewExistingEntry.updated) : "Not yet"}</strong>
+                          </article>
+                        </div>
+
+                        <div className="form-grid tool-review-form-grid">
+                          <label className="field">
+                            <span>Counted Amount</span>
+                            <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
+                          </label>
+                          <label className="field">
+                            <span>Condition</span>
+                            <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
+                              {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
+                                <option key={`tool-review-condition-${option}`} value={option}>{option}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Reviewed By</span>
+                            <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
+                          </label>
+                          <label className="field">
+                            <span>Supervisor</span>
+                            <input className="input" value={toolReviewForm.supervisor} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, supervisor: e.target.value }))} />
+                          </label>
+                          <label className="field field-wide">
+                            <span>Monthly Photo Proof</span>
+                            <input key={`tool-review-photo-${toolReviewPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={onToolReviewPhotoFile} />
+                          </label>
+                          <label className="field field-wide">
+                            <span>Note</span>
+                            <textarea className="textarea" value={toolReviewForm.note} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Missing pieces, damaged parts, borrowed tools, replacement needed..." />
+                          </label>
+                        </div>
+
+                        {toolReviewForm.photo ? (
+                          <div className="tool-review-proof-preview">
+                            <img
+                              src={toolReviewForm.photo}
+                              alt="Tool review proof"
+                              style={{ width: "100%", maxWidth: isPhoneView ? "100%" : 260, borderRadius: 16, border: "1px solid rgba(120,160,220,0.35)", objectFit: "cover" }}
+                            />
+                          </div>
+                        ) : null}
+
+                        <div className="asset-actions">
+                          <div className="tiny">
+                            Save one review per month for each tool item. Saving again in the same month will update that item.
+                          </div>
+                          <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
+                            {toolReviewExistingEntry ? "Update Monthly Review" : "Save Monthly Review"}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="panel-note">Select a tool card above to start monthly verification.</div>
+                    )}
+                  </section>
+
+                  <section className="tool-review-history-panel">
+                    <div className="panel-row">
+                      <div>
+                        <h3 className="section-title">Reviewed This Month</h3>
+                        <p className="tiny">Simple list for follow-up and audit check.</p>
+                      </div>
+                    </div>
+                    {toolReviewMonthReports.length ? (
+                      <div className="tool-review-history-list">
+                        {toolReviewMonthReports.map((row) => (
+                          <button
+                            type="button"
+                            key={`tool-review-row-${row.id}`}
+                            className={`tool-review-history-card ${String(toolReviewForm.itemId || "") === String(row.itemId) ? "is-selected" : ""}`}
+                            onClick={() => {
+                              const selectedRow = toolReviewItemOptions.find((item) => String(item.id) === String(row.itemId));
+                              if (selectedRow) {
+                                openToolReviewItem(selectedRow, row);
+                              }
+                            }}
+                          >
+                            <div className="tool-review-history-main">
                               <strong>{row.itemCode}</strong>
-                              <div className="tiny">{inventoryDisplayName(row.itemName, lang)}</div>
-                            </td>
-                            <td>{inventoryCampusLabel(row.campus)}</td>
-                            <td>{row.location || "-"}</td>
-                            <td>{row.expectedQty} {row.unit}</td>
-                            <td>{row.countedQty} {row.unit}</td>
-                            <td>{row.condition}</td>
-                            <td>{row.reviewedBy || "-"}</td>
-                            <td>{row.supervisor || "-"}</td>
-                            <td>
-                              {row.photo ? (
-                                <img src={row.photo} alt={row.itemCode} style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover" }} />
-                              ) : (
-                                <span className="tiny">No photo</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={10}>No monthly tool reviews yet for this filter set.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                              <span>{inventoryDisplayName(row.itemName, lang)}</span>
+                              <small>{inventoryCampusLabel(row.campus)} • {row.location || "-"}</small>
+                            </div>
+                            <div className="tool-review-history-side">
+                              <span className={`tool-review-card-status ${row.condition === "Good" ? "is-reviewed" : "is-pending"}`}>{row.condition}</span>
+                              <small>{row.countedQty} {row.unit}</small>
+                              <small>{row.reviewedBy || "-"}</small>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="panel-note">No monthly tool reviews yet for this month and filter set.</div>
+                    )}
+                  </section>
                 </div>
+                ) : null}
               </section>
             )}
 
@@ -53165,25 +53769,35 @@ function formatTicketRequestSource(value?: string) {
                 {!maintenanceQuickGeneralTask ? (
                   <label className="field field-wide">
                     <span>{lang === "km" ? "ទ្រព្យ ឬ សម្ភារៈ" : "Asset or Item"}</span>
-                    <AssetPicker
-                      value={maintenanceRecordForm.assetId}
-                      assets={maintenanceRecordFilteredAssets}
-                      getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")}`}
-                      onChange={(assetId) => {
-                        const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
-                        setMaintenanceRecordForm((f) => ({
-                          ...f,
-                          assetId,
-                          workflow: {
-                            ...normalizeMaintenanceWorkflow(f.workflow),
-                            template: getMaintenanceTemplateKey(selectedAsset),
-                            checklist: [],
-                          },
-                        }));
-                      }}
-                      placeholder={lang === "km" ? "ជ្រើសទ្រព្យ ឬ សម្ភារៈ" : "Select asset"}
-                      disabled={!maintenanceRecordFilteredAssets.length}
-                    />
+                    <div className="maintenance-asset-picker-row">
+                      <div className="maintenance-asset-picker-main">
+                        <AssetPicker
+                          value={maintenanceRecordForm.assetId}
+                          assets={maintenanceRecordFilteredAssets}
+                          getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")}`}
+                          onChange={(assetId) => {
+                            const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
+                            applyMaintenanceRecordAssetSelection(
+                              selectedAsset && String(selectedAsset.id) === String(assetId) ? selectedAsset : null
+                            );
+                          }}
+                          placeholder={lang === "km" ? "ជ្រើសទ្រព្យ ឬ សម្ភារៈ" : "Select asset"}
+                          disabled={!maintenanceRecordFilteredAssets.length}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="tab btn-small maintenance-qr-inline-btn"
+                        onClick={() => {
+                          setMaintenanceQrModalOpen(true);
+                          setMaintenanceQrError("");
+                          setMaintenanceQrManualCode("");
+                        }}
+                      >
+                        <Camera size={15} />
+                        <span>{lang === "km" ? "ស្កេន QR" : "Scan QR"}</span>
+                      </button>
+                    </div>
                     <div className="tiny">
                       {maintenanceRecordFilteredAssets.length
                         ? (lang === "km"
@@ -57018,11 +57632,6 @@ function formatTicketRequestSource(value?: string) {
               </div>
             ) : null}
             {reportType === "inventory_balance" ? (
-              <div className="tiny" style={{ marginBottom: 10 }}>
-                Standard print mode: {reportInventoryModeLabel} | Group: {reportInventoryGroupFilterLabel}
-              </div>
-            ) : null}
-            {reportType === "inventory_balance" ? (
               <div className="report-inventory-group-tabs" role="tablist" aria-label="Inventory report groups">
                 {reportInventoryGroupTabs.map((tabOption) => {
                   const active = reportInventoryGroupFilter === tabOption.value;
@@ -57041,40 +57650,42 @@ function formatTicketRequestSource(value?: string) {
                 })}
               </div>
             ) : null}
-            <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""}`}>
-              <div className="report-builder-top">
-                <label className="field report-type-field">
-                  <span>{lang === "km" ? "ជំហានទី 1៖ ជ្រើសប្រភេទរបាយការណ៍" : "Step 1: Choose Report Type"}</span>
-                  <LocationPicker
-                    value={reportType}
-                    onChange={(value) => {
-                      const next = value as ReportType;
-                      setReportType(next);
-                      setReportSection(REPORT_TYPE_SECTION_MAP[next]);
-                    }}
-                    options={currentSectionReportTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
-                    placeholder={lang === "km" ? "ជ្រើសប្រភេទរបាយការណ៍" : "Choose report type"}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទរបាយការណ៍..." : "Search report type..."}
-                    emptyText={lang === "km" ? "មិនមានប្រភេទរបាយការណ៍" : "No report type found."}
-                  />
-                </label>
-                <div className="report-builder-actions">
-                  <button
-                    type="button"
-                    className="tab report-mobile-filter-btn"
-                    onClick={() => setReportMobileFiltersOpen((open) => !open)}
-                  >
-                    {isPhoneView && reportMobileFiltersOpen
-                      ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
-                      : (lang === "km" ? "តម្រង" : "Filters")}
-                  </button>
-                  {isPhoneView ? (
-                    <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
-                      {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+            <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""} ${reportType === "inventory_balance" ? "report-builder-inventory" : ""}`}>
+              {reportType !== "inventory_balance" ? (
+                <div className="report-builder-top">
+                  <label className="field report-type-field">
+                    <span>{lang === "km" ? "ជំហានទី 1៖ ជ្រើសប្រភេទរបាយការណ៍" : "Step 1: Choose Report Type"}</span>
+                    <LocationPicker
+                      value={reportType}
+                      onChange={(value) => {
+                        const next = value as ReportType;
+                        setReportType(next);
+                        setReportSection(REPORT_TYPE_SECTION_MAP[next]);
+                      }}
+                      options={currentSectionReportTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
+                      placeholder={lang === "km" ? "ជ្រើសប្រភេទរបាយការណ៍" : "Choose report type"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទរបាយការណ៍..." : "Search report type..."}
+                      emptyText={lang === "km" ? "មិនមានប្រភេទរបាយការណ៍" : "No report type found."}
+                    />
+                  </label>
+                  <div className="report-builder-actions">
+                    <button
+                      type="button"
+                      className="tab report-mobile-filter-btn"
+                      onClick={() => setReportMobileFiltersOpen((open) => !open)}
+                    >
+                      {isPhoneView && reportMobileFiltersOpen
+                        ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                        : (lang === "km" ? "តម្រង" : "Filters")}
                     </button>
-                  ) : null}
+                    {isPhoneView ? (
+                      <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
+                        {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : null}
               {hasReportFilters ? (
                 <>
                   <div
@@ -57084,7 +57695,9 @@ function formatTicketRequestSource(value?: string) {
                         : ""
                     }`}
                   >
-                    {lang === "km" ? "ជំហានទី 2៖ ជ្រើសតម្រង (បើចាំបាច់)" : "Step 2: Set Filters (if needed)"}
+                    {reportType === "inventory_balance"
+                      ? (lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters")
+                      : (lang === "km" ? "ជំហានទី 2៖ ជ្រើសតម្រង (បើចាំបាច់)" : "Step 2: Set Filters (if needed)")}
                   </div>
                   {isPhoneView && reportMobileFiltersOpen ? (
                     <button
@@ -57109,7 +57722,7 @@ function formatTicketRequestSource(value?: string) {
                         {lang === "km" ? "រួចរាល់" : "Done"}
                       </button>
                     </div>
-                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""}`}>
+                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""} ${reportType === "inventory_balance" ? "report-filter-row-inventory" : ""}`}>
               {reportType === "maintenance_completion" ? (
                 <>
                   <input
@@ -57192,17 +57805,60 @@ function formatTicketRequestSource(value?: string) {
                 </>
               ) : null}
               {reportType === "inventory_balance" ? (
-                <LocationPicker
-                  value={reportInventoryMode}
-                  onChange={(value) => setReportInventoryMode(value as "all" | "low")}
-                  options={[
-                    { value: "all", label: lang === "km" ? "ស្តុកទាំងអស់" : "All Stock Items" },
-                    { value: "low", label: lang === "km" ? "ស្តុកទាបតែប៉ុណ្ណោះ" : "Low Stock Only" },
-                  ]}
-                  placeholder={lang === "km" ? "ជ្រើសរបៀបស្តុក" : "Select stock mode"}
-                  searchPlaceholder={lang === "km" ? "ស្វែងរករបៀប..." : "Search mode..."}
-                  emptyText={lang === "km" ? "មិនមានជម្រើស" : "No mode found."}
-                />
+                <>
+                  <LocationPicker
+                    value={reportInventoryMode}
+                    onChange={(value) => setReportInventoryMode(value as "all" | "low")}
+                    options={[
+                      { value: "all", label: lang === "km" ? "ស្តុកទាំងអស់" : "All Stock Items" },
+                      { value: "low", label: lang === "km" ? "ស្តុកទាបតែប៉ុណ្ណោះ" : "Low Stock Only" },
+                    ]}
+                    placeholder={lang === "km" ? "ជ្រើសរបៀបស្តុក" : "Select stock mode"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរករបៀប..." : "Search mode..."}
+                    emptyText={lang === "km" ? "មិនមានជម្រើស" : "No mode found."}
+                  />
+                  <LocationPicker
+                    value={reportInventoryCampusFilter}
+                    onChange={(value) => setReportInventoryCampusFilter(value)}
+                    options={[
+                      { value: "ALL", label: t.allCampuses },
+                      ...reportInventoryCampusOptions.map((campus) => ({
+                        value: campus,
+                        label: inventoryCampusLabel(campus),
+                      })),
+                    ]}
+                    placeholder={lang === "km" ? "ជ្រើសសាខា" : "Filter Campus"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={columnFilterSummary}
+                    options={inventoryReportColumnDefs.map((column) => ({
+                      value: column.key,
+                      label: column.label,
+                    }))}
+                    selectedValues={inventoryReportVisibleColumns}
+                    onToggleValue={(value) => updateInventoryReportColumnSelection(value as InventoryReportColumnKey)}
+                    allOptionLabel={lang === "km" ? "ជ្រើសទាំងអស់" : "All Columns"}
+                    allOptionChecked={inventoryReportVisibleColumns.length === inventoryReportColumnDefs.length}
+                    onToggleAllOption={(checked) =>
+                      setInventoryReportVisibleColumns(
+                        checked ? inventoryReportColumnDefs.map((column) => column.key) : inventoryReportVisibleColumns
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search columns..."}
+                    emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No columns found."}
+                  />
+                  {!isPhoneView ? (
+                    <button
+                      type="button"
+                      className="tab report-filter-reset-btn report-filter-reset-btn-inline"
+                      onClick={resetReportFilters}
+                    >
+                      {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                    </button>
+                  ) : null}
+                </>
               ) : null}
               {reportType === "verification_summary" && reportPeriodMode === "month" ? (
                 <input
@@ -57645,7 +58301,7 @@ function formatTicketRequestSource(value?: string) {
                   />
                 </>
               ) : null}
-                      {!isPhoneView ? (
+                      {!isPhoneView && reportType !== "inventory_balance" ? (
                         <>
                           <button
                             type="button"
@@ -57666,10 +58322,12 @@ function formatTicketRequestSource(value?: string) {
                     : "No extra filters for this report. You can go directly to print."}
                 </div>
               )}
-              <div className="report-builder-hint">
-                <strong>{selectedReportDisplayTitle}</strong>
-                <span>{selectedReportDisplayGuide}</span>
-              </div>
+              {reportType !== "inventory_balance" ? (
+                <div className="report-builder-hint">
+                  <strong>{selectedReportDisplayTitle}</strong>
+                  <span>{selectedReportDisplayGuide}</span>
+                </div>
+              ) : null}
               {reportType === "qr_labels" ? (
                 <div className="panel-filters qr-size-toolbar">
                   <div className="tiny report-filters-title">
@@ -57741,11 +58399,6 @@ function formatTicketRequestSource(value?: string) {
             {reportType === "set_code" && (
               <div className="panel-note">
                 <strong>Computer set view:</strong> one row per set with main asset and connected items (with photos).
-              </div>
-            )}
-            {reportType === "inventory_balance" && (
-              <div className="panel-note">
-                <strong>Inventory stock report:</strong> standard printable stock balance table for submission and review.
               </div>
             )}
             {reportType === "furniture_control" && (
@@ -58403,61 +59056,123 @@ function formatTicketRequestSource(value?: string) {
             )}
 
             {reportType === "inventory_balance" && (
-              <div className="table-wrap report-table-wrap" style={{ marginTop: 12 }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>{t.photo}</th>
-                      <th>Name</th>
-                      <th>Category</th>
-                      <th>{t.campus}</th>
-                      <th>{t.location}</th>
-                      <th>Unit</th>
-                      <th>Stock In</th>
-                      <th>Stock Out</th>
-                      <th>Current</th>
-                      <th>Min</th>
-                      <th>Alert</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportInventoryGroupedRows.length ? (
-                      reportInventoryGroupedRows.flatMap((section) => [
-                        (
-                          <tr key={`report-inventory-section-${section.group}`} className="report-section-row">
-                            <td colSpan={12}>
-                              <strong>{section.label}</strong>
+              reportInventorySplitByCategoryPages ? (
+                <div className="report-inventory-pages">
+                  {reportInventoryToolPages.length ? (
+                    reportInventoryToolPages.map((page, pageIndex) => (
+                      <section key={`report-inventory-page-${page.key}`} className="report-inventory-page-card">
+                        <div className="report-inventory-page-head">
+                          <div>
+                            <div className="report-inventory-page-kicker">Tool Report Page {pageIndex + 1}</div>
+                            <h4>{page.title}</h4>
+                            <p className="report-inventory-page-copy">{page.description}</p>
+                          </div>
+                          <div className="report-inventory-page-stats">
+                            <span>{page.rows.length} items</span>
+                            <span>{page.rows.filter((row) => row.lowStock).length} low stock</span>
+                          </div>
+                        </div>
+                        <div className="report-inventory-page-sections">
+                          {page.sections.map((section) => (
+                            <section key={`report-inventory-page-section-${page.key}-${section.key}`} className="report-inventory-subsection">
+                              <div className="report-inventory-subsection-head">
+                                <div>
+                                  <h5>{section.title}</h5>
+                                </div>
+                                <div className="report-inventory-subsection-stats">
+                                  <span>{section.rows.length} items</span>
+                                  <span>{section.rows.filter((row) => row.lowStock).length} low stock</span>
+                                </div>
+                              </div>
+                              <div className="table-wrap report-table-wrap report-table-wrap-inventory report-table-wrap-inventory-page">
+                                <table>
+                                  <thead>
+                                    <tr>
+                                      {visibleInventoryReportColumnDefs.map((column) => (
+                                        <th key={`report-inventory-page-col-${page.key}-${section.key}-${column.key}`}>{column.label}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {section.rows.length ? (
+                                      section.rows.map((row) => (
+                                        <tr key={`report-inventory-balance-${page.key}-${section.key}-${row.id}`}>
+                                          {visibleInventoryReportColumnDefs.map((column) => (
+                                            <td key={`report-inventory-page-cell-${page.key}-${section.key}-${row.id}-${column.key}`}>
+                                              {column.key === "photo"
+                                                ? renderAssetPhoto(row.photo || "", row.itemCode)
+                                                : column.key === "code" || column.key === "amount"
+                                                  ? <strong>{inventoryReportCellText(row, column.key)}</strong>
+                                                  : inventoryReportCellText(row, column.key)}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr>
+                                        <td colSpan={Math.max(visibleInventoryReportColumnDefs.length, 1)}>No tools in this section.</td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </section>
+                          ))}
+                        </div>
+                      </section>
+                    ))
+                  ) : (
+                    <div className="table-wrap report-table-wrap report-table-wrap-inventory" style={{ marginTop: 12 }}>
+                      <table>
+                        <tbody>
+                          <tr>
+                            <td colSpan={10}>
+                              {reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data."}
                             </td>
                           </tr>
-                        ),
-                        ...section.rows.map((row) => (
-                          <tr key={`report-inventory-balance-${section.group}-${row.id}`}>
-                            <td><strong>{row.itemCode}</strong></td>
-                            <td>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                            <td>{inventoryDisplayName(row.itemName, lang)}</td>
-                            <td>{inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}</td>
-                            <td>{inventoryCampusLabel(row.campus)}</td>
-                            <td>{row.location || "-"}</td>
-                            <td>{row.unit || "-"}</td>
-                            <td>{row.stockIn}</td>
-                            <td>{row.stockOut}</td>
-                            <td><strong>{row.currentStock}</strong></td>
-                            <td>{row.minStock}</td>
-                            <td>{row.lowStock ? "Low" : "OK"}</td>
-                          </tr>
-                        )),
-                      ])
-                    ) : (
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap report-table-wrap report-table-wrap-inventory" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
                       <tr>
-                        <td colSpan={12}>
-                          {reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data."}
-                        </td>
+                        {visibleInventoryReportColumnDefs.map((column) => (
+                          <th key={`report-inventory-col-${column.key}`}>{column.label}</th>
+                        ))}
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {reportInventoryGroupedRows.length ? (
+                        reportInventoryGroupedRows.flatMap((section) =>
+                          section.rows.map((row) => (
+                            <tr key={`report-inventory-balance-${section.group}-${row.id}`}>
+                              {visibleInventoryReportColumnDefs.map((column) => (
+                                <td key={`report-inventory-cell-${section.group}-${row.id}-${column.key}`}>
+                                  {column.key === "photo"
+                                    ? renderAssetPhoto(row.photo || "", row.itemCode)
+                                    : column.key === "code" || column.key === "amount" || column.key === "current"
+                                      ? <strong>{inventoryReportCellText(row, column.key)}</strong>
+                                    : inventoryReportCellText(row, column.key)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))
+                        )
+                      ) : (
+                        <tr>
+                          <td colSpan={Math.max(visibleInventoryReportColumnDefs.length, 1)}>
+                            {reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )
             )}
 
             {reportType === "asset_full_record" && (
@@ -63402,6 +64117,72 @@ function formatTicketRequestSource(value?: string) {
             </section>
           </div>
         ) : null}
+        {maintenanceQrModalOpen ? (
+          <div className="modal-backdrop" onClick={() => setMaintenanceQrModalOpen(false)}>
+            <section className="panel modal-panel tool-review-modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <div>
+                  <h2>{lang === "km" ? "ស្កេន QR សម្រាប់ Asset" : "Scan QR For Asset"}</h2>
+                  <div className="tiny">
+                    {lang === "km"
+                      ? "ស្កេន QR របស់ Asset ដើម្បីភ្ជាប់ទៅ Maintenance form ដោយស្វ័យប្រវត្តិ។"
+                      : "Scan the asset QR code to link it directly into the maintenance form."}
+                  </div>
+                </div>
+                <button className="tab" onClick={() => setMaintenanceQrModalOpen(false)}>{t.close}</button>
+              </div>
+
+              <div className="form-grid tool-review-form-grid">
+                <label className="field field-wide">
+                  <span>{lang === "km" ? "ថត / ជ្រើសរូប QR" : "Capture / Choose QR Image"}</span>
+                  <input
+                    key={`maintenance-qr-file-${maintenanceQrFileKey}`}
+                    className="input"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={onMaintenanceQrFile}
+                  />
+                  <small className="tiny">
+                    {lang === "km"
+                      ? "នៅលើទូរស័ព្ទ អាចបើកកាមេរ៉ាផ្ទាល់ ដើម្បីស្កេន QR បាន។"
+                      : "On phone, this can open the camera directly for a QR photo scan."}
+                  </small>
+                </label>
+                <label className="field field-wide">
+                  <span>{lang === "km" ? "ឬ វាយលេខ Asset / QR" : "Or Enter Asset / QR Code"}</span>
+                  <input
+                    className="input"
+                    value={maintenanceQrManualCode}
+                    onChange={(e) => setMaintenanceQrManualCode(e.target.value)}
+                    placeholder={lang === "km" ? "ឧ. ECO1-COM-ADP-001" : "Example: ECO1-COM-ADP-001"}
+                  />
+                </label>
+              </div>
+
+              {maintenanceQrError ? <div className="alert">{maintenanceQrError}</div> : null}
+
+              <div className="asset-actions">
+                <div className="tiny">
+                  {lang === "km"
+                    ? "បើ browser មិនគាំទ្រ camera scan អ្នកអាចវាយលេខ Asset ដោយដៃបាន។"
+                    : "If camera scan is not supported, you can still enter the asset code manually."}
+                </div>
+                <button
+                  className="btn-primary"
+                  disabled={maintenanceQrBusy || !maintenanceQrManualCode.trim()}
+                  onClick={() => {
+                    submitMaintenanceQrCode(maintenanceQrManualCode);
+                  }}
+                >
+                  {maintenanceQrBusy
+                    ? (lang === "km" ? "កំពុងស្កេន..." : "Scanning...")
+                    : (lang === "km" ? "ភ្ជាប់ទៅ Maintenance" : "Link To Maintenance")}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
         {scheduleScopeModal ? (
           <div className="modal-backdrop" onClick={() => setScheduleScopeModal(null)}>
             <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
@@ -64762,6 +65543,98 @@ function formatTicketRequestSource(value?: string) {
             </section>
           </div>
         )}
+
+        {maintenanceQuickMode && toolReviewModalOpen && toolReviewSelectedItem ? (
+          <div className="modal-backdrop" onClick={() => setToolReviewModalOpen(false)}>
+            <section className="panel modal-panel tool-review-modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <div>
+                  <h2>Verify Tool</h2>
+                  <div className="tiny">Check real amount, take latest photo, then submit.</div>
+                </div>
+                <button className="tab" onClick={() => setToolReviewModalOpen(false)}>{t.close}</button>
+              </div>
+
+              <div className="tool-review-selected-hero tool-review-selected-hero-modal">
+                {toolReviewSelectedItem.photo ? (
+                  <img
+                    loading="lazy"
+                    decoding="async"
+                    src={toolReviewSelectedItem.photo}
+                    alt={toolReviewSelectedItem.itemCode}
+                    className="tool-review-selected-photo"
+                  />
+                ) : (
+                  <div className="tool-review-selected-photo tool-review-selected-photo-empty">🧰</div>
+                )}
+                <div className="tool-review-selected-copy">
+                  <strong>{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
+                  <span>{toolReviewSelectedItem.itemCode}</span>
+                  <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)} • {toolReviewSelectedItem.location || "-"}</span>
+                </div>
+              </div>
+
+              <div className="tool-review-meta-grid">
+                <article className="tool-review-meta-card">
+                  <small>Expected Amount</small>
+                  <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
+                </article>
+                <article className="tool-review-meta-card">
+                  <small>Status</small>
+                  <strong>{toolReviewExistingEntry ? toolReviewExistingEntry.condition : "Pending"}</strong>
+                </article>
+              </div>
+
+              <div className="form-grid tool-review-form-grid">
+                <label className="field">
+                  <span>Real Amount</span>
+                  <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Condition</span>
+                  <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
+                    {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
+                      <option key={`tool-review-modal-condition-${option}`} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Reviewed By</span>
+                  <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Supervisor</span>
+                  <input className="input" value={toolReviewForm.supervisor} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, supervisor: e.target.value }))} />
+                </label>
+                <label className="field field-wide">
+                  <span>Latest Photo</span>
+                  <input key={`tool-review-modal-photo-${toolReviewPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={onToolReviewPhotoFile} />
+                </label>
+                <label className="field field-wide">
+                  <span>Note</span>
+                  <textarea className="textarea" value={toolReviewForm.note} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Missing pieces, damaged parts, replacement needed..." />
+                </label>
+              </div>
+
+              {toolReviewForm.photo ? (
+                <div className="tool-review-proof-preview">
+                  <img
+                    src={toolReviewForm.photo}
+                    alt="Tool review proof"
+                    className="tool-review-modal-proof"
+                  />
+                </div>
+              ) : null}
+
+              <div className="asset-actions">
+                <div className="tiny">Submit this month verification for the selected tool.</div>
+                <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
+                  {toolReviewExistingEntry ? "Update Verification" : "Submit Verification"}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         <div className="footnote-row">
           <p className={`footnote ${error ? "footnote-error" : ""}`}>
