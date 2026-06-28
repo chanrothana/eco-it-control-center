@@ -8045,15 +8045,19 @@ function LocationPicker({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const prevValueRef = useRef(value);
   const selected = options.find((opt) => String(opt.value) === value) || null;
+  const closePicker = useCallback(() => {
+    setOpen(false);
+    setSearch("");
+  }, []);
 
   useEffect(() => {
     if (!open) return;
     const onDocClick = (ev: MouseEvent) => {
       if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(ev.target as Node)) setOpen(false);
+      if (!wrapRef.current.contains(ev.target as Node)) closePicker();
     };
     const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") setOpen(false);
+      if (ev.key === "Escape") closePicker();
     };
     document.addEventListener("mousedown", onDocClick);
     document.addEventListener("keydown", onKeyDown);
@@ -8061,15 +8065,14 @@ function LocationPicker({
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, closePicker]);
 
   useEffect(() => {
     if (prevValueRef.current !== value) {
       prevValueRef.current = value;
-      setOpen(false);
-      setSearch("");
+      closePicker();
     }
-  }, [value]);
+  }, [value, closePicker]);
 
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -8082,10 +8085,9 @@ function LocationPicker({
   const selectLocation = useCallback(
     (nextValue: string) => {
       onChange(nextValue);
-      setOpen(false);
-      setSearch("");
+      closePicker();
     },
-    [onChange]
+    [onChange, closePicker]
   );
 
   return (
@@ -8095,7 +8097,14 @@ function LocationPicker({
         className="asset-picker-trigger input"
         disabled={disabled}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          if (open) {
+            closePicker();
+            return;
+          }
+          setSearch("");
+          setOpen(true);
+        }}
       >
         {selected ? (
           <span className="asset-picker-selected">
@@ -14679,6 +14688,37 @@ export default function App() {
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
   }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter]);
+  const toolReviewLocationOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of inventoryBalanceRows) {
+      if (inventoryBusinessGroupValue(row) !== inventoryDashboardGroup) continue;
+      if (toolReviewCampusFilter !== "ALL" && String(row.campus || "").trim() !== toolReviewCampusFilter) continue;
+      if (toolReviewAreaFilter !== "ALL" && String(row.area || "").trim() !== toolReviewAreaFilter) continue;
+      const location = String(row.location || "").trim();
+      if (location) values.add(location);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewAreaFilter]);
+  const toolReviewAreaAddsValue = useMemo(() => {
+    if (!toolReviewAreaOptions.length) return false;
+    if (toolReviewAreaOptions.length !== toolReviewLocationOptions.length) return true;
+    return toolReviewAreaOptions.some((area, index) => area !== toolReviewLocationOptions[index]);
+  }, [toolReviewAreaOptions, toolReviewLocationOptions]);
+  useEffect(() => {
+    if (!toolReviewAreaAddsValue && toolReviewAreaFilter !== "ALL") {
+      setToolReviewAreaFilter("ALL");
+    }
+  }, [toolReviewAreaAddsValue, toolReviewAreaFilter]);
+  useEffect(() => {
+    if (toolReviewAreaFilter !== "ALL" && !toolReviewAreaOptions.includes(toolReviewAreaFilter)) {
+      setToolReviewAreaFilter("ALL");
+    }
+  }, [toolReviewAreaFilter, toolReviewAreaOptions]);
+  useEffect(() => {
+    if (toolReviewLocationFilter !== "ALL" && !toolReviewLocationOptions.includes(toolReviewLocationFilter)) {
+      setToolReviewLocationFilter("ALL");
+    }
+  }, [toolReviewLocationFilter, toolReviewLocationOptions]);
   const inventoryToolListRows = useMemo(() => {
     return inventoryItemRows.filter((row) => {
       if (inventoryToolListAreaFilter !== "ALL" && String(row.area || "").trim() !== inventoryToolListAreaFilter) {
@@ -14745,16 +14785,6 @@ export default function App() {
     () => toolReviewItemOptions.find((row) => String(row.id) === String(toolReviewForm.itemId || "")) || null,
     [toolReviewItemOptions, toolReviewForm.itemId]
   );
-  const toolReviewLocationOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const row of inventoryBalanceRows) {
-      if (inventoryBusinessGroupValue(row) !== inventoryDashboardGroup) continue;
-      if (toolReviewCampusFilter !== "ALL" && String(row.campus || "").trim() !== toolReviewCampusFilter) continue;
-      const location = String(row.location || "").trim();
-      if (location) values.add(location);
-    }
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter]);
   const toolReviewMonthReports = useMemo(() => {
     return toolReviewReports
       .filter((row) => row.month === toolReviewMonth)
@@ -14800,6 +14830,39 @@ export default function App() {
         : null,
     [toolReviewReports, toolReviewMonth, toolReviewForm.itemId]
   );
+  const toolReviewPreviousEntry = useMemo(() => {
+    if (!toolReviewForm.itemId) return null;
+    let previous: ToolReviewReport | null = null;
+    for (const row of toolReviewReports) {
+      if (String(row.itemId) !== String(toolReviewForm.itemId)) continue;
+      const rowMonth = String(row.month || "").trim();
+      if (!rowMonth || rowMonth >= toolReviewMonth) continue;
+      if (!previous) {
+        previous = row;
+        continue;
+      }
+      const previousMonth = String(previous.month || "").trim();
+      if (rowMonth > previousMonth) {
+        previous = row;
+        continue;
+      }
+      if (rowMonth === previousMonth) {
+        const previousStamp = String(previous.updated || previous.created || "");
+        const rowStamp = String(row.updated || row.created || "");
+        if (rowStamp > previousStamp) {
+          previous = row;
+        }
+      }
+    }
+    return previous;
+  }, [toolReviewReports, toolReviewMonth, toolReviewForm.itemId]);
+  const toolReviewPreviousPhoto = useMemo(() => {
+    const previousPhoto = String(toolReviewPreviousEntry?.photo || "").trim();
+    if (previousPhoto) return previousPhoto;
+    const setupPhoto = String(toolReviewSelectedItem?.photo || "").trim();
+    if (setupPhoto) return setupPhoto;
+    return "";
+  }, [toolReviewPreviousEntry, toolReviewSelectedItem]);
   const inventoryLowStockRows = useMemo(
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
@@ -48022,7 +48085,7 @@ function formatTicketRequestSource(value?: string) {
                       Phone-friendly monthly checking for staff. Tap one tool card, confirm the amount, and save the condition.
                     </p>
                   </div>
-                  <div className="detail-value">{toolReviewMonth}</div>
+                  {!maintenanceQuickMode ? <div className="detail-value">{toolReviewMonth}</div> : null}
                 </div>
 
                 {!(maintenanceQuickMode && isPhoneView) ? (
@@ -48068,23 +48131,25 @@ function formatTicketRequestSource(value?: string) {
                       emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                     />
                   </label>
-                  <label className="field">
-                    <span>Area</span>
-                    <LocationPicker
-                      value={toolReviewAreaFilter}
-                      onChange={setToolReviewAreaFilter}
-                      options={[
-                        { value: "ALL", label: "All Areas" },
-                        ...toolReviewAreaOptions.map((area) => ({
-                          value: area,
-                          label: area,
-                        })),
-                      ]}
-                      placeholder="All Areas"
-                      searchPlaceholder={lang === "km" ? "ស្វែងរកតំបន់..." : "Search area..."}
-                      emptyText={lang === "km" ? "មិនមានតំបន់" : "No area found."}
-                    />
-                  </label>
+                  {toolReviewAreaAddsValue ? (
+                    <label className="field">
+                      <span>Area</span>
+                      <LocationPicker
+                        value={toolReviewAreaFilter}
+                        onChange={setToolReviewAreaFilter}
+                        options={[
+                          { value: "ALL", label: "All Areas" },
+                          ...toolReviewAreaOptions.map((area) => ({
+                            value: area,
+                            label: area,
+                          })),
+                        ]}
+                        placeholder="All Areas"
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកតំបន់..." : "Search area..."}
+                        emptyText={lang === "km" ? "មិនមានតំបន់" : "No area found."}
+                      />
+                    </label>
+                  ) : null}
                   <label className="field">
                     <span>{t.location}</span>
                     <LocationPicker
@@ -48102,23 +48167,25 @@ function formatTicketRequestSource(value?: string) {
                       emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                     />
                   </label>
-                  <label className="field">
-                    <span>Supervisor</span>
-                    <LocationPicker
-                      value={toolReviewSupervisorFilter}
-                      onChange={setToolReviewSupervisorFilter}
-                      options={[
-                        { value: "ALL", label: "All Supervisors" },
-                        ...toolReviewSupervisorOptions.map((supervisor) => ({
-                          value: supervisor,
-                          label: supervisor,
-                        })),
-                      ]}
-                      placeholder="All Supervisors"
-                      searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកត្រួតពិនិត្យ..." : "Search supervisor..."}
-                      emptyText={lang === "km" ? "មិនមានអ្នកត្រួតពិនិត្យ" : "No supervisor found."}
-                    />
-                  </label>
+                  {!maintenanceQuickMode ? (
+                    <label className="field">
+                      <span>Supervisor</span>
+                      <LocationPicker
+                        value={toolReviewSupervisorFilter}
+                        onChange={setToolReviewSupervisorFilter}
+                        options={[
+                          { value: "ALL", label: "All Supervisors" },
+                          ...toolReviewSupervisorOptions.map((supervisor) => ({
+                            value: supervisor,
+                            label: supervisor,
+                          })),
+                        ]}
+                        placeholder="All Supervisors"
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកត្រួតពិនិត្យ..." : "Search supervisor..."}
+                        emptyText={lang === "km" ? "មិនមានអ្នកត្រួតពិនិត្យ" : "No supervisor found."}
+                      />
+                    </label>
+                  ) : null}
                 </div>
 
                 <article className="panel inventory-daily-gallery-panel tool-review-gallery-panel">
@@ -53837,14 +53904,7 @@ function formatTicketRequestSource(value?: string) {
                           : "No asset available for this campus.")}
                     </div>
                   </label>
-                ) : (
-                  <div className="field field-wide">
-                    <span>{lang === "km" ? "របៀបកត់ត្រា" : "Record Mode"}</span>
-                    <div className="detail-value">
-                      {lang === "km" ? "ការងារទូទៅ" : "General Task"}
-                    </div>
-                  </div>
-                )}
+                ) : null}
                 <label className="field">
                   <span>{lang === "km" ? "អ្នកអនុវត្ត" : "Performed By"}</span>
                   <input
@@ -65603,57 +65663,81 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               </div>
 
-              <div className="tool-review-meta-grid">
+              <div className="tool-review-meta-grid tool-review-meta-grid-compact">
                 <article className="tool-review-meta-card">
                   <small>Expected Amount</small>
                   <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
                 </article>
-                <article className="tool-review-meta-card">
+                <article className={`tool-review-meta-card tool-review-status-card ${toolReviewExistingEntry ? "is-done" : "is-pending"}`}>
                   <small>Status</small>
-                  <strong>{toolReviewExistingEntry ? toolReviewExistingEntry.condition : "Pending"}</strong>
+                  <strong>{toolReviewExistingEntry ? "Done" : "Pending"}</strong>
                 </article>
               </div>
 
               <div className="form-grid tool-review-form-grid">
-                <label className="field">
-                  <span>Real Amount</span>
-                  <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
-                </label>
-                <label className="field">
-                  <span>Condition</span>
-                  <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
-                    {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
-                      <option key={`tool-review-modal-condition-${option}`} value={option}>{option}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Reviewed By</span>
-                  <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
-                </label>
-                <label className="field">
-                  <span>Supervisor</span>
-                  <input className="input" value={toolReviewForm.supervisor} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, supervisor: e.target.value }))} />
-                </label>
-                <label className="field field-wide">
-                  <span>Latest Photo</span>
-                  <input key={`tool-review-modal-photo-${toolReviewPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={onToolReviewPhotoFile} />
-                </label>
-                <label className="field field-wide">
-                  <span>Note</span>
-                  <textarea className="textarea" value={toolReviewForm.note} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Missing pieces, damaged parts, replacement needed..." />
-                </label>
+                <div className="tool-review-compact-row">
+                  <label className="field tool-review-field-centered">
+                    <span>Real Amount</span>
+                    <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
+                  </label>
+                  <label className="field tool-review-field-centered">
+                    <span>Condition</span>
+                    <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
+                      {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
+                        <option key={`tool-review-modal-condition-${option}`} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="tool-review-compact-row">
+                  <label className="field tool-review-field-centered">
+                    <span>Reviewed By</span>
+                    <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
+                  </label>
+                  <label className="field tool-review-field-centered">
+                    <span>New Photo</span>
+                    <input key={`tool-review-modal-photo-${toolReviewPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={onToolReviewPhotoFile} />
+                  </label>
+                </div>
               </div>
 
-              {toolReviewForm.photo ? (
-                <div className="tool-review-proof-preview">
-                  <img
-                    src={toolReviewForm.photo}
-                    alt="Tool review proof"
-                    className="tool-review-modal-proof"
-                  />
+              <div className="tool-review-photo-section">
+                <div className="tool-review-photo-section-head">
+                  <strong>Photo Comparison</strong>
+                  <span>Compare the previous photo with the new upload before submit.</span>
                 </div>
-              ) : null}
+                <div className="tool-review-photo-compare">
+                  <div className="tool-review-proof-preview tool-review-proof-preview-compare">
+                    <small>Last Photo</small>
+                    {toolReviewPreviousPhoto ? (
+                      <img
+                        src={toolReviewPreviousPhoto}
+                        alt="Last tool review proof"
+                        className="tool-review-modal-proof"
+                      />
+                    ) : (
+                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">No previous photo</div>
+                    )}
+                  </div>
+                  <div className="tool-review-proof-preview tool-review-proof-preview-compare">
+                    <small>New Photo</small>
+                    {toolReviewForm.photo ? (
+                      <img
+                        src={toolReviewForm.photo}
+                        alt="New tool review proof"
+                        className="tool-review-modal-proof"
+                      />
+                    ) : (
+                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">No new photo yet</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <label className="field field-wide">
+                <span>Note</span>
+                <textarea className="textarea" value={toolReviewForm.note} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Missing pieces, damaged parts, replacement needed..." />
+              </label>
 
               <div className="asset-actions">
                 <div className="tiny">Submit this month verification for the selected tool.</div>
