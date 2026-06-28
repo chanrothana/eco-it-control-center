@@ -30,6 +30,7 @@ import {
   Puzzle,
   Radio,
   RotateCcw,
+  ScanQrCode,
   Search,
   Settings,
   Shield,
@@ -13606,15 +13607,18 @@ export default function App() {
   const quickCampusPickerOption = useCallback(
     (campus: string) => ({
       value: campus,
-      label: campus === "Chaktomuk Campus"
-        ? "សាខាចតុមុខ 2.1"
-        : campus === "Chaktomuk Campus (C2.2)"
-        ? "សាខាចតុមុខ 2.2"
-        : (CAMPUS_KM_LABEL[campus] || campusLabel(campus)),
+      label:
+        lang === "km"
+          ? campus === "Chaktomuk Campus"
+            ? "សាខាចតុមុខ 2.1"
+            : campus === "Chaktomuk Campus (C2.2)"
+              ? "សាខាចតុមុខ 2.2"
+              : (CAMPUS_KM_LABEL[campus] || campusLabel(campus))
+          : rentalPrinterCampusLabel(campus),
       description: "",
-      searchText: `${campus} ${CAMPUS_CODE[campus] || ""} ${campusLabel(campus)}`,
+      searchText: `${campus} ${CAMPUS_CODE[campus] || ""} ${campusLabel(campus)} ${rentalPrinterCampusLabel(campus)}`,
     }),
-    [campusLabel]
+    [campusLabel, lang, rentalPrinterCampusLabel]
   );
   const maintenanceQuickCampusPickerOptions = useMemo(
     () => [
@@ -48049,47 +48053,71 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select className="input" value={toolReviewCampusFilter} onChange={(e) => setToolReviewCampusFilter(e.target.value)}>
-                      <option value="ALL">All Campuses</option>
-                      {inventoryItemCampusOptions.map((campus) => (
-                        <option key={`tool-review-campus-${campus}`} value={campus}>
-                          {inventoryCampusLabel(campus)}
-                        </option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={toolReviewCampusFilter}
+                      onChange={setToolReviewCampusFilter}
+                      options={[
+                        { value: "ALL", label: "All Campuses" },
+                        ...CAMPUS_LIST.sort(compareCampusByCode).map((campus) => ({
+                          value: campus,
+                          label: rentalPrinterCampusLabel(campus),
+                        })),
+                      ]}
+                      placeholder="All Campuses"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Area</span>
-                    <select className="input" value={toolReviewAreaFilter} onChange={(e) => setToolReviewAreaFilter(e.target.value)}>
-                      <option value="ALL">All Areas</option>
-                      {toolReviewAreaOptions.map((area) => (
-                        <option key={`tool-review-area-${area}`} value={area}>
-                          {area}
-                        </option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={toolReviewAreaFilter}
+                      onChange={setToolReviewAreaFilter}
+                      options={[
+                        { value: "ALL", label: "All Areas" },
+                        ...toolReviewAreaOptions.map((area) => ({
+                          value: area,
+                          label: area,
+                        })),
+                      ]}
+                      placeholder="All Areas"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកតំបន់..." : "Search area..."}
+                      emptyText={lang === "km" ? "មិនមានតំបន់" : "No area found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{t.location}</span>
-                    <select className="input" value={toolReviewLocationFilter} onChange={(e) => setToolReviewLocationFilter(e.target.value)}>
-                      <option value="ALL">All Locations</option>
-                      {toolReviewLocationOptions.map((location) => (
-                        <option key={`tool-review-location-${location}`} value={location}>
-                          {location}
-                        </option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={toolReviewLocationFilter}
+                      onChange={setToolReviewLocationFilter}
+                      options={[
+                        { value: "ALL", label: "All Locations" },
+                        ...toolReviewLocationOptions.map((location) => ({
+                          value: location,
+                          label: location,
+                        })),
+                      ]}
+                      placeholder="All Locations"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                      emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Supervisor</span>
-                    <select className="input" value={toolReviewSupervisorFilter} onChange={(e) => setToolReviewSupervisorFilter(e.target.value)}>
-                      <option value="ALL">All Supervisors</option>
-                      {toolReviewSupervisorOptions.map((supervisor) => (
-                        <option key={`tool-review-supervisor-${supervisor}`} value={supervisor}>
-                          {supervisor}
-                        </option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={toolReviewSupervisorFilter}
+                      onChange={setToolReviewSupervisorFilter}
+                      options={[
+                        { value: "ALL", label: "All Supervisors" },
+                        ...toolReviewSupervisorOptions.map((supervisor) => ({
+                          value: supervisor,
+                          label: supervisor,
+                        })),
+                      ]}
+                      placeholder="All Supervisors"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកត្រួតពិនិត្យ..." : "Search supervisor..."}
+                      emptyText={lang === "km" ? "មិនមានអ្នកត្រួតពិនិត្យ" : "No supervisor found."}
+                    />
                   </label>
                 </div>
 
@@ -53788,14 +53816,15 @@ function formatTicketRequestSource(value?: string) {
                       <button
                         type="button"
                         className="tab btn-small maintenance-qr-inline-btn"
+                        aria-label={lang === "km" ? "ស្កេន QR" : "Scan QR"}
+                        title={lang === "km" ? "ស្កេន QR" : "Scan QR"}
                         onClick={() => {
                           setMaintenanceQrModalOpen(true);
                           setMaintenanceQrError("");
                           setMaintenanceQrManualCode("");
                         }}
                       >
-                        <Camera size={15} />
-                        <span>{lang === "km" ? "ស្កេន QR" : "Scan QR"}</span>
+                        <ScanQrCode size={15} />
                       </button>
                     </div>
                     <div className="tiny">
