@@ -5283,6 +5283,12 @@ function inventoryBusinessGroupHasDailyStockFlow(value: InventoryBusinessGroup) 
 function inventoryToolGroupNeedsMonthlyReview(value: InventoryBusinessGroup) {
   return value === "CLEAN_TOOL" || value === "MAINT_TOOL" || value === "GARDEN_TOOL" || value === "SERVICE_TOOL";
 }
+function isInventoryToolCategory(
+  value?: InventoryItem["category"] | InventoryBusinessGroup | string
+): value is "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL" {
+  const category = String(value || "").trim().toUpperCase();
+  return category === "CLEAN_TOOL" || category === "MAINT_TOOL" || category === "GARDEN_TOOL" || category === "SERVICE_TOOL";
+}
 function toolOwnerTypeLabel(value?: string) {
   const normalized = String(value || "").trim().toUpperCase();
   return TOOL_OWNER_TYPE_OPTIONS.find((option) => option.value === normalized)?.label || (normalized || "School");
@@ -6305,6 +6311,42 @@ function drawContainImage(
   const drawX = x + Math.round((width - drawWidth) / 2);
   const drawY = y + Math.round((height - drawHeight) / 2);
   ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+}
+
+async function buildImageFingerprint(src: string): Promise<string> {
+  const normalizedSrc = String(src || "").trim();
+  if (!normalizedSrc) return "";
+  try {
+    const img = await loadImageElement(normalizedSrc);
+    const canvas = document.createElement("canvas");
+    const size = 12;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return "";
+
+    const cropX = Math.round(img.width * 0.12);
+    const cropY = Math.round(img.height * 0.1);
+    const cropWidth = Math.max(1, Math.round(img.width * 0.72));
+    const cropHeight = Math.max(1, Math.round(img.height * 0.72));
+    const safeWidth = Math.min(cropWidth, Math.max(1, img.width - cropX));
+    const safeHeight = Math.min(cropHeight, Math.max(1, img.height - cropY));
+
+    ctx.drawImage(img, cropX, cropY, safeWidth, safeHeight, 0, 0, size, size);
+    const imageData = ctx.getImageData(0, 0, size, size).data;
+    const values: number[] = [];
+    for (let i = 0; i < imageData.length; i += 4) {
+      const r = imageData[i] || 0;
+      const g = imageData[i + 1] || 0;
+      const b = imageData[i + 2] || 0;
+      values.push(Math.round(r * 0.299 + g * 0.587 + b * 0.114));
+    }
+    if (!values.length) return "";
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return values.map((value) => (value >= average ? "1" : "0")).join("");
+  } catch {
+    return "";
+  }
 }
 
 async function buildMaintenanceTelegramComparisonPhoto(beforePhoto: string, afterPhoto: string): Promise<string> {
@@ -8779,6 +8821,7 @@ export default function App() {
   const scheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const bulkScheduleDateWrapRef = useRef<HTMLLabelElement | null>(null);
   const inventoryAdminMatrixDateWrapRef = useRef<HTMLDivElement | null>(null);
+  const toolReviewNoteRef = useRef<HTMLTextAreaElement | null>(null);
   const mobileSwipeStartXRef = useRef<number | null>(null);
   const mobileSwipeStartYRef = useRef<number | null>(null);
   const navItems = useMemo<Array<{ id: NavModule; label: string }>>(
@@ -12566,6 +12609,11 @@ export default function App() {
   const [inventoryCodeManual, setInventoryCodeManual] = useState(false);
   const [inventoryItemFileKey, setInventoryItemFileKey] = useState(0);
   const [inventoryBulkUploadFileKey, setInventoryBulkUploadFileKey] = useState(0);
+  const [inventoryCloneForm, setInventoryCloneForm] = useState({
+    sourceCampus: CAMPUS_LIST[0],
+    sourceItemId: "ALL",
+    targetCampuses: [] as string[],
+  });
   const [inventoryTxnForm, setInventoryTxnForm] = useState({
     itemId: "",
     date: toYmd(new Date()),
@@ -14584,6 +14632,93 @@ export default function App() {
     }
     return Array.from(campuses).sort((a, b) => inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b)));
   }, [inventoryBalanceRows, inventoryCampusLabel]);
+  const inventoryCloneSourceCampusOptions = useMemo(() => {
+    if (!isInventoryToolCategory(inventoryItemForm.category)) return [];
+    return allowedCampusOptions.filter((campus) =>
+      inventoryItems.some(
+        (item) =>
+          item.category === inventoryItemForm.category &&
+          String(item.campus || "").trim() === campus
+      )
+    );
+  }, [allowedCampusOptions, inventoryItemForm.category, inventoryItems]);
+  const inventoryCloneTargetCampusOptions = useMemo(
+    () =>
+      allowedCampusOptions.filter(
+        (campus) => campus !== String(inventoryCloneForm.sourceCampus || "").trim()
+      ),
+    [allowedCampusOptions, inventoryCloneForm.sourceCampus]
+  );
+  const inventoryCloneSourceRows = useMemo(() => {
+    if (!isInventoryToolCategory(inventoryItemForm.category)) return [];
+    return inventoryItems
+      .filter(
+        (item) =>
+          item.category === inventoryItemForm.category &&
+          String(item.campus || "").trim() === String(inventoryCloneForm.sourceCampus || "").trim()
+      )
+      .slice()
+      .sort((a, b) => String(a.itemCode || "").localeCompare(String(b.itemCode || "")));
+  }, [inventoryCloneForm.sourceCampus, inventoryItemForm.category, inventoryItems]);
+  const inventoryCloneRowsToCopy = useMemo(() => {
+    if (String(inventoryCloneForm.sourceItemId || "ALL") === "ALL") return inventoryCloneSourceRows;
+    return inventoryCloneSourceRows.filter(
+      (item) => String(item.id) === String(inventoryCloneForm.sourceItemId || "")
+    );
+  }, [inventoryCloneForm.sourceItemId, inventoryCloneSourceRows]);
+  const inventoryCloneItemOptions = useMemo(
+    () => [
+      {
+        value: "ALL",
+        label: "All tools",
+        description: `${inventoryCloneSourceRows.length} item${inventoryCloneSourceRows.length === 1 ? "" : "s"} in source`,
+        searchText: `all tools ${inventoryCloneSourceRows.map((item) => `${item.itemCode} ${item.itemName}`).join(" ")}`,
+      },
+      ...inventoryCloneSourceRows.map((item) => ({
+        value: String(item.id),
+        label: inventoryDisplayName(item.itemName, lang),
+        description: item.itemCode,
+        photo: item.photo || "",
+        searchText: `${item.itemCode} ${item.itemName} ${inventoryAliasText(item.itemName)} ${item.location || ""}`,
+      })),
+    ],
+    [inventoryCloneSourceRows, lang]
+  );
+  useEffect(() => {
+    if (!isInventoryToolCategory(inventoryItemForm.category)) return;
+    if (!inventoryCloneSourceCampusOptions.length) {
+      setInventoryCloneForm((prev) =>
+        prev.sourceCampus || prev.sourceItemId !== "ALL" || prev.targetCampuses.length
+          ? { sourceCampus: CAMPUS_LIST[0], sourceItemId: "ALL", targetCampuses: [] }
+          : prev
+      );
+      return;
+    }
+    setInventoryCloneForm((prev) => {
+      const nextSource = inventoryCloneSourceCampusOptions.includes(prev.sourceCampus)
+        ? prev.sourceCampus
+        : inventoryCloneSourceCampusOptions[0];
+      const nextTargets = prev.targetCampuses.filter(
+        (campus) => campus !== nextSource && allowedCampusOptions.includes(campus)
+      );
+      const nextItemId =
+        prev.sourceItemId === "ALL" || inventoryCloneSourceRows.some((item) => String(item.id) === String(prev.sourceItemId))
+          ? prev.sourceItemId
+          : "ALL";
+      if (
+        nextSource === prev.sourceCampus &&
+        nextItemId === prev.sourceItemId &&
+        nextTargets.length === prev.targetCampuses.length
+      ) {
+        return prev;
+      }
+      return {
+        sourceCampus: nextSource,
+        sourceItemId: nextItemId,
+        targetCampuses: nextTargets,
+      };
+    });
+  }, [allowedCampusOptions, inventoryCloneSourceCampusOptions, inventoryCloneSourceRows, inventoryItemForm.category]);
   const inventoryItemGroupOptions = useMemo(() => {
     const groups = new Set<InventoryBusinessGroup>();
     for (const row of inventoryBalanceRows) {
@@ -14863,6 +14998,19 @@ export default function App() {
     if (setupPhoto) return setupPhoto;
     return "";
   }, [toolReviewPreviousEntry, toolReviewSelectedItem]);
+  const toolReviewReferencePhotos = useMemo(() => {
+    const photos = new Set<string>();
+    const itemId = String(toolReviewForm.itemId || "").trim();
+    if (!itemId) return [] as string[];
+    const setupPhoto = String(toolReviewSelectedItem?.photo || "").trim();
+    if (setupPhoto) photos.add(setupPhoto);
+    for (const row of toolReviewReports) {
+      if (String(row.itemId) !== itemId) continue;
+      const photo = String(row.photo || "").trim();
+      if (photo) photos.add(photo);
+    }
+    return Array.from(photos);
+  }, [toolReviewForm.itemId, toolReviewReports, toolReviewSelectedItem]);
   const inventoryLowStockRows = useMemo(
     () => inventoryBalanceRows.filter((r) => r.lowStock),
     [inventoryBalanceRows]
@@ -18151,6 +18299,12 @@ export default function App() {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
   }, [autoInventoryItemCode, inventoryCodeManual]);
+  useEffect(() => {
+    const el = toolReviewNoteRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 44)}px`;
+  }, [toolReviewForm.note, toolReviewModalOpen]);
   useEffect(() => {
     if (inventoryDailyForm.type !== "OUT") {
       setInventoryDailyForm((prev) => ({ ...prev, type: "OUT" }));
@@ -23660,6 +23814,21 @@ export default function App() {
     }
     try {
       const photo = await optimizeUploadPhoto(file);
+      const nextFingerprint = await buildImageFingerprint(photo);
+      if (nextFingerprint) {
+        const referenceFingerprints = await Promise.all(
+          toolReviewReferencePhotos
+            .filter((src) => src && src !== photo)
+            .map(async (src) => ({ src, fingerprint: await buildImageFingerprint(src) }))
+        );
+        const duplicateFound = referenceFingerprints.some((entry) => entry.fingerprint && entry.fingerprint === nextFingerprint);
+        if (duplicateFound) {
+          setError("Please upload a different photo. This image matches an existing tool photo.");
+          setToolReviewPhotoFileKey((key) => key + 1);
+          return;
+        }
+      }
+      setError("");
       setToolReviewForm((prev) => ({ ...prev, photo }));
     } catch (err) {
       handlePhotoUploadError(err);
@@ -23860,6 +24029,109 @@ export default function App() {
     setInventoryItemFileKey((k) => k + 1);
     setBusy(false);
     setError("");
+  }
+
+  async function cloneInventoryToolSetToCampuses() {
+    if (!requireAdminAction()) return;
+    if (!isInventoryToolCategory(inventoryItemForm.category)) {
+      setError("Tool set cloning is only available for tool categories.");
+      return;
+    }
+    const sourceCampus = String(inventoryCloneForm.sourceCampus || "").trim();
+    const targetCampuses = Array.from(
+      new Set(
+        inventoryCloneForm.targetCampuses
+          .map((campus) => String(campus || "").trim())
+          .filter((campus) => campus && campus !== sourceCampus)
+      )
+    );
+    if (!sourceCampus) {
+      setError("Please choose a source campus.");
+      return;
+    }
+    if (!targetCampuses.length) {
+      setError("Please choose at least one target campus.");
+      return;
+    }
+    if (!inventoryCloneRowsToCopy.length) {
+      setError("The source campus has no tool items in this group yet.");
+      return;
+    }
+
+    let nextItems = [...inventoryItems];
+    let createdCount = 0;
+    let skippedCount = 0;
+    let usedFallback = false;
+    const timestamp = new Date().toISOString();
+
+    setBusy(true);
+    setError("");
+    try {
+      for (const targetCampus of targetCampuses) {
+        for (const sourceRow of inventoryCloneRowsToCopy) {
+          const duplicateExists = nextItems.some(
+            (item) =>
+              inventoryRecordCampusCode(item.campus) === inventoryRecordCampusCode(targetCampus) &&
+              String(item.itemCode || "").trim().toUpperCase() ===
+                String(sourceRow.itemCode || "").trim().toUpperCase()
+          );
+          if (duplicateExists) {
+            skippedCount += 1;
+            continue;
+          }
+          const draftRow: InventoryItem = {
+            ...sourceRow,
+            id: Date.now() + createdCount + skippedCount + 1,
+            campus: targetCampus,
+            created: timestamp,
+          };
+          try {
+            const res = await requestJson<{ item: InventoryItem }>("/api/inventory/items", {
+              method: "POST",
+              body: JSON.stringify({
+                campus: targetCampus,
+                category: sourceRow.category,
+                itemCode: sourceRow.itemCode,
+                itemName: sourceRow.itemName,
+                unit: sourceRow.unit,
+                openingQty: Math.max(0, Number(sourceRow.openingQty || 0)),
+                minStock: Math.max(0, Number(sourceRow.minStock || 0)),
+                area: sourceRow.area || "",
+                location: sourceRow.location || "",
+                ownerType: sourceRow.ownerType || "SCHOOL",
+                responsibleParty: sourceRow.responsibleParty || "",
+                vendor: sourceRow.vendor || "",
+                notes: sourceRow.notes || "",
+                photo: sourceRow.photo || "",
+              }),
+            });
+            nextItems = [res.item, ...nextItems.filter((item) => item.id !== res.item.id)];
+          } catch (err) {
+            if (!isMissingRouteError(err)) throw err;
+            usedFallback = true;
+            nextItems = [draftRow, ...nextItems];
+          }
+          createdCount += 1;
+        }
+      }
+      setInventoryItems(nextItems);
+      if (usedFallback) {
+        await persistInventorySettings(nextItems, inventoryTxns);
+      }
+      appendUiAudit(
+        "CREATE",
+        "inventory_item",
+        `${inventoryItemForm.category}-CAMPUS-CLONE`,
+        `${sourceCampus} -> ${targetCampuses.join(", ")} | ${createdCount} cloned`
+      );
+      window.alert(
+        `Cloned ${createdCount} tool item(s) from ${inventoryCampusLabel(sourceCampus)}.${skippedCount ? ` Skipped ${skippedCount} existing item(s).` : ""}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clone tool set");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function downloadInventoryBulkTemplate() {
@@ -47518,11 +47790,6 @@ function formatTicketRequestSource(value?: string) {
                 <div className="asset-actions">
                   <div className="tiny">Add operational supplies and tool master records with owner/team responsibility.</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {editingInventoryItemId === null ? (
-                      <button className="tab" disabled={!isAdmin || busy} onClick={downloadInventoryBulkTemplate} type="button">
-                        Download CSV Template
-                      </button>
-                    ) : null}
                     {editingInventoryItemId === null &&
                     inventoryItemForm.category === "MAINT_TOOL" &&
                     inventoryRecordCampusCode(inventoryItemForm.campus) === "C1" ? (
@@ -47547,31 +47814,105 @@ function formatTicketRequestSource(value?: string) {
                     </button>
                   </div>
                 </div>
-                {editingInventoryItemId === null ? (
-                  <div className="panel-note" style={{ marginTop: 10 }}>
-                    Download the Excel-ready CSV template, fill it with Khmer or English item names, then upload it here for bulk creation.
+                {editingInventoryItemId === null && isInventoryToolCategory(inventoryItemForm.category) ? (
+                  <div className="inventory-tool-clone-panel">
+                    <div className="panel-row">
+                      <div>
+                        <strong>Copy Tool Set To Campuses</strong>
+                        <div className="tiny">
+                          Clone this tool group from one campus to other campuses. Existing item codes in the target campus will be skipped.
+                        </div>
+                      </div>
+                      <div className="detail-value">
+                        {inventoryCloneRowsToCopy.length} item{inventoryCloneRowsToCopy.length === 1 ? "" : "s"} selected
+                      </div>
+                    </div>
+                    <div className="form-grid inventory-item-create-grid">
+                      <label className="field">
+                        <span>Source Campus</span>
+                        <select
+                          className="input"
+                          value={inventoryCloneForm.sourceCampus}
+                          onChange={(e) =>
+                            setInventoryCloneForm((prev) => ({
+                              ...prev,
+                              sourceCampus: e.target.value,
+                              sourceItemId: "ALL",
+                              targetCampuses: prev.targetCampuses.filter((campus) => campus !== e.target.value),
+                            }))
+                          }
+                        >
+                          {inventoryCloneSourceCampusOptions.length ? (
+                            inventoryCloneSourceCampusOptions.map((campus) => (
+                              <option key={`inventory-clone-source-${campus}`} value={campus}>
+                                {inventoryCampusLabel(campus)}
+                              </option>
+                            ))
+                          ) : (
+                            <option value="">No source campus yet</option>
+                          )}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>Tool</span>
+                        <LocationPicker
+                          value={inventoryCloneForm.sourceItemId}
+                          options={inventoryCloneItemOptions}
+                          onChange={(value) =>
+                            setInventoryCloneForm((prev) => ({
+                              ...prev,
+                              sourceItemId: value,
+                            }))
+                          }
+                          placeholder="All tools"
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកឧបករណ៍..." : "Search tool..."}
+                          emptyText={lang === "km" ? "រកមិនឃើញឧបករណ៍" : "No tool found."}
+                        />
+                      </label>
+                      <label className="field field-wide">
+                        <span>Target Campuses</span>
+                        <div className="inventory-tool-clone-targets">
+                          {inventoryCloneTargetCampusOptions.map((campus) => {
+                            const checked = inventoryCloneForm.targetCampuses.includes(campus);
+                            return (
+                              <label key={`inventory-clone-target-${campus}`} className="inventory-tool-clone-option">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) =>
+                                    setInventoryCloneForm((prev) => ({
+                                      ...prev,
+                                      targetCampuses: e.target.checked
+                                        ? [...prev.targetCampuses, campus]
+                                        : prev.targetCampuses.filter((entry) => entry !== campus),
+                                    }))
+                                  }
+                                />
+                                <span>{inventoryCampusLabel(campus)}</span>
+                              </label>
+                            );
+                          })}
+                          {!inventoryCloneTargetCampusOptions.length ? (
+                            <div className="panel-note">No other campus available to receive this tool set.</div>
+                          ) : null}
+                        </div>
+                      </label>
+                    </div>
+                    <div className="asset-actions">
+                      <div className="tiny">
+                        Copies code, name, unit, opening qty, min stock, location, owner, responsible team, notes, and photo.
+                      </div>
+                      <button
+                        className="btn-primary"
+                        disabled={!isAdmin || busy || !inventoryCloneRowsToCopy.length || !inventoryCloneForm.targetCampuses.length}
+                        onClick={() => void cloneInventoryToolSetToCampuses()}
+                        type="button"
+                      >
+                        {inventoryCloneForm.sourceItemId === "ALL" ? "Clone Tool Set" : "Clone Selected Tool"}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
-                {editingInventoryItemId === null ? (
-                  <label className="field field-wide" style={{ marginTop: 12 }}>
-                    <span>Upload Filled CSV Template</span>
-                    <input
-                      key={`inventory-bulk-upload-${inventoryBulkUploadFileKey}`}
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="input"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        void importInventoryItemsFromTemplateFile(file);
-                      }}
-                    />
-                    <small className="tiny">
-                      Required columns: {INVENTORY_BULK_TEMPLATE_HEADERS.join(", ")}. If `item_code` is blank, the app will auto-generate it.
-                    </small>
-                  </label>
-                ) : null}
-
                 <div className="panel-filters inventory-item-filter-bar" style={{ marginTop: 12 }}>
                   <label className="field">
                     <span>{t.campus}</span>
@@ -48264,8 +48605,20 @@ function formatTicketRequestSource(value?: string) {
                           )}
                           <div className="tool-review-selected-copy">
                             <strong>{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
-                            <span>{toolReviewSelectedItem.itemCode}</span>
-                            <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)} • {toolReviewSelectedItem.location || "-"}</span>
+                            <div className="tool-review-selected-info-list">
+                              <div className="tool-review-selected-info-row">
+                                <small>Tool ID</small>
+                                <span>{toolReviewSelectedItem.itemCode}</span>
+                              </div>
+                              <div className="tool-review-selected-info-row">
+                                <small>Campus</small>
+                                <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)}</span>
+                              </div>
+                              <div className="tool-review-selected-info-row">
+                                <small>Location</small>
+                                <span>{toolReviewSelectedItem.location || "-"}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -65644,22 +65997,36 @@ function formatTicketRequestSource(value?: string) {
                 <button className="tab" onClick={() => setToolReviewModalOpen(false)}>{t.close}</button>
               </div>
 
-              <div className="tool-review-selected-hero tool-review-selected-hero-modal">
-                {toolReviewSelectedItem.photo ? (
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    src={toolReviewSelectedItem.photo}
-                    alt={toolReviewSelectedItem.itemCode}
-                    className="tool-review-selected-photo"
-                  />
-                ) : (
-                  <div className="tool-review-selected-photo tool-review-selected-photo-empty">🧰</div>
-                )}
-                <div className="tool-review-selected-copy">
-                  <strong>{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
-                  <span>{toolReviewSelectedItem.itemCode}</span>
-                  <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)} • {toolReviewSelectedItem.location || "-"}</span>
+              <div className="tool-review-selected-head">
+                <strong>{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
+                <div className="tool-review-selected-hero tool-review-selected-hero-modal">
+                  {toolReviewSelectedItem.photo ? (
+                    <img
+                      loading="lazy"
+                      decoding="async"
+                      src={toolReviewSelectedItem.photo}
+                      alt={toolReviewSelectedItem.itemCode}
+                      className="tool-review-selected-photo"
+                    />
+                  ) : (
+                    <div className="tool-review-selected-photo tool-review-selected-photo-empty">🧰</div>
+                  )}
+                  <div className="tool-review-selected-copy">
+                    <div className="tool-review-selected-info-list">
+                      <div className="tool-review-selected-info-row">
+                        <small>Tool ID</small>
+                        <span>{toolReviewSelectedItem.itemCode}</span>
+                      </div>
+                      <div className="tool-review-selected-info-row">
+                        <small>Campus</small>
+                        <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)}</span>
+                      </div>
+                      <div className="tool-review-selected-info-row">
+                        <small>Location</small>
+                        <span>{toolReviewSelectedItem.location || "-"}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -65736,10 +66103,21 @@ function formatTicketRequestSource(value?: string) {
 
               <label className="field field-wide">
                 <span>Note</span>
-                <textarea className="textarea" value={toolReviewForm.note} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Missing pieces, damaged parts, replacement needed..." />
+                <textarea
+                  ref={toolReviewNoteRef}
+                  rows={1}
+                  className="textarea tool-review-note-textarea"
+                  value={toolReviewForm.note}
+                  onChange={(e) => {
+                    e.currentTarget.style.height = "auto";
+                    e.currentTarget.style.height = `${Math.max(e.currentTarget.scrollHeight, 44)}px`;
+                    setToolReviewForm((prev) => ({ ...prev, note: e.target.value }));
+                  }}
+                  placeholder="Missing pieces, damaged parts, replacement needed..."
+                />
               </label>
 
-              <div className="asset-actions">
+              <div className="asset-actions tool-review-modal-actions">
                 <div className="tiny">Submit this month verification for the selected tool.</div>
                 <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
                   {toolReviewExistingEntry ? "Update Verification" : "Submit Verification"}
