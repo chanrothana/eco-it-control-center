@@ -285,7 +285,7 @@ const TYPE_CODES = {
     "FGP",
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "WDP", "WTK", "FPN", "RPN", "TBL", "CHR", "PNO"],
+  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "WDP", "WTK", "RMT", "FPN", "RPN", "TBL", "CHR", "PNO"],
   FURNITURE: ["TBL", "CHR", "DSK", "CAB", "NBD"],
 };
 const TYPE_LABELS = {

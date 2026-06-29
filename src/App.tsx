@@ -2624,6 +2624,9 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Wall Clock", itemKm: "នាឡិកាជញ្ជាំង", code: "WCL" },
     { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
     { itemEn: "Walkie Talkie", itemKm: "វិទ្យុទាក់ទង", code: "WTK" },
+    { itemEn: "Remote Control", itemKm: "រីម៉ូតបញ្ជា", code: "RMT" },
+    { itemEn: "Front Unit (Indoor)", itemKm: "ផ្នែកខាងមុខ (ក្នុងបន្ទប់)", code: "FPN" },
+    { itemEn: "Back Unit (Outdoor)", itemKm: "ផ្នែកខាងក្រៅ", code: "RPN" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
     { itemEn: "Piano", itemKm: "ព្យាណូ", code: "PNO" },
@@ -2639,7 +2642,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 
 const NEW_ENTRY_HIDDEN_TYPE_CODES: Record<string, string[]> = {
   IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC"],
-  FACILITY: ["TBL", "CHR", "PNO"],
+  FACILITY: ["RMT", "FPN", "RPN", "TBL", "CHR", "PNO"],
 };
 
 const WALKIE_TALKIE_TYPE_CODE = "WTK";
@@ -9105,6 +9108,7 @@ export default function App() {
     "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
   >("CLEAN_TOOL");
   const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState("ALL");
+  const [reportInventorySelectedItemId, setReportInventorySelectedItemId] = useState("");
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -9165,6 +9169,7 @@ export default function App() {
         note: reviewedEntry?.note || "",
         photo: reviewedEntry?.photo || "",
       }));
+      setToolReviewPhotoName("");
       if (maintenanceQuickMode) {
         setToolReviewModalOpen(true);
       }
@@ -12711,6 +12716,7 @@ export default function App() {
   const [toolReviewLocationFilter, setToolReviewLocationFilter] = useState("ALL");
   const [toolReviewSupervisorFilter, setToolReviewSupervisorFilter] = useState("ALL");
   const [toolReviewPhotoFileKey, setToolReviewPhotoFileKey] = useState(0);
+  const [toolReviewPhotoName, setToolReviewPhotoName] = useState("");
   const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
   const [toolReviewForm, setToolReviewForm] = useState({
     itemId: "",
@@ -14950,6 +14956,27 @@ export default function App() {
     }
     return map;
   }, [toolReviewReports]);
+  const toolReviewHistoryByItemId = useMemo(() => {
+    const map = new Map<number, ToolReviewReport[]>();
+    for (const row of toolReviewReports) {
+      const itemId = Number(row.itemId || 0);
+      if (!itemId) continue;
+      const bucket: ToolReviewReport[] = map.get(itemId) || [];
+      bucket.push(row);
+      map.set(itemId, bucket);
+    }
+    Array.from(map.keys()).forEach((itemId) => {
+      const rows = map.get(itemId);
+      if (!rows) return;
+      rows.sort(
+        (a: ToolReviewReport, b: ToolReviewReport) =>
+          String(b.updated || b.created || "").localeCompare(String(a.updated || a.created || "")) ||
+          String(b.month || "").localeCompare(String(a.month || ""))
+      );
+      map.set(itemId, rows);
+    });
+    return map;
+  }, [toolReviewReports]);
   const toolReviewItemOptions = useMemo(() => {
     return inventoryBalanceRows
       .filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup)
@@ -15292,6 +15319,48 @@ export default function App() {
       },
     ].filter((page) => page.rows.length);
   }, [reportInventoryRows, reportInventorySplitByCategoryPages]);
+  const reportInventoryToolRows = useMemo(
+    () => reportInventoryGroupedRows.flatMap((section) => section.rows),
+    [reportInventoryGroupedRows]
+  );
+  useEffect(() => {
+    if (reportType !== "inventory_balance" || !reportInventoryIsToolGroup) {
+      if (reportInventorySelectedItemId) setReportInventorySelectedItemId("");
+      return;
+    }
+    const nextRows = reportInventoryToolRows;
+    if (!nextRows.length) {
+      if (reportInventorySelectedItemId) setReportInventorySelectedItemId("");
+      return;
+    }
+    const exists = nextRows.some((row) => String(row.id) === String(reportInventorySelectedItemId));
+    if (!exists) {
+      setReportInventorySelectedItemId(String(nextRows[0].id));
+    }
+  }, [reportInventoryIsToolGroup, reportInventorySelectedItemId, reportInventoryToolRows, reportType]);
+  const selectedReportInventoryToolRow = useMemo(
+    () => reportInventoryToolRows.find((row) => String(row.id) === String(reportInventorySelectedItemId)) || null,
+    [reportInventorySelectedItemId, reportInventoryToolRows]
+  );
+  const selectedReportInventoryToolHistory = useMemo(() => {
+    if (!selectedReportInventoryToolRow) return [] as ToolReviewReport[];
+    return toolReviewHistoryByItemId.get(Number(selectedReportInventoryToolRow.id || 0)) || [];
+  }, [selectedReportInventoryToolRow, toolReviewHistoryByItemId]);
+  const selectedReportInventoryToolLatestReview = useMemo(
+    () => selectedReportInventoryToolHistory[0] || null,
+    [selectedReportInventoryToolHistory]
+  );
+  const selectedReportInventoryToolPreviousReview = useMemo(
+    () => selectedReportInventoryToolHistory[1] || null,
+    [selectedReportInventoryToolHistory]
+  );
+  const selectedReportInventoryToolPreviousPhoto = useMemo(() => {
+    const previousReviewPhoto = String(selectedReportInventoryToolPreviousReview?.photo || "").trim();
+    if (previousReviewPhoto) return previousReviewPhoto;
+    const setupPhoto = String(selectedReportInventoryToolRow?.photo || "").trim();
+    if (setupPhoto) return setupPhoto;
+    return "";
+  }, [selectedReportInventoryToolPreviousReview, selectedReportInventoryToolRow]);
   const inventoryVisibleItemLookup = useMemo(() => {
     const out = new Map<number, InventoryItem>();
     for (const item of inventoryVisibleItems) out.set(Number(item.id), item);
@@ -18310,6 +18379,7 @@ export default function App() {
     setToolReviewForm((prev) => (prev.reviewedBy.trim() ? prev : { ...prev, reviewedBy: operator }));
   }, [authUser?.displayName, authUser?.username]);
   useEffect(() => {
+    setToolReviewPhotoName("");
     setToolReviewForm((prev) => {
       if (!prev.itemId) return prev;
       if (!toolReviewExistingEntry) {
@@ -23868,10 +23938,12 @@ export default function App() {
         if (duplicateFound) {
           setError("Please upload a different photo. This image matches an existing tool photo.");
           setToolReviewPhotoFileKey((key) => key + 1);
+          setToolReviewPhotoName("");
           return;
         }
       }
       setError("");
+      setToolReviewPhotoName(file.name);
       setToolReviewForm((prev) => ({ ...prev, photo }));
     } catch (err) {
       handlePhotoUploadError(err);
@@ -23963,6 +24035,7 @@ export default function App() {
         note: "",
         photo: "",
       }));
+      setToolReviewPhotoName("");
       setToolReviewPhotoFileKey((key) => key + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save tool review report");
@@ -59683,7 +59756,103 @@ function formatTicketRequestSource(value?: string) {
             )}
 
             {reportType === "inventory_balance" && (
-              isPhoneView ? (
+              <>
+                {reportInventoryIsToolGroup && selectedReportInventoryToolRow ? (
+                  <section className="report-tool-preview">
+                    <div className="report-tool-preview-head">
+                      <div>
+                        <div className="report-tool-preview-kicker">
+                          {lang === "km" ? "រូបរាងរបាយការណ៍ឧបករណ៍" : "Tool Report Preview"}
+                        </div>
+                        <h4>{inventoryDisplayName(selectedReportInventoryToolRow.itemName, lang)}</h4>
+                        <p>
+                          {lang === "km"
+                            ? "បង្ហាញការពិនិត្យចុងក្រោយ និងប្រៀបធៀបរូបភាពមុនជាមួយរូបភាពពេលពិនិត្យថ្មីបំផុត។"
+                            : "Shows the latest monthly check and a previous-vs-latest photo comparison for this tool."}
+                        </p>
+                      </div>
+                      <span
+                        className={`report-tool-preview-status ${
+                          !selectedReportInventoryToolLatestReview
+                            ? "is-pending"
+                            : selectedReportInventoryToolLatestReview.condition === "Good"
+                              ? "is-good"
+                              : "is-issue"
+                        }`}
+                      >
+                        {!selectedReportInventoryToolLatestReview
+                          ? (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Not Checked Yet")
+                          : selectedReportInventoryToolLatestReview.condition === "Good"
+                            ? (lang === "km" ? "ស្ថានភាពល្អ" : "Good")
+                            : selectedReportInventoryToolLatestReview.condition}
+                      </span>
+                    </div>
+
+                    <div className="report-tool-preview-grid">
+                      <article className="report-tool-preview-summary">
+                        <div className="report-tool-preview-item">
+                          <div className="report-tool-preview-photo">
+                            {renderAssetPhoto(selectedReportInventoryToolRow.photo || "", selectedReportInventoryToolRow.itemCode)}
+                          </div>
+                          <div className="report-tool-preview-copy">
+                            <span className="report-card-id">{selectedReportInventoryToolRow.itemCode}</span>
+                            <strong>{inventoryDisplayName(selectedReportInventoryToolRow.itemName, lang)}</strong>
+                            <p>{inventoryCampusLabel(selectedReportInventoryToolRow.campus)} • {selectedReportInventoryToolRow.location || "-"}</p>
+                          </div>
+                        </div>
+
+                        <div className="report-tool-preview-metrics">
+                          <div>
+                            <span>{lang === "km" ? "បរិមាណ" : "Amount"}</span>
+                            <strong>{selectedReportInventoryToolRow.currentStock ?? 0} {selectedReportInventoryToolRow.unit || "pcs"}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "អ្នកទទួលខុសត្រូវ" : "Responsible"}</span>
+                            <strong>{selectedReportInventoryToolRow.responsibleParty || "-"}</strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "ពិនិត្យចុងក្រោយ" : "Last Check Date"}</span>
+                            <strong>
+                              {selectedReportInventoryToolLatestReview
+                                ? formatDateTime(selectedReportInventoryToolLatestReview.updated || selectedReportInventoryToolLatestReview.created || "")
+                                : (lang === "km" ? "មិនទាន់មាន" : "No check yet")}
+                            </strong>
+                          </div>
+                          <div>
+                            <span>{lang === "km" ? "ពិនិត្យដោយ" : "Last Checked By"}</span>
+                            <strong>{selectedReportInventoryToolLatestReview?.reviewedBy || "-"}</strong>
+                          </div>
+                        </div>
+                      </article>
+
+                      <article className="report-tool-preview-compare">
+                        <div className="report-tool-preview-compare-head">
+                          <strong>{lang === "km" ? "រូបភាពប្រៀបធៀប" : "Photo Comparison"}</strong>
+                          <span>{lang === "km" ? "មុន | ចុងក្រោយ" : "Previous | Latest Check"}</span>
+                        </div>
+                        <div className="report-tool-preview-compare-grid">
+                          <div className="report-tool-preview-photo-panel">
+                            <small>{lang === "km" ? "រូបមុន" : "Previous Photo"}</small>
+                            <div className="report-tool-preview-photo-frame">
+                              {selectedReportInventoryToolPreviousPhoto
+                                ? renderAssetPhoto(selectedReportInventoryToolPreviousPhoto, `${selectedReportInventoryToolRow.itemCode}-previous`)
+                                : <span className="photo-empty">{lang === "km" ? "មិនមានរូបមុន" : "No previous photo"}</span>}
+                            </div>
+                          </div>
+                          <div className="report-tool-preview-photo-panel">
+                            <small>{lang === "km" ? "រូបពិនិត្យចុងក្រោយ" : "Latest Check Photo"}</small>
+                            <div className="report-tool-preview-photo-frame">
+                              {String(selectedReportInventoryToolLatestReview?.photo || "").trim()
+                                ? renderAssetPhoto(String(selectedReportInventoryToolLatestReview?.photo || ""), `${selectedReportInventoryToolRow.itemCode}-latest`)
+                                : <span className="photo-empty">{lang === "km" ? "មិនទាន់មានរូបពិនិត្យ" : "No latest check photo"}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+                ) : null}
+              {isPhoneView ? (
                 <div className="report-inventory-mobile-list">
                   {reportInventoryGroupedRows.length ? (
                     reportInventoryGroupedRows.map((section) => (
@@ -59693,8 +59862,26 @@ function formatTicketRequestSource(value?: string) {
                           <span>{section.rows.length} items</span>
                         </div>
                         <div className="report-card-list">
-                          {section.rows.map((row) => (
-                            <article key={`report-inventory-mobile-card-${section.group}-${row.id}`} className="report-card report-inventory-mobile-card">
+                          {section.rows.map((row) => {
+                            const latestReview = reportInventoryIsToolGroup ? latestToolReviewByItemId.get(Number(row.id || 0)) || null : null;
+                            return (
+                            <article
+                              key={`report-inventory-mobile-card-${section.group}-${row.id}`}
+                              className={`report-card report-inventory-mobile-card ${String(reportInventorySelectedItemId) === String(row.id) ? "is-selected" : ""}`}
+                              role={reportInventoryIsToolGroup ? "button" : undefined}
+                              tabIndex={reportInventoryIsToolGroup ? 0 : undefined}
+                              onClick={reportInventoryIsToolGroup ? () => setReportInventorySelectedItemId(String(row.id)) : undefined}
+                              onKeyDown={
+                                reportInventoryIsToolGroup
+                                  ? (e) => {
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        setReportInventorySelectedItemId(String(row.id));
+                                      }
+                                    }
+                                  : undefined
+                              }
+                            >
                               <div className="report-card-head report-inventory-mobile-head">
                                 <div className="report-card-title">
                                   <span className="report-card-id">{row.itemCode}</span>
@@ -59719,6 +59906,14 @@ function formatTicketRequestSource(value?: string) {
                                       <span>Unit</span>
                                       <strong>{row.unit || "-"}</strong>
                                     </div>
+                                    <div>
+                                      <span>{lang === "km" ? "ពិនិត្យចុងក្រោយ" : "Last Check"}</span>
+                                      <strong>{latestReview ? formatDate(latestReview.updated || latestReview.created || "-") : "-"}</strong>
+                                    </div>
+                                    <div>
+                                      <span>{lang === "km" ? "ស្ថានភាព" : "Status"}</span>
+                                      <strong>{latestReview?.condition || (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</strong>
+                                    </div>
                                   </div>
                                   <div className="report-card-meta">
                                     <div>
@@ -59726,6 +59921,9 @@ function formatTicketRequestSource(value?: string) {
                                     </div>
                                     <div>
                                       <strong>Responsible:</strong> {row.responsibleParty || "-"}
+                                    </div>
+                                    <div>
+                                      <strong>{lang === "km" ? "ពិនិត្យដោយ" : "Checked By"}:</strong> {latestReview?.reviewedBy || "-"}
                                     </div>
                                   </div>
                                 </>
@@ -59760,7 +59958,7 @@ function formatTicketRequestSource(value?: string) {
                                 </>
                               )}
                             </article>
-                          ))}
+                          )})}
                         </div>
                       </section>
                     ))
@@ -59810,7 +60008,11 @@ function formatTicketRequestSource(value?: string) {
                                   <tbody>
                                     {section.rows.length ? (
                                       section.rows.map((row) => (
-                                        <tr key={`report-inventory-balance-${page.key}-${section.key}-${row.id}`}>
+                                        <tr
+                                          key={`report-inventory-balance-${page.key}-${section.key}-${row.id}`}
+                                          className={reportInventoryIsToolGroup && String(reportInventorySelectedItemId) === String(row.id) ? "report-table-row-selected" : ""}
+                                          onClick={reportInventoryIsToolGroup ? () => setReportInventorySelectedItemId(String(row.id)) : undefined}
+                                        >
                                           {visibleInventoryReportColumnDefs.map((column) => (
                                             <td key={`report-inventory-page-cell-${page.key}-${section.key}-${row.id}-${column.key}`}>
                                               {column.key === "photo"
@@ -59863,7 +60065,11 @@ function formatTicketRequestSource(value?: string) {
                       {reportInventoryGroupedRows.length ? (
                         reportInventoryGroupedRows.flatMap((section) =>
                           section.rows.map((row) => (
-                            <tr key={`report-inventory-balance-${section.group}-${row.id}`}>
+                            <tr
+                              key={`report-inventory-balance-${section.group}-${row.id}`}
+                              className={reportInventoryIsToolGroup && String(reportInventorySelectedItemId) === String(row.id) ? "report-table-row-selected" : ""}
+                              onClick={reportInventoryIsToolGroup ? () => setReportInventorySelectedItemId(String(row.id)) : undefined}
+                            >
                               {visibleInventoryReportColumnDefs.map((column) => (
                                 <td key={`report-inventory-cell-${section.group}-${row.id}-${column.key}`}>
                                   {column.key === "photo"
@@ -59886,7 +60092,8 @@ function formatTicketRequestSource(value?: string) {
                     </tbody>
                   </table>
                 </div>
-              )
+              )}
+              </>
             )}
 
             {reportType === "asset_full_record" && (
@@ -66335,7 +66542,25 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                   <label className="field tool-review-field-centered">
                     <span>New Photo</span>
-                    <input key={`tool-review-modal-photo-${toolReviewPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={onToolReviewPhotoFile} />
+                    <div className="tool-review-upload-control">
+                      <input
+                        id={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
+                        key={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
+                        type="file"
+                        accept="image/*"
+                        className="tool-review-upload-native"
+                        onChange={onToolReviewPhotoFile}
+                      />
+                      <label
+                        htmlFor={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
+                        className="tool-review-upload-trigger"
+                      >
+                        Upload Photo
+                      </label>
+                      <span className={`tool-review-upload-name ${toolReviewPhotoName ? "has-file" : ""}`}>
+                        {toolReviewPhotoName || "No new photo yet"}
+                      </span>
+                    </div>
                   </label>
                 </div>
               </div>
