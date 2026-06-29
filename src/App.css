@@ -102,6 +102,12 @@ body {
     linear-gradient(145deg, #0d1828 0%, #14253b 42%, #1b3150 100%);
 }
 
+html:has(body main.app-shell.theme-warm),
+body:has(main.app-shell.theme-warm) {
+  background:
+    linear-gradient(180deg, #fff8f1 0%, #fff1e4 44%, #fbe4cc 100%) !important;
+}
+
 .app-shell {
   position: relative;
   min-height: 100vh;
@@ -176,6 +182,266 @@ body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(238, 246, 254, 0.96));
   color: #224063;
   border-color: rgba(160, 183, 214, 0.55);
+}
+
+.app-shell.theme-warm {
+  --bg: #fff4e8;
+  --bg-accent: #f1d4b5;
+  --surface: #fffaf4;
+  --surface-soft: #fff1e2;
+  --line: #e6c6a4;
+  --line-strong: #cb945f;
+  --text: #4b2d12;
+  --text-soft: #916848;
+  --brand: #e48a3d;
+  --brand-strong: #c96a20;
+  background:
+    radial-gradient(760px 420px at -6% -8%, rgba(241, 176, 110, 0.26), transparent 62%),
+    radial-gradient(880px 480px at 108% 108%, rgba(244, 198, 143, 0.22), transparent 64%),
+    linear-gradient(180deg, #fff8f1 0%, #fff1e4 44%, #fbe4cc 100%);
+}
+
+.app-shell.theme-warm .app-card,
+.app-shell.theme-warm .topbar,
+.app-shell.theme-warm .main-nav-rail,
+.app-shell.theme-warm .panel,
+.app-shell.theme-warm .table-wrap,
+.app-shell.theme-warm .tabs,
+.app-shell.theme-warm .mobile-nav-hud,
+.app-shell.theme-warm .report-mobile-filter-sheet-open,
+.app-shell.theme-warm .app-top-controls-grid {
+  background: linear-gradient(180deg, rgba(255, 251, 246, 0.98), rgba(255, 242, 228, 0.96)) !important;
+  border-color: rgba(213, 165, 116, 0.48) !important;
+}
+
+.app-shell.theme-warm .app-card {
+  box-shadow: 0 24px 56px rgba(154, 103, 52, 0.14) !important;
+}
+
+.app-shell.theme-warm .brand-block h1,
+.app-shell.theme-warm .main-nav-head h3,
+.app-shell.theme-warm .main-nav-btn,
+.app-shell.theme-warm .field span,
+.app-shell.theme-warm .subhead,
+.app-shell.theme-warm .eyebrow,
+.app-shell.theme-warm .main-nav-section-label {
+  color: #7a4d23;
+}
+
+.app-shell.theme-warm .main-nav-btn {
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(255, 239, 220, 0.98));
+  border-color: rgba(228, 186, 141, 0.78);
+}
+
+.app-shell.theme-warm .main-nav-btn:hover {
+  background: linear-gradient(180deg, rgba(255, 248, 238, 0.98), rgba(255, 233, 209, 0.98));
+  border-color: #e29a53;
+}
+
+.app-shell.theme-warm .main-nav-toggle-btn,
+.app-shell.theme-warm .main-nav-head,
+.app-shell.theme-warm .mobile-menu-head,
+.app-shell.theme-warm .mobile-side-drawer,
+.app-shell.theme-warm .mobile-nav-topline,
+.app-shell.theme-warm .mobile-menu-nav-btn {
+  background: linear-gradient(180deg, rgba(255, 249, 242, 0.88), rgba(255, 241, 225, 0.96));
+  color: #6c431f;
+  border-color: rgba(213, 165, 116, 0.48);
+}
+
+.app-shell.theme-warm .input,
+.app-shell.theme-warm .file-input,
+.app-shell.theme-warm .textarea,
+.app-shell.theme-warm .status-select,
+.app-shell.theme-warm .table-input,
+.app-shell.theme-warm .detail-value {
+  border-color: rgba(205, 148, 95, 0.56);
+  background: linear-gradient(180deg, #fffdfa, #fff0df);
+  color: #583516;
+  -webkit-text-fill-color: #583516;
+}
+
+.app-shell.theme-warm .input::placeholder,
+.app-shell.theme-warm .textarea::placeholder,
+.app-shell.theme-warm .table-input::placeholder {
+  color: #9b7250;
+  -webkit-text-fill-color: #9b7250;
+  opacity: 1;
+}
+
+.app-shell.theme-warm select.input,
+.app-shell.theme-warm .status-select {
+  color: #583516;
+  -webkit-text-fill-color: #583516;
+}
+
+.app-shell.theme-warm select.input option,
+.app-shell.theme-warm select.input optgroup,
+.app-shell.theme-warm .status-select option,
+.app-shell.theme-warm .status-select optgroup {
+  color: #583516;
+  background: #fff7ee;
+}
+
+.app-shell.theme-warm .maintenance-quick-hero-card,
+.app-shell.theme-warm .maintenance-staff-quick-panel,
+.app-shell.theme-warm .tool-review-detail-panel,
+.app-shell.theme-warm .tool-review-history-panel {
+  border-color: rgba(205, 148, 95, 0.34);
+  background:
+    radial-gradient(circle at top right, rgba(228, 138, 61, 0.14) 0%, rgba(228, 138, 61, 0) 32%),
+    linear-gradient(180deg, rgba(255, 249, 242, 0.98), rgba(255, 240, 224, 0.96));
+  box-shadow: 0 18px 34px rgba(130, 82, 35, 0.12);
+}
+
+.app-shell.theme-warm .maintenance-quick-hero-copy h2,
+.app-shell.theme-warm .maintenance-staff-quick-head h4,
+.app-shell.theme-warm .tool-review-selected-head > strong,
+.app-shell.theme-warm .tool-review-photo-section-head strong,
+.app-shell.theme-warm .tool-review-meta-card strong,
+.app-shell.theme-warm .tool-review-selected-info-row span {
+  color: #5a3412;
+}
+
+.app-shell.theme-warm .maintenance-quick-hero-copy p,
+.app-shell.theme-warm .maintenance-staff-quick-head p:last-child,
+.app-shell.theme-warm .tool-review-selected-copy span,
+.app-shell.theme-warm .tool-review-photo-section-head span,
+.app-shell.theme-warm .tool-review-proof-preview-compare small,
+.app-shell.theme-warm .tool-review-meta-card small,
+.app-shell.theme-warm .tool-review-selected-info-row small {
+  color: #8d6644;
+}
+
+.app-shell.theme-warm .maintenance-quick-kicker,
+.app-shell.theme-warm .maintenance-quick-campus-field > span,
+.app-shell.theme-warm .maintenance-quick-fact span,
+.app-shell.theme-warm .maintenance-quick-summary-pill span {
+  color: #a06e3c;
+}
+
+.app-shell.theme-warm .maintenance-quick-campus-chip,
+.app-shell.theme-warm .maintenance-quick-fact,
+.app-shell.theme-warm .maintenance-quick-nav-btn,
+.app-shell.theme-warm .maintenance-quick-summary-pill,
+.app-shell.theme-warm .tool-review-meta-card,
+.app-shell.theme-warm .tool-review-selected-info-list,
+.app-shell.theme-warm .tool-review-proof-preview,
+.app-shell.theme-warm .tool-review-history-card {
+  border-color: rgba(205, 148, 95, 0.28);
+  background: rgba(255, 248, 239, 0.72);
+  color: #5a3412;
+}
+
+.app-shell.theme-warm .maintenance-quick-fact strong,
+.app-shell.theme-warm .maintenance-quick-switch-btn,
+.app-shell.theme-warm .maintenance-quick-summary-pill strong,
+.app-shell.theme-warm .maintenance-quick-nav-btn,
+.app-shell.theme-warm .tool-review-history-main strong,
+.app-shell.theme-warm .tool-review-history-main span,
+.app-shell.theme-warm .tool-review-history-main small,
+.app-shell.theme-warm .tool-review-history-side small {
+  color: #5a3412;
+}
+
+.app-shell.theme-warm .maintenance-quick-campus-field .detail-value,
+.app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-trigger.input,
+.app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-search,
+.app-shell.theme-warm .maintenance-staff-quick-panel select.input {
+  border-color: rgba(205, 148, 95, 0.42);
+  background: linear-gradient(180deg, #fffdfa, #fff0df);
+  color: #583516;
+  -webkit-text-fill-color: #583516;
+  caret-color: #583516;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 8px 16px rgba(130, 82, 35, 0.08);
+}
+
+.app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-placeholder,
+.app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-search::placeholder {
+  color: #9b7250;
+  -webkit-text-fill-color: #9b7250;
+}
+
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-selected,
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-selected > span:last-child,
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-caret {
+    color: #583516;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-menu,
+  .app-shell.theme-warm .maintenance-quick-campus-field .filter-menu-list {
+    border-color: rgba(205, 148, 95, 0.34);
+    background:
+      radial-gradient(circle at top right, rgba(228, 138, 61, 0.12), rgba(228, 138, 61, 0) 34%),
+      linear-gradient(180deg, rgba(255, 248, 239, 0.98), rgba(255, 239, 223, 0.96));
+    box-shadow: 0 18px 34px rgba(130, 82, 35, 0.14);
+  }
+
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-search,
+  .app-shell.theme-warm .maintenance-quick-campus-field .filter-menu-search-input {
+    background: linear-gradient(180deg, rgba(255, 253, 249, 0.98), rgba(255, 241, 226, 0.94));
+    border-color: rgba(205, 148, 95, 0.34);
+    color: #6a4018;
+    -webkit-text-fill-color: #6a4018;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-option,
+  .app-shell.theme-warm .maintenance-quick-campus-field .searchable-multi-option,
+  .app-shell.theme-warm .maintenance-quick-campus-field .filter-menu-item {
+    border-color: rgba(205, 148, 95, 0.26);
+    background: linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(255, 241, 226, 0.86));
+    color: #6a4018;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-option:hover,
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-option-active,
+  .app-shell.theme-warm .maintenance-quick-campus-field .searchable-multi-option:hover,
+  .app-shell.theme-warm .maintenance-quick-campus-field .filter-menu-item:hover {
+    background: linear-gradient(180deg, rgba(255, 243, 228, 0.98), rgba(255, 229, 202, 0.94));
+  }
+
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-option-label,
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-option > span:last-child,
+  .app-shell.theme-warm .maintenance-quick-campus-field .filter-menu-item-label,
+  .app-shell.theme-warm .maintenance-quick-campus-field .filter-menu-item > span {
+    color: #6a4018;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-campus-field .asset-picker-empty {
+    color: #9b7250;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-nav-btn-active,
+  .app-shell.theme-warm .maintenance-quick-switch-btn.tab-active,
+  .app-shell.theme-warm .maintenance-quick-side-drawer .mobile-menu-nav-btn-active {
+    border-color: rgba(205, 148, 95, 0.46);
+  background: linear-gradient(135deg, #df8640 0%, #c66c24 100%);
+  color: #ffffff;
+}
+
+.app-shell.theme-warm .tool-review-card.is-selected {
+  border-color: #d38b4c;
+  box-shadow: 0 12px 28px rgba(201, 106, 32, 0.16);
+}
+
+.app-shell.theme-warm .tool-review-card.is-reviewed,
+.app-shell.theme-warm .tool-review-card.is-pending {
+  background: linear-gradient(180deg, #fffdf9 0%, #fff3e6 100%);
+}
+
+.app-shell.theme-warm .tool-review-card-icon,
+.app-shell.theme-warm .tool-review-selected-photo,
+.app-shell.theme-warm .tool-review-history-card,
+.app-shell.theme-warm .tool-review-proof-preview {
+  border-color: rgba(205, 148, 95, 0.26);
+  background: #fffaf4;
+}
+
+.app-shell.theme-warm .tool-review-card-status.is-reviewed {
+  background: rgba(223, 134, 64, 0.16);
+  color: #a8601d;
 }
 
 .app-shell.theme-dark .input,
@@ -5691,6 +5957,84 @@ h2 {
 .report-card-photo .photo-placeholder {
   width: 90px;
   height: 90px;
+}
+
+.report-inventory-mobile-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.report-inventory-mobile-section {
+  display: grid;
+  gap: 10px;
+}
+
+.report-inventory-mobile-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.report-inventory-mobile-section-head strong {
+  font-size: 18px;
+  color: #28406e;
+}
+
+.report-inventory-mobile-section-head span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6d7d9c;
+}
+
+.report-inventory-mobile-card {
+  gap: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+}
+
+.report-inventory-mobile-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.report-inventory-mobile-name {
+  font-size: 18px;
+  line-height: 1.2;
+  color: #23395f;
+}
+
+.report-inventory-mobile-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.report-inventory-mobile-metrics > div {
+  border: 1px solid #d3dff2;
+  border-radius: 14px;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, 0.88);
+  display: grid;
+  gap: 4px;
+}
+
+.report-inventory-mobile-metrics span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #62759b;
+}
+
+.report-inventory-mobile-metrics strong {
+  font-size: 22px;
+  line-height: 1;
+  color: #24395f;
 }
 
 .report-card-title {
@@ -24652,6 +24996,21 @@ tr.row-maint-maintenance:hover td {
     background: linear-gradient(180deg, var(--mobile-bg) 0%, var(--mobile-bg-2) 100%);
   }
 
+  .app-shell.theme-warm {
+    --mobile-bg: #fff6ec;
+    --mobile-bg-2: #f9e5cf;
+    --mobile-surface: #fff8ef;
+    --mobile-surface-soft: #fff0df;
+    --mobile-line: #dfbc95;
+    --mobile-line-strong: #c88f57;
+    --mobile-text: #5b3512;
+    --mobile-text-soft: #8f6947;
+    --mobile-brand: #df8640;
+    --mobile-brand-strong: #c66c24;
+    --mobile-shadow: 0 16px 32px rgba(130, 82, 35, 0.16);
+    background: linear-gradient(180deg, var(--mobile-bg) 0%, var(--mobile-bg-2) 100%);
+  }
+
   .app-card {
     width: 100%;
     max-width: 100%;
@@ -24660,6 +25019,12 @@ tr.row-maint-maintenance:hover td {
     border-radius: 0;
     border: 0;
     background: linear-gradient(180deg, var(--mobile-bg) 0%, var(--mobile-bg-2) 100%) !important;
+  }
+
+  .app-shell.theme-warm .topbar {
+    background: linear-gradient(180deg, rgba(255, 248, 239, 0.96), rgba(255, 239, 223, 0.94)) !important;
+    border-color: rgba(205, 148, 95, 0.34) !important;
+    box-shadow: 0 12px 24px rgba(130, 82, 35, 0.12);
   }
 
   .topbar {
@@ -24679,6 +25044,10 @@ tr.row-maint-maintenance:hover td {
   .app-card-maintenance-quick .topbar {
     position: relative;
     top: auto;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .topbar {
+    box-shadow: 0 10px 20px rgba(130, 82, 35, 0.12);
   }
 
   .top-right {
@@ -24761,9 +25130,39 @@ tr.row-maint-maintenance:hover td {
     padding: 0;
   }
 
+  .app-card-maintenance-quick .topbar-phone {
+    margin-bottom: 0;
+    padding: 0;
+    min-height: 0;
+  }
+
+  .app-card-maintenance-quick .topbar-phone .brand-block {
+    display: grid !important;
+    width: 100%;
+    min-height: 0;
+    padding: 0 56px !important;
+    place-items: center;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .app-shell.theme-warm .topbar-phone .brand-block {
+    background:
+      radial-gradient(circle at top center, rgba(228, 138, 61, 0.12), transparent 48%),
+      linear-gradient(180deg, rgba(255, 248, 239, 0.98), rgba(255, 239, 223, 0.96));
+    border-color: rgba(205, 148, 95, 0.34);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      0 10px 20px rgba(130, 82, 35, 0.12);
+  }
+
   .app-card-maintenance-quick .mobile-brand-logo {
     width: min(54vw, 220px);
     max-height: 54px;
+    opacity: 1 !important;
+    filter: none !important;
   }
 
   .maintenance-quick-mobile-brand {
@@ -24781,11 +25180,21 @@ tr.row-maint-maintenance:hover td {
   .maintenance-quick-mobile-brand-logo-only {
     width: 100%;
     margin: 0 auto;
+    display: grid !important;
+    place-items: center;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 2;
   }
 
   .maintenance-quick-mobile-logo {
     width: min(72vw, 248px) !important;
     max-height: 54px !important;
+    opacity: 1 !important;
+    display: block !important;
+    visibility: visible !important;
+    filter: drop-shadow(0 2px 6px rgba(138, 92, 44, 0.12)) contrast(1.04) saturate(1.04) !important;
   }
 
   .maintenance-quick-mobile-brand-copy {
@@ -24817,6 +25226,10 @@ tr.row-maint-maintenance:hover td {
 
   .app-card-maintenance-quick .workspace-main {
     padding: 10px 8px 16px !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .workspace-main {
+    background: transparent;
   }
 
   .maintenance-quick-hero-card {
@@ -25422,12 +25835,17 @@ tr.row-maint-maintenance:hover td {
   }
 
   .input,
+  .file-input,
   .textarea,
   .detail-value,
-  .filter-menu {
+  .filter-menu,
+  select.input,
+  .status-select,
+  .table-input {
     border-color: var(--mobile-line-strong) !important;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.07)) !important;
     color: var(--mobile-text) !important;
+    -webkit-text-fill-color: var(--mobile-text) !important;
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.12),
       0 0 0 1px rgba(110, 142, 184, 0.08);
@@ -25449,8 +25867,36 @@ tr.row-maint-maintenance:hover td {
   }
 
   .workspace-main .input::placeholder,
-  .workspace-main .textarea::placeholder {
+  .workspace-main .textarea::placeholder,
+  .workspace-main .table-input::placeholder {
     color: #bfd0e8 !important;
+    opacity: 1;
+  }
+
+  .workspace-main select.input,
+  .workspace-main .status-select {
+    color: var(--mobile-text) !important;
+    -webkit-text-fill-color: var(--mobile-text) !important;
+  }
+
+  .workspace-main select.input option,
+  .workspace-main select.input optgroup,
+  .workspace-main .status-select option,
+  .workspace-main .status-select optgroup {
+    color: #17304f !important;
+    background: #f3f7fd !important;
+  }
+
+  .app-shell.theme-warm .workspace-main .field > span,
+  .app-shell.theme-warm .workspace-main .panel .tiny,
+  .app-shell.theme-warm .workspace-main .panel-note,
+  .app-shell.theme-warm .workspace-main .subhead {
+    color: #8f6947 !important;
+  }
+
+  .app-shell.theme-warm .workspace-main .input::placeholder,
+  .app-shell.theme-warm .workspace-main .textarea::placeholder {
+    color: #9b7250 !important;
     opacity: 1;
   }
 
@@ -29415,6 +29861,345 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
   .documents-overview-grid,
   .documents-mini-stats {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell.theme-warm .topbar,
+  .app-shell.theme-warm .app-card-maintenance-quick .topbar {
+    background: linear-gradient(180deg, rgba(255, 248, 239, 0.96), rgba(255, 239, 223, 0.94)) !important;
+    border-color: rgba(205, 148, 95, 0.34) !important;
+    box-shadow: 0 12px 24px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .topbar {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    padding: 0 10px 8px !important;
+  }
+
+  .app-shell.theme-warm .topbar-phone .brand-block {
+    background:
+      radial-gradient(circle at top center, rgba(228, 138, 61, 0.12), transparent 48%),
+      linear-gradient(180deg, rgba(255, 248, 239, 0.98), rgba(255, 239, 223, 0.96)) !important;
+    border-color: rgba(205, 148, 95, 0.34) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      0 10px 20px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .topbar-phone .brand-block {
+    display: grid !important;
+    padding: 0 56px !important;
+    place-items: center;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .maintenance-quick-mobile-brand-logo-only,
+  .app-shell.theme-warm .app-card-maintenance-quick .maintenance-quick-mobile-logo {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-hero-card,
+  .app-shell.theme-warm .maintenance-staff-quick-panel {
+    background:
+      radial-gradient(circle at top right, rgba(228, 138, 61, 0.14) 0%, rgba(228, 138, 61, 0) 32%),
+      linear-gradient(180deg, rgba(255, 249, 242, 0.98), rgba(255, 240, 224, 0.96)) !important;
+    border-color: rgba(205, 148, 95, 0.34) !important;
+    box-shadow: 0 18px 34px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .inventory-daily-gallery-card.tool-review-card,
+  .app-shell.theme-warm .inventory-daily-gallery-card {
+    border-color: rgba(205, 148, 95, 0.24) !important;
+    background: linear-gradient(180deg, #fffdf9 0%, #fff3e6 100%) !important;
+    color: #5a3412 !important;
+  }
+
+  .app-shell.theme-warm .inventory-daily-gallery-name,
+  .app-shell.theme-warm .inventory-daily-campus-group-title,
+  .app-shell.theme-warm .tool-review-card .inventory-daily-gallery-name {
+    color: #5a3412 !important;
+  }
+
+  .app-shell.theme-warm .inventory-daily-gallery-meta,
+  .app-shell.theme-warm .tool-review-card .inventory-daily-gallery-meta,
+  .app-shell.theme-warm .inventory-daily-gallery-panel .panel-row .tiny {
+    color: #8d6644 !important;
+  }
+
+  .app-shell.theme-warm .inventory-daily-gallery-photo,
+  .app-shell.theme-warm .tool-review-card-icon {
+    border-color: rgba(205, 148, 95, 0.24) !important;
+    background: #fffaf4 !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-menu,
+  .app-shell.theme-warm .app-card-maintenance-quick .filter-menu-list,
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-eco-inline-panel,
+  .app-shell.theme-warm .app-card-maintenance-quick .maintenance-datetime-eco-panel {
+    border-color: rgba(205, 148, 95, 0.34) !important;
+    background:
+      radial-gradient(circle at top right, rgba(228, 138, 61, 0.12), rgba(228, 138, 61, 0) 34%),
+      linear-gradient(180deg, rgba(255, 248, 239, 0.98), rgba(255, 239, 223, 0.96)) !important;
+    box-shadow: 0 18px 34px rgba(130, 82, 35, 0.14) !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-search,
+  .app-shell.theme-warm .app-card-maintenance-quick .filter-menu-search-input,
+  .app-shell.theme-warm .app-card-maintenance-quick .maintenance-datetime-eco-time .input,
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-date-input-wrap .input,
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-date-input-wrap .input[readonly] {
+    border-color: rgba(205, 148, 95, 0.38) !important;
+    background: linear-gradient(180deg, rgba(255, 253, 249, 0.98), rgba(255, 241, 226, 0.94)) !important;
+    color: #6a4018 !important;
+    -webkit-text-fill-color: #6a4018 !important;
+    caret-color: #6a4018 !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.78),
+      0 8px 16px rgba(130, 82, 35, 0.08) !important;
+    opacity: 1 !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-search::placeholder,
+  .app-shell.theme-warm .app-card-maintenance-quick .filter-menu-search-input::placeholder,
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-date-input-wrap .input::placeholder,
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-date-input-wrap .input[readonly]::placeholder,
+  .app-shell.theme-warm .app-card-maintenance-quick .maintenance-datetime-eco-time .input::placeholder {
+    color: #a3764f !important;
+    -webkit-text-fill-color: #a3764f !important;
+    opacity: 1 !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-option,
+  .app-shell.theme-warm .app-card-maintenance-quick .searchable-multi-option,
+  .app-shell.theme-warm .app-card-maintenance-quick .filter-menu-item {
+    border-color: rgba(205, 148, 95, 0.24) !important;
+    background: linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(255, 241, 226, 0.86)) !important;
+    color: #6a4018 !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-option:hover,
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-option-active,
+  .app-shell.theme-warm .app-card-maintenance-quick .searchable-multi-option:hover,
+  .app-shell.theme-warm .app-card-maintenance-quick .filter-menu-item:hover {
+    background: linear-gradient(180deg, rgba(255, 243, 228, 0.98), rgba(255, 229, 202, 0.94)) !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-option-label,
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-option > span:last-child,
+  .app-shell.theme-warm .app-card-maintenance-quick .parent-asset-picker-option-title,
+  .app-shell.theme-warm .app-card-maintenance-quick .filter-menu-item-label,
+  .app-shell.theme-warm .app-card-maintenance-quick .filter-menu-item > span,
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-eco-title,
+  .app-shell.theme-warm .app-card-maintenance-quick .maintenance-datetime-eco-time > span {
+    color: #6a4018 !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .parent-asset-picker-option-meta,
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-placeholder,
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-caret,
+  .app-shell.theme-warm .app-card-maintenance-quick .asset-picker-empty,
+  .app-shell.theme-warm .app-card-maintenance-quick .maintenance-datetime-eco-month {
+    color: #9b7250 !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-eco-nav-btn,
+  .app-shell.theme-warm .app-card-maintenance-quick .quickout-date-icon-btn {
+    border-color: rgba(205, 148, 95, 0.38) !important;
+    background: linear-gradient(180deg, rgba(255, 249, 242, 0.98), rgba(255, 240, 224, 0.96)) !important;
+    color: #8a5c2c !important;
+    box-shadow: 0 8px 16px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-datetime-field .quickout-date-input-wrap .input,
+  .app-shell.theme-warm .maintenance-quick-datetime-field .quickout-date-input-wrap .input[readonly] {
+    border-color: rgba(205, 148, 95, 0.42) !important;
+    background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 241, 226, 0.96)) !important;
+    color: #6a4018 !important;
+    -webkit-text-fill-color: #6a4018 !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.84),
+      0 8px 18px rgba(130, 82, 35, 0.08) !important;
+    opacity: 1 !important;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-datetime-field .quickout-date-input-wrap .input::placeholder,
+  .app-shell.theme-warm .maintenance-quick-datetime-field .quickout-date-input-wrap .input[readonly]::placeholder {
+    color: #a3764f !important;
+    -webkit-text-fill-color: #a3764f !important;
+    opacity: 1 !important;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-datetime-field .quickout-date-input-wrap .input::-webkit-date-and-time-value {
+    color: #6a4018 !important;
+  }
+
+  .app-shell.theme-warm .maintenance-quick-datetime-field .quickout-date-icon-btn {
+    border-color: rgba(205, 148, 95, 0.4) !important;
+    background: linear-gradient(180deg, rgba(255, 249, 242, 0.98), rgba(255, 240, 224, 0.96)) !important;
+    color: #8a5c2c !important;
+    box-shadow: 0 8px 16px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .maintenance-history-eco-calendar .quickout-date-input-wrap .input,
+  .app-shell.theme-warm .maintenance-filter-row .input,
+  .app-shell.theme-warm .maintenance-filter-row .filter-menu > summary {
+    border-color: rgba(205, 148, 95, 0.42) !important;
+    background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 241, 226, 0.96)) !important;
+    color: #6a4018 !important;
+    -webkit-text-fill-color: #6a4018 !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.84),
+      0 8px 18px rgba(130, 82, 35, 0.08) !important;
+  }
+
+  .app-shell.theme-warm .maintenance-history-eco-calendar .quickout-date-input-wrap .input::placeholder,
+  .app-shell.theme-warm .maintenance-filter-row .input::placeholder {
+    color: #a3764f !important;
+    -webkit-text-fill-color: #a3764f !important;
+    opacity: 1 !important;
+  }
+
+  .app-shell.theme-warm .maintenance-history-eco-calendar .quickout-date-input-wrap .input::-webkit-date-and-time-value,
+  .app-shell.theme-warm .maintenance-filter-row .input[type="date"]::-webkit-date-and-time-value,
+  .app-shell.theme-warm .maintenance-filter-row .input[type="month"]::-webkit-date-and-time-value {
+    color: #6a4018 !important;
+  }
+
+  .app-shell.theme-warm .maintenance-history-eco-calendar .quickout-date-input-wrap .input::-webkit-calendar-picker-indicator,
+  .app-shell.theme-warm .maintenance-filter-row .input[type="date"]::-webkit-calendar-picker-indicator,
+  .app-shell.theme-warm .maintenance-filter-row .input[type="month"]::-webkit-calendar-picker-indicator {
+    filter: invert(28%) sepia(23%) saturate(1143%) hue-rotate(349deg) brightness(92%) contrast(88%) !important;
+  }
+
+  .app-shell.theme-warm .dashboard-calendar-panel {
+    border-color: rgba(205, 148, 95, 0.3) !important;
+    background:
+      radial-gradient(circle at top right, rgba(228, 138, 61, 0.12), rgba(228, 138, 61, 0) 36%),
+      linear-gradient(180deg, rgba(255, 248, 239, 0.98), rgba(255, 239, 223, 0.96)) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      0 18px 34px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .dashboard-calendar-panel .section-title,
+  .app-shell.theme-warm .dashboard-calendar-panel .tiny,
+  .app-shell.theme-warm .dashboard-calendar-panel .row-actions.calendar-nav-row > strong {
+    color: #6a4018 !important;
+  }
+
+  .app-shell.theme-warm .dashboard-calendar-month {
+    border-color: rgba(205, 148, 95, 0.28) !important;
+    background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 241, 226, 0.95)) !important;
+    color: #8a6440 !important;
+  }
+
+  .app-shell.theme-warm .dashboard-calendar-grid {
+    border-color: rgba(205, 148, 95, 0.28) !important;
+    background: linear-gradient(180deg, #fff9f2, #fdebd6) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.74),
+      inset 0 0 0 1px rgba(205, 148, 95, 0.08) !important;
+  }
+
+  .app-shell.theme-warm .dashboard-calendar-grid .calendar-head {
+    color: #9b6b38 !important;
+  }
+
+  .app-shell.theme-warm .dashboard-calendar-grid .calendar-day {
+    background: rgba(255, 255, 255, 0.72) !important;
+    border-color: rgba(205, 148, 95, 0.18) !important;
+    color: #6a4018 !important;
+  }
+
+  .app-shell.theme-warm .dashboard-calendar-grid .calendar-day small {
+    color: #8a6440 !important;
+  }
+
+  .app-shell.theme-warm .mobile-nav-topline {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: 10px;
+    right: 10px;
+    padding: 0;
+  }
+
+  .app-shell.theme-warm .mobile-hamburger-btn,
+  .app-shell.theme-warm .mobile-notify-btn {
+    border-color: rgba(205, 148, 95, 0.36) !important;
+    background: linear-gradient(180deg, rgba(255, 248, 239, 0.98), rgba(255, 239, 223, 0.96)) !important;
+    color: #7a4d23 !important;
+    box-shadow: 0 8px 16px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .app-card-maintenance-quick .mobile-hamburger-btn,
+  .app-shell.theme-warm .app-card-maintenance-quick .mobile-notify-btn {
+    background: transparent !important;
+    border-color: rgba(205, 148, 95, 0.42) !important;
+    box-shadow: none !important;
+    color: #8a5c2c !important;
+  }
+
+  .app-shell.theme-warm .phone-dashboard-hero {
+    background:
+      radial-gradient(circle at top right, rgba(228, 138, 61, 0.14) 0%, rgba(228, 138, 61, 0) 34%),
+      linear-gradient(155deg, rgba(255, 248, 239, 0.98) 0%, rgba(255, 239, 223, 0.96) 100%) !important;
+    border: 1px solid rgba(205, 148, 95, 0.3) !important;
+    box-shadow: 0 14px 28px rgba(130, 82, 35, 0.12) !important;
+  }
+
+  .app-shell.theme-warm .phone-dashboard-kicker {
+    color: #9b6b38 !important;
+  }
+
+  .app-shell.theme-warm .phone-dashboard-title {
+    color: #5a3412 !important;
+  }
+
+  .app-shell.theme-warm .phone-dashboard-campus {
+    color: #8a6440 !important;
+  }
+
+  .app-shell.theme-warm .phone-quick-btn {
+    border-color: rgba(205, 148, 95, 0.3) !important;
+    background: linear-gradient(180deg, rgba(255, 253, 249, 0.98), rgba(255, 242, 227, 0.94)) !important;
+    color: #6f431c !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.72),
+      0 8px 16px rgba(130, 82, 35, 0.08) !important;
+  }
+
+  .app-shell.theme-warm .dashboard-mobile-fold {
+    border-color: rgba(205, 148, 95, 0.24) !important;
+    background: linear-gradient(180deg, rgba(255, 249, 242, 0.96), rgba(255, 241, 226, 0.92)) !important;
+  }
+
+  .app-shell.theme-warm .dashboard-mobile-fold summary {
+    color: #6f431c !important;
+  }
+
+  .app-shell.theme-warm .dashboard-mobile-fold summary::after {
+    color: #c66c24 !important;
+  }
+
+  .app-shell.theme-warm .workspace-main,
+  .app-shell.theme-warm .footer-row,
+  .app-shell.theme-warm .footnote-row {
+    background: transparent !important;
+  }
+
+  .app-shell.theme-warm .footnote,
+  .app-shell.theme-warm .version-badge-btn {
+    color: #7a4d23 !important;
+  }
+
+  .app-shell.theme-warm .version-badge-btn {
+    border-color: rgba(205, 148, 95, 0.36) !important;
+    background: rgba(255, 248, 239, 0.96) !important;
   }
 }
 

@@ -795,7 +795,8 @@ function tabNeedsFullAssetDetail(tab: NavModule) {
 
 type ApiError = { error?: string };
 type Lang = "en" | "km";
-type UiTheme = "dark" | "light";
+type UiTheme = "dark" | "light" | "warm";
+type UiThemeMode = "auto" | "manual";
 type AssetSubviewAccess = "both" | "list_only";
 type AuthRole = "Super Admin" | "Admin" | "Viewer";
 type NavModule =
@@ -2818,6 +2819,10 @@ function isSingleFurnitureType(type: string): boolean {
   return String(type || "").trim().toUpperCase() === "NBD";
 }
 
+function preferredThemeForLang(lang: Lang): UiTheme {
+  return lang === "km" ? "warm" : "dark";
+}
+
 function needsComponentRole(type: string): boolean {
   return String(type || "").trim().toUpperCase() !== WEBCAM_TYPE_CODE;
 }
@@ -2838,6 +2843,7 @@ const TEXT = {
     khmer: "Khmer",
     themeDark: "Dark",
     themeLight: "Light",
+    themeWarm: "Warm",
     allCampuses: "All Campuses",
     dashboard: "Dashboard",
     assets: "Assets",
@@ -3075,6 +3081,7 @@ const TEXT = {
     khmer: "ខ្មែរ",
     themeDark: "ងងឹត",
     themeLight: "ភ្លឺ",
+    themeWarm: "កក់ក្តៅ",
     allCampuses: "គ្រប់ Campus",
     dashboard: "ផ្ទាំងសង្ខេប",
     assets: "ទ្រព្យសម្បត្តិ",
@@ -8759,9 +8766,35 @@ export default function App() {
   });
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => {
     const saved = localStorage.getItem("ui_theme");
-    return saved === "light" ? "light" : "dark";
+    if (saved === "dark" || saved === "light" || saved === "warm") return saved;
+    const savedLang = localStorage.getItem("ui_lang");
+    return preferredThemeForLang(savedLang === "km" ? "km" : "en");
+  });
+  const [uiThemeMode, setUiThemeMode] = useState<UiThemeMode>(() => {
+    const saved = localStorage.getItem("ui_theme_mode");
+    return saved === "manual" ? "manual" : "auto";
   });
   const t = TEXT[lang];
+  const themeOptions = useMemo(
+    () => [
+      { value: "dark", label: t.themeDark },
+      { value: "light", label: t.themeLight },
+      { value: "warm", label: t.themeWarm },
+    ],
+    [t]
+  );
+  const handleLanguageChange = useCallback((value: string) => {
+    const nextLang = value as Lang;
+    setLang(nextLang);
+    if (uiThemeMode === "auto") {
+      setUiTheme(preferredThemeForLang(nextLang));
+    }
+  }, [uiThemeMode]);
+  const handleThemeChange = useCallback((value: string) => {
+    const nextTheme = value as UiTheme;
+    setUiTheme(nextTheme);
+    setUiThemeMode(nextTheme === preferredThemeForLang(lang) ? "auto" : "manual");
+  }, [lang]);
   const [authLoading, setAuthLoading] = useState(true);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const currentOperatorName = String(authUser?.displayName || authUser?.username || "").trim();
@@ -12727,6 +12760,16 @@ export default function App() {
   useEffect(() => {
     trySetLocalStorage("ui_theme", uiTheme);
   }, [uiTheme]);
+  useEffect(() => {
+    trySetLocalStorage("ui_theme_mode", uiThemeMode);
+  }, [uiThemeMode]);
+  useEffect(() => {
+    if (uiThemeMode !== "auto") return;
+    const preferredTheme = preferredThemeForLang(lang);
+    if (uiTheme !== preferredTheme) {
+      setUiTheme(preferredTheme);
+    }
+  }, [lang, uiTheme, uiThemeMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -27824,13 +27867,185 @@ export default function App() {
               (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
               String(a.assetId || "").localeCompare(String(b.assetId || ""))
           );
-        for (const component of existingAirconChildren) {
+        const desiredAirconComponents = [
+          {
+            type: REMOTE_TYPE_CODE,
+            enabled: Boolean(assetEditForm.acHasRemote),
+            role: "Remote",
+            serialNumber: String(assetEditForm.acRemoteSerial || "").trim(),
+            photo: String(assetEditForm.acRemotePhoto || "").trim(),
+          },
+          {
+            type: AIRCON_FRONT_UNIT_TYPE_CODE,
+            enabled: Boolean(assetEditForm.acHasFrontPanel),
+            role: "Front Unit (Indoor)",
+            serialNumber: String(assetEditForm.acFrontUnitSerial || "").trim(),
+            photo: String(assetEditForm.acFrontUnitPhoto || "").trim(),
+          },
+          {
+            type: AIRCON_OUTDOOR_UNIT_TYPE_CODE,
+            enabled: Boolean(assetEditForm.acHasOutdoor),
+            role: "Back Unit (Outdoor)",
+            serialNumber: String(assetEditForm.acOutdoorSerial || "").trim(),
+            photo: String(assetEditForm.acOutdoorPhoto || "").trim(),
+          },
+        ];
+        const existingAirconChildMap = new Map(
+          existingAirconChildren.map((component) => [String(component.type || "").trim().toUpperCase(), component] as const)
+        );
+        for (const component of desiredAirconComponents) {
+          const existingChild = existingAirconChildMap.get(component.type) || null;
+          if (!component.enabled) {
+            if (!existingChild) continue;
+            try {
+              await requestJson<{ ok: boolean }>(`/api/assets/${existingChild.id}`, { method: "DELETE" });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+            nextLocal = nextLocal.filter((asset) => asset.id !== existingChild.id);
+            continue;
+          }
+
+          const childPhotos = component.photo ? [component.photo] : [];
+          const childNotes = assetEditForm.acComponentNote.trim() || `${component.role} for ${editingAsset.assetId}`;
+          if (existingChild) {
+            const updatedChild: Asset = {
+              ...existingChild,
+              campus: editingAsset.campus,
+              category: editingAsset.category,
+              type: component.type,
+              name: airconComponentLabel(component.type),
+              location: payload.location,
+              setCode: "",
+              parentAssetId: editingAsset.assetId,
+              componentRole: component.role,
+              componentRequired: component.type !== REMOTE_TYPE_CODE,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: payload.brand,
+              model: "",
+              serialNumber: component.serialNumber,
+              specs: "",
+              purchaseDate: payload.purchaseDate,
+              warrantyUntil: payload.warrantyUntil,
+              vendor: payload.vendor,
+              notes: childNotes,
+              photo: childPhotos[0] || "",
+              photos: childPhotos,
+              status: payload.status,
+            };
+            nextLocal = nextLocal.map((asset) => (asset.id === existingChild.id ? updatedChild : asset));
+            try {
+              await requestJson<{ asset: Asset }>(`/api/assets/${existingChild.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  location: payload.location,
+                  parentAssetId: editingAsset.assetId,
+                  componentRole: component.role,
+                  componentRequired: component.type !== REMOTE_TYPE_CODE,
+                  brand: payload.brand,
+                  model: "",
+                  serialNumber: component.serialNumber,
+                  specs: "",
+                  purchaseDate: payload.purchaseDate,
+                  warrantyUntil: payload.warrantyUntil,
+                  vendor: payload.vendor,
+                  notes: childNotes,
+                  photo: childPhotos[0] || "",
+                  photos: childPhotos,
+                  status: payload.status,
+                }),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+            continue;
+          }
+
           try {
-            await requestJson<{ ok: boolean }>(`/api/assets/${component.id}`, { method: "DELETE" });
+            const created = await requestJson<{ asset: Asset }>("/api/assets", {
+              method: "POST",
+              body: JSON.stringify({
+                campus: editingAsset.campus,
+                category: editingAsset.category,
+                type: component.type,
+                location: payload.location,
+                setCode: "",
+                parentAssetId: editingAsset.assetId,
+                componentRole: component.role,
+                componentRequired: component.type !== REMOTE_TYPE_CODE,
+                assignedTo: "",
+                custodyStatus: "IN_STOCK",
+                brand: payload.brand,
+                model: "",
+                serialNumber: component.serialNumber,
+                specs: "",
+                purchaseDate: payload.purchaseDate,
+                warrantyUntil: payload.warrantyUntil,
+                vendor: payload.vendor,
+                notes: childNotes,
+                nextMaintenanceDate: "",
+                scheduleNote: "",
+                photo: childPhotos[0] || "",
+                photos: childPhotos,
+                status: payload.status,
+              }),
+            });
+            nextLocal = [created.asset, ...nextLocal.filter((asset) => asset.id !== created.asset.id)];
           } catch (err) {
             if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, editingAsset.category, component.type);
+            const newChild: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: editingAsset.campus,
+              category: editingAsset.category,
+              type: component.type,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(editingAsset.campus, editingAsset.category, component.type, childSeq),
+              name: airconComponentLabel(component.type),
+              location: payload.location,
+              setCode: "",
+              parentAssetId: editingAsset.assetId,
+              componentRole: component.role,
+              componentRequired: component.type !== REMOTE_TYPE_CODE,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: payload.brand,
+              model: "",
+              serialNumber: component.serialNumber,
+              specs: "",
+              purchaseDate: payload.purchaseDate,
+              warrantyUntil: payload.warrantyUntil,
+              vendor: payload.vendor,
+              notes: childNotes,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: payload.status,
+                  reason: "Asset created as air-con component",
+                },
+              ],
+              photo: childPhotos[0] || "",
+              photos: childPhotos,
+              status: payload.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [newChild, ...nextLocal];
           }
-          nextLocal = nextLocal.filter((asset) => asset.id !== component.id);
         }
       }
 
@@ -36932,6 +37147,21 @@ export default function App() {
       }
       return text;
     };
+    const printableCellHtml = (cell: string) => {
+      const text = String(cell || "");
+      const printablePhoto = toPrintablePhotoUrl(text);
+      if (
+        printablePhoto &&
+        (printablePhoto.startsWith("data:image") ||
+          /^https?:\/\//i.test(printablePhoto))
+      ) {
+        return `<td><img loading="lazy" decoding="async" src="${escapeHtml(printablePhoto)}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
+      }
+      if (text.startsWith("<div")) {
+        return `<td>${text}</td>`;
+      }
+      return `<td>${escapeHtml(text || "-")}</td>`;
+    };
     const readVisibleReportColumnWidths = () => {
       if (typeof document === "undefined") return [] as number[];
       const table = Array.from(document.querySelectorAll<HTMLTableElement>(".report-table-wrap table")).find(
@@ -37253,18 +37483,7 @@ export default function App() {
                       String(runningIndex++),
                       ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
                     ];
-                    return `<tr>${cells
-                      .map((cell) => {
-                        const text = String(cell || "");
-                        if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
-                          return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
-                        }
-                        if (text.startsWith("<div")) {
-                          return `<td>${text}</td>`;
-                        }
-                        return `<td>${escapeHtml(text || "-")}</td>`;
-                      })
-                      .join("")}</tr>`;
+                    return `<tr>${cells.map((cell) => printableCellHtml(cell)).join("")}</tr>`;
                   })
                   .join("");
                 return `<tr class="report-section-row"><td colspan="${columns.length}">${escapeHtml(section.label)}</td></tr>${sectionRows}`;
@@ -37275,18 +37494,7 @@ export default function App() {
           ? rows
               .map(
                 (row) =>
-                  `<tr>${row
-                    .map((cell) => {
-                      const text = String(cell || "");
-                      if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
-                        return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
-                      }
-                      if (text.startsWith("<div")) {
-                        return `<td>${text}</td>`;
-                      }
-                      return `<td>${escapeHtml(text || "-")}</td>`;
-                    })
-                    .join("")}</tr>`
+                  `<tr>${row.map((cell) => printableCellHtml(cell)).join("")}</tr>`
               )
               .join("")
           : `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
@@ -37668,15 +37876,7 @@ export default function App() {
                               String(rowIndex + 1),
                               ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
                             ];
-                            return `<tr>${cells
-                              .map((cell) => {
-                                const text = String(cell || "");
-                                if (text.startsWith("data:image") || /^https?:\/\//i.test(text)) {
-                                  return `<td><img loading="lazy" decoding="async" src="${text}" alt="photo" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></td>`;
-                                }
-                                return `<td>${escapeHtml(text || "-")}</td>`;
-                              })
-                              .join("")}</tr>`;
+                            return `<tr>${cells.map((cell) => printableCellHtml(cell)).join("")}</tr>`;
                           })
                           .join("")
                       : `<tr><td colspan="${visibleInventoryReportColumnDefs.length + 1}">No tools in this section.</td></tr>`;
@@ -38884,14 +39084,14 @@ function formatTicketRequestSource(value?: string) {
                 <button
                   type="button"
                   className={`public-qr-lang-btn ${lang === "en" ? "is-active" : ""}`}
-                  onClick={() => setLang("en")}
+                  onClick={() => handleLanguageChange("en")}
                 >
                   English
                 </button>
                 <button
                   type="button"
                   className={`public-qr-lang-btn ${lang === "km" ? "is-active" : ""}`}
-                  onClick={() => setLang("km")}
+                  onClick={() => handleLanguageChange("km")}
                 >
                   ខ្មែរ
                 </button>
@@ -39019,14 +39219,14 @@ function formatTicketRequestSource(value?: string) {
                   <button
                     type="button"
                     className={`public-qr-lang-btn ${lang === "en" ? "is-active" : ""}`}
-                    onClick={() => setLang("en")}
+                    onClick={() => handleLanguageChange("en")}
                   >
                     English
                   </button>
                   <button
                     type="button"
                     className={`public-qr-lang-btn ${lang === "km" ? "is-active" : ""}`}
-                    onClick={() => setLang("km")}
+                    onClick={() => handleLanguageChange("km")}
                   >
                     ខ្មែរ
                   </button>
@@ -39852,7 +40052,7 @@ function formatTicketRequestSource(value?: string) {
   }
 
   return (
-    <main className={`app-shell ${uiTheme === "light" ? "theme-light" : "theme-dark"}`}>
+    <main className={`app-shell ${uiTheme === "light" ? "theme-light" : uiTheme === "warm" ? "theme-warm" : "theme-dark"}`}>
       <div className="bg-orb bg-orb-a" aria-hidden={true} />
       <div className="bg-orb bg-orb-b" aria-hidden={true} />
 
@@ -39893,7 +40093,7 @@ function formatTicketRequestSource(value?: string) {
               <span>{t.language}</span>
               <LocationPicker
                 value={lang}
-                onChange={(value) => setLang(value as Lang)}
+                onChange={handleLanguageChange}
                 options={[
                   ...(!maintenanceQuickMode ? [{ value: "en", label: t.english }] : []),
                   { value: "km", label: t.khmer },
@@ -39909,11 +40109,8 @@ function formatTicketRequestSource(value?: string) {
               <span>{t.theme}</span>
               <LocationPicker
                 value={uiTheme}
-                onChange={(value) => setUiTheme(value as UiTheme)}
-                options={[
-                  { value: "dark", label: t.themeDark },
-                  { value: "light", label: t.themeLight },
-                ]}
+                onChange={handleThemeChange}
+                options={themeOptions}
                 placeholder={t.theme}
                 searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
                 emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
@@ -40135,14 +40332,14 @@ function formatTicketRequestSource(value?: string) {
                         <button
                           type="button"
                           className={`public-qr-lang-btn ${lang === "en" ? "is-active" : ""}`}
-                          onClick={() => setLang("en")}
+                          onClick={() => handleLanguageChange("en")}
                         >
                           English
                         </button>
                         <button
                           type="button"
                           className={`public-qr-lang-btn ${lang === "km" ? "is-active" : ""}`}
-                          onClick={() => setLang("km")}
+                          onClick={() => handleLanguageChange("km")}
                         >
                           ខ្មែរ
                         </button>
@@ -40243,13 +40440,8 @@ function formatTicketRequestSource(value?: string) {
                           <span>{t.theme}</span>
                           <LocationPicker
                             value={uiTheme}
-                            onChange={(value) => {
-                              setUiTheme(value as UiTheme);
-                            }}
-                            options={[
-                              { value: "dark", label: t.themeDark },
-                              { value: "light", label: t.themeLight },
-                            ]}
+                            onChange={handleThemeChange}
+                            options={themeOptions}
                             placeholder={t.theme}
                             searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
                             emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
@@ -40306,9 +40498,7 @@ function formatTicketRequestSource(value?: string) {
                       <span>{t.language}</span>
                       <LocationPicker
                         value={lang}
-                        onChange={(value) => {
-                          setLang(value as Lang);
-                        }}
+                        onChange={handleLanguageChange}
                         options={[
                           { value: "en", label: t.english },
                           { value: "km", label: t.khmer },
@@ -40323,13 +40513,8 @@ function formatTicketRequestSource(value?: string) {
                       <span>{t.theme}</span>
                       <LocationPicker
                         value={uiTheme}
-                        onChange={(value) => {
-                          setUiTheme(value as UiTheme);
-                        }}
-                        options={[
-                          { value: "dark", label: t.themeDark },
-                          { value: "light", label: t.themeLight },
-                        ]}
+                        onChange={handleThemeChange}
+                        options={themeOptions}
                         placeholder={t.theme}
                         searchPlaceholder={lang === "km" ? "ស្វែងរករចនាប័ទ្ម..." : "Search theme..."}
                         emptyText={lang === "km" ? "មិនមានរចនាប័ទ្ម" : "No theme found."}
@@ -59498,7 +59683,94 @@ function formatTicketRequestSource(value?: string) {
             )}
 
             {reportType === "inventory_balance" && (
-              reportInventorySplitByCategoryPages ? (
+              isPhoneView ? (
+                <div className="report-inventory-mobile-list">
+                  {reportInventoryGroupedRows.length ? (
+                    reportInventoryGroupedRows.map((section) => (
+                      <section key={`report-inventory-mobile-section-${section.group}`} className="report-inventory-mobile-section">
+                        <div className="report-inventory-mobile-section-head">
+                          <strong>{section.label}</strong>
+                          <span>{section.rows.length} items</span>
+                        </div>
+                        <div className="report-card-list">
+                          {section.rows.map((row) => (
+                            <article key={`report-inventory-mobile-card-${section.group}-${row.id}`} className="report-card report-inventory-mobile-card">
+                              <div className="report-card-head report-inventory-mobile-head">
+                                <div className="report-card-title">
+                                  <span className="report-card-id">{row.itemCode}</span>
+                                  <strong className="report-inventory-mobile-name">{inventoryDisplayName(row.itemName, lang)}</strong>
+                                  <p className="report-card-sub">
+                                    {inventoryCampusLabel(row.campus)} • {row.location || "-"}
+                                  </p>
+                                </div>
+                                <div className="report-card-photo">
+                                  {renderAssetPhoto(row.photo || "", row.itemCode)}
+                                </div>
+                              </div>
+
+                              {reportInventoryIsToolGroup ? (
+                                <>
+                                  <div className="report-inventory-mobile-metrics">
+                                    <div>
+                                      <span>Amount</span>
+                                      <strong>{row.currentStock ?? 0}</strong>
+                                    </div>
+                                    <div>
+                                      <span>Unit</span>
+                                      <strong>{row.unit || "-"}</strong>
+                                    </div>
+                                  </div>
+                                  <div className="report-card-meta">
+                                    <div>
+                                      <strong>Owner:</strong> {toolOwnerTypeLabel(row.ownerType)}
+                                    </div>
+                                    <div>
+                                      <strong>Responsible:</strong> {row.responsibleParty || "-"}
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="report-inventory-mobile-metrics">
+                                    <div>
+                                      <span>Current</span>
+                                      <strong>{row.currentStock ?? 0}</strong>
+                                    </div>
+                                    <div>
+                                      <span>Min</span>
+                                      <strong>{row.minStock ?? 0}</strong>
+                                    </div>
+                                    <div>
+                                      <span>Stock In</span>
+                                      <strong>{row.stockIn ?? 0}</strong>
+                                    </div>
+                                    <div>
+                                      <span>Stock Out</span>
+                                      <strong>{row.stockOut ?? 0}</strong>
+                                    </div>
+                                  </div>
+                                  <div className="report-card-meta">
+                                    <div>
+                                      <strong>Category:</strong> {inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}
+                                    </div>
+                                    <div>
+                                      <strong>Unit:</strong> {row.unit || "-"}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ))
+                  ) : (
+                    <div className="panel-note">
+                      {reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                    </div>
+                  )}
+                </div>
+              ) : reportInventorySplitByCategoryPages ? (
                 <div className="report-inventory-pages">
                   {reportInventoryToolPages.length ? (
                     reportInventoryToolPages.map((page, pageIndex) => (
