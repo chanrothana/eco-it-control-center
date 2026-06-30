@@ -24609,6 +24609,16 @@ tr.row-maint-maintenance:hover td {
   overflow: visible;
 }
 
+.public-asset-shell {
+  --public-qr-surface: rgba(255, 252, 246, 0.96);
+  --public-qr-surface-strong: #fffaf0;
+  --public-qr-border: #d1b183;
+  --public-qr-ink: #2f2418;
+  --public-qr-ink-soft: #5f4930;
+  --public-qr-placeholder: #8d7354;
+  --public-qr-focus: rgba(181, 120, 37, 0.22);
+}
+
 .app-card-public-asset {
   max-width: 980px;
   margin: 24px auto;
@@ -24631,6 +24641,10 @@ tr.row-maint-maintenance:hover td {
   min-width: 84px !important;
   padding: 0 12px !important;
   max-width: min(44vw, 220px);
+  border: 1px solid rgba(120, 82, 34, 0.32) !important;
+  background: linear-gradient(180deg, rgba(255, 246, 225, 0.98), rgba(245, 223, 177, 0.96)) !important;
+  color: var(--public-qr-ink) !important;
+  box-shadow: 0 10px 24px rgba(59, 39, 17, 0.14);
 }
 
 .public-qr-account-chip-text {
@@ -24639,6 +24653,9 @@ tr.row-maint-maintenance:hover td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: inherit;
+  font-weight: 800;
+  text-shadow: none;
 }
 
 .public-qr-side-drawer {
@@ -24849,8 +24866,9 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-group-hint {
   padding: 0 18px 14px;
-  color: #7a5c3b;
+  color: var(--public-qr-ink-soft);
   font-size: 13px;
+  line-height: 1.55;
 }
 
 .public-asset-group-body {
@@ -24858,27 +24876,37 @@ tr.row-maint-maintenance:hover td {
 }
 
 .public-asset-group-body .field > span {
-  color: #7a5c3b;
+  color: var(--public-qr-ink-soft);
   font-weight: 700;
+  line-height: 1.45;
 }
 
 .public-asset-group-body .input,
 .public-asset-group-body .textarea,
 .public-asset-group-body .status-select,
 .public-asset-group-body .detail-value {
-  border-color: #d8c09b !important;
-  background: linear-gradient(180deg, #fffdfa, #f9f1e4) !important;
-  color: #3f2d1c !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  border-color: var(--public-qr-border) !important;
+  background: linear-gradient(180deg, var(--public-qr-surface-strong), #f8eddc) !important;
+  color: var(--public-qr-ink) !important;
+  -webkit-text-fill-color: var(--public-qr-ink) !important;
+  caret-color: var(--public-qr-ink);
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 2px rgba(95, 73, 48, 0.06);
+  opacity: 1;
 }
 
 .public-asset-group-body .input::placeholder,
 .public-asset-group-body .textarea::placeholder {
-  color: #9c7f5d !important;
+  color: var(--public-qr-placeholder) !important;
+  -webkit-text-fill-color: var(--public-qr-placeholder) !important;
+  opacity: 1;
 }
 
 .public-asset-group-body select.input {
-  color: #3f2d1c !important;
+  color: var(--public-qr-ink) !important;
+  -webkit-text-fill-color: var(--public-qr-ink) !important;
 }
 
 .public-asset-group-body input[type="date"]::-webkit-calendar-picker-indicator {
@@ -24887,7 +24915,25 @@ tr.row-maint-maintenance:hover td {
 }
 
 .public-asset-group-body input[type="file"] {
-  color: #5c442d;
+  color: var(--public-qr-ink-soft);
+}
+
+.public-asset-group-body .input:focus,
+.public-asset-group-body .textarea:focus,
+.public-asset-group-body .status-select:focus,
+.public-asset-group-body .detail-value:focus-within {
+  border-color: #b77722 !important;
+  box-shadow:
+    0 0 0 3px var(--public-qr-focus),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+}
+
+.public-asset-group-body select.input option,
+.public-asset-group-body .status-select option,
+.public-asset-group-body select.input optgroup,
+.public-asset-group-body .status-select optgroup {
+  color: var(--public-qr-ink);
+  background: #fffaf2;
 }
 
 .public-qr-photo-pair {
@@ -24908,7 +24954,7 @@ tr.row-maint-maintenance:hover td {
 }
 
 .public-asset-group-body .tiny {
-  color: #7a5c3b !important;
+  color: var(--public-qr-ink-soft) !important;
 }
 
 .public-asset-date-field .input {
@@ -29300,6 +29346,7 @@ tr.row-maint-maintenance:hover td {
   .public-qr-account-chip {
     min-height: 46px;
     max-width: min(42vw, 180px);
+    padding-inline: 14px !important;
   }
 
   .public-qr-side-drawer .field {
@@ -29316,13 +29363,17 @@ tr.row-maint-maintenance:hover td {
     font-size: 16px;
   }
 
+  .public-asset-group-toggle span {
+    line-height: 1.3;
+  }
+
   .public-asset-group-body {
     padding: 0 14px 14px;
   }
 
   .public-asset-group-hint {
     padding: 0 14px 12px;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .public-asset-grid .field {
@@ -29419,8 +29470,8 @@ tr.row-maint-maintenance:hover td {
   .public-asset-grid .detail-value {
     min-height: 40px;
     padding: 8px 10px;
-    font-size: 15px;
-    line-height: 1.35;
+    font-size: 16px;
+    line-height: 1.45;
   }
 
   .public-asset-date-field .input {
@@ -29429,6 +29480,28 @@ tr.row-maint-maintenance:hover td {
     border-radius: 18px;
     padding-left: 10px;
     padding-right: 10px;
+  }
+
+  .public-asset-group-body .field > span {
+    font-size: 13px;
+  }
+
+  .public-asset-group-body .input,
+  .public-asset-group-body .textarea,
+  .public-asset-group-body .status-select,
+  .public-asset-group-body .detail-value {
+    min-height: 52px;
+    font-size: 16px;
+  }
+
+  .public-asset-group-body .textarea {
+    min-height: 110px;
+    line-height: 1.5;
+  }
+
+  .public-asset-group-body .input::placeholder,
+  .public-asset-group-body .textarea::placeholder {
+    font-size: 15px;
   }
 
   .public-asset-photo-row .photo-preview,
@@ -29532,6 +29605,26 @@ tr.row-maint-maintenance:hover td {
 }
 
 @media (max-width: 480px) {
+  .public-qr-account-chip {
+    max-width: min(50vw, 210px);
+  }
+
+  .public-qr-account-chip-text {
+    max-width: 100%;
+    font-size: 15px;
+  }
+
+  .public-asset-group-toggle {
+    align-items: center;
+  }
+
+  .public-asset-group-body .input,
+  .public-asset-group-body .textarea,
+  .public-asset-group-body .status-select,
+  .public-asset-group-body .detail-value {
+    font-size: 16px;
+  }
+
   .eco-date-floating-field .eco-date-floating-panel {
     width: 100%;
     min-width: 0;

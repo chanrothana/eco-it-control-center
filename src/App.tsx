@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   ArrowLeftRight,
@@ -12722,6 +12723,25 @@ export default function App() {
   const [toolReviewPhotoFileKey, setToolReviewPhotoFileKey] = useState(0);
   const [toolReviewPhotoName, setToolReviewPhotoName] = useState("");
   const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
+  const [toolReviewSummaryModal, setToolReviewSummaryModal] = useState<null | {
+    title: string;
+    items: Array<{
+      id: number;
+      itemCode: string;
+      itemName: string;
+      campus: string;
+      location: string;
+      currentStock: number;
+      unit: string;
+      photo: string;
+      responsibleParty: string;
+      condition: string;
+      reviewedBy: string;
+      reviewedAt: string;
+      note: string;
+      status: "reviewed" | "pending" | "issue";
+    }>;
+  }>(null);
   const [toolReviewForm, setToolReviewForm] = useState({
     itemId: "",
     countedQty: "",
@@ -15030,6 +15050,51 @@ export default function App() {
       issues,
     };
   }, [toolReviewItemOptions, toolReviewMonthReports]);
+  function openToolReviewSummaryModal(mode: "all" | "reviewed" | "pending" | "issues") {
+    const issueConditions = new Set<ToolReviewCondition>(["Damaged", "Missing", "Need Replacement"]);
+    const items = toolReviewItemOptions
+      .map((row) => {
+        const reviewedEntry = toolReviewMonthReportByItemId.get(String(row.id)) || null;
+        const status: "reviewed" | "pending" | "issue" = !reviewedEntry
+          ? "pending"
+          : issueConditions.has(reviewedEntry.condition)
+            ? "issue"
+            : "reviewed";
+        return {
+          id: Number(row.id || 0),
+          itemCode: String(row.itemCode || "").trim(),
+          itemName: inventoryDisplayName(row.itemName || "-", lang),
+          campus: String(row.campus || "").trim(),
+          location: String(row.location || "").trim(),
+          currentStock: Number(row.currentStock || 0),
+          unit: String(row.unit || "pcs").trim(),
+          photo: String(row.photo || "").trim(),
+          responsibleParty: String(row.responsibleParty || "").trim(),
+          condition: reviewedEntry?.condition || "Pending",
+          reviewedBy: String(reviewedEntry?.reviewedBy || "").trim(),
+          reviewedAt: String(reviewedEntry?.updated || reviewedEntry?.created || "").trim(),
+          note: String(reviewedEntry?.note || "").trim(),
+          status,
+        };
+      })
+      .filter((row) => {
+        if (mode === "all") return true;
+        if (mode === "reviewed") return row.status === "reviewed" || row.status === "issue";
+        if (mode === "pending") return row.status === "pending";
+        return row.status === "issue";
+      });
+
+    const title =
+      mode === "all"
+        ? "Tools In Scope"
+        : mode === "reviewed"
+          ? "Reviewed Tools"
+          : mode === "pending"
+            ? "Pending Tools"
+            : "Tools With Issues";
+
+    setToolReviewSummaryModal({ title, items });
+  }
   const toolReviewExistingEntry = useMemo(
     () =>
       toolReviewForm.itemId
@@ -33747,6 +33812,7 @@ export default function App() {
     inventoryQuickOutModal ||
     inventoryDashboardModal ||
     inventoryAdminDetailModal ||
+    toolReviewSummaryModal ||
     scheduleScopeModal ||
     scheduleQuickCreateOpen ||
     scheduleAlertModal ||
@@ -48736,22 +48802,38 @@ function formatTicketRequestSource(value?: string) {
 
                 {!(maintenanceQuickMode && isPhoneView) ? (
                   <div className="stats-grid" style={{ marginBottom: 16 }}>
-                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-neutral">
+                    <button
+                      type="button"
+                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-neutral"
+                      onClick={() => openToolReviewSummaryModal("all")}
+                    >
                       <div className="stat-label">Tools In Scope</div>
                       <div className="stat-value">{toolReviewSummary.totalTools}</div>
-                    </div>
-                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-primary">
+                    </button>
+                    <button
+                      type="button"
+                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-primary"
+                      onClick={() => openToolReviewSummaryModal("reviewed")}
+                    >
                       <div className="stat-label">Reviewed</div>
                       <div className="stat-value">{toolReviewSummary.reviewed}</div>
-                    </div>
-                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-alert">
+                    </button>
+                    <button
+                      type="button"
+                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-alert"
+                      onClick={() => openToolReviewSummaryModal("pending")}
+                    >
                       <div className="stat-label">Pending</div>
                       <div className="stat-value">{toolReviewSummary.pending}</div>
-                    </div>
-                    <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-danger">
+                    </button>
+                    <button
+                      type="button"
+                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-danger"
+                      onClick={() => openToolReviewSummaryModal("issues")}
+                    >
                       <div className="stat-label">Issues</div>
                       <div className="stat-value">{toolReviewSummary.issues}</div>
-                    </div>
+                    </button>
                   </div>
                 ) : null}
 
@@ -66260,6 +66342,108 @@ function formatTicketRequestSource(value?: string) {
                   </tbody>
                 </table>
               </div>
+            </section>
+          </div>
+        ) : null}
+
+        {toolReviewSummaryModal ? (
+          <div className="modal-backdrop quick-count-assets-backdrop" onClick={() => setToolReviewSummaryModal(null)}>
+            <section className="panel modal-panel quick-count-assets-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{toolReviewSummaryModal.title}</h2>
+                <button className="tab" onClick={() => setToolReviewSummaryModal(null)}>{t.close}</button>
+              </div>
+              {isPhoneView ? (
+                <div className="quick-count-mobile-list">
+                  {toolReviewSummaryModal.items.length ? (
+                    toolReviewSummaryModal.items.map((item) => (
+                      <article key={`tool-review-summary-mobile-${item.id}`} className="quick-count-mobile-card">
+                        <div className="quick-count-mobile-head">
+                          <strong>{item.itemCode}</strong>
+                          <span>{item.condition || "Pending"}</span>
+                        </div>
+                        <div className="quick-count-mobile-body">
+                          <div>
+                            {item.photo ? (
+                              <img loading="lazy" decoding="async" src={item.photo} alt={item.itemCode} className="table-photo" />
+                            ) : (
+                              <div className="asset-gallery-photo-empty">No photo</div>
+                            )}
+                          </div>
+                          <div className="quick-count-mobile-meta">
+                            <div>{item.itemName}</div>
+                            <div>{t.campus}: {inventoryCampusLabel(item.campus)}</div>
+                            <div>{t.location}: {item.location || "-"}</div>
+                            <div>Amount: {item.currentStock} {item.unit}</div>
+                            <div>{item.reviewedBy ? `Reviewed By: ${item.reviewedBy}` : "Waiting Review"}</div>
+                          </div>
+                        </div>
+                        <div className="asset-actions" style={{ marginTop: 10 }}>
+                          <button
+                            className="tab btn-small"
+                            onClick={() => {
+                              const selectedRow = toolReviewItemOptions.find((row) => Number(row.id) === item.id);
+                              if (!selectedRow) return;
+                              openToolReviewItem(selectedRow, toolReviewMonthReportByItemId.get(String(item.id)) || null);
+                              setToolReviewSummaryModal(null);
+                            }}
+                          >
+                            Open Tool
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">No tool items found.</div>
+                  )}
+                </div>
+              ) : (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Tool ID</th>
+                        <th>{t.photo}</th>
+                        <th>{t.campus}</th>
+                        <th>{t.name}</th>
+                        <th>{t.location}</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Reviewed By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {toolReviewSummaryModal.items.length ? (
+                        toolReviewSummaryModal.items.map((item) => (
+                          <tr
+                            key={`tool-review-summary-row-${item.id}`}
+                            onClick={() => {
+                              const selectedRow = toolReviewItemOptions.find((row) => Number(row.id) === item.id);
+                              if (!selectedRow) return;
+                              openToolReviewItem(selectedRow, toolReviewMonthReportByItemId.get(String(item.id)) || null);
+                              setToolReviewSummaryModal(null);
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <td><strong>{item.itemCode}</strong></td>
+                            <td>{item.photo ? <img loading="lazy" decoding="async" src={item.photo} alt={item.itemCode} className="table-photo" /> : <span className="tiny">No photo</span>}</td>
+                            <td>{inventoryCampusLabel(item.campus)}</td>
+                            <td>{item.itemName}</td>
+                            <td>{item.location || "-"}</td>
+                            <td>{item.currentStock} {item.unit}</td>
+                            <td>{item.condition || "Pending"}</td>
+                            <td>{item.reviewedBy || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8}>No tool items found.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           </div>
         ) : null}
