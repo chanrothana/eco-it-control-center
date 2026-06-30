@@ -6706,6 +6706,14 @@ h2 {
   border-bottom: 1px solid rgba(171, 189, 220, 0.42);
 }
 
+.maintenance-mobile-asset-card-general .maintenance-mobile-asset-head-bar {
+  background: linear-gradient(180deg, rgba(76, 94, 132, 0.98), rgba(57, 76, 112, 0.96));
+}
+
+.maintenance-mobile-asset-card-linked .maintenance-mobile-asset-head-bar {
+  background: linear-gradient(180deg, rgba(44, 99, 117, 0.98), rgba(31, 78, 101, 0.96));
+}
+
 .maintenance-mobile-asset-head-bar strong {
   display: block;
   color: #f4f8ff;
@@ -6788,6 +6796,12 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.maintenance-mobile-asset-photo-field {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(159, 186, 224, 0.9);
+}
+
 .maintenance-mobile-asset-note {
   padding-top: 2px;
 }
@@ -6847,8 +6861,12 @@ h2 {
 }
 
 .maintenance-history-mobile-actions {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-content: center;
   justify-content: center;
   gap: 12px;
+  margin-top: 4px;
 }
 
 .maintenance-history-mobile-actions .btn-icon-edit,
@@ -18224,6 +18242,12 @@ table {
   color: #eef4fc;
 }
 
+.staff-user-status-tag-inactive {
+  background: rgba(255, 122, 122, 0.14);
+  border-color: rgba(255, 122, 122, 0.28);
+  color: #ffd5d5;
+}
+
 .staff-user-mobile-body {
   display: grid;
   gap: 10px;
@@ -22329,6 +22353,11 @@ tr.row-maint-maintenance:hover td {
   padding: 18px;
 }
 
+.user-setup-modal-panel {
+  margin-top: 74px;
+  max-height: calc(100vh - 110px);
+}
+
 .modal-panel h2 {
   font-size: clamp(28px, 2.5vw, 42px);
   line-height: 1.06;
@@ -23488,6 +23517,11 @@ tr.row-maint-maintenance:hover td {
     max-height: 95vh;
     border-radius: 12px;
     padding: 12px;
+  }
+
+  .user-setup-modal-panel {
+    margin-top: 0;
+    max-height: 95vh;
   }
 
   .transfer-modal-panel {
@@ -28738,6 +28772,11 @@ tr.row-maint-maintenance:hover td {
     width: 100%;
     max-height: calc(100vh - 12px);
     padding: 10px;
+  }
+
+  .user-setup-modal-panel {
+    margin-top: 0;
+    max-height: calc(100vh - 12px);
   }
 
   .inventory-dashboard-modal {

@@ -5883,6 +5883,7 @@ function normalizeStaffUsers(input) {
     const telegramChatId = toText(row.telegramChatId);
     const photo = toText(row.photo);
     const sex = toText(row.sex).toLowerCase() === "female" ? "Female" : "Male";
+    const status = toText(row.status).toLowerCase() === "deactive" ? "Deactive" : "Active";
     if (!fullName || !position) continue;
     if (email) {
       if (usedEmails.has(email)) continue;
@@ -5900,6 +5901,7 @@ function normalizeStaffUsers(input) {
       telegramChatId,
       photo,
       sex,
+      status,
     });
   }
   return out;
@@ -6002,10 +6004,11 @@ function validateStaffUser(body) {
   const telegramChatId = toText(body.telegramChatId);
   const photo = toText(body.photo);
   const sex = toText(body.sex).toLowerCase() === "female" ? "Female" : "Male";
+  const status = toText(body.status).toLowerCase() === "deactive" ? "Deactive" : "Active";
   if (!fullName) return "Staff full name is required";
   if (!position) return "Position is required";
   if (!campuses.length) return "At least one campus is required";
-  return { fullName, position, campus, campuses, email, telegramChatId, photo, sex };
+  return { fullName, position, campus, campuses, email, telegramChatId, photo, sex, status };
 }
 
 function validateTicket(body) {

@@ -494,6 +494,7 @@ type StaffUser = {
   fullName: string;
   position: string;
   sex?: "Male" | "Female";
+  status?: "Active" | "Deactive";
   campus: string;
   campuses?: string[];
   email: string;
@@ -2218,13 +2219,20 @@ function workOrderAssignableUsers(users: StaffUser[], category: string, selected
   const keywords = WORK_ORDER_ASSIGNABLE_ROLE_KEYWORDS[normalizedCategory] || [];
   const sortUsersByName = (list: StaffUser[]) =>
     [...list].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || "")));
-  if (!keywords.length) return sortUsersByName(users);
   const selected = String(selectedName || "").trim();
-  const filtered = users.filter((user) => {
+  const activeUsers = users.filter((user) => isStaffUserActive(user));
+  if (!keywords.length) {
+    if (selected && !activeUsers.some((user) => user.fullName === selected)) {
+      const selectedUser = users.find((user) => user.fullName === selected);
+      if (selectedUser) return sortUsersByName([...activeUsers, selectedUser]);
+    }
+    return sortUsersByName(activeUsers);
+  }
+  const filtered = activeUsers.filter((user) => {
     const haystack = `${user.fullName} ${user.position} ${user.email || ""}`.toLowerCase();
     return keywords.some((keyword) => haystack.includes(keyword));
   });
-  if (!filtered.length) return sortUsersByName(users);
+  if (!filtered.length) return sortUsersByName(activeUsers);
   if (selected && !filtered.some((user) => user.fullName === selected)) {
     const selectedUser = users.find((user) => user.fullName === selected);
     if (selectedUser) return sortUsersByName([...filtered, selectedUser]);
@@ -2285,6 +2293,14 @@ function normalizeStaffSex(value?: unknown): "Male" | "Female" {
   return String(value || "").trim().toLowerCase() === "female" ? "Female" : "Male";
 }
 
+function normalizeStaffStatus(value?: unknown): "Active" | "Deactive" {
+  return String(value || "").trim().toLowerCase() === "deactive" ? "Deactive" : "Active";
+}
+
+function isStaffUserActive(user?: Partial<StaffUser> | null) {
+  return normalizeStaffStatus(user?.status) === "Active";
+}
+
 function staffSexTemplateLabel(sex?: unknown) {
   return normalizeStaffSex(sex) === "Female" ? "Women" : "Men";
 }
@@ -2292,9 +2308,17 @@ function staffSexTemplateLabel(sex?: unknown) {
 function staffUsersForCampus(users: StaffUser[], campusName = "", selectedName = "") {
   const sortUsersByName = (list: StaffUser[]) =>
     [...list].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || "")));
+  const activeUsers = users.filter((user) => isStaffUserActive(user));
   const campus = String(campusName || "").trim();
-  if (!campus) return sortUsersByName(users);
-  const filtered = users.filter((user) => {
+  if (!campus) {
+    const selected = String(selectedName || "").trim();
+    if (selected && !activeUsers.some((user) => user.fullName === selected)) {
+      const selectedUser = users.find((user) => user.fullName === selected);
+      if (selectedUser) return sortUsersByName([...activeUsers, selectedUser]);
+    }
+    return sortUsersByName(activeUsers);
+  }
+  const filtered = activeUsers.filter((user) => {
     const userCampuses = staffCampusList(user);
     return !userCampuses.length || userCampuses.includes(campus);
   });
@@ -3621,6 +3645,7 @@ function readUserFallback(): StaffUser[] {
           fullName: String(user.fullName || "").trim(),
           position: String(user.position || "").trim(),
           sex: normalizeStaffSex(user.sex),
+          status: normalizeStaffStatus(user.status),
           campus: String(user.campus || "").trim(),
           campuses: Array.isArray(user.campuses) ? normalizeStaffCampuses(user.campuses) : [],
           email: String(user.email || "").trim().toLowerCase(),
@@ -10886,6 +10911,8 @@ export default function App() {
     furnitureSize: "",
     furnitureQuantity: "1",
     furnitureCondition: FURNITURE_CONDITION_OPTIONS[0] as string,
+    tvRemoteCount: "1",
+    tvRemotePhotos: [] as string[],
     specs: "",
     purchaseDate: "",
     warrantyUntil: "",
@@ -12620,6 +12647,7 @@ export default function App() {
     fullName: "",
     position: "",
     sex: "Male" as "Male" | "Female",
+    status: "Active" as "Active" | "Deactive",
     campuses: [CAMPUS_LIST[0]],
     email: "",
     telegramChatId: "",
@@ -12665,6 +12693,7 @@ export default function App() {
         user.fullName,
         user.position,
         normalizeStaffSex(user.sex),
+        normalizeStaffStatus(user.status),
         ...staffCampusList(user),
         user.email || "",
         user.telegramChatId || "",
@@ -22794,6 +22823,7 @@ export default function App() {
     const telegramChatId = userForm.telegramChatId.trim();
     const photo = String(userForm.photo || "").trim();
     const sex = normalizeStaffSex(userForm.sex);
+    const status = normalizeStaffStatus(userForm.status);
     if (!fullName || !position || !campus) return;
 
     const emailTaken = email
@@ -22810,7 +22840,7 @@ export default function App() {
       if (editingUserId !== null) {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>(`/api/staff-users/${editingUserId}`, {
           method: "PATCH",
-          body: JSON.stringify({ fullName, position, sex, campus, campuses, email, telegramChatId, photo }),
+          body: JSON.stringify({ fullName, position, sex, status, campus, campuses, email, telegramChatId, photo }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -22819,7 +22849,7 @@ export default function App() {
         } else {
           setUsers((prev) =>
             prev.map((u) =>
-              u.id === editingUserId ? { ...u, fullName, position, sex, campus, campuses, email, telegramChatId, photo } : u
+              u.id === editingUserId ? { ...u, fullName, position, sex, status, campus, campuses, email, telegramChatId, photo } : u
             )
           );
         }
@@ -22827,7 +22857,7 @@ export default function App() {
       } else {
         const res = await requestJson<{ user?: StaffUser; users?: StaffUser[] }>("/api/staff-users", {
           method: "POST",
-          body: JSON.stringify({ fullName, position, sex, campus, campuses, email, telegramChatId, photo }),
+          body: JSON.stringify({ fullName, position, sex, status, campus, campuses, email, telegramChatId, photo }),
         });
         const returnedRows = normalizeArray<StaffUser>(res.users);
         if (returnedRows.length) {
@@ -22842,6 +22872,7 @@ export default function App() {
             telegramChatId: String(res.user.telegramChatId || "").trim(),
             photo: String(res.user.photo || "").trim(),
             sex: normalizeStaffSex(res.user.sex),
+            status: normalizeStaffStatus(res.user.status),
           };
           setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
         } else {
@@ -22854,7 +22885,7 @@ export default function App() {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) {
         if (editingUserId !== null) {
           const nextUsers = users.map((u) =>
-            u.id === editingUserId ? { ...u, fullName, position, sex, campus, campuses, email, telegramChatId, photo } : u
+            u.id === editingUserId ? { ...u, fullName, position, sex, status, campus, campuses, email, telegramChatId, photo } : u
           );
           setUsers(nextUsers);
           writeUserFallback(nextUsers);
@@ -22865,6 +22896,7 @@ export default function App() {
             fullName,
             position,
             sex,
+            status,
             campus,
             campuses,
             email,
@@ -23781,7 +23813,7 @@ export default function App() {
 
   function resetUserSetupForm() {
     setEditingUserId(null);
-    setUserForm({ fullName: "", position: "", sex: "Male", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "", photo: "" });
+    setUserForm({ fullName: "", position: "", sex: "Male", status: "Active", campuses: [CAMPUS_LIST[0]], email: "", telegramChatId: "", photo: "" });
     setUserPhotoFileKey((n) => n + 1);
   }
 
@@ -23801,6 +23833,7 @@ export default function App() {
       fullName: user.fullName,
       position: user.position,
       sex: normalizeStaffSex(user.sex),
+      status: normalizeStaffStatus(user.status),
       campuses: staffCampusList(user).length ? staffCampusList(user) : [CAMPUS_LIST[0]],
       email: user.email,
       telegramChatId: user.telegramChatId || "",
@@ -27299,9 +27332,17 @@ export default function App() {
     const parsedFan = isFanAsset(asset.category, asset.type)
       ? parseFanSpecs(asset.specs || "")
       : { fanType: "", specs: parsedAircon.specs || String(asset.specs || "") };
+    const parsedTv =
+      asset.category === "IT" && String(asset.type || "").trim().toUpperCase() === TV_TYPE_CODE
+        ? parseTvSpecs(asset.specs || "")
+        : {
+            remoteCount: 1,
+            remotePhotos: [] as string[],
+            specs: parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
+          };
     const parsedWalkie = String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
       ? parseWalkieTalkieSpecs(asset.specs || "")
-      : { hasCharger: false, chargerDetail: "", specs: parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
+      : { hasCharger: false, chargerDetail: "", specs: parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
     const parsedFurniture = isFurnitureAsset(asset.category)
       ? parseFurnitureSpecs(asset.specs || "")
       : {
@@ -27358,7 +27399,9 @@ export default function App() {
       furnitureSize: parsedFurniture.size,
       furnitureQuantity: parsedFurniture.quantity || "1",
       furnitureCondition: parsedFurniture.condition || FURNITURE_CONDITION_OPTIONS[0],
-      specs: parsedFurniture.specs || parsedWalkie.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
+      tvRemoteCount: String(parsedTv.remoteCount || 1) === "2" ? "2" : "1",
+      tvRemotePhotos: parsedTv.remotePhotos.slice(0, 2),
+      specs: parsedFurniture.specs || parsedWalkie.specs || parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
@@ -27893,6 +27936,12 @@ export default function App() {
           })
         : (isFanAsset(editingAsset?.category || "", editingAsset?.type || "")
             ? buildFanSpecs(assetEditForm.specs.trim(), assetEditForm.fanType)
+            : (editingAsset?.category === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === TV_TYPE_CODE
+                ? buildTvSpecs(
+                    assetEditForm.specs.trim(),
+                    Number(assetEditForm.tvRemoteCount || 1),
+                    assetEditForm.tvRemotePhotos || []
+                  )
             : (String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
             ? buildWalkieTalkieSpecs(
                 assetEditForm.specs.trim(),
@@ -27911,7 +27960,7 @@ export default function App() {
                     quantity: assetEditForm.furnitureQuantity,
                     condition: assetEditForm.furnitureCondition,
                   })
-                : assetEditForm.specs.trim()))),
+                : assetEditForm.specs.trim())))),
       purchaseDate: assetEditForm.purchaseDate.trim(),
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
@@ -30489,6 +30538,29 @@ export default function App() {
     try {
       const optimized = await optimizeUploadPhoto(file);
       setAssetForm((f) => {
+        const next = [...(f.tvRemotePhotos || [])];
+        while (next.length <= index) next.push("");
+        next[index] = optimized;
+        return { ...f, tvRemotePhotos: next.slice(0, 2) };
+      });
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onEditTvRemotePhotoFileAt(index: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetEditForm((f) => {
         const next = [...(f.tvRemotePhotos || [])];
         while (next.length <= index) next.push("");
         next[index] = optimized;
@@ -45359,6 +45431,145 @@ function formatTicketRequestSource(value?: string) {
                         <input className="input" value={assetEditForm.serialNumber} onChange={(e) => setAssetEditForm((f) => ({ ...f, serialNumber: e.target.value }))} />
                       </label>
                     ) : null}
+                    {editingAsset?.category === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === TV_TYPE_CODE ? (
+                      <div className="field field-wide">
+                        <span>Included Components</span>
+                        <div className="aircon-inline-triple">
+                          <div className="field" style={{ minWidth: 0 }}>
+                            <span>{`${t.tvRemoteCount}: ${t.selectRemote}`}</span>
+                            <select
+                              className="input"
+                              value={assetEditForm.tvRemoteCount}
+                              onChange={(e) =>
+                                setAssetEditForm((f) => ({
+                                  ...f,
+                                  tvRemoteCount: e.target.value === "2" ? "2" : "1",
+                                  tvRemotePhotos:
+                                    e.target.value === "2"
+                                      ? (f.tvRemotePhotos || []).slice(0, 2)
+                                      : (f.tvRemotePhotos || []).slice(0, 1),
+                                }))
+                              }
+                            >
+                              <option value="1">1 {t.includeRemoteControl}</option>
+                              <option value="2">2 {t.includeRemoteControl}</option>
+                            </select>
+                          </div>
+                          <div className="field" style={{ minWidth: 0 }}>
+                            <span>Remote 1 Photo</span>
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                              <input
+                                id="tv-remote-edit-photo-1-upload"
+                                className="file-input"
+                                type="file"
+                                accept="image/*"
+                                style={{ display: "none" }}
+                                onChange={(e) => {
+                                  void onEditTvRemotePhotoFileAt(0, e);
+                                }}
+                              />
+                              {String((assetEditForm.tvRemotePhotos || [])[0] || "").trim() ? (
+                                <>
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={String((assetEditForm.tvRemotePhotos || [])[0] || "")}
+                                    alt="edit-tv-remote-1"
+                                    className="asset-photo-chip-img"
+                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="tab btn-small"
+                                    onClick={() => document.getElementById("tv-remote-edit-photo-1-upload")?.click()}
+                                  >
+                                    Change
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="tab btn-small"
+                                    onClick={() =>
+                                      setAssetEditForm((f) => {
+                                        const next = [...(f.tvRemotePhotos || [])];
+                                        next[0] = "";
+                                        return { ...f, tvRemotePhotos: next };
+                                      })
+                                    }
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="tab btn-small"
+                                  onClick={() => document.getElementById("tv-remote-edit-photo-1-upload")?.click()}
+                                >
+                                  Choose Photo
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {String(assetEditForm.tvRemoteCount || "1") === "2" ? (
+                            <div className="field" style={{ minWidth: 0 }}>
+                              <span>Remote 2 Photo</span>
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                                <input
+                                  id="tv-remote-edit-photo-2-upload"
+                                  className="file-input"
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: "none" }}
+                                  onChange={(e) => {
+                                    void onEditTvRemotePhotoFileAt(1, e);
+                                  }}
+                                />
+                                {String((assetEditForm.tvRemotePhotos || [])[1] || "").trim() ? (
+                                  <>
+                                    <img
+                                      loading="lazy"
+                                      decoding="async"
+                                      src={String((assetEditForm.tvRemotePhotos || [])[1] || "")}
+                                      alt="edit-tv-remote-2"
+                                      className="asset-photo-chip-img"
+                                      style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="tab btn-small"
+                                      onClick={() => document.getElementById("tv-remote-edit-photo-2-upload")?.click()}
+                                    >
+                                      Change
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="tab btn-small"
+                                      onClick={() =>
+                                        setAssetEditForm((f) => {
+                                          const next = [...(f.tvRemotePhotos || [])];
+                                          next[1] = "";
+                                          return { ...f, tvRemotePhotos: next };
+                                        })
+                                      }
+                                    >
+                                      Remove
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="tab btn-small"
+                                    onClick={() => document.getElementById("tv-remote-edit-photo-2-upload")?.click()}
+                                  >
+                                    Choose Photo
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                     {isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
                       <>
                         <div className="field field-wide">
@@ -55884,11 +56095,22 @@ function formatTicketRequestSource(value?: string) {
               <div className="report-mobile-only report-card-list">
                         {filteredMaintenanceRows.length ? (
                           filteredMaintenanceRows.map((row) => (
-                    <article key={`maint-history-mobile-${row.rowId}`} className="report-card maintenance-mobile-asset-card">
+                    <article
+                      key={`maint-history-mobile-${row.rowId}`}
+                      className={`report-card maintenance-mobile-asset-card ${
+                        String(row.location || "").trim() === "General Record"
+                          ? "maintenance-mobile-asset-card-general"
+                          : "maintenance-mobile-asset-card-linked"
+                      }`}
+                    >
                       <div className="maintenance-mobile-asset-head">
                         <div className="maintenance-mobile-asset-head-bar">
                           <strong>{campusLabel(row.campus)}</strong>
-                          <span>{row.location || "-"}</span>
+                          <span>
+                            {String(row.location || "").trim() === "General Record"
+                              ? "General Record"
+                              : (row.assetId || row.itemName || "Asset Record")}
+                          </span>
                         </div>
                       </div>
                       <div className="maintenance-mobile-asset-grid">
@@ -55945,10 +56167,6 @@ function formatTicketRequestSource(value?: string) {
                               className: "maintenance-history-photo-groups-two-col",
                             })}
                           </div>
-                        </div>
-                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
-                          <span>Workflow</span>
-                          <div>{renderSavedMaintenanceWorkflow(row)}</div>
                         </div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">
@@ -61879,6 +62097,7 @@ function formatTicketRequestSource(value?: string) {
                             </div>
                             <div className="staff-user-mobile-tags">
                               <span className="staff-user-mobile-tag">{sexLabel}</span>
+                              <span className={`staff-user-mobile-tag ${isStaffUserActive(u) ? "" : "staff-user-status-tag-inactive"}`}>{normalizeStaffStatus(u.status)}</span>
                               <span className="staff-user-mobile-tag staff-user-mobile-tag-campus">{staffCampusSummary(u) || t.allCampuses}</span>
                             </div>
                             <div className="staff-user-mobile-summary">
@@ -61928,13 +62147,14 @@ function formatTicketRequestSource(value?: string) {
                       <div className="staff-user-desktop-main">
                         {renderStaffAvatar(u.photo, u.fullName, u.sex, "staff-user-avatar staff-user-avatar-desktop")}
                         <div className="staff-user-desktop-copy">
-                          <div className="staff-user-desktop-name-row">
-                            <strong>{u.fullName}</strong>
-                            <div className="staff-user-desktop-tags">
-                              <span className="staff-user-desktop-tag">{normalizeStaffSex(u.sex)}</span>
-                              <span className="staff-user-desktop-tag">{staffCampusSummary(u) || t.allCampuses}</span>
+                            <div className="staff-user-desktop-name-row">
+                              <strong>{u.fullName}</strong>
+                              <div className="staff-user-desktop-tags">
+                                <span className="staff-user-desktop-tag">{normalizeStaffSex(u.sex)}</span>
+                                <span className={`staff-user-desktop-tag ${isStaffUserActive(u) ? "" : "staff-user-status-tag-inactive"}`}>{normalizeStaffStatus(u.status)}</span>
+                                <span className="staff-user-desktop-tag">{staffCampusSummary(u) || t.allCampuses}</span>
+                              </div>
                             </div>
-                          </div>
                           <span className="staff-user-desktop-position">{u.position || "-"}</span>
                           <div className="staff-user-desktop-meta">
                             <div className="staff-user-desktop-meta-item">
@@ -61975,7 +62195,7 @@ function formatTicketRequestSource(value?: string) {
             )}
             {userSetupModalOpen ? (
               <div className="modal-backdrop" onClick={() => { if (!busy) closeUserSetupModal(); }}>
-                <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
+                <section className="panel modal-panel user-setup-modal-panel" onClick={(e) => e.stopPropagation()}>
                   <div className="panel-row">
                     <h2>{editingUserId !== null ? t.updateUser : t.addUser}</h2>
                     <button className="tab" disabled={busy} onClick={closeUserSetupModal}>Close</button>
@@ -62007,6 +62227,22 @@ function formatTicketRequestSource(value?: string) {
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                       </select>
+                    </label>
+                    <label className="field">
+                      <span>Status</span>
+                      <select
+                        className="input"
+                        value={userForm.status}
+                        onChange={(e) => setUserForm((f) => ({ ...f, status: normalizeStaffStatus(e.target.value) }))}
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Deactive">Deactive</option>
+                      </select>
+                      <small className="tiny">
+                        {lang === "km"
+                          ? "Deactive នឹងលាក់អ្នកប្រើនេះពីការស្វែងរក និងការជ្រើសរើសក្នុង Asset/User picker។"
+                          : "Deactive hides this staff member from search and asset assignment pickers."}
+                      </small>
                     </label>
                     <label className="field field-wide">
                       <span>{t.photo} ({lang === "km" ? "ជាជម្រើស" : "Optional"})</span>
