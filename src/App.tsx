@@ -18732,13 +18732,18 @@ export default function App() {
     }
   }, [authUser, campusFilter]);
 
-  const loadAssetsDataset = useCallback(async () => {
+  const loadAssetsDataset = useCallback(async (requestedDetail?: "summary" | "full") => {
     try {
       const fallbackAssets = readAssetFallback();
       if (fallbackAssets.length) {
         setAssets((current) => (current.length ? current : fallbackAssets));
       }
-      const detail = tabNeedsFullAssetDetail(tabRef.current) ? "full" : "summary";
+      const detail =
+        requestedDetail === "full" ||
+        tabNeedsFullAssetDetail(tabRef.current) ||
+        assetDataDetailLevelRef.current === "full"
+          ? "full"
+          : "summary";
       const bootstrapParams = new URLSearchParams();
       bootstrapParams.set("include", "assets");
       bootstrapParams.set("asset_scope", "all");
@@ -30879,6 +30884,10 @@ export default function App() {
     () => tonerHistoryEntries(detailMaintenanceEntries),
     [detailMaintenanceEntries]
   );
+  const assetDetailNeedsFullHistory =
+    assetDetailId != null &&
+    assetDataLoaded &&
+    assetDataDetailLevel !== "full";
   const detailTonerItem = useMemo(
     () => tonerInventoryItems.find((item) => Number(item.id) === Number(detailAsset?.tonerItemId || 0)) || null,
     [tonerInventoryItems, detailAsset?.tonerItemId]
@@ -31597,6 +31606,8 @@ export default function App() {
                     </article>
                   ))}
                 </div>
+              ) : assetDetailNeedsFullHistory ? (
+                renderPublicHistoryEmpty("Loading maintenance history...")
               ) : (
                 renderPublicHistoryEmpty(detailFurniture ? "No fixing records yet." : "No maintenance records yet.")
               )}
@@ -31680,6 +31691,8 @@ export default function App() {
                     </div>
                   </article>
                 ))
+              ) : assetDetailNeedsFullHistory ? (
+                <div className="panel-note">Loading movement and assignment history...</div>
               ) : (
                 <div className="panel-note">No movement or assignment history yet.</div>
               )}
@@ -31733,7 +31746,7 @@ export default function App() {
         </div>
       );
     },
-    [assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerFileKey, assetDetailTonerForm, assetDisplayPhoto, assetItemName, assetStatusLabel, busy, calcInventoryCurrentStockFromRows, campusLabel, canAccessMenu, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openFullAssetRecordFromDetail, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems]
+    [assetDetailNeedsFullHistory, assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerFileKey, assetDetailTonerForm, assetDisplayPhoto, assetItemName, assetStatusLabel, busy, calcInventoryCurrentStockFromRows, campusLabel, canAccessMenu, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openFullAssetRecordFromDetail, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems]
   );
   useEffect(() => {
     if (!assetDetailId) return;
@@ -31743,6 +31756,11 @@ export default function App() {
       showAllTransfer: false,
     });
   }, [assetDetailId]);
+  useEffect(() => {
+    if (!authUser || assetDetailId == null) return;
+    if (assetDataDetailLevel === "full") return;
+    void loadAssetsDataset("full");
+  }, [authUser, assetDetailId, assetDataDetailLevel, loadAssetsDataset]);
   useEffect(() => {
     const actor = authUser?.displayName || authUser?.username || "";
     if (!actor) return;
@@ -38933,17 +38951,23 @@ function formatTicketRequestSource(value?: string) {
     hint?: string,
   ) {
     const isOpen = publicQrSectionsOpen[key];
+    const togglePublicQrSection = () =>
+      setPublicQrSectionsOpen((prev) => {
+        const nextOpen = !prev[key];
+        return {
+          request: false,
+          maintenance: false,
+          toner: false,
+          details: false,
+          [key]: nextOpen,
+        };
+      });
     return (
       <section className={`public-asset-group public-asset-group-${key} ${isOpen ? "public-asset-group-open" : ""}`}>
         <button
           type="button"
           className="public-asset-group-toggle"
-          onClick={() =>
-            setPublicQrSectionsOpen((prev) => ({
-              ...prev,
-              [key]: !prev[key],
-            }))
-          }
+          onClick={togglePublicQrSection}
           aria-expanded={isOpen}
         >
           <span>{title}</span>
@@ -39301,7 +39325,12 @@ function formatTicketRequestSource(value?: string) {
                     type="button"
                     className={`mobile-menu-nav-btn ${publicQrSectionsOpen.request ? "mobile-menu-nav-btn-active" : ""}`}
                     onClick={() => {
-                      setPublicQrSectionsOpen((prev) => ({ ...prev, request: !prev.request }));
+                      setPublicQrSectionsOpen((prev) => ({
+                        request: !prev.request,
+                        maintenance: false,
+                        toner: false,
+                        details: false,
+                      }));
                       setMobileMenuOpen(false);
                     }}
                   >
@@ -39315,7 +39344,12 @@ function formatTicketRequestSource(value?: string) {
                       type="button"
                       className={`mobile-menu-nav-btn ${publicQrSectionsOpen.maintenance ? "mobile-menu-nav-btn-active" : ""}`}
                       onClick={() => {
-                        setPublicQrSectionsOpen((prev) => ({ ...prev, maintenance: !prev.maintenance }));
+                        setPublicQrSectionsOpen((prev) => ({
+                          request: false,
+                          maintenance: !prev.maintenance,
+                          toner: false,
+                          details: false,
+                        }));
                         setMobileMenuOpen(false);
                       }}
                     >
@@ -39329,7 +39363,12 @@ function formatTicketRequestSource(value?: string) {
                     type="button"
                     className={`mobile-menu-nav-btn ${publicQrSectionsOpen.details ? "mobile-menu-nav-btn-active" : ""}`}
                     onClick={() => {
-                      setPublicQrSectionsOpen((prev) => ({ ...prev, details: !prev.details }));
+                      setPublicQrSectionsOpen((prev) => ({
+                        request: false,
+                        maintenance: false,
+                        toner: false,
+                        details: !prev.details,
+                      }));
                       setMobileMenuOpen(false);
                     }}
                   >

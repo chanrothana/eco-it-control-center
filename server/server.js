@@ -1405,6 +1405,38 @@ function normalizeItemTypeOptions(input) {
   return out;
 }
 
+function itemTypeOptionsWithDefaults(input) {
+  const normalized = normalizeItemTypeOptions(input);
+  const out = {};
+  for (const [category, codes] of Object.entries(TYPE_CODES)) {
+    const seen = new Map();
+    for (const code of Array.isArray(codes) ? codes : []) {
+      const normalizedCode = toUpper(code);
+      if (!normalizedCode) continue;
+      seen.set(normalizedCode, {
+        itemEn: TYPE_LABELS[normalizedCode] || normalizedCode,
+        itemKm: TYPE_LABELS[normalizedCode] || normalizedCode,
+        code: normalizedCode,
+      });
+    }
+    for (const row of Array.isArray(normalized[category]) ? normalized[category] : []) {
+      const normalizedCode = toUpper(row && row.code);
+      if (!normalizedCode) continue;
+      seen.set(normalizedCode, {
+        itemEn: toText(row.itemEn).trim() || TYPE_LABELS[normalizedCode] || normalizedCode,
+        itemKm: toText(row.itemKm).trim() || toText(row.itemEn).trim() || TYPE_LABELS[normalizedCode] || normalizedCode,
+        code: normalizedCode,
+      });
+    }
+    out[category] = Array.from(seen.values());
+  }
+  for (const [category, rows] of Object.entries(normalized)) {
+    if (out[category]) continue;
+    out[category] = Array.isArray(rows) ? rows : [];
+  }
+  return out;
+}
+
 const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL", "GARDEN_TOOL", "SERVICE_TOOL"]);
 const INVENTORY_TXN_TYPE_SET = new Set(["IN", "OUT", "SET", "BORROW_OUT", "BORROW_IN", "BORROW_CONSUME"]);
 
@@ -6925,7 +6957,7 @@ const server = http.createServer(async (req, res) => {
           ...settings,
           itemNames: normalizeStringMap(settings.itemNames),
           itemAssetCategories: normalizeStringMap(settings.itemAssetCategories),
-          itemTypeOptions: normalizeItemTypeOptions(settings.itemTypeOptions),
+          itemTypeOptions: itemTypeOptionsWithDefaults(settings.itemTypeOptions),
           inventoryApprovalRouting: normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting),
           telegramChatIds: normalizeTelegramChatIds(settings.telegramChatIds),
           telegramMaintenanceChatIds: normalizeTelegramChatIds(settings.telegramMaintenanceChatIds),
