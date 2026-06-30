@@ -768,6 +768,7 @@ type ApiRequestInit = RequestInit & {
 
 function tabNeedsAssetDataset(tab: NavModule) {
   switch (tab) {
+    case "dashboard":
     case "assets":
     case "classroom":
     case "tickets":
@@ -784,6 +785,7 @@ function tabNeedsAssetDataset(tab: NavModule) {
 
 function tabNeedsFullAssetDetail(tab: NavModule) {
   switch (tab) {
+    case "transfer":
     case "maintenance":
     case "verification":
     case "reports":
@@ -2510,7 +2512,7 @@ function itemSetupAssetCategoryLabel(code: string) {
     "Other Fixed Assets (OTA)"
   );
 }
-const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP"] as const;
+const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP", "3.5HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
 const FAN_TYPE_OPTIONS = ["Wall Fan", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
 const FAN_TYPE_CODES = ["FAN", "WFN", "CFN", "EFN"] as const;
@@ -10409,6 +10411,7 @@ export default function App() {
     [maintenanceNotifications]
   );
   const assetDataLoadedRef = useRef(false);
+  const assetDataDetailLevelRef = useRef<"summary" | "full">("summary");
   const tabRef = useRef<NavModule>("dashboard");
 
   const [loading, setLoading] = useState(false);
@@ -10416,6 +10419,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [appVersionBadge, setAppVersionBadge] = useState(APP_VERSION);
   const [assetDataLoaded, setAssetDataLoaded] = useState(false);
+  const [assetDataDetailLevel, setAssetDataDetailLevel] = useState<"summary" | "full">("summary");
   const hasPrimaryDataLoaded =
     assets.length > 0 ||
     tickets.length > 0 ||
@@ -17773,7 +17777,7 @@ export default function App() {
       }
     }
     return Array.from(byModel.values()).sort((a, b) => a.model.localeCompare(b.model));
-  }, [assets]);
+  }, [assets, assetItemName]);
   const furnitureModelChoices = useCallback(
     (type: string) => {
       const normalizedType = String(type || "").trim().toUpperCase();
@@ -18537,6 +18541,10 @@ export default function App() {
   }, [assetDataLoaded]);
 
   useEffect(() => {
+    assetDataDetailLevelRef.current = assetDataDetailLevel;
+  }, [assetDataDetailLevel]);
+
+  useEffect(() => {
     tabRef.current = tab;
   }, [tab]);
 
@@ -18707,6 +18715,7 @@ export default function App() {
         );
       }
       setAssetDataLoaded(true);
+      setAssetDataDetailLevel(detail);
     } catch (err) {
       if (
         isApiUnavailableError(err) ||
@@ -18717,6 +18726,7 @@ export default function App() {
         if (fallbackAssets.length) {
           setAssets(fallbackAssets);
           setAssetDataLoaded(true);
+          setAssetDataDetailLevel("full");
         }
         return;
       }
@@ -18766,6 +18776,7 @@ export default function App() {
           writeAssetFallback(serverAssets);
         }
         setAssetDataLoaded(true);
+        setAssetDataDetailLevel(assetDetail);
       }
 
       setTickets(normalizeArray<Ticket>(bootstrapRes.tickets));
@@ -19086,12 +19097,17 @@ export default function App() {
   useEffect(() => {
     if (!authUser) {
       setAssetDataLoaded(false);
+      setAssetDataDetailLevel("summary");
       setAssets([]);
       return;
     }
-    if (!tabNeedsAssetDataset(tab) || assetDataLoaded) return;
+    const needsAssetDataset = tabNeedsAssetDataset(tab);
+    const needsFullAssetDetail = tabNeedsFullAssetDetail(tab);
+    const hasRequiredAssetDetail =
+      assetDataLoaded && (!needsFullAssetDetail || assetDataDetailLevel === "full");
+    if (!needsAssetDataset || hasRequiredAssetDetail) return;
     void loadAssetsDataset();
-  }, [authUser, tab, assetDataLoaded, loadAssetsDataset]);
+  }, [authUser, tab, assetDataLoaded, assetDataDetailLevel, loadAssetsDataset]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -30676,9 +30692,13 @@ export default function App() {
     },
     [approvalManagerAccounts]
   );
+  const resolvedAssets = useMemo(
+    () => mergeAssets(readAssetFallback(), assets),
+    [assets]
+  );
   const historyAsset = useMemo(
-    () => assets.find((a) => a.id === historyAssetId) || null,
-    [assets, historyAssetId]
+    () => resolvedAssets.find((a) => a.id === historyAssetId) || null,
+    [resolvedAssets, historyAssetId]
   );
   const historyAssetEntries = useMemo(() => {
     if (!historyAsset) return [];
@@ -30690,12 +30710,12 @@ export default function App() {
     });
   }, [historyAsset]);
   const quickRecordAsset = useMemo(
-    () => assets.find((a) => a.id === quickRecordAssetId) || null,
-    [assets, quickRecordAssetId]
+    () => resolvedAssets.find((a) => a.id === quickRecordAssetId) || null,
+    [resolvedAssets, quickRecordAssetId]
   );
   const maintenanceRecordSelectedAsset = useMemo(
-    () => assets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
-    [assets, maintenanceRecordForm.assetId]
+    () => resolvedAssets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
+    [resolvedAssets, maintenanceRecordForm.assetId]
   );
   const maintenanceRecordIsComplete = useMemo(() => (
     (maintenanceQuickMode ? (maintenanceQuickGeneralTask || Boolean(maintenanceRecordForm.assetId)) : Boolean(maintenanceRecordForm.assetId)) &&
@@ -30712,10 +30732,10 @@ export default function App() {
   const detailAsset = useMemo(() => {
     if (assetDetailId == null) return null;
     return (
-      assets.find((a) => String(a.id ?? "") === String(assetDetailId)) ||
+      resolvedAssets.find((a) => String(a.id ?? "") === String(assetDetailId)) ||
       null
     );
-  }, [assets, assetDetailId]);
+  }, [resolvedAssets, assetDetailId]);
   const sortByNewestDate = useCallback(
     (aDate?: string, bDate?: string) => {
       const aTime = Date.parse(aDate || "");
@@ -30725,6 +30745,61 @@ export default function App() {
     },
     []
   );
+  const allTransferRows = useMemo<TransferHistoryRow[]>(() => {
+    const locationPhotoMap = new Map(
+      locations
+        .map((row) => {
+          const campus = String(row.campus || "").trim();
+          const name = String(row.name || "").trim();
+          if (!campus || !name) return null;
+          return [`${campus}::${name}`, String(row.photo || "").trim()] as const;
+        })
+        .filter(Boolean) as Array<readonly [string, string]>
+    );
+    const rows: TransferHistoryRow[] = [];
+    for (const asset of resolvedAssets) {
+      for (const entry of asset.transferHistory || []) {
+        const matchedCustody = (asset.custodyHistory || []).find(
+          (row) =>
+            String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
+            String(row.toCampus || "") === String(entry.toCampus || "") &&
+            String(row.toLocation || "") === String(entry.toLocation || "")
+        );
+        const fromCampus = String(entry.fromCampus || "").trim();
+        const fromLocation = String(entry.fromLocation || "").trim();
+        const toCampus = String(entry.toCampus || "").trim();
+        const toLocation = String(entry.toLocation || "").trim();
+        rows.push({
+          rowId: `${asset.id}-${entry.id}`,
+          assetDbId: asset.id,
+          transferEntryId: Number(entry.id || 0),
+          custodyEntryId: Number(matchedCustody?.id || 0),
+          assetId: asset.assetId,
+          assetPhoto: asset.photo || "",
+          category: asset.category || "",
+          itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+          date: entry.date || "",
+          fromCampus,
+          fromLocation,
+          fromLocationPhoto:
+            String(entry.fromLocationPhoto || "").trim() || locationPhotoMap.get(`${fromCampus}::${fromLocation}`) || "",
+          toCampus,
+          toLocation,
+          toLocationPhoto:
+            String(entry.toLocationPhoto || "").trim() || locationPhotoMap.get(`${toCampus}::${toLocation}`) || "",
+          transferPhoto: String(entry.photo || "").trim(),
+          fromUser: matchedCustody?.fromUser || "",
+          toUser: matchedCustody?.toUser || "",
+          responsibilityAck: matchedCustody?.responsibilityAck ? "Yes" : "No",
+          responsibilityAckValue: Boolean(matchedCustody?.responsibilityAck),
+          by: entry.by || "",
+          reason: entry.reason || "",
+          note: entry.note || "",
+        });
+      }
+    }
+    return rows.sort((a, b) => b.date.localeCompare(a.date));
+  }, [resolvedAssets, assetItemName, locations]);
   const detailMaintenanceEntries = useMemo(
     () =>
       detailAsset
@@ -30777,6 +30852,27 @@ export default function App() {
         : [],
     [detailAsset, sortByNewestDate]
   );
+  const detailMovementFallbackRows = useMemo(() => {
+    if (!detailAsset) return [];
+    return allTransferRows
+      .filter((row) => String(row.assetId || "").trim() === String(detailAsset.assetId || "").trim())
+      .map((row) => ({
+        id: `fallback-transfer-${row.rowId}`,
+        date: row.date || "",
+        title: row.toUser || row.fromUser ? "Transfer & Assignment" : "Location Transfer",
+        fromCampus: row.fromCampus || "",
+        toCampus: row.toCampus || "",
+        fromLocation: row.fromLocation || "",
+        toLocation: row.toLocation || "",
+        fromUser: row.fromUser || "",
+        toUser: row.toUser || "",
+        ack: row.responsibilityAck || "-",
+        by: row.by || "-",
+        reason: row.reason || "-",
+        note: row.note || "",
+      }))
+      .sort((a, b) => sortByNewestDate(a.date, b.date));
+  }, [allTransferRows, detailAsset, sortByNewestDate]);
   const detailMovementEntries = useMemo(() => {
     const transferEntries = [...detailTransferEntries];
     const custodyEntries = [...detailCustodyEntries];
@@ -30844,8 +30940,9 @@ export default function App() {
       });
     }
 
-    return rows.sort((a, b) => sortByNewestDate(a.date, b.date));
-  }, [detailCustodyEntries, detailTransferEntries, sortByNewestDate]);
+    const normalizedRows = rows.sort((a, b) => sortByNewestDate(a.date, b.date));
+    return normalizedRows.length ? normalizedRows : detailMovementFallbackRows;
+  }, [detailCustodyEntries, detailMovementFallbackRows, detailTransferEntries, sortByNewestDate]);
   const detailLinkedComponents = useMemo(
     () =>
       detailAsset
@@ -31860,8 +31957,8 @@ export default function App() {
     [assetStatusRowClass, isBrokenMaintenance, isReplacementDone]
   );
   const transferAsset = useMemo(
-    () => assets.find((a) => String(a.id) === transferForm.assetId) || null,
-    [assets, transferForm.assetId]
+    () => resolvedAssets.find((a) => String(a.id) === transferForm.assetId) || null,
+    [resolvedAssets, transferForm.assetId]
   );
   const transferGroupedFurnitureMeta = useMemo(
     () => groupedFurnitureTransferMeta(transferAsset),
@@ -31870,13 +31967,13 @@ export default function App() {
   const transferIsGroupedFurniture = Boolean(transferGroupedFurnitureMeta);
   const transferRecordAssets = useMemo(
     () =>
-      [...assets].sort((a, b) => {
+      [...resolvedAssets].sort((a, b) => {
         const itemA = assetItemName(a.category, a.type, a.pcType || "");
         const itemB = assetItemName(b.category, b.type, b.pcType || "");
         if (itemA !== itemB) return itemA.localeCompare(itemB);
         return a.assetId.localeCompare(b.assetId);
       }),
-    [assets, assetItemName]
+    [resolvedAssets, assetItemName]
   );
   const transferFilterCampusOptions = useMemo(
     () => Array.from(new Set(transferRecordAssets.map((a) => a.campus).filter(Boolean))).sort(compareCampusByCode),
@@ -31938,10 +32035,10 @@ export default function App() {
     assetItemName,
   ]);
   const maintenanceRecordAssetPool = useMemo(() => {
-    return (campusFilter === "ALL" ? assets : assets.filter((a) => a.campus === campusFilter)).sort((a, b) =>
+    return (campusFilter === "ALL" ? resolvedAssets : resolvedAssets.filter((a) => a.campus === campusFilter)).sort((a, b) =>
       a.assetId.localeCompare(b.assetId)
     );
-  }, [assets, campusFilter]);
+  }, [resolvedAssets, campusFilter]);
   const maintenanceRecordCampusOptions = useMemo(() => {
     return Array.from(new Set(maintenanceRecordAssetPool.map((a) => a.campus).filter(Boolean))).sort(compareCampusByCode);
   }, [maintenanceRecordAssetPool]);
@@ -32015,10 +32112,10 @@ export default function App() {
     assetItemName,
   ]);
   const verificationRecordAssetPool = useMemo(() => {
-    return (campusFilter === "ALL" ? assets : assets.filter((a) => a.campus === campusFilter)).sort((a, b) =>
+    return (campusFilter === "ALL" ? resolvedAssets : resolvedAssets.filter((a) => a.campus === campusFilter)).sort((a, b) =>
       a.assetId.localeCompare(b.assetId)
     );
-  }, [assets, campusFilter]);
+  }, [resolvedAssets, campusFilter]);
   const verificationRecordCategoryOptions = useMemo(() => {
     return Array.from(new Set(verificationRecordAssetPool.map((a) => a.category).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
@@ -32069,8 +32166,8 @@ export default function App() {
     assetItemName,
   ]);
   const transferQuickAsset = useMemo(
-    () => assets.find((a) => a.id === transferQuickAssetId) || null,
-    [assets, transferQuickAssetId]
+    () => resolvedAssets.find((a) => a.id === transferQuickAssetId) || null,
+    [resolvedAssets, transferQuickAssetId]
   );
   const transferLocationOptions = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === transferForm.toCampus)),
@@ -32229,7 +32326,7 @@ export default function App() {
       if (!Number.isNaN(aCreatedAt) && !Number.isNaN(bCreatedAt) && aCreatedAt !== bCreatedAt) return bCreatedAt - aCreatedAt;
       return b.rowId.localeCompare(a.rowId);
     });
-  }, [assets]);
+  }, [resolvedAssets, assetItemName]);
   const maintenanceTypeOptions = useMemo(() => {
     let rows = [...allMaintenanceRows];
     if (!maintenanceCategoryFilter.includes("ALL")) {
@@ -32630,7 +32727,7 @@ export default function App() {
       }
     }
     return rows.sort((a, b) => b.date.localeCompare(a.date));
-  }, [assets]);
+  }, [resolvedAssets]);
   const filteredVerificationRows = useMemo(() => {
     let rows = [...allVerificationRows];
     if (verificationCategoryFilter !== "ALL") {
@@ -33271,8 +33368,7 @@ export default function App() {
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     // Prefer current in-memory/server assets, use fallback only to fill missing fields.
-    const merged = mergeAssets(readAssetFallback(), assets);
-    const filtered = campusFilter === "ALL" ? merged : merged.filter((a) => a.campus === campusFilter);
+    const filtered = campusFilter === "ALL" ? resolvedAssets : resolvedAssets.filter((a) => a.campus === campusFilter);
     return filtered
       .map((a) => {
         const nextMaintenanceDate = resolveNextScheduleDate(a, today);
@@ -33280,7 +33376,7 @@ export default function App() {
       })
       .filter((a) => a.nextMaintenanceDate)
       .sort((a, b) => (a.nextMaintenanceDate || "").localeCompare(b.nextMaintenanceDate || ""));
-  }, [assets, campusFilter]);
+  }, [campusFilter, resolvedAssets]);
   const scheduleListRows = useMemo(() => {
     return [...scheduleAssets].sort((a, b) => {
       const aDate = String(a.nextMaintenanceDate || "");
@@ -33557,7 +33653,7 @@ export default function App() {
       return {
         title: "Total Assets",
         mode: "assets" as const,
-        assets: assets,
+        assets: resolvedAssets,
         tickets: [] as Ticket[],
       };
     }
@@ -33565,7 +33661,7 @@ export default function App() {
       return {
         title: "IT Assets",
         mode: "assets" as const,
-        assets: assets.filter((a) => a.category === "IT"),
+        assets: resolvedAssets.filter((a) => a.category === "IT"),
         tickets: [] as Ticket[],
       };
     }
@@ -33573,7 +33669,7 @@ export default function App() {
       return {
         title: "Safety Assets",
         mode: "assets" as const,
-        assets: assets.filter((a) => a.category === "SAFETY"),
+        assets: resolvedAssets.filter((a) => a.category === "SAFETY"),
         tickets: [] as Ticket[],
       };
     }
@@ -33591,7 +33687,7 @@ export default function App() {
       assets: [] as Asset[],
       tickets: [] as Ticket[],
     };
-  }, [overviewModal, assets, tickets]);
+  }, [overviewModal, resolvedAssets, tickets]);
   const maintenanceDashboardModalData = useMemo(() => {
     if (maintenanceDashboardModal === "overdue") {
       return {
@@ -33857,61 +33953,6 @@ export default function App() {
     }
   }, [transferForm.assetId]);
 
-  const allTransferRows = useMemo<TransferHistoryRow[]>(() => {
-    const cachedAssets = readAssetFallback();
-    const sourceAssets = cachedAssets.length ? cachedAssets : assets;
-    const locationPhotoMap = new Map(
-      locations
-        .map((row) => {
-          const campus = String(row.campus || "").trim();
-          const name = String(row.name || "").trim();
-          if (!campus || !name) return null;
-          return [`${campus}::${name}`, String(row.photo || "").trim()] as const;
-        })
-        .filter(Boolean) as Array<readonly [string, string]>
-    );
-    const rows: TransferHistoryRow[] = [];
-    for (const asset of sourceAssets) {
-      for (const entry of asset.transferHistory || []) {
-        const matchedCustody = (asset.custodyHistory || []).find(
-          (row) =>
-            String(row.date || "").slice(0, 10) === String(entry.date || "").slice(0, 10) &&
-            String(row.toCampus || "") === String(entry.toCampus || "") &&
-            String(row.toLocation || "") === String(entry.toLocation || "")
-        );
-        const fromCampus = String(entry.fromCampus || "").trim();
-        const fromLocation = String(entry.fromLocation || "").trim();
-      const toCampus = String(entry.toCampus || "").trim();
-      const toLocation = String(entry.toLocation || "").trim();
-      rows.push({
-          rowId: `${asset.id}-${entry.id}`,
-          assetDbId: asset.id,
-          transferEntryId: Number(entry.id || 0),
-          custodyEntryId: Number(matchedCustody?.id || 0),
-          assetId: asset.assetId,
-          assetPhoto: asset.photo || "",
-          category: asset.category || "",
-          itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
-          date: entry.date || "",
-          fromCampus,
-          fromLocation,
-          fromLocationPhoto: String(entry.fromLocationPhoto || "").trim() || locationPhotoMap.get(`${fromCampus}::${fromLocation}`) || "",
-          toCampus,
-          toLocation,
-          toLocationPhoto: String(entry.toLocationPhoto || "").trim() || locationPhotoMap.get(`${toCampus}::${toLocation}`) || "",
-          transferPhoto: String(entry.photo || "").trim(),
-          fromUser: matchedCustody?.fromUser || "",
-          toUser: matchedCustody?.toUser || "",
-          responsibilityAck: matchedCustody?.responsibilityAck ? "Yes" : "No",
-          responsibilityAckValue: Boolean(matchedCustody?.responsibilityAck),
-          by: entry.by || "",
-          reason: entry.reason || "",
-          note: entry.note || "",
-        });
-      }
-    }
-    return rows.sort((a, b) => b.date.localeCompare(a.date));
-  }, [assets, assetItemName, locations]);
   const transferHistoryCampusOptions = useMemo(
     () =>
       Array.from(
@@ -33948,8 +33989,8 @@ export default function App() {
     [allTransferRows, reportAssetIdFilter]
   );
   const focusedReportAsset = useMemo(
-    () => assets.find((asset) => String(asset.assetId || "").trim() === reportAssetIdFilter) || null,
-    [assets, reportAssetIdFilter]
+    () => resolvedAssets.find((asset) => String(asset.assetId || "").trim() === reportAssetIdFilter) || null,
+    [resolvedAssets, reportAssetIdFilter]
   );
   const assetFullRecordMaintenanceRows = useMemo(
     () =>
@@ -36180,7 +36221,7 @@ export default function App() {
     []
   );
   const quickCountLocationOptions = useMemo(() => {
-    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    let list = resolvedAssets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
     if (!quickCountCampusFilter.includes("ALL")) {
       list = list.filter((asset) => quickCountCampusFilter.includes(asset.campus));
     }
@@ -36198,7 +36239,7 @@ export default function App() {
     return Array.from(new Set(list.map((asset) => String(asset.location || "").trim()).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
-  }, [assets, quickCountCampusFilter, quickCountCategoryFilter, quickCountStatusFilter]);
+  }, [resolvedAssets, quickCountCampusFilter, quickCountCategoryFilter, quickCountStatusFilter]);
   useEffect(() => {
     setQuickCountLocationFilter((prev) => {
       if (prev.includes("ALL")) return prev;
@@ -36210,7 +36251,7 @@ export default function App() {
     });
   }, [quickCountLocationFilter, quickCountLocationOptions]);
   const quickCountBaseAssets = useMemo(() => {
-    let list = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    let list = resolvedAssets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
     list = list.filter((asset) => !DASHBOARD_HIDDEN_COMPONENT_TYPES.has(String(asset.type || "").trim().toUpperCase()));
     if (!quickCountCampusFilter.includes("ALL")) {
       list = list.filter((asset) => quickCountCampusFilter.includes(asset.campus));
@@ -36227,10 +36268,10 @@ export default function App() {
           quickCountStatusFilter.some(
             (status) => String(asset.status || "Active").trim().toLowerCase() === status.toLowerCase()
           )
-      );
+        );
     }
     return list;
-  }, [assets, quickCountCampusFilter, quickCountCategoryFilter, quickCountLocationFilter, quickCountStatusFilter]);
+  }, [resolvedAssets, quickCountCampusFilter, quickCountCategoryFilter, quickCountLocationFilter, quickCountStatusFilter]);
   const quickCountRows = useMemo(() => {
     const map = new Map<string, { category: string; itemName: string; count: number }>();
     for (const asset of quickCountBaseAssets) {
@@ -43813,17 +43854,15 @@ function formatTicketRequestSource(value?: string) {
                     <label className="field">
                       <span>{t.purchaseDate}</span>
                       <input
-                        type="text"
+                        type="date"
                         className="input"
-                        placeholder="dd/Mon/yyyy"
-                        value={assetFormDateDrafts.purchaseDate}
-                        onChange={(e) => setAssetFormDateDrafts((prev) => ({ ...prev, purchaseDate: e.target.value }))}
-                        onBlur={() => {
-                          const normalized = normalizeMateDateInput(assetFormDateDrafts.purchaseDate);
+                        value={normalizeYmdInput(assetForm.purchaseDate)}
+                        onChange={(e) => {
+                          const normalized = normalizeYmdInput(e.target.value);
                           setAssetForm((f) => ({ ...f, purchaseDate: normalized }));
                           setAssetFormDateDrafts((prev) => ({
                             ...prev,
-                            purchaseDate: normalized ? formatMateDateInput(normalized) : String(prev.purchaseDate || "").trim(),
+                            purchaseDate: normalized ? formatMateDateInput(normalized) : "",
                           }));
                         }}
                       />
@@ -43833,17 +43872,15 @@ function formatTicketRequestSource(value?: string) {
                     <label className="field">
                       <span>{t.warrantyUntil}</span>
                       <input
-                        type="text"
+                        type="date"
                         className="input"
-                        placeholder="dd/Mon/yyyy"
-                        value={assetFormDateDrafts.warrantyUntil}
-                        onChange={(e) => setAssetFormDateDrafts((prev) => ({ ...prev, warrantyUntil: e.target.value }))}
-                        onBlur={() => {
-                          const normalized = normalizeMateDateInput(assetFormDateDrafts.warrantyUntil);
+                        value={normalizeYmdInput(assetForm.warrantyUntil)}
+                        onChange={(e) => {
+                          const normalized = normalizeYmdInput(e.target.value);
                           setAssetForm((f) => ({ ...f, warrantyUntil: normalized }));
                           setAssetFormDateDrafts((prev) => ({
                             ...prev,
-                            warrantyUntil: normalized ? formatMateDateInput(normalized) : String(prev.warrantyUntil || "").trim(),
+                            warrantyUntil: normalized ? formatMateDateInput(normalized) : "",
                           }));
                         }}
                       />
@@ -45384,17 +45421,15 @@ function formatTicketRequestSource(value?: string) {
                       <label className="field">
                         <span>Purchase Date</span>
                         <input
-                          type="text"
+                          type="date"
                           className="input"
-                          placeholder="dd/Mon/yyyy"
-                          value={assetEditDateDrafts.purchaseDate}
-                          onChange={(e) => setAssetEditDateDrafts((prev) => ({ ...prev, purchaseDate: e.target.value }))}
-                          onBlur={() => {
-                            const normalized = normalizeMateDateInput(assetEditDateDrafts.purchaseDate);
+                          value={normalizeYmdInput(assetEditForm.purchaseDate)}
+                          onChange={(e) => {
+                            const normalized = normalizeYmdInput(e.target.value);
                             setAssetEditForm((f) => ({ ...f, purchaseDate: normalized }));
                             setAssetEditDateDrafts((prev) => ({
                               ...prev,
-                              purchaseDate: normalized ? formatMateDateInput(normalized) : String(prev.purchaseDate || "").trim(),
+                              purchaseDate: normalized ? formatMateDateInput(normalized) : "",
                             }));
                           }}
                         />
@@ -45404,17 +45439,15 @@ function formatTicketRequestSource(value?: string) {
                       <label className="field">
                         <span>Warranty Until</span>
                         <input
-                          type="text"
+                          type="date"
                           className="input"
-                          placeholder="dd/Mon/yyyy"
-                          value={assetEditDateDrafts.warrantyUntil}
-                          onChange={(e) => setAssetEditDateDrafts((prev) => ({ ...prev, warrantyUntil: e.target.value }))}
-                          onBlur={() => {
-                            const normalized = normalizeMateDateInput(assetEditDateDrafts.warrantyUntil);
+                          value={normalizeYmdInput(assetEditForm.warrantyUntil)}
+                          onChange={(e) => {
+                            const normalized = normalizeYmdInput(e.target.value);
                             setAssetEditForm((f) => ({ ...f, warrantyUntil: normalized }));
                             setAssetEditDateDrafts((prev) => ({
                               ...prev,
-                              warrantyUntil: normalized ? formatMateDateInput(normalized) : String(prev.warrantyUntil || "").trim(),
+                              warrantyUntil: normalized ? formatMateDateInput(normalized) : "",
                             }));
                           }}
                         />
