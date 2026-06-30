@@ -24643,7 +24643,7 @@ tr.row-maint-maintenance:hover td {
   max-width: min(44vw, 220px);
   border: 1px solid rgba(120, 82, 34, 0.32) !important;
   background: linear-gradient(180deg, rgba(255, 246, 225, 0.98), rgba(245, 223, 177, 0.96)) !important;
-  color: var(--public-qr-ink) !important;
+  color: #3a2916 !important;
   box-shadow: 0 10px 24px rgba(59, 39, 17, 0.14);
 }
 
@@ -24825,6 +24825,7 @@ tr.row-maint-maintenance:hover td {
   font-weight: 800;
   text-align: left;
   cursor: pointer;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .public-asset-group-request {
@@ -24833,8 +24834,12 @@ tr.row-maint-maintenance:hover td {
 }
 
 .public-asset-group-request .public-asset-group-toggle {
-  background: linear-gradient(135deg, rgba(255, 244, 222, 0.98), rgba(246, 221, 176, 0.96));
-  color: #5f3d17;
+  background: linear-gradient(135deg, rgba(255, 244, 222, 1), rgba(242, 213, 158, 0.98));
+  color: #4e3012;
+}
+
+.public-asset-group-request .public-asset-group-body {
+  background: linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(251, 243, 228, 0.96));
 }
 
 .public-asset-group-maintenance {
@@ -24843,8 +24848,8 @@ tr.row-maint-maintenance:hover td {
 }
 
 .public-asset-group-maintenance .public-asset-group-toggle {
-  background: linear-gradient(135deg, rgba(226, 240, 255, 0.98), rgba(190, 218, 248, 0.96));
-  color: #23486f;
+  background: linear-gradient(135deg, rgba(226, 240, 255, 1), rgba(178, 209, 244, 0.98));
+  color: #173e68;
 }
 
 .public-asset-group-details,
@@ -24855,8 +24860,8 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-group-details .public-asset-group-toggle,
 .public-asset-group-toner .public-asset-group-toggle {
-  background: linear-gradient(135deg, rgba(232, 246, 236, 0.98), rgba(196, 228, 205, 0.96));
-  color: #234d37;
+  background: linear-gradient(135deg, rgba(232, 246, 236, 1), rgba(185, 223, 196, 0.98));
+  color: #193f2b;
 }
 
 .public-asset-group-toggle strong {
@@ -24866,18 +24871,20 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-group-hint {
   padding: 0 18px 14px;
-  color: var(--public-qr-ink-soft);
+  color: #654b30;
   font-size: 13px;
   line-height: 1.55;
 }
 
 .public-asset-group-body {
   padding: 0 18px 18px;
+  color: #4b3520;
 }
 
 .public-asset-group-body .field > span {
-  color: var(--public-qr-ink-soft);
-  font-weight: 700;
+  color: #5a4021;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   line-height: 1.45;
 }
 
@@ -24899,8 +24906,8 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-group-body .input::placeholder,
 .public-asset-group-body .textarea::placeholder {
-  color: var(--public-qr-placeholder) !important;
-  -webkit-text-fill-color: var(--public-qr-placeholder) !important;
+  color: #7e6546 !important;
+  -webkit-text-fill-color: #7e6546 !important;
   opacity: 1;
 }
 
@@ -24916,6 +24923,47 @@ tr.row-maint-maintenance:hover td {
 
 .public-asset-group-body input[type="file"] {
   color: var(--public-qr-ink-soft);
+}
+
+.public-asset-group-body .file-input,
+.public-asset-group-body input[type="file"] {
+  min-height: 54px;
+  padding: 8px 10px;
+  border-color: #cfae81 !important;
+  background: linear-gradient(180deg, #fffaf0, #f6e8cf) !important;
+  color: #50361d !important;
+  -webkit-text-fill-color: #50361d !important;
+  font-weight: 700;
+}
+
+.public-asset-group-body .tiny,
+.public-asset-group-body .alert,
+.public-asset-group-body .alert-error {
+  color: #5d4428 !important;
+}
+
+.public-asset-group-body .file-input::file-selector-button,
+.public-asset-group-body input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  border: 1px solid #b48a4c;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #f3e3c7);
+  color: #52361a;
+  padding: 8px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.public-asset-group-body .file-input::-webkit-file-upload-button,
+.public-asset-group-body input[type="file"]::-webkit-file-upload-button {
+  margin-right: 12px;
+  border: 1px solid #b48a4c;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #f3e3c7);
+  color: #52361a;
+  padding: 8px 14px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .public-asset-group-body .input:focus,
@@ -29374,6 +29422,7 @@ tr.row-maint-maintenance:hover td {
   .public-asset-group-hint {
     padding: 0 14px 12px;
     font-size: 13px;
+    color: #5d4428;
   }
 
   .public-asset-grid .field {
@@ -29484,6 +29533,7 @@ tr.row-maint-maintenance:hover td {
 
   .public-asset-group-body .field > span {
     font-size: 13px;
+    color: #604424;
   }
 
   .public-asset-group-body .input,
@@ -29492,6 +29542,20 @@ tr.row-maint-maintenance:hover td {
   .public-asset-group-body .detail-value {
     min-height: 52px;
     font-size: 16px;
+  }
+
+  .public-asset-group-body .file-input,
+  .public-asset-group-body input[type="file"] {
+    font-size: 15px;
+    line-height: 1.35;
+  }
+
+  .public-asset-group-body .file-input::file-selector-button,
+  .public-asset-group-body input[type="file"]::file-selector-button,
+  .public-asset-group-body .file-input::-webkit-file-upload-button,
+  .public-asset-group-body input[type="file"]::-webkit-file-upload-button {
+    min-height: 38px;
+    padding: 8px 12px;
   }
 
   .public-asset-group-body .textarea {
@@ -29546,13 +29610,17 @@ tr.row-maint-maintenance:hover td {
   }
 
   .public-asset-history-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
   }
 
   .public-asset-history-grid.public-asset-history-grid-paired {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px 18px;
+  }
+
+  .public-asset-history-item {
+    min-width: 0;
   }
 
   .public-asset-history-title {
@@ -29612,6 +29680,7 @@ tr.row-maint-maintenance:hover td {
   .public-qr-account-chip-text {
     max-width: 100%;
     font-size: 15px;
+    color: #2f2012;
   }
 
   .public-asset-group-toggle {

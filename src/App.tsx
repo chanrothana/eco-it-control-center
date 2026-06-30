@@ -2624,7 +2624,9 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
     { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
-    { itemEn: "Wall Clock", itemKm: "នាឡិកាជញ្ជាំង", code: "WCL" },
+    { itemEn: "Refrigerator", itemKm: "ទូទឹកកក", code: "RFG" },
+    { itemEn: "Microwave", itemKm: "ម៉ាស៊ីនកម្តៅម្ហូប", code: "MWV" },
+    { itemEn: "Clock", itemKm: "នាឡិកា", code: "WCL" },
     { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
     { itemEn: "Walkie Talkie", itemKm: "វិទ្យុទាក់ទង", code: "WTK" },
     { itemEn: "Remote Control", itemKm: "រីម៉ូតបញ្ជា", code: "RMT" },
@@ -6990,8 +6992,8 @@ function parseTvSpecs(specsRaw: string) {
     };
   }
   const countMatch = specs.match(/TV Remotes?:\s*(\d+)/i);
-  const remotePhoto1Match = specs.match(/TV Remote Photo 1:\s*([^\n|;]+)/i);
-  const remotePhoto2Match = specs.match(/TV Remote Photo 2:\s*([^\n|;]+)/i);
+  const remotePhoto1Match = specs.match(/TV Remote Photo 1:\s*([^\n]+)/i);
+  const remotePhoto2Match = specs.match(/TV Remote Photo 2:\s*([^\n]+)/i);
   const remoteCount = Math.max(1, Math.min(2, Number(countMatch?.[1] || 1)));
   const remotePhotos = [
     String(remotePhoto1Match?.[1] || "").trim(),
@@ -6999,8 +7001,8 @@ function parseTvSpecs(specsRaw: string) {
   ].filter(Boolean);
   const cleanedSpecs = specs
     .replace(/TV Remotes?:\s*\d+/gi, "")
-    .replace(/TV Remote Photo 1:\s*([^\n|;]+)/gi, "")
-    .replace(/TV Remote Photo 2:\s*([^\n|;]+)/gi, "")
+    .replace(/TV Remote Photo 1:\s*([^\n]+)/gi, "")
+    .replace(/TV Remote Photo 2:\s*([^\n]+)/gi, "")
     .replace(/[|;]+/g, "\n")
     .replace(/\n\s*,/g, "\n")
     .replace(/\n{2,}/g, "\n")
@@ -7094,9 +7096,9 @@ function parseAirconSpecs(specsRaw: string) {
   const frontSerialMatch = specs.match(/Front Unit S\/N:\s*([^\n|;]+)/i);
   const outdoorSerialMatch = specs.match(/Back Unit S\/N:\s*([^\n|;]+)/i);
   const componentNoteMatch = specs.match(/Components? Note:\s*([^\n|;]+)/i);
-  const remotePhotoMatch = specs.match(/Remote Photo:\s*([^\n|;]+)/i);
-  const frontPhotoMatch = specs.match(/Front Unit Photo:\s*([^\n|;]+)/i);
-  const outdoorPhotoMatch = specs.match(/(?:Outdoor|Back) Unit Photo:\s*([^\n|;]+)/i);
+  const remotePhotoMatch = specs.match(/Remote Photo:\s*([^\n]+)/i);
+  const frontPhotoMatch = specs.match(/Front Unit Photo:\s*([^\n]+)/i);
+  const outdoorPhotoMatch = specs.match(/(?:Outdoor|Back) Unit Photo:\s*([^\n]+)/i);
   if (typeMatch?.[1]) acType = String(typeMatch[1]).trim();
   if (hpMatch?.[1]) acHp = String(hpMatch[1]).trim();
   if (includedMatch?.[1]) {
@@ -7127,9 +7129,9 @@ function parseAirconSpecs(specsRaw: string) {
     .replace(/Front Unit S\/N:\s*([^\n|;]+)/gi, "")
     .replace(/Back Unit S\/N:\s*([^\n|;]+)/gi, "")
     .replace(/Components? Note:\s*([^\n|;]+)/gi, "")
-    .replace(/Remote Photo:\s*([^\n|;]+)/gi, "")
-    .replace(/Front Unit Photo:\s*([^\n|;]+)/gi, "")
-    .replace(/(?:Outdoor|Back) Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Remote Photo:\s*([^\n]+)/gi, "")
+    .replace(/Front Unit Photo:\s*([^\n]+)/gi, "")
+    .replace(/(?:Outdoor|Back) Unit Photo:\s*([^\n]+)/gi, "")
     .replace(/\b(?:data:image\/[a-z0-9.+-]+;)?base64,[A-Za-z0-9+/=\s]+/gi, "")
     .replace(/[|;]+/g, "\n")
     .replace(/\n\s*,/g, "\n")
@@ -13688,7 +13690,6 @@ export default function App() {
       ),
     [editingRentalPrinterId, rentalPrinterForm.machineName, rentalPrinterForm.model, rentalPrinterForm.vendor, rentalPrinters]
   );
-
   const currentTypeOptions = useMemo(
     () => {
       const base = newEntryTypeOptions[assetForm.category] || newEntryTypeOptions.IT || TYPE_OPTIONS.IT;
