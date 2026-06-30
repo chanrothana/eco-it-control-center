@@ -6749,7 +6749,7 @@ function createMaintenanceRecordForm(
     note: "",
     cost: "",
     by: String(preferredBy || "").trim(),
-    checkedBy: "",
+    checkedBy: String(preferredBy || "").trim(),
     photo: "",
     photos: [] as string[],
     beforePhotos: [] as string[],
@@ -28670,6 +28670,10 @@ export default function App() {
       workflow.workPerformed ||
       workflow.issueSummary
     ).trim();
+    const resolvedBy = String(maintenanceRecordForm.by || "").trim() || currentOperatorName;
+    const resolvedCheckedBy = String(maintenanceRecordForm.checkedBy || "").trim() || currentOperatorName;
+    const resolvedDate = normalizeYmdInput(maintenanceRecordForm.date) || toYmd(new Date());
+    const resolvedTime = String(maintenanceRecordForm.time || "").trim() || toHm(new Date());
     const normalizedBeforePhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []);
     const normalizedAfterPhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []);
     maintenanceRecordSaveLockRef.current = true;
@@ -28685,15 +28689,15 @@ export default function App() {
 
       const entry: MaintenanceEntry = {
         id: Date.now(),
-        date: maintenanceRecordForm.date,
-        createdAt: combineYmdAndTimeToIso(maintenanceRecordForm.date, maintenanceRecordForm.time),
+        date: resolvedDate,
+        createdAt: combineYmdAndTimeToIso(resolvedDate, resolvedTime),
         type: maintenanceRecordForm.type.trim(),
         completion: maintenanceRecordForm.completion,
         condition: maintenanceRecordForm.condition.trim(),
         note: resolvedNote,
         cost: maintenanceRecordForm.cost.trim(),
-        by: maintenanceRecordForm.by.trim(),
-        checkedBy: maintenanceRecordForm.checkedBy.trim(),
+        by: resolvedBy,
+        checkedBy: resolvedCheckedBy,
         beforePhotos: normalizedBeforePhotos,
         afterPhotos: normalizedAfterPhotos,
         photo: normalizedAfterPhotos[0] || "",
@@ -29894,6 +29898,8 @@ export default function App() {
     if (!requireAdminAction()) return;
     if (!maintenanceDetailAssetId) return;
     if (!maintenanceEditForm.date || !maintenanceEditForm.type.trim() || !maintenanceEditForm.note.trim()) return;
+    const resolvedBy = String(maintenanceEditForm.by || "").trim() || currentOperatorName;
+    const resolvedCheckedBy = String(maintenanceEditForm.checkedBy || "").trim() || currentOperatorName;
 
     const payload: MaintenanceEntry = {
       id: entryId,
@@ -29903,8 +29909,8 @@ export default function App() {
       condition: maintenanceEditForm.condition.trim(),
       note: maintenanceEditForm.note.trim(),
       cost: maintenanceEditForm.cost.trim(),
-      by: maintenanceEditForm.by.trim(),
-      checkedBy: maintenanceEditForm.checkedBy.trim(),
+      by: resolvedBy,
+      checkedBy: resolvedCheckedBy,
       beforePhotos: normalizeMaintenancePhotoList(maintenanceEditForm.beforePhotos || []),
       afterPhotos: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || []),
       photo: normalizeMaintenancePhotoList(maintenanceEditForm.afterPhotos || [])[0] || "",
@@ -33161,7 +33167,15 @@ export default function App() {
   }, [maintenanceRecordForm.assetId, maintenanceRecordFilteredAssets]);
   useEffect(() => {
     if (!currentOperatorName) return;
-    setMaintenanceRecordForm((f) => (f.by.trim() ? f : { ...f, by: currentOperatorName }));
+    setMaintenanceRecordForm((f) =>
+      f.by.trim() && f.checkedBy.trim()
+        ? f
+        : {
+            ...f,
+            by: f.by.trim() || currentOperatorName,
+            checkedBy: f.checkedBy.trim() || currentOperatorName,
+          }
+    );
     setTicketMaintenanceForm((f) => (f.by.trim() ? f : { ...f, by: currentOperatorName }));
   }, [currentOperatorName]);
   useEffect(() => {
