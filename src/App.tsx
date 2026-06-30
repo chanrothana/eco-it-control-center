@@ -39301,6 +39301,18 @@ function formatTicketRequestSource(value?: string) {
     const publicQrAssignedUser = String(asset?.assignedTo || "").trim()
       ? users.find((user) => user.fullName === String(asset?.assignedTo || "").trim()) || null
       : null;
+    const publicQrAssetName = asset
+      ? asset.name || assetItemName(asset.category || "", asset.type || "", asset.pcType || "")
+      : "-";
+    const publicQrStatusLabel = assetStatusLabel(asset?.status || "-");
+    const publicQrStatusTone = (() => {
+      const value = String(asset?.status || "").trim().toLowerCase();
+      if (value === "active") return "is-active";
+      if (value === "inactive") return "is-inactive";
+      if (value === "repair" || value === "under repair" || value === "maintenance") return "is-repair";
+      if (value === "missing" || value === "lost") return "is-alert";
+      return "is-neutral";
+    })();
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
       : asset?.photo
@@ -39419,8 +39431,33 @@ function formatTicketRequestSource(value?: string) {
                 <span className="mobile-hamburger-icon" aria-hidden={true}>☰</span>
               </button>
             ) : (
-              <span />
+              <span className="public-qr-nav-placeholder" />
             )}
+            <button
+              type="button"
+              className="public-qr-logo-btn"
+              onClick={handlePhoneLogoHome}
+              aria-label="Go to dashboard"
+              title="Dashboard"
+            >
+              <img
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                src={ECO_LOGO_URL}
+                alt="Eco International School"
+                className="public-qr-top-logo"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  if (!img.dataset.fallback) {
+                    img.dataset.fallback = "1";
+                    img.src = APP_ICON_FALLBACK_URL;
+                    return;
+                  }
+                  img.style.display = "none";
+                }}
+              />
+            </button>
             <button
               type="button"
               className="mobile-notify-btn public-qr-account-chip"
@@ -39649,41 +39686,46 @@ function formatTicketRequestSource(value?: string) {
                   <div className="form-grid public-asset-grid public-asset-grid-summary">
                     <div className="public-asset-mobile-card">
                       <div className="public-asset-mobile-head">
-                        <div className="detail-value"><strong>{asset.assetId || "-"}</strong></div>
-                      </div>
-                      <div className="public-asset-mobile-body">
-                        <div className="public-asset-mobile-text">
-                          <div className="public-asset-mobile-name">
-                            <strong>{t.name}:</strong> {asset.name || assetItemName(asset.category || "", asset.type || "", asset.pcType || "")}
+                        <div className="public-asset-mobile-head-main">
+                          <div className="public-asset-mobile-head-copy">
+                            <div className="public-asset-mobile-head-topline">
+                              <div className="public-asset-mobile-id">{asset.assetId || "-"}</div>
+                              <span className={`public-asset-status-pill ${publicQrStatusTone}`}>{publicQrStatusLabel}</span>
+                            </div>
+                            <div className="public-asset-mobile-title">{publicQrAssetName}</div>
+                            <div className="public-asset-mobile-summary-line">
+                              {asset.category || "-"} • {campusLabel(asset.campus || "-")} • {asset.location || "-"}
+                            </div>
+                            <div className="public-asset-mobile-meta">
+                            <div><span>{t.campus}</span><strong>{campusLabel(asset.campus || "-")}</strong></div>
+                            <div><span>{t.location}</span><strong>{asset.location || "-"}</strong></div>
+                            <div>
+                              <span>{t.user}</span>
+                              <strong className="public-asset-mobile-user-inline">
+                                <span>{asset.assignedTo || "-"}</span>
+                                {publicQrAssignedUser ? (
+                                  renderStaffAvatar(
+                                    publicQrAssignedUser.photo,
+                                    publicQrAssignedUser.fullName,
+                                    publicQrAssignedUser.sex,
+                                    "staff-user-avatar public-asset-user-avatar-inline"
+                                  )
+                                ) : null}
+                              </strong>
+                            </div>
                           </div>
-                          <div className="public-asset-mobile-meta">
-                            <div><strong>{t.campus}:</strong> {campusLabel(asset.campus || "-")}</div>
-                            <div><strong>{t.category}:</strong> {asset.category || "-"}</div>
-                            <div><strong>{t.location}:</strong> {asset.location || "-"}</div>
-                            <div><strong>{t.status}:</strong> {assetStatusLabel(asset.status || "-")}</div>
-                            <div><strong>{t.user}:</strong> {asset.assignedTo || "-"}</div>
                           </div>
-                        </div>
-                        <div className="public-asset-mobile-media">
-                          <div className="public-asset-mobile-photo">
+                          <div className="public-asset-mobile-photo public-asset-mobile-photo-head">
                             {photos[0] ? (
                               <img loading="lazy" decoding="async" src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
                             ) : (
                               <div className="photo-placeholder">{t.noPhoto}</div>
                             )}
                           </div>
-                          {publicQrAssignedUser ? (
-                            <div className="public-asset-mobile-user-photo" title={publicQrAssignedUser.fullName}>
-                              {renderStaffAvatar(
-                                publicQrAssignedUser.photo,
-                                publicQrAssignedUser.fullName,
-                                publicQrAssignedUser.sex,
-                                "staff-user-avatar public-asset-user-avatar"
-                              )}
-                              <div className="public-asset-mobile-user-label">{publicQrAssignedUser.fullName}</div>
-                            </div>
-                          ) : null}
                         </div>
+                      </div>
+                      <div className="public-asset-mobile-body">
+                        <div className="public-asset-mobile-media" />
                       </div>
                     </div>
                   </div>
