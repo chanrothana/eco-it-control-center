@@ -55886,55 +55886,65 @@ function formatTicketRequestSource(value?: string) {
                           filteredMaintenanceRows.map((row) => (
                     <article key={`maint-history-mobile-${row.rowId}`} className="report-card maintenance-mobile-asset-card">
                       <div className="maintenance-mobile-asset-head">
-                        <span className="tiny report-card-sub">
-                          {campusLabel(row.campus)} • {row.location || "-"}
-                        </span>
+                        <div className="maintenance-mobile-asset-head-bar">
+                          <strong>{campusLabel(row.campus)} • {row.location || "-"}</strong>
+                        </div>
                       </div>
                       <div className="maintenance-mobile-asset-grid">
-                      <div className="maintenance-mobile-asset-field">
-                          <span>WHEN</span>
-                          <strong>{formatDate(row.date || "-")}</strong>
+                        <div className="maintenance-mobile-asset-field">
+                          <div className="maintenance-mobile-asset-label-line">
+                            <span>When:</span>
+                            <strong>{formatDate(row.date || "-")}</strong>
+                          </div>
                           <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
-                          <span>TYPE</span>
-                          <strong>{row.type || "-"}</strong>
+                          <div className="maintenance-mobile-asset-label-line">
+                            <span>Type:</span>
+                            <strong>{row.type || "-"}</strong>
+                          </div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
-                          <span>WORK STATUS</span>
-                          <strong>{maintenanceCompletionText(row.completion || "-")}</strong>
+                          <div className="maintenance-mobile-asset-label-line">
+                            <span>Work Status:</span>
+                            <strong>{maintenanceCompletionText(row.completion || "-")}</strong>
+                          </div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
-                          <span>CONDITION</span>
-                          <strong>{row.condition || "-"}</strong>
+                          <div className="maintenance-mobile-asset-label-line">
+                            <span>Condition:</span>
+                            <strong>{row.condition || "-"}</strong>
+                          </div>
                         </div>
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
-                          <span>NOTED</span>
+                          <span>Noted</span>
                           <strong>{row.note || "-"}</strong>
                         </div>
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
-                          <span>WORKFLOW</span>
+                          <span>Workflow</span>
                           <div>{renderSavedMaintenanceWorkflow(row)}</div>
                         </div>
                         <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
-                          <span>PHOTOS</span>
+                          <span>Photos</span>
                           <div className="maintenance-mobile-asset-photo">
                             {renderMaintenancePhotoGroups(row, `maintenance-history-${row.rowId}`, undefined, {
                               className: "maintenance-history-photo-groups-two-col",
                             })}
                           </div>
                         </div>
-                        <div className="maintenance-mobile-asset-field">
-                          <span>COST</span>
-                          <strong>{row.cost || "-"}</strong>
-                        </div>
-                        <div className="maintenance-mobile-asset-field">
-                          <span>BY</span>
-                          <strong>{row.by || "-"}</strong>
-                        </div>
-                        <div className="maintenance-mobile-asset-field">
-                          <span>CHECKED</span>
-                          <strong>{row.checkedBy || "-"}</strong>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-teamline">
+                          <div className="maintenance-mobile-asset-team-item">
+                            <span>Cost:</span>
+                            <strong>{row.cost || "-"}</strong>
+                          </div>
+                          <div className="maintenance-mobile-asset-team-item">
+                            <span>By:</span>
+                            <strong>{row.by || "-"}</strong>
+                          </div>
+                          <div className="maintenance-mobile-asset-team-item">
+                            <span>Checked:</span>
+                            <strong>{row.checkedBy || "-"}</strong>
+                          </div>
                         </div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">

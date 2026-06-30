@@ -6690,11 +6690,30 @@ h2 {
   background: #f8fbff;
   border-color: #b7cae8;
   gap: 12px;
+  border-radius: 24px;
+  overflow: hidden;
 }
 
 .maintenance-mobile-asset-head {
   display: grid;
-  gap: 6px;
+  gap: 0;
+  margin: -12px -12px 0;
+}
+
+.maintenance-mobile-asset-head-bar {
+  padding: 14px 18px 12px;
+  background: linear-gradient(180deg, rgba(63, 84, 121, 0.97), rgba(51, 71, 107, 0.94));
+  border-bottom: 1px solid rgba(171, 189, 220, 0.42);
+}
+
+.maintenance-mobile-asset-head-bar strong {
+  display: block;
+  color: #f4f8ff;
+  font-size: 18px;
+  line-height: 1.18;
+  font-weight: 800;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .maintenance-mobile-asset-grid {
@@ -6709,13 +6728,39 @@ h2 {
   gap: 3px;
 }
 
+.maintenance-mobile-asset-label-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.maintenance-mobile-asset-label-line > span {
+  margin: 0;
+  color: #6178a1;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.maintenance-mobile-asset-label-line > strong {
+  margin: 0;
+  color: #2f2112;
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .maintenance-mobile-asset-field > span {
   margin: 0;
   font-family: var(--font-head);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.15;
   letter-spacing: 0.08em;
   color: #5f7398;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .maintenance-mobile-asset-field > strong {
@@ -6732,11 +6777,19 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.maintenance-mobile-asset-note {
+  padding-top: 2px;
+}
+
 .maintenance-mobile-asset-note > strong {
   display: block;
   width: 100%;
   margin-top: 2px;
   white-space: pre-wrap;
+}
+
+.maintenance-mobile-asset-note > div {
+  color: #2f2112;
 }
 
 .maintenance-mobile-asset-photo {
@@ -6752,6 +6805,34 @@ h2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   width: 100%;
+}
+
+.maintenance-mobile-asset-teamline {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(153, 176, 214, 0.7);
+  display: grid;
+  gap: 8px;
+}
+
+.maintenance-mobile-asset-team-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.maintenance-mobile-asset-team-item > span {
+  color: #6178a1;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.maintenance-mobile-asset-team-item > strong {
+  color: #2f2112;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .maintenance-photo-stack {
