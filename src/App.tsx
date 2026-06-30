@@ -12462,6 +12462,18 @@ export default function App() {
         };
     }
   }, [vaultTab, vaultSearchResults.length, vaultAccounts.length, vaultCredentials.length, vaultDesignLinks.length, vaultNetworkDocs.length, vaultCctvRecords.length]);
+  const vaultWorkspaceOptions = useMemo(
+    () =>
+      [
+        canAccessMenu("vault.dashboard", "vault") ? { value: "dashboard", label: "Dashboard" } : null,
+        canAccessMenu("vault.accounts", "vault") ? { value: "accounts", label: "Access Systems" } : null,
+        canAccessMenu("vault.credentials", "vault") ? { value: "credentials", label: "Web Services" } : null,
+        canAccessMenu("vault.network", "vault") ? { value: "network", label: "Network & WiFi Docs" } : null,
+        canAccessMenu("vault.cctv", "vault") ? { value: "cctv", label: "CCTV Systems" } : null,
+        canAccessMenu("vault.design", "vault") ? { value: "design", label: "Design Folders" } : null,
+      ].filter(Boolean) as Array<{ value: "dashboard" | "accounts" | "credentials" | "network" | "cctv" | "design"; label: string }>,
+    [canAccessMenu]
+  );
   const copyVaultSearchEntry = useCallback(async (entry: VaultSearchEntry) => {
     const text = buildVaultSearchEntryText(entry);
     try {
@@ -15509,6 +15521,22 @@ export default function App() {
     ],
     [lang]
   );
+  const reportInventoryGroupIcon = useCallback((value: typeof reportInventoryGroupTabs[number]["value"]) => {
+    switch (value) {
+      case "SUPPLY":
+        return <Droplets size={16} aria-hidden={true} />;
+      case "CLEAN_TOOL":
+        return <Shield size={16} aria-hidden={true} />;
+      case "MAINT_TOOL":
+        return <Wrench size={16} aria-hidden={true} />;
+      case "GARDEN_TOOL":
+        return <Flame size={16} aria-hidden={true} />;
+      case "SERVICE_TOOL":
+        return <Building2 size={16} aria-hidden={true} />;
+      default:
+        return <Boxes size={16} aria-hidden={true} />;
+    }
+  }, []);
   const reportInventoryIsToolGroup = useMemo(
     () =>
       reportInventoryGroupFilter === "ALL" ||
@@ -44644,7 +44672,9 @@ function formatTicketRequestSource(value?: string) {
                             <div className="asset-mobile-status">
                               {isAdmin ? (
                                 <select
-                                  className="status-select"
+                                  className={`status-select asset-mobile-status-select asset-mobile-status-select-${String(asset.status || "Active")
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9]+/g, "-")}`}
                                   value={asset.status || "Active"}
                                   onChange={(e) => openAssetStatusChangeDialog(asset.id, e.target.value)}
                                 >
@@ -58870,16 +58900,18 @@ function formatTicketRequestSource(value?: string) {
             <div className={`report-title-row ${reportType === "it_vault" ? "report-title-row-it-vault" : ""}`}>
               <h2>{reportType === "it_vault" ? "IT Vault Formal Report" : t.reports}</h2>
               <div className="report-title-actions">
-                <button
-                  className="btn-primary report-print-btn report-title-print-btn"
-                  onClick={() => {
-                    setReportMobileFiltersOpen(false);
-                    printCurrentReport();
-                  }}
-                >
-                  <Printer size={16} aria-hidden={true} />
-                  <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
-                </button>
+                {!(isPhoneView && reportType === "inventory_balance") ? (
+                  <button
+                    className="btn-primary report-print-btn report-title-print-btn"
+                    onClick={() => {
+                      setReportMobileFiltersOpen(false);
+                      printCurrentReport();
+                    }}
+                  >
+                    <Printer size={16} aria-hidden={true} />
+                    <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
+                  </button>
+                ) : null}
               </div>
             </div>
             {reportType === "it_vault" && (
@@ -58987,7 +59019,61 @@ function formatTicketRequestSource(value?: string) {
               </div>
             ) : null}
             {reportType === "inventory_balance" ? (
-              <div className="report-inventory-group-tabs" role="tablist" aria-label="Inventory report groups">
+              <>
+                {isPhoneView ? (
+                  <section className="report-inventory-mobile-toolbar">
+                    <div className="report-inventory-mobile-toolbar-head">
+                      <div>
+                        <strong>{lang === "km" ? "របាយការណ៍" : "Reports"}</strong>
+                        <span>{reportInventoryCampusFilterLabel}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="report-inventory-mobile-print-btn"
+                        onClick={() => window.print()}
+                        aria-label={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print report"}
+                        title={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print report"}
+                      >
+                        <Printer size={18} aria-hidden={true} />
+                      </button>
+                    </div>
+                    <div className="report-inventory-mobile-toolbar-controls">
+                      <label className="field report-inventory-mobile-campus-field">
+                        <span>{t.campus}</span>
+                        <LocationPicker
+                          value={reportInventoryCampusFilter}
+                          onChange={(value) => setReportInventoryCampusFilter(value)}
+                          options={[
+                            { value: "ALL", label: t.allCampuses },
+                            ...reportInventoryCampusOptions.map((campus) => ({
+                              value: campus,
+                              label: inventoryCampusLabel(campus),
+                            })),
+                          ]}
+                          placeholder={lang === "km" ? "ជ្រើសសាខា" : "Select campus"}
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                          emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                        />
+                      </label>
+                      <label className="field report-inventory-mobile-campus-field">
+                        <span>{lang === "km" ? "ប្រភេទឧបករណ៍" : "Tool Category"}</span>
+                        <LocationPicker
+                          value={reportInventoryGroupFilter}
+                          onChange={(value) => setReportInventoryGroupFilter(value as typeof reportInventoryGroupTabs[number]["value"])}
+                          options={reportInventoryGroupTabs.map((option) => ({
+                            value: option.value,
+                            label: option.label,
+                          }))}
+                          placeholder={lang === "km" ? "ជ្រើសប្រភេទឧបករណ៍" : "Select tool category"}
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទឧបករណ៍..." : "Search tool category..."}
+                          emptyText={lang === "km" ? "មិនមានប្រភេទឧបករណ៍" : "No tool category found."}
+                        />
+                      </label>
+                    </div>
+                  </section>
+                ) : null}
+                {!isPhoneView ? (
+                <div className="report-inventory-group-tabs" role="tablist" aria-label="Inventory report groups">
                 {reportInventoryGroupTabs.map((tabOption) => {
                   const active = reportInventoryGroupFilter === tabOption.value;
                   return (
@@ -58999,11 +59085,14 @@ function formatTicketRequestSource(value?: string) {
                       className={`report-inventory-group-tab ${active ? "report-inventory-group-tab-active" : ""}`}
                       onClick={() => setReportInventoryGroupFilter(tabOption.value)}
                     >
-                      {tabOption.label}
+                      <span className="report-inventory-group-tab-icon">{reportInventoryGroupIcon(tabOption.value)}</span>
+                      <span>{tabOption.label}</span>
                     </button>
                   );
                 })}
-              </div>
+                </div>
+                ) : null}
+              </>
             ) : null}
             <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""} ${reportType === "inventory_balance" ? "report-builder-inventory" : ""}`}>
               {reportType !== "inventory_balance" ? (
@@ -64140,15 +64229,21 @@ function formatTicketRequestSource(value?: string) {
                 <div className="vault-command-hero-panel">
                   <div className="vault-command-headline">
                     <span className="vault-hero-kicker">IT Vault</span>
-                    <span className="vault-command-status">Controlled Access Layer</span>
+                    {isPhoneView ? null : <span className="vault-command-status">Controlled Access Layer</span>}
                   </div>
-                  <h2>IT Vault Mission Control</h2>
-                  <p className="tiny">A command-center workspace for credentials, infrastructure references, service accounts, design access, and urgent reporting requests.</p>
-                  <div className="vault-hero-tags vault-hero-tags-reimagined">
-                    <span><Shield size={14} /> Sensitive Records</span>
-                    <span><Radio size={14} /> Live Review Queue</span>
-                    <span><Boxes size={14} /> Section-Based Filing</span>
-                  </div>
+                  <h2>{isPhoneView ? "IT Vault" : "IT Vault Mission Control"}</h2>
+                  <p className="tiny">
+                    {isPhoneView
+                      ? "Secure records for systems, web services, CCTV, network, and design access."
+                      : "A command-center workspace for credentials, infrastructure references, service accounts, design access, and urgent reporting requests."}
+                  </p>
+                  {isPhoneView ? null : (
+                    <div className="vault-hero-tags vault-hero-tags-reimagined">
+                      <span><Shield size={14} /> Sensitive Records</span>
+                      <span><Radio size={14} /> Live Review Queue</span>
+                      <span><Boxes size={14} /> Section-Based Filing</span>
+                    </div>
+                  )}
                   <div className="vault-dashboard-actions vault-command-actions">
                     <button type="button" className="btn-primary btn-small" onClick={() => void copyVaultText("vault-visible-report", vaultVisibleReportText)}>
                       {vaultCopiedEntryId === "vault-visible-report" ? "Copied Report" : "Copy Visible Report"}
@@ -64158,6 +64253,7 @@ function formatTicketRequestSource(value?: string) {
                     </button>
                   </div>
                 </div>
+                {!isPhoneView ? (
                 <div className="vault-command-metric-wall">
                   <article className="vault-command-metric-card vault-command-metric-card-primary">
                     <span>Total Records</span>
@@ -64180,9 +64276,11 @@ function formatTicketRequestSource(value?: string) {
                     <p>Communication accounts filed in Web Services.</p>
                   </article>
                 </div>
+                ) : null}
               </div>
             </div>
             <div className="vault-main-nav">
+              {!isPhoneView ? (
               <div className="vault-main-nav-top">
                 <div className="vault-main-nav-meta">
                   <span>Workspace Map</span>
@@ -64196,6 +64294,24 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 </div>
               </div>
+              ) : null}
+              {isPhoneView ? (
+                <div className="vault-mobile-workspace-picker">
+                  <label className="eyebrow" htmlFor="vault-mobile-workspace-select">Workspace</label>
+                  <select
+                    id="vault-mobile-workspace-select"
+                    className="input vault-mobile-workspace-select"
+                    value={vaultTab}
+                    onChange={(e) => setVaultTab(e.target.value as "dashboard" | "accounts" | "credentials" | "network" | "cctv" | "design")}
+                  >
+                    {vaultWorkspaceOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
               <div className="vault-main-tabs vault-main-tabs-compact">
                 {canAccessMenu("vault.dashboard", "vault") ? (
                   <button className={`tab ${vaultTab === "dashboard" ? "tab-active" : ""}`} onClick={() => setVaultTab("dashboard")}>Dashboard</button>
@@ -64216,14 +64332,16 @@ function formatTicketRequestSource(value?: string) {
                   <button className={`tab ${vaultTab === "design" ? "tab-active" : ""}`} onClick={() => setVaultTab("design")}>Design Folders</button>
                 ) : null}
               </div>
+              )}
             </div>
             <div className="vault-stage">
             <div className="vault-stage-head vault-stage-head-reimagined">
               <div className="vault-stage-head-copy">
-                <span>Active Workspace</span>
+                <span>{isPhoneView ? "Workspace" : "Active Workspace"}</span>
                 <h3>{vaultActiveSectionMeta.title}</h3>
                 <p>{vaultActiveSectionMeta.description}</p>
               </div>
+              {!isPhoneView ? (
               <div className="vault-stage-head-side">
                 <div className="vault-stage-head-stat">
                   <strong>{vaultActiveSectionMeta.metricValue}</strong>
@@ -64234,6 +64352,14 @@ function formatTicketRequestSource(value?: string) {
                   <strong>One record. One owner. One correct section.</strong>
                 </div>
               </div>
+              ) : (
+              <div className="vault-stage-head-side vault-stage-head-side-phone">
+                <div className="vault-stage-head-stat">
+                  <strong>{vaultActiveSectionMeta.metricValue}</strong>
+                  <small>{vaultActiveSectionMeta.metricLabel}</small>
+                </div>
+              </div>
+              )}
             </div>
             {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
               <div className="panel vault-overview-panel vault-overview-panel-reimagined" style={{ padding: 12, marginBottom: 12 }}>
