@@ -24904,6 +24904,101 @@ tr.row-maint-maintenance:hover td {
   opacity: 1;
 }
 
+.public-asset-group-body .asset-picker-trigger.input,
+.public-asset-group-body .asset-picker-search {
+  border-radius: 18px;
+}
+
+.public-asset-group-body .asset-picker-menu {
+  border-radius: 22px;
+  padding: 12px;
+}
+
+.public-asset-group-body .asset-picker-list {
+  gap: 10px;
+}
+
+.public-asset-group-body .asset-picker-option {
+  min-height: 50px;
+  border-radius: 16px;
+  padding: 10px 12px;
+}
+
+.public-asset-group-body .asset-picker-option-checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+
+.public-asset-maintenance-type-field .asset-picker-trigger.input {
+  min-height: 58px;
+  border-radius: 22px;
+  padding: 14px 18px;
+}
+
+.public-asset-maintenance-type-field .asset-picker-selected,
+.public-asset-maintenance-type-field .asset-picker-placeholder,
+.public-asset-maintenance-type-field .parent-asset-picker-option-title,
+.public-asset-maintenance-type-field .asset-picker-caret {
+  font-size: 16px;
+}
+
+.public-asset-maintenance-type-field .asset-picker-menu {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  border-radius: 24px;
+  padding: 14px;
+}
+
+.public-asset-maintenance-type-field .type-code-picker-search-wrap {
+  margin-bottom: 10px;
+}
+
+.public-asset-maintenance-type-field .asset-picker-search {
+  min-height: 56px;
+  border-radius: 20px;
+  padding-right: 18px;
+}
+
+.public-asset-maintenance-type-field .type-code-picker-search-icon {
+  left: 20px;
+}
+
+.public-asset-maintenance-type-field .type-code-picker-search {
+  padding-left: 58px !important;
+}
+
+.public-asset-maintenance-type-field .asset-picker-list {
+  gap: 10px;
+}
+
+.public-asset-maintenance-type-field .asset-picker-option {
+  min-height: 58px;
+  border-radius: 18px;
+  padding: 10px 14px;
+}
+
+.public-asset-maintenance-type-field .asset-picker-option-checkbox {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.public-asset-maintenance-type-field .asset-picker-option-active {
+  box-shadow:
+    inset 0 0 0 2px rgba(183, 119, 34, 0.34),
+    0 0 0 1px rgba(207, 174, 129, 0.48);
+}
+
+.public-asset-maintenance-type-field .asset-picker-option-active .asset-picker-option-checkbox {
+  background: #b77722;
+  border-color: #b77722;
+  color: #fff;
+}
+
 .public-asset-group-body .input::placeholder,
 .public-asset-group-body .textarea::placeholder {
   color: #7e6546 !important;
@@ -25015,6 +25110,128 @@ tr.row-maint-maintenance:hover td {
   padding-left: 12px;
   padding-right: 12px;
   box-sizing: border-box;
+  color-scheme: light;
+  accent-color: #5cab4b;
+  color: #17324f !important;
+  border: 1.5px solid rgba(92, 171, 75, 0.55) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 239, 0.98), rgba(255, 246, 225, 0.96)) !important;
+  box-shadow:
+    0 0 0 3px rgba(92, 171, 75, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+  letter-spacing: 0.01em;
+}
+
+.public-asset-date-field .input[type="date"]::-webkit-date-and-time-value {
+  text-align: center;
+  color: #17324f;
+}
+
+.public-asset-date-field .input[type="date"]::-webkit-calendar-picker-indicator {
+  border-radius: 999px;
+  padding: 6px;
+  background-color: rgba(92, 171, 75, 0.18);
+  filter: saturate(1.2) contrast(1.05);
+}
+
+.public-asset-date-field .input:hover,
+.public-asset-date-field .input:focus {
+  border-color: rgba(67, 140, 60, 0.88) !important;
+  box-shadow:
+    0 0 0 4px rgba(92, 171, 75, 0.18),
+    0 10px 22px rgba(47, 87, 40, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
+}
+
+.public-asset-eco-date-input {
+  width: 100%;
+  max-width: 100%;
+}
+
+.public-asset-eco-date-input .quickout-date-input-wrap {
+  width: 100%;
+}
+
+.public-asset-eco-date-input .eco-date-floating-panel {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-panel {
+  padding: 18px;
+  border-radius: 28px;
+  border: 1px solid rgba(126, 156, 199, 0.32);
+  background:
+    linear-gradient(180deg, rgba(46, 68, 101, 0.98) 0%, rgba(34, 53, 80, 0.98) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(205, 221, 246, 0.08),
+    0 20px 36px rgba(7, 16, 29, 0.34);
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-head {
+  margin-bottom: 14px;
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-head .quickout-eco-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #eef4ff;
+  letter-spacing: 0.01em;
+}
+
+.public-asset-eco-date-input .quickout-eco-nav {
+  gap: 10px;
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-head .quickout-eco-nav-btn {
+  min-width: 54px;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  font-size: 24px;
+}
+
+.public-asset-eco-date-input .eco-date-legend {
+  margin-bottom: 14px;
+  gap: 8px;
+}
+
+.public-asset-eco-date-input .calendar-type-badge {
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-grid {
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid rgba(137, 167, 210, 0.34);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #314663, #263954);
+  box-shadow:
+    inset 0 1px 0 rgba(205, 222, 246, 0.08),
+    inset 0 0 0 1px rgba(10, 20, 34, 0.18);
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-grid .calendar-head {
+  min-height: 34px;
+  border-radius: 14px;
+  font-size: 13px;
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-grid .calendar-day {
+  min-height: 54px;
+  border-radius: 16px;
+  padding: 6px 8px;
+  font-size: 16px;
+}
+
+.public-asset-eco-date-input .maintenance-datetime-eco-grid .calendar-day small {
+  top: 6px;
+  right: 6px;
 }
 
 .public-asset-mobile-card {
@@ -29358,17 +29575,26 @@ tr.row-maint-maintenance:hover td {
   }
 
   .public-asset-shell {
-    overflow: visible;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   .app-card-public-asset {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
     margin: calc(72px + env(safe-area-inset-top, 0px)) auto 10px;
     padding: 10px;
     border-radius: 14px;
+    overflow-x: clip;
   }
 
   .public-asset-panel {
     padding: 12px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .public-asset-panel h2 {
@@ -29458,6 +29684,9 @@ tr.row-maint-maintenance:hover td {
     background: var(--mobile-surface);
     padding: 10px;
     gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .public-asset-mobile-card .field > span,
@@ -29477,6 +29706,8 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     gap: 10px;
+    min-width: 0;
+    width: 100%;
   }
 
   .public-asset-mobile-text {
@@ -29500,6 +29731,8 @@ tr.row-maint-maintenance:hover td {
 
   .public-asset-mobile-photo {
     justify-self: end;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .public-asset-mobile-photo .photo-preview,
@@ -29542,6 +29775,23 @@ tr.row-maint-maintenance:hover td {
   .public-asset-group-body .detail-value {
     min-height: 52px;
     font-size: 16px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .public-asset-maintenance-type-field .asset-picker-trigger.input {
+    min-height: 60px;
+    padding: 14px 16px;
+  }
+
+  .public-asset-maintenance-type-field .asset-picker-search {
+    min-height: 54px;
+  }
+
+  .public-asset-maintenance-type-field .asset-picker-option {
+    min-height: 56px;
+    padding: 10px 12px;
   }
 
   .public-asset-group-body .file-input,
@@ -29588,6 +29838,9 @@ tr.row-maint-maintenance:hover td {
     grid-template-columns: 76px minmax(0, 1fr);
     gap: 10px;
     padding: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .public-asset-component-photo,
@@ -29603,6 +29856,9 @@ tr.row-maint-maintenance:hover td {
     border-color: #bfd0e7;
     background: #f3f7fd;
     color: #29466d;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .public-asset-history-head {
@@ -29617,6 +29873,42 @@ tr.row-maint-maintenance:hover td {
   .public-asset-history-grid.public-asset-history-grid-paired {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px 18px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-panel {
+    padding: 14px;
+    border-radius: 24px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-head .quickout-eco-title {
+    font-size: 20px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-head .quickout-eco-nav-btn {
+    min-width: 46px;
+    width: 46px;
+    height: 46px;
+    border-radius: 15px;
+    font-size: 20px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-grid {
+    gap: 7px;
+    padding: 12px;
+    border-radius: 20px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-grid .calendar-head {
+    min-height: 30px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-grid .calendar-day {
+    min-height: 46px;
+    border-radius: 14px;
+    padding: 4px 6px;
+    font-size: 14px;
   }
 
   .public-asset-history-item {
@@ -29673,6 +29965,16 @@ tr.row-maint-maintenance:hover td {
 }
 
 @media (max-width: 480px) {
+  .app-card-public-asset {
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+    padding: 6px;
+  }
+
+  .public-asset-panel {
+    padding: 8px;
+  }
+
   .public-qr-account-chip {
     max-width: min(50vw, 210px);
   }
@@ -29685,6 +29987,7 @@ tr.row-maint-maintenance:hover td {
 
   .public-asset-group-toggle {
     align-items: center;
+    padding: 12px 14px;
   }
 
   .public-asset-group-body .input,
@@ -29692,6 +29995,89 @@ tr.row-maint-maintenance:hover td {
   .public-asset-group-body .status-select,
   .public-asset-group-body .detail-value {
     font-size: 16px;
+  }
+
+  .public-asset-maintenance-type-field .asset-picker-trigger.input {
+    min-height: 58px;
+    border-radius: 20px;
+    padding: 13px 15px;
+  }
+
+  .public-asset-maintenance-type-field .asset-picker-menu {
+    border-radius: 22px;
+    padding: 12px;
+  }
+
+  .public-asset-maintenance-type-field .asset-picker-search {
+    min-height: 52px;
+    border-radius: 18px;
+  }
+
+  .public-asset-maintenance-type-field .asset-picker-option {
+    min-height: 54px;
+    border-radius: 16px;
+  }
+
+  .public-asset-mobile-body {
+    grid-template-columns: 1fr;
+  }
+
+  .public-asset-mobile-photo {
+    justify-self: center;
+  }
+
+  .public-qr-photo-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .public-asset-history-grid,
+  .public-asset-history-grid.public-asset-history-grid-paired {
+    grid-template-columns: 1fr;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-panel {
+    padding: 12px;
+    border-radius: 22px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-head .quickout-eco-title {
+    font-size: 18px;
+  }
+
+  .public-asset-eco-date-input .quickout-eco-nav {
+    gap: 8px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-head .quickout-eco-nav-btn {
+    min-width: 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    font-size: 18px;
+  }
+
+  .public-asset-eco-date-input .calendar-type-badge {
+    min-height: 28px;
+    padding: 5px 9px;
+    font-size: 10px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-grid {
+    gap: 6px;
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-grid .calendar-head {
+    min-height: 28px;
+    border-radius: 11px;
+    font-size: 11px;
+  }
+
+  .public-asset-eco-date-input .maintenance-datetime-eco-grid .calendar-day {
+    min-height: 42px;
+    border-radius: 12px;
+    font-size: 13px;
   }
 
   .eco-date-floating-field .eco-date-floating-panel {

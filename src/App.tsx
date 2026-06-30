@@ -7914,6 +7914,13 @@ type AssetTypePickerOption = {
   label: string;
 };
 
+type SearchableSelectOption = {
+  value: string;
+  label: string;
+  description?: string;
+  searchText?: string;
+};
+
 type AssetTypePickerProps = {
   value: string;
   options: AssetTypePickerOption[];
@@ -7923,6 +7930,16 @@ type AssetTypePickerProps = {
   searchPlaceholder?: string;
   emptyText?: string;
   getIcon?: (opt: AssetTypePickerOption) => React.ReactNode;
+};
+
+type SearchableSelectPickerProps = {
+  value: string;
+  options: SearchableSelectOption[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  searchPlaceholder?: string;
+  emptyText?: string;
 };
 
 type LocationPickerOption = {
@@ -8075,6 +8092,145 @@ function AssetTypePicker({
                 >
                   <span className="type-code-picker-icon">{getIcon ? getIcon(opt) : <Package size={16} aria-hidden={true} />}</span>
                   <span>{opt.label} ({opt.code})</span>
+                </button>
+              ))
+            ) : (
+              <div className="asset-picker-empty">{emptyText}</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchableSelectPicker({
+  value,
+  options,
+  onChange,
+  placeholder = "Select option",
+  disabled,
+  searchPlaceholder = "Search option...",
+  emptyText = "No option found.",
+}: SearchableSelectPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const prevValueRef = useRef(value);
+  const selected = options.find((opt) => String(opt.value) === value) || null;
+  const closePicker = useCallback(() => {
+    setOpen(false);
+    setSearch("");
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(ev.target as Node)) closePicker();
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") closePicker();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, closePicker]);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      closePicker();
+    }
+  }, [value, closePicker]);
+
+  const filtered = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((opt) =>
+      `${opt.label} ${opt.value} ${opt.description || ""} ${opt.searchText || ""}`.toLowerCase().includes(q)
+    );
+  }, [options, deferredSearch]);
+
+  const selectOption = useCallback(
+    (nextValue: string) => {
+      onChange(nextValue);
+      closePicker();
+    },
+    [onChange, closePicker]
+  );
+
+  return (
+    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="asset-picker-trigger input"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          if (open) {
+            closePicker();
+            return;
+          }
+          setSearch("");
+          setOpen(true);
+        }}
+      >
+        {selected ? (
+          <span className="asset-picker-selected">
+            <span className={selected.description ? "parent-asset-picker-selected-content" : undefined}>
+              <span className="parent-asset-picker-option-title">{selected.label}</span>
+              {selected.description ? (
+                <span className="parent-asset-picker-option-meta">{selected.description}</span>
+              ) : null}
+            </span>
+          </span>
+        ) : (
+          <span className="asset-picker-placeholder">{placeholder}</span>
+        )}
+        <span className="asset-picker-caret">▾</span>
+      </button>
+      {open ? (
+        <div className="asset-picker-menu">
+          <div className="type-code-picker-search-wrap">
+            <Search size={15} aria-hidden={true} className="type-code-picker-search-icon" />
+            <input
+              className="input asset-picker-search type-code-picker-search"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="asset-picker-list">
+            {filtered.length ? (
+              filtered.map((opt) => (
+                <button
+                  type="button"
+                  key={`searchable-select-${opt.value}`}
+                  className={`asset-picker-option ${opt.value === value ? "asset-picker-option-active" : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectOption(opt.value);
+                  }}
+                  onClick={() => selectOption(opt.value)}
+                >
+                  <span
+                    className={`asset-picker-option-checkbox ${opt.value === value ? "asset-picker-option-checkbox-checked" : ""}`}
+                    aria-hidden={true}
+                  >
+                    {opt.value === value ? "✓" : ""}
+                  </span>
+                  <span className={opt.description ? "parent-asset-picker-option-content asset-picker-option-label" : "asset-picker-option-label"}>
+                    <span className="parent-asset-picker-option-title">{opt.label}</span>
+                    {opt.description ? (
+                      <span className="parent-asset-picker-option-meta">{opt.description}</span>
+                    ) : null}
+                  </span>
                 </button>
               ))
             ) : (
@@ -39549,17 +39705,18 @@ function formatTicketRequestSource(value?: string) {
                       </label>
                       <label className="field">
                         <span>Priority</span>
-                        <select
-                          className="input"
+                        <SearchableSelectPicker
                           value={publicQrRequestForm.priority}
-                          onChange={(e) => setPublicQrRequestForm((f) => ({ ...f, priority: e.target.value }))}
-                        >
-                          {PRIORITY_OPTIONS.map((p) => (
-                            <option key={`public-qr-priority-${p.value}`} value={p.value}>
-                              {(lang === "km" ? p.km : p.en) || p.value}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(value) => setPublicQrRequestForm((f) => ({ ...f, priority: value }))}
+                          placeholder={lang === "km" ? "ជ្រើស Priority" : "Select priority"}
+                          searchPlaceholder={lang === "km" ? "ស្វែងរក Priority..." : "Search priority..."}
+                          emptyText={lang === "km" ? "មិនមាន Priority" : "No priority found."}
+                          options={PRIORITY_OPTIONS.map((p) => ({
+                            value: p.value,
+                            label: (lang === "km" ? p.km : p.en) || p.value,
+                            searchText: `${p.value} ${p.en} ${p.km}`,
+                          }))}
+                        />
                       </label>
                       <label className="field field-wide">
                         <span>{lang === "km" ? "រូបថត (មិនបង្ខំ)" : "Photo (Optional)"}</span>
@@ -39624,66 +39781,70 @@ function formatTicketRequestSource(value?: string) {
                           <div className="form-grid">
                             <label className="field public-asset-date-field">
                               <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
-                              <input
-                                className="input"
-                                type="date"
-                                min={todayYmd}
+                              <EcoDateInput
                                 value={publicQrRecordForm.date}
-                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, date: e.target.value }))}
+                                onChange={(value) => setPublicQrRecordForm((f) => ({ ...f, date: value }))}
+                                minYmd={todayYmd}
+                                ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
+                                showLegend
+                                className="public-asset-eco-date-input"
+                              />
+                            </label>
+                            <label className="field public-asset-maintenance-type-field">
+                              <span>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}</span>
+                              <SearchableSelectPicker
+                                value={publicQrRecordForm.type}
+                                onChange={(value) => setPublicQrRecordForm((f) => ({ ...f, type: value }))}
+                                placeholder={lang === "km" ? "ជ្រើសប្រភេទថែទាំ" : "Select maintenance type"}
+                                searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទថែទាំ..." : "Search maintenance type..."}
+                                emptyText={lang === "km" ? "មិនមានប្រភេទថែទាំ" : "No maintenance type found."}
+                                options={MAINTENANCE_TYPE_OPTIONS.map((opt) => ({
+                                  value: opt,
+                                  label: maintenanceTypePublicLabel(opt),
+                                  searchText: opt,
+                                }))}
                               />
                             </label>
                             <label className="field">
-                              <span>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}</span>
-                              <select
-                                className="input"
-                                value={publicQrRecordForm.type}
-                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, type: e.target.value }))}
-                              >
-                                {MAINTENANCE_TYPE_OPTIONS.map((opt) => (
-                                  <option key={`public-qr-maintenance-type-${opt}`} value={opt}>
-                                    {maintenanceTypePublicLabel(opt)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="field">
                               <span>{publicQrText.workStatus}</span>
-                              <select
-                                className="input"
+                              <SearchableSelectPicker
                                 value={publicQrRecordForm.completion}
-                                onChange={(e) =>
-                                  setPublicQrRecordForm((f) => ({ ...f, completion: e.target.value as "Done" | "Not Yet" }))
+                                onChange={(value) =>
+                                  setPublicQrRecordForm((f) => ({ ...f, completion: value as "Done" | "Not Yet" }))
                                 }
-                              >
-                                {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
-                                  <option key={`public-qr-maintenance-${opt.value}`} value={opt.value}>
-                                    {maintenanceCompletionText(opt.value)}
-                                  </option>
-                                ))}
-                              </select>
+                                placeholder={lang === "km" ? "ជ្រើសស្ថានភាពការងារ" : "Select work status"}
+                                searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាពការងារ..." : "Search work status..."}
+                                emptyText={lang === "km" ? "មិនមានស្ថានភាពការងារ" : "No work status found."}
+                                options={MAINTENANCE_COMPLETION_OPTIONS.map((opt) => ({
+                                  value: opt.value,
+                                  label: maintenanceCompletionText(opt.value),
+                                  searchText: opt.value,
+                                }))}
+                              />
                             </label>
                             <label className="field">
                               <span>{publicQrText.condition}</span>
-                              <select
-                                className="input"
+                              <SearchableSelectPicker
                                 value={publicQrRecordForm.condition}
-                                onChange={(e) => setPublicQrRecordForm((f) => ({ ...f, condition: e.target.value }))}
-                              >
-                                {MAINTENANCE_CONDITION_OPTIONS.map((opt) => (
-                                  <option key={`public-qr-maintenance-condition-${opt}`} value={opt}>
-                                    {lang === "km"
-                                      ? (
-                                        {
-                                          Good: "ល្អ",
-                                          Fair: "មធ្យម",
-                                          Damaged: "ខូច",
-                                          Missing: "បាត់",
-                                        } as Record<string, string>
-                                      )[opt] || opt
-                                      : opt}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(value) => setPublicQrRecordForm((f) => ({ ...f, condition: value }))}
+                                placeholder={lang === "km" ? "ជ្រើសស្ថានភាព" : "Select condition"}
+                                searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាព..." : "Search condition..."}
+                                emptyText={lang === "km" ? "មិនមានស្ថានភាព" : "No condition found."}
+                                options={MAINTENANCE_CONDITION_OPTIONS.map((opt) => ({
+                                  value: opt,
+                                  label: lang === "km"
+                                    ? (
+                                      {
+                                        Good: "ល្អ",
+                                        Fair: "មធ្យម",
+                                        Damaged: "ខូច",
+                                        Missing: "បាត់",
+                                      } as Record<string, string>
+                                    )[opt] || opt
+                                    : opt,
+                                  searchText: opt,
+                                }))}
+                              />
                             </label>
                             <label className="field field-wide">
                               <span>{publicQrText.note}</span>
@@ -39820,16 +39981,21 @@ function formatTicketRequestSource(value?: string) {
                           <div className="form-grid">
                             <label className="field">
                               <span>{publicQrText.tonerItem}</span>
-                              <select className="input" value={publicQrTonerForm.itemId} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, itemId: e.target.value }))}>
-                                <option value="">{publicQrText.selectToner}</option>
-                                {tonerInventoryItems
+                              <SearchableSelectPicker
+                                value={publicQrTonerForm.itemId}
+                                onChange={(value) => setPublicQrTonerForm((f) => ({ ...f, itemId: value }))}
+                                placeholder={publicQrText.selectToner}
+                                searchPlaceholder={lang === "km" ? "ស្វែងរក Toner..." : "Search toner..."}
+                                emptyText={lang === "km" ? "មិនមាន Toner" : "No toner found."}
+                                options={tonerInventoryItems
                                   .filter((item) => item.campus === asset.campus)
-                                  .map((item) => (
-                                    <option key={`public-qr-toner-${item.id}`} value={item.id}>
-                                      {item.itemCode} - {inventoryDisplayName(item.itemName, lang)} ({calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns)} {item.unit})
-                                    </option>
-                                  ))}
-                              </select>
+                                  .map((item) => ({
+                                    value: String(item.id),
+                                    label: `${item.itemCode} - ${inventoryDisplayName(item.itemName, lang)}`,
+                                    description: `${calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns)} ${item.unit}`,
+                                    searchText: `${item.itemCode} ${item.itemName} ${item.unit}`,
+                                  }))}
+                              />
                             </label>
                             <label className="field">
                               <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
@@ -39841,12 +40007,17 @@ function formatTicketRequestSource(value?: string) {
                             </label>
                             <label className="field">
                               <span>{publicQrText.oldTonerStatus}</span>
-                              <select className="input" value={publicQrTonerForm.oldTonerStatus} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, oldTonerStatus: e.target.value }))}>
-                                <option value="Empty">Empty</option>
-                                <option value="Low">Low</option>
-                                <option value="Leaking">Leaking</option>
-                                <option value="Defective">Defective</option>
-                              </select>
+                              <SearchableSelectPicker
+                                value={publicQrTonerForm.oldTonerStatus}
+                                onChange={(value) => setPublicQrTonerForm((f) => ({ ...f, oldTonerStatus: value }))}
+                                placeholder={lang === "km" ? "ជ្រើសស្ថានភាព Toner" : "Select toner status"}
+                                searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាព Toner..." : "Search toner status..."}
+                                emptyText={lang === "km" ? "មិនមានស្ថានភាព Toner" : "No toner status found."}
+                                options={["Empty", "Low", "Leaking", "Defective"].map((opt) => ({
+                                  value: opt,
+                                  label: opt,
+                                }))}
+                              />
                             </label>
                             <label className="field">
                               <span>{publicQrText.pageCounter}</span>
