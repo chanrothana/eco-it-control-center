@@ -55887,16 +55887,16 @@ function formatTicketRequestSource(value?: string) {
                     <article key={`maint-history-mobile-${row.rowId}`} className="report-card maintenance-mobile-asset-card">
                       <div className="maintenance-mobile-asset-head">
                         <div className="maintenance-mobile-asset-head-bar">
-                          <strong>{campusLabel(row.campus)} • {row.location || "-"}</strong>
+                          <strong>{campusLabel(row.campus)}</strong>
+                          <span>{row.location || "-"}</span>
                         </div>
                       </div>
                       <div className="maintenance-mobile-asset-grid">
                         <div className="maintenance-mobile-asset-field">
                           <div className="maintenance-mobile-asset-label-line">
                             <span>When:</span>
-                            <strong>{formatDate(row.date || "-")}</strong>
+                            <strong>{formatDate(row.date || "-")} ({row.createdAt ? formatTimeOnly(row.createdAt) : "-"})</strong>
                           </div>
-                          <div className="tiny">{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
                           <div className="maintenance-mobile-asset-label-line">
@@ -55916,27 +55916,19 @@ function formatTicketRequestSource(value?: string) {
                             <strong>{row.condition || "-"}</strong>
                           </div>
                         </div>
-                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
-                          <span>Noted</span>
-                          <strong>{row.note || "-"}</strong>
-                        </div>
-                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
-                          <span>Workflow</span>
-                          <div>{renderSavedMaintenanceWorkflow(row)}</div>
-                        </div>
-                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
-                          <span>Photos</span>
-                          <div className="maintenance-mobile-asset-photo">
-                            {renderMaintenancePhotoGroups(row, `maintenance-history-${row.rowId}`, undefined, {
-                              className: "maintenance-history-photo-groups-two-col",
-                            })}
+                        <div className="maintenance-mobile-asset-field">
+                          <div className="maintenance-mobile-asset-team-item">
+                            <span>Noted:</span>
+                            <strong>{row.note || "-"}</strong>
                           </div>
                         </div>
-                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-teamline">
+                        <div className="maintenance-mobile-asset-field">
                           <div className="maintenance-mobile-asset-team-item">
                             <span>Cost:</span>
                             <strong>{row.cost || "-"}</strong>
                           </div>
+                        </div>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-teamline">
                           <div className="maintenance-mobile-asset-team-item">
                             <span>By:</span>
                             <strong>{row.by || "-"}</strong>
@@ -55946,21 +55938,37 @@ function formatTicketRequestSource(value?: string) {
                             <strong>{row.checkedBy || "-"}</strong>
                           </div>
                         </div>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-photo-field">
+                          <span>Photos</span>
+                          <div className="maintenance-mobile-asset-photo">
+                            {renderMaintenancePhotoGroups(row, `maintenance-history-${row.rowId}`, undefined, {
+                              className: "maintenance-history-photo-groups-two-col",
+                            })}
+                          </div>
+                        </div>
+                        <div className="maintenance-mobile-asset-field maintenance-mobile-asset-note">
+                          <span>Workflow</span>
+                          <div>{renderSavedMaintenanceWorkflow(row)}</div>
+                        </div>
                       </div>
                       <div className="asset-actions maintenance-history-mobile-actions">
                         <button
-                          className="tab"
+                          className="btn-icon-edit"
                           disabled={!isAdmin}
+                          title={t.edit}
+                          aria-label={t.edit}
                           onClick={() => editMaintenanceEntryFromHistoryRow(row)}
                         >
-                          {t.edit}
+                          <Pencil size={16} strokeWidth={2.2} />
                         </button>
                         <button
                           className="btn-danger"
                           disabled={busy || !isAdmin}
+                          title={t.delete}
+                          aria-label={t.delete}
                           onClick={() => deleteMaintenanceEntryByAsset(row.assetDbId, row.entryId)}
                         >
-                          X
+                          <Trash2 size={16} strokeWidth={2.2} />
                         </button>
                       </div>
                     </article>
