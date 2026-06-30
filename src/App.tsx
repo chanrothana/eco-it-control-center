@@ -38912,7 +38912,7 @@ export default function App() {
       setPublicQrRecordError("Date, type, note, before photo, and after photo are required.");
       return;
     }
-    if (publicQrRecordForm.date < todayYmd) {
+    if (!(authUser && isAdminRole(authUser.role)) && publicQrRecordForm.date < todayYmd) {
       setPublicQrRecordError("Cannot set maintenance date to a past date.");
       return;
     }
@@ -38988,7 +38988,7 @@ export default function App() {
       setPublicQrRecordError("Date, type, note, before photo, and after photo are required.");
       return;
     }
-    if (publicQrRecordForm.date < todayYmd) {
+    if (!(authUser && isAdminRole(authUser.role)) && publicQrRecordForm.date < todayYmd) {
       setPublicQrRecordError("Cannot set maintenance date to a past date.");
       return;
     }
@@ -39232,6 +39232,15 @@ function formatTicketRequestSource(value?: string) {
         lang === "km"
           ? "មើលឃើញសម្រាប់បុគ្គលិកថែទាំ និងអ្នកគ្រប់គ្រង ដែលអាចកត់ត្រាការថែទាំបាន។"
           : "Visible for maintenance staff and admins who can record maintenance.",
+      autoTimeStamp: lang === "km" ? "ម៉ោងកត់ត្រាស្វ័យប្រវត្តិ" : "Auto Time Stamp",
+      autoTimeStampHint:
+        lang === "km"
+          ? "ប្រព័ន្ធនឹងកត់ម៉ោងពិតដោយស្វ័យប្រវត្តិនៅពេលរក្សាទុក។"
+          : "The system saves the exact time automatically when you submit.",
+      adminDateEditHint:
+        lang === "km"
+          ? "Admin អាចកែថ្ងៃបាន។"
+          : "Admins can change the date.",
       tonerChange: lang === "km" ? "ប្តូរតូន័រ" : "Toner Change",
       tonerItem: lang === "km" ? "មុខទំនិញតូន័រ" : "Toner Item",
       selectToner: lang === "km" ? "ជ្រើសតូន័រ" : "Select toner",
@@ -39279,14 +39288,19 @@ function formatTicketRequestSource(value?: string) {
     };
     const showPublicQrSetFields = asset?.category === "IT";
     const publicQrCampusAllowed = (authUser ? isAdminRole(authUser.role) : false) || (asset?.campus ? allowedCampuses.includes(asset.campus) : true);
+    const publicQrIsAdmin = Boolean(authUser && isAdminRole(authUser.role));
     const publicQrCanRecordMaintenance = Boolean(
       authUser &&
       asset &&
       publicQrCampusAllowed &&
-      (isAdminRole(authUser.role) || canAccessMenu("maintenance.record", "maintenance"))
+      (publicQrIsAdmin || canAccessMenu("maintenance.record", "maintenance"))
     );
     const publicQrCanViewDetails = Boolean(asset);
+    const publicQrAutoTimestampPreview = formatDateTime(new Date().toISOString());
     const publicQrOpenWorkOrder = asset?.openWorkOrder || null;
+    const publicQrAssignedUser = String(asset?.assignedTo || "").trim()
+      ? users.find((user) => user.fullName === String(asset?.assignedTo || "").trim()) || null
+      : null;
     const photos = Array.isArray(asset?.photos) && asset?.photos?.length
       ? asset.photos
       : asset?.photo
@@ -39650,12 +39664,25 @@ function formatTicketRequestSource(value?: string) {
                             <div><strong>{t.user}:</strong> {asset.assignedTo || "-"}</div>
                           </div>
                         </div>
-                        <div className="public-asset-mobile-photo">
-                          {photos[0] ? (
-                            <img loading="lazy" decoding="async" src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
-                          ) : (
-                            <div className="photo-placeholder">{t.noPhoto}</div>
-                          )}
+                        <div className="public-asset-mobile-media">
+                          <div className="public-asset-mobile-photo">
+                            {photos[0] ? (
+                              <img loading="lazy" decoding="async" src={photos[0]} alt={asset.assetId || "asset"} className="photo-preview" />
+                            ) : (
+                              <div className="photo-placeholder">{t.noPhoto}</div>
+                            )}
+                          </div>
+                          {publicQrAssignedUser ? (
+                            <div className="public-asset-mobile-user-photo" title={publicQrAssignedUser.fullName}>
+                              {renderStaffAvatar(
+                                publicQrAssignedUser.photo,
+                                publicQrAssignedUser.fullName,
+                                publicQrAssignedUser.sex,
+                                "staff-user-avatar public-asset-user-avatar"
+                              )}
+                              <div className="public-asset-mobile-user-label">{publicQrAssignedUser.fullName}</div>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -39784,11 +39811,21 @@ function formatTicketRequestSource(value?: string) {
                               <EcoDateInput
                                 value={publicQrRecordForm.date}
                                 onChange={(value) => setPublicQrRecordForm((f) => ({ ...f, date: value }))}
-                                minYmd={todayYmd}
+                                minYmd={publicQrIsAdmin ? undefined : todayYmd}
                                 ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
                                 showLegend
                                 className="public-asset-eco-date-input"
                               />
+                              <div className="tiny" style={{ marginTop: 8 }}>
+                                {publicQrIsAdmin ? publicQrText.adminDateEditHint : publicQrText.autoTimeStampHint}
+                              </div>
+                            </label>
+                            <label className="field">
+                              <span>{publicQrText.autoTimeStamp}</span>
+                              <div className="detail-value">{publicQrAutoTimestampPreview}</div>
+                              <div className="tiny" style={{ marginTop: 8 }}>
+                                {publicQrText.autoTimeStampHint}
+                              </div>
                             </label>
                             <label className="field public-asset-maintenance-type-field">
                               <span>{lang === "km" ? "ប្រភេទថែទាំ" : "Type"}</span>

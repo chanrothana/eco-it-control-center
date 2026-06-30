@@ -10230,6 +10230,7 @@ const server = http.createServer(async (req, res) => {
       const entry = {
         id: Date.now(),
         date,
+        createdAt: new Date().toISOString(),
         type,
         completion,
         condition,
