@@ -1890,6 +1890,26 @@ function normalizeRentalPrinterCounters(input) {
     .filter((row) => row.rentalPrinterId && row.machineCode && row.billingMonth);
 }
 
+function normalizeRentalPrinterCounterResets(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      rentalPrinterId: Number(row.rentalPrinterId) || 0,
+      vendor: toText(row.vendor) || "LA",
+      machineCode: toUpper(row.machineCode),
+      machineName: toText(row.machineName),
+      campus: normalizeCampusInput(row.campus) || CAMPUS_LIST[0],
+      location: toText(row.location),
+      effectiveDate: toText(row.effectiveDate),
+      baselineMono: Math.max(0, Number(row.baselineMono) || 0),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }))
+    .filter((row) => row.rentalPrinterId && row.machineCode && row.effectiveDate);
+}
+
 function assetCategoryCode(category) {
   const normalized = normalizeCategoryInput(category);
   if (normalized === "IT") return "COM";
@@ -2067,6 +2087,7 @@ function normalizeImportedDb(input) {
   const toolReviewReports = normalizeToolReviewReports(settings.toolReviewReports);
   const rentalPrinters = normalizeRentalPrinters(settings.rentalPrinters);
   const rentalPrinterCounters = normalizeRentalPrinterCounters(settings.rentalPrinterCounters);
+  const rentalPrinterCounterResets = normalizeRentalPrinterCounterResets(settings.rentalPrinterCounterResets);
   const vaultAccounts = normalizeVaultAccounts(settings.vaultAccounts);
   const vaultCredentials = normalizeVaultCredentials(settings.vaultCredentials);
   const vaultDesignLinks = normalizeVaultDesignLinks(settings.vaultDesignLinks);
@@ -2116,6 +2137,7 @@ function normalizeImportedDb(input) {
       toolReviewReports,
       rentalPrinters,
       rentalPrinterCounters,
+      rentalPrinterCounterResets,
       poolCleaningSchedules,
       poolEquipmentChecks,
       poolChemicalRecords,
@@ -6971,6 +6993,7 @@ const server = http.createServer(async (req, res) => {
           toolReviewReports: normalizeToolReviewReports(settings.toolReviewReports),
           rentalPrinters: normalizeRentalPrinters(settings.rentalPrinters),
           rentalPrinterCounters: normalizeRentalPrinterCounters(settings.rentalPrinterCounters),
+          rentalPrinterCounterResets: normalizeRentalPrinterCounterResets(settings.rentalPrinterCounterResets),
           poolCleaningSchedules: normalizePoolCleaningSchedules(settings.poolCleaningSchedules),
           poolEquipmentChecks: normalizePoolEquipmentChecks(settings.poolEquipmentChecks),
           poolChemicalRecords: normalizePoolChemicalRecords(settings.poolChemicalRecords),
@@ -7061,6 +7084,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "rentalPrinterCounters")
           ? normalizeRentalPrinterCounters(incoming.rentalPrinterCounters)
           : normalizeRentalPrinterCounters(current.rentalPrinterCounters);
+      const nextRentalPrinterCounterResets =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "rentalPrinterCounterResets")
+          ? normalizeRentalPrinterCounterResets(incoming.rentalPrinterCounterResets)
+          : normalizeRentalPrinterCounterResets(current.rentalPrinterCounterResets);
       const nextPoolCleaningSchedules =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "poolCleaningSchedules")
           ? normalizePoolCleaningSchedules(incoming.poolCleaningSchedules)
@@ -7130,6 +7157,7 @@ const server = http.createServer(async (req, res) => {
         toolReviewReports: nextToolReviewReports,
         rentalPrinters: nextRentalPrinters,
         rentalPrinterCounters: nextRentalPrinterCounters,
+        rentalPrinterCounterResets: nextRentalPrinterCounterResets,
         poolCleaningSchedules: nextPoolCleaningSchedules,
         poolEquipmentChecks: nextPoolEquipmentChecks,
         poolChemicalRecords: nextPoolChemicalRecords,

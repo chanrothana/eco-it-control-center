@@ -748,6 +748,19 @@ type RentalPrinterCounter = {
   note?: string;
   created: string;
 };
+type RentalPrinterCounterReset = {
+  id: number;
+  rentalPrinterId: number;
+  vendor: string;
+  machineCode: string;
+  machineName: string;
+  campus: string;
+  location: string;
+  effectiveDate: string;
+  baselineMono: number;
+  note?: string;
+  created: string;
+};
 
 type DashboardStats = {
   totalAssets: number;
@@ -762,6 +775,7 @@ type BootstrapPayload = {
   tickets?: Ticket[];
   stats?: DashboardStats;
   locations?: LocationEntry[];
+  settings?: ServerSettings;
 };
 
 type ApiRequestInit = RequestInit & {
@@ -941,6 +955,7 @@ type ServerSettings = {
   utilityReadings?: UtilityReading[];
   rentalPrinters?: RentalPrinter[];
   rentalPrinterCounters?: RentalPrinterCounter[];
+  rentalPrinterCounterResets?: RentalPrinterCounterReset[];
   itemTemplates?: ItemTemplate[];
   furnitureModels?: FurnitureModelMaster[];
   vaultAccounts?: VaultAccount[];
@@ -1512,6 +1527,7 @@ const UTILITY_METER_FALLBACK_KEY = "it_utility_meters_v1";
 const UTILITY_READING_FALLBACK_KEY = "it_utility_readings_v1";
 const RENTAL_PRINTER_FALLBACK_KEY = "it_rental_printers_v1";
 const RENTAL_PRINTER_COUNTER_FALLBACK_KEY = "it_rental_printer_counters_v1";
+const RENTAL_PRINTER_COUNTER_RESET_FALLBACK_KEY = "it_rental_printer_counter_resets_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
 const APP_VERSION = "v2.3.0";
 const DEFAULT_MAINTENANCE_REMINDER_OFFSETS = [7, 6, 5, 4, 3, 2, 1, 0];
@@ -4664,6 +4680,39 @@ function readRentalPrinterCounterFallback(): RentalPrinterCounter[] {
 
 function writeRentalPrinterCounterFallback(rows: RentalPrinterCounter[]) {
   trySetLocalStorage(RENTAL_PRINTER_COUNTER_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function normalizeRentalPrinterCounterResets(input: unknown): RentalPrinterCounterReset[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): RentalPrinterCounterReset => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      rentalPrinterId: Number(row.rentalPrinterId) || 0,
+      vendor: String(row.vendor || "").trim() || "LA",
+      machineCode: String(row.machineCode || "").trim().toUpperCase(),
+      machineName: String(row.machineName || "").trim(),
+      campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
+      location: String(row.location || "").trim(),
+      effectiveDate: String(row.effectiveDate || "").trim(),
+      baselineMono: Math.max(0, Number(row.baselineMono) || 0),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.rentalPrinterId && row.machineCode && row.effectiveDate);
+}
+
+function readRentalPrinterCounterResetFallback(): RentalPrinterCounterReset[] {
+  try {
+    const raw = localStorage.getItem(RENTAL_PRINTER_COUNTER_RESET_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeRentalPrinterCounterResets(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeRentalPrinterCounterResetFallback(rows: RentalPrinterCounterReset[]) {
+  trySetLocalStorage(RENTAL_PRINTER_COUNTER_RESET_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function normalizeVaultAccounts(input: unknown): VaultAccount[] {
@@ -10543,6 +10592,9 @@ export default function App() {
   const [rentalPrinterCounters, setRentalPrinterCounters] = useState<RentalPrinterCounter[]>(
     () => readRentalPrinterCounterFallback()
   );
+  const [rentalPrinterCounterResets, setRentalPrinterCounterResets] = useState<RentalPrinterCounterReset[]>(
+    () => readRentalPrinterCounterResetFallback()
+  );
   const [poolCleaningSchedules, setPoolCleaningSchedules] = useState<PoolCleaningSchedule[]>([]);
   const [poolEquipmentChecks, setPoolEquipmentChecks] = useState<PoolEquipmentCheck[]>([]);
   const [poolChemicalRecords, setPoolChemicalRecords] = useState<PoolChemicalRecord[]>([]);
@@ -11203,6 +11255,12 @@ export default function App() {
     amount: "",
     submittedBy: "",
     photo: "",
+    note: "",
+  });
+  const [rentalCounterResetForm, setRentalCounterResetForm] = useState({
+    rentalPrinterId: "",
+    effectiveDate: toYmd(new Date()),
+    baselineMono: "",
     note: "",
   });
   const [rentalReportFromMonth, setRentalReportFromMonth] = useState(() => toYmd(new Date()).slice(0, 7));
@@ -13485,6 +13543,9 @@ export default function App() {
     writeRentalPrinterCounterFallback(rentalPrinterCounters);
   }, [rentalPrinterCounters]);
   useEffect(() => {
+    writeRentalPrinterCounterResetFallback(rentalPrinterCounterResets);
+  }, [rentalPrinterCounterResets]);
+  useEffect(() => {
     writePoolCleaningScheduleFallback(poolCleaningSchedules);
   }, [poolCleaningSchedules]);
   useEffect(() => {
@@ -13692,13 +13753,88 @@ export default function App() {
     if (/^https?:\/\//i.test(rawIp)) return rawIp;
     return `http://${rawIp}`;
   }, [selectedRentalPrinter]);
+  const rentalPrinterEffectiveRows = useMemo(() => {
+    const rows = [...rentalPrinterCounters].sort((a, b) => {
+      const aKey = `${a.readingDate || a.billingMonth}-${a.billingMonth}-${a.id}`;
+      const bKey = `${b.readingDate || b.billingMonth}-${b.billingMonth}-${b.id}`;
+      return aKey.localeCompare(bKey);
+    });
+    const effectiveMap = new Map<number, RentalPrinterCounter>();
+    for (const row of rows) {
+      const printerId = Number(row.rentalPrinterId) || 0;
+      const readingDate = String(row.readingDate || "").trim();
+      const currentMono = Math.max(0, Number(row.currentMono) || 0);
+      const printer = rentalPrinters.find((item) => Number(item.id) === printerId);
+      const latestReset = rentalPrinterCounterResets
+        .filter(
+          (reset) =>
+            Number(reset.rentalPrinterId) === printerId &&
+            String(reset.effectiveDate || "").trim() &&
+            String(reset.effectiveDate || "").trim() <= readingDate
+        )
+        .sort((a, b) => String(b.effectiveDate || "").localeCompare(String(a.effectiveDate || "")))[0];
+      const previousEffectiveRow = rows
+        .filter(
+          (candidate) =>
+            Number(candidate.rentalPrinterId) === printerId &&
+            Number(candidate.id) !== Number(row.id) &&
+            `${candidate.readingDate || candidate.billingMonth}-${candidate.billingMonth}-${candidate.id}` <
+              `${row.readingDate || row.billingMonth}-${row.billingMonth}-${row.id}`
+        )
+        .sort((a, b) =>
+          `${b.readingDate || b.billingMonth}-${b.billingMonth}-${b.id}`.localeCompare(
+            `${a.readingDate || a.billingMonth}-${a.billingMonth}-${a.id}`
+          )
+        )
+        .map((candidate) => effectiveMap.get(Number(candidate.id)) || candidate)[0];
+      const resetApplies =
+        latestReset &&
+        (!previousEffectiveRow || String(previousEffectiveRow.readingDate || "") < String(latestReset.effectiveDate || ""));
+      const previousMono = Math.max(
+        0,
+        resetApplies
+          ? Number(latestReset?.baselineMono) || 0
+          : previousEffectiveRow
+            ? Number(previousEffectiveRow.currentMono) || 0
+            : Number(printer?.openingMono) || Number(row.previousMono) || 0
+      );
+      const monoUsage = Math.max(0, currentMono - previousMono);
+      effectiveMap.set(Number(row.id), {
+        ...row,
+        previousMono,
+        monoUsage,
+        amount: printer ? monoUsage * Number(printer.monoRate || row.monoRate || 0) : row.amount,
+      });
+    }
+    return rows
+      .map((row) => effectiveMap.get(Number(row.id)) || row)
+      .sort((a, b) =>
+        `${b.billingMonth}-${b.readingDate}`.localeCompare(`${a.billingMonth}-${a.readingDate}`)
+      );
+  }, [rentalPrinterCounterResets, rentalPrinterCounters, rentalPrinters]);
+  const selectedRentalPrinterApplicableReset = useMemo(() => {
+    if (!selectedRentalPrinter) return null;
+    const readingDate = String(rentalCounterForm.readingDate || "").trim();
+    if (!readingDate) return null;
+    return (
+      rentalPrinterCounterResets
+        .filter(
+          (row) =>
+            Number(row.rentalPrinterId) === Number(selectedRentalPrinter.id) &&
+            String(row.effectiveDate || "").trim() &&
+            String(row.effectiveDate || "").trim() <= readingDate
+        )
+        .sort((a, b) => String(b.effectiveDate || "").localeCompare(String(a.effectiveDate || "")))[0] || null
+    );
+  }, [rentalCounterForm.readingDate, rentalPrinterCounterResets, selectedRentalPrinter]);
   const selectedRentalPrinterPreviousCounter = useMemo(() => {
     if (!selectedRentalPrinter) return null;
-    const previousRows = rentalPrinterCounters
+    const previousRows = rentalPrinterEffectiveRows
       .filter(
         (row) =>
           Number(row.rentalPrinterId) === Number(selectedRentalPrinter.id) &&
-          String(row.billingMonth || "").trim() !== String(rentalCounterForm.billingMonth || "").trim()
+          String(row.billingMonth || "").trim() !== String(rentalCounterForm.billingMonth || "").trim() &&
+          String(row.readingDate || "").trim() < String(rentalCounterForm.readingDate || "").trim()
       )
       .sort((a, b) => {
         const aKey = `${a.billingMonth}-${a.readingDate}`;
@@ -13706,10 +13842,21 @@ export default function App() {
         return bKey.localeCompare(aKey);
       });
     const latest = previousRows[0];
-    return latest
-      ? { previousMono: latest.currentMono, previousColor: 0 }
-      : { previousMono: selectedRentalPrinter.openingMono, previousColor: 0 };
-  }, [rentalCounterForm.billingMonth, rentalPrinterCounters, selectedRentalPrinter]);
+    if (
+      selectedRentalPrinterApplicableReset &&
+      (!latest || String(latest.readingDate || "").trim() < String(selectedRentalPrinterApplicableReset.effectiveDate || "").trim())
+    ) {
+      return { previousMono: selectedRentalPrinterApplicableReset.baselineMono, previousColor: 0 };
+    }
+    if (latest) return { previousMono: latest.currentMono, previousColor: 0 };
+    return { previousMono: selectedRentalPrinter.openingMono, previousColor: 0 };
+  }, [
+    rentalCounterForm.billingMonth,
+    rentalCounterForm.readingDate,
+    rentalPrinterEffectiveRows,
+    selectedRentalPrinter,
+    selectedRentalPrinterApplicableReset,
+  ]);
   const rentalCounterPreview = useMemo(() => {
     const defaultPreviousMono = selectedRentalPrinterPreviousCounter?.previousMono ?? 0;
     const previousMono = Math.max(0, Number(rentalCounterForm.previousMono) || defaultPreviousMono);
@@ -13726,7 +13873,7 @@ export default function App() {
       if (prev.previousMono === nextPreviousMono) return prev;
       return { ...prev, previousMono: nextPreviousMono };
     });
-  }, [selectedRentalPrinterPreviousCounter, rentalCounterForm.rentalPrinterId, rentalCounterForm.billingMonth]);
+  }, [selectedRentalPrinterPreviousCounter, rentalCounterForm.rentalPrinterId, rentalCounterForm.billingMonth, rentalCounterForm.readingDate]);
   const rentalReportRange = useMemo(() => {
     const from = String(rentalReportFromMonth || "").trim();
     const to = String(rentalReportToMonth || "").trim();
@@ -13755,14 +13902,14 @@ export default function App() {
     return rentalReportCampuses.filter((campus) => rentalReportCampusFilterOptions.includes(campus));
   }, [rentalReportCampusFilterOptions, rentalReportCampuses]);
   const rentalReportLatestMonth = useMemo(() => {
-    const months = rentalPrinterCounters
+    const months = rentalPrinterEffectiveRows
       .map((row) => String(row.billingMonth || "").trim())
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
     return months[months.length - 1] || toYmd(new Date()).slice(0, 7);
-  }, [rentalPrinterCounters]);
+  }, [rentalPrinterEffectiveRows]);
   const rentalReportRows = useMemo(() => {
-    return rentalPrinterCounters
+    return rentalPrinterEffectiveRows
       .filter((row) => {
         const month = String(row.billingMonth || "").trim();
         const campus = String(row.campus || "").trim();
@@ -13782,7 +13929,7 @@ export default function App() {
           sensitivity: "base",
         });
       });
-  }, [rentalPrinterCounters, rentalReportRange, rentalReportSelectedCampuses]);
+  }, [rentalPrinterEffectiveRows, rentalReportRange, rentalReportSelectedCampuses]);
   const rentalReportSummary = useMemo(() => {
     const printerIds = new Set<string>();
     return rentalReportRows.reduce(
@@ -13820,7 +13967,7 @@ export default function App() {
       string,
       Map<string, { previousMono: number; currentMono: number; monoUsage: number }>
     >();
-    for (const row of rentalPrinterCounters) {
+    for (const row of rentalPrinterEffectiveRows) {
       const month = String(row.billingMonth || "").trim();
       const campus = String(row.campus || "").trim();
       if (!month || !campus) continue;
@@ -13859,12 +14006,13 @@ export default function App() {
           }),
       }))
       .filter((block) => block.rows.length > 0);
-  }, [rentalPrinterCounters, rentalReportRange, rentalReportSelectedCampuses]);
+  }, [rentalPrinterEffectiveRows, rentalReportRange, rentalReportSelectedCampuses]);
   const rentalMissingPrinterRows = useMemo(() => {
     const targetMonth = rentalReportRange.to;
     if (!targetMonth) return [];
     const reportSet = new Set(
       rentalPrinterCounters
+        .map((row) => row)
         .filter((row) => String(row.billingMonth || "").trim() === targetMonth)
         .map((row) => Number(row.rentalPrinterId))
     );
@@ -19156,6 +19304,7 @@ export default function App() {
         const serverUtilityReadings = normalizeUtilityReadings(settingsRes.settings?.utilityReadings);
         const serverRentalPrinters = normalizeRentalPrinters(settingsRes.settings?.rentalPrinters);
         const serverRentalPrinterCounters = normalizeRentalPrinterCounters(settingsRes.settings?.rentalPrinterCounters);
+        const serverRentalPrinterCounterResets = normalizeRentalPrinterCounterResets(settingsRes.settings?.rentalPrinterCounterResets);
         const serverPoolCleaningSchedules = normalizePoolCleaningSchedules(settingsRes.settings?.poolCleaningSchedules);
         const serverPoolEquipmentChecks = normalizePoolEquipmentChecks(settingsRes.settings?.poolEquipmentChecks);
         const serverPoolChemicalRecords = normalizePoolChemicalRecords(settingsRes.settings?.poolChemicalRecords);
@@ -19170,6 +19319,7 @@ export default function App() {
         const fallbackUtilityReadings = readUtilityReadingFallback();
         const fallbackRentalPrinters = readRentalPrinterFallback();
         const fallbackRentalPrinterCounters = readRentalPrinterCounterFallback();
+        const fallbackRentalPrinterCounterResets = readRentalPrinterCounterResetFallback();
         const fallbackPoolCleaningSchedules = readPoolCleaningScheduleFallback();
         const fallbackPoolEquipmentChecks = readPoolEquipmentFallback();
         const fallbackPoolChemicalRecords = readPoolChemicalFallback();
@@ -19186,6 +19336,9 @@ export default function App() {
         const nextRentalPrinterCounters = serverRentalPrinterCounters.length
           ? serverRentalPrinterCounters
           : fallbackRentalPrinterCounters;
+        const nextRentalPrinterCounterResets = serverRentalPrinterCounterResets.length
+          ? serverRentalPrinterCounterResets
+          : fallbackRentalPrinterCounterResets;
         const nextPoolCleaningSchedules = serverPoolCleaningSchedules.length
           ? serverPoolCleaningSchedules
           : fallbackPoolCleaningSchedules;
@@ -19243,6 +19396,11 @@ export default function App() {
           Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinterCounters")
             ? (nextRentalPrinterCounters.length ? nextRentalPrinterCounters : fallbackRentalPrinterCounters)
             : fallbackRentalPrinterCounters
+        );
+        setRentalPrinterCounterResets(
+          Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinterCounterResets")
+            ? nextRentalPrinterCounterResets
+            : fallbackRentalPrinterCounterResets
         );
         setVaultAccounts(
           Object.prototype.hasOwnProperty.call(settingsObj, "vaultAccounts")
@@ -19345,6 +19503,7 @@ export default function App() {
         setUtilityReadings(readUtilityReadingFallback());
         setRentalPrinters(readRentalPrinterFallback());
         setRentalPrinterCounters(readRentalPrinterCounterFallback());
+        setRentalPrinterCounterResets(readRentalPrinterCounterResetFallback());
         setPoolCleaningSchedules(readPoolCleaningScheduleFallback());
         setPoolEquipmentChecks(readPoolEquipmentFallback());
         setPoolChemicalRecords(readPoolChemicalFallback());
@@ -20757,7 +20916,8 @@ export default function App() {
 
   async function saveRentalPrinterSettingsToServer(
     nextPrinters: RentalPrinter[],
-    nextCounters: RentalPrinterCounter[]
+    nextCounters: RentalPrinterCounter[],
+    nextResets: RentalPrinterCounterReset[]
   ) {
     try {
       await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
@@ -20766,6 +20926,7 @@ export default function App() {
           settings: {
             rentalPrinters: nextPrinters,
             rentalPrinterCounters: nextCounters,
+            rentalPrinterCounterResets: nextResets,
           },
         }),
       });
@@ -21418,7 +21579,7 @@ export default function App() {
     setError("");
     setRentalPrinterMessage(`Rental printer ${row.machineCode} saved.`);
     try {
-      await saveRentalPrinterSettingsToServer(nextPrinters, rentalPrinterCounters);
+      await saveRentalPrinterSettingsToServer(nextPrinters, rentalPrinterCounters, rentalPrinterCounterResets);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save rental printer.");
     }
@@ -21460,9 +21621,76 @@ export default function App() {
       setEditingRentalPrinterId(null);
     }
     try {
-      await saveRentalPrinterSettingsToServer(nextPrinters, nextCounters);
+      await saveRentalPrinterSettingsToServer(nextPrinters, nextCounters, rentalPrinterCounterResets);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete rental printer.");
+    }
+  }
+
+  async function saveRentalPrinterCounterReset() {
+    if (!requireAdminAction()) return;
+    const printer = rentalPrinters.find((row) => Number(row.id) === Number(rentalCounterResetForm.rentalPrinterId));
+    if (!printer) {
+      setError("Please select a rental printer for the reset.");
+      return;
+    }
+    if (!rentalCounterResetForm.effectiveDate) {
+      setError("Reset effective date is required.");
+      return;
+    }
+    const baselineMono = Math.max(0, Number(rentalCounterResetForm.baselineMono) || 0);
+    if (!baselineMono) {
+      setError("Reset opening counter is required.");
+      return;
+    }
+    const duplicate = rentalPrinterCounterResets.find(
+      (row) =>
+        Number(row.rentalPrinterId) === Number(printer.id) &&
+        String(row.effectiveDate || "").trim() === String(rentalCounterResetForm.effectiveDate || "").trim()
+    );
+    if (duplicate) {
+      setError(`Reset for ${printer.machineCode} on ${rentalCounterResetForm.effectiveDate} already exists.`);
+      return;
+    }
+    const resetRow: RentalPrinterCounterReset = {
+      id: Date.now(),
+      rentalPrinterId: printer.id,
+      vendor: printer.vendor || "LA",
+      machineCode: printer.machineCode,
+      machineName: printer.machineName,
+      campus: printer.campus,
+      location: printer.location,
+      effectiveDate: rentalCounterResetForm.effectiveDate,
+      baselineMono,
+      note: rentalCounterResetForm.note.trim(),
+      created: new Date().toISOString(),
+    };
+    const nextResets = [resetRow, ...rentalPrinterCounterResets].sort((a, b) =>
+      `${b.effectiveDate}-${b.machineCode}`.localeCompare(`${a.effectiveDate}-${a.machineCode}`)
+    );
+    setRentalPrinterCounterResets(nextResets);
+    setRentalCounterResetForm({
+      rentalPrinterId: "",
+      effectiveDate: toYmd(new Date()),
+      baselineMono: "",
+      note: "",
+    });
+    setRentalPrinterMessage(`Counter reset saved for ${printer.machineCode} from ${resetRow.effectiveDate}.`);
+    try {
+      await saveRentalPrinterSettingsToServer(rentalPrinters, rentalPrinterCounters, nextResets);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save rental printer reset.");
+    }
+  }
+
+  async function deleteRentalPrinterCounterReset(resetId: number) {
+    if (!requireAdminAction()) return;
+    const nextResets = rentalPrinterCounterResets.filter((row) => Number(row.id) !== Number(resetId));
+    setRentalPrinterCounterResets(nextResets);
+    try {
+      await saveRentalPrinterSettingsToServer(rentalPrinters, rentalPrinterCounters, nextResets);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete rental printer reset.");
     }
   }
 
@@ -21537,7 +21765,7 @@ export default function App() {
     setRentalCounterFileKey((key) => key + 1);
     setRentalPrinterMessage(`Rental counter saved for ${printer.machineCode} (${row.billingMonth}).`);
     try {
-      await saveRentalPrinterSettingsToServer(rentalPrinters, nextCounters);
+      await saveRentalPrinterSettingsToServer(rentalPrinters, nextCounters, rentalPrinterCounterResets);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save rental printer counter.");
     }
@@ -21548,7 +21776,7 @@ export default function App() {
     const nextCounters = rentalPrinterCounters.filter((row) => Number(row.id) !== Number(counterId));
     setRentalPrinterCounters(nextCounters);
     try {
-      await saveRentalPrinterSettingsToServer(rentalPrinters, nextCounters);
+      await saveRentalPrinterSettingsToServer(rentalPrinters, nextCounters, rentalPrinterCounterResets);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete rental printer counter.");
     }
@@ -57896,6 +58124,72 @@ function formatTicketRequestSource(value?: string) {
                     Direct IP read works only when this app server can reach the printer page on your local network. If not, use screenshot read.
                   </p>
                 </div>
+                <div className="panel" style={{ padding: 12, marginBottom: 12 }}>
+                  <div className="panel-row" style={{ alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                    <div>
+                      <h3 style={{ margin: 0 }}>Counter Reset / Replacement</h3>
+                      <p className="tiny" style={{ margin: "4px 0 0" }}>
+                        Use this when provider replaces a machine or the total counter starts again. Old monthly records stay unchanged.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="form-grid inventory-item-grid printer-entry-grid">
+                    <label className="field">
+                      <span>Rental Printer</span>
+                      <select className="input" value={rentalCounterResetForm.rentalPrinterId} onChange={(e) => setRentalCounterResetForm((prev) => ({ ...prev, rentalPrinterId: e.target.value }))}>
+                        <option value="">Select printer</option>
+                        {rentalPrinterOptions.map((row) => (
+                          <option key={`rental-reset-printer-${row.id}`} value={row.id}>
+                            {row.vendor} | {row.machineCode} | {row.machineName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Reset Effective Date</span>
+                      <input className="input" type="date" value={rentalCounterResetForm.effectiveDate} onChange={(e) => setRentalCounterResetForm((prev) => ({ ...prev, effectiveDate: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>New Start Counter</span>
+                      <input className="input" inputMode="numeric" value={rentalCounterResetForm.baselineMono} onChange={(e) => setRentalCounterResetForm((prev) => ({ ...prev, baselineMono: e.target.value.replace(/[^0-9]/g, "") }))} />
+                    </label>
+                    <label className="field field-wide">
+                      <span>Remark</span>
+                      <input className="input" value={rentalCounterResetForm.note} onChange={(e) => setRentalCounterResetForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Example: Provider changed machine on June 4, 2026." />
+                    </label>
+                  </div>
+                  <div className="row-actions" style={{ marginTop: 10 }}>
+                    <button className="btn-primary" disabled={!isAdmin || !rentalCounterResetForm.rentalPrinterId} onClick={() => void saveRentalPrinterCounterReset()}>
+                      Save Counter Reset
+                    </button>
+                  </div>
+                  {rentalPrinterCounterResets.length ? (
+                    <div className="table-wrap" style={{ marginTop: 12 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Printer</th>
+                            <th>Effective Date</th>
+                            <th>Start Counter</th>
+                            <th>Remark</th>
+                            <th>{t.delete}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rentalPrinterCounterResets.map((row) => (
+                            <tr key={`rental-reset-row-${row.id}`}>
+                              <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
+                              <td>{row.effectiveDate}</td>
+                              <td>{row.baselineMono.toLocaleString()}</td>
+                              <td>{row.note || "-"}</td>
+                              <td><button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteRentalPrinterCounterReset(row.id)}>X</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
                 <div className="form-grid inventory-item-grid printer-entry-grid">
                   <label className="field">
                     <span>Rental Printer</span>
@@ -57926,6 +58220,11 @@ function formatTicketRequestSource(value?: string) {
                       value={rentalCounterForm.previousMono}
                       onChange={(e) => setRentalCounterForm((prev) => ({ ...prev, previousMono: e.target.value.replace(/[^0-9]/g, "") }))}
                     />
+                    {selectedRentalPrinterApplicableReset ? (
+                      <span className="tiny">
+                        Reset active from {selectedRentalPrinterApplicableReset.effectiveDate}: {selectedRentalPrinterApplicableReset.baselineMono.toLocaleString()}
+                      </span>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Current Monthly</span>
@@ -57996,7 +58295,7 @@ function formatTicketRequestSource(value?: string) {
                 </div>
                 {isPhoneView ? (
                   <div className="printer-counter-mobile-list" style={{ marginTop: 12 }}>
-                    {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
+                    {rentalPrinterEffectiveRows.length ? rentalPrinterEffectiveRows.map((row) => (
                       <article key={`rental-counter-mobile-${row.id}`} className="printer-counter-mobile-card">
                         <div className="printer-counter-mobile-head">
                           <strong>{formatMonthYear(row.billingMonth || "-")}</strong>
@@ -58036,7 +58335,7 @@ function formatTicketRequestSource(value?: string) {
                         </tr>
                       </thead>
                       <tbody>
-                        {rentalPrinterCounters.length ? rentalPrinterCounters.map((row) => (
+                        {rentalPrinterEffectiveRows.length ? rentalPrinterEffectiveRows.map((row) => (
                           <tr key={`rental-counter-row-${row.id}`}>
                             <td>{formatMonthYear(row.billingMonth || "-")}</td>
                             <td><strong>{row.machineCode}</strong> {row.machineName ? `| ${row.machineName}` : ""}</td>
