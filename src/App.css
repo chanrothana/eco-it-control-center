@@ -7507,6 +7507,20 @@ h2 {
   gap: 12px;
 }
 
+.edit-asset-inline-grid {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.edit-asset-inline-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.edit-asset-inline-grid-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .inventory-item-create-grid {
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.7fr) minmax(190px, 0.7fr);
 }
@@ -28162,6 +28176,11 @@ tr.row-maint-maintenance:hover td {
 
   .modal-panel .form-grid.asset-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .edit-asset-inline-grid-two,
+  .edit-asset-inline-grid-three {
+    grid-template-columns: 1fr;
   }
 
   .asset-detail-modal-header {

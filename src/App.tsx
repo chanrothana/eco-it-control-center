@@ -419,6 +419,16 @@ type MaintenanceReportColumnKey =
   | "by"
   | "reportFile"
   | "note";
+type StaffBorrowingReportColumnKey =
+  | "assetId"
+  | "photo"
+  | "itemName"
+  | "campus"
+  | "location"
+  | "assignedTo"
+  | "sinceDate"
+  | "responsibilityAck"
+  | "lastAction";
 type InventoryReportColumnKey =
   | "code"
   | "photo"
@@ -10418,6 +10428,9 @@ export default function App() {
     key: "assignedTo",
     direction: "asc",
   });
+  const [staffBorrowingCampusFilter, setStaffBorrowingCampusFilter] = useState("ALL");
+  const [staffBorrowingAssignedToFilter, setStaffBorrowingAssignedToFilter] = useState("ALL");
+  const [staffBorrowingLocationFilter, setStaffBorrowingLocationFilter] = useState("ALL");
   const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
   const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState<string[]>(["ALL"]);
   const [assetMasterItemFilter, setAssetMasterItemFilter] = useState<string[]>(["ALL"]);
@@ -10483,6 +10496,17 @@ export default function App() {
     "completion",
     "condition",
     "by",
+  ]);
+  const [staffBorrowingVisibleColumns, setStaffBorrowingVisibleColumns] = useState<StaffBorrowingReportColumnKey[]>([
+    "assetId",
+    "photo",
+    "itemName",
+    "campus",
+    "location",
+    "assignedTo",
+    "sinceDate",
+    "responsibilityAck",
+    "lastAction",
   ]);
   const [inventoryReportVisibleColumns, setInventoryReportVisibleColumns] = useState<InventoryReportColumnKey[]>([
     "code",
@@ -34594,6 +34618,19 @@ export default function App() {
     return assets
       .filter((asset) => String(asset.assignedTo || "").trim())
       .filter((asset) => (reportAssetIdFilter ? String(asset.assetId || "").trim() === reportAssetIdFilter : true))
+      .filter((asset) =>
+        staffBorrowingCampusFilter === "ALL" ? true : String(asset.campus || "").trim() === staffBorrowingCampusFilter
+      )
+      .filter((asset) =>
+        staffBorrowingAssignedToFilter === "ALL"
+          ? true
+          : String(asset.assignedTo || "").trim() === staffBorrowingAssignedToFilter
+      )
+      .filter((asset) =>
+        staffBorrowingLocationFilter === "ALL"
+          ? true
+          : String(asset.location || "").trim() === staffBorrowingLocationFilter
+      )
       .map((asset) => {
         const latestCustody = [...(asset.custodyHistory || [])].sort((a, b) =>
           String(b.date || "").localeCompare(String(a.date || ""))
@@ -34613,7 +34650,57 @@ export default function App() {
         };
       })
       .sort((a, b) => a.assignedTo.localeCompare(b.assignedTo) || a.assetId.localeCompare(b.assetId));
-  }, [assets, assetItemName, reportAssetIdFilter]);
+  }, [assets, assetItemName, reportAssetIdFilter, staffBorrowingAssignedToFilter, staffBorrowingCampusFilter, staffBorrowingLocationFilter]);
+  const staffBorrowingCampusFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          assets
+            .filter((asset) => String(asset.assignedTo || "").trim())
+            .map((asset) => String(asset.campus || "").trim())
+            .filter(Boolean)
+        )
+      ).sort(compareCampusByCode),
+    [assets]
+  );
+  const staffBorrowingAssignedToFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          assets
+            .filter((asset) => String(asset.assignedTo || "").trim())
+            .map((asset) => String(asset.assignedTo || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    [assets]
+  );
+  const staffBorrowingLocationFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          assets
+            .filter((asset) => String(asset.assignedTo || "").trim())
+            .filter((asset) =>
+              staffBorrowingCampusFilter === "ALL" ? true : String(asset.campus || "").trim() === staffBorrowingCampusFilter
+            )
+            .filter((asset) =>
+              staffBorrowingAssignedToFilter === "ALL"
+                ? true
+                : String(asset.assignedTo || "").trim() === staffBorrowingAssignedToFilter
+            )
+            .map((asset) => String(asset.location || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    [assets, staffBorrowingAssignedToFilter, staffBorrowingCampusFilter]
+  );
+  useEffect(() => {
+    if (staffBorrowingLocationFilter === "ALL") return;
+    if (!staffBorrowingLocationFilterOptions.includes(staffBorrowingLocationFilter)) {
+      setStaffBorrowingLocationFilter("ALL");
+    }
+  }, [staffBorrowingLocationFilter, staffBorrowingLocationFilterOptions]);
   const sortedStaffBorrowingRows = useMemo(() => {
     const direction = staffBorrowingSort.direction === "asc" ? 1 : -1;
     const text = (value: string) => String(value || "").toLowerCase();
@@ -36329,6 +36416,36 @@ export default function App() {
     () => maintenanceReportColumnDefs.filter((column) => maintenanceReportVisibleColumns.includes(column.key)),
     [maintenanceReportColumnDefs, maintenanceReportVisibleColumns]
   );
+  const staffBorrowingColumnDefs = useMemo<Array<{ key: StaffBorrowingReportColumnKey; label: string; sortable?: boolean }>>(
+    () => [
+      { key: "assetId", label: t.assetId, sortable: true },
+      { key: "photo", label: t.photo },
+      { key: "itemName", label: t.name, sortable: true },
+      { key: "campus", label: t.campus, sortable: true },
+      { key: "location", label: t.location, sortable: true },
+      { key: "assignedTo", label: "Assigned To", sortable: true },
+      { key: "sinceDate", label: "Since", sortable: true },
+      { key: "responsibilityAck", label: "Ack", sortable: true },
+      { key: "lastAction", label: "Last Action", sortable: true },
+    ],
+    [t.assetId, t.photo, t.name, t.campus, t.location]
+  );
+  const visibleStaffBorrowingColumnDefs = useMemo(
+    () => staffBorrowingColumnDefs.filter((column) => staffBorrowingVisibleColumns.includes(column.key)),
+    [staffBorrowingColumnDefs, staffBorrowingVisibleColumns]
+  );
+  const updateStaffBorrowingColumnSelection = useCallback((column: StaffBorrowingReportColumnKey) => {
+    setStaffBorrowingVisibleColumns((prev) => {
+      const exists = prev.includes(column);
+      if (exists) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((item) => item !== column);
+      }
+      const withColumn = [...prev, column];
+      const order = staffBorrowingColumnDefs.map((d) => d.key);
+      return [...withColumn].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    });
+  }, [staffBorrowingColumnDefs]);
   const inventoryReportColumnDefs = useMemo<Array<{ key: InventoryReportColumnKey; label: string }>>(
     () =>
       reportInventoryIsToolGroup
@@ -36509,6 +36626,7 @@ export default function App() {
   }, [reportType, lang, assetMasterItemTitle, reportTypeGuideText, qrLabelEntityType]);
   const hasReportFilters = useMemo(
     () =>
+      reportType === "staff_borrowing" ||
       reportType === "asset_master" ||
       reportType === "asset_by_location" ||
       reportType === "furniture_control" ||
@@ -36548,6 +36666,24 @@ export default function App() {
     }
     if (reportType === "asset_master") {
       resetAssetMasterReportFilters();
+      return;
+    }
+    if (reportType === "staff_borrowing") {
+      setReportAssetIdFilter("");
+      setStaffBorrowingCampusFilter("ALL");
+      setStaffBorrowingAssignedToFilter("ALL");
+      setStaffBorrowingLocationFilter("ALL");
+      setStaffBorrowingVisibleColumns([
+        "assetId",
+        "photo",
+        "itemName",
+        "campus",
+        "location",
+        "assignedTo",
+        "sinceDate",
+        "responsibilityAck",
+        "lastAction",
+      ]);
       return;
     }
     if (reportType === "maintenance_completion") {
@@ -36637,6 +36773,9 @@ export default function App() {
     setReportSection("asset");
     setReportType("asset_master");
     setReportAssetIdFilter("");
+    setStaffBorrowingCampusFilter("ALL");
+    setStaffBorrowingAssignedToFilter("ALL");
+    setStaffBorrowingLocationFilter("ALL");
     setReportInventoryMode("all");
     resetAssetMasterReportFilters();
     setQrCampusFilter(["ALL"]);
@@ -38013,19 +38152,33 @@ export default function App() {
       ]);
     } else if (reportType === "staff_borrowing") {
       title = "Staff Asset Assignment List Report";
-      columns = ["Asset ID", "Photo", "Item", "Campus", "Location", "Assigned To", "Since", "Ack", "Last Action", "Note"];
-      rows = sortedStaffBorrowingRows.map((r) => [
-        r.assetId,
-        toPrintablePhotoUrl(r.assetPhoto || ""),
-        r.itemName || "-",
-        reportCampusName(r.campus),
-        r.location || "-",
-        r.assignedTo || "-",
-        formatDate(r.sinceDate || "-"),
-        r.responsibilityAck,
-        r.lastAction || "-",
-        r.note || "-",
-      ]);
+      columns = visibleStaffBorrowingColumnDefs.map((column) => column.label);
+      rows = sortedStaffBorrowingRows.map((r) =>
+        visibleStaffBorrowingColumnDefs.map((column) => {
+          switch (column.key) {
+            case "assetId":
+              return r.assetId;
+            case "photo":
+              return toPrintablePhotoUrl(r.assetPhoto || "");
+            case "itemName":
+              return r.itemName || "-";
+            case "campus":
+              return reportCampusName(r.campus);
+            case "location":
+              return r.location || "-";
+            case "assignedTo":
+              return r.assignedTo || "-";
+            case "sinceDate":
+              return formatDate(r.sinceDate || "-");
+            case "responsibilityAck":
+              return r.responsibilityAck;
+            case "lastAction":
+              return r.lastAction || "-";
+            default:
+              return "-";
+          }
+        })
+      );
     } else if (reportType === "maintenance_completion") {
       title = `Maintenance Report for ED (${maintenanceCompletionRangeLabel})`;
       const visibleDefs = maintenanceReportColumnDefs.filter((def) => isMaintenanceReportColumnVisible(def.key));
@@ -38153,11 +38306,14 @@ export default function App() {
     const initialColumnWidths = (() => {
       if (reportType === "asset_master") {
         const base = visibleAssetMasterColumnWidths.map((column) => column.width);
-        return [5, ...base];
+        return [3, ...base];
       }
       if (reportType === "set_code") {
         const base = [...setCodeReportColumnWidths];
-        return [5, ...base];
+        return [3, ...base];
+      }
+      if (reportType === "staff_borrowing") {
+        return [3, 12, 9, 11, 12, 11, 10, 10, 9, 13];
       }
       const widths = readVisibleReportColumnWidths();
       if (widths.length === columns.length) return widths;
@@ -38216,7 +38372,13 @@ export default function App() {
                 : ""
           }</p>`
         : reportType === "staff_borrowing"
-        ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length}</p>`
+        ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length} | <strong>Campus:</strong> ${escapeHtml(
+            staffBorrowingCampusFilter === "ALL" ? t.allCampuses : reportCampusName(staffBorrowingCampusFilter)
+          )} | <strong>Staff:</strong> ${escapeHtml(
+            staffBorrowingAssignedToFilter === "ALL" ? (lang === "km" ? "បុគ្គលិកទាំងអស់" : "All Staff") : staffBorrowingAssignedToFilter
+          )} | <strong>Location:</strong> ${escapeHtml(
+            staffBorrowingLocationFilter === "ALL" ? (lang === "km" ? "គ្រប់ទីតាំង" : "All Locations") : staffBorrowingLocationFilter
+          )}</p><p><strong>Ack:</strong> ${escapeHtml(lang === "km" ? "ការទទួលស្គាល់ទំនួលខុសត្រូវ" : "Responsibility acknowledgement")}</p>`
         : reportType === "asset_master"
         ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>${
             assetMasterCampusBreakdown.length
@@ -38318,6 +38480,11 @@ export default function App() {
       reportType === "qr_labels"
         ? `@page { size: A4 portrait; margin: 4mm; }`
         : `@page { size: A4 landscape; margin: 3mm; }`;
+
+    const previewTableClassName =
+      reportType === "staff_borrowing"
+        ? "preview-report-table preview-report-table-staff-borrowing"
+        : "preview-report-table";
 
     const reportContentHtml =
       reportType === "asset_full_record"
@@ -38616,7 +38783,7 @@ export default function App() {
               </table>
             </div>`
         : `<div class="preview-table-wrap">
-          <table class="preview-report-table">
+          <table class="${previewTableClassName}">
           <colgroup>${initialColumnWidths.map((width) => `<col style="width:${width}%;" />`).join("")}</colgroup>
           <thead><tr>${columns
             .map(
@@ -38664,6 +38831,13 @@ export default function App() {
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
           .preview-report-table th,
           .preview-report-table td { word-break: normal; overflow-wrap: break-word; hyphens: auto; }
+          .preview-report-table-staff-borrowing th:nth-child(2),
+          .preview-report-table-staff-borrowing td:nth-child(2) {
+            white-space: nowrap;
+            word-break: keep-all;
+            overflow-wrap: normal;
+            hyphens: none;
+          }
           .inventory-preview-page {
             border: 1px solid #d8dfeb;
             border-radius: 18px;
@@ -45360,20 +45534,42 @@ function formatTicketRequestSource(value?: string) {
                         </select>
                       </label>
                     ) : null}
-                    <label className="field">
-                      <span>{t.status}</span>
-                      <select
-                        className="input"
-                        value={assetEditForm.status}
-                        onChange={(e) => setAssetEditForm((f) => ({ ...f, status: e.target.value }))}
-                      >
-                        {ASSET_STATUS_OPTIONS.map((status) => (
-                          <option key={status.value} value={status.value}>
-                            {lang === "km" ? status.km : status.en}
-                          </option>
-                          ))}
-                      </select>
-                    </label>
+                    <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-two">
+                      <label className="field">
+                        <span>{t.status}</span>
+                        <select
+                          className="input"
+                          value={assetEditForm.status}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, status: e.target.value }))}
+                        >
+                          {ASSET_STATUS_OPTIONS.map((status) => (
+                            <option key={status.value} value={status.value}>
+                              {lang === "km" ? status.km : status.en}
+                            </option>
+                            ))}
+                        </select>
+                      </label>
+                      {editingShowUserField && editingStatusActive ? (
+                        <label className="field">
+                          <span>{t.user}</span>
+                          <UserPicker
+                            value={assetEditForm.assignedTo}
+                            users={staffUsersForCampus(users, editingAsset?.campus || "", assetEditForm.assignedTo)}
+                            placeholder={t.selectUser}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
+                            emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
+                            onChange={(value) => setAssetEditForm((f) => ({ ...f, assignedTo: value }))}
+                          />
+                          {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
+                        </label>
+                      ) : editingShowUserField ? (
+                        <div className="field">
+                          <span>{t.user}</span>
+                          <div className="detail-value">-</div>
+                          <p className="tiny">Status is not Active. User is not assigned.</p>
+                        </div>
+                      ) : null}
+                    </div>
                     {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
                       <label className="field field-wide">
                         <span>{t.setCode}</span>
@@ -45641,47 +45837,33 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                       </div>
                     ) : null}
-                    {editingShowUserField && editingStatusActive ? (
-                      <label className="field field-wide">
-                        <span>{t.user}</span>
-                        <UserPicker
-                          value={assetEditForm.assignedTo}
-                          users={staffUsersForCampus(users, editingAsset?.campus || "", assetEditForm.assignedTo)}
-                          placeholder={t.selectUser}
-                          searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
-                          emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
-                          onChange={(value) => setAssetEditForm((f) => ({ ...f, assignedTo: value }))}
-                        />
-                        {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
-                      </label>
-                    ) : editingShowUserField ? (
-                      <div className="field field-wide">
-                        <span>{t.user}</span>
-                        <div className="detail-value">-</div>
-                        <p className="tiny">Status is not Active. User is not assigned.</p>
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                      <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-three">
+                        <label className="field">
+                          <span>Brand</span>
+                          <input
+                            className="input"
+                            list="asset-brand-options-edit"
+                            value={assetEditForm.brand}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, brand: e.target.value }))}
+                          />
+                          <datalist id="asset-brand-options-edit">
+                            {brandSuggestions.map((brand) => (
+                              <option key={`brand-edit-${brand.toLowerCase()}`} value={brand} />
+                            ))}
+                          </datalist>
+                        </label>
+                        <label className="field">
+                          <span>Model</span>
+                          <input className="input" value={assetEditForm.model} onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))} />
+                        </label>
+                        {!isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                          <label className="field">
+                            <span>Vendor</span>
+                            <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
+                          </label>
+                        ) : <div className="field" />}
                       </div>
-                    ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") ? (
-                      <label className="field">
-                        <span>Brand</span>
-                        <input
-                          className="input"
-                          list="asset-brand-options-edit"
-                          value={assetEditForm.brand}
-                          onChange={(e) => setAssetEditForm((f) => ({ ...f, brand: e.target.value }))}
-                        />
-                        <datalist id="asset-brand-options-edit">
-                          {brandSuggestions.map((brand) => (
-                            <option key={`brand-edit-${brand.toLowerCase()}`} value={brand} />
-                          ))}
-                        </datalist>
-                      </label>
-                    ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") ? (
-                      <label className="field">
-                        <span>Model</span>
-                        <input className="input" value={assetEditForm.model} onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))} />
-                      </label>
                     ) : null}
                     {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">
@@ -46276,12 +46458,6 @@ function formatTicketRequestSource(value?: string) {
                             }));
                           }}
                         />
-                      </label>
-                    ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") && !isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
-                      <label className="field">
-                        <span>Vendor</span>
-                        <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
                       </label>
                     ) : null}
                     {isPrinterAssetRow(editingAsset) ? (
@@ -59868,6 +60044,70 @@ function formatTicketRequestSource(value?: string) {
                   />
                 </>
               ) : null}
+              {reportType === "staff_borrowing" ? (
+                <>
+                  <LocationPicker
+                    value={staffBorrowingCampusFilter}
+                    onChange={setStaffBorrowingCampusFilter}
+                    options={[
+                      { value: "ALL", label: t.allCampuses },
+                      ...staffBorrowingCampusFilterOptions.map((campus) => ({
+                        value: campus,
+                        label: reportCampusName(campus),
+                      })),
+                    ]}
+                    placeholder={t.allCampuses}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <LocationPicker
+                    value={staffBorrowingAssignedToFilter}
+                    onChange={setStaffBorrowingAssignedToFilter}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "បុគ្គលិកទាំងអស់" : "All Staff" },
+                      ...staffBorrowingAssignedToFilterOptions.map((name) => ({
+                        value: name,
+                        label: name,
+                      })),
+                    ]}
+                    placeholder={lang === "km" ? "ជ្រើសបុគ្គលិក" : "Filter Staff"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                    emptyText={lang === "km" ? "មិនមានបុគ្គលិក" : "No staff found."}
+                  />
+                  <LocationPicker
+                    value={staffBorrowingLocationFilter}
+                    onChange={setStaffBorrowingLocationFilter}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
+                      ...staffBorrowingLocationFilterOptions.map((location) => ({
+                        value: location,
+                        label: location,
+                      })),
+                    ]}
+                    placeholder={lang === "km" ? "ជ្រើសទីតាំង" : "Filter Location"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                  />
+                  <SearchableMultiSelectPicker
+                    summary={columnFilterSummary}
+                    options={staffBorrowingColumnDefs.map((column) => ({
+                      value: column.key,
+                      label: column.label,
+                    }))}
+                    selectedValues={staffBorrowingVisibleColumns}
+                    onToggleValue={(value) => updateStaffBorrowingColumnSelection(value as StaffBorrowingReportColumnKey)}
+                    allOptionLabel={lang === "km" ? "ជ្រើសទាំងអស់" : "All Columns"}
+                    allOptionChecked={staffBorrowingVisibleColumns.length === staffBorrowingColumnDefs.length}
+                    onToggleAllOption={(checked) =>
+                      setStaffBorrowingVisibleColumns(
+                        checked ? staffBorrowingColumnDefs.map((column) => column.key) : staffBorrowingVisibleColumns
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search columns..."}
+                    emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No columns found."}
+                  />
+                </>
+              ) : null}
               {reportType === "furniture_control" ? (
                 <>
                   <SearchableMultiSelectPicker
@@ -61521,109 +61761,61 @@ function formatTicketRequestSource(value?: string) {
                 <table>
                   <thead>
                     <tr>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "assetId" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("assetId")}
-                        >
-                          {t.assetId} {staffBorrowingSort.key === "assetId" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>{t.photo}</th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "itemName" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("itemName")}
-                        >
-                          {t.name} {staffBorrowingSort.key === "itemName" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "campus" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("campus")}
-                        >
-                          {t.campus} {staffBorrowingSort.key === "campus" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "location" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("location")}
-                        >
-                          {t.location} {staffBorrowingSort.key === "location" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "assignedTo" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("assignedTo")}
-                        >
-                          Assigned To {staffBorrowingSort.key === "assignedTo" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "sinceDate" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("sinceDate")}
-                        >
-                          Since {staffBorrowingSort.key === "sinceDate" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "responsibilityAck" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("responsibilityAck")}
-                        >
-                          Ack {staffBorrowingSort.key === "responsibilityAck" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "lastAction" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("lastAction")}
-                        >
-                          Last Action {staffBorrowingSort.key === "lastAction" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
-                      <th>
-                        <button
-                          type="button"
-                          className={`th-sort-btn ${staffBorrowingSort.key === "note" ? "is-active" : ""}`}
-                          onClick={() => toggleStaffBorrowingSort("note")}
-                        >
-                          {t.notes} {staffBorrowingSort.key === "note" ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </button>
-                      </th>
+                      {visibleStaffBorrowingColumnDefs.map((column) => (
+                        <th key={`staff-borrowing-head-${column.key}`}>
+                          {column.sortable ? (
+                            <button
+                              type="button"
+                              className={`th-sort-btn ${staffBorrowingSort.key === column.key ? "is-active" : ""}`}
+                              onClick={() => toggleStaffBorrowingSort(column.key as StaffBorrowingSortKey)}
+                              title={
+                                column.key === "responsibilityAck"
+                                  ? (lang === "km" ? "ការទទួលស្គាល់ទំនួលខុសត្រូវ" : "Responsibility acknowledgement")
+                                  : undefined
+                              }
+                            >
+                              {column.label} {staffBorrowingSort.key === column.key ? (staffBorrowingSort.direction === "asc" ? "▲" : "▼") : ""}
+                            </button>
+                          ) : (
+                            column.label
+                          )}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {sortedStaffBorrowingRows.length ? (
                       sortedStaffBorrowingRows.map((r) => (
                         <tr key={`report-staff-borrow-${r.assetDbId}`}>
-                          <td><strong>{r.assetId}</strong></td>
-                          <td>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>
-                          <td>{r.itemName}</td>
-                          <td>{reportCampusName(r.campus)}</td>
-                          <td>{r.location || "-"}</td>
-                          <td>{r.assignedTo || "-"}</td>
-                          <td>{formatDate(r.sinceDate || "-")}</td>
-                          <td>{r.responsibilityAck}</td>
-                          <td>{r.lastAction || "-"}</td>
-                          <td>{r.note || "-"}</td>
+                          {visibleStaffBorrowingColumnDefs.map((column) => {
+                            switch (column.key) {
+                              case "assetId":
+                                return <td key={`${r.assetDbId}-${column.key}`}><strong>{r.assetId}</strong></td>;
+                              case "photo":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{renderAssetPhoto(r.assetPhoto || "", r.assetId)}</td>;
+                              case "itemName":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{r.itemName}</td>;
+                              case "campus":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{reportCampusName(r.campus)}</td>;
+                              case "location":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{r.location || "-"}</td>;
+                              case "assignedTo":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{r.assignedTo || "-"}</td>;
+                              case "sinceDate":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{formatDate(r.sinceDate || "-")}</td>;
+                              case "responsibilityAck":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{r.responsibilityAck}</td>;
+                              case "lastAction":
+                                return <td key={`${r.assetDbId}-${column.key}`}>{r.lastAction || "-"}</td>;
+                              default:
+                                return <td key={`${r.assetDbId}-${column.key}`}>-</td>;
+                            }
+                          })}
                         </tr>
                       ))
                     ) : (
                       <tr>
-                          <td colSpan={10}>No staff asset assignment records.</td>
+                          <td colSpan={Math.max(visibleStaffBorrowingColumnDefs.length, 1)}>No staff asset assignment records.</td>
                       </tr>
                     )}
                   </tbody>
