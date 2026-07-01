@@ -429,6 +429,16 @@ type StaffBorrowingReportColumnKey =
   | "sinceDate"
   | "responsibilityAck"
   | "lastAction";
+type MaintenanceQuickTemplateKey =
+  | "manual"
+  | "aircon_cleaning"
+  | "computer_service"
+  | "laptop_service"
+  | "ipad_service"
+  | "tv_service"
+  | "walkie_service"
+  | "it_maintenance"
+  | "facility_maintenance";
 type InventoryReportColumnKey =
   | "code"
   | "photo"
@@ -6928,6 +6938,10 @@ function isAirconAsset(category: string, type: string) {
   return String(category || "").toUpperCase() === "FACILITY" && String(type || "").toUpperCase() === "AC";
 }
 
+function monthStartYmd(base = new Date()) {
+  return toYmd(new Date(base.getFullYear(), base.getMonth(), 1));
+}
+
 function isFanAsset(category: string, type: string) {
   return (
     String(category || "").toUpperCase() === "FACILITY" &&
@@ -10487,6 +10501,7 @@ export default function App() {
   const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
   const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
+  const [maintenanceQuickTemplate, setMaintenanceQuickTemplate] = useState<MaintenanceQuickTemplateKey>("manual");
   const [reportAssetIdFilter, setReportAssetIdFilter] = useState("");
   const [maintenanceReportVisibleColumns, setMaintenanceReportVisibleColumns] = useState<MaintenanceReportColumnKey[]>([
     "date",
@@ -34735,6 +34750,112 @@ export default function App() {
     [sortedStaffBorrowingRows, reportAssetIdFilter]
   );
 
+  const maintenanceQuickTemplateOptions = useMemo<Array<{ value: MaintenanceQuickTemplateKey; label: string }>>(
+    () =>
+      lang === "km"
+        ? [
+            { value: "manual", label: "ជ្រើសដោយដៃ" },
+            { value: "aircon_cleaning", label: "ED Quick: សម្អាតម៉ាស៊ីនត្រជាក់ប្រចាំខែ" },
+            { value: "computer_service", label: "ED Quick: កំណត់ត្រាកុំព្យូទ័រ" },
+            { value: "laptop_service", label: "ED Quick: កំណត់ត្រាឡេបថប" },
+            { value: "ipad_service", label: "ED Quick: កំណត់ត្រា iPad / Tablet" },
+            { value: "tv_service", label: "ED Quick: កំណត់ត្រា TV" },
+            { value: "walkie_service", label: "ED Quick: កំណត់ត្រាវិទ្យុទាក់ទង" },
+            { value: "it_maintenance", label: "ED Quick: ថែទាំ IT ទាំងអស់" },
+            { value: "facility_maintenance", label: "ED Quick: ថែទាំ Facility ទាំងអស់" },
+          ]
+        : [
+            { value: "manual", label: "Manual / Custom" },
+            { value: "aircon_cleaning", label: "ED Quick: Air-Con Cleaning" },
+            { value: "computer_service", label: "ED Quick: Computer Records" },
+            { value: "laptop_service", label: "ED Quick: Laptop Records" },
+            { value: "ipad_service", label: "ED Quick: iPad / Tablet Records" },
+            { value: "tv_service", label: "ED Quick: TV Records" },
+            { value: "walkie_service", label: "ED Quick: Walkie Records" },
+            { value: "it_maintenance", label: "ED Quick: All IT Maintenance" },
+            { value: "facility_maintenance", label: "ED Quick: All Facility Maintenance" },
+          ],
+    [lang]
+  );
+  const maintenanceQuickTemplateLabel = useMemo(
+    () =>
+      maintenanceQuickTemplateOptions.find((option) => option.value === maintenanceQuickTemplate)?.label ||
+      (lang === "km" ? "ជ្រើសដោយដៃ" : "Manual / Custom"),
+    [lang, maintenanceQuickTemplate, maintenanceQuickTemplateOptions]
+  );
+  const maintenanceQuickTemplateMatches = useCallback(
+    (row: (typeof allMaintenanceRows)[number]) => {
+      const assetType = String(row.assetType || "").trim().toUpperCase();
+      const maintenanceType = String(row.type || "").trim().toLowerCase();
+      if (maintenanceQuickTemplate === "manual") return true;
+      if (maintenanceQuickTemplate === "aircon_cleaning") {
+        return row.category === "FACILITY" && assetType === "AC" && maintenanceType === "preventive";
+      }
+      if (maintenanceQuickTemplate === "computer_service") {
+        return row.category === "IT" && assetType === DESKTOP_PARENT_TYPE;
+      }
+      if (maintenanceQuickTemplate === "laptop_service") {
+        return row.category === "IT" && assetType === LAPTOP_TYPE;
+      }
+      if (maintenanceQuickTemplate === "ipad_service") {
+        return row.category === "IT" && assetType === "TAB";
+      }
+      if (maintenanceQuickTemplate === "tv_service") {
+        return row.category === "IT" && assetType === TV_TYPE_CODE;
+      }
+      if (maintenanceQuickTemplate === "walkie_service") {
+        return row.category === "FACILITY" && assetType === WALKIE_TALKIE_TYPE_CODE;
+      }
+      if (maintenanceQuickTemplate === "it_maintenance") {
+        return row.category === "IT";
+      }
+      if (maintenanceQuickTemplate === "facility_maintenance") {
+        return row.category === "FACILITY";
+      }
+      return true;
+    },
+    [maintenanceQuickTemplate]
+  );
+  const applyMaintenanceQuickTemplate = useCallback(
+    (template: MaintenanceQuickTemplateKey) => {
+      const today = new Date();
+      setMaintenanceQuickTemplate(template);
+      setReportDateFrom(monthStartYmd(today));
+      setReportDateTo(toYmd(today));
+      setReportAssetIdFilter("");
+      setMaintenanceReportExpandedRows({});
+      if (template === "manual") {
+        setReportMaintenanceCategoryFilter("ALL");
+        setReportMaintenanceItemFilter("ALL");
+        return;
+      }
+      if (template === "aircon_cleaning") {
+        setReportMaintenanceCategoryFilter("FACILITY");
+        setReportMaintenanceItemFilter("ALL");
+        return;
+      }
+      if (
+        template === "computer_service" ||
+        template === "laptop_service" ||
+        template === "ipad_service" ||
+        template === "tv_service" ||
+        template === "it_maintenance"
+      ) {
+        setReportMaintenanceCategoryFilter("IT");
+        setReportMaintenanceItemFilter("ALL");
+        return;
+      }
+      if (template === "walkie_service" || template === "facility_maintenance") {
+        setReportMaintenanceCategoryFilter("FACILITY");
+        setReportMaintenanceItemFilter("ALL");
+        return;
+      }
+      setReportMaintenanceCategoryFilter("ALL");
+      setReportMaintenanceItemFilter("ALL");
+    },
+    []
+  );
+
   const maintenanceCompletionRows = useMemo(() => {
     return allMaintenanceRows.filter((row) => {
       if (reportAssetIdFilter && String(row.assetId || "").trim() !== reportAssetIdFilter) return false;
@@ -34744,10 +34865,12 @@ export default function App() {
       if (reportMaintenanceCampusFilter !== "ALL" && row.campus !== reportMaintenanceCampusFilter) return false;
       if (reportMaintenanceCategoryFilter !== "ALL" && row.category !== reportMaintenanceCategoryFilter) return false;
       if (reportMaintenanceItemFilter !== "ALL" && row.itemName !== reportMaintenanceItemFilter) return false;
+      if (!maintenanceQuickTemplateMatches(row)) return false;
       return true;
     });
   }, [
     allMaintenanceRows,
+    maintenanceQuickTemplateMatches,
     reportAssetIdFilter,
     reportDateFrom,
     reportDateTo,
@@ -34809,8 +34932,9 @@ export default function App() {
       reportMaintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(reportMaintenanceCampusFilter);
     const categoryText = reportMaintenanceCategoryFilter === "ALL" ? t.allCategories : reportMaintenanceCategoryFilter;
     const itemText = reportMaintenanceItemFilter === "ALL" ? "All Items" : reportMaintenanceItemFilter;
-    return `${campusText} | ${categoryText} | ${itemText}`;
+    return `${maintenanceQuickTemplateLabel} | ${campusText} | ${categoryText} | ${itemText}`;
   }, [
+    maintenanceQuickTemplateLabel,
     reportMaintenanceCampusFilter,
     reportMaintenanceCategoryFilter,
     reportMaintenanceItemFilter,
@@ -34824,6 +34948,7 @@ export default function App() {
   );
   const maintenanceCompletionSummaryChips = useMemo(
     () => [
+      `${lang === "km" ? "Template" : "Template"}: ${maintenanceQuickTemplateLabel}`,
       `${lang === "km" ? "សាខា" : "Campus"}: ${
         reportMaintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(reportMaintenanceCampusFilter)
       }`,
@@ -34837,6 +34962,7 @@ export default function App() {
     ],
     [
       lang,
+      maintenanceQuickTemplateLabel,
       reportMaintenanceCampusFilter,
       reportMaintenanceCategoryFilter,
       reportMaintenanceItemFilter,
@@ -36689,6 +36815,7 @@ export default function App() {
     if (reportType === "maintenance_completion") {
       const today = new Date();
       const ymd = toYmd(today);
+      setMaintenanceQuickTemplate("manual");
       setReportDateFrom(`${ymd.slice(0, 7)}-01`);
       setReportDateTo(ymd);
       setReportAssetIdFilter("");
@@ -36798,6 +36925,7 @@ export default function App() {
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
     setReportDateTo(ymd);
+    setMaintenanceQuickTemplate("manual");
     setReportYear(String(today.getFullYear()));
     setReportTerm("Term 1");
     setReportMobileFiltersOpen(false);
@@ -38356,7 +38484,7 @@ export default function App() {
       reportType === "asset_full_record"
         ? `<p><strong>Maintenance Records:</strong> ${assetFullRecordMaintenanceRows.length} | <strong>Transfer Records:</strong> ${assetFullRecordTransferRows.length} | <strong>Verification Records:</strong> ${assetFullRecordVerificationRows.length}</p>`
         : reportType === "maintenance_completion"
-        ? `<p><strong>Filter:</strong> ${escapeHtml(maintenanceCompletionFilterLabel)}</p><p><strong>Total:</strong> ${maintenanceCompletionSummary.total} | <strong>Done:</strong> ${maintenanceCompletionSummary.done} | <strong>Not Yet:</strong> ${maintenanceCompletionSummary.notYet}</p>`
+        ? `<p><strong>Filter:</strong> ${escapeHtml(maintenanceCompletionFilterLabel)}</p><p><strong>Template:</strong> ${escapeHtml(maintenanceQuickTemplateLabel)} | <strong>Total:</strong> ${maintenanceCompletionSummary.total} | <strong>Done:</strong> ${maintenanceCompletionSummary.done} | <strong>Not Yet:</strong> ${maintenanceCompletionSummary.notYet}</p>`
         : reportType === "verification_summary"
         ? `<p><strong>Total:</strong> ${verificationSummary.total} | <strong>Verified:</strong> ${verificationSummary.verified} | <strong>Issue Found:</strong> ${verificationSummary.issue} | <strong>Missing:</strong> ${verificationSummary.missing}</p>`
         : reportType === "asset_by_location"
@@ -59644,6 +59772,17 @@ function formatTicketRequestSource(value?: string) {
                     <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""} ${reportType === "inventory_balance" ? "report-filter-row-inventory" : ""}`}>
               {reportType === "maintenance_completion" ? (
                 <>
+                  <LocationPicker
+                    value={maintenanceQuickTemplate}
+                    onChange={(value) => applyMaintenanceQuickTemplate(value as MaintenanceQuickTemplateKey)}
+                    options={maintenanceQuickTemplateOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    placeholder={lang === "km" ? "ជ្រើស Template រហ័ស" : "Quick Report Template"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរក Template..." : "Search template..."}
+                    emptyText={lang === "km" ? "មិនមាន Template" : "No template found."}
+                  />
                   <input
                     className="input"
                     type="date"
