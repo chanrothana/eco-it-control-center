@@ -6848,7 +6848,7 @@ function createMaintenanceRecordForm(
     note: "",
     cost: "",
     by: String(preferredBy || "").trim(),
-    checkedBy: String(preferredBy || "").trim(),
+    checkedBy: "",
     photo: "",
     photos: [] as string[],
     beforePhotos: [] as string[],
@@ -29258,7 +29258,7 @@ export default function App() {
       workflow.issueSummary
     ).trim();
     const resolvedBy = String(maintenanceRecordForm.by || "").trim() || currentOperatorName;
-    const resolvedCheckedBy = String(maintenanceRecordForm.checkedBy || "").trim() || currentOperatorName;
+    const resolvedCheckedBy = String(maintenanceRecordForm.checkedBy || "").trim();
     const resolvedDate = normalizeYmdInput(maintenanceRecordForm.date) || toYmd(new Date());
     const resolvedTime = String(maintenanceRecordForm.time || "").trim() || toHm(new Date());
     const normalizedBeforePhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []);
@@ -33872,12 +33872,11 @@ export default function App() {
   useEffect(() => {
     if (!currentOperatorName) return;
     setMaintenanceRecordForm((f) =>
-      f.by.trim() && f.checkedBy.trim()
+      f.by.trim()
         ? f
         : {
             ...f,
             by: f.by.trim() || currentOperatorName,
-            checkedBy: f.checkedBy.trim() || currentOperatorName,
           }
     );
     setTicketMaintenanceForm((f) => (f.by.trim() ? f : { ...f, by: currentOperatorName }));
@@ -36693,9 +36692,10 @@ export default function App() {
       return `${selectedReportTypeLabel} - ${assetMasterCampusTitle}`;
     }
     if (reportType === "qr_labels") {
-      return qrLabelEntityType === "rental_printer"
-        ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល + QR" : "Rental Printer + QR Labels")
-        : selectedReportTypeLabel;
+      if (qrLabelEntityType === "rental_printer") {
+        return lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល + QR" : "Rental Printer + QR Labels";
+      }
+      return reportAssetIdFilter ? `${selectedReportTypeLabel} - ${reportAssetIdFilter}` : selectedReportTypeLabel;
     }
     return selectedReportTypeLabel;
   }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, lang, qrLabelEntityType, reportAssetIdFilter]);
@@ -37000,6 +37000,22 @@ export default function App() {
     const options = Array.from(new Set(qrRowsByCampusLocationCategoryStatus.map((row) => row.itemName).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [qrRowsByCampusLocationCategoryStatus]);
+  const qrRowsByCampusLocationCategoryStatusItem = useMemo(() => {
+    return qrRowsByCampusLocationCategoryStatus.filter((row) =>
+      qrItemFilter.includes("ALL") ? true : qrItemFilter.includes(row.itemName)
+    );
+  }, [qrRowsByCampusLocationCategoryStatus, qrItemFilter]);
+  const qrAssetIdFilterOptions = useMemo(() => {
+    if (qrLabelEntityType !== "asset") return [];
+    return qrRowsByCampusLocationCategoryStatusItem
+      .map((row) => ({
+        value: row.labelId,
+        label: row.labelId,
+        description: [row.itemName, reportLocationName(row.location)].filter(Boolean).join(" | "),
+        searchText: [row.itemName, row.campus, row.location, row.assignedTo || "", row.serialNumber || ""].join(" "),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [qrLabelEntityType, qrRowsByCampusLocationCategoryStatusItem, reportLocationName]);
   useEffect(() => {
     setQrLocationFilter((prev) => {
       if (prev.includes("ALL")) return prev;
@@ -37044,6 +37060,16 @@ export default function App() {
       return next;
     });
   }, [qrItemFilterOptions]);
+  useEffect(() => {
+    if (qrLabelEntityType !== "asset") {
+      if (reportAssetIdFilter) setReportAssetIdFilter("");
+      return;
+    }
+    if (!reportAssetIdFilter) return;
+    if (!qrAssetIdFilterOptions.some((option) => option.value === reportAssetIdFilter)) {
+      setReportAssetIdFilter("");
+    }
+  }, [qrLabelEntityType, reportAssetIdFilter, qrAssetIdFilterOptions]);
   const quickCountCampusFilterOptions = useMemo(
     () => [...CAMPUS_LIST].sort(compareCampusByCode),
     []
@@ -37931,9 +37957,10 @@ export default function App() {
       if (!qrCategoryFilter.includes("ALL") && !qrCategoryFilter.includes(row.category)) return false;
       if (!qrStatusFilter.includes("ALL") && !qrStatusFilter.includes(String(row.status || "").trim())) return false;
       if (!qrItemFilter.includes("ALL") && !qrItemFilter.includes(row.itemName)) return false;
+      if (qrLabelEntityType === "asset" && reportAssetIdFilter && row.labelId !== reportAssetIdFilter) return false;
       return true;
     });
-  }, [qrLabelRows, qrCampusFilter, qrLocationFilter, qrCategoryFilter, qrStatusFilter, qrItemFilter]);
+  }, [qrLabelRows, qrCampusFilter, qrLocationFilter, qrCategoryFilter, qrStatusFilter, qrItemFilter, qrLabelEntityType, reportAssetIdFilter]);
 
   const qrScanBase = useMemo(() => {
     if (typeof window === "undefined") return DEFAULT_CLOUD_API_BASE;
@@ -38542,7 +38569,11 @@ export default function App() {
             qrLabelEntityType === "rental_printer"
               ? (lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer")
               : (lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset")
-          )} | <strong>${escapeHtml(lang === "km" ? "ទំហំ QR" : "QR Size")}:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
+          )} | ${
+            qrLabelEntityType === "asset" && reportAssetIdFilter
+              ? `<strong>${escapeHtml(lang === "km" ? "លេខទ្រព្យ" : "Asset ID")}:</strong> ${escapeHtml(reportAssetIdFilter)} | `
+              : ""
+          }<strong>${escapeHtml(lang === "km" ? "ទំហំ QR" : "QR Size")}:</strong> ${escapeHtml(qrLabelSizeLabel)}</p>`
         : reportType === "it_vault"
         ? `<p><strong>Total Records:</strong> ${vaultReportRowsFiltered.length} | <strong>Needs Review:</strong> ${vaultNeedsReviewItems.length} | <strong>Missing Info:</strong> ${vaultMissingInfoItems.length} | <strong>Sensitive Visible:</strong> ${vaultReportShowSensitive ? "Yes" : "No"}</p>`
         : "";
@@ -60085,73 +60116,46 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
                     emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                   />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(
-                      qrCategoryFilter,
-                      qrLabelEntityType === "rental_printer" ? (lang === "km" ? "ក្រុមហ៊ុនទាំងអស់" : "All Vendors") : t.allCategories,
-                      (category) => (qrLabelEntityType === "rental_printer" ? category : reportCategoryLabel(category))
-                    )}
-                    options={qrCategoryFilterOptions.map((category) => ({
-                      value: category,
-                      label: qrLabelEntityType === "rental_printer" ? category : reportCategoryLabel(category),
-                    }))}
-                    selectedValues={qrCategoryFilter}
-                    allOptionLabel={qrLabelEntityType === "rental_printer" ? (lang === "km" ? "ក្រុមហ៊ុនទាំងអស់" : "All Vendors") : t.allCategories}
-                    allOptionChecked={qrCategoryFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setQrCategoryFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", qrCategoryFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setQrCategoryFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, qrCategoryFilterOptions)
-                      )
-                    }
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
-                    emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
-                  />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(qrStatusFilter, lang === "km" ? "ស្ថានភាពទាំងអស់" : "All Statuses", (status) => assetStatusLabel(status))}
-                    options={qrStatusFilterOptions.map((status) => ({
-                      value: status,
-                      label: assetStatusLabel(status),
-                    }))}
-                    selectedValues={qrStatusFilter}
-                    allOptionLabel={lang === "km" ? "ស្ថានភាពទាំងអស់" : "All Statuses"}
-                    allOptionChecked={qrStatusFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setQrStatusFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", qrStatusFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setQrStatusFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, qrStatusFilterOptions)
-                      )
-                    }
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាព..." : "Search status..."}
-                    emptyText={lang === "km" ? "មិនមានស្ថានភាព" : "No status found."}
-                  />
-                  <SearchableMultiSelectPicker
-                    summary={summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}
-                    options={qrItemFilterOptions.map((itemName) => ({ value: itemName, label: itemName }))}
-                    selectedValues={qrItemFilter}
-                    allOptionLabel={lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}
-                    allOptionChecked={qrItemFilter.includes("ALL")}
-                    onToggleAllOption={(checked) =>
-                      setQrItemFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, "ALL", qrItemFilterOptions)
-                      )
-                    }
-                    onToggleValue={(value, checked) =>
-                      setQrItemFilter((prev) =>
-                        applyMultiFilterSelection(prev, checked, value, qrItemFilterOptions)
-                      )
-                    }
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search item name..."}
-                    emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No item found."}
-                  />
+                  {qrLabelEntityType === "asset" ? (
+                    <LocationPicker
+                      value={reportAssetIdFilter || "ALL"}
+                      onChange={(value) => setReportAssetIdFilter(value === "ALL" ? "" : value)}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "គ្រប់លេខទ្រព្យ" : "All Asset IDs" },
+                        ...qrAssetIdFilterOptions,
+                      ]}
+                      placeholder={lang === "km" ? "ជ្រើសលេខទ្រព្យ" : "Select asset ID"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកលេខទ្រព្យ..." : "Search asset ID..."}
+                      emptyText={lang === "km" ? "មិនមានលេខទ្រព្យ" : "No asset ID found."}
+                    />
+                  ) : (
+                    <SearchableMultiSelectPicker
+                      summary={summarizeMultiFilter(
+                        qrCategoryFilter,
+                        lang === "km" ? "ក្រុមហ៊ុនទាំងអស់" : "All Vendors",
+                        (category) => category
+                      )}
+                      options={qrCategoryFilterOptions.map((category) => ({
+                        value: category,
+                        label: category,
+                      }))}
+                      selectedValues={qrCategoryFilter}
+                      allOptionLabel={lang === "km" ? "ក្រុមហ៊ុនទាំងអស់" : "All Vendors"}
+                      allOptionChecked={qrCategoryFilter.includes("ALL")}
+                      onToggleAllOption={(checked) =>
+                        setQrCategoryFilter((prev) =>
+                          applyMultiFilterSelection(prev, checked, "ALL", qrCategoryFilterOptions)
+                        )
+                      }
+                      onToggleValue={(value, checked) =>
+                        setQrCategoryFilter((prev) =>
+                          applyMultiFilterSelection(prev, checked, value, qrCategoryFilterOptions)
+                        )
+                      }
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកក្រុមហ៊ុន..." : "Search vendor..."}
+                      emptyText={lang === "km" ? "មិនមានក្រុមហ៊ុន" : "No vendor found."}
+                    />
+                  )}
                 </>
               ) : null}
               {reportType === "asset_by_location" ? (
@@ -60462,7 +60466,12 @@ function formatTicketRequestSource(value?: string) {
                         <button
                           type="button"
                           className={`qr-size-button ${qrLabelEntityType === "asset" ? "is-selected" : ""}`}
-                          onClick={() => setQrLabelEntityType("asset")}
+                          onClick={() => {
+                            setQrLabelEntityType("asset");
+                            setQrCategoryFilter(["ALL"]);
+                            setQrStatusFilter(["ALL"]);
+                            setQrItemFilter(["ALL"]);
+                          }}
                           aria-pressed={qrLabelEntityType === "asset"}
                         >
                           {lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset"}
@@ -60470,7 +60479,13 @@ function formatTicketRequestSource(value?: string) {
                         <button
                           type="button"
                           className={`qr-size-button ${qrLabelEntityType === "rental_printer" ? "is-selected" : ""}`}
-                          onClick={() => setQrLabelEntityType("rental_printer")}
+                          onClick={() => {
+                            setQrLabelEntityType("rental_printer");
+                            setQrCategoryFilter(["ALL"]);
+                            setQrStatusFilter(["ALL"]);
+                            setQrItemFilter(["ALL"]);
+                            setReportAssetIdFilter("");
+                          }}
                           aria-pressed={qrLabelEntityType === "rental_printer"}
                         >
                           {lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល" : "Rental Printer"}
@@ -62149,9 +62164,14 @@ function formatTicketRequestSource(value?: string) {
                       <thead>
                         <tr>
                           {visibleMaintenanceReportColumnDefs.map((column) => (
-                            <th key={`maintenance-report-head-${column.key}`}>{column.label}</th>
+                            <th
+                              key={`maintenance-report-head-${column.key}`}
+                              className={`report-maintenance-col-${column.key}`}
+                            >
+                              {column.label}
+                            </th>
                           ))}
-                          <th>Details</th>
+                          <th className="report-maintenance-col-details">Details</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -62164,14 +62184,14 @@ function formatTicketRequestSource(value?: string) {
                                   {visibleMaintenanceReportColumnDefs.map((column) => {
                                     switch (column.key) {
                                       case "date":
-                                        return <td key={`${r.rowId}-${column.key}`}>{formatDate(r.date || "-")}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-date">{formatDate(r.date || "-")}</td>;
                                       case "assetId":
-                                        return <td key={`${r.rowId}-${column.key}`}><strong>{r.assetId}</strong></td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-assetId"><strong>{r.assetId}</strong></td>;
                                       case "itemName":
-                                        return <td key={`${r.rowId}-${column.key}`}>{r.itemName || "-"}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-itemName">{r.itemName || "-"}</td>;
                                       case "beforePhoto":
                                         return (
-                                          <td key={`${r.rowId}-${column.key}`}>
+                                          <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-beforePhoto">
                                             {String((r.beforePhotos || [])[0] || "").trim()
                                               ? renderAssetPhoto(String((r.beforePhotos || [])[0] || ""), `${r.assetId}-before`)
                                               : "-"}
@@ -62179,29 +62199,29 @@ function formatTicketRequestSource(value?: string) {
                                         );
                                       case "afterPhoto":
                                         return (
-                                          <td key={`${r.rowId}-${column.key}`}>
+                                          <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-afterPhoto">
                                             {String((r.afterPhotos || [])[0] || "").trim()
                                               ? renderAssetPhoto(String((r.afterPhotos || [])[0] || ""), `${r.assetId}-after`)
                                               : "-"}
                                           </td>
                                         );
                                       case "campus":
-                                        return <td key={`${r.rowId}-${column.key}`}>{reportCampusName(r.campus)}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-campus">{reportCampusName(r.campus)}</td>;
                                       case "location":
-                                        return <td key={`${r.rowId}-${column.key}`}>{r.location || "-"}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-location">{r.location || "-"}</td>;
                                       case "type":
-                                        return <td key={`${r.rowId}-${column.key}`}>{r.type || "-"}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-type">{r.type || "-"}</td>;
                                       case "completion":
-                                        return <td key={`${r.rowId}-${column.key}`}>{maintenanceCompletionText(r.completion || "-")}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-completion">{maintenanceCompletionText(r.completion || "-")}</td>;
                                       case "condition":
-                                        return <td key={`${r.rowId}-${column.key}`}>{r.condition || "-"}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-condition">{r.condition || "-"}</td>;
                                       case "cost":
-                                        return <td key={`${r.rowId}-${column.key}`}>{r.cost || "-"}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-cost">{r.cost || "-"}</td>;
                                       case "by":
-                                        return <td key={`${r.rowId}-${column.key}`}>{r.by || "-"}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-by">{r.by || "-"}</td>;
                                       case "reportFile":
                                         return (
-                                          <td key={`${r.rowId}-${column.key}`}>
+                                          <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-reportFile">
                                             {renderMaintenanceReportFileLink(
                                               normalizeMaintenanceReportFile({
                                                 url: r.reportFile || "",
@@ -62213,7 +62233,7 @@ function formatTicketRequestSource(value?: string) {
                                           </td>
                                         );
                                       case "note":
-                                        return <td key={`${r.rowId}-${column.key}`}>{r.note || "-"}</td>;
+                                        return <td key={`${r.rowId}-${column.key}`} className="report-maintenance-col-note">{r.note || "-"}</td>;
                                       default:
                                         return <td key={`${r.rowId}-${column.key}`}>-</td>;
                                     }
@@ -62803,7 +62823,10 @@ function formatTicketRequestSource(value?: string) {
                     const campuses = staffCampusList(u);
                     const campusText = campuses.length ? campuses.map((campus) => campusLabel(campus)).join(", ") : "-";
                     return (
-                      <article className="setup-mobile-card staff-user-mobile-card" key={`user-mobile-${u.id}`}>
+                      <article
+                        className={`setup-mobile-card staff-user-mobile-card ${isStaffUserActive(u) ? "" : "staff-user-card-inactive"}`}
+                        key={`user-mobile-${u.id}`}
+                      >
                         <div className="staff-user-mobile-hero-card">
                           <div className="staff-user-mobile-photo-wrap">
                             {renderStaffAvatar(u.photo, u.fullName, u.sex, "staff-user-avatar staff-user-avatar-hero")}
@@ -62862,7 +62885,10 @@ function formatTicketRequestSource(value?: string) {
               <div className="setup-user-desktop-list" style={{ marginTop: 12 }}>
                 {filteredSetupUsers.length ? (
                   filteredSetupUsers.map((u) => (
-                    <article className="staff-user-desktop-card" key={`user-desktop-${u.id}`}>
+                    <article
+                      className={`staff-user-desktop-card ${isStaffUserActive(u) ? "" : "staff-user-card-inactive"}`}
+                      key={`user-desktop-${u.id}`}
+                    >
                       <div className="staff-user-desktop-main">
                         {renderStaffAvatar(u.photo, u.fullName, u.sex, "staff-user-avatar staff-user-avatar-desktop")}
                         <div className="staff-user-desktop-copy">
@@ -64854,61 +64880,6 @@ function formatTicketRequestSource(value?: string) {
 
           {tab === "vault" && canAccessMenu("vault.dashboard", "vault") && (
           <section className="panel vault-shell">
-            <div className="vault-hero vault-hero-reimagined">
-              <div className="vault-command-deck">
-                <div className="vault-command-hero-panel">
-                  <div className="vault-command-headline">
-                    <span className="vault-hero-kicker">IT Vault</span>
-                    {isPhoneView ? null : <span className="vault-command-status">Controlled Access Layer</span>}
-                  </div>
-                  <h2>{isPhoneView ? "IT Vault" : "IT Vault Mission Control"}</h2>
-                  <p className="tiny">
-                    {isPhoneView
-                      ? "Secure records for systems, web services, CCTV, network, and design access."
-                      : "A command-center workspace for credentials, infrastructure references, service accounts, design access, and urgent reporting requests."}
-                  </p>
-                  {isPhoneView ? null : (
-                    <div className="vault-hero-tags vault-hero-tags-reimagined">
-                      <span><Shield size={14} /> Sensitive Records</span>
-                      <span><Radio size={14} /> Live Review Queue</span>
-                      <span><Boxes size={14} /> Section-Based Filing</span>
-                    </div>
-                  )}
-                  <div className="vault-dashboard-actions vault-command-actions">
-                    <button type="button" className="btn-primary btn-small" onClick={() => void copyVaultText("vault-visible-report", vaultVisibleReportText)}>
-                      {vaultCopiedEntryId === "vault-visible-report" ? "Copied Report" : "Copy Visible Report"}
-                    </button>
-                    <button type="button" className="tab btn-small" onClick={() => void copyVaultText("vault-review-report", vaultNeedsReviewReportText)}>
-                      {vaultCopiedEntryId === "vault-review-report" ? "Copied Queue" : "Copy Review Queue"}
-                    </button>
-                  </div>
-                </div>
-                {!isPhoneView ? (
-                <div className="vault-command-metric-wall">
-                  <article className="vault-command-metric-card vault-command-metric-card-primary">
-                    <span>Total Records</span>
-                    <strong>{vaultTotalRecordCount}</strong>
-                    <p>All active entries across the vault.</p>
-                  </article>
-                  <article className="vault-command-metric-card">
-                    <span>Needs Review</span>
-                    <strong>{vaultNeedsReviewItems.length}</strong>
-                    <p>Records waiting for an update check.</p>
-                  </article>
-                  <article className="vault-command-metric-card">
-                    <span>Missing Info</span>
-                    <strong>{vaultMissingInfoItems.length}</strong>
-                    <p>Entries missing owner, recovery, or review data.</p>
-                  </article>
-                  <article className="vault-command-metric-card">
-                    <span>Telegram Records</span>
-                    <strong>{vaultTelegramRecordCount}</strong>
-                    <p>Communication accounts filed in Web Services.</p>
-                  </article>
-                </div>
-                ) : null}
-              </div>
-            </div>
             <div className="vault-main-nav">
               {!isPhoneView ? (
               <div className="vault-main-nav-top">
