@@ -7398,6 +7398,19 @@ function getVisibleSpecsTextareaValue(category: string, type: string, specs: str
     }
     return lines.join("\n").trim();
   }
+  if (String(category || "").trim().toUpperCase() === "IT" && String(type || "").trim().toUpperCase() === "TAB") {
+    const parsed = parseTabletSpecs(specs);
+    const lines: string[] = [];
+    if (parsed.hasCase) {
+      lines.push("Included Components:");
+      lines.push("iPad Case");
+    }
+    if (parsed.specs) {
+      if (lines.length) lines.push("");
+      lines.push(parsed.specs);
+    }
+    return lines.join("\n").trim();
+  }
   return String(specs || "");
 }
 
@@ -7460,6 +7473,37 @@ function parseWalkieTalkieSpecs(specsRaw: string) {
     chargerDetail,
     specs: cleanedSpecs,
   };
+}
+
+function parseTabletSpecs(specsRaw: string) {
+  const specs = String(specsRaw || "").trim();
+  if (!specs) {
+    return {
+      hasCase: false,
+      specs: "",
+    };
+  }
+  const includedMatch = specs.match(/Included:\s*([^|\n;]+)/i);
+  const includedText = includedMatch?.[1] ? String(includedMatch[1]).toLowerCase() : "";
+  const hasCase = includedText.includes("ipad case") || includedText.includes("tablet case") || includedText.includes("case");
+  const cleanedSpecs = specs
+    .replace(/Included:\s*([^|\n;]+)/gi, "")
+    .replace(/[|;]+/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return {
+    hasCase,
+    specs: cleanedSpecs,
+  };
+}
+
+function buildTabletSpecs(baseSpecs: string, hasCase: boolean) {
+  const normalized = parseTabletSpecs(baseSpecs);
+  const out: string[] = [];
+  if (hasCase) out.push("Included: iPad Case");
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
 }
 
 function buildWalkieTalkieSpecs(baseSpecs: string, hasCharger: boolean, chargerDetail?: string) {
@@ -10732,6 +10776,7 @@ export default function App() {
     acRemotePhoto: "",
     acFrontUnitPhoto: "",
     acOutdoorPhoto: "",
+    tabletHasCase: false,
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
@@ -10990,6 +11035,7 @@ export default function App() {
     acRemotePhoto: "",
     acFrontUnitPhoto: "",
     acOutdoorPhoto: "",
+    tabletHasCase: false,
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
@@ -18310,6 +18356,9 @@ export default function App() {
     const parsedWalkie = String(template.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
       ? parseWalkieTalkieSpecs(String(template.specs || ""))
       : { hasCharger: false, chargerDetail: "", specs: String(template.specs || "") };
+    const parsedTablet = String(template.type || "").trim().toUpperCase() === "TAB"
+      ? parseTabletSpecs(String(template.specs || ""))
+      : { hasCase: false, specs: parsedWalkie.specs };
     setAssetForm((prev) => ({
       ...prev,
       category: template.category || prev.category,
@@ -18317,7 +18366,7 @@ export default function App() {
       brand: template.brand || "",
       model: template.model || "",
       vendor: template.vendor || "",
-      specs: parsedWalkie.specs,
+      specs: parsedTablet.specs,
       acType: isAc ? String(template.acType || "") : "",
       acHp: isAc ? String(template.acHp || "") : "",
       fanType: isFan ? String(template.fanType || "") : "",
@@ -18328,6 +18377,7 @@ export default function App() {
       acRemotePhoto: "",
       acFrontUnitPhoto: "",
       acOutdoorPhoto: "",
+      tabletHasCase: parsedTablet.hasCase,
       walkieHasCharger: parsedWalkie.hasCharger,
       walkieChargerDetail: parsedWalkie.chargerDetail,
     }));
@@ -18477,6 +18527,13 @@ export default function App() {
       return { ...prev, fanType: "" };
     });
   }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    setAssetForm((prev) => {
+      if (String(prev.type || "").trim().toUpperCase() === "TAB") return prev;
+      if (!prev.tabletHasCase) return prev;
+      return { ...prev, tabletHasCase: false };
+    });
+  }, [assetForm.type]);
   useEffect(() => {
     setAssetForm((prev) => {
       if (String(prev.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE) return prev;
@@ -19802,6 +19859,7 @@ export default function App() {
     const createAssignedTo = userRequired ? assetForm.assignedTo.trim() : "";
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
     const createIsFan = isFanAsset(assetForm.category, assetForm.type);
+    const createIsTablet = String(assetForm.category || "").trim().toUpperCase() === "IT" && String(assetForm.type || "").trim().toUpperCase() === "TAB";
     const createTvRemotePhotos = isTvAsset
       ? (assetForm.tvRemotePhotos || [])
           .map((entry) => String(entry || "").trim())
@@ -19829,6 +19887,8 @@ export default function App() {
           ? buildTvSpecs(assetForm.specs, createTvRemoteCount, createTvRemotePhotos)
       : (createIsFan
           ? buildFanSpecs(assetForm.specs, assetForm.fanType)
+          : (createIsTablet
+          ? buildTabletSpecs(assetForm.specs, Boolean(assetForm.tabletHasCase))
           : (String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
           ? buildWalkieTalkieSpecs(
               assetForm.specs,
@@ -19847,7 +19907,7 @@ export default function App() {
                   quantity: assetForm.furnitureQuantity,
                   condition: assetForm.furnitureCondition,
                 })
-              : assetForm.specs))));
+              : assetForm.specs)))));
     const mainSerial = assetForm.serialNumber.trim();
     const duplicateMain = findDuplicateAssetSerial(assets, mainSerial);
     if (duplicateMain) {
@@ -20155,6 +20215,7 @@ export default function App() {
         acRemotePhoto: "",
         acFrontUnitPhoto: "",
         acOutdoorPhoto: "",
+        tabletHasCase: false,
         walkieHasCharger: false,
         walkieChargerDetail: "",
         walkieChargerPhotos: [],
@@ -27638,6 +27699,9 @@ export default function App() {
     const parsedWalkie = String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
       ? parseWalkieTalkieSpecs(asset.specs || "")
       : { hasCharger: false, chargerDetail: "", specs: parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
+    const parsedTablet = String(asset.type || "").trim().toUpperCase() === "TAB"
+      ? parseTabletSpecs(asset.specs || "")
+      : { hasCase: false, specs: parsedWalkie.specs || parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
     const parsedFurniture = isFurnitureAsset(asset.category)
       ? parseFurnitureSpecs(asset.specs || "")
       : {
@@ -27650,7 +27714,7 @@ export default function App() {
           size: "",
           quantity: "1",
           condition: FURNITURE_CONDITION_OPTIONS[0],
-          specs: parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
+          specs: parsedTablet.specs || parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
         };
     setAssetEditForm({
       location: asset.location || "",
@@ -27679,6 +27743,7 @@ export default function App() {
       acRemotePhoto: normalizeAssetPhotos(airconRemoteChild || {})[0] || parsedAircon.acRemotePhoto || "",
       acFrontUnitPhoto: normalizeAssetPhotos(airconFrontUnitChild || {})[0] || parsedAircon.acFrontUnitPhoto || "",
       acOutdoorPhoto: normalizeAssetPhotos(airconOutdoorChild || {})[0] || parsedAircon.acOutdoorPhoto || "",
+      tabletHasCase: parsedTablet.hasCase,
       walkieHasCharger: parsedWalkie.hasCharger || Boolean(walkieChargerChild),
       walkieChargerDetail: parsedWalkie.chargerDetail,
       walkieChargerPhotos:
@@ -27696,7 +27761,7 @@ export default function App() {
       furnitureCondition: parsedFurniture.condition || FURNITURE_CONDITION_OPTIONS[0],
       tvRemoteCount: String(parsedTv.remoteCount || 1) === "2" ? "2" : "1",
       tvRemotePhotos: parsedTv.remotePhotos.slice(0, 2),
-      specs: parsedFurniture.specs || parsedWalkie.specs || parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
+      specs: parsedFurniture.specs || parsedTablet.specs || parsedWalkie.specs || parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
       purchaseDate: asset.purchaseDate || "",
       warrantyUntil: asset.warrantyUntil || "",
       vendor: asset.vendor || "",
@@ -28231,6 +28296,8 @@ export default function App() {
           })
         : (isFanAsset(editingAsset?.category || "", editingAsset?.type || "")
             ? buildFanSpecs(assetEditForm.specs.trim(), assetEditForm.fanType)
+            : (String(editingAsset?.category || "").trim().toUpperCase() === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === "TAB"
+                ? buildTabletSpecs(assetEditForm.specs.trim(), Boolean(assetEditForm.tabletHasCase))
             : (editingAsset?.category === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === TV_TYPE_CODE
                 ? buildTvSpecs(
                     assetEditForm.specs.trim(),
@@ -28255,7 +28322,7 @@ export default function App() {
                     quantity: assetEditForm.furnitureQuantity,
                     condition: assetEditForm.furnitureCondition,
                   })
-                : assetEditForm.specs.trim())))),
+                : assetEditForm.specs.trim()))))),
       purchaseDate: assetEditForm.purchaseDate.trim(),
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
@@ -31867,6 +31934,9 @@ export default function App() {
                   <div className="asset-detail-kv-grid">
                     {isFanAsset(detailAsset.category, detailAsset.type) ? (
                       <div className="asset-detail-kv"><span>Fan Type</span><strong>{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</strong></div>
+                    ) : null}
+                    {String(detailAsset.category || "").trim().toUpperCase() === "IT" && String(detailAsset.type || "").trim().toUpperCase() === "TAB" ? (
+                      <div className="asset-detail-kv"><span>Included Components</span><strong>{parseTabletSpecs(detailAsset.specs || "").hasCase ? "iPad Case" : "-"}</strong></div>
                     ) : null}
                     {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
                       <div className="asset-detail-kv"><span>{t.pcType}</span><strong>{detailAsset.pcType || "-"}</strong></div>
@@ -44685,7 +44755,26 @@ function formatTicketRequestSource(value?: string) {
                             {option}
                           </option>
                         ))}
-                      </select>
+                        </select>
+                      </label>
+                    ) : null}
+                  {String(assetForm.category || "").trim().toUpperCase() === "IT" && String(assetForm.type || "").trim().toUpperCase() === "TAB" ? (
+                    <label className="field">
+                      <span>Included Components</span>
+                      <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "nowrap" }}>
+                        <label
+                          className="tab setpack-include-item"
+                          style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={assetForm.tabletHasCase}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, tabletHasCase: e.target.checked }))}
+                            style={{ marginRight: 8 }}
+                          />
+                          iPad Case
+                        </label>
+                      </div>
                     </label>
                   ) : null}
                   {String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
@@ -46402,6 +46491,25 @@ function formatTicketRequestSource(value?: string) {
                             </option>
                           ))}
                         </select>
+                      </label>
+                    ) : null}
+                    {String(editingAsset?.category || "").trim().toUpperCase() === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === "TAB" ? (
+                      <label className="field">
+                        <span>Included Components</span>
+                        <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "nowrap" }}>
+                          <label
+                            className="tab setpack-include-item"
+                            style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center" }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={assetEditForm.tabletHasCase}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, tabletHasCase: e.target.checked }))}
+                              style={{ marginRight: 8 }}
+                            />
+                            iPad Case
+                          </label>
+                        </div>
                       </label>
                     ) : null}
                     {String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
@@ -59943,6 +60051,8 @@ function formatTicketRequestSource(value?: string) {
                       type="button"
                       className="tab report-filter-reset-btn report-filter-reset-btn-inline"
                       onClick={resetReportFilters}
+                      aria-label={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                      title={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                     >
                       {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                     </button>
@@ -60117,17 +60227,64 @@ function formatTicketRequestSource(value?: string) {
                     emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                   />
                   {qrLabelEntityType === "asset" ? (
-                    <LocationPicker
-                      value={reportAssetIdFilter || "ALL"}
-                      onChange={(value) => setReportAssetIdFilter(value === "ALL" ? "" : value)}
-                      options={[
-                        { value: "ALL", label: lang === "km" ? "គ្រប់លេខទ្រព្យ" : "All Asset IDs" },
-                        ...qrAssetIdFilterOptions,
-                      ]}
-                      placeholder={lang === "km" ? "ជ្រើសលេខទ្រព្យ" : "Select asset ID"}
-                      searchPlaceholder={lang === "km" ? "ស្វែងរកលេខទ្រព្យ..." : "Search asset ID..."}
-                      emptyText={lang === "km" ? "មិនមានលេខទ្រព្យ" : "No asset ID found."}
-                    />
+                    <>
+                      <SearchableMultiSelectPicker
+                        summary={summarizeMultiFilter(
+                          qrCategoryFilter,
+                          t.allCategories,
+                          (category) => reportCategoryLabel(category)
+                        )}
+                        options={qrCategoryFilterOptions.map((category) => ({
+                          value: category,
+                          label: reportCategoryLabel(category),
+                        }))}
+                        selectedValues={qrCategoryFilter}
+                        allOptionLabel={t.allCategories}
+                        allOptionChecked={qrCategoryFilter.includes("ALL")}
+                        onToggleAllOption={(checked) =>
+                          setQrCategoryFilter((prev) =>
+                            applyMultiFilterSelection(prev, checked, "ALL", qrCategoryFilterOptions)
+                          )
+                        }
+                        onToggleValue={(value, checked) =>
+                          setQrCategoryFilter((prev) =>
+                            applyMultiFilterSelection(prev, checked, value, qrCategoryFilterOptions)
+                          )
+                        }
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                        emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+                      />
+                      <SearchableMultiSelectPicker
+                        summary={summarizeMultiFilter(qrItemFilter, lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")}
+                        options={qrItemFilterOptions.map((itemName) => ({ value: itemName, label: itemName }))}
+                        selectedValues={qrItemFilter}
+                        allOptionLabel={lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names"}
+                        allOptionChecked={qrItemFilter.includes("ALL")}
+                        onToggleAllOption={(checked) =>
+                          setQrItemFilter((prev) =>
+                            applyMultiFilterSelection(prev, checked, "ALL", qrItemFilterOptions)
+                          )
+                        }
+                        onToggleValue={(value, checked) =>
+                          setQrItemFilter((prev) =>
+                            applyMultiFilterSelection(prev, checked, value, qrItemFilterOptions)
+                          )
+                        }
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search item name..."}
+                        emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No item found."}
+                      />
+                      <LocationPicker
+                        value={reportAssetIdFilter || "ALL"}
+                        onChange={(value) => setReportAssetIdFilter(value === "ALL" ? "" : value)}
+                        options={[
+                          { value: "ALL", label: lang === "km" ? "គ្រប់លេខទ្រព្យ" : "All Asset IDs" },
+                          ...qrAssetIdFilterOptions,
+                        ]}
+                        placeholder={lang === "km" ? "ជ្រើសលេខទ្រព្យ" : "Select asset ID"}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកលេខទ្រព្យ..." : "Search asset ID..."}
+                        emptyText={lang === "km" ? "មិនមានលេខទ្រព្យ" : "No asset ID found."}
+                      />
+                    </>
                   ) : (
                     <SearchableMultiSelectPicker
                       summary={summarizeMultiFilter(
@@ -60433,6 +60590,8 @@ function formatTicketRequestSource(value?: string) {
                             type="button"
                             className="tab report-filter-reset-btn"
                             onClick={resetReportFilters}
+                            aria-label={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                            title={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                           >
                             {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                           </button>
