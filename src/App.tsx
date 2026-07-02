@@ -2309,7 +2309,9 @@ function staffCampusList(user: StaffUser) {
   const campuses = normalizeStaffCampuses(user.campuses);
   if (campuses.length) return campuses;
   const singleCampus = String(user.campus || "").trim();
-  return singleCampus ? [singleCampus] : [];
+  if (!singleCampus) return [];
+  const normalizedSingleCampus = normalizeStaffCampuses([singleCampus]);
+  return normalizedSingleCampus.length ? normalizedSingleCampus : [singleCampus];
 }
 
 function staffCampusSummary(user: StaffUser) {
@@ -2330,7 +2332,9 @@ function normalizeStaffSex(value?: unknown): "Male" | "Female" {
 }
 
 function normalizeStaffStatus(value?: unknown): "Active" | "Deactive" {
-  return String(value || "").trim().toLowerCase() === "deactive" ? "Deactive" : "Active";
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "deactive" || normalized === "inactive") return "Deactive";
+  return "Active";
 }
 
 function isStaffUserActive(user?: Partial<StaffUser> | null) {
@@ -2356,7 +2360,7 @@ function staffUsersForCampus(users: StaffUser[], campusName = "", selectedName =
   }
   const filtered = activeUsers.filter((user) => {
     const userCampuses = staffCampusList(user);
-    return !userCampuses.length || userCampuses.includes(campus);
+    return userCampuses.includes(campus);
   });
   const selected = String(selectedName || "").trim();
   if (selected && !filtered.some((user) => user.fullName === selected)) {
@@ -2720,6 +2724,7 @@ const QR_OPTIONAL_COMPUTER_COMPONENT_TYPES = ["KBD", "MSE"] as const;
 const AIRCON_FRONT_UNIT_TYPE_CODE = "FPN";
 const AIRCON_OUTDOOR_UNIT_TYPE_CODE = "RPN";
 const WALKIE_CHARGER_TYPE_CODE = "ADP";
+const TABLET_CHARGER_TYPE_CODE = "CHB";
 const USB_WIFI_DEFAULT_SPECS = "USB WiFi adapter can be used with desktop computers.";
 const SHARED_LOCATION_KEYWORDS = [
   "admin office",
@@ -2874,8 +2879,12 @@ function canLinkToParentAsset(category: string, type: string): boolean {
   return (
     !NO_PARENT_LINK_TYPES.has(code) &&
     !DIGITAL_CAMERA_COMPONENT_TYPES.includes(code as (typeof DIGITAL_CAMERA_COMPONENT_TYPES)[number]) &&
+    !FAN_TYPE_CODES.includes(code as (typeof FAN_TYPE_CODES)[number]) &&
     code !== WATER_DISPENSER_MAIN_TYPE &&
     code !== "AC" &&
+    code !== "RFG" &&
+    code !== "MWV" &&
+    code !== "WCL" &&
     code !== "WTK" &&
     code !== "TBL" &&
     code !== "CHR" &&
@@ -7480,28 +7489,34 @@ function parseTabletSpecs(specsRaw: string) {
   if (!specs) {
     return {
       hasCase: false,
+      casePhoto: "",
       specs: "",
     };
   }
   const includedMatch = specs.match(/Included:\s*([^|\n;]+)/i);
   const includedText = includedMatch?.[1] ? String(includedMatch[1]).toLowerCase() : "";
   const hasCase = includedText.includes("ipad case") || includedText.includes("tablet case") || includedText.includes("case");
+  const casePhotoMatch = specs.match(/Case Photo:\s*([^\n]+)/i);
+  const casePhoto = casePhotoMatch?.[1] ? String(casePhotoMatch[1]).trim() : "";
   const cleanedSpecs = specs
     .replace(/Included:\s*([^|\n;]+)/gi, "")
+    .replace(/Case Photo:\s*([^\n]+)/gi, "")
     .replace(/[|;]+/g, "\n")
     .replace(/\n{2,}/g, "\n")
     .replace(/\s{2,}/g, " ")
     .trim();
   return {
     hasCase,
+    casePhoto,
     specs: cleanedSpecs,
   };
 }
 
-function buildTabletSpecs(baseSpecs: string, hasCase: boolean) {
+function buildTabletSpecs(baseSpecs: string, hasCase: boolean, casePhoto?: string) {
   const normalized = parseTabletSpecs(baseSpecs);
   const out: string[] = [];
   if (hasCase) out.push("Included: iPad Case");
+  if (hasCase && String(casePhoto || "").trim()) out.push(`Case Photo: ${String(casePhoto || "").trim()}`);
   if (normalized.specs) out.push(normalized.specs);
   return out.join("\n").trim();
 }
@@ -10777,6 +10792,9 @@ export default function App() {
     acFrontUnitPhoto: "",
     acOutdoorPhoto: "",
     tabletHasCase: false,
+    tabletCasePhoto: "",
+    tabletHasCharger: false,
+    tabletChargerPhoto: "",
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
@@ -11036,6 +11054,9 @@ export default function App() {
     acFrontUnitPhoto: "",
     acOutdoorPhoto: "",
     tabletHasCase: false,
+    tabletCasePhoto: "",
+    tabletHasCharger: false,
+    tabletChargerPhoto: "",
     walkieHasCharger: false,
     walkieChargerDetail: "",
     walkieChargerPhotos: [] as string[],
@@ -18358,7 +18379,7 @@ export default function App() {
       : { hasCharger: false, chargerDetail: "", specs: String(template.specs || "") };
     const parsedTablet = String(template.type || "").trim().toUpperCase() === "TAB"
       ? parseTabletSpecs(String(template.specs || ""))
-      : { hasCase: false, specs: parsedWalkie.specs };
+      : { hasCase: false, casePhoto: "", specs: parsedWalkie.specs };
     setAssetForm((prev) => ({
       ...prev,
       category: template.category || prev.category,
@@ -18378,6 +18399,9 @@ export default function App() {
       acFrontUnitPhoto: "",
       acOutdoorPhoto: "",
       tabletHasCase: parsedTablet.hasCase,
+      tabletCasePhoto: parsedTablet.casePhoto,
+      tabletHasCharger: false,
+      tabletChargerPhoto: "",
       walkieHasCharger: parsedWalkie.hasCharger,
       walkieChargerDetail: parsedWalkie.chargerDetail,
     }));
@@ -18530,8 +18554,8 @@ export default function App() {
   useEffect(() => {
     setAssetForm((prev) => {
       if (String(prev.type || "").trim().toUpperCase() === "TAB") return prev;
-      if (!prev.tabletHasCase) return prev;
-      return { ...prev, tabletHasCase: false };
+      if (!prev.tabletHasCase && !prev.tabletCasePhoto && !prev.tabletHasCharger && !prev.tabletChargerPhoto) return prev;
+      return { ...prev, tabletHasCase: false, tabletCasePhoto: "", tabletHasCharger: false, tabletChargerPhoto: "" };
     });
   }, [assetForm.type]);
   useEffect(() => {
@@ -19860,6 +19884,8 @@ export default function App() {
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
     const createIsFan = isFanAsset(assetForm.category, assetForm.type);
     const createIsTablet = String(assetForm.category || "").trim().toUpperCase() === "IT" && String(assetForm.type || "").trim().toUpperCase() === "TAB";
+    const createTabletCharger = createIsTablet && Boolean(assetForm.tabletHasCharger);
+    const createTabletChargerPhoto = createTabletCharger ? String(assetForm.tabletChargerPhoto || "").trim() : "";
     const createTvRemotePhotos = isTvAsset
       ? (assetForm.tvRemotePhotos || [])
           .map((entry) => String(entry || "").trim())
@@ -19888,7 +19914,7 @@ export default function App() {
       : (createIsFan
           ? buildFanSpecs(assetForm.specs, assetForm.fanType)
           : (createIsTablet
-          ? buildTabletSpecs(assetForm.specs, Boolean(assetForm.tabletHasCase))
+          ? buildTabletSpecs(assetForm.specs, Boolean(assetForm.tabletHasCase), assetForm.tabletCasePhoto)
           : (String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
           ? buildWalkieTalkieSpecs(
               assetForm.specs,
@@ -20157,6 +20183,34 @@ export default function App() {
           });
         }
       }
+      if (createTabletCharger && created.asset?.assetId) {
+        await requestJson<{ asset: Asset }>("/api/assets", {
+          method: "POST",
+          body: JSON.stringify({
+            campus: assetForm.campus,
+            category: "IT",
+            type: TABLET_CHARGER_TYPE_CODE,
+            location: assetForm.location,
+            setCode: "",
+            parentAssetId: created.asset.assetId,
+            assignedTo: "",
+            custodyStatus: "IN_STOCK",
+            brand: assetForm.brand,
+            model: "",
+            serialNumber: "",
+            specs: "",
+            purchaseDate: assetForm.purchaseDate,
+            warrantyUntil: assetForm.warrantyUntil,
+            vendor: assetForm.vendor,
+            notes: `Auto-created tablet charger for ${created.asset.assetId}`,
+            nextMaintenanceDate: "",
+            scheduleNote: "",
+            photo: createTabletChargerPhoto,
+            photos: createTabletChargerPhoto ? [createTabletChargerPhoto] : [],
+            status: assetForm.status,
+          }),
+        });
+      }
       if (createWalkieCharger && created.asset?.assetId) {
         await requestJson<{ asset: Asset }>("/api/assets", {
           method: "POST",
@@ -20216,6 +20270,9 @@ export default function App() {
         acFrontUnitPhoto: "",
         acOutdoorPhoto: "",
         tabletHasCase: false,
+        tabletCasePhoto: "",
+        tabletHasCharger: false,
+        tabletChargerPhoto: "",
         walkieHasCharger: false,
         walkieChargerDetail: "",
         walkieChargerPhotos: [],
@@ -20620,6 +20677,57 @@ export default function App() {
             nextLocal = [child, ...nextLocal];
           }
         }
+        if (createTabletCharger) {
+          const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", TABLET_CHARGER_TYPE_CODE);
+          const child: Asset = {
+            id: Date.now() + Math.floor(Math.random() * 10000),
+            campus: assetForm.campus,
+            category: "IT",
+            type: TABLET_CHARGER_TYPE_CODE,
+            pcType: "",
+            seq: childSeq,
+            assetId: buildAssetId(assetForm.campus, "IT", TABLET_CHARGER_TYPE_CODE, childSeq),
+            name: assetItemName("IT", TABLET_CHARGER_TYPE_CODE),
+            location: assetForm.location,
+            setCode: "",
+            parentAssetId: newAsset.assetId,
+            assignedTo: "",
+            custodyStatus: "IN_STOCK",
+            brand: assetForm.brand,
+            model: "",
+            serialNumber: "",
+            specs: "",
+            purchaseDate: assetForm.purchaseDate,
+            warrantyUntil: assetForm.warrantyUntil,
+            vendor: assetForm.vendor,
+            notes: `Auto-created tablet charger for ${newAsset.assetId}`,
+            nextMaintenanceDate: "",
+            nextVerificationDate: "",
+            verificationFrequency: "NONE",
+            scheduleNote: "",
+            repeatMode: "NONE",
+            repeatWeekOfMonth: 0,
+            repeatWeekday: 0,
+            maintenanceHistory: [],
+            verificationHistory: [],
+            transferHistory: [],
+            custodyHistory: [],
+            statusHistory: [
+              {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                fromStatus: "New",
+                toStatus: assetForm.status,
+                reason: "Asset created as tablet charger",
+              },
+            ],
+            photo: createTabletChargerPhoto,
+            photos: createTabletChargerPhoto ? [createTabletChargerPhoto] : [],
+            status: assetForm.status,
+            created: new Date().toISOString(),
+          };
+          nextLocal = [child, ...nextLocal];
+        }
         if (createWalkieCharger) {
           const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", WALKIE_CHARGER_TYPE_CODE);
           const child: Asset = {
@@ -20706,6 +20814,10 @@ export default function App() {
           acRemotePhoto: "",
           acFrontUnitPhoto: "",
           acOutdoorPhoto: "",
+          tabletHasCase: false,
+          tabletCasePhoto: "",
+          tabletHasCharger: false,
+          tabletChargerPhoto: "",
           walkieHasCharger: false,
           walkieChargerDetail: "",
           walkieChargerPhotos: [],
@@ -27651,6 +27763,21 @@ export default function App() {
                 String(a.assetId || "").localeCompare(String(b.assetId || ""))
             )[0] || null
         : null;
+    const tabletChargerChild =
+      String(asset.type || "").trim().toUpperCase() === "TAB"
+        ? assets
+            .filter(
+              (entry) =>
+                entry.assetId !== asset.assetId &&
+                String(entry.type || "").trim().toUpperCase() === TABLET_CHARGER_TYPE_CODE &&
+                String(entry.parentAssetId || "").trim() === String(asset.assetId || "").trim()
+            )
+            .sort(
+              (a, b) =>
+                (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+                String(a.assetId || "").localeCompare(String(b.assetId || ""))
+            )[0] || null
+        : null;
     const airconChildren =
       isAirconAsset(asset.category, asset.type)
         ? assets
@@ -27701,7 +27828,7 @@ export default function App() {
       : { hasCharger: false, chargerDetail: "", specs: parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
     const parsedTablet = String(asset.type || "").trim().toUpperCase() === "TAB"
       ? parseTabletSpecs(asset.specs || "")
-      : { hasCase: false, specs: parsedWalkie.specs || parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
+      : { hasCase: false, casePhoto: "", specs: parsedWalkie.specs || parsedTv.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || "") };
     const parsedFurniture = isFurnitureAsset(asset.category)
       ? parseFurnitureSpecs(asset.specs || "")
       : {
@@ -27744,6 +27871,9 @@ export default function App() {
       acFrontUnitPhoto: normalizeAssetPhotos(airconFrontUnitChild || {})[0] || parsedAircon.acFrontUnitPhoto || "",
       acOutdoorPhoto: normalizeAssetPhotos(airconOutdoorChild || {})[0] || parsedAircon.acOutdoorPhoto || "",
       tabletHasCase: parsedTablet.hasCase,
+      tabletCasePhoto: parsedTablet.casePhoto,
+      tabletHasCharger: Boolean(tabletChargerChild),
+      tabletChargerPhoto: normalizeAssetPhotos(tabletChargerChild || {})[0] || "",
       walkieHasCharger: parsedWalkie.hasCharger || Boolean(walkieChargerChild),
       walkieChargerDetail: parsedWalkie.chargerDetail,
       walkieChargerPhotos:
@@ -28220,6 +28350,10 @@ export default function App() {
       !!editingAsset &&
       editingAsset.category === "IT" &&
       String(editingAsset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE;
+    const editingIsTabletAsset =
+      !!editingAsset &&
+      editingAsset.category === "IT" &&
+      String(editingAsset.type || "").trim().toUpperCase() === "TAB";
     const needsUser =
       !!editingAsset &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
@@ -28297,7 +28431,7 @@ export default function App() {
         : (isFanAsset(editingAsset?.category || "", editingAsset?.type || "")
             ? buildFanSpecs(assetEditForm.specs.trim(), assetEditForm.fanType)
             : (String(editingAsset?.category || "").trim().toUpperCase() === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === "TAB"
-                ? buildTabletSpecs(assetEditForm.specs.trim(), Boolean(assetEditForm.tabletHasCase))
+                ? buildTabletSpecs(assetEditForm.specs.trim(), Boolean(assetEditForm.tabletHasCase), assetEditForm.tabletCasePhoto)
             : (editingAsset?.category === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === TV_TYPE_CODE
                 ? buildTvSpecs(
                     assetEditForm.specs.trim(),
@@ -28412,6 +28546,126 @@ export default function App() {
         });
       } catch (err) {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+      }
+      if (editingIsTabletAsset && editingAsset?.assetId) {
+        const tabletChargerPhoto = String(assetEditForm.tabletChargerPhoto || "").trim();
+        const chargerChildren = nextLocal
+          .filter(
+            (asset) =>
+              asset.assetId !== editingAsset.assetId &&
+              String(asset.type || "").trim().toUpperCase() === TABLET_CHARGER_TYPE_CODE &&
+              String(asset.parentAssetId || "").trim() === String(editingAsset.assetId || "").trim()
+          )
+          .sort(
+            (a, b) =>
+              (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+              String(a.assetId || "").localeCompare(String(b.assetId || ""))
+          );
+        const activeCharger = chargerChildren[0] || null;
+        const extraChargers = chargerChildren.slice(1);
+        if (assetEditForm.tabletHasCharger) {
+          const chargerPayload = {
+            location: payload.location,
+            parentAssetId: editingAsset.assetId,
+            brand: payload.brand,
+            model: "",
+            serialNumber: "",
+            specs: "",
+            purchaseDate: payload.purchaseDate,
+            warrantyUntil: payload.warrantyUntil,
+            vendor: payload.vendor,
+            notes: `Auto-created tablet charger for ${editingAsset.assetId}`,
+            photo: tabletChargerPhoto,
+            photos: tabletChargerPhoto ? [tabletChargerPhoto] : [],
+            status: payload.status,
+          };
+          if (activeCharger) {
+            const updatedCharger: Asset = {
+              ...activeCharger,
+              campus: editingAsset.campus,
+              category: "IT",
+              type: TABLET_CHARGER_TYPE_CODE,
+              setCode: "",
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              ...chargerPayload,
+            };
+            nextLocal = nextLocal.map((asset) => (asset.id === activeCharger.id ? updatedCharger : asset));
+            try {
+              await requestJson<{ asset: Asset }>(`/api/assets/${activeCharger.id}`, {
+                method: "PATCH",
+                body: JSON.stringify(chargerPayload),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+          } else {
+            try {
+              await requestJson<{ asset: Asset }>("/api/assets", {
+                method: "POST",
+                body: JSON.stringify({
+                  campus: editingAsset.campus,
+                  category: "IT",
+                  type: TABLET_CHARGER_TYPE_CODE,
+                  setCode: "",
+                  assignedTo: "",
+                  custodyStatus: "IN_STOCK",
+                  ...chargerPayload,
+                }),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, "IT", TABLET_CHARGER_TYPE_CODE);
+            const newCharger: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: editingAsset.campus,
+              category: "IT",
+              type: TABLET_CHARGER_TYPE_CODE,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(editingAsset.campus, "IT", TABLET_CHARGER_TYPE_CODE, childSeq),
+              name: assetItemName("IT", TABLET_CHARGER_TYPE_CODE),
+              setCode: "",
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: payload.status,
+                  reason: "Asset created as tablet charger",
+                },
+              ],
+              created: new Date().toISOString(),
+              ...chargerPayload,
+            };
+            nextLocal = [newCharger, ...nextLocal];
+          }
+        } else {
+          nextLocal = nextLocal.filter((asset) => !chargerChildren.some((child) => child.id === asset.id));
+        }
+        const chargerDeleteTargets = assetEditForm.tabletHasCharger ? extraChargers : chargerChildren;
+        for (const charger of chargerDeleteTargets) {
+          try {
+            await requestJson<{ ok: boolean }>(`/api/assets/${charger.id}`, { method: "DELETE" });
+          } catch (err) {
+            if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+          }
+          nextLocal = nextLocal.filter((asset) => asset.id !== charger.id);
+        }
       }
       if (editingIsWalkieAsset && editingAsset?.assetId) {
         const walkieChargerPhotos = Array.from(
@@ -30889,6 +31143,42 @@ export default function App() {
     }
   }
 
+  async function onTabletCasePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetForm((f) => ({ ...f, tabletCasePhoto: optimized }));
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onTabletChargerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetForm((f) => ({ ...f, tabletChargerPhoto: optimized, tabletHasCharger: true }));
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   async function onTvRemotePhotoFileAt(index: number, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -31088,6 +31378,42 @@ export default function App() {
         const chargerPhotos = Array.from(new Set([...(f.walkieChargerPhotos || []), ...optimized])).slice(0, 4);
         return { ...f, walkieChargerPhotos: chargerPhotos };
       });
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onEditTabletCasePhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetEditForm((f) => ({ ...f, tabletCasePhoto: optimized }));
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onEditTabletChargerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetEditForm((f) => ({ ...f, tabletChargerPhoto: optimized, tabletHasCharger: true }));
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
@@ -31659,6 +31985,29 @@ export default function App() {
     () => (detailAsset && isFurnitureAsset(detailAsset.category) ? parseFurnitureSpecs(detailAsset.specs || "") : null),
     [detailAsset]
   );
+  const detailTablet = useMemo(
+    () =>
+      detailAsset &&
+      String(detailAsset.category || "").trim().toUpperCase() === "IT" &&
+      String(detailAsset.type || "").trim().toUpperCase() === "TAB"
+        ? parseTabletSpecs(detailAsset.specs || "")
+        : null,
+    [detailAsset]
+  );
+  const detailTabletChargerComponent = useMemo(
+    () =>
+      detailTablet
+        ? detailLinkedComponents.find((component) => String(component.type || "").trim().toUpperCase() === TABLET_CHARGER_TYPE_CODE) || null
+        : null,
+    [detailLinkedComponents, detailTablet]
+  );
+  const detailTabletIncludedSummary = useMemo(() => {
+    if (!detailTablet) return "";
+    const labels: string[] = [];
+    if (detailTablet.hasCase) labels.push("iPad Case");
+    if (detailTabletChargerComponent) labels.push("Charger");
+    return labels.join(", ") || "-";
+  }, [detailTablet, detailTabletChargerComponent]);
   const detailMaintenanceVisibleEntries = useMemo(
     () =>
       assetDetailSections.showAllMaintenance
@@ -31935,8 +32284,8 @@ export default function App() {
                     {isFanAsset(detailAsset.category, detailAsset.type) ? (
                       <div className="asset-detail-kv"><span>Fan Type</span><strong>{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</strong></div>
                     ) : null}
-                    {String(detailAsset.category || "").trim().toUpperCase() === "IT" && String(detailAsset.type || "").trim().toUpperCase() === "TAB" ? (
-                      <div className="asset-detail-kv"><span>Included Components</span><strong>{parseTabletSpecs(detailAsset.specs || "").hasCase ? "iPad Case" : "-"}</strong></div>
+                    {detailTablet ? (
+                      <div className="asset-detail-kv"><span>Included Components</span><strong>{detailTabletIncludedSummary}</strong></div>
                     ) : null}
                     {detailAsset.category === "IT" && detailAsset.type === DESKTOP_PARENT_TYPE ? (
                       <div className="asset-detail-kv"><span>{t.pcType}</span><strong>{detailAsset.pcType || "-"}</strong></div>
@@ -31961,6 +32310,55 @@ export default function App() {
                       <span>Specs</span>
                       <div className="asset-detail-rich-value">
                         {getVisibleSpecsTextareaValue(detailAsset.category || "", detailAsset.type || "", detailAsset.specs || "") || "-"}
+                      </div>
+                    </div>
+                  ) : null}
+                  {detailTablet && (detailTablet.casePhoto || detailTabletChargerComponent?.photos?.[0]) ? (
+                    <div className="asset-detail-rich-block">
+                      <span>Tablet Accessory Photos</span>
+                      <div className="asset-detail-photo-grid">
+                        {detailTablet.casePhoto ? (
+                          <div className="asset-detail-rich-value asset-detail-rich-value-photo">
+                            <div style={{ display: "grid", gap: 8, justifyItems: "center" }}>
+                              <strong>iPad Case</strong>
+                              <button
+                                type="button"
+                                className="photo-thumb-btn"
+                                onClick={() => setPreviewImage(detailTablet.casePhoto)}
+                                title="Open case photo"
+                              >
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={detailTablet.casePhoto}
+                                  alt={`${detailAsset.assetId}-tablet-case`}
+                                  className="asset-detail-component-photo"
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {detailTabletChargerComponent?.photos?.[0] ? (
+                          <div className="asset-detail-rich-value asset-detail-rich-value-photo">
+                            <div style={{ display: "grid", gap: 8, justifyItems: "center" }}>
+                              <strong>Charger</strong>
+                              <button
+                                type="button"
+                                className="photo-thumb-btn"
+                                onClick={() => setPreviewImage(detailTabletChargerComponent.photos[0])}
+                                title="Open charger photo"
+                              >
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={detailTabletChargerComponent.photos[0]}
+                                  alt={`${detailAsset.assetId}-tablet-charger`}
+                                  className="asset-detail-component-photo"
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
@@ -42831,7 +43229,7 @@ function formatTicketRequestSource(value?: string) {
             {assetsView === "register" && canOpenAssetRegister && (
               <section className="panel">
                 <h2>{t.registerAsset}</h2>
-                <div className="form-grid inventory-item-grid">
+                <div className="form-grid inventory-item-grid asset-form-grid">
                   <label className="field">
                     <span>{t.campus}</span>
                     <select className="input" value={assetForm.campus} onChange={(e) => setAssetForm((f) => ({ ...f, campus: e.target.value }))}>
@@ -42887,66 +43285,155 @@ function formatTicketRequestSource(value?: string) {
                       ))}
                     </select>
                   </label>
-                  <label className="field">
-                    <span>{t.typeCode}</span>
-                    <AssetTypePicker
-                      value={assetForm.type}
-                      options={currentTypeOptions.map((opt) => ({
-                        code: opt.code,
-                        label: itemNames[`${assetForm.category}:${opt.code}`] || (lang === "km" ? opt.itemKm : opt.itemEn),
-                      }))}
-                      onChange={(typeCode) =>
-                        setAssetForm((f) => ({
-                          ...f,
-                          type: typeCode,
-                          model: "",
-                          furnitureTrackingMode: defaultFurnitureTrackingMode(typeCode),
-                          furnitureLevel: "",
-                          furnitureSubtype: defaultFurnitureSubtype(typeCode),
-                          furnitureModelPhoto: "",
-                          furnitureMaterial: "",
-                          furnitureColor: "",
-                          furnitureSize: "",
-                          furnitureQuantity: "1",
-                          furnitureCondition: FURNITURE_CONDITION_OPTIONS[0],
-                        }))
-                      }
-                      searchPlaceholder={lang === "km" ? "ស្វែងរកកូដប្រភេទ..." : "Search type code..."}
-                      emptyText={lang === "km" ? "រកមិនឃើញប្រភេទ។" : "No type code found."}
-                      getIcon={(opt) => itemTypeIcon(assetForm.category, opt.code, opt.label)}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>{t.assetId}</span>
-                    <input
-                      className="input"
-                      value={suggestedAssetId}
-                      readOnly
-                    />
-                  </label>
-                  <label className="field">
-                    <span>{t.status}</span>
-                    <select className="input" value={assetForm.status} onChange={(e) => setAssetForm((f) => ({ ...f, status: e.target.value }))}>
-                      {ASSET_STATUS_OPTIONS.map((status) => (
-                        <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
-                      ))}
-                    </select>
-                  </label>
+                  {isLaptopAssetForCreate ? (
+                    <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-four">
+                      <label className="field">
+                        <span>{t.typeCode}</span>
+                        <AssetTypePicker
+                          value={assetForm.type}
+                          options={currentTypeOptions.map((opt) => ({
+                            code: opt.code,
+                            label: itemNames[`${assetForm.category}:${opt.code}`] || (lang === "km" ? opt.itemKm : opt.itemEn),
+                          }))}
+                          onChange={(typeCode) =>
+                            setAssetForm((f) => ({
+                              ...f,
+                              type: typeCode,
+                              model: "",
+                              furnitureTrackingMode: defaultFurnitureTrackingMode(typeCode),
+                              furnitureLevel: "",
+                              furnitureSubtype: defaultFurnitureSubtype(typeCode),
+                              furnitureModelPhoto: "",
+                              furnitureMaterial: "",
+                              furnitureColor: "",
+                              furnitureSize: "",
+                              furnitureQuantity: "1",
+                              furnitureCondition: FURNITURE_CONDITION_OPTIONS[0],
+                            }))
+                          }
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកកូដប្រភេទ..." : "Search type code..."}
+                          emptyText={lang === "km" ? "រកមិនឃើញប្រភេទ។" : "No type code found."}
+                          getIcon={(opt) => itemTypeIcon(assetForm.category, opt.code, opt.label)}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t.assetId}</span>
+                        <input
+                          className="input"
+                          value={suggestedAssetId}
+                          readOnly
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t.status}</span>
+                        <select className="input" value={assetForm.status} onChange={(e) => setAssetForm((f) => ({ ...f, status: e.target.value }))}>
+                          {ASSET_STATUS_OPTIONS.map((status) => (
+                            <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {userRequired && !isFurnitureAsset(assetForm.category) ? (
+                        <label className="field">
+                          <span>{t.user}</span>
+                          <UserPicker
+                            value={assetForm.assignedTo}
+                            users={staffUsersForCampus(users, assetForm.campus, assetForm.assignedTo)}
+                            placeholder={t.selectUser}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
+                            emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
+                            onChange={(value) => setAssetForm((f) => ({ ...f, assignedTo: value }))}
+                          />
+                        </label>
+                      ) : (
+                        <div className="field">
+                          <span>{t.user}</span>
+                          <div className="detail-value">-</div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <label className="field">
+                        <span>{t.typeCode}</span>
+                        <AssetTypePicker
+                          value={assetForm.type}
+                          options={currentTypeOptions.map((opt) => ({
+                            code: opt.code,
+                            label: itemNames[`${assetForm.category}:${opt.code}`] || (lang === "km" ? opt.itemKm : opt.itemEn),
+                          }))}
+                          onChange={(typeCode) =>
+                            setAssetForm((f) => ({
+                              ...f,
+                              type: typeCode,
+                              model: "",
+                              furnitureTrackingMode: defaultFurnitureTrackingMode(typeCode),
+                              furnitureLevel: "",
+                              furnitureSubtype: defaultFurnitureSubtype(typeCode),
+                              furnitureModelPhoto: "",
+                              furnitureMaterial: "",
+                              furnitureColor: "",
+                              furnitureSize: "",
+                              furnitureQuantity: "1",
+                              furnitureCondition: FURNITURE_CONDITION_OPTIONS[0],
+                            }))
+                          }
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកកូដប្រភេទ..." : "Search type code..."}
+                          emptyText={lang === "km" ? "រកមិនឃើញប្រភេទ។" : "No type code found."}
+                          getIcon={(opt) => itemTypeIcon(assetForm.category, opt.code, opt.label)}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t.assetId}</span>
+                        <input
+                          className="input"
+                          value={suggestedAssetId}
+                          readOnly
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t.status}</span>
+                        <select className="input" value={assetForm.status} onChange={(e) => setAssetForm((f) => ({ ...f, status: e.target.value }))}>
+                          {ASSET_STATUS_OPTIONS.map((status) => (
+                            <option key={status.value} value={status.value}>{lang === "km" ? status.km : status.en}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  )}
                   {isPcAssetForCreate ? (
-                    <label className="field">
-                      <span>{t.pcType}</span>
-                      <select
-                        className="input"
-                        value={assetForm.pcType}
-                        onChange={(e) => setAssetForm((f) => ({ ...f, pcType: e.target.value }))}
-                      >
-                        {PC_TYPE_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {lang === "km" ? opt.km : opt.en}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-three">
+                      <label className="field">
+                        <span>{t.pcType}</span>
+                        <select
+                          className="input"
+                          value={assetForm.pcType}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, pcType: e.target.value }))}
+                        >
+                          {PC_TYPE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {lang === "km" ? opt.km : opt.en}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field">
+                        <span>{t.setCode}</span>
+                        <input className="input" value={suggestedDesktopSetCode} readOnly />
+                      </label>
+                      {userRequired && !isFurnitureAsset(assetForm.category) ? (
+                        <label className="field">
+                          <span>{t.user}</span>
+                          <UserPicker
+                            value={assetForm.assignedTo}
+                            users={staffUsersForCampus(users, assetForm.campus, assetForm.assignedTo)}
+                            placeholder={t.selectUser}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
+                            emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
+                            onChange={(value) => setAssetForm((f) => ({ ...f, assignedTo: value }))}
+                          />
+                        </label>
+                      ) : <div className="field" />}
+                    </div>
                   ) : null}
                   {isTvAssetForCreate ? (
                     <div className="field field-wide">
@@ -43068,11 +43555,7 @@ function formatTicketRequestSource(value?: string) {
                   ) : null}
                   {assetForm.category === "IT" && assetForm.type === DESKTOP_PARENT_TYPE ? (
                     <>
-                      <label className="field">
-                        <span>{t.setCode}</span>
-                        <input className="input" value={suggestedDesktopSetCode} readOnly />
-                      </label>
-                      <div className="field">
+                      <div className="field field-wide">
                         <span>{t.createAsSetPack}</span>
                         <div className="setpack-toggle-row">
                           <span className="tiny">{t.setPackHint}</span>
@@ -43265,27 +43748,102 @@ function formatTicketRequestSource(value?: string) {
                                         }
                                       />
                                     </label>
-                                    <label className="field">
-                                      <span>{t.vendor}</span>
-                                      <input
-                                        className="input"
-                                        value={setPackDraft[item.type].vendor}
-                                        onChange={(e) =>
-                                          setSetPackDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              vendor: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
+                                    <div className="field field-wide add-detail-media-row">
+                                      <label className="field">
+                                        <span>{t.vendor}</span>
+                                        <input
+                                          className="input"
+                                          value={setPackDraft[item.type].vendor}
+                                          onChange={(e) =>
+                                            setSetPackDraft((prev) => ({
+                                              ...prev,
+                                              [item.type]: {
+                                                ...prev[item.type],
+                                                vendor: e.target.value,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      </label>
+                                      <div className="field add-detail-photo-field">
+                                        <span>{t.photo}</span>
+                                        <input
+                                          key={setPackFileKey[item.type]}
+                                          ref={(el) => {
+                                            setPackPhotoInputRefs.current[item.type] = el;
+                                          }}
+                                          className="file-input"
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={(e) => onSetPackPhotoFile(item.type, e)}
+                                        />
+                                        <div className="add-detail-photo-card">
+                                          {normalizeAssetPhotos(setPackDraft[item.type]).length ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                              src={normalizeAssetPhotos(setPackDraft[item.type])[0]}
+                                              alt={`${item.label} preview`}
+                                              className="photo-preview"
+                                            />
+                                          ) : (
+                                            <div className="photo-placeholder">{t.noPhoto}</div>
+                                          )}
+                                          <div className="add-detail-photo-meta">
+                                            <div className="add-detail-photo-actions">
+                                              <button
+                                                className="btn-icon-edit"
+                                                type="button"
+                                                title="Upload photo"
+                                                aria-label="Upload photo"
+                                                onClick={() => setPackPhotoInputRefs.current[item.type]?.click()}
+                                              >
+                                                ✎
+                                              </button>
+                                              <button
+                                                className="btn-danger"
+                                                type="button"
+                                                title="Delete Photo"
+                                                aria-label="Delete Photo"
+                                                disabled={!normalizeAssetPhotos(setPackDraft[item.type]).length}
+                                                onClick={() => {
+                                                  setSetPackDraft((prev) => ({
+                                                    ...prev,
+                                                    [item.type]: {
+                                                      ...prev[item.type],
+                                                      photo: "",
+                                                      photos: [],
+                                                    },
+                                                  }));
+                                                  setSetPackFileKey((prev) => ({
+                                                    ...prev,
+                                                    [item.type]: prev[item.type] + 1,
+                                                  }));
+                                                }}
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
                                     <label className="field field-wide">
                                       <span>{t.specs}</span>
                                       <textarea
-                                        className="textarea"
+                                        className="textarea textarea-auto-grow"
+                                        rows={1}
                                         value={setPackDraft[item.type].specs}
+                                        ref={(el) => {
+                                          if (!el) return;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
+                                        onInput={(e) => {
+                                          const el = e.currentTarget;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
                                         onChange={(e) =>
                                           setSetPackDraft((prev) => ({
                                             ...prev,
@@ -43300,8 +43858,19 @@ function formatTicketRequestSource(value?: string) {
                                     <label className="field field-wide">
                                       <span>{t.notes}</span>
                                       <textarea
-                                        className="textarea"
+                                        className="textarea textarea-auto-grow"
+                                        rows={1}
                                         value={setPackDraft[item.type].notes}
+                                        ref={(el) => {
+                                          if (!el) return;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
+                                        onInput={(e) => {
+                                          const el = e.currentTarget;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
                                         onChange={(e) =>
                                           setSetPackDraft((prev) => ({
                                             ...prev,
@@ -43313,113 +43882,6 @@ function formatTicketRequestSource(value?: string) {
                                         }
                                       />
                                     </label>
-                                    <div className="field field-wide">
-                                      <span>{t.photo}</span>
-                                      <input
-                                        key={setPackFileKey[item.type]}
-                                        ref={(el) => {
-                                          setPackPhotoInputRefs.current[item.type] = el;
-                                        }}
-                                        className="file-input"
-                                        type="file"
-                                        accept="image/*"
-                                        multiple
-                                        onChange={(e) => onSetPackPhotoFile(item.type, e)}
-                                      />
-                                      <div className="photo-preview-wrap">
-                                        {normalizeAssetPhotos(setPackDraft[item.type]).length ? (
-                                          <img loading="lazy" decoding="async" src={normalizeAssetPhotos(setPackDraft[item.type])[0]}
-                                            alt={`${item.label} preview`}
-                                            className="photo-preview"
-                                          />
-                                        ) : (
-                                          <div className="photo-placeholder">{t.noPhoto}</div>
-                                        )}
-                                        <div className="photo-preview-actions">
-                                          <button
-                                            className="btn-icon-edit"
-                                            type="button"
-                                            title="Change Photo"
-                                            aria-label="Change Photo"
-                                            onClick={() => setPackPhotoInputRefs.current[item.type]?.click()}
-                                          >
-                                            ✎
-                                          </button>
-                                          <button
-                                            className="btn-danger"
-                                            type="button"
-                                            title="Delete Photo"
-                                            aria-label="Delete Photo"
-                                            disabled={!normalizeAssetPhotos(setPackDraft[item.type]).length}
-                                            onClick={() => {
-                                              setSetPackDraft((prev) => ({
-                                                ...prev,
-                                                [item.type]: {
-                                                  ...prev[item.type],
-                                                  photo: "",
-                                                  photos: [],
-                                                },
-                                              }));
-                                              setSetPackFileKey((prev) => ({
-                                                ...prev,
-                                                [item.type]: prev[item.type] + 1,
-                                              }));
-                                            }}
-                                          >
-                                            ✕
-                                          </button>
-                                        </div>
-                                      </div>
-                                      <div className="asset-photo-gallery">
-                                        {normalizeAssetPhotos(setPackDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
-                                          <div key={`setpack-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                            <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
-                                            <div className="asset-photo-chip-actions">
-                                              <button
-                                                className="tab asset-photo-main-btn"
-                                                type="button"
-                                                onClick={() =>
-                                                  setSetPackDraft((prev) => {
-                                                    const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
-                                                    const hit = next.indexOf(url);
-                                                    if (hit <= 0) return prev;
-                                                    next.splice(hit, 1);
-                                                    next.unshift(url);
-                                                    return {
-                                                      ...prev,
-                                                      [item.type]: {
-                                                        ...prev[item.type],
-                                                        photo: next[0] || "",
-                                                        photos: next,
-                                                      },
-                                                    };
-                                                  })
-                                                }
-                                              >Set Main</button>
-                                              <button
-                                                className="btn-danger"
-                                                type="button"
-                                                onClick={() =>
-                                                  setSetPackDraft((prev) => {
-                                                    const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
-                                                    return {
-                                                      ...prev,
-                                                      [item.type]: {
-                                                        ...prev[item.type],
-                                                        photo: next[0] || "",
-                                                        photos: next,
-                                                      },
-                                                    };
-                                                  })
-                                                }
-                                              >
-                                                ✕
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
                                       </div>
                                     ) : null}
                                   </div>
@@ -43592,27 +44054,102 @@ function formatTicketRequestSource(value?: string) {
                                         }
                                       />
                                     </label>
-                                    <label className="field">
-                                      <span>{t.vendor}</span>
-                                      <input
-                                        className="input"
-                                        value={laptopAccessoryDraft[item.type].vendor}
-                                        onChange={(e) =>
-                                          setLaptopAccessoryDraft((prev) => ({
-                                            ...prev,
-                                            [item.type]: {
-                                              ...prev[item.type],
-                                              vendor: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                    </label>
+                                    <div className="field field-wide add-detail-media-row">
+                                      <label className="field">
+                                        <span>{t.vendor}</span>
+                                        <input
+                                          className="input"
+                                          value={laptopAccessoryDraft[item.type].vendor}
+                                          onChange={(e) =>
+                                            setLaptopAccessoryDraft((prev) => ({
+                                              ...prev,
+                                              [item.type]: {
+                                                ...prev[item.type],
+                                                vendor: e.target.value,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      </label>
+                                      <div className="field add-detail-photo-field">
+                                        <span>{t.photo}</span>
+                                        <input
+                                          key={laptopAccessoryFileKey[item.type]}
+                                          ref={(el) => {
+                                            laptopAccessoryPhotoInputRefs.current[item.type] = el;
+                                          }}
+                                          className="file-input"
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={(e) => onLaptopAccessoryPhotoFile(item.type, e)}
+                                        />
+                                        <div className="add-detail-photo-card">
+                                          {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                              src={normalizeAssetPhotos(laptopAccessoryDraft[item.type])[0]}
+                                              alt={`${item.label} preview`}
+                                              className="photo-preview"
+                                            />
+                                          ) : (
+                                            <div className="photo-placeholder">{t.noPhoto}</div>
+                                          )}
+                                          <div className="add-detail-photo-meta">
+                                            <div className="add-detail-photo-actions">
+                                              <button
+                                                className="btn-icon-edit"
+                                                type="button"
+                                                title="Upload photo"
+                                                aria-label="Upload photo"
+                                                onClick={() => laptopAccessoryPhotoInputRefs.current[item.type]?.click()}
+                                              >
+                                                ✎
+                                              </button>
+                                              <button
+                                                className="btn-danger"
+                                                type="button"
+                                                title="Delete Photo"
+                                                aria-label="Delete Photo"
+                                                disabled={!normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length}
+                                                onClick={() => {
+                                                  setLaptopAccessoryDraft((prev) => ({
+                                                    ...prev,
+                                                    [item.type]: {
+                                                      ...prev[item.type],
+                                                      photo: "",
+                                                      photos: [],
+                                                    },
+                                                  }));
+                                                  setLaptopAccessoryFileKey((prev) => ({
+                                                    ...prev,
+                                                    [item.type]: prev[item.type] + 1,
+                                                  }));
+                                                }}
+                                              >
+                                                ✕
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
                                     <label className="field field-wide">
                                       <span>{t.specs}</span>
                                       <textarea
-                                        className="textarea"
+                                        className="textarea textarea-auto-grow"
+                                        rows={1}
                                         value={laptopAccessoryDraft[item.type].specs}
+                                        ref={(el) => {
+                                          if (!el) return;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
+                                        onInput={(e) => {
+                                          const el = e.currentTarget;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
                                         onChange={(e) =>
                                           setLaptopAccessoryDraft((prev) => ({
                                             ...prev,
@@ -43627,8 +44164,19 @@ function formatTicketRequestSource(value?: string) {
                                     <label className="field field-wide">
                                       <span>{t.notes}</span>
                                       <textarea
-                                        className="textarea"
+                                        className="textarea textarea-auto-grow"
+                                        rows={1}
                                         value={laptopAccessoryDraft[item.type].notes}
+                                        ref={(el) => {
+                                          if (!el) return;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
+                                        onInput={(e) => {
+                                          const el = e.currentTarget;
+                                          el.style.height = "auto";
+                                          el.style.height = `${el.scrollHeight}px`;
+                                        }}
                                         onChange={(e) =>
                                           setLaptopAccessoryDraft((prev) => ({
                                             ...prev,
@@ -43640,113 +44188,6 @@ function formatTicketRequestSource(value?: string) {
                                         }
                                       />
                                     </label>
-                                    <div className="field field-wide">
-                                      <span>{t.photo}</span>
-                                      <input
-                                        key={laptopAccessoryFileKey[item.type]}
-                                        ref={(el) => {
-                                          laptopAccessoryPhotoInputRefs.current[item.type] = el;
-                                        }}
-                                        className="file-input"
-                                        type="file"
-                                        accept="image/*"
-                                        multiple
-                                        onChange={(e) => onLaptopAccessoryPhotoFile(item.type, e)}
-                                      />
-                                      <div className="photo-preview-wrap">
-                                        {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length ? (
-                                          <img loading="lazy" decoding="async" src={normalizeAssetPhotos(laptopAccessoryDraft[item.type])[0]}
-                                            alt={`${item.label} preview`}
-                                            className="photo-preview"
-                                          />
-                                        ) : (
-                                          <div className="photo-placeholder">{t.noPhoto}</div>
-                                        )}
-                                        <div className="photo-preview-actions">
-                                          <button
-                                            className="btn-icon-edit"
-                                            type="button"
-                                            title="Change Photo"
-                                            aria-label="Change Photo"
-                                            onClick={() => laptopAccessoryPhotoInputRefs.current[item.type]?.click()}
-                                          >
-                                            ✎
-                                          </button>
-                                          <button
-                                            className="btn-danger"
-                                            type="button"
-                                            title="Delete Photo"
-                                            aria-label="Delete Photo"
-                                            disabled={!normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length}
-                                            onClick={() => {
-                                              setLaptopAccessoryDraft((prev) => ({
-                                                ...prev,
-                                                [item.type]: {
-                                                  ...prev[item.type],
-                                                  photo: "",
-                                                  photos: [],
-                                                },
-                                              }));
-                                              setLaptopAccessoryFileKey((prev) => ({
-                                                ...prev,
-                                                [item.type]: prev[item.type] + 1,
-                                              }));
-                                            }}
-                                          >
-                                            ✕
-                                          </button>
-                                        </div>
-                                      </div>
-                                      <div className="asset-photo-gallery">
-                                        {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
-                                          <div key={`laptop-accessory-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                            <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
-                                            <div className="asset-photo-chip-actions">
-                                              <button
-                                                className="tab asset-photo-main-btn"
-                                                type="button"
-                                                onClick={() =>
-                                                  setLaptopAccessoryDraft((prev) => {
-                                                    const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
-                                                    const hit = next.indexOf(url);
-                                                    if (hit <= 0) return prev;
-                                                    next.splice(hit, 1);
-                                                    next.unshift(url);
-                                                    return {
-                                                      ...prev,
-                                                      [item.type]: {
-                                                        ...prev[item.type],
-                                                        photo: next[0] || "",
-                                                        photos: next,
-                                                      },
-                                                    };
-                                                  })
-                                                }
-                                              >Set Main</button>
-                                              <button
-                                                className="btn-danger"
-                                                type="button"
-                                                onClick={() =>
-                                                  setLaptopAccessoryDraft((prev) => {
-                                                    const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
-                                                    return {
-                                                      ...prev,
-                                                      [item.type]: {
-                                                        ...prev[item.type],
-                                                        photo: next[0] || "",
-                                                        photos: next,
-                                                      },
-                                                    };
-                                                  })
-                                                }
-                                              >
-                                                ✕
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
                                   </div>
                                 ) : null}
                               </div>
@@ -43911,27 +44352,102 @@ function formatTicketRequestSource(value?: string) {
                                       }
                                     />
                                   </label>
-                                  <label className="field">
-                                    <span>{t.vendor}</span>
-                                    <input
-                                      className="input"
-                                      value={cameraComponentDraft[item.type].vendor}
-                                      onChange={(e) =>
-                                        setCameraComponentDraft((prev) => ({
-                                          ...prev,
-                                          [item.type]: {
-                                            ...prev[item.type],
-                                            vendor: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  </label>
+                                  <div className="field field-wide add-detail-media-row">
+                                    <label className="field">
+                                      <span>{t.vendor}</span>
+                                      <input
+                                        className="input"
+                                        value={cameraComponentDraft[item.type].vendor}
+                                        onChange={(e) =>
+                                          setCameraComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              vendor: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <div className="field add-detail-photo-field">
+                                      <span>{t.photo}</span>
+                                      <input
+                                        key={cameraComponentFileKey[item.type]}
+                                        ref={(el) => {
+                                          cameraComponentPhotoInputRefs.current[item.type] = el;
+                                        }}
+                                        className="file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => onCameraComponentPhotoFile(item.type, e)}
+                                      />
+                                      <div className="add-detail-photo-card">
+                                        {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
+                                          <img
+                                            loading="lazy"
+                                            decoding="async"
+                                            src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
+                                            alt={`${item.label} preview`}
+                                            className="photo-preview"
+                                          />
+                                        ) : (
+                                          <div className="photo-placeholder">{t.noPhoto}</div>
+                                        )}
+                                        <div className="add-detail-photo-meta">
+                                          <div className="add-detail-photo-actions">
+                                            <button
+                                              className="btn-icon-edit"
+                                              type="button"
+                                              title="Upload photo"
+                                              aria-label="Upload photo"
+                                              onClick={() => cameraComponentPhotoInputRefs.current[item.type]?.click()}
+                                            >
+                                              ✎
+                                            </button>
+                                            <button
+                                              className="btn-danger"
+                                              type="button"
+                                              title="Delete Photo"
+                                              aria-label="Delete Photo"
+                                              disabled={!normalizeAssetPhotos(cameraComponentDraft[item.type]).length}
+                                              onClick={() => {
+                                                setCameraComponentDraft((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: {
+                                                    ...prev[item.type],
+                                                    photo: "",
+                                                    photos: [],
+                                                  },
+                                                }));
+                                                setCameraComponentFileKey((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: prev[item.type] + 1,
+                                                }));
+                                              }}
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                   <label className="field field-wide">
                                     <span>{t.specs}</span>
                                     <textarea
-                                      className="textarea"
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
                                       value={cameraComponentDraft[item.type].specs}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
                                       onChange={(e) =>
                                         setCameraComponentDraft((prev) => ({
                                           ...prev,
@@ -43946,8 +44462,19 @@ function formatTicketRequestSource(value?: string) {
                                   <label className="field field-wide">
                                     <span>{t.notes}</span>
                                     <textarea
-                                      className="textarea"
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
                                       value={cameraComponentDraft[item.type].notes}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
                                       onChange={(e) =>
                                         setCameraComponentDraft((prev) => ({
                                           ...prev,
@@ -43959,113 +44486,6 @@ function formatTicketRequestSource(value?: string) {
                                       }
                                     />
                                   </label>
-                                  <div className="field field-wide">
-                                    <span>{t.photo}</span>
-                                    <input
-                                      key={cameraComponentFileKey[item.type]}
-                                      ref={(el) => {
-                                        cameraComponentPhotoInputRefs.current[item.type] = el;
-                                      }}
-                                      className="file-input"
-                                      type="file"
-                                      accept="image/*"
-                                      multiple
-                                      onChange={(e) => onCameraComponentPhotoFile(item.type, e)}
-                                    />
-                                    <div className="photo-preview-wrap">
-                                      {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
-                                        <img loading="lazy" decoding="async" src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
-                                          alt={`${item.label} preview`}
-                                          className="photo-preview"
-                                        />
-                                      ) : (
-                                        <div className="photo-placeholder">{t.noPhoto}</div>
-                                      )}
-                                      <div className="photo-preview-actions">
-                                        <button
-                                          className="btn-icon-edit"
-                                          type="button"
-                                          title="Change Photo"
-                                          aria-label="Change Photo"
-                                          onClick={() => cameraComponentPhotoInputRefs.current[item.type]?.click()}
-                                        >
-                                          ✎
-                                        </button>
-                                        <button
-                                          className="btn-danger"
-                                          type="button"
-                                          title="Delete Photo"
-                                          aria-label="Delete Photo"
-                                          disabled={!normalizeAssetPhotos(cameraComponentDraft[item.type]).length}
-                                          onClick={() => {
-                                            setCameraComponentDraft((prev) => ({
-                                              ...prev,
-                                              [item.type]: {
-                                                ...prev[item.type],
-                                                photo: "",
-                                                photos: [],
-                                              },
-                                            }));
-                                            setCameraComponentFileKey((prev) => ({
-                                              ...prev,
-                                              [item.type]: prev[item.type] + 1,
-                                            }));
-                                          }}
-                                        >
-                                          ✕
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <div className="asset-photo-gallery">
-                                      {normalizeAssetPhotos(cameraComponentDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
-                                        <div key={`camera-component-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                          <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
-                                          <div className="asset-photo-chip-actions">
-                                            <button
-                                              className="tab asset-photo-main-btn"
-                                              type="button"
-                                              onClick={() =>
-                                                setCameraComponentDraft((prev) => {
-                                                  const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
-                                                  const hit = next.indexOf(url);
-                                                  if (hit <= 0) return prev;
-                                                  next.splice(hit, 1);
-                                                  next.unshift(url);
-                                                  return {
-                                                    ...prev,
-                                                    [item.type]: {
-                                                      ...prev[item.type],
-                                                      photo: next[0] || "",
-                                                      photos: next,
-                                                    },
-                                                  };
-                                                })
-                                              }
-                                            >Set Main</button>
-                                            <button
-                                              className="btn-danger"
-                                              type="button"
-                                              onClick={() =>
-                                                setCameraComponentDraft((prev) => {
-                                                  const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
-                                                  return {
-                                                    ...prev,
-                                                    [item.type]: {
-                                                      ...prev[item.type],
-                                                      photo: next[0] || "",
-                                                      photos: next,
-                                                    },
-                                                  };
-                                                })
-                                              }
-                                            >
-                                              ✕
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
                                 </div>
                               </div>
                             ) : null}
@@ -44227,27 +44647,102 @@ function formatTicketRequestSource(value?: string) {
                                       }
                                     />
                                   </label>
-                                  <label className="field">
-                                    <span>{t.vendor}</span>
-                                    <input
-                                      className="input"
-                                      value={projectorComponentDraft[item.type].vendor}
-                                      onChange={(e) =>
-                                        setProjectorComponentDraft((prev) => ({
-                                          ...prev,
-                                          [item.type]: {
-                                            ...prev[item.type],
-                                            vendor: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  </label>
+                                  <div className="field field-wide add-detail-media-row">
+                                    <label className="field">
+                                      <span>{t.vendor}</span>
+                                      <input
+                                        className="input"
+                                        value={projectorComponentDraft[item.type].vendor}
+                                        onChange={(e) =>
+                                          setProjectorComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              vendor: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <div className="field add-detail-photo-field">
+                                      <span>{t.photo}</span>
+                                      <input
+                                        key={projectorComponentFileKey[item.type]}
+                                        ref={(el) => {
+                                          projectorComponentPhotoInputRefs.current[item.type] = el;
+                                        }}
+                                        className="file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => onProjectorComponentPhotoFile(item.type, e)}
+                                      />
+                                      <div className="add-detail-photo-card">
+                                        {normalizeAssetPhotos(projectorComponentDraft[item.type]).length ? (
+                                          <img
+                                            loading="lazy"
+                                            decoding="async"
+                                            src={normalizeAssetPhotos(projectorComponentDraft[item.type])[0]}
+                                            alt={`${item.label} preview`}
+                                            className="photo-preview"
+                                          />
+                                        ) : (
+                                          <div className="photo-placeholder">{t.noPhoto}</div>
+                                        )}
+                                        <div className="add-detail-photo-meta">
+                                          <div className="add-detail-photo-actions">
+                                            <button
+                                              className="btn-icon-edit"
+                                              type="button"
+                                              title="Upload photo"
+                                              aria-label="Upload photo"
+                                              onClick={() => projectorComponentPhotoInputRefs.current[item.type]?.click()}
+                                            >
+                                              ✎
+                                            </button>
+                                            <button
+                                              className="btn-danger"
+                                              type="button"
+                                              title="Delete Photo"
+                                              aria-label="Delete Photo"
+                                              disabled={!normalizeAssetPhotos(projectorComponentDraft[item.type]).length}
+                                              onClick={() => {
+                                                setProjectorComponentDraft((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: {
+                                                    ...prev[item.type],
+                                                    photo: "",
+                                                    photos: [],
+                                                  },
+                                                }));
+                                                setProjectorComponentFileKey((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: prev[item.type] + 1,
+                                                }));
+                                              }}
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                   <label className="field field-wide">
                                     <span>{t.specs}</span>
                                     <textarea
-                                      className="textarea"
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
                                       value={projectorComponentDraft[item.type].specs}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
                                       onChange={(e) =>
                                         setProjectorComponentDraft((prev) => ({
                                           ...prev,
@@ -44262,8 +44757,19 @@ function formatTicketRequestSource(value?: string) {
                                   <label className="field field-wide">
                                     <span>{t.notes}</span>
                                     <textarea
-                                      className="textarea"
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
                                       value={projectorComponentDraft[item.type].notes}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
                                       onChange={(e) =>
                                         setProjectorComponentDraft((prev) => ({
                                           ...prev,
@@ -44275,113 +44781,6 @@ function formatTicketRequestSource(value?: string) {
                                       }
                                     />
                                   </label>
-                                  <div className="field field-wide">
-                                    <span>{t.photo}</span>
-                                    <input
-                                      key={projectorComponentFileKey[item.type]}
-                                      ref={(el) => {
-                                        projectorComponentPhotoInputRefs.current[item.type] = el;
-                                      }}
-                                      className="file-input"
-                                      type="file"
-                                      accept="image/*"
-                                      multiple
-                                      onChange={(e) => onProjectorComponentPhotoFile(item.type, e)}
-                                    />
-                                    <div className="photo-preview-wrap">
-                                      {normalizeAssetPhotos(projectorComponentDraft[item.type]).length ? (
-                                        <img loading="lazy" decoding="async" src={normalizeAssetPhotos(projectorComponentDraft[item.type])[0]}
-                                          alt={`${item.label} preview`}
-                                          className="photo-preview"
-                                        />
-                                      ) : (
-                                        <div className="photo-placeholder">{t.noPhoto}</div>
-                                      )}
-                                      <div className="photo-preview-actions">
-                                        <button
-                                          className="btn-icon-edit"
-                                          type="button"
-                                          title="Change Photo"
-                                          aria-label="Change Photo"
-                                          onClick={() => projectorComponentPhotoInputRefs.current[item.type]?.click()}
-                                        >
-                                          ✎
-                                        </button>
-                                        <button
-                                          className="btn-danger"
-                                          type="button"
-                                          title="Delete Photo"
-                                          aria-label="Delete Photo"
-                                          disabled={!normalizeAssetPhotos(projectorComponentDraft[item.type]).length}
-                                          onClick={() => {
-                                            setProjectorComponentDraft((prev) => ({
-                                              ...prev,
-                                              [item.type]: {
-                                                ...prev[item.type],
-                                                photo: "",
-                                                photos: [],
-                                              },
-                                            }));
-                                            setProjectorComponentFileKey((prev) => ({
-                                              ...prev,
-                                              [item.type]: prev[item.type] + 1,
-                                            }));
-                                          }}
-                                        >
-                                          ✕
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <div className="asset-photo-gallery">
-                                      {normalizeAssetPhotos(projectorComponentDraft[item.type]).slice(1, MAX_SET_PACK_PHOTOS).map((url, index) => (
-                                        <div key={`projector-component-photo-${item.type}-${index}`} className="asset-photo-chip">
-                                          <img loading="lazy" decoding="async" src={url} alt={`${item.label}-${index + 1}`} className="asset-photo-chip-img" />
-                                          <div className="asset-photo-chip-actions">
-                                            <button
-                                              className="tab asset-photo-main-btn"
-                                              type="button"
-                                              onClick={() =>
-                                                setProjectorComponentDraft((prev) => {
-                                                  const next = [...normalizeAssetPhotos(prev[item.type]).slice(0, MAX_SET_PACK_PHOTOS)];
-                                                  const hit = next.indexOf(url);
-                                                  if (hit <= 0) return prev;
-                                                  next.splice(hit, 1);
-                                                  next.unshift(url);
-                                                  return {
-                                                    ...prev,
-                                                    [item.type]: {
-                                                      ...prev[item.type],
-                                                      photo: next[0] || "",
-                                                      photos: next,
-                                                    },
-                                                  };
-                                                })
-                                              }
-                                            >Set Main</button>
-                                            <button
-                                              className="btn-danger"
-                                              type="button"
-                                              onClick={() =>
-                                                setProjectorComponentDraft((prev) => {
-                                                  const next = normalizeAssetPhotos(prev[item.type]).filter((entry) => entry !== url).slice(0, MAX_SET_PACK_PHOTOS);
-                                                  return {
-                                                    ...prev,
-                                                    [item.type]: {
-                                                      ...prev[item.type],
-                                                      photo: next[0] || "",
-                                                      photos: next,
-                                                    },
-                                                  };
-                                                })
-                                              }
-                                            >
-                                              ✕
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
                                 </div>
                               </div>
                             ) : null}
@@ -44475,7 +44874,7 @@ function formatTicketRequestSource(value?: string) {
                       ) : null}
                     </>
                   ) : null}
-                  {userRequired && !isFurnitureAsset(assetForm.category) && (
+                  {userRequired && !isFurnitureAsset(assetForm.category) && !isPcAssetForCreate && !isLaptopAssetForCreate && (
                     <label className="field">
                       <span>{t.user}</span>
                       <UserPicker
@@ -44489,46 +44888,80 @@ function formatTicketRequestSource(value?: string) {
                     </label>
                   )}
                   {!isFurnitureAsset(assetForm.category) ? (
-                    <label className="field">
-                      <span>{t.brand}</span>
-                      <input
-                        className="input"
-                        list="asset-brand-options-create"
-                        value={assetForm.brand}
-                        onChange={(e) => setAssetForm((f) => ({ ...f, brand: e.target.value }))}
-                      />
-                      <datalist id="asset-brand-options-create">
-                        {brandSuggestions.map((brand) => (
-                          <option key={`brand-create-${brand.toLowerCase()}`} value={brand} />
-                        ))}
-                      </datalist>
-                    </label>
+                    <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-three">
+                      <label className="field">
+                        <span>{t.brand}</span>
+                        <input
+                          className="input"
+                          list="asset-brand-options-create"
+                          value={assetForm.brand}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, brand: e.target.value }))}
+                        />
+                        <datalist id="asset-brand-options-create">
+                          {brandSuggestions.map((brand) => (
+                            <option key={`brand-create-${brand.toLowerCase()}`} value={brand} />
+                          ))}
+                        </datalist>
+                      </label>
+                      <label className="field">
+                        <span>{t.model}</span>
+                        <input
+                          className="input"
+                          list="asset-model-options"
+                          value={assetForm.model}
+                          onChange={(e) => {
+                            const model = e.target.value;
+                            setAssetForm((f) => ({ ...f, model }));
+                            if (!model.trim()) setModelTemplateNote("");
+                          }}
+                          onBlur={(e) => applyModelTemplate(e.target.value)}
+                        />
+                        <datalist id="asset-model-options">
+                          {modelTemplates.map((row) => (
+                            <option key={`model-template-${row.model.toLowerCase()}`} value={row.model} />
+                          ))}
+                        </datalist>
+                      </label>
+                      <label className="field">
+                        <span>{t.serialNumber}</span>
+                        <input className="input" value={assetForm.serialNumber} onChange={(e) => setAssetForm((f) => ({ ...f, serialNumber: e.target.value }))} />
+                      </label>
+                    </div>
                   ) : null}
                   {!isFurnitureAsset(assetForm.category) ? (
                     <label className="field">
-                      <span>{t.model}</span>
+                      <span>{t.purchaseDate}</span>
                       <input
+                        type="date"
                         className="input"
-                        list="asset-model-options"
-                        value={assetForm.model}
+                        value={normalizeYmdInput(assetForm.purchaseDate)}
                         onChange={(e) => {
-                          const model = e.target.value;
-                          setAssetForm((f) => ({ ...f, model }));
-                          if (!model.trim()) setModelTemplateNote("");
+                          const normalized = normalizeYmdInput(e.target.value);
+                          setAssetForm((f) => ({ ...f, purchaseDate: normalized }));
+                          setAssetFormDateDrafts((prev) => ({
+                            ...prev,
+                            purchaseDate: normalized ? formatMateDateInput(normalized) : "",
+                          }));
                         }}
-                        onBlur={(e) => applyModelTemplate(e.target.value)}
                       />
-                      <datalist id="asset-model-options">
-                        {modelTemplates.map((row) => (
-                          <option key={`model-template-${row.model.toLowerCase()}`} value={row.model} />
-                        ))}
-                      </datalist>
                     </label>
                   ) : null}
                   {!isFurnitureAsset(assetForm.category) ? (
                     <label className="field">
-                      <span>{t.serialNumber}</span>
-                      <input className="input" value={assetForm.serialNumber} onChange={(e) => setAssetForm((f) => ({ ...f, serialNumber: e.target.value }))} />
+                      <span>{t.warrantyUntil}</span>
+                      <input
+                        type="date"
+                        className="input"
+                        value={normalizeYmdInput(assetForm.warrantyUntil)}
+                        onChange={(e) => {
+                          const normalized = normalizeYmdInput(e.target.value);
+                          setAssetForm((f) => ({ ...f, warrantyUntil: normalized }));
+                          setAssetFormDateDrafts((prev) => ({
+                            ...prev,
+                            warrantyUntil: normalized ? formatMateDateInput(normalized) : "",
+                          }));
+                        }}
+                      />
                     </label>
                   ) : null}
                   {isAirconAsset(assetForm.category, assetForm.type) ? (
@@ -44741,39 +45174,126 @@ function formatTicketRequestSource(value?: string) {
                       </label>
                     </>
                   ) : null}
-                  {isFanAsset(assetForm.category, assetForm.type) ? (
+                  {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) ? (
                     <label className="field">
-                      <span>Fan Type</span>
-                      <select
-                        className="input"
-                        value={assetForm.fanType}
-                        onChange={(e) => setAssetForm((f) => ({ ...f, fanType: e.target.value }))}
-                      >
-                        <option value="">Select fan type</option>
-                        {FAN_TYPE_OPTIONS.map((option) => (
-                          <option key={`fan-type-${option}`} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                        </select>
-                      </label>
-                    ) : null}
+                      <span>{t.vendor}</span>
+                      <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
+                    </label>
+                  ) : null}
                   {String(assetForm.category || "").trim().toUpperCase() === "IT" && String(assetForm.type || "").trim().toUpperCase() === "TAB" ? (
                     <label className="field">
                       <span>Included Components</span>
-                      <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "nowrap" }}>
-                        <label
-                          className="tab setpack-include-item"
-                          style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center" }}
-                        >
+                      <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
                           <input
                             type="checkbox"
                             checked={assetForm.tabletHasCase}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, tabletHasCase: e.target.checked }))}
+                            onChange={(e) =>
+                              setAssetForm((f) => ({
+                                ...f,
+                                tabletHasCase: e.target.checked,
+                                tabletCasePhoto: e.target.checked ? f.tabletCasePhoto : "",
+                              }))
+                            }
                             style={{ marginRight: 8 }}
                           />
                           iPad Case
                         </label>
+                        {assetForm.tabletHasCase ? (
+                          <>
+                            <input
+                              id="tablet-case-create-upload"
+                              className="file-input"
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={onTabletCasePhotoFile}
+                            />
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                              <button
+                                type="button"
+                                className="tab btn-small"
+                                onClick={() => document.getElementById("tablet-case-create-upload")?.click()}
+                              >
+                                Choose Photo
+                              </button>
+                              {assetForm.tabletCasePhoto ? (
+                                <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={assetForm.tabletCasePhoto}
+                                    alt="tablet-case"
+                                    className="asset-photo-chip-img"
+                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                  />
+                                  <button
+                                    className="tab btn-small"
+                                    type="button"
+                                    onClick={() => setAssetForm((f) => ({ ...f, tabletCasePhoto: "" }))}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </>
+                        ) : null}
+                        <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <input
+                            type="checkbox"
+                            checked={assetForm.tabletHasCharger}
+                            onChange={(e) =>
+                              setAssetForm((f) => ({
+                                ...f,
+                                tabletHasCharger: e.target.checked,
+                                tabletChargerPhoto: e.target.checked ? f.tabletChargerPhoto : "",
+                              }))
+                            }
+                            style={{ marginRight: 8 }}
+                          />
+                          Charger
+                        </label>
+                        {assetForm.tabletHasCharger ? (
+                          <>
+                            <input
+                              id="tablet-charger-create-upload"
+                              className="file-input"
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={onTabletChargerPhotoFile}
+                            />
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                              <button
+                                type="button"
+                                className="tab btn-small"
+                                onClick={() => document.getElementById("tablet-charger-create-upload")?.click()}
+                              >
+                                Choose Photo
+                              </button>
+                              {assetForm.tabletChargerPhoto ? (
+                                <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
+                                  <img
+                                    loading="lazy"
+                                    decoding="async"
+                                    src={assetForm.tabletChargerPhoto}
+                                    alt="tablet-charger"
+                                    className="asset-photo-chip-img"
+                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                  />
+                                  <button
+                                    className="tab btn-small"
+                                    type="button"
+                                    onClick={() => setAssetForm((f) => ({ ...f, tabletChargerPhoto: "" }))}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </>
+                        ) : null}
                       </div>
                     </label>
                   ) : null}
@@ -44956,48 +45476,6 @@ function formatTicketRequestSource(value?: string) {
                         ) : null}
                     </>
                   ) : null}
-                  {!isFurnitureAsset(assetForm.category) ? (
-                    <label className="field">
-                      <span>{t.purchaseDate}</span>
-                      <input
-                        type="date"
-                        className="input"
-                        value={normalizeYmdInput(assetForm.purchaseDate)}
-                        onChange={(e) => {
-                          const normalized = normalizeYmdInput(e.target.value);
-                          setAssetForm((f) => ({ ...f, purchaseDate: normalized }));
-                          setAssetFormDateDrafts((prev) => ({
-                            ...prev,
-                            purchaseDate: normalized ? formatMateDateInput(normalized) : "",
-                          }));
-                        }}
-                      />
-                    </label>
-                  ) : null}
-                  {!isFurnitureAsset(assetForm.category) ? (
-                    <label className="field">
-                      <span>{t.warrantyUntil}</span>
-                      <input
-                        type="date"
-                        className="input"
-                        value={normalizeYmdInput(assetForm.warrantyUntil)}
-                        onChange={(e) => {
-                          const normalized = normalizeYmdInput(e.target.value);
-                          setAssetForm((f) => ({ ...f, warrantyUntil: normalized }));
-                          setAssetFormDateDrafts((prev) => ({
-                            ...prev,
-                            warrantyUntil: normalized ? formatMateDateInput(normalized) : "",
-                          }));
-                        }}
-                      />
-                    </label>
-                  ) : null}
-                  {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) ? (
-                    <label className="field">
-                      <span>{t.vendor}</span>
-                      <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
-                    </label>
-                  ) : null}
                   {isPrinterAssetRow(assetForm) ? (
                     <>
                       <label className="field">
@@ -45031,37 +45509,67 @@ function formatTicketRequestSource(value?: string) {
                       </label>
                     </>
                   ) : null}
-                  {!isFurnitureAsset(assetForm.category) ? (
-                    <label className="field field-wide">
-                      <span>{t.specs}</span>
-                      <textarea
-                        className="textarea"
-                        value={getVisibleSpecsTextareaValue(assetForm.category, assetForm.type, assetForm.specs)}
-                        onChange={(e) =>
-                          setAssetForm((f) =>
-                            isAirconAsset(f.category, f.type)
-                              ? {
-                                  ...f,
-                                  specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(e.target.value), f.acType, f.acHp, {
-                                    hasRemote: Boolean(f.acHasRemote),
-                                    hasFrontPanel: Boolean(f.acHasFrontPanel),
-                                    hasOutdoor: Boolean(f.acHasOutdoor),
-                                    componentNote: String(f.acComponentNote || ""),
-                                    remotePhoto: String(f.acRemotePhoto || ""),
-                                    frontUnitPhoto: String(f.acFrontUnitPhoto || ""),
-                                    outdoorPhoto: String(f.acOutdoorPhoto || ""),
-                                  }),
-                                }
-                              : { ...f, specs: e.target.value }
-                          )
-                        }
-                      />
-                    </label>
-                  ) : null}
-                  <label className="field field-wide">
-                    <span>{t.notes}</span>
-                    <textarea className="textarea" value={assetForm.notes} onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))} />
-                  </label>
+                  <div className="field field-wide">
+                    <div className="asset-dual-textarea-row">
+                      {!isFurnitureAsset(assetForm.category) ? (
+                        <label className="field">
+                          <span>{t.specs}</span>
+                          <textarea
+                            className="textarea textarea-auto-grow"
+                            rows={1}
+                            value={getVisibleSpecsTextareaValue(assetForm.category, assetForm.type, assetForm.specs)}
+                            ref={(el) => {
+                              if (!el) return;
+                              el.style.height = "auto";
+                              el.style.height = `${el.scrollHeight}px`;
+                            }}
+                            onInput={(e) => {
+                              const el = e.currentTarget;
+                              el.style.height = "auto";
+                              el.style.height = `${el.scrollHeight}px`;
+                            }}
+                            onChange={(e) =>
+                              setAssetForm((f) =>
+                                isAirconAsset(f.category, f.type)
+                                  ? {
+                                      ...f,
+                                      specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(e.target.value), f.acType, f.acHp, {
+                                        hasRemote: Boolean(f.acHasRemote),
+                                        hasFrontPanel: Boolean(f.acHasFrontPanel),
+                                        hasOutdoor: Boolean(f.acHasOutdoor),
+                                        componentNote: String(f.acComponentNote || ""),
+                                        remotePhoto: String(f.acRemotePhoto || ""),
+                                        frontUnitPhoto: String(f.acFrontUnitPhoto || ""),
+                                        outdoorPhoto: String(f.acOutdoorPhoto || ""),
+                                      }),
+                                    }
+                                  : { ...f, specs: e.target.value }
+                              )
+                            }
+                          />
+                        </label>
+                      ) : null}
+                      <label className="field">
+                        <span>{t.notes}</span>
+                        <textarea
+                          className="textarea textarea-auto-grow"
+                          rows={1}
+                          value={assetForm.notes}
+                          ref={(el) => {
+                            if (!el) return;
+                            el.style.height = "auto";
+                            el.style.height = `${el.scrollHeight}px`;
+                          }}
+                          onInput={(e) => {
+                            const el = e.currentTarget;
+                            el.style.height = "auto";
+                            el.style.height = `${el.scrollHeight}px`;
+                          }}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))}
+                        />
+                      </label>
+                    </div>
+                  </div>
                   <label className="field field-wide">
                     <span>{isFurnitureAsset(assetForm.category) ? "Location Photo" : t.photo}</span>
                     <input
@@ -45745,7 +46253,7 @@ function formatTicketRequestSource(value?: string) {
                   <div className="panel-row">
                     <h2>Edit Asset - {editingAsset.assetId}</h2>
                   </div>
-                  <div className="form-grid">
+                  <div className="form-grid asset-form-grid">
                     <div className="field">
                       <span>{t.campus}</span>
                       <div className="detail-value">{campusLabel(editingAsset.campus)}</div>
@@ -45767,20 +46275,51 @@ function formatTicketRequestSource(value?: string) {
                       <div className="detail-value">{editingAsset.type}</div>
                     </div>
                     {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
-                      <label className="field">
-                        <span>{t.pcType}</span>
-                        <select
-                          className="input"
-                          value={assetEditForm.pcType}
-                          onChange={(e) => setAssetEditForm((f) => ({ ...f, pcType: e.target.value }))}
-                        >
-                          {PC_TYPE_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {lang === "km" ? opt.km : opt.en}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-three">
+                        <label className="field">
+                          <span>{t.pcType}</span>
+                          <select
+                            className="input"
+                            value={assetEditForm.pcType}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, pcType: e.target.value }))}
+                          >
+                            {PC_TYPE_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {lang === "km" ? opt.km : opt.en}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>{t.setCode}</span>
+                          <input
+                            className="input"
+                            value={assetEditForm.setCode}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, setCode: e.target.value }))}
+                            placeholder="SET-C2.2-001"
+                          />
+                        </label>
+                        {editingShowUserField && editingStatusActive ? (
+                          <label className="field">
+                            <span>{t.user}</span>
+                            <UserPicker
+                              value={assetEditForm.assignedTo}
+                              users={staffUsersForCampus(users, editingAsset?.campus || "", assetEditForm.assignedTo)}
+                              placeholder={t.selectUser}
+                              searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
+                              emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
+                              onChange={(value) => setAssetEditForm((f) => ({ ...f, assignedTo: value }))}
+                            />
+                            {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
+                          </label>
+                        ) : editingShowUserField ? (
+                          <div className="field">
+                            <span>{t.user}</span>
+                            <div className="detail-value">-</div>
+                            <p className="tiny">Status is not Active. User is not assigned.</p>
+                          </div>
+                        ) : <div className="field" />}
+                      </div>
                     ) : null}
                     <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-two">
                       <label className="field">
@@ -45797,7 +46336,7 @@ function formatTicketRequestSource(value?: string) {
                             ))}
                         </select>
                       </label>
-                      {editingShowUserField && editingStatusActive ? (
+                      {editingShowUserField && editingStatusActive && !(editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE) ? (
                         <label className="field">
                           <span>{t.user}</span>
                           <UserPicker
@@ -45810,7 +46349,7 @@ function formatTicketRequestSource(value?: string) {
                           />
                           {editingUserRequired ? <p className="tiny">{t.userRequired}</p> : null}
                         </label>
-                      ) : editingShowUserField ? (
+                      ) : editingShowUserField && !(editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE) ? (
                         <div className="field">
                           <span>{t.user}</span>
                           <div className="detail-value">-</div>
@@ -45818,17 +46357,7 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                       ) : null}
                     </div>
-                    {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
-                      <label className="field field-wide">
-                        <span>{t.setCode}</span>
-                        <input
-                          className="input"
-                          value={assetEditForm.setCode}
-                          onChange={(e) => setAssetEditForm((f) => ({ ...f, setCode: e.target.value }))}
-                          placeholder="SET-C2.2-001"
-                        />
-                      </label>
-                    ) : (!editingIsSafetyAsset && editingIsLinkableAsset) ? (
+                    {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? null : (!editingIsSafetyAsset && editingIsLinkableAsset) ? (
                       <>
                         <label className="field">
                           <span>{t.linkToParentAsset}</span>
@@ -45922,7 +46451,7 @@ function formatTicketRequestSource(value?: string) {
                     ) : null}
                     {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
                       <>
-                        <div className="field">
+                        <div className="field field-wide">
                           <span>{t.createAsSetPack}</span>
                           <div className="setpack-toggle-row">
                             <span className="tiny">{t.setPackHint}</span>
@@ -46105,18 +46634,16 @@ function formatTicketRequestSource(value?: string) {
                           <span>Model</span>
                           <input className="input" value={assetEditForm.model} onChange={(e) => setAssetEditForm((f) => ({ ...f, model: e.target.value }))} />
                         </label>
-                        {!isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
-                          <label className="field">
-                            <span>Vendor</span>
-                            <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
-                          </label>
-                        ) : <div className="field" />}
-                      </div>
-                    ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") ? (
-                      <label className="field">
+                        <label className="field">
                         <span>Serial Number</span>
                         <input className="input" value={assetEditForm.serialNumber} onChange={(e) => setAssetEditForm((f) => ({ ...f, serialNumber: e.target.value }))} />
+                      </label>
+                      </div>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") && !isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                      <label className="field">
+                        <span>Vendor</span>
+                        <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
                       </label>
                     ) : null}
                     {editingAsset?.category === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === TV_TYPE_CODE ? (
@@ -46476,39 +47003,156 @@ function formatTicketRequestSource(value?: string) {
                         </label>
                       </>
                     ) : null}
-                    {isFanAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">
-                        <span>Fan Type</span>
-                        <select
+                        <span>Purchase Date</span>
+                        <input
+                          type="date"
                           className="input"
-                          value={assetEditForm.fanType}
-                          onChange={(e) => setAssetEditForm((f) => ({ ...f, fanType: e.target.value }))}
-                        >
-                          <option value="">Select fan type</option>
-                          {FAN_TYPE_OPTIONS.map((option) => (
-                            <option key={`edit-fan-type-${option}`} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                          value={normalizeYmdInput(assetEditForm.purchaseDate)}
+                          onChange={(e) => {
+                            const normalized = normalizeYmdInput(e.target.value);
+                            setAssetEditForm((f) => ({ ...f, purchaseDate: normalized }));
+                            setAssetEditDateDrafts((prev) => ({
+                              ...prev,
+                              purchaseDate: normalized ? formatMateDateInput(normalized) : "",
+                            }));
+                          }}
+                        />
+                      </label>
+                    ) : null}
+                    {!isFurnitureAsset(editingAsset?.category || "") ? (
+                      <label className="field">
+                        <span>Warranty Until</span>
+                        <input
+                          type="date"
+                          className="input"
+                          value={normalizeYmdInput(assetEditForm.warrantyUntil)}
+                          onChange={(e) => {
+                            const normalized = normalizeYmdInput(e.target.value);
+                            setAssetEditForm((f) => ({ ...f, warrantyUntil: normalized }));
+                            setAssetEditDateDrafts((prev) => ({
+                              ...prev,
+                              warrantyUntil: normalized ? formatMateDateInput(normalized) : "",
+                            }));
+                          }}
+                        />
                       </label>
                     ) : null}
                     {String(editingAsset?.category || "").trim().toUpperCase() === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === "TAB" ? (
                       <label className="field">
                         <span>Included Components</span>
-                        <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "nowrap" }}>
-                          <label
-                            className="tab setpack-include-item"
-                            style={{ width: "fit-content", flex: "0 0 auto", whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center" }}
-                          >
+                        <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                          <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <input
                               type="checkbox"
                               checked={assetEditForm.tabletHasCase}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, tabletHasCase: e.target.checked }))}
+                              onChange={(e) =>
+                                setAssetEditForm((f) => ({
+                                  ...f,
+                                  tabletHasCase: e.target.checked,
+                                  tabletCasePhoto: e.target.checked ? f.tabletCasePhoto : "",
+                                }))
+                              }
                               style={{ marginRight: 8 }}
                             />
                             iPad Case
                           </label>
+                          {assetEditForm.tabletHasCase ? (
+                            <>
+                              <input
+                                id="tablet-case-edit-upload"
+                                className="file-input"
+                                type="file"
+                                accept="image/*"
+                                style={{ display: "none" }}
+                                onChange={onEditTabletCasePhotoFile}
+                              />
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                                <button
+                                  type="button"
+                                  className="tab btn-small"
+                                  onClick={() => document.getElementById("tablet-case-edit-upload")?.click()}
+                                >
+                                  Choose Photo
+                                </button>
+                                {assetEditForm.tabletCasePhoto ? (
+                                  <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
+                                    <img
+                                      loading="lazy"
+                                      decoding="async"
+                                      src={assetEditForm.tabletCasePhoto}
+                                      alt="edit-tablet-case"
+                                      className="asset-photo-chip-img"
+                                      style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                    />
+                                    <button
+                                      className="tab btn-small"
+                                      type="button"
+                                      onClick={() => setAssetEditForm((f) => ({ ...f, tabletCasePhoto: "" }))}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : null}
+                          <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <input
+                              type="checkbox"
+                              checked={assetEditForm.tabletHasCharger}
+                              onChange={(e) =>
+                                setAssetEditForm((f) => ({
+                                  ...f,
+                                  tabletHasCharger: e.target.checked,
+                                  tabletChargerPhoto: e.target.checked ? f.tabletChargerPhoto : "",
+                                }))
+                              }
+                              style={{ marginRight: 8 }}
+                            />
+                            Charger
+                          </label>
+                          {assetEditForm.tabletHasCharger ? (
+                            <>
+                              <input
+                                id="tablet-charger-edit-upload"
+                                className="file-input"
+                                type="file"
+                                accept="image/*"
+                                style={{ display: "none" }}
+                                onChange={onEditTabletChargerPhotoFile}
+                              />
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
+                                <button
+                                  type="button"
+                                  className="tab btn-small"
+                                  onClick={() => document.getElementById("tablet-charger-edit-upload")?.click()}
+                                >
+                                  Choose Photo
+                                </button>
+                                {assetEditForm.tabletChargerPhoto ? (
+                                  <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
+                                    <img
+                                      loading="lazy"
+                                      decoding="async"
+                                      src={assetEditForm.tabletChargerPhoto}
+                                      alt="edit-tablet-charger"
+                                      className="asset-photo-chip-img"
+                                      style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
+                                    />
+                                    <button
+                                      className="tab btn-small"
+                                      type="button"
+                                      onClick={() => setAssetEditForm((f) => ({ ...f, tabletChargerPhoto: "" }))}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : null}
                         </div>
                       </label>
                     ) : null}
@@ -46691,42 +47335,6 @@ function formatTicketRequestSource(value?: string) {
                         ) : null}
                       </>
                     ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") ? (
-                      <label className="field">
-                        <span>Purchase Date</span>
-                        <input
-                          type="date"
-                          className="input"
-                          value={normalizeYmdInput(assetEditForm.purchaseDate)}
-                          onChange={(e) => {
-                            const normalized = normalizeYmdInput(e.target.value);
-                            setAssetEditForm((f) => ({ ...f, purchaseDate: normalized }));
-                            setAssetEditDateDrafts((prev) => ({
-                              ...prev,
-                              purchaseDate: normalized ? formatMateDateInput(normalized) : "",
-                            }));
-                          }}
-                        />
-                      </label>
-                    ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") ? (
-                      <label className="field">
-                        <span>Warranty Until</span>
-                        <input
-                          type="date"
-                          className="input"
-                          value={normalizeYmdInput(assetEditForm.warrantyUntil)}
-                          onChange={(e) => {
-                            const normalized = normalizeYmdInput(e.target.value);
-                            setAssetEditForm((f) => ({ ...f, warrantyUntil: normalized }));
-                            setAssetEditDateDrafts((prev) => ({
-                              ...prev,
-                              warrantyUntil: normalized ? formatMateDateInput(normalized) : "",
-                            }));
-                          }}
-                        />
-                      </label>
-                    ) : null}
                     {isPrinterAssetRow(editingAsset) ? (
                       <>
                         <label className="field">
@@ -46760,37 +47368,67 @@ function formatTicketRequestSource(value?: string) {
                         </label>
                       </>
                     ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") ? (
-                      <label className="field field-wide">
-                        <span>Specs</span>
-                        <textarea
-                          className="textarea"
-                          value={getVisibleSpecsTextareaValue(editingAsset?.category || "", editingAsset?.type || "", assetEditForm.specs)}
-                          onChange={(e) =>
-                            setAssetEditForm((f) =>
-                              isAirconAsset(editingAsset?.category || "", editingAsset?.type || "")
-                                ? {
-                                    ...f,
-                                    specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(e.target.value), f.acType, f.acHp, {
-                                      hasRemote: Boolean(f.acHasRemote),
-                                      hasFrontPanel: Boolean(f.acHasFrontPanel),
-                                      hasOutdoor: Boolean(f.acHasOutdoor),
-                                      componentNote: String(f.acComponentNote || ""),
-                                      remotePhoto: String(f.acRemotePhoto || ""),
-                                      frontUnitPhoto: String(f.acFrontUnitPhoto || ""),
-                                      outdoorPhoto: String(f.acOutdoorPhoto || ""),
-                                    }),
-                                  }
-                                : { ...f, specs: e.target.value }
-                            )
-                          }
-                        />
-                      </label>
-                    ) : null}
-                    <label className="field field-wide">
-                      <span>Notes</span>
-                      <textarea className="textarea" value={assetEditForm.notes} onChange={(e) => setAssetEditForm((f) => ({ ...f, notes: e.target.value }))} />
-                    </label>
+                    <div className="field field-wide">
+                      <div className="asset-dual-textarea-row">
+                        {!isFurnitureAsset(editingAsset?.category || "") ? (
+                          <label className="field">
+                            <span>Specs</span>
+                            <textarea
+                              className="textarea textarea-auto-grow"
+                              rows={1}
+                              value={getVisibleSpecsTextareaValue(editingAsset?.category || "", editingAsset?.type || "", assetEditForm.specs)}
+                              ref={(el) => {
+                                if (!el) return;
+                                el.style.height = "auto";
+                                el.style.height = `${el.scrollHeight}px`;
+                              }}
+                              onInput={(e) => {
+                                const el = e.currentTarget;
+                                el.style.height = "auto";
+                                el.style.height = `${el.scrollHeight}px`;
+                              }}
+                              onChange={(e) =>
+                                setAssetEditForm((f) =>
+                                  isAirconAsset(editingAsset?.category || "", editingAsset?.type || "")
+                                    ? {
+                                        ...f,
+                                        specs: buildAirconSpecs(stripAirconVisibleSpecsTextareaInput(e.target.value), f.acType, f.acHp, {
+                                          hasRemote: Boolean(f.acHasRemote),
+                                          hasFrontPanel: Boolean(f.acHasFrontPanel),
+                                          hasOutdoor: Boolean(f.acHasOutdoor),
+                                          componentNote: String(f.acComponentNote || ""),
+                                          remotePhoto: String(f.acRemotePhoto || ""),
+                                          frontUnitPhoto: String(f.acFrontUnitPhoto || ""),
+                                          outdoorPhoto: String(f.acOutdoorPhoto || ""),
+                                        }),
+                                      }
+                                    : { ...f, specs: e.target.value }
+                                )
+                              }
+                            />
+                          </label>
+                        ) : null}
+                        <label className="field">
+                          <span>Notes</span>
+                          <textarea
+                            className="textarea textarea-auto-grow"
+                            rows={1}
+                            value={assetEditForm.notes}
+                            ref={(el) => {
+                              if (!el) return;
+                              el.style.height = "auto";
+                              el.style.height = `${el.scrollHeight}px`;
+                            }}
+                            onInput={(e) => {
+                              const el = e.currentTarget;
+                              el.style.height = "auto";
+                              el.style.height = `${el.scrollHeight}px`;
+                            }}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, notes: e.target.value }))}
+                          />
+                        </label>
+                      </div>
+                    </div>
                     <label className="field field-wide">
                     <span>{isFurnitureAsset(editingAsset?.category || "") ? "Location Photo" : t.photo}</span>
                       <input

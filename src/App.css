@@ -7546,9 +7546,17 @@ h2 {
   gap: 12px;
 }
 
+.asset-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .modal-panel .form-grid.asset-detail-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.modal-panel .form-grid.asset-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .modal-panel .asset-detail-grid .field-wide {
@@ -7577,12 +7585,79 @@ h2 {
   align-items: start;
 }
 
+.asset-dual-textarea-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
 .edit-asset-inline-grid-two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .edit-asset-inline-grid-three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.edit-asset-inline-grid-four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.add-detail-media-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.add-detail-photo-field .file-input {
+  display: none;
+}
+
+.add-detail-photo-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  min-height: var(--control-height);
+  padding: 8px 10px;
+  border: 1px solid #d5e1f2;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(249, 252, 255, 0.98), rgba(238, 245, 253, 0.96));
+}
+
+.add-detail-photo-card .photo-preview,
+.add-detail-photo-card .photo-placeholder {
+  width: 56px;
+  height: 56px;
+  margin: 0;
+  border-radius: 12px;
+  font-size: 11px;
+  padding: 4px;
+}
+
+.add-detail-photo-meta {
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.add-detail-photo-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.add-detail-photo-actions .btn-icon-edit,
+.add-detail-photo-actions .btn-danger {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .inventory-item-create-grid {
@@ -7790,6 +7865,13 @@ h2 {
   min-height: 96px;
   padding: 10px 12px;
   resize: vertical;
+}
+
+.textarea-auto-grow {
+  min-height: var(--control-height);
+  height: var(--control-height);
+  resize: none;
+  overflow: hidden;
 }
 
 .file-input {
@@ -9570,6 +9652,8 @@ label.backup-action-btn {
 
 .setpack-include-item {
   width: 100%;
+  color: #274067;
+  font-weight: 800;
 }
 
 .setpack-card-grid {
@@ -9592,6 +9676,10 @@ label.backup-action-btn {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.setpack-item-head strong {
+  color: #1f3658;
 }
 
 .setpack-item-card .photo-preview-wrap {
@@ -27264,6 +27352,29 @@ tr.row-maint-maintenance:hover td {
     color: #d7e4f6 !important;
   }
 
+  .workspace-main .setpack-include-item {
+    color: #eef5ff !important;
+    border-color: rgba(146, 178, 226, 0.48) !important;
+  }
+
+  .workspace-main .setpack-include-item input {
+    accent-color: #5f96ff;
+  }
+
+  .workspace-main .setpack-item-head strong,
+  .workspace-main .setpack-component-check {
+    color: #f3f8ff !important;
+  }
+
+  .workspace-main .setpack-component-meta {
+    color: #d7e4f6 !important;
+  }
+
+  .workspace-main .setpack-item-card {
+    border-color: rgba(146, 178, 226, 0.38) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)) !important;
+  }
+
   .workspace-main .switch-slider {
     background: #8ca6cf;
   }
@@ -28271,12 +28382,30 @@ tr.row-maint-maintenance:hover td {
     gap: 10px;
   }
 
+  .workspace-main .form-grid.asset-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .workspace-main .asset-dual-textarea-row {
+    grid-template-columns: 1fr;
+  }
+
   .modal-panel .form-grid.asset-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .modal-panel .form-grid.asset-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modal-panel .asset-dual-textarea-row {
+    grid-template-columns: 1fr;
+  }
+
   .edit-asset-inline-grid-two,
-  .edit-asset-inline-grid-three {
+  .edit-asset-inline-grid-three,
+  .edit-asset-inline-grid-four,
+  .add-detail-media-row {
     grid-template-columns: 1fr;
   }
 
@@ -28315,6 +28444,10 @@ tr.row-maint-maintenance:hover td {
 .workspace-main .form-grid.inventory-item-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   gap: 10px;
+}
+
+.workspace-main .form-grid.inventory-item-grid.asset-form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 
 .workspace-main .form-grid.inventory-item-grid.utility-invoice-entry-grid {
