@@ -2690,6 +2690,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
     { itemEn: "Refrigerator", itemKm: "ទូទឹកកក", code: "RFG" },
     { itemEn: "Microwave", itemKm: "ម៉ាស៊ីនកម្តៅម្ហូប", code: "MWV" },
+    { itemEn: "Oven Griller", itemKm: "ឡដុតម្ហូប", code: "OVG" },
     { itemEn: "Clock", itemKm: "នាឡិកា", code: "WCL" },
     { itemEn: "Water Dispenser", itemKm: "ម៉ាស៊ីនទឹកត្រជាក់", code: "WDP" },
     { itemEn: "Walkie Talkie", itemKm: "វិទ្យុទាក់ទង", code: "WTK" },
@@ -2710,7 +2711,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 };
 
 const NEW_ENTRY_HIDDEN_TYPE_CODES: Record<string, string[]> = {
-  IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC"],
+  IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC", "WMR"],
   FACILITY: ["RMT", "FPN", "RPN", "TBL", "CHR", "PNO"],
 };
 
@@ -2743,6 +2744,8 @@ const WATER_DISPENSER_MAIN_TYPE = "WDP";
 const LAPTOP_TYPE = "LAP";
 const DIGITAL_CAMERA_TYPE = "DCM";
 const PROJECTOR_TYPE = "SLP";
+const MICROPHONE_SET_TYPE = "MIC";
+const WIRELESS_MIC_RECEIVER_TYPE = "WMR";
 const PROJECTOR_COMPONENT_TYPES = ["PBG"] as const;
 const DASHBOARD_HIDDEN_COMPONENT_TYPES = new Set([
   "ADP",
@@ -2778,6 +2781,8 @@ const NO_PARENT_LINK_TYPES = new Set([
   "SPK",
   "SW",
   "CAM",
+  MICROPHONE_SET_TYPE,
+  WIRELESS_MIC_RECEIVER_TYPE,
 ]);
 const DIGITAL_CAMERA_COMPONENT_TYPES = ["BAT", "CHB", "MCD", "BAG"] as const;
 const MOUSE_KEYBOARD_COMPONENT_ROLE_OPTIONS = [
@@ -2797,6 +2802,7 @@ type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE" | "UWF" | "WBC";
 type LaptopAccessoryType = "ADP" | "MSE" | "KBD" | "MON";
 type CameraComponentType = "BAT" | "CHB" | "MCD" | "BAG";
 type ProjectorComponentType = "PBG" | "RMT" | "ADP" | "HDC";
+type MicrophoneComponentType = "MIC1" | "MIC2" | "WMR";
 type SetPackChildDraft = {
   enabled: boolean;
   status: string;
@@ -2867,9 +2873,28 @@ function defaultProjectorComponentDraft(): Record<ProjectorComponentType, SetPac
   };
 }
 
+function defaultMicrophoneComponentDraft(): Record<MicrophoneComponentType, SetPackChildDraft> {
+  return {
+    MIC1: defaultSetPackChildDraft(),
+    MIC2: defaultSetPackChildDraft(),
+    WMR: defaultSetPackChildDraft(),
+  };
+}
+
 function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF" | "WBC" {
   if (type === "MON2") return "MON";
   return type;
+}
+
+function microphoneComponentAssetType(type: MicrophoneComponentType): "MIC" | "WMR" {
+  if (type === "WMR") return WIRELESS_MIC_RECEIVER_TYPE;
+  return MICROPHONE_SET_TYPE;
+}
+
+function microphoneComponentRole(type: MicrophoneComponentType): string {
+  if (type === "MIC1") return "Mic 1";
+  if (type === "MIC2") return "Mic 2";
+  return "Controller";
 }
 
 function canLinkToParentAsset(category: string, type: string): boolean {
@@ -2884,6 +2909,7 @@ function canLinkToParentAsset(category: string, type: string): boolean {
     code !== "AC" &&
     code !== "RFG" &&
     code !== "MWV" &&
+    code !== "OVG" &&
     code !== "WCL" &&
     code !== "WTK" &&
     code !== "TBL" &&
@@ -2971,6 +2997,11 @@ const TEXT = {
     includeAdapter: "Include Adapter",
     includeExtraMonitor: "Include Extra Monitor",
     laptopAccessoryHint: "Laptop can include accessories without linking to an existing parent asset.",
+    microphoneComponents: "Microphone Components",
+    includeMic1: "Include Mic 1",
+    includeMic2: "Include Mic 2",
+    includeController: "Include Controller",
+    microphoneComponentHint: "Microphone set can include 2 microphones and 1 controller without linking to an existing parent asset.",
     cameraComponents: "Camera Components",
     includeBattery: "Include Battery",
     includeBatteryCharger: "Include Charger Battery",
@@ -3209,6 +3240,11 @@ const TEXT = {
     includeAdapter: "រួមបញ្ចូល Adapter",
     includeExtraMonitor: "រួមបញ្ចូល Monitor បន្ថែម",
     laptopAccessoryHint: "Laptop អាចមានគ្រឿងបន្ថែម ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
+    microphoneComponents: "គ្រឿងបន្ថែមមីក្រូហ្វូន",
+    includeMic1: "រួមបញ្ចូល Mic 1",
+    includeMic2: "រួមបញ្ចូល Mic 2",
+    includeController: "រួមបញ្ចូល Controller",
+    microphoneComponentHint: "ឈុត Microphone អាចមាន Mic 2 និង Controller 1 ដោយមិនចាំបាច់ភ្ជាប់ទៅ Asset មេដែលមានស្រាប់។",
     cameraComponents: "គ្រឿងបន្ថែមកាមេរ៉ា",
     includeBattery: "រួមបញ្ចូលថ្ម",
     includeBatteryCharger: "រួមបញ្ចូលឆ្នាំងសាកថ្ម",
@@ -10836,14 +10872,6 @@ export default function App() {
     UWF: 0,
     WBC: 0,
   });
-  const setPackPhotoInputRefs = useRef<Record<SetPackChildType, HTMLInputElement | null>>({
-    MON: null,
-    MON2: null,
-    KBD: null,
-    MSE: null,
-    UWF: null,
-    WBC: null,
-  });
   const [setPackDetailOpen, setSetPackDetailOpen] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
     MON2: false,
@@ -10867,12 +10895,6 @@ export default function App() {
     KBD: 0,
     MON: 0,
   });
-  const laptopAccessoryPhotoInputRefs = useRef<Record<LaptopAccessoryType, HTMLInputElement | null>>({
-    ADP: null,
-    MSE: null,
-    KBD: null,
-    MON: null,
-  });
   const [laptopAccessoryDetailOpen, setLaptopAccessoryDetailOpen] = useState<Record<LaptopAccessoryType, boolean>>({
     ADP: false,
     MSE: false,
@@ -10893,12 +10915,6 @@ export default function App() {
     CHB: 0,
     MCD: 0,
     BAG: 0,
-  });
-  const cameraComponentPhotoInputRefs = useRef<Record<CameraComponentType, HTMLInputElement | null>>({
-    BAT: null,
-    CHB: null,
-    MCD: null,
-    BAG: null,
   });
   const [cameraComponentDetailOpen, setCameraComponentDetailOpen] = useState<Record<CameraComponentType, boolean>>({
     BAT: false,
@@ -10921,17 +10937,29 @@ export default function App() {
     ADP: 0,
     HDC: 0,
   });
-  const projectorComponentPhotoInputRefs = useRef<Record<ProjectorComponentType, HTMLInputElement | null>>({
-    PBG: null,
-    RMT: null,
-    ADP: null,
-    HDC: null,
-  });
   const [projectorComponentDetailOpen, setProjectorComponentDetailOpen] = useState<Record<ProjectorComponentType, boolean>>({
     PBG: false,
     RMT: false,
     ADP: false,
     HDC: false,
+  });
+  const [microphoneComponentEnabled, setMicrophoneComponentEnabled] = useState<Record<MicrophoneComponentType, boolean>>({
+    MIC1: true,
+    MIC2: true,
+    WMR: true,
+  });
+  const [microphoneComponentDraft, setMicrophoneComponentDraft] = useState<Record<MicrophoneComponentType, SetPackChildDraft>>(
+    () => defaultMicrophoneComponentDraft()
+  );
+  const [microphoneComponentFileKey, setMicrophoneComponentFileKey] = useState<Record<MicrophoneComponentType, number>>({
+    MIC1: 0,
+    MIC2: 0,
+    WMR: 0,
+  });
+  const [microphoneComponentDetailOpen, setMicrophoneComponentDetailOpen] = useState<Record<MicrophoneComponentType, boolean>>({
+    MIC1: false,
+    MIC2: false,
+    WMR: false,
   });
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
@@ -15029,6 +15057,15 @@ export default function App() {
       HDC: buildAssetId(assetForm.campus, "IT", "HDC", baseHdc),
     };
   }, [assets, assetForm.campus]);
+  const microphoneComponentSuggestedAssetId = useMemo<Record<MicrophoneComponentType, string>>(() => {
+    const baseMic = calcNextSeq(assets, assetForm.campus, "IT", MICROPHONE_SET_TYPE);
+    const baseWmr = calcNextSeq(assets, assetForm.campus, "IT", WIRELESS_MIC_RECEIVER_TYPE);
+    return {
+      MIC1: buildAssetId(assetForm.campus, "IT", MICROPHONE_SET_TYPE, baseMic),
+      MIC2: buildAssetId(assetForm.campus, "IT", MICROPHONE_SET_TYPE, baseMic + 1),
+      WMR: buildAssetId(assetForm.campus, "IT", WIRELESS_MIC_RECEIVER_TYPE, baseWmr),
+    };
+  }, [assets, assetForm.campus]);
   const parentAssetsForEdit = useMemo(() => {
     const editing = assets.find((a) => a.id === editingAssetId);
     if (!editing) return [] as Asset[];
@@ -18242,6 +18279,10 @@ export default function App() {
     () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === PROJECTOR_TYPE,
     [assetForm.category, assetForm.type]
   );
+  const isMicrophoneAssetForCreate = useMemo(
+    () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === MICROPHONE_SET_TYPE,
+    [assetForm.category, assetForm.type]
+  );
   const isTvAssetForCreate = useMemo(
     () => assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === TV_TYPE_CODE,
     [assetForm.category, assetForm.type]
@@ -18703,6 +18744,26 @@ export default function App() {
       HDC: prev.HDC + 1,
     }));
   }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    const isMicrophone = assetForm.category === "IT" && String(assetForm.type || "").trim().toUpperCase() === MICROPHONE_SET_TYPE;
+    if (isMicrophone) return;
+    setMicrophoneComponentEnabled({
+      MIC1: true,
+      MIC2: true,
+      WMR: true,
+    });
+    setMicrophoneComponentDraft(defaultMicrophoneComponentDraft());
+    setMicrophoneComponentDetailOpen({
+      MIC1: false,
+      MIC2: false,
+      WMR: false,
+    });
+    setMicrophoneComponentFileKey((prev) => ({
+      MIC1: prev.MIC1 + 1,
+      MIC2: prev.MIC2 + 1,
+      WMR: prev.WMR + 1,
+    }));
+  }, [assetForm.category, assetForm.type]);
 
   useEffect(() => {
     setAssetForm((prev) => {
@@ -18818,6 +18879,14 @@ export default function App() {
       { type: "HDC", label: t.includeHdmiCable },
     ],
     [t.includeProjectorBag, t.includeRemoteControl, t.includeAdapter, t.includeHdmiCable]
+  );
+  const microphoneComponentMeta = useMemo<Array<{ type: MicrophoneComponentType; label: string }>>(
+    () => [
+      { type: "MIC1", label: t.includeMic1 },
+      { type: "MIC2", label: t.includeMic2 },
+      { type: "WMR", label: t.includeController },
+    ],
+    [t.includeMic1, t.includeMic2, t.includeController]
   );
 
   useEffect(() => {
@@ -19821,6 +19890,7 @@ export default function App() {
     const isLaptopAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === LAPTOP_TYPE;
     const isDigitalCameraAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === DIGITAL_CAMERA_TYPE;
     const isProjectorAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === PROJECTOR_TYPE;
+    const isMicrophoneAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === MICROPHONE_SET_TYPE;
     const isTvAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === TV_TYPE_CODE;
     const isWalkieAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === WALKIE_TALKIE_TYPE_CODE;
     const shouldLinkToParent = !isDesktopAsset && (isLinkableForCreate && assetForm.useExistingSet);
@@ -19839,6 +19909,11 @@ export default function App() {
       ? (Object.entries(projectorComponentEnabled) as Array<[ProjectorComponentType, boolean]>)
           .filter(([, enabled]) => enabled)
           .map(([type]) => ({ type, draft: projectorComponentDraft[type] }))
+      : [];
+    const createMicrophoneComponents = isMicrophoneAsset
+      ? (Object.entries(microphoneComponentEnabled) as Array<[MicrophoneComponentType, boolean]>)
+          .filter(([, enabled]) => enabled)
+          .map(([type]) => ({ type, draft: microphoneComponentDraft[type] }))
       : [];
     const createTvRemoteCount = isTvAsset ? Math.max(1, Math.min(2, Number(assetForm.tvRemoteCount || 1))) : 0;
     const createWalkieCharger = isWalkieAsset && Boolean(assetForm.walkieHasCharger);
@@ -20032,6 +20107,29 @@ export default function App() {
         localProjectorComponentSerials.set(key, type);
       }
     }
+    if (createMicrophoneComponents.length) {
+      const localMicrophoneComponentSerials = new Map<string, string>();
+      for (const { type, draft } of createMicrophoneComponents) {
+        const serial = String(draft.serialNumber || "").trim();
+        if (!serial) continue;
+        const key = normalizeAssetSerialKey(serial);
+        if (!key) continue;
+        const duplicateExisting = findDuplicateAssetSerial(assets, serial);
+        if (duplicateExisting) {
+          setError(`Serial number already exists: ${duplicateExisting.assetId}`);
+          return;
+        }
+        if (mainSerial && normalizeAssetSerialKey(mainSerial) === key) {
+          setError(`Duplicate serial in microphone component (${type}): ${serial}`);
+          return;
+        }
+        if (localMicrophoneComponentSerials.has(key)) {
+          setError(`Duplicate serial in microphone components: ${serial}`);
+          return;
+        }
+        localMicrophoneComponentSerials.set(key, type);
+      }
+    }
 
     setBusy(true);
     setError("");
@@ -20174,6 +20272,39 @@ export default function App() {
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
               notes: draft.notes || `Auto-created projector component for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: componentPhotos[0] || "",
+              photos: componentPhotos,
+              status: draft.status || assetForm.status,
+            }),
+          });
+        }
+      }
+      if (createMicrophoneComponents.length && created.asset?.assetId) {
+        for (const { type, draft } of createMicrophoneComponents) {
+          const componentPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: "IT",
+              type: microphoneComponentAssetType(type),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              componentRole: microphoneComponentRole(type),
+              componentRequired: true,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created microphone component for ${created.asset.assetId}`,
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: componentPhotos[0] || "",
@@ -20372,6 +20503,22 @@ export default function App() {
         RMT: prev.RMT + 1,
         ADP: prev.ADP + 1,
         HDC: prev.HDC + 1,
+      }));
+      setMicrophoneComponentEnabled({
+        MIC1: true,
+        MIC2: true,
+        WMR: true,
+      });
+      setMicrophoneComponentDraft(defaultMicrophoneComponentDraft());
+      setMicrophoneComponentDetailOpen({
+        MIC1: false,
+        MIC2: false,
+        WMR: false,
+      });
+      setMicrophoneComponentFileKey((prev) => ({
+        MIC1: prev.MIC1 + 1,
+        MIC2: prev.MIC2 + 1,
+        WMR: prev.WMR + 1,
       }));
       setModelTemplateNote("");
       setAssetFileKey((k) => k + 1);
@@ -20677,6 +20824,63 @@ export default function App() {
             nextLocal = [child, ...nextLocal];
           }
         }
+        if (createMicrophoneComponents.length) {
+          for (const { type, draft } of createMicrophoneComponents) {
+            const assetType = microphoneComponentAssetType(type);
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", assetType);
+            const componentPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: "IT",
+              type: assetType,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(assetForm.campus, "IT", assetType, childSeq),
+              name: assetItemName("IT", assetType),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              componentRole: microphoneComponentRole(type),
+              componentRequired: true,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created microphone component for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: draft.status || assetForm.status,
+                  reason: "Asset created as microphone component",
+                },
+              ],
+              photo: componentPhotos[0] || "",
+              photos: componentPhotos,
+              status: draft.status || assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
         if (createTabletCharger) {
           const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", TABLET_CHARGER_TYPE_CODE);
           const child: Asset = {
@@ -20913,6 +21117,22 @@ export default function App() {
           RMT: prev.RMT + 1,
           ADP: prev.ADP + 1,
           HDC: prev.HDC + 1,
+        }));
+        setMicrophoneComponentEnabled({
+          MIC1: true,
+          MIC2: true,
+          WMR: true,
+        });
+        setMicrophoneComponentDraft(defaultMicrophoneComponentDraft());
+        setMicrophoneComponentDetailOpen({
+          MIC1: false,
+          MIC2: false,
+          WMR: false,
+        });
+        setMicrophoneComponentFileKey((prev) => ({
+          MIC1: prev.MIC1 + 1,
+          MIC2: prev.MIC2 + 1,
+          WMR: prev.WMR + 1,
         }));
         setModelTemplateNote("");
         setAssetFileKey((k) => k + 1);
@@ -28265,6 +28485,124 @@ export default function App() {
     }
   }
 
+  async function editOrCreateMicrophoneComponentChild(type: MicrophoneComponentType) {
+    if (!editingAsset) return;
+    const existing = editingMicrophoneComponentChildren[type];
+    if (existing) {
+      startEditAsset(existing);
+      return;
+    }
+    if (!requireAdminAction()) return;
+    if (!(editingAsset.category === "IT" && editingAsset.type === MICROPHONE_SET_TYPE)) return;
+
+    const assetType = microphoneComponentAssetType(type);
+    const payload = {
+      campus: editingAsset.campus,
+      category: "IT",
+      type: assetType,
+      location: editingAsset.location,
+      setCode: "",
+      parentAssetId: editingAsset.assetId,
+      componentRole: microphoneComponentRole(type),
+      componentRequired: true,
+      assignedTo: "",
+      custodyStatus: "IN_STOCK",
+      brand: "",
+      model: "",
+      serialNumber: "",
+      specs: "",
+      purchaseDate: "",
+      warrantyUntil: "",
+      vendor: "",
+      notes: `Linked microphone component to ${editingAsset.assetId}`,
+      nextMaintenanceDate: "",
+      scheduleNote: "",
+      photo: "",
+      photos: [],
+      status: editingAsset.status || "Active",
+    };
+
+    setBusy(true);
+    setError("");
+    try {
+      let childAsset: Asset | null = null;
+      try {
+        const created = await requestJson<{ asset: Asset }>("/api/assets", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        childAsset = created.asset;
+      } catch (err) {
+        if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+        const allLocal = readAssetFallback();
+        const seq = calcNextSeq(allLocal, payload.campus, payload.category, payload.type);
+        childAsset = {
+          id: Date.now(),
+          campus: payload.campus,
+          category: payload.category,
+          type: payload.type,
+          pcType: "",
+          seq,
+          assetId: buildAssetId(payload.campus, payload.category, payload.type, seq),
+          name: assetItemName(payload.category, payload.type),
+          location: payload.location,
+          setCode: payload.setCode,
+          parentAssetId: payload.parentAssetId,
+          componentRole: payload.componentRole,
+          componentRequired: payload.componentRequired,
+          assignedTo: payload.assignedTo,
+          custodyStatus: "IN_STOCK",
+          brand: payload.brand,
+          model: payload.model,
+          serialNumber: payload.serialNumber,
+          specs: payload.specs,
+          purchaseDate: payload.purchaseDate,
+          warrantyUntil: payload.warrantyUntil,
+          vendor: payload.vendor,
+          notes: payload.notes,
+          nextMaintenanceDate: payload.nextMaintenanceDate,
+          nextVerificationDate: "",
+          verificationFrequency: "NONE",
+          scheduleNote: payload.scheduleNote,
+          repeatMode: "NONE",
+          repeatWeekOfMonth: 0,
+          repeatWeekday: 0,
+          maintenanceHistory: [],
+          verificationHistory: [],
+          transferHistory: [],
+          custodyHistory: [],
+          statusHistory: [
+            {
+              id: Date.now(),
+              date: new Date().toISOString(),
+              fromStatus: "New",
+              toStatus: payload.status,
+              reason: "Asset created as microphone component in edit",
+            },
+          ],
+          photo: "",
+          photos: [],
+          status: payload.status,
+          created: new Date().toISOString(),
+        };
+        const nextLocal = [childAsset, ...allLocal];
+        writeAssetFallback(nextLocal);
+        setAssets(nextLocal);
+        setStats(buildStatsFromAssets(nextLocal, campusFilter));
+      }
+
+      if (childAsset) {
+        appendUiAudit("CREATE", "asset", childAsset.assetId, `${childAsset.campus} | ${childAsset.location}`);
+        startEditAsset(childAsset);
+      }
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create microphone component");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addMissingProjectorComponents() {
     if (!editingAsset) return;
     if (!requireAdminAction()) return;
@@ -31363,6 +31701,36 @@ export default function App() {
       e.target.value = "";
     }
   }
+  async function onMicrophoneComponentPhotoFile(type: MicrophoneComponentType, e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setMicrophoneComponentDraft((prev) => {
+        const merged = normalizeAssetPhotos({
+          photo: prev[type].photo,
+          photos: [...(prev[type].photos || []), ...optimized],
+        }).slice(0, MAX_SET_PACK_PHOTOS);
+        return {
+          ...prev,
+          [type]: {
+            ...prev[type],
+            photo: merged[0] || "",
+            photos: merged,
+          },
+        };
+      });
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
 
   async function onEditWalkieChargerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
@@ -32902,6 +33270,34 @@ export default function App() {
       if (child.type === "ADP" && !map.ADP) map.ADP = child;
       if (child.type === "HDC" && !map.HDC) map.HDC = child;
     }
+    return map;
+  }, [assets, editingAsset]);
+  const editingMicrophoneComponentChildren = useMemo<Partial<Record<MicrophoneComponentType, Asset>>>(() => {
+    if (!editingAsset) return {};
+    const isMicrophoneParent = editingAsset.category === "IT" && editingAsset.type === MICROPHONE_SET_TYPE;
+    if (!isMicrophoneParent) return {};
+    const map: Partial<Record<MicrophoneComponentType, Asset>> = {};
+    const childrenByScope = assets
+      .filter(
+        (a) =>
+          a.assetId !== editingAsset.assetId &&
+          a.campus === editingAsset.campus &&
+          a.parentAssetId === editingAsset.assetId
+      )
+      .sort((a, b) => (Number(a.seq) || 0) - (Number(b.seq) || 0) || a.assetId.localeCompare(b.assetId));
+    const receiver = childrenByScope.find((a) => a.type === WIRELESS_MIC_RECEIVER_TYPE);
+    if (receiver) map.WMR = receiver;
+    const micChildren = childrenByScope.filter((a) => a.type === MICROPHONE_SET_TYPE);
+    const micRoleMatcher = (asset: Asset, keyword: string) =>
+      String(asset.componentRole || "")
+        .trim()
+        .toLowerCase()
+        .includes(keyword);
+    const mic1 = micChildren.find((asset) => micRoleMatcher(asset, "mic 1") || micRoleMatcher(asset, "microphone 1"));
+    const mic2 = micChildren.find((asset) => micRoleMatcher(asset, "mic 2") || micRoleMatcher(asset, "microphone 2"));
+    const fallbackMicChildren = micChildren.filter((asset) => asset.assetId !== mic1?.assetId && asset.assetId !== mic2?.assetId);
+    if (mic1 || micChildren[0]) map.MIC1 = mic1 || micChildren[0];
+    if (mic2 || fallbackMicChildren[0]) map.MIC2 = mic2 || fallbackMicChildren[0];
     return map;
   }, [assets, editingAsset]);
   const editSetPackChildMeta = useMemo(
@@ -37882,6 +38278,9 @@ export default function App() {
       name.includes("exhaust fan") ||
       name.includes("fan")
     ) return icon(Fan);
+    if (code === "OVG" || name.includes("oven griller") || name.includes("oven") || name.includes("griller") || name.includes("grill")) {
+      return icon(Flame);
+    }
     if (code === "WDP" || name.includes("water dispenser")) return icon(Droplets);
     if (code === "WTK" || name.includes("walkie")) return icon(Radio);
     if (code === "FPN" || name.includes("front panel")) return icon(Puzzle);
@@ -43577,55 +43976,44 @@ function formatTicketRequestSource(value?: string) {
                       {assetForm.createSetPack ? (
                         <div className="field field-wide">
                           <span>{t.setPackItems}</span>
-                          <div className="setpack-include-grid">
+                          <div className="setpack-component-list">
                             {createSetPackChildMeta.map((item) => (
-                              <label key={`pack-toggle-${item.type}`} className="tab setpack-include-item">
-                                <input
-                                  type="checkbox"
-                                  checked={setPackDraft[item.type].enabled}
-                                  onChange={(e) =>
-                                    setSetPackDraft((prev) => {
-                                      const checked = e.target.checked;
-                                      const next = {
-                                        ...prev,
-                                        [item.type]: {
-                                          ...prev[item.type],
-                                          enabled: checked,
-                                        },
-                                      };
-                                      if (item.type === "MON2" && checked) {
-                                        next.MON = { ...next.MON, enabled: true };
+                              <div
+                                key={`pack-fields-${item.type}`}
+                                className={`setpack-component-row${setPackDraft[item.type].enabled ? " setpack-component-row-enabled" : ""}`}
+                              >
+                                <div className="setpack-component-main">
+                                  <label className="setpack-component-check">
+                                    <input
+                                      type="checkbox"
+                                      checked={setPackDraft[item.type].enabled}
+                                      onChange={(e) =>
+                                        setSetPackDraft((prev) => {
+                                          const checked = e.target.checked;
+                                          const next = {
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              enabled: checked,
+                                            },
+                                          };
+                                          if (item.type === "MON2" && checked) {
+                                            next.MON = { ...next.MON, enabled: true };
+                                          }
+                                          if (item.type === "MON" && !checked) {
+                                            next.MON2 = { ...next.MON2, enabled: false };
+                                          }
+                                          return next;
+                                        })
                                       }
-                                      if (item.type === "MON" && !checked) {
-                                        next.MON2 = { ...next.MON2, enabled: false };
-                                      }
-                                      return next;
-                                    })
-                                  }
-                                />{" "}
-                                {item.label}
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                      {assetForm.createSetPack
-                        ? (
-                          <div className="field field-wide">
-                            <div className="setpack-card-grid">
-                              {createSetPackChildMeta.map((item) => (
-                                setPackDraft[item.type].enabled ? (
-                                  <div
-                                    key={`pack-fields-${item.type}`}
-                                    className={`setpack-item-card${setPackDetailOpen[item.type] ? " setpack-item-card-open" : ""}`}
-                                  >
-                                    <div className="setpack-item-head">
-                                      <div>
-                                        <strong>{item.label}</strong>
-                                        <div className="tiny">
-                                          {t.assetId}: {setPackSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", setPackAssetType(item.type))}
-                                        </div>
-                                      </div>
+                                    />
+                                    <span>{item.label}</span>
+                                  </label>
+                                  {setPackDraft[item.type].enabled ? (
+                                    <>
+                                      <span className="tiny setpack-component-meta">
+                                        {t.assetId}: {setPackSuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", setPackAssetType(item.type))}
+                                      </span>
                                       <button
                                         type="button"
                                         className="tab setpack-detail-btn"
@@ -43638,9 +44026,12 @@ function formatTicketRequestSource(value?: string) {
                                       >
                                         {setPackDetailOpen[item.type] ? t.hideDetails : t.addDetails}
                                       </button>
-                                    </div>
-                                    {setPackDetailOpen[item.type] ? (
-                                      <div className="form-grid">
+                                    </>
+                                  ) : null}
+                                </div>
+                                {setPackDraft[item.type].enabled && setPackDetailOpen[item.type] ? (
+                                  <div className="setpack-component-detail-wrap">
+                                    <div className="form-grid">
                                     <label className="field">
                                       <span>{t.status}</span>
                                       <select
@@ -43768,40 +44159,34 @@ function formatTicketRequestSource(value?: string) {
                                       <div className="field add-detail-photo-field">
                                         <span>{t.photo}</span>
                                         <input
+                                          id={`set-pack-photo-${item.type}`}
                                           key={setPackFileKey[item.type]}
-                                          ref={(el) => {
-                                            setPackPhotoInputRefs.current[item.type] = el;
-                                          }}
                                           className="file-input"
                                           type="file"
                                           accept="image/*"
                                           onChange={(e) => onSetPackPhotoFile(item.type, e)}
                                         />
                                         <div className="add-detail-photo-card">
+                                          <label className="add-detail-photo-swatch" htmlFor={`set-pack-photo-${item.type}`}>
+                                            {normalizeAssetPhotos(setPackDraft[item.type]).length ? (
+                                              <img
+                                                loading="lazy"
+                                                decoding="async"
+                                                src={normalizeAssetPhotos(setPackDraft[item.type])[0]}
+                                                alt={`${item.label} preview`}
+                                                className="photo-preview"
+                                              />
+                                            ) : (
+                                              <>
+                                                <div className="photo-placeholder" aria-hidden="true">+</div>
+                                                <span className="add-detail-photo-empty">{t.noPhoto}</span>
+                                              </>
+                                            )}
+                                          </label>
                                           {normalizeAssetPhotos(setPackDraft[item.type]).length ? (
-                                            <img
-                                              loading="lazy"
-                                              decoding="async"
-                                              src={normalizeAssetPhotos(setPackDraft[item.type])[0]}
-                                              alt={`${item.label} preview`}
-                                              className="photo-preview"
-                                            />
-                                          ) : (
-                                            <div className="photo-placeholder">{t.noPhoto}</div>
-                                          )}
-                                          <div className="add-detail-photo-meta">
                                             <div className="add-detail-photo-actions">
                                               <button
-                                                className="btn-icon-edit"
-                                                type="button"
-                                                title="Upload photo"
-                                                aria-label="Upload photo"
-                                                onClick={() => setPackPhotoInputRefs.current[item.type]?.click()}
-                                              >
-                                                ✎
-                                              </button>
-                                              <button
-                                                className="btn-danger"
+                                                className="btn-danger add-detail-photo-icon"
                                                 type="button"
                                                 title="Delete Photo"
                                                 aria-label="Delete Photo"
@@ -43824,7 +44209,7 @@ function formatTicketRequestSource(value?: string) {
                                                 ✕
                                               </button>
                                             </div>
-                                          </div>
+                                          ) : null}
                                         </div>
                                       </div>
                                     </div>
@@ -43882,72 +44267,64 @@ function formatTicketRequestSource(value?: string) {
                                         }
                                       />
                                     </label>
-                                      </div>
-                                    ) : null}
+                                    </div>
                                   </div>
-                                ) : (
-                                  <div key={`pack-slot-${item.type}`} className="setpack-item-slot" aria-hidden={true} />
-                                )
-                              ))}
-                            </div>
+                                ) : null}
+                              </div>
+                            ))}
                           </div>
-                        ) : null}
+                        </div>
+                      ) : null}
                     </>
                   ) : isLaptopAssetForCreate ? (
                     <>
-                      <label className="field field-wide">
+                      <div className="field field-wide">
                         <span>{t.laptopAccessories}</span>
                         <div className="setpack-toggle-row">
                           <span className="tiny">{t.laptopAccessoryHint}</span>
                         </div>
-                        <div className="setpack-include-grid">
+                        <div className="setpack-component-list">
                           {laptopAccessoryMeta.map((item) => (
-                            <label key={`laptop-accessory-${item.type}`} className="tab setpack-include-item">
-                              <input
-                                type="checkbox"
-                                checked={laptopAccessoryEnabled[item.type]}
-                                onChange={(e) =>
-                                  setLaptopAccessoryEnabled((prev) => ({
-                                    ...prev,
-                                    [item.type]: e.target.checked,
-                                  }))
-                                }
-                                style={{ marginRight: 8 }}
-                              />
-                              {item.label}
-                            </label>
-                          ))}
-                        </div>
-                      </label>
-                      <div className="field field-wide">
-                        <div className="setpack-card-grid">
-                          {laptopAccessoryMeta.map((item) => (
-                            laptopAccessoryEnabled[item.type] ? (
-                              <div
-                                key={`laptop-accessory-details-${item.type}`}
-                                className={`setpack-item-card${laptopAccessoryDetailOpen[item.type] ? " setpack-item-card-open" : ""}`}
-                              >
-                                <div className="setpack-item-head">
-                                  <div>
-                                    <strong>{item.label}</strong>
-                                    <div className="tiny">
-                                      {t.assetId}: {laptopAccessorySuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="tab setpack-detail-btn"
-                                    onClick={() =>
-                                      setLaptopAccessoryDetailOpen((prev) => ({
+                            <div
+                              key={`laptop-accessory-details-${item.type}`}
+                              className={`setpack-component-row${laptopAccessoryEnabled[item.type] ? " setpack-component-row-enabled" : ""}`}
+                            >
+                              <div className="setpack-component-main">
+                                <label className="setpack-component-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={laptopAccessoryEnabled[item.type]}
+                                    onChange={(e) =>
+                                      setLaptopAccessoryEnabled((prev) => ({
                                         ...prev,
-                                        [item.type]: !prev[item.type],
+                                        [item.type]: e.target.checked,
                                       }))
                                     }
-                                  >
-                                    {laptopAccessoryDetailOpen[item.type] ? t.hideDetails : t.addDetails}
-                                  </button>
-                                </div>
-                                {laptopAccessoryDetailOpen[item.type] ? (
+                                  />
+                                  <span>{item.label}</span>
+                                </label>
+                                {laptopAccessoryEnabled[item.type] ? (
+                                  <>
+                                    <span className="tiny setpack-component-meta">
+                                      {t.assetId}: {laptopAccessorySuggestedAssetId[item.type]} | {t.assetName}: {assetItemName("IT", item.type)}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="tab setpack-detail-btn"
+                                      onClick={() =>
+                                        setLaptopAccessoryDetailOpen((prev) => ({
+                                          ...prev,
+                                          [item.type]: !prev[item.type],
+                                        }))
+                                      }
+                                    >
+                                      {laptopAccessoryDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                    </button>
+                                  </>
+                                ) : null}
+                              </div>
+                              {laptopAccessoryEnabled[item.type] && laptopAccessoryDetailOpen[item.type] ? (
+                                <div className="setpack-component-detail-wrap">
                                   <div className="form-grid">
                                     <label className="field">
                                       <span>{t.status}</span>
@@ -44074,40 +44451,34 @@ function formatTicketRequestSource(value?: string) {
                                       <div className="field add-detail-photo-field">
                                         <span>{t.photo}</span>
                                         <input
+                                          id={`laptop-accessory-photo-${item.type}`}
                                           key={laptopAccessoryFileKey[item.type]}
-                                          ref={(el) => {
-                                            laptopAccessoryPhotoInputRefs.current[item.type] = el;
-                                          }}
                                           className="file-input"
                                           type="file"
                                           accept="image/*"
                                           onChange={(e) => onLaptopAccessoryPhotoFile(item.type, e)}
                                         />
                                         <div className="add-detail-photo-card">
+                                          <label className="add-detail-photo-swatch" htmlFor={`laptop-accessory-photo-${item.type}`}>
+                                            {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length ? (
+                                              <img
+                                                loading="lazy"
+                                                decoding="async"
+                                                src={normalizeAssetPhotos(laptopAccessoryDraft[item.type])[0]}
+                                                alt={`${item.label} preview`}
+                                                className="photo-preview"
+                                              />
+                                            ) : (
+                                              <>
+                                                <div className="photo-placeholder" aria-hidden="true">+</div>
+                                                <span className="add-detail-photo-empty">{t.noPhoto}</span>
+                                              </>
+                                            )}
+                                          </label>
                                           {normalizeAssetPhotos(laptopAccessoryDraft[item.type]).length ? (
-                                            <img
-                                              loading="lazy"
-                                              decoding="async"
-                                              src={normalizeAssetPhotos(laptopAccessoryDraft[item.type])[0]}
-                                              alt={`${item.label} preview`}
-                                              className="photo-preview"
-                                            />
-                                          ) : (
-                                            <div className="photo-placeholder">{t.noPhoto}</div>
-                                          )}
-                                          <div className="add-detail-photo-meta">
                                             <div className="add-detail-photo-actions">
                                               <button
-                                                className="btn-icon-edit"
-                                                type="button"
-                                                title="Upload photo"
-                                                aria-label="Upload photo"
-                                                onClick={() => laptopAccessoryPhotoInputRefs.current[item.type]?.click()}
-                                              >
-                                                ✎
-                                              </button>
-                                              <button
-                                                className="btn-danger"
+                                                className="btn-danger add-detail-photo-icon"
                                                 type="button"
                                                 title="Delete Photo"
                                                 aria-label="Delete Photo"
@@ -44130,7 +44501,7 @@ function formatTicketRequestSource(value?: string) {
                                                 ✕
                                               </button>
                                             </div>
-                                          </div>
+                                          ) : null}
                                         </div>
                                       </div>
                                     </div>
@@ -44189,11 +44560,9 @@ function formatTicketRequestSource(value?: string) {
                                       />
                                     </label>
                                   </div>
-                                ) : null}
-                              </div>
-                            ) : (
-                              <div key={`laptop-accessory-slot-${item.type}`} className="setpack-item-slot" aria-hidden={true} />
-                            )
+                                </div>
+                              ) : null}
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -44372,40 +44741,34 @@ function formatTicketRequestSource(value?: string) {
                                     <div className="field add-detail-photo-field">
                                       <span>{t.photo}</span>
                                       <input
+                                        id={`camera-component-photo-${item.type}`}
                                         key={cameraComponentFileKey[item.type]}
-                                        ref={(el) => {
-                                          cameraComponentPhotoInputRefs.current[item.type] = el;
-                                        }}
                                         className="file-input"
                                         type="file"
                                         accept="image/*"
                                         onChange={(e) => onCameraComponentPhotoFile(item.type, e)}
                                       />
                                       <div className="add-detail-photo-card">
+                                        <label className="add-detail-photo-swatch" htmlFor={`camera-component-photo-${item.type}`}>
+                                          {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                              src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
+                                              alt={`${item.label} preview`}
+                                              className="photo-preview"
+                                            />
+                                          ) : (
+                                            <>
+                                              <div className="photo-placeholder" aria-hidden="true">+</div>
+                                              <span className="add-detail-photo-empty">{t.noPhoto}</span>
+                                            </>
+                                          )}
+                                        </label>
                                         {normalizeAssetPhotos(cameraComponentDraft[item.type]).length ? (
-                                          <img
-                                            loading="lazy"
-                                            decoding="async"
-                                            src={normalizeAssetPhotos(cameraComponentDraft[item.type])[0]}
-                                            alt={`${item.label} preview`}
-                                            className="photo-preview"
-                                          />
-                                        ) : (
-                                          <div className="photo-placeholder">{t.noPhoto}</div>
-                                        )}
-                                        <div className="add-detail-photo-meta">
                                           <div className="add-detail-photo-actions">
                                             <button
-                                              className="btn-icon-edit"
-                                              type="button"
-                                              title="Upload photo"
-                                              aria-label="Upload photo"
-                                              onClick={() => cameraComponentPhotoInputRefs.current[item.type]?.click()}
-                                            >
-                                              ✎
-                                            </button>
-                                            <button
-                                              className="btn-danger"
+                                              className="btn-danger add-detail-photo-icon"
                                               type="button"
                                               title="Delete Photo"
                                               aria-label="Delete Photo"
@@ -44428,7 +44791,7 @@ function formatTicketRequestSource(value?: string) {
                                               ✕
                                             </button>
                                           </div>
-                                        </div>
+                                        ) : null}
                                       </div>
                                     </div>
                                   </div>
@@ -44667,40 +45030,34 @@ function formatTicketRequestSource(value?: string) {
                                     <div className="field add-detail-photo-field">
                                       <span>{t.photo}</span>
                                       <input
+                                        id={`projector-component-photo-${item.type}`}
                                         key={projectorComponentFileKey[item.type]}
-                                        ref={(el) => {
-                                          projectorComponentPhotoInputRefs.current[item.type] = el;
-                                        }}
                                         className="file-input"
                                         type="file"
                                         accept="image/*"
                                         onChange={(e) => onProjectorComponentPhotoFile(item.type, e)}
                                       />
                                       <div className="add-detail-photo-card">
+                                        <label className="add-detail-photo-swatch" htmlFor={`projector-component-photo-${item.type}`}>
+                                          {normalizeAssetPhotos(projectorComponentDraft[item.type]).length ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                              src={normalizeAssetPhotos(projectorComponentDraft[item.type])[0]}
+                                              alt={`${item.label} preview`}
+                                              className="photo-preview"
+                                            />
+                                          ) : (
+                                            <>
+                                              <div className="photo-placeholder" aria-hidden="true">+</div>
+                                              <span className="add-detail-photo-empty">{t.noPhoto}</span>
+                                            </>
+                                          )}
+                                        </label>
                                         {normalizeAssetPhotos(projectorComponentDraft[item.type]).length ? (
-                                          <img
-                                            loading="lazy"
-                                            decoding="async"
-                                            src={normalizeAssetPhotos(projectorComponentDraft[item.type])[0]}
-                                            alt={`${item.label} preview`}
-                                            className="photo-preview"
-                                          />
-                                        ) : (
-                                          <div className="photo-placeholder">{t.noPhoto}</div>
-                                        )}
-                                        <div className="add-detail-photo-meta">
                                           <div className="add-detail-photo-actions">
                                             <button
-                                              className="btn-icon-edit"
-                                              type="button"
-                                              title="Upload photo"
-                                              aria-label="Upload photo"
-                                              onClick={() => projectorComponentPhotoInputRefs.current[item.type]?.click()}
-                                            >
-                                              ✎
-                                            </button>
-                                            <button
-                                              className="btn-danger"
+                                              className="btn-danger add-detail-photo-icon"
                                               type="button"
                                               title="Delete Photo"
                                               aria-label="Delete Photo"
@@ -44723,7 +45080,7 @@ function formatTicketRequestSource(value?: string) {
                                               ✕
                                             </button>
                                           </div>
-                                        </div>
+                                        ) : null}
                                       </div>
                                     </div>
                                   </div>
@@ -44772,6 +45129,295 @@ function formatTicketRequestSource(value?: string) {
                                       }}
                                       onChange={(e) =>
                                         setProjectorComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            notes: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : isMicrophoneAssetForCreate ? (
+                    <div className="field field-wide">
+                      <span>{t.microphoneComponents}</span>
+                      <div className="setpack-toggle-row">
+                        <span className="tiny">{t.microphoneComponentHint}</span>
+                      </div>
+                      <div className="setpack-component-list">
+                        {microphoneComponentMeta.map((item) => (
+                          <div
+                            key={`microphone-component-row-${item.type}`}
+                            className={`setpack-component-row${microphoneComponentEnabled[item.type] ? " setpack-component-row-enabled" : ""}`}
+                          >
+                            <div className="setpack-component-main">
+                              <label className="setpack-component-check">
+                                <input
+                                  type="checkbox"
+                                  checked={microphoneComponentEnabled[item.type]}
+                                  onChange={(e) =>
+                                    setMicrophoneComponentEnabled((prev) => ({
+                                      ...prev,
+                                      [item.type]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>{item.label}</span>
+                              </label>
+                              {microphoneComponentEnabled[item.type] ? (
+                                <>
+                                  <span className="tiny setpack-component-meta">
+                                    {t.assetId}: {microphoneComponentSuggestedAssetId[item.type]} | {assetItemName("IT", microphoneComponentAssetType(item.type))} | {microphoneComponentRole(item.type)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="tab setpack-detail-btn"
+                                    onClick={() =>
+                                      setMicrophoneComponentDetailOpen((prev) => ({
+                                        ...prev,
+                                        [item.type]: !prev[item.type],
+                                      }))
+                                    }
+                                  >
+                                    {microphoneComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                            {microphoneComponentEnabled[item.type] && microphoneComponentDetailOpen[item.type] ? (
+                              <div className="setpack-component-detail-wrap">
+                                <div className="form-grid">
+                                  <label className="field">
+                                    <span>{t.status}</span>
+                                    <select
+                                      className="input"
+                                      value={microphoneComponentDraft[item.type].status}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            status: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      {ASSET_STATUS_OPTIONS.map((status) => (
+                                        <option key={`microphone-component-${item.type}-status-${status.value}`} value={status.value}>
+                                          {lang === "km" ? status.km : status.en}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.brand}</span>
+                                    <input
+                                      className="input"
+                                      value={microphoneComponentDraft[item.type].brand}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            brand: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.model}</span>
+                                    <input
+                                      className="input"
+                                      list="asset-model-options"
+                                      value={microphoneComponentDraft[item.type].model}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            model: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.serialNumber}</span>
+                                    <input
+                                      className="input"
+                                      value={microphoneComponentDraft[item.type].serialNumber}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            serialNumber: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.purchaseDate}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={microphoneComponentDraft[item.type].purchaseDate}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            purchaseDate: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.warrantyUntil}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={microphoneComponentDraft[item.type].warrantyUntil}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            warrantyUntil: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <div className="field field-wide add-detail-media-row">
+                                    <label className="field">
+                                      <span>{t.vendor}</span>
+                                      <input
+                                        className="input"
+                                        value={microphoneComponentDraft[item.type].vendor}
+                                        onChange={(e) =>
+                                          setMicrophoneComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              vendor: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <div className="field add-detail-photo-field">
+                                      <span>{t.photo}</span>
+                                      <input
+                                        id={`microphone-component-photo-${item.type}`}
+                                        key={microphoneComponentFileKey[item.type]}
+                                        className="file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => onMicrophoneComponentPhotoFile(item.type, e)}
+                                      />
+                                      <div className="add-detail-photo-card">
+                                        <label className="add-detail-photo-swatch" htmlFor={`microphone-component-photo-${item.type}`}>
+                                          {normalizeAssetPhotos(microphoneComponentDraft[item.type]).length ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                              src={normalizeAssetPhotos(microphoneComponentDraft[item.type])[0]}
+                                              alt={`${item.label} preview`}
+                                              className="photo-preview"
+                                            />
+                                          ) : (
+                                            <>
+                                              <div className="photo-placeholder" aria-hidden="true">+</div>
+                                              <span className="add-detail-photo-empty">{t.noPhoto}</span>
+                                            </>
+                                          )}
+                                        </label>
+                                        {normalizeAssetPhotos(microphoneComponentDraft[item.type]).length ? (
+                                          <div className="add-detail-photo-actions">
+                                            <button
+                                              className="btn-danger add-detail-photo-icon"
+                                              type="button"
+                                              title="Delete Photo"
+                                              aria-label="Delete Photo"
+                                              disabled={!normalizeAssetPhotos(microphoneComponentDraft[item.type]).length}
+                                              onClick={() => {
+                                                setMicrophoneComponentDraft((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: {
+                                                    ...prev[item.type],
+                                                    photo: "",
+                                                    photos: [],
+                                                  },
+                                                }));
+                                                setMicrophoneComponentFileKey((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: prev[item.type] + 1,
+                                                }));
+                                              }}
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <label className="field field-wide">
+                                    <span>{t.specs}</span>
+                                    <textarea
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
+                                      value={microphoneComponentDraft[item.type].specs}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            specs: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-wide">
+                                    <span>{t.notes}</span>
+                                    <textarea
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
+                                      value={microphoneComponentDraft[item.type].notes}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onChange={(e) =>
+                                        setMicrophoneComponentDraft((prev) => ({
                                           ...prev,
                                           [item.type]: {
                                             ...prev[item.type],
@@ -45181,121 +45827,141 @@ function formatTicketRequestSource(value?: string) {
                     </label>
                   ) : null}
                   {String(assetForm.category || "").trim().toUpperCase() === "IT" && String(assetForm.type || "").trim().toUpperCase() === "TAB" ? (
-                    <label className="field">
+                    <div className="field field-wide">
                       <span>Included Components</span>
-                      <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <input
-                            type="checkbox"
-                            checked={assetForm.tabletHasCase}
-                            onChange={(e) =>
-                              setAssetForm((f) => ({
-                                ...f,
-                                tabletHasCase: e.target.checked,
-                                tabletCasePhoto: e.target.checked ? f.tabletCasePhoto : "",
-                              }))
-                            }
-                            style={{ marginRight: 8 }}
-                          />
-                          iPad Case
-                        </label>
-                        {assetForm.tabletHasCase ? (
-                          <>
+                      <div className="tablet-component-grid">
+                        <div className={`tablet-component-card${assetForm.tabletHasCase ? " tablet-component-card-enabled" : ""}`}>
+                          <label className="tablet-component-toggle">
                             <input
-                              id="tablet-case-create-upload"
-                              className="file-input"
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              onChange={onTabletCasePhotoFile}
+                              type="checkbox"
+                              checked={assetForm.tabletHasCase}
+                              onChange={(e) =>
+                                setAssetForm((f) => ({
+                                  ...f,
+                                  tabletHasCase: e.target.checked,
+                                  tabletCasePhoto: e.target.checked ? f.tabletCasePhoto : "",
+                                }))
+                              }
                             />
-                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
-                              <button
-                                type="button"
-                                className="tab btn-small"
-                                onClick={() => document.getElementById("tablet-case-create-upload")?.click()}
-                              >
-                                Choose Photo
-                              </button>
-                              {assetForm.tabletCasePhoto ? (
-                                <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
-                                  <img
-                                    loading="lazy"
-                                    decoding="async"
-                                    src={assetForm.tabletCasePhoto}
-                                    alt="tablet-case"
-                                    className="asset-photo-chip-img"
-                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
-                                  />
+                            <span className="tablet-component-title">iPad Case</span>
+                          </label>
+                          {assetForm.tabletHasCase ? (
+                            <>
+                              <input
+                                id="tablet-case-create-upload"
+                                className="file-input tablet-component-upload-input"
+                                type="file"
+                                accept="image/*"
+                                onChange={onTabletCasePhotoFile}
+                              />
+                              <div className="tablet-component-upload-row">
+                                <label
+                                  className="tablet-component-upload-box"
+                                  htmlFor="tablet-case-create-upload"
+                                  title={assetForm.tabletCasePhoto ? "Replace photo" : "Choose photo"}
+                                >
+                                  {assetForm.tabletCasePhoto ? (
+                                    <>
+                                      <img
+                                        loading="lazy"
+                                        decoding="async"
+                                        src={assetForm.tabletCasePhoto}
+                                        alt="tablet-case"
+                                        className="tablet-component-upload-thumb"
+                                      />
+                                      <span className="tablet-component-upload-text">Replace photo</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="tablet-component-upload-plus" aria-hidden="true">
+                                        +
+                                      </span>
+                                      <span className="tablet-component-upload-text">Choose photo</span>
+                                    </>
+                                  )}
+                                </label>
+                                {assetForm.tabletCasePhoto ? (
                                   <button
-                                    className="tab btn-small"
+                                    className="tablet-component-remove"
                                     type="button"
                                     onClick={() => setAssetForm((f) => ({ ...f, tabletCasePhoto: "" }))}
                                   >
-                                    ✕
+                                    Remove
                                   </button>
-                                </div>
-                              ) : null}
-                            </div>
-                          </>
-                        ) : null}
-                        <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <input
-                            type="checkbox"
-                            checked={assetForm.tabletHasCharger}
-                            onChange={(e) =>
-                              setAssetForm((f) => ({
-                                ...f,
-                                tabletHasCharger: e.target.checked,
-                                tabletChargerPhoto: e.target.checked ? f.tabletChargerPhoto : "",
-                              }))
-                            }
-                            style={{ marginRight: 8 }}
-                          />
-                          Charger
-                        </label>
-                        {assetForm.tabletHasCharger ? (
-                          <>
+                                ) : null}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="tablet-component-helper">Enable to add a case photo.</span>
+                          )}
+                        </div>
+                        <div className={`tablet-component-card${assetForm.tabletHasCharger ? " tablet-component-card-enabled" : ""}`}>
+                          <label className="tablet-component-toggle">
                             <input
-                              id="tablet-charger-create-upload"
-                              className="file-input"
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              onChange={onTabletChargerPhotoFile}
+                              type="checkbox"
+                              checked={assetForm.tabletHasCharger}
+                              onChange={(e) =>
+                                setAssetForm((f) => ({
+                                  ...f,
+                                  tabletHasCharger: e.target.checked,
+                                  tabletChargerPhoto: e.target.checked ? f.tabletChargerPhoto : "",
+                                }))
+                              }
                             />
-                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
-                              <button
-                                type="button"
-                                className="tab btn-small"
-                                onClick={() => document.getElementById("tablet-charger-create-upload")?.click()}
-                              >
-                                Choose Photo
-                              </button>
-                              {assetForm.tabletChargerPhoto ? (
-                                <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
-                                  <img
-                                    loading="lazy"
-                                    decoding="async"
-                                    src={assetForm.tabletChargerPhoto}
-                                    alt="tablet-charger"
-                                    className="asset-photo-chip-img"
-                                    style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
-                                  />
+                            <span className="tablet-component-title">Charger</span>
+                          </label>
+                          {assetForm.tabletHasCharger ? (
+                            <>
+                              <input
+                                id="tablet-charger-create-upload"
+                                className="file-input tablet-component-upload-input"
+                                type="file"
+                                accept="image/*"
+                                onChange={onTabletChargerPhotoFile}
+                              />
+                              <div className="tablet-component-upload-row">
+                                <label
+                                  className="tablet-component-upload-box"
+                                  htmlFor="tablet-charger-create-upload"
+                                  title={assetForm.tabletChargerPhoto ? "Replace photo" : "Choose photo"}
+                                >
+                                  {assetForm.tabletChargerPhoto ? (
+                                    <>
+                                      <img
+                                        loading="lazy"
+                                        decoding="async"
+                                        src={assetForm.tabletChargerPhoto}
+                                        alt="tablet-charger"
+                                        className="tablet-component-upload-thumb"
+                                      />
+                                      <span className="tablet-component-upload-text">Replace photo</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="tablet-component-upload-plus" aria-hidden="true">
+                                        +
+                                      </span>
+                                      <span className="tablet-component-upload-text">Choose photo</span>
+                                    </>
+                                  )}
+                                </label>
+                                {assetForm.tabletChargerPhoto ? (
                                   <button
-                                    className="tab btn-small"
+                                    className="tablet-component-remove"
                                     type="button"
                                     onClick={() => setAssetForm((f) => ({ ...f, tabletChargerPhoto: "" }))}
                                   >
-                                    ✕
+                                    Remove
                                   </button>
-                                </div>
-                              ) : null}
-                            </div>
-                          </>
-                        ) : null}
+                                ) : null}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="tablet-component-helper">Enable to add a charger photo.</span>
+                          )}
+                        </div>
                       </div>
-                    </label>
+                    </div>
                   ) : null}
                   {String(assetForm.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
                     <label className="field">
@@ -46469,58 +47135,54 @@ function formatTicketRequestSource(value?: string) {
                         {editCreateSetPack ? (
                           <div className="field field-wide">
                             <span>{t.setPackItems}</span>
-                            <div className="setpack-include-grid">
-                              {editSetPackChildMeta.map((item) => (
-                                <label key={`edit-setpack-include-${item.type}`} className="tab setpack-include-item">
-                                  <input
-                                    type="checkbox"
-                                    checked={editSetPackEnabled[item.type]}
-                                    disabled={!isAdmin || busy}
-                                    onChange={(e) =>
-                                      setEditSetPackEnabled((prev) => {
-                                        const checked = e.target.checked;
-                                        const next = {
-                                          ...prev,
-                                          [item.type]: checked,
-                                        };
-                                        if (item.type === "MON2" && checked) next.MON = true;
-                                        if (item.type === "MON" && !checked) next.MON2 = false;
-                                        return next;
-                                      })
-                                    }
-                                    style={{ marginRight: 8 }}
-                                  />
-                                  {item.label}
-                                </label>
-                              ))}
-                            </div>
-                            <div className="setpack-card-grid">
+                            <div className="setpack-component-list">
                               {editSetPackChildMeta.map((item) => {
-                                if (!editSetPackEnabled[item.type]) {
-                                  return <div key={`edit-setpack-empty-${item.type}`} className="setpack-item-slot" />;
-                                }
                                 const child = editingSetPackChildren[item.type];
                                 return (
-                                  <div key={`edit-setpack-${item.type}`} className="setpack-item-card">
-                                    <div className="setpack-item-head">
-                                      <div>
-                                        <strong>{item.label}</strong>
-                                        <div className="tiny">
-                                          {child
-                                            ? `${t.assetId}: ${child.assetId} | ${t.status}: ${assetStatusLabel(child.status || "-")}`
-                                            : "Not created yet for this set"}
-                                        </div>
-                                      </div>
-                                      <button
-                                        className="setpack-detail-btn"
-                                        type="button"
-                                        disabled={!isAdmin || busy}
-                                        onClick={() => {
-                                          void editOrCreateSetPackChild(item.type);
-                                        }}
-                                      >
-                                        {child ? "Edit Details" : "Add + Edit"}
-                                      </button>
+                                  <div
+                                    key={`edit-setpack-${item.type}`}
+                                    className={`setpack-component-row${editSetPackEnabled[item.type] ? " setpack-component-row-enabled" : ""}`}
+                                  >
+                                    <div className="setpack-component-main">
+                                      <label className="setpack-component-check">
+                                        <input
+                                          type="checkbox"
+                                          checked={editSetPackEnabled[item.type]}
+                                          disabled={!isAdmin || busy}
+                                          onChange={(e) =>
+                                            setEditSetPackEnabled((prev) => {
+                                              const checked = e.target.checked;
+                                              const next = {
+                                                ...prev,
+                                                [item.type]: checked,
+                                              };
+                                              if (item.type === "MON2" && checked) next.MON = true;
+                                              if (item.type === "MON" && !checked) next.MON2 = false;
+                                              return next;
+                                            })
+                                          }
+                                        />
+                                        <span>{item.label}</span>
+                                      </label>
+                                      {editSetPackEnabled[item.type] ? (
+                                        <>
+                                          <span className="tiny setpack-component-meta">
+                                            {child
+                                              ? `${t.assetId}: ${child.assetId} | ${t.status}: ${assetStatusLabel(child.status || "-")}`
+                                              : "Not created yet for this set"}
+                                          </span>
+                                          <button
+                                            className="setpack-detail-btn"
+                                            type="button"
+                                            disabled={!isAdmin || busy}
+                                            onClick={() => {
+                                              void editOrCreateSetPackChild(item.type);
+                                            }}
+                                          >
+                                            {child ? "Edit Details" : "Add + Edit"}
+                                          </button>
+                                        </>
+                                      ) : null}
                                     </div>
                                   </div>
                                 );
@@ -46536,26 +47198,69 @@ function formatTicketRequestSource(value?: string) {
                         <div className="setpack-toggle-row">
                           <span className="tiny">{t.laptopAccessoryHint}</span>
                         </div>
-                        <div className="setpack-card-grid">
+                        <div className="setpack-component-list">
                           {laptopAccessoryMeta.map((item) => {
                             const child = editingLaptopAccessoryChildren[item.type];
                             return (
-                              <div key={`edit-laptop-accessory-${item.type}`} className="setpack-item-card">
-                                <div className="setpack-item-head">
-                                  <div>
-                                    <strong>{item.label}</strong>
-                                    <div className="tiny">
-                                      {child
-                                        ? `${t.assetId}: ${child.assetId} | ${t.status}: ${assetStatusLabel(child.status || "-")}`
-                                        : "Not created yet for this laptop"}
-                                    </div>
+                              <div
+                                key={`edit-laptop-accessory-${item.type}`}
+                                className={`setpack-component-row${child ? " setpack-component-row-enabled" : ""}`}
+                              >
+                                <div className="setpack-component-main">
+                                  <div className="setpack-component-check">
+                                    <span>{item.label}</span>
                                   </div>
+                                  <span className="tiny setpack-component-meta">
+                                    {child
+                                      ? `${t.assetId}: ${child.assetId} | ${t.status}: ${assetStatusLabel(child.status || "-")}`
+                                      : "Not created yet for this laptop"}
+                                  </span>
                                   <button
                                     className="setpack-detail-btn"
                                     type="button"
                                     disabled={!isAdmin || busy}
                                     onClick={() => {
                                       void editOrCreateLaptopAccessoryChild(item.type);
+                                    }}
+                                  >
+                                    {child ? "Edit Details" : "Add + Edit"}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                    {editingAsset.category === "IT" && editingAsset.type === MICROPHONE_SET_TYPE ? (
+                      <div className="field field-wide">
+                        <span>{t.microphoneComponents}</span>
+                        <div className="setpack-toggle-row">
+                          <span className="tiny">{t.microphoneComponentHint}</span>
+                        </div>
+                        <div className="setpack-component-list">
+                          {microphoneComponentMeta.map((item) => {
+                            const child = editingMicrophoneComponentChildren[item.type];
+                            return (
+                              <div
+                                key={`edit-microphone-component-${item.type}`}
+                                className={`setpack-component-row${child ? " setpack-component-row-enabled" : ""}`}
+                              >
+                                <div className="setpack-component-main">
+                                  <div className="setpack-component-check">
+                                    <span>{item.label}</span>
+                                  </div>
+                                  <span className="tiny setpack-component-meta">
+                                    {child
+                                      ? `${t.assetId}: ${child.assetId} | ${t.status}: ${assetStatusLabel(child.status || "-")} | ${child.componentRole || microphoneComponentRole(item.type)}`
+                                      : `Not created yet for this microphone set (${microphoneComponentRole(item.type)})`}
+                                  </span>
+                                  <button
+                                    className="setpack-detail-btn"
+                                    type="button"
+                                    disabled={!isAdmin || busy}
+                                    onClick={() => {
+                                      void editOrCreateMicrophoneComponentChild(item.type);
                                     }}
                                   >
                                     {child ? "Edit Details" : "Add + Edit"}
@@ -47040,121 +47745,141 @@ function formatTicketRequestSource(value?: string) {
                       </label>
                     ) : null}
                     {String(editingAsset?.category || "").trim().toUpperCase() === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === "TAB" ? (
-                      <label className="field">
+                      <div className="field field-wide">
                         <span>Included Components</span>
-                        <div className="row-actions" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                          <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <input
-                              type="checkbox"
-                              checked={assetEditForm.tabletHasCase}
-                              onChange={(e) =>
-                                setAssetEditForm((f) => ({
-                                  ...f,
-                                  tabletHasCase: e.target.checked,
-                                  tabletCasePhoto: e.target.checked ? f.tabletCasePhoto : "",
-                                }))
-                              }
-                              style={{ marginRight: 8 }}
-                            />
-                            iPad Case
-                          </label>
-                          {assetEditForm.tabletHasCase ? (
-                            <>
+                        <div className="tablet-component-grid">
+                          <div className={`tablet-component-card${assetEditForm.tabletHasCase ? " tablet-component-card-enabled" : ""}`}>
+                            <label className="tablet-component-toggle">
                               <input
-                                id="tablet-case-edit-upload"
-                                className="file-input"
-                                type="file"
-                                accept="image/*"
-                                style={{ display: "none" }}
-                                onChange={onEditTabletCasePhotoFile}
+                                type="checkbox"
+                                checked={assetEditForm.tabletHasCase}
+                                onChange={(e) =>
+                                  setAssetEditForm((f) => ({
+                                    ...f,
+                                    tabletHasCase: e.target.checked,
+                                    tabletCasePhoto: e.target.checked ? f.tabletCasePhoto : "",
+                                  }))
+                                }
                               />
-                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
-                                <button
-                                  type="button"
-                                  className="tab btn-small"
-                                  onClick={() => document.getElementById("tablet-case-edit-upload")?.click()}
-                                >
-                                  Choose Photo
-                                </button>
-                                {assetEditForm.tabletCasePhoto ? (
-                                  <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
-                                    <img
-                                      loading="lazy"
-                                      decoding="async"
-                                      src={assetEditForm.tabletCasePhoto}
-                                      alt="edit-tablet-case"
-                                      className="asset-photo-chip-img"
-                                      style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
-                                    />
+                              <span className="tablet-component-title">iPad Case</span>
+                            </label>
+                            {assetEditForm.tabletHasCase ? (
+                              <>
+                                <input
+                                  id="tablet-case-edit-upload"
+                                  className="file-input tablet-component-upload-input"
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={onEditTabletCasePhotoFile}
+                                />
+                                <div className="tablet-component-upload-row">
+                                  <label
+                                    className="tablet-component-upload-box"
+                                    htmlFor="tablet-case-edit-upload"
+                                    title={assetEditForm.tabletCasePhoto ? "Replace photo" : "Choose photo"}
+                                  >
+                                    {assetEditForm.tabletCasePhoto ? (
+                                      <>
+                                        <img
+                                          loading="lazy"
+                                          decoding="async"
+                                          src={assetEditForm.tabletCasePhoto}
+                                          alt="edit-tablet-case"
+                                          className="tablet-component-upload-thumb"
+                                        />
+                                        <span className="tablet-component-upload-text">Replace photo</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="tablet-component-upload-plus" aria-hidden="true">
+                                          +
+                                        </span>
+                                        <span className="tablet-component-upload-text">Choose photo</span>
+                                      </>
+                                    )}
+                                  </label>
+                                  {assetEditForm.tabletCasePhoto ? (
                                     <button
-                                      className="tab btn-small"
+                                      className="tablet-component-remove"
                                       type="button"
                                       onClick={() => setAssetEditForm((f) => ({ ...f, tabletCasePhoto: "" }))}
                                     >
-                                      ✕
+                                      Remove
                                     </button>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </>
-                          ) : null}
-                          <label className="tab setpack-include-item" style={{ width: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <input
-                              type="checkbox"
-                              checked={assetEditForm.tabletHasCharger}
-                              onChange={(e) =>
-                                setAssetEditForm((f) => ({
-                                  ...f,
-                                  tabletHasCharger: e.target.checked,
-                                  tabletChargerPhoto: e.target.checked ? f.tabletChargerPhoto : "",
-                                }))
-                              }
-                              style={{ marginRight: 8 }}
-                            />
-                            Charger
-                          </label>
-                          {assetEditForm.tabletHasCharger ? (
-                            <>
+                                  ) : null}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="tablet-component-helper">Enable to add a case photo.</span>
+                            )}
+                          </div>
+                          <div className={`tablet-component-card${assetEditForm.tabletHasCharger ? " tablet-component-card-enabled" : ""}`}>
+                            <label className="tablet-component-toggle">
                               <input
-                                id="tablet-charger-edit-upload"
-                                className="file-input"
-                                type="file"
-                                accept="image/*"
-                                style={{ display: "none" }}
-                                onChange={onEditTabletChargerPhotoFile}
+                                type="checkbox"
+                                checked={assetEditForm.tabletHasCharger}
+                                onChange={(e) =>
+                                  setAssetEditForm((f) => ({
+                                    ...f,
+                                    tabletHasCharger: e.target.checked,
+                                    tabletChargerPhoto: e.target.checked ? f.tabletChargerPhoto : "",
+                                  }))
+                                }
                               />
-                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap" }}>
-                                <button
-                                  type="button"
-                                  className="tab btn-small"
-                                  onClick={() => document.getElementById("tablet-charger-edit-upload")?.click()}
-                                >
-                                  Choose Photo
-                                </button>
-                                {assetEditForm.tabletChargerPhoto ? (
-                                  <div className="row-actions" style={{ gap: 6, alignItems: "center" }}>
-                                    <img
-                                      loading="lazy"
-                                      decoding="async"
-                                      src={assetEditForm.tabletChargerPhoto}
-                                      alt="edit-tablet-charger"
-                                      className="asset-photo-chip-img"
-                                      style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }}
-                                    />
+                              <span className="tablet-component-title">Charger</span>
+                            </label>
+                            {assetEditForm.tabletHasCharger ? (
+                              <>
+                                <input
+                                  id="tablet-charger-edit-upload"
+                                  className="file-input tablet-component-upload-input"
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={onEditTabletChargerPhotoFile}
+                                />
+                                <div className="tablet-component-upload-row">
+                                  <label
+                                    className="tablet-component-upload-box"
+                                    htmlFor="tablet-charger-edit-upload"
+                                    title={assetEditForm.tabletChargerPhoto ? "Replace photo" : "Choose photo"}
+                                  >
+                                    {assetEditForm.tabletChargerPhoto ? (
+                                      <>
+                                        <img
+                                          loading="lazy"
+                                          decoding="async"
+                                          src={assetEditForm.tabletChargerPhoto}
+                                          alt="edit-tablet-charger"
+                                          className="tablet-component-upload-thumb"
+                                        />
+                                        <span className="tablet-component-upload-text">Replace photo</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="tablet-component-upload-plus" aria-hidden="true">
+                                          +
+                                        </span>
+                                        <span className="tablet-component-upload-text">Choose photo</span>
+                                      </>
+                                    )}
+                                  </label>
+                                  {assetEditForm.tabletChargerPhoto ? (
                                     <button
-                                      className="tab btn-small"
+                                      className="tablet-component-remove"
                                       type="button"
                                       onClick={() => setAssetEditForm((f) => ({ ...f, tabletChargerPhoto: "" }))}
                                     >
-                                      ✕
+                                      Remove
                                     </button>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </>
-                          ) : null}
+                                  ) : null}
+                                </div>
+                              </>
+                            ) : (
+                              <span className="tablet-component-helper">Enable to add a charger photo.</span>
+                            )}
+                          </div>
                         </div>
-                      </label>
+                      </div>
                     ) : null}
                     {String(editingAsset?.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE ? (
                       <label className="field">
