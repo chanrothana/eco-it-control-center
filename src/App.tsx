@@ -7326,9 +7326,6 @@ function buildAirconSpecs(
   const remoteSerial = components ? String(components.remoteSerial || "").trim() : normalized.acRemoteSerial;
   const frontUnitSerial = components ? String(components.frontUnitSerial || "").trim() : normalized.acFrontUnitSerial;
   const outdoorSerial = components ? String(components.outdoorSerial || "").trim() : normalized.acOutdoorSerial;
-  const remotePhoto = components ? String(components.remotePhoto || "").trim() : normalized.acRemotePhoto;
-  const frontUnitPhoto = components ? String(components.frontUnitPhoto || "").trim() : normalized.acFrontUnitPhoto;
-  const outdoorPhoto = components ? String(components.outdoorPhoto || "").trim() : normalized.acOutdoorPhoto;
   if (type) out.push(`AC Type: ${type}`);
   if (hp) out.push(`Capacity: ${hp}`);
   const included: string[] = [];
@@ -7339,9 +7336,6 @@ function buildAirconSpecs(
   if (hasRemote && remoteSerial) out.push(`Remote S/N: ${remoteSerial}`);
   if (hasFrontPanel && frontUnitSerial) out.push(`Front Unit S/N: ${frontUnitSerial}`);
   if (hasOutdoor && outdoorSerial) out.push(`Back Unit S/N: ${outdoorSerial}`);
-  if (remotePhoto) out.push(`Remote Photo: ${remotePhoto}`);
-  if (frontUnitPhoto) out.push(`Front Unit Photo: ${frontUnitPhoto}`);
-  if (outdoorPhoto) out.push(`Outdoor Unit Photo: ${outdoorPhoto}`);
   if (componentNote) out.push(`Components Note: ${componentNote}`);
   if (normalized.specs) out.push(normalized.specs);
   return out.join("\n").trim();
@@ -36757,8 +36751,9 @@ export default function App() {
   }, [printableFurnitureModelPhotoByLabel]);
   const assetMasterSetRows = useMemo(() => {
     const toItemDescription = (asset: Asset) => {
+      const visibleSpecs = getVisibleSpecsTextareaValue(asset.category || "", asset.type || "", asset.specs || "");
       const chunks = [
-        asset.specs || "",
+        visibleSpecs,
         [asset.brand || "", asset.model || ""].filter(Boolean).join(" "),
         asset.serialNumber ? `SN: ${asset.serialNumber}` : "",
       ]
@@ -39402,31 +39397,55 @@ export default function App() {
             staffBorrowingLocationFilter === "ALL" ? (lang === "km" ? "គ្រប់ទីតាំង" : "All Locations") : staffBorrowingLocationFilter
           )}</p><p><strong>Ack:</strong> ${escapeHtml(lang === "km" ? "ការទទួលស្គាល់ទំនួលខុសត្រូវ" : "Responsibility acknowledgement")}</p>`
         : reportType === "asset_master"
-        ? `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>${
-            assetMasterCampusBreakdown.length
-              ? `<p><strong>By Campus:</strong> ${assetMasterCampusBreakdown
-                  .map(([campus, count]) => `${escapeHtml(campus)} = ${count}`)
-                  .join(" | ")}</p>`
-              : ""
-          }${
-            assetMasterItemBreakdown.length
-              ? `<p><strong>By Item:</strong> ${assetMasterItemBreakdown
-                  .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
-                  .join(" | ")}</p>`
-              : ""
-          }${
-            isAirconAssetMasterReport && airconAssetMasterSummary.byType.length
-              ? `<p><strong>By AC Type:</strong> ${airconAssetMasterSummary.byType
-                  .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
-                  .join(" | ")}</p>`
-              : ""
-          }${
-            isAirconAssetMasterReport && airconAssetMasterSummary.byCapacity.length
-              ? `<p><strong>By Capacity:</strong> ${airconAssetMasterSummary.byCapacity
-                  .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
-                  .join(" | ")}</p>`
-              : ""
-          }`
+        ? isAirconAssetMasterReport
+          ? `<section class="report-two-column-summary">
+              <div class="report-summary-stack">
+                <p class="report-summary-line"><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>
+                ${
+                  assetMasterCampusBreakdown.length
+                    ? `<p class="report-summary-line"><strong>By Campus:</strong> ${assetMasterCampusBreakdown
+                        .map(([campus, count]) => `${escapeHtml(campus)} = ${count}`)
+                        .join(" | ")}</p>`
+                    : ""
+                }
+                ${
+                  assetMasterItemBreakdown.length
+                    ? `<p class="report-summary-line"><strong>By Item:</strong> ${assetMasterItemBreakdown
+                        .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
+                        .join(" | ")}</p>`
+                    : ""
+                }
+              </div>
+              <div class="report-summary-stack">
+                ${
+                  airconAssetMasterSummary.byType.length
+                    ? `<p class="report-summary-line"><strong>By AC Type:</strong> ${airconAssetMasterSummary.byType
+                        .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
+                        .join(" | ")}</p>`
+                    : ""
+                }
+                ${
+                  airconAssetMasterSummary.byCapacity.length
+                    ? `<p class="report-summary-line"><strong>By Capacity:</strong> ${airconAssetMasterSummary.byCapacity
+                        .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
+                        .join(" | ")}</p>`
+                    : ""
+                }
+              </div>
+            </section>`
+          : `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>${
+              assetMasterCampusBreakdown.length
+                ? `<p><strong>By Campus:</strong> ${assetMasterCampusBreakdown
+                    .map(([campus, count]) => `${escapeHtml(campus)} = ${count}`)
+                    .join(" | ")}</p>`
+                : ""
+            }${
+              assetMasterItemBreakdown.length
+                ? `<p><strong>By Item:</strong> ${assetMasterItemBreakdown
+                    .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
+                    .join(" | ")}</p>`
+                : ""
+            }`
         : reportType === "set_code"
         ? `<p><strong>Total Set Codes:</strong> ${setCodeReportRows.length} | <strong>Total Assets in Sets:</strong> ${setCodeReportRows.reduce((sum, row) => sum + row.totalItems, 0)}</p>`
         : reportType === "qr_labels"
@@ -39851,6 +39870,22 @@ export default function App() {
           .report-head-left { min-width: 0; flex: 1 1 auto; }
           .report-head-logo { width: 210px; max-width: 36vw; height: auto; object-fit: contain; }
           p.meta { margin: 0 0 12px; color: #41584c; }
+          .report-two-column-summary {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 18px 28px;
+            margin: 0 0 14px;
+          }
+          .report-summary-stack {
+            display: grid;
+            gap: 10px;
+            align-content: start;
+          }
+          .report-summary-line {
+            margin: 0;
+            color: #294036;
+            line-height: 1.45;
+          }
           .preview-table-wrap { width: 100%; overflow-x: auto; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; background: #fff; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
@@ -40024,6 +40059,7 @@ export default function App() {
             body { margin: 0; background: #fff; }
             .preview-toolbar { display: none !important; }
             .preview-shell { padding: 0; }
+            .report-two-column-summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
           }
         </style>
       </head>
@@ -63187,7 +63223,7 @@ function formatTicketRequestSource(value?: string) {
                         <div className="report-formal-note-grid">
                           <div className="report-formal-note-card">
                             <span>Specifications</span>
-                            <p>{focusedReportAsset.specs || "-"}</p>
+                            <p>{getVisibleSpecsTextareaValue(focusedReportAsset.category || "", focusedReportAsset.type || "", focusedReportAsset.specs || "") || "-"}</p>
                           </div>
                           <div className="report-formal-note-card">
                             <span>Notes</span>

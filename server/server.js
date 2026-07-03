@@ -285,7 +285,7 @@ const TYPE_CODES = {
     "FGP",
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "RFG", "MWV", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "TBL", "CHR", "PNO"],
+  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "RFG", "MWV", "OVG", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "TBL", "CHR", "PNO"],
   FURNITURE: ["TBL", "CHR", "DSK", "CAB", "NBD"],
 };
 const TYPE_LABELS = {
@@ -326,6 +326,7 @@ const TYPE_LABELS = {
   EFN: "Exhaust Fan",
   RFG: "Refrigerator",
   MWV: "Microwave",
+  OVG: "Oven Griller",
   WCL: "Clock",
   WDP: "Water Dispenser",
   WTK: "Walkie Talkie",
