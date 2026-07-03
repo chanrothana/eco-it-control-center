@@ -4090,6 +4090,22 @@ function compactAssetSpecsForSummary(raw) {
     .trim();
 }
 
+function sanitizeAirconSpecsForStorage(raw) {
+  const text = toText(raw);
+  if (!text) return "";
+  return text
+    .replace(/Remote Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Front Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Outdoor Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/Back Unit Photo:\s*([^\n|;]+)/gi, "")
+    .replace(/\b(?:data:image\/[a-z0-9.+-]+;)?base64,[A-Za-z0-9+/=\s]+/gi, "")
+    .replace(/^\s*Included Components:\s*$/gim, "")
+    .replace(/^\s*(Remote|Front Unit \(Indoor\)|Back Unit \(Outdoor\)|Front Panel|Outdoor Unit|Rear Unit)\s*$/gim, "")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function fileNameFromUploadUrl(raw, fallback = "attachment") {
   const text = toText(raw);
   if (!text) return fallback;
@@ -5776,7 +5792,10 @@ function validateAsset(body, settings) {
   const brand = toText(body.brand);
   const model = toText(body.model);
   const serialNumber = toText(body.serialNumber);
-  const specs = toText(body.specs);
+  const specs =
+    category === "FACILITY" && type === "AC"
+      ? sanitizeAirconSpecsForStorage(body.specs)
+      : toText(body.specs);
   const purchaseDate = toText(body.purchaseDate);
   const warrantyUntil = toText(body.warrantyUntil);
   const vendor = toText(body.vendor);

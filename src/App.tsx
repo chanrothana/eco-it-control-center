@@ -7261,6 +7261,18 @@ function parseAirconSpecs(specsRaw: string) {
       specs: "",
     };
   }
+  const cleanAirconValue = (value: string) => String(value || "").replace(/\s+/g, " ").trim();
+  const includedLabels = (value: string) =>
+    String(value || "")
+      .split(/[,|]/)
+      .map((entry) => cleanAirconValue(entry).toLowerCase())
+      .filter(Boolean);
+  const setIncludedFlag = (label: string) => {
+    if (!label) return;
+    if (label.includes("remote")) acHasRemote = true;
+    if (label.includes("front panel") || label.includes("front unit")) acHasFrontPanel = true;
+    if (label.includes("outdoor unit") || label.includes("back unit") || label.includes("rear unit")) acHasOutdoor = true;
+  };
   let acType = "";
   let acHp = "";
   let acHasRemote = false;
@@ -7273,54 +7285,123 @@ function parseAirconSpecs(specsRaw: string) {
   let acRemotePhoto = "";
   let acFrontUnitPhoto = "";
   let acOutdoorPhoto = "";
-  const typeMatch = specs.match(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/i);
-  const hpMatch = specs.match(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/i);
-  const includedMatch = specs.match(/Included:\s*([^|\n;]+?)(?=\s*(?:Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/i);
-  const remoteSerialMatch = specs.match(/Remote S\/N:\s*([^\n|;]+)/i);
-  const frontSerialMatch = specs.match(/Front Unit S\/N:\s*([^\n|;]+)/i);
-  const outdoorSerialMatch = specs.match(/Back Unit S\/N:\s*([^\n|;]+)/i);
-  const componentNoteMatch = specs.match(/Components? Note:\s*([^\n|;]+)/i);
-  const remotePhotoMatch = specs.match(/Remote Photo:\s*([^\n]+)/i);
-  const frontPhotoMatch = specs.match(/Front Unit Photo:\s*([^\n]+)/i);
-  const outdoorPhotoMatch = specs.match(/(?:Outdoor|Back) Unit Photo:\s*([^\n]+)/i);
-  if (typeMatch?.[1]) acType = String(typeMatch[1]).trim();
-  if (hpMatch?.[1]) acHp = String(hpMatch[1]).trim();
-  if (includedMatch?.[1]) {
-    const includedText = String(includedMatch[1]).toLowerCase();
-    acHasRemote = includedText.includes("remote");
-    acHasFrontPanel = includedText.includes("front panel");
-    acHasOutdoor =
-      includedText.includes("outdoor unit") ||
-      includedText.includes("back unit") ||
-      includedText.includes("rear unit");
-  } else {
-    // Default for legacy AC records: working unit should include both front and outdoor parts.
+  let sawIncludedLine = false;
+  let readingIncludedList = false;
+  const visibleLines: string[] = [];
+  const normalizedSpecs = specs
+    .replace(/\r\n?/g, "\n")
+    .replace(/[|;]+/g, "\n")
+    .replace(
+      /\s+(?=(?:AC Type:|Capacity:|Included:|Included Components:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|Remote Photo:|Front Unit Photo:|(?:Outdoor|Back) Unit Photo:))/gi,
+      "\n"
+    );
+  const sourceLines = normalizedSpecs.split("\n");
+  for (const sourceLine of sourceLines) {
+    const line = String(sourceLine || "").trim();
+    if (!line) {
+      readingIncludedList = false;
+      if (visibleLines.length && visibleLines[visibleLines.length - 1] !== "") {
+        visibleLines.push("");
+      }
+      continue;
+    }
+    if (/^(?:data:image\/[a-z0-9.+-]+;)?base64,/i.test(line)) {
+      continue;
+    }
+    let match = line.match(/^AC Type:\s*(.+)$/i);
+    if (match) {
+      if (!acType) acType = cleanAirconValue(match[1]);
+      readingIncludedList = false;
+      continue;
+    }
+    match = line.match(/^Capacity:\s*(.+)$/i);
+    if (match) {
+      if (!acHp) acHp = cleanAirconValue(match[1]);
+      readingIncludedList = false;
+      continue;
+    }
+    match = line.match(/^Included:\s*(.+)$/i);
+    if (match) {
+      sawIncludedLine = true;
+      readingIncludedList = false;
+      includedLabels(match[1]).forEach(setIncludedFlag);
+      continue;
+    }
+    if (/^Included Components:\s*$/i.test(line)) {
+      sawIncludedLine = true;
+      readingIncludedList = true;
+      continue;
+    }
+    if (readingIncludedList) {
+      const normalizedLine = cleanAirconValue(line).toLowerCase();
+      const isStandaloneIncludedLine =
+        normalizedLine === "remote" ||
+        normalizedLine === "front unit (indoor)" ||
+        normalizedLine === "front panel" ||
+        normalizedLine === "back unit (outdoor)" ||
+        normalizedLine === "outdoor unit" ||
+        normalizedLine === "rear unit";
+      if (isStandaloneIncludedLine) {
+        setIncludedFlag(normalizedLine);
+        continue;
+      }
+      readingIncludedList = false;
+    }
+    match = line.match(/^Remote S\/N:\s*(.+)$/i);
+    if (match) {
+      acHasRemote = true;
+      if (!acRemoteSerial) acRemoteSerial = cleanAirconValue(match[1]);
+      continue;
+    }
+    match = line.match(/^Front Unit S\/N:\s*(.+)$/i);
+    if (match) {
+      acHasFrontPanel = true;
+      if (!acFrontUnitSerial) acFrontUnitSerial = cleanAirconValue(match[1]);
+      continue;
+    }
+    match = line.match(/^Back Unit S\/N:\s*(.+)$/i);
+    if (match) {
+      acHasOutdoor = true;
+      if (!acOutdoorSerial) acOutdoorSerial = cleanAirconValue(match[1]);
+      continue;
+    }
+    match = line.match(/^Components? Note:\s*(.+)$/i);
+    if (match) {
+      if (!acComponentNote) acComponentNote = cleanAirconValue(match[1]);
+      continue;
+    }
+    match = line.match(/^Remote Photo:\s*(.+)$/i);
+    if (match) {
+      acHasRemote = true;
+      if (!acRemotePhoto) acRemotePhoto = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Front Unit Photo:\s*(.+)$/i);
+    if (match) {
+      acHasFrontPanel = true;
+      if (!acFrontUnitPhoto) acFrontUnitPhoto = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^(?:Outdoor|Back) Unit Photo:\s*(.+)$/i);
+    if (match) {
+      acHasOutdoor = true;
+      if (!acOutdoorPhoto) acOutdoorPhoto = String(match[1] || "").trim();
+      continue;
+    }
+    visibleLines.push(line);
+  }
+  if (!sawIncludedLine) {
+    // Legacy AC records normally represent a complete working unit.
     acHasFrontPanel = true;
     acHasOutdoor = true;
   }
-  if (remoteSerialMatch?.[1]) acRemoteSerial = String(remoteSerialMatch[1]).trim();
-  if (frontSerialMatch?.[1]) acFrontUnitSerial = String(frontSerialMatch[1]).trim();
-  if (outdoorSerialMatch?.[1]) acOutdoorSerial = String(outdoorSerialMatch[1]).trim();
-  if (componentNoteMatch?.[1]) acComponentNote = String(componentNoteMatch[1]).trim();
-  if (remotePhotoMatch?.[1]) acRemotePhoto = String(remotePhotoMatch[1]).trim();
-  if (frontPhotoMatch?.[1]) acFrontUnitPhoto = String(frontPhotoMatch[1]).trim();
-  if (outdoorPhotoMatch?.[1]) acOutdoorPhoto = String(outdoorPhotoMatch[1]).trim();
-  const cleanedSpecs = specs
-    .replace(/AC Type:\s*([^|\n;]+?)(?=\s*(?:Capacity:|Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/gi, "")
-    .replace(/Capacity:\s*([^|\n;]+?)(?=\s*(?:Included:|Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/gi, "")
-    .replace(/Included:\s*([^|\n;]+?)(?=\s*(?:Remote S\/N:|Front Unit S\/N:|Back Unit S\/N:|Components? Note:|$))/gi, "")
-    .replace(/Remote S\/N:\s*([^\n|;]+)/gi, "")
-    .replace(/Front Unit S\/N:\s*([^\n|;]+)/gi, "")
-    .replace(/Back Unit S\/N:\s*([^\n|;]+)/gi, "")
-    .replace(/Components? Note:\s*([^\n|;]+)/gi, "")
-    .replace(/Remote Photo:\s*([^\n]+)/gi, "")
-    .replace(/Front Unit Photo:\s*([^\n]+)/gi, "")
-    .replace(/(?:Outdoor|Back) Unit Photo:\s*([^\n]+)/gi, "")
-    .replace(/\b(?:data:image\/[a-z0-9.+-]+;)?base64,[A-Za-z0-9+/=\s]+/gi, "")
+  const cleanedSpecs = visibleLines
+    .join("\n")
     .replace(/[|;]+/g, "\n")
     .replace(/\n\s*,/g, "\n")
-    .replace(/\n{2,}/g, "\n")
-    .replace(/\s{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
     .trim();
   return {
     acType,
@@ -19950,6 +20031,31 @@ export default function App() {
       alert("Air-Con requires both Front Unit and Back Unit (Outdoor) components.");
       return;
     }
+    const createAirconComponents = createIsAircon
+      ? [
+          {
+            type: REMOTE_TYPE_CODE,
+            enabled: Boolean(assetForm.acHasRemote),
+            role: "Remote",
+            serialNumber: String(assetForm.acRemoteSerial || "").trim(),
+            photo: String(assetForm.acRemotePhoto || "").trim(),
+          },
+          {
+            type: AIRCON_FRONT_UNIT_TYPE_CODE,
+            enabled: Boolean(assetForm.acHasFrontPanel),
+            role: "Front Unit (Indoor)",
+            serialNumber: String(assetForm.acFrontUnitSerial || "").trim(),
+            photo: String(assetForm.acFrontUnitPhoto || "").trim(),
+          },
+          {
+            type: AIRCON_OUTDOOR_UNIT_TYPE_CODE,
+            enabled: Boolean(assetForm.acHasOutdoor),
+            role: "Back Unit (Outdoor)",
+            serialNumber: String(assetForm.acOutdoorSerial || "").trim(),
+            photo: String(assetForm.acOutdoorPhoto || "").trim(),
+          },
+        ].filter((component) => component.enabled)
+      : [];
     const createSpecs = createIsAircon
         ? buildAirconSpecs(assetForm.specs, assetForm.acType, assetForm.acHp, {
           hasRemote: assetForm.acHasRemote,
@@ -20289,6 +20395,39 @@ export default function App() {
               photo: componentPhotos[0] || "",
               photos: componentPhotos,
               status: draft.status || assetForm.status,
+            }),
+          });
+        }
+      }
+      if (createAirconComponents.length && created.asset?.assetId) {
+        for (const component of createAirconComponents) {
+          const childPhotos = component.photo ? [component.photo] : [];
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: assetForm.category,
+              type: component.type,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              componentRole: component.role,
+              componentRequired: component.type !== REMOTE_TYPE_CODE,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: component.serialNumber,
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: assetForm.acComponentNote.trim() || `${component.role} for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: childPhotos[0] || "",
+              photos: childPhotos,
+              status: assetForm.status,
             }),
           });
         }
@@ -20855,6 +20994,62 @@ export default function App() {
               photo: componentPhotos[0] || "",
               photos: componentPhotos,
               status: draft.status || assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
+        if (createAirconComponents.length) {
+          for (const component of createAirconComponents) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, assetForm.category, component.type);
+            const childPhotos = component.photo ? [component.photo] : [];
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: assetForm.category,
+              type: component.type,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(assetForm.campus, assetForm.category, component.type, childSeq),
+              name: airconComponentLabel(component.type),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              componentRole: component.role,
+              componentRequired: component.type !== REMOTE_TYPE_CODE,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: component.serialNumber,
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: assetForm.acComponentNote.trim() || `${component.role} for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: assetForm.status,
+                  reason: "Asset created as air-con component",
+                },
+              ],
+              photo: childPhotos[0] || "",
+              photos: childPhotos,
+              status: assetForm.status,
               created: new Date().toISOString(),
             };
             nextLocal = [child, ...nextLocal];
