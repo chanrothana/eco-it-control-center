@@ -450,6 +450,7 @@ type InventoryReportColumnKey =
   | "responsible"
   | "unit"
   | "amount"
+  | "checkStatus"
   | "stockIn"
   | "stockOut"
   | "current"
@@ -2581,6 +2582,46 @@ const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP", "3.5HP"]
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
 const FAN_TYPE_OPTIONS = ["Wall Fan", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
 const FAN_TYPE_CODES = ["FAN", "WFN", "CFN", "EFN"] as const;
+
+function shortAirconCapacityLabel(value: string) {
+  const text = String(value || "").trim();
+  if (!text || text.toLowerCase() === "unknown capacity") return "Unknown";
+  const match = text.match(/^(\d+(?:\.\d+)?)\s*HP$/i);
+  if (!match) return text;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return text;
+  return `${Number.isInteger(amount) ? amount : amount.toFixed(1).replace(/\.0$/, "")}HP`;
+}
+
+function compareAirconCapacityLabels(a: string, b: string) {
+  const normalizedA = shortAirconCapacityLabel(a).toUpperCase();
+  const normalizedB = shortAirconCapacityLabel(b).toUpperCase();
+  const optionIndexA = AIRCON_HP_OPTIONS.findIndex((option) => shortAirconCapacityLabel(option).toUpperCase() === normalizedA);
+  const optionIndexB = AIRCON_HP_OPTIONS.findIndex((option) => shortAirconCapacityLabel(option).toUpperCase() === normalizedB);
+  if (optionIndexA !== -1 || optionIndexB !== -1) {
+    if (optionIndexA === -1) return 1;
+    if (optionIndexB === -1) return -1;
+    if (optionIndexA !== optionIndexB) return optionIndexA - optionIndexB;
+  }
+  if (normalizedA === "UNKNOWN") return 1;
+  if (normalizedB === "UNKNOWN") return -1;
+  return normalizedA.localeCompare(normalizedB);
+}
+
+function compareAirconTypeLabels(a: string, b: string) {
+  const typeRank = (value: string) => {
+    const text = String(value || "").trim().toLowerCase();
+    if (text === "wall mount") return 1;
+    if (text === "cassette") return 2;
+    if (text === "unknown type" || !text) return 99;
+    return 50;
+  };
+  const rankA = typeRank(a);
+  const rankB = typeRank(b);
+  if (rankA !== rankB) return rankA - rankB;
+  return String(a || "").localeCompare(String(b || ""));
+}
+
 const FURNITURE_CONDITION_OPTIONS = ["Good", "Need Repair", "Broken", "Scrap"] as const;
 const FURNITURE_TRACKING_MODE_OPTIONS = ["Grouped", "Individual"] as const;
 const FURNITURE_MODEL_OPTIONS_BY_TYPE: Record<string, string[]> = {
@@ -9456,7 +9497,6 @@ export default function App() {
     "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
   >("CLEAN_TOOL");
   const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState("ALL");
-  const [reportInventorySelectedItemId, setReportInventorySelectedItemId] = useState("");
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -10620,6 +10660,7 @@ export default function App() {
     "location",
     "unit",
     "amount",
+    "checkStatus",
   ]);
   const [maintenanceReportExpandedRows, setMaintenanceReportExpandedRows] = useState<Record<string, boolean>>({});
   const [maintenanceReportFiltersCollapsed, setMaintenanceReportFiltersCollapsed] = useState(false);
@@ -14875,6 +14916,9 @@ export default function App() {
     ).sort((a, b) => a.localeCompare(b));
   }, [assets, assetCampusMultiFilter, assetCategoryMultiFilter, assetAssignedToMultiFilter]);
   const assetAssignedToFilterOptions = useMemo(() => {
+    const userActiveByName = new Map(
+      users.map((user) => [String(user.fullName || "").trim(), isStaffUserActive(user)])
+    );
     const assetsById = new Map<string, Asset>();
     for (const asset of assets) {
       const assetId = String(asset.assetId || "").trim();
@@ -14893,9 +14937,13 @@ export default function App() {
         list
           .map((asset) => String(asset.assignedTo || "").trim())
           .filter(Boolean)
+          .filter((name) => {
+            const isActive = userActiveByName.get(name);
+            return isActive === undefined ? true : isActive;
+          })
       )
     ).sort((a, b) => a.localeCompare(b));
-  }, [assets, assetCampusMultiFilter]);
+  }, [assets, assetCampusMultiFilter, users]);
   const assetAssignedToFilterPickerOptions = useMemo(
     () =>
       assetAssignedToFilterOptions.map((name) => {
@@ -15463,27 +15511,6 @@ export default function App() {
     }
     return map;
   }, [toolReviewReports]);
-  const toolReviewHistoryByItemId = useMemo(() => {
-    const map = new Map<number, ToolReviewReport[]>();
-    for (const row of toolReviewReports) {
-      const itemId = Number(row.itemId || 0);
-      if (!itemId) continue;
-      const bucket: ToolReviewReport[] = map.get(itemId) || [];
-      bucket.push(row);
-      map.set(itemId, bucket);
-    }
-    Array.from(map.keys()).forEach((itemId) => {
-      const rows = map.get(itemId);
-      if (!rows) return;
-      rows.sort(
-        (a: ToolReviewReport, b: ToolReviewReport) =>
-          String(b.updated || b.created || "").localeCompare(String(a.updated || a.created || "")) ||
-          String(b.month || "").localeCompare(String(a.month || ""))
-      );
-      map.set(itemId, rows);
-    });
-    return map;
-  }, [toolReviewReports]);
   const toolReviewItemOptions = useMemo(() => {
     return inventoryBalanceRows
       .filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup)
@@ -15887,48 +15914,6 @@ export default function App() {
       },
     ].filter((page) => page.rows.length);
   }, [reportInventoryRows, reportInventorySplitByCategoryPages]);
-  const reportInventoryToolRows = useMemo(
-    () => reportInventoryGroupedRows.flatMap((section) => section.rows),
-    [reportInventoryGroupedRows]
-  );
-  useEffect(() => {
-    if (reportType !== "inventory_balance" || !reportInventoryIsToolGroup) {
-      if (reportInventorySelectedItemId) setReportInventorySelectedItemId("");
-      return;
-    }
-    const nextRows = reportInventoryToolRows;
-    if (!nextRows.length) {
-      if (reportInventorySelectedItemId) setReportInventorySelectedItemId("");
-      return;
-    }
-    const exists = nextRows.some((row) => String(row.id) === String(reportInventorySelectedItemId));
-    if (!exists) {
-      setReportInventorySelectedItemId(String(nextRows[0].id));
-    }
-  }, [reportInventoryIsToolGroup, reportInventorySelectedItemId, reportInventoryToolRows, reportType]);
-  const selectedReportInventoryToolRow = useMemo(
-    () => reportInventoryToolRows.find((row) => String(row.id) === String(reportInventorySelectedItemId)) || null,
-    [reportInventorySelectedItemId, reportInventoryToolRows]
-  );
-  const selectedReportInventoryToolHistory = useMemo(() => {
-    if (!selectedReportInventoryToolRow) return [] as ToolReviewReport[];
-    return toolReviewHistoryByItemId.get(Number(selectedReportInventoryToolRow.id || 0)) || [];
-  }, [selectedReportInventoryToolRow, toolReviewHistoryByItemId]);
-  const selectedReportInventoryToolLatestReview = useMemo(
-    () => selectedReportInventoryToolHistory[0] || null,
-    [selectedReportInventoryToolHistory]
-  );
-  const selectedReportInventoryToolPreviousReview = useMemo(
-    () => selectedReportInventoryToolHistory[1] || null,
-    [selectedReportInventoryToolHistory]
-  );
-  const selectedReportInventoryToolPreviousPhoto = useMemo(() => {
-    const previousReviewPhoto = String(selectedReportInventoryToolPreviousReview?.photo || "").trim();
-    if (previousReviewPhoto) return previousReviewPhoto;
-    const setupPhoto = String(selectedReportInventoryToolRow?.photo || "").trim();
-    if (setupPhoto) return setupPhoto;
-    return "";
-  }, [selectedReportInventoryToolPreviousReview, selectedReportInventoryToolRow]);
   const inventoryVisibleItemLookup = useMemo(() => {
     const out = new Map<number, InventoryItem>();
     for (const item of inventoryVisibleItems) out.set(Number(item.id), item);
@@ -37238,13 +37223,18 @@ export default function App() {
     () => assetMasterItemBreakdown.map(([name, count]) => `${name} = ${count}`).join(" | "),
     [assetMasterItemBreakdown]
   );
+  const showAssetMasterItemBreakdown = useMemo(() => {
+    if (!assetMasterItemBreakdown.length) return false;
+    if (assetMasterItemBreakdown.length > 1) return true;
+    return assetMasterItemBreakdown[0][1] !== assetMasterReportRows.length;
+  }, [assetMasterItemBreakdown, assetMasterReportRows.length]);
   const assetMasterCampusBreakdown = useMemo(() => {
     const counts = new Map<string, number>();
     for (const row of assetMasterReportRows) {
       const campus = campusLabel(String(row.campus || "").trim()) || "Unknown Campus";
       counts.set(campus, (counts.get(campus) || 0) + 1);
     }
-    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    return Array.from(counts.entries()).sort((a, b) => compareCampusByCode(a[0], b[0]) || a[0].localeCompare(b[0]));
   }, [assetMasterReportRows, campusLabel]);
   const assetMasterCampusBreakdownText = useMemo(
     () => assetMasterCampusBreakdown.map(([campus, count]) => `${campus} = ${count}`).join(" | "),
@@ -37264,8 +37254,8 @@ export default function App() {
     }
     return {
       total: airconRows.length,
-      byType: Array.from(byType.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
-      byCapacity: Array.from(byCapacity.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
+      byType: Array.from(byType.entries()).sort((a, b) => compareAirconTypeLabels(a[0], b[0]) || b[1] - a[1]),
+      byCapacity: Array.from(byCapacity.entries()).sort((a, b) => compareAirconCapacityLabels(a[0], b[0]) || b[1] - a[1]),
     };
   }, [assetMasterReportRows]);
   const isAirconAssetMasterReport = useMemo(
@@ -37443,6 +37433,7 @@ export default function App() {
             { key: "responsible", label: "Responsible" },
             { key: "unit", label: "Unit" },
             { key: "amount", label: "Amount" },
+            { key: "checkStatus", label: lang === "km" ? "ស្ថានភាពត្រួតពិនិត្យ" : "Check Status" },
           ]
         : [
             { key: "code", label: "Code" },
@@ -37458,19 +37449,18 @@ export default function App() {
             { key: "min", label: "Min" },
             { key: "alert", label: "Alert" },
           ],
-    [reportInventoryIsToolGroup, t.photo, t.campus, t.location]
+    [lang, reportInventoryIsToolGroup, t.photo, t.campus, t.location]
   );
   useEffect(() => {
     setInventoryReportVisibleColumns((prev) => {
       const allowed: InventoryReportColumnKey[] = inventoryReportColumnDefs.map((column) => column.key);
       let filtered: InventoryReportColumnKey[] = prev.filter((key) => allowed.includes(key));
-      if (reportInventoryIsToolGroup && !filtered.includes("amount")) {
-        const amountIndex = allowed.indexOf("amount");
-        if (amountIndex >= 0) {
-          filtered = [...filtered, "amount" as InventoryReportColumnKey].sort(
-            (a, b) => allowed.indexOf(a) - allowed.indexOf(b)
-          );
-        }
+      if (reportInventoryIsToolGroup) {
+        (["amount", "checkStatus"] as InventoryReportColumnKey[]).forEach((requiredKey) => {
+          if (!filtered.includes(requiredKey) && allowed.includes(requiredKey)) {
+            filtered = [...filtered, requiredKey].sort((a, b) => allowed.indexOf(a) - allowed.indexOf(b));
+          }
+        });
       }
       if (filtered.length) return filtered;
       return allowed;
@@ -37515,6 +37505,10 @@ export default function App() {
           return row.unit || "-";
         case "amount":
           return String(row.currentStock ?? 0);
+        case "checkStatus":
+          return latestToolReviewByItemId.has(Number(row.id || 0))
+            ? (lang === "km" ? "បានពិនិត្យ" : "Checked")
+            : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Not Checked Yet");
         case "stockIn":
           return String(row.stockIn ?? 0);
         case "stockOut":
@@ -37529,7 +37523,7 @@ export default function App() {
           return "-";
       }
     },
-    [inventoryCampusLabel, lang]
+    [inventoryCampusLabel, lang, latestToolReviewByItemId]
   );
   const assetMasterCampusTitle = useMemo(() => {
     if (assetMasterCampusFilter.includes("ALL")) return t.allCampuses;
@@ -39135,7 +39129,7 @@ export default function App() {
         row.notes || "-",
       ]);
     } else if (reportType === "inventory_balance") {
-      title = `${reportInventoryIsToolGroup ? "Inventory Tool Balance Report" : "Inventory Stock Balance Report"} - ${reportInventoryModeLabel} - ${reportInventoryGroupFilterLabel} - ${reportInventoryCampusFilterLabel}`;
+      title = reportInventoryIsToolGroup ? "Inventory Tool Balance Report" : "Inventory Stock Balance Report";
       columns = visibleInventoryReportColumnDefs.map((column) => column.label);
       rows = reportInventoryRows.map((row) => [
         ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
@@ -39325,6 +39319,29 @@ export default function App() {
         const base = visibleAssetMasterColumnWidths.map((column) => column.width);
         return [3, ...base];
       }
+      if (reportType === "inventory_balance") {
+        const inventoryWidthMap: Record<InventoryReportColumnKey, number> = {
+          code: 10,
+          photo: 7,
+          name: 18,
+          category: 12,
+          campus: 12,
+          location: 13,
+          owner: 9,
+          responsible: 12,
+          unit: 5,
+          amount: 6,
+          checkStatus: 11,
+          stockIn: 6,
+          stockOut: 6,
+          current: 6,
+          min: 5,
+          alert: 6,
+        };
+        const weights = [3, ...visibleInventoryReportColumnDefs.map((column) => inventoryWidthMap[column.key] || 8)];
+        const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+        return weights.map((value) => (value / total) * 100);
+      }
       if (reportType === "set_code") {
         const base = [...setCodeReportColumnWidths];
         return [3, ...base];
@@ -39381,13 +39398,13 @@ export default function App() {
         : reportType === "furniture_control"
         ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Locations:</strong> ${furnitureControlGapSummary.rooms}</p>`
         : reportType === "inventory_balance"
-        ? `<p><strong>Mode:</strong> ${escapeHtml(reportInventoryModeLabel)} | <strong>Group:</strong> ${escapeHtml(reportInventoryGroupFilterLabel)} | <strong>Campus:</strong> ${escapeHtml(reportInventoryCampusFilterLabel)} | <strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${reportInventoryRows.filter((row) => row.lowStock).length}${
-            reportInventorySplitByCategoryPages
-              ? " | <strong>Layout:</strong> Each tool category prints on its own separate page."
-              : reportInventoryIsToolGroup
-                ? " | <strong>Tool Process:</strong> Campus-owned tools use opening/current quantity, with review, repair, and cross-campus borrow handled separately."
-                : ""
-          }</p>`
+        ? reportInventoryIsToolGroup
+          ? `<p><strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Checked:</strong> ${
+              reportInventoryRows.filter((row) => latestToolReviewByItemId.has(Number(row.id || 0))).length
+            } | <strong>Not Checked Yet:</strong> ${
+              reportInventoryRows.filter((row) => !latestToolReviewByItemId.has(Number(row.id || 0))).length
+            }</p>`
+          : `<p><strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${reportInventoryRows.filter((row) => row.lowStock).length}</p>`
         : reportType === "staff_borrowing"
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length} | <strong>Campus:</strong> ${escapeHtml(
             staffBorrowingCampusFilter === "ALL" ? t.allCampuses : reportCampusName(staffBorrowingCampusFilter)
@@ -39399,36 +39416,53 @@ export default function App() {
         : reportType === "asset_master"
         ? isAirconAssetMasterReport
           ? `<section class="report-two-column-summary">
-              <div class="report-summary-stack">
-                <p class="report-summary-line"><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>
+              <div class="report-summary-panel">
+                <div class="report-summary-panel-title">Asset Summary</div>
+                <div class="report-summary-box">
+                  <div class="report-summary-box-label">Total Assets</div>
+                  <div class="report-summary-box-value">${assetMasterReportRows.length}</div>
+                </div>
                 ${
                   assetMasterCampusBreakdown.length
-                    ? `<p class="report-summary-line"><strong>By Campus:</strong> ${assetMasterCampusBreakdown
-                        .map(([campus, count]) => `${escapeHtml(campus)} = ${count}`)
-                        .join(" | ")}</p>`
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">By Campus</div>
+                        <div class="report-summary-box-value report-summary-box-value-grid">${assetMasterCampusBreakdown
+                          .map(([campus, count]) => `<div class="report-summary-entry">${escapeHtml(campus)} = ${count}</div>`)
+                          .join("")}</div>
+                      </div>`
                     : ""
                 }
                 ${
-                  assetMasterItemBreakdown.length
-                    ? `<p class="report-summary-line"><strong>By Item:</strong> ${assetMasterItemBreakdown
-                        .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
-                        .join(" | ")}</p>`
+                  showAssetMasterItemBreakdown
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">By Item</div>
+                        <div class="report-summary-box-value report-summary-box-value-list">${assetMasterItemBreakdown
+                          .map(([name, count]) => `<div class="report-summary-entry">${escapeHtml(name)} = ${count}</div>`)
+                          .join("")}</div>
+                      </div>`
                     : ""
                 }
               </div>
-              <div class="report-summary-stack">
+              <div class="report-summary-panel">
+                <div class="report-summary-panel-title">AC Breakdown</div>
                 ${
                   airconAssetMasterSummary.byType.length
-                    ? `<p class="report-summary-line"><strong>By AC Type:</strong> ${airconAssetMasterSummary.byType
-                        .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
-                        .join(" | ")}</p>`
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">By AC Type</div>
+                        <div class="report-summary-box-value">${airconAssetMasterSummary.byType
+                          .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
+                          .join(" | ")}</div>
+                      </div>`
                     : ""
                 }
                 ${
                   airconAssetMasterSummary.byCapacity.length
-                    ? `<p class="report-summary-line"><strong>By Capacity:</strong> ${airconAssetMasterSummary.byCapacity
-                        .map(([name, count]) => `${escapeHtml(name)}: ${count} unit${count === 1 ? "" : "s"}`)
-                        .join(" | ")}</p>`
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">By Capacity</div>
+                        <div class="report-summary-box-value">${airconAssetMasterSummary.byCapacity
+                          .map(([name, count]) => `${escapeHtml(shortAirconCapacityLabel(name))}: ${count}`)
+                          .join(" | ")}</div>
+                      </div>`
                     : ""
                 }
               </div>
@@ -39440,7 +39474,7 @@ export default function App() {
                     .join(" | ")}</p>`
                 : ""
             }${
-              assetMasterItemBreakdown.length
+              showAssetMasterItemBreakdown
                 ? `<p><strong>By Item:</strong> ${assetMasterItemBreakdown
                     .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
                     .join(" | ")}</p>`
@@ -39474,11 +39508,9 @@ export default function App() {
             const itemText = assetMasterItemFilter.includes("ALL")
               ? (lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")
               : (assetMasterItemFilter.length ? assetMasterItemFilter.join(", ") : "-");
-            return [
-              `<p class="meta">Generated: ${escapeHtml(generatedAt)}</p>`,
-              `<p class="meta">Campus: ${escapeHtml(campusText)}</p>`,
-              `<p class="meta">${escapeHtml(lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of")}: ${escapeHtml(itemText)}</p>`,
-            ].join("");
+            return `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus: ${escapeHtml(campusText)} | ${escapeHtml(
+              lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"
+            )}: ${escapeHtml(itemText)}</p>`;
           })()
         : reportType === "it_vault"
         ? [
@@ -39516,6 +39548,10 @@ export default function App() {
           )} | ${escapeHtml(lang === "km" ? "តម្រងសាខា" : "Campus Filter")}: ${escapeHtml(filterLabel)} | ${escapeHtml(
             lang === "km" ? "ទំហំ QR" : "QR Size"
           )}: ${escapeHtml(qrLabelSizeLabel)}</p>`
+        : reportType === "inventory_balance"
+        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Mode: ${escapeHtml(reportInventoryModeLabel)} | Group: ${escapeHtml(
+            reportInventoryGroupFilterLabel
+          )} | Campus: ${escapeHtml(reportInventoryCampusFilterLabel)}</p>`
         : `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
             lang === "km" ? "តម្រងសាខា" : "Campus Filter"
           )}: ${escapeHtml(filterLabel)}</p>`;
@@ -39529,6 +39565,8 @@ export default function App() {
     const previewTableClassName =
       reportType === "staff_borrowing"
         ? "preview-report-table preview-report-table-staff-borrowing"
+        : reportType === "inventory_balance"
+          ? "preview-report-table preview-report-table-inventory"
         : "preview-report-table";
 
     const reportContentHtml =
@@ -39845,6 +39883,22 @@ export default function App() {
           <tbody>${tableHtml}</tbody>
         </table></div>`;
 
+    const inventorySignatureHtml =
+      reportType === "inventory_balance"
+        ? `<section class="report-signature-section">
+            <article class="report-signature-card">
+              <div class="report-signature-title">${escapeHtml(lang === "km" ? "ហត្ថលេខាបុគ្គលិក" : "Staff Signature")}</div>
+              <div class="report-signature-line"></div>
+              <div class="report-signature-note">${escapeHtml(lang === "km" ? "ឈ្មោះ និងកាលបរិច្ឆេទ" : "Name and date")}</div>
+            </article>
+            <article class="report-signature-card">
+              <div class="report-signature-title">${escapeHtml(lang === "km" ? "ហត្ថលេខាអ្នកគ្រប់គ្រង" : "Supervisor Signature")}</div>
+              <div class="report-signature-line"></div>
+              <div class="report-signature-note">${escapeHtml(lang === "km" ? "ឈ្មោះ និងកាលបរិច្ឆេទ" : "Name and date")}</div>
+            </article>
+          </section>`
+        : "";
+
     const html = `
       <html>
       <head>
@@ -39872,19 +39926,59 @@ export default function App() {
           p.meta { margin: 0 0 12px; color: #41584c; }
           .report-two-column-summary {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 18px 28px;
+            grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+            gap: 14px 18px;
             margin: 0 0 14px;
           }
-          .report-summary-stack {
+          .report-summary-panel {
             display: grid;
-            gap: 10px;
+            gap: 8px;
             align-content: start;
+            border: 1px solid #d7ccb8;
+            border-radius: 14px;
+            background: #fffdf8;
+            padding: 12px 14px;
           }
-          .report-summary-line {
-            margin: 0;
+          .report-summary-panel-title {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #7a6647;
+            margin: 0 0 2px;
+          }
+          .report-summary-box {
+            border: 1px solid #e2d8c7;
+            border-radius: 10px;
+            background: #fff;
+            padding: 9px 11px;
+          }
+          .report-summary-box-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #8a6f47;
+            margin-bottom: 4px;
+          }
+          .report-summary-box-value {
             color: #294036;
-            line-height: 1.45;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.4;
+          }
+          .report-summary-box-value-list {
+            display: grid;
+            gap: 4px;
+          }
+          .report-summary-box-value-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px 18px;
+            align-items: start;
+          }
+          .report-summary-entry {
+            display: block;
           }
           .preview-table-wrap { width: 100%; overflow-x: auto; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; background: #fff; }
@@ -39892,12 +39986,49 @@ export default function App() {
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
           .preview-report-table th,
           .preview-report-table td { word-break: normal; overflow-wrap: break-word; hyphens: auto; }
+          .preview-report-table-inventory col:first-child {
+            width: 3% !important;
+          }
+          .preview-report-table-inventory th:first-child,
+          .preview-report-table-inventory td:first-child {
+            white-space: nowrap;
+            text-align: center;
+          }
           .preview-report-table-staff-borrowing th:nth-child(2),
           .preview-report-table-staff-borrowing td:nth-child(2) {
             white-space: nowrap;
             word-break: keep-all;
             overflow-wrap: normal;
             hyphens: none;
+          }
+          .report-signature-section {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            margin-top: 18px;
+          }
+          .report-signature-card {
+            border: 1px solid #d7ccb8;
+            border-radius: 12px;
+            background: #fffdf8;
+            padding: 14px 16px 12px;
+            min-height: 94px;
+          }
+          .report-signature-title {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #7a6647;
+            margin-bottom: 34px;
+          }
+          .report-signature-line {
+            border-top: 1px solid #977c55;
+            margin-bottom: 6px;
+          }
+          .report-signature-note {
+            color: #7b6544;
+            font-size: 10px;
           }
           .inventory-preview-page {
             border: 1px solid #d8dfeb;
@@ -40059,7 +40190,7 @@ export default function App() {
             body { margin: 0; background: #fff; }
             .preview-toolbar { display: none !important; }
             .preview-shell { padding: 0; }
-            .report-two-column-summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+            .report-two-column-summary { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); }
           }
         </style>
       </head>
@@ -40096,6 +40227,7 @@ export default function App() {
           ${printMetaHtml}
           ${summaryHtml}
           ${reportContentHtml}
+          ${inventorySignatureHtml}
         </div>
         <script>
           (function () {
@@ -62077,7 +62209,7 @@ function formatTicketRequestSource(value?: string) {
                 {edAssetTemplate !== "ALL" ? (
                   <span> Template: <strong>{selectedEdTemplateLabel}</strong></span>
                 ) : null}
-                {assetMasterItemBreakdownText ? (
+                {showAssetMasterItemBreakdown && assetMasterItemBreakdownText ? (
                   <span> | <strong>By Item:</strong> {assetMasterItemBreakdownText}</span>
                 ) : null}
                 {assetMasterCampusBreakdownText ? (
@@ -62752,102 +62884,7 @@ function formatTicketRequestSource(value?: string) {
 
             {reportType === "inventory_balance" && (
               <>
-                {reportInventoryIsToolGroup && selectedReportInventoryToolRow ? (
-                  <section className="report-tool-preview">
-                    <div className="report-tool-preview-head">
-                      <div>
-                        <div className="report-tool-preview-kicker">
-                          {lang === "km" ? "រូបរាងរបាយការណ៍ឧបករណ៍" : "Tool Report Preview"}
-                        </div>
-                        <h4>{inventoryDisplayName(selectedReportInventoryToolRow.itemName, lang)}</h4>
-                        <p>
-                          {lang === "km"
-                            ? "បង្ហាញការពិនិត្យចុងក្រោយ និងប្រៀបធៀបរូបភាពមុនជាមួយរូបភាពពេលពិនិត្យថ្មីបំផុត។"
-                            : "Shows the latest monthly check and a previous-vs-latest photo comparison for this tool."}
-                        </p>
-                      </div>
-                      <span
-                        className={`report-tool-preview-status ${
-                          !selectedReportInventoryToolLatestReview
-                            ? "is-pending"
-                            : selectedReportInventoryToolLatestReview.condition === "Good"
-                              ? "is-good"
-                              : "is-issue"
-                        }`}
-                      >
-                        {!selectedReportInventoryToolLatestReview
-                          ? (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Not Checked Yet")
-                          : selectedReportInventoryToolLatestReview.condition === "Good"
-                            ? (lang === "km" ? "ស្ថានភាពល្អ" : "Good")
-                            : selectedReportInventoryToolLatestReview.condition}
-                      </span>
-                    </div>
-
-                    <div className="report-tool-preview-grid">
-                      <article className="report-tool-preview-summary">
-                        <div className="report-tool-preview-item">
-                          <div className="report-tool-preview-photo">
-                            {renderAssetPhoto(selectedReportInventoryToolRow.photo || "", selectedReportInventoryToolRow.itemCode)}
-                          </div>
-                          <div className="report-tool-preview-copy">
-                            <span className="report-card-id">{selectedReportInventoryToolRow.itemCode}</span>
-                            <strong>{inventoryDisplayName(selectedReportInventoryToolRow.itemName, lang)}</strong>
-                            <p>{inventoryCampusLabel(selectedReportInventoryToolRow.campus)} • {selectedReportInventoryToolRow.location || "-"}</p>
-                          </div>
-                        </div>
-
-                        <div className="report-tool-preview-metrics">
-                          <div>
-                            <span>{lang === "km" ? "បរិមាណ" : "Amount"}</span>
-                            <strong>{selectedReportInventoryToolRow.currentStock ?? 0} {selectedReportInventoryToolRow.unit || "pcs"}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "អ្នកទទួលខុសត្រូវ" : "Responsible"}</span>
-                            <strong>{selectedReportInventoryToolRow.responsibleParty || "-"}</strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "ពិនិត្យចុងក្រោយ" : "Last Check Date"}</span>
-                            <strong>
-                              {selectedReportInventoryToolLatestReview
-                                ? formatDateTime(selectedReportInventoryToolLatestReview.updated || selectedReportInventoryToolLatestReview.created || "")
-                                : (lang === "km" ? "មិនទាន់មាន" : "No check yet")}
-                            </strong>
-                          </div>
-                          <div>
-                            <span>{lang === "km" ? "ពិនិត្យដោយ" : "Last Checked By"}</span>
-                            <strong>{selectedReportInventoryToolLatestReview?.reviewedBy || "-"}</strong>
-                          </div>
-                        </div>
-                      </article>
-
-                      <article className="report-tool-preview-compare">
-                        <div className="report-tool-preview-compare-head">
-                          <strong>{lang === "km" ? "រូបភាពប្រៀបធៀប" : "Photo Comparison"}</strong>
-                          <span>{lang === "km" ? "មុន | ចុងក្រោយ" : "Previous | Latest Check"}</span>
-                        </div>
-                        <div className="report-tool-preview-compare-grid">
-                          <div className="report-tool-preview-photo-panel">
-                            <small>{lang === "km" ? "រូបមុន" : "Previous Photo"}</small>
-                            <div className="report-tool-preview-photo-frame">
-                              {selectedReportInventoryToolPreviousPhoto
-                                ? renderAssetPhoto(selectedReportInventoryToolPreviousPhoto, `${selectedReportInventoryToolRow.itemCode}-previous`)
-                                : <span className="photo-empty">{lang === "km" ? "មិនមានរូបមុន" : "No previous photo"}</span>}
-                            </div>
-                          </div>
-                          <div className="report-tool-preview-photo-panel">
-                            <small>{lang === "km" ? "រូបពិនិត្យចុងក្រោយ" : "Latest Check Photo"}</small>
-                            <div className="report-tool-preview-photo-frame">
-                              {String(selectedReportInventoryToolLatestReview?.photo || "").trim()
-                                ? renderAssetPhoto(String(selectedReportInventoryToolLatestReview?.photo || ""), `${selectedReportInventoryToolRow.itemCode}-latest`)
-                                : <span className="photo-empty">{lang === "km" ? "មិនទាន់មានរូបពិនិត្យ" : "No latest check photo"}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </article>
-                    </div>
-                  </section>
-                ) : null}
-              {isPhoneView ? (
+                {isPhoneView ? (
                 <div className="report-inventory-mobile-list">
                   {reportInventoryGroupedRows.length ? (
                     reportInventoryGroupedRows.map((section) => (
@@ -62862,20 +62899,7 @@ function formatTicketRequestSource(value?: string) {
                             return (
                             <article
                               key={`report-inventory-mobile-card-${section.group}-${row.id}`}
-                              className={`report-card report-inventory-mobile-card ${String(reportInventorySelectedItemId) === String(row.id) ? "is-selected" : ""}`}
-                              role={reportInventoryIsToolGroup ? "button" : undefined}
-                              tabIndex={reportInventoryIsToolGroup ? 0 : undefined}
-                              onClick={reportInventoryIsToolGroup ? () => setReportInventorySelectedItemId(String(row.id)) : undefined}
-                              onKeyDown={
-                                reportInventoryIsToolGroup
-                                  ? (e) => {
-                                      if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
-                                        setReportInventorySelectedItemId(String(row.id));
-                                      }
-                                    }
-                                  : undefined
-                              }
+                              className="report-card report-inventory-mobile-card"
                             >
                               <div className="report-card-head report-inventory-mobile-head">
                                 <div className="report-card-title">
@@ -63003,11 +63027,7 @@ function formatTicketRequestSource(value?: string) {
                                   <tbody>
                                     {section.rows.length ? (
                                       section.rows.map((row) => (
-                                        <tr
-                                          key={`report-inventory-balance-${page.key}-${section.key}-${row.id}`}
-                                          className={reportInventoryIsToolGroup && String(reportInventorySelectedItemId) === String(row.id) ? "report-table-row-selected" : ""}
-                                          onClick={reportInventoryIsToolGroup ? () => setReportInventorySelectedItemId(String(row.id)) : undefined}
-                                        >
+                                        <tr key={`report-inventory-balance-${page.key}-${section.key}-${row.id}`}>
                                           {visibleInventoryReportColumnDefs.map((column) => (
                                             <td key={`report-inventory-page-cell-${page.key}-${section.key}-${row.id}-${column.key}`}>
                                               {column.key === "photo"
@@ -63060,11 +63080,7 @@ function formatTicketRequestSource(value?: string) {
                       {reportInventoryGroupedRows.length ? (
                         reportInventoryGroupedRows.flatMap((section) =>
                           section.rows.map((row) => (
-                            <tr
-                              key={`report-inventory-balance-${section.group}-${row.id}`}
-                              className={reportInventoryIsToolGroup && String(reportInventorySelectedItemId) === String(row.id) ? "report-table-row-selected" : ""}
-                              onClick={reportInventoryIsToolGroup ? () => setReportInventorySelectedItemId(String(row.id)) : undefined}
-                            >
+                            <tr key={`report-inventory-balance-${section.group}-${row.id}`}>
                               {visibleInventoryReportColumnDefs.map((column) => (
                                 <td key={`report-inventory-cell-${section.group}-${row.id}-${column.key}`}>
                                   {column.key === "photo"
