@@ -62,6 +62,7 @@ const APP_ICON_FALLBACK_URL = publicAssetUrl("/logo192.png");
 const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
 const MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY = "maintenance_notification_read_map_v1";
 const ASSET_DATA_REQUEST_TIMEOUT_MS = 45000;
+const TONER_OLD_STATUS_OPTIONS = ["Empty", "Low", "Leaking", "Defective"] as const;
 
 type Asset = {
   id: number;
@@ -141,6 +142,7 @@ type MaintenanceEntry = {
   id: number;
   date: string;
   createdAt?: string;
+  updatedAt?: string;
   type: string;
   note: string;
   completion?: "Done" | "Not Yet";
@@ -11150,6 +11152,7 @@ export default function App() {
     photo: "",
   });
   const [publicQrTonerFileKey, setPublicQrTonerFileKey] = useState(0);
+  const [publicQrTonerAdvancedOpen, setPublicQrTonerAdvancedOpen] = useState(false);
   const [publicQrRequestFileKey, setPublicQrRequestFileKey] = useState(0);
   const [publicQrRequestForm, setPublicQrRequestForm] = useState({
     title: "",
@@ -11347,6 +11350,8 @@ export default function App() {
     photo: "",
   });
   const [assetDetailTonerFileKey, setAssetDetailTonerFileKey] = useState(0);
+  const [assetDetailTonerFormOpen, setAssetDetailTonerFormOpen] = useState(false);
+  const [assetDetailTonerAdvancedOpen, setAssetDetailTonerAdvancedOpen] = useState(false);
   const [transferForm, setTransferForm] = useState({
     assetId: "",
     date: toYmd(new Date()),
@@ -26108,6 +26113,29 @@ export default function App() {
       setBusy(false);
     }
   }
+
+  function tonerItemDisplayLabel(item?: Pick<InventoryItem, "itemCode" | "itemName"> | null) {
+    if (!item) return "toner cartridge";
+    const code = String(item.itemCode || "").trim();
+    const name = inventoryDisplayName(item.itemName, lang).trim();
+    if (code && name) return `${code} ${name}`;
+    return code || name || "toner cartridge";
+  }
+
+  function buildTonerAutoNote(form: TonerChangeForm, item?: Pick<InventoryItem, "itemCode" | "itemName"> | null) {
+    const qty = Math.max(1, Number(form.qty || 1));
+    const tonerLabel = tonerItemDisplayLabel(item);
+    const oldStatus = String(form.oldTonerStatus || "").trim();
+    const pageCounter = Math.max(0, Number(form.pageCounter || 0));
+    const installedLine =
+      qty > 1
+        ? `Installed ${qty} toner cartridges (${tonerLabel}).`
+        : `Installed 1 toner cartridge (${tonerLabel}).`;
+    const statusLine = oldStatus ? ` Replaced old toner: ${oldStatus}.` : "";
+    const counterLine = pageCounter > 0 ? ` Counter: ${pageCounter.toLocaleString()}.` : "";
+    return `${installedLine}${statusLine}${counterLine}`.trim();
+  }
+
   async function saveTonerChangeForAsset(
     asset: Pick<Asset, "id" | "assetId">,
     form: TonerChangeForm,
@@ -26115,12 +26143,14 @@ export default function App() {
   ) {
     const itemId = Number(form.itemId || 0);
     const qty = Math.max(1, Number(form.qty || 1));
-    if (!asset?.id || !itemId || !form.date || !form.note.trim()) {
-      const message = "Please select toner, date, and note.";
+    if (!asset?.id || !itemId || !form.date) {
+      const message = "Please select toner and date.";
       options.setFormError?.(message);
       setError(message);
       return false;
     }
+    const selectedItem = inventoryItems.find((item) => Number(item.id) === itemId) || null;
+    const resolvedNote = form.note.trim() || buildTonerAutoNote(form, selectedItem);
     setBusy(true);
     options.setFormError?.("");
     options.setMessage?.("");
@@ -26131,7 +26161,7 @@ export default function App() {
           itemId,
           date: form.date,
           qty,
-          note: form.note.trim(),
+          note: resolvedNote,
           by: form.by.trim(),
           cost: form.cost.trim(),
           condition: form.condition.trim(),
@@ -31339,6 +31369,7 @@ export default function App() {
       reportFileName: maintenanceEditForm.reportFile?.name || "",
       reportFileType: maintenanceEditForm.reportFile?.mimeType || "",
     };
+    const updatedAt = new Date().toISOString();
 
     setBusy(true);
     setError("");
@@ -31346,7 +31377,7 @@ export default function App() {
       const nextLocal = readAssetFallback().map((asset) => {
         if (asset.id !== maintenanceDetailAssetId) return asset;
         const nextHistory = (asset.maintenanceHistory || []).map((h) =>
-          Number(h.id) === Number(entryId) ? { ...h, ...payload } : h
+          Number(h.id) === Number(entryId) ? { ...h, ...payload, updatedAt } : h
         );
         return normalizeAssetForUi({ ...asset, maintenanceHistory: nextHistory });
       });
@@ -31363,6 +31394,7 @@ export default function App() {
                   mimeType: maintenanceEditForm.reportFile.mimeType || "",
                 }
               : "",
+            updatedAt,
           }),
         });
       } catch (err) {
@@ -32358,6 +32390,10 @@ export default function App() {
     () => tonerInventoryRows.find((row) => Number(row.id) === Number(detailTonerItem?.id || 0)) || null,
     [tonerInventoryRows, detailTonerItem?.id]
   );
+  const detailSelectedTonerItem = useMemo(
+    () => tonerInventoryItems.find((item) => Number(item.id) === Number(assetDetailTonerForm.itemId || 0)) || null,
+    [tonerInventoryItems, assetDetailTonerForm.itemId]
+  );
   const detailTransferEntries = useMemo(
     () =>
       detailAsset
@@ -32722,6 +32758,12 @@ export default function App() {
                 <div className="asset-detail-kv-grid">
                   <div className="asset-detail-kv"><span>{t.category}</span><strong>{detailAsset.category}</strong></div>
                   <div className="asset-detail-kv"><span>{t.typeCode}</span><strong>{detailAsset.type}</strong></div>
+                  {isAirconAsset(detailAsset.category, detailAsset.type) ? (
+                    <div className="asset-detail-kv">
+                      <span>Air-Con Capacity</span>
+                      <strong>{shortAirconCapacityLabel(parseAirconSpecs(detailAsset.specs || "").acHp || "") || "-"}</strong>
+                    </div>
+                  ) : null}
                   <div className="asset-detail-kv"><span>{t.name}</span><strong>{assetItemName(detailAsset.category, detailAsset.type, detailAsset.pcType || "")}</strong></div>
                   {detailAsset.category === "IT" ? (
                     <div className="asset-detail-kv"><span>{t.setCode}</span><strong>{detailAsset.setCode || "-"}</strong></div>
@@ -32926,26 +32968,6 @@ export default function App() {
                 </section>
               </div>
 
-              {isPrinterAssetRow(detailAsset) ? (
-                <section className="asset-detail-info-section">
-                  <div className="asset-detail-info-head">
-                    <h4>Toner Snapshot</h4>
-                    <span>Printer-specific reference</span>
-                  </div>
-                  <div className="asset-detail-kv-grid">
-                    <div className="asset-detail-kv"><span>Toner Model</span><strong>{detailAsset.tonerModel || "-"}</strong></div>
-                    <div className="asset-detail-kv"><span>Linked Toner Stock</span><strong>{detailTonerItem ? `${detailTonerItem.itemCode} (${detailTonerStock} ${detailTonerItem.unit})` : "-"}</strong></div>
-                    <div className="asset-detail-kv"><span>Last Toner Change</span><strong>{formatDate(detailAsset.tonerLastChangedAt || "-")}</strong></div>
-                    <div className="asset-detail-kv"><span>Last Page Counter</span><strong>{detailAsset.tonerLastPageCount || "-"}</strong></div>
-                    <div className="asset-detail-kv"><span>Min Toner Stock</span><strong>{detailAsset.tonerMinStock || "-"}</strong></div>
-                    <div className="asset-detail-kv"><span>Expected Yield</span><strong>{detailAsset.tonerExpectedYield ? `${detailAsset.tonerExpectedYield} pages` : "-"}</strong></div>
-                  </div>
-                  <div className="asset-detail-rich-block">
-                    <span>Toner Note</span>
-                    <div className="asset-detail-rich-value">{detailAsset.tonerNotes || "-"}</div>
-                  </div>
-                </section>
-              ) : null}
               {detailFurniture ? (
                 <section className="asset-detail-info-section">
                   <div className="asset-detail-info-head">
@@ -32983,14 +33005,14 @@ export default function App() {
             ) : null}
 
             {isPrinterAssetRow(detailAsset) ? (
-              <section className="panel" style={{ marginTop: 12 }}>
-                <div className="panel-row">
-                  <h3 className="section-title" style={{ margin: 0 }}>Toner Control</h3>
-                  <div className="row-actions">
-                    <span className="tiny">{detailTonerEntries.length} record(s)</span>
+              <section className="panel toner-summary-card" style={{ marginTop: 12 }}>
+                <div className="panel-row toner-summary-head">
+                  <h3 className="section-title" style={{ margin: 0 }}>Toner Summary</h3>
+                  <div className="row-actions toner-summary-head-actions">
+                    <span className="tiny toner-summary-record-count">{detailTonerEntries.length} toner change record(s)</span>
                     <button
                       type="button"
-                      className="tab btn-small"
+                      className="tab btn-small toner-summary-report-btn"
                       onClick={() => {
                         setTab("inventory");
                         setInventoryView("items");
@@ -33001,20 +33023,34 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <div className="form-grid" style={{ marginBottom: 10 }}>
-                  <div className="field">
-                    <span>In Stock</span>
-                    <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.currentStock : detailTonerStock}</div>
+                <div className="form-grid toner-summary-metrics" style={{ marginBottom: 10 }}>
+                  <div className="field toner-summary-metric-card">
+                    <span>Toner Changed</span>
+                    <div className="detail-value toner-summary-metric-value">{detailTonerEntries.length} time{detailTonerEntries.length === 1 ? "" : "s"}</div>
                   </div>
-                  <div className="field">
-                    <span>Used</span>
-                    <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.usedQty : detailTonerEntries.length}</div>
-                  </div>
-                  <div className="field">
-                    <span>Purchased</span>
-                    <div className="detail-value">{detailTonerSummaryRow ? detailTonerSummaryRow.purchaseQty : "-"}</div>
+                  <div className="field toner-summary-metric-card">
+                    <span>Remaining Toner</span>
+                    <div className="detail-value toner-summary-metric-value">
+                      {detailSelectedTonerItem || detailTonerItem
+                        ? `${detailTonerSummaryRow ? detailTonerSummaryRow.currentStock : detailTonerStock} ${(detailSelectedTonerItem || detailTonerItem)?.unit || "pcs"}`
+                        : "No toner linked"}
+                    </div>
                   </div>
                 </div>
+                <div className="panel-note toner-summary-note" style={{ marginBottom: 12 }}>
+                  Toner changes for this printer are saved inside Maintenance History. Here we only show how many times this printer changed toner and how many cartridges remain.
+                </div>
+                <div className="row-actions toner-summary-primary-actions" style={{ marginBottom: 10 }}>
+                  <button
+                    type="button"
+                    className="tab btn-small toner-summary-toggle-btn"
+                    onClick={() => setAssetDetailTonerFormOpen((prev) => !prev)}
+                  >
+                    {assetDetailTonerFormOpen ? "Hide Toner Form" : "Record Toner Change"}
+                  </button>
+                </div>
+                {assetDetailTonerFormOpen ? (
+                <>
                 <div className="form-grid">
                   <label className="field">
                     <span>Toner Item</span>
@@ -33028,6 +33064,11 @@ export default function App() {
                           </option>
                         ))}
                     </select>
+                    {detailSelectedTonerItem ? (
+                      <span className="tiny">
+                        Using {tonerItemDisplayLabel(detailSelectedTonerItem)}. Stock now: {calcInventoryCurrentStockFromRows(detailSelectedTonerItem, inventoryVisibleTxns)} {detailSelectedTonerItem.unit}
+                      </span>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Date</span>
@@ -33040,10 +33081,9 @@ export default function App() {
                   <label className="field">
                     <span>Old Toner Status</span>
                     <select className="input" value={assetDetailTonerForm.oldTonerStatus} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, oldTonerStatus: e.target.value }))}>
-                      <option value="Empty">Empty</option>
-                      <option value="Low">Low</option>
-                      <option value="Leaking">Leaking</option>
-                      <option value="Defective">Defective</option>
+                      {TONER_OLD_STATUS_OPTIONS.map((option) => (
+                        <option key={`detail-toner-old-status-${option}`} value={option}>{option}</option>
+                      ))}
                     </select>
                   </label>
                   <label className="field">
@@ -33054,29 +33094,68 @@ export default function App() {
                     <span>By</span>
                     <input className="input" value={assetDetailTonerForm.by} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, by: e.target.value }))} />
                   </label>
-                  <label className="field">
-                    <span>Cost</span>
-                    <input className="input" value={assetDetailTonerForm.cost} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, cost: e.target.value }))} />
-                  </label>
-                  <label className="field">
-                    <span>Condition</span>
-                    <input className="input" value={assetDetailTonerForm.condition} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, condition: e.target.value }))} />
-                  </label>
                   <label className="field field-wide">
-                    <span>Note</span>
-                    <textarea className="textarea" value={assetDetailTonerForm.note} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, note: e.target.value }))} />
-                  </label>
-                  <label className="field field-wide">
-                    <span>{t.photo}</span>
-                    <input key={assetDetailTonerFileKey} type="file" accept="image/*" onChange={onAssetDetailTonerPhotoFile} />
-                    {assetDetailTonerForm.photo ? <img loading="lazy" decoding="async" src={assetDetailTonerForm.photo} alt="toner" className="photo-preview" /> : null}
+                    <span>Note (Optional)</span>
+                    <textarea
+                      className="textarea"
+                      placeholder="Leave blank to auto-write a simple note."
+                      value={assetDetailTonerForm.note}
+                      onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, note: e.target.value }))}
+                    />
+                    <span className="tiny">Auto note preview: {buildTonerAutoNote(assetDetailTonerForm, detailSelectedTonerItem)}</span>
                   </label>
                 </div>
+                <div className="row-actions" style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    onClick={() => setAssetDetailTonerForm((prev) => ({ ...prev, note: buildTonerAutoNote(prev, detailSelectedTonerItem) }))}
+                  >
+                    Use Auto Note
+                  </button>
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    onClick={() => setAssetDetailTonerAdvancedOpen((prev) => !prev)}
+                  >
+                    {assetDetailTonerAdvancedOpen ? "Hide More Details" : "More Details"}
+                  </button>
+                </div>
+                {assetDetailTonerAdvancedOpen ? (
+                  <div className="form-grid" style={{ marginTop: 10 }}>
+                    <label className="field">
+                      <span>Cost (Optional)</span>
+                      <input className="input" value={assetDetailTonerForm.cost} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, cost: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Condition (Optional)</span>
+                      <input className="input" value={assetDetailTonerForm.condition} onChange={(e) => setAssetDetailTonerForm((prev) => ({ ...prev, condition: e.target.value }))} />
+                    </label>
+                    <label className="field field-wide">
+                      <span>{t.photo} (Optional)</span>
+                      <input key={assetDetailTonerFileKey} type="file" accept="image/*" onChange={onAssetDetailTonerPhotoFile} />
+                      {assetDetailTonerForm.photo ? <img loading="lazy" decoding="async" src={assetDetailTonerForm.photo} alt="toner" className="photo-preview" /> : null}
+                    </label>
+                  </div>
+                ) : null}
                 <div className="asset-actions">
-                  <button className="btn-primary" disabled={busy || !assetDetailTonerForm.note.trim() || !assetDetailTonerForm.itemId} onClick={() => void saveTonerChangeForAsset(detailAsset, assetDetailTonerForm, { setForm: setAssetDetailTonerForm, resetFileKey: () => setAssetDetailTonerFileKey((k) => k + 1) })}>
+                  <button
+                    className="btn-primary"
+                    disabled={busy || !assetDetailTonerForm.itemId}
+                    onClick={() => void saveTonerChangeForAsset(detailAsset, assetDetailTonerForm, {
+                      setForm: setAssetDetailTonerForm,
+                      resetFileKey: () => setAssetDetailTonerFileKey((k) => k + 1),
+                      onDone: () => {
+                        setAssetDetailTonerAdvancedOpen(false);
+                        setAssetDetailTonerFormOpen(false);
+                      },
+                    })}
+                  >
                     Save Toner Change
                   </button>
                 </div>
+                </>
+                ) : null}
               </section>
             ) : null}
 
@@ -33279,7 +33358,7 @@ export default function App() {
         </div>
       );
     },
-    [assetDetailNeedsFullHistory, assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerFileKey, assetDetailTonerForm, assetDisplayPhoto, assetItemName, assetStatusLabel, busy, calcInventoryCurrentStockFromRows, campusLabel, canAccessMenu, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openFullAssetRecordFromDetail, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems]
+    [assetDetailNeedsFullHistory, assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerAdvancedOpen, assetDetailTonerFileKey, assetDetailTonerForm, assetDetailTonerFormOpen, assetDisplayPhoto, assetItemName, assetStatusLabel, buildTonerAutoNote, busy, calcInventoryCurrentStockFromRows, campusLabel, canAccessMenu, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailSelectedTonerItem, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openFullAssetRecordFromDetail, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems, tonerItemDisplayLabel]
   );
   useEffect(() => {
     if (!assetDetailId) return;
@@ -33310,6 +33389,8 @@ export default function App() {
       date: prev.date || toYmd(new Date()),
       pageCounter: prev.pageCounter || (detailAsset.tonerLastPageCount ? String(detailAsset.tonerLastPageCount) : ""),
     }));
+    setAssetDetailTonerFormOpen(false);
+    setAssetDetailTonerAdvancedOpen(false);
   }, [detailAsset, detailTonerItem, tonerInventoryItems]);
   const editingAsset = useMemo(
     () => assets.find((a) => a.id === editingAssetId) || null,
@@ -33910,6 +33991,7 @@ export default function App() {
       status: string;
       date: string;
       createdAt: string;
+      updatedAt: string;
       type: string;
       completion: string;
       condition: string;
@@ -33944,6 +34026,7 @@ export default function App() {
           status: asset.status || "Active",
           date: entry.date || "",
           createdAt: entry.createdAt || "",
+          updatedAt: entry.updatedAt || "",
           type: entry.type || "",
           completion: entry.completion || "Not Yet",
           condition: entry.condition || "-",
@@ -33966,9 +34049,9 @@ export default function App() {
       const aTime = Date.parse(a.date);
       const bTime = Date.parse(b.date);
       if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) return bTime - aTime;
-      const aCreatedAt = Date.parse(a.createdAt || "");
-      const bCreatedAt = Date.parse(b.createdAt || "");
-      if (!Number.isNaN(aCreatedAt) && !Number.isNaN(bCreatedAt) && aCreatedAt !== bCreatedAt) return bCreatedAt - aCreatedAt;
+      const aDisplayAt = Date.parse(maintenanceEntryDisplayTime(a));
+      const bDisplayAt = Date.parse(maintenanceEntryDisplayTime(b));
+      if (!Number.isNaN(aDisplayAt) && !Number.isNaN(bDisplayAt) && aDisplayAt !== bDisplayAt) return bDisplayAt - aDisplayAt;
       return b.rowId.localeCompare(a.rowId);
     });
   }, [resolvedAssets, assetItemName]);
@@ -36931,7 +37014,9 @@ export default function App() {
   }, [printableFurnitureModelPhotoByLabel]);
   const assetMasterSetRows = useMemo(() => {
     const toItemDescription = (asset: Asset) => {
-      const visibleSpecs = getVisibleSpecsTextareaValue(asset.category || "", asset.type || "", asset.specs || "");
+      const visibleSpecs = isAirconAsset(asset.category || "", asset.type || "")
+        ? parseAirconSpecs(asset.specs || "").specs
+        : getVisibleSpecsTextareaValue(asset.category || "", asset.type || "", asset.specs || "");
       const chunks = [
         visibleSpecs,
         [asset.brand || "", asset.model || ""].filter(Boolean).join(" "),
@@ -37530,13 +37615,12 @@ export default function App() {
               { value: "it_vault" as ReportType, label: "IT Vault Report" },
             ]
       )
-        .filter((option) => (option.value === "asset_full_record" ? Boolean(reportAssetIdFilter) : true))
         .filter((option) =>
           option.value === "asset_full_record"
             ? canAccessMenu("reports.asset_master", "reports")
             : canAccessMenu(`reports.${option.value}`, "reports")
         ),
-    [lang, canAccessMenu, reportAssetIdFilter]
+    [lang, canAccessMenu]
   );
   const availableReportSections = useMemo(
     () =>
@@ -37787,9 +37871,17 @@ export default function App() {
       return `${lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"}: ${assetMasterItemTitle}`;
     }
     if (reportType === "asset_full_record") {
-      return lang === "km"
-        ? "បើករបាយការណ៍ទ្រព្យសម្បត្តិពេញលេញសម្រាប់ទ្រព្យដែលបានជ្រើស។"
-        : "Open one complete printable record for the selected asset.";
+      return reportAssetIdFilter
+        ? (
+          lang === "km"
+            ? "បើករបាយការណ៍ទ្រព្យសម្បត្តិពេញលេញសម្រាប់ទ្រព្យដែលបានជ្រើស។"
+            : "Open one complete printable record for the selected asset."
+        )
+        : (
+          lang === "km"
+            ? "ជ្រើសសាខា ទីតាំង ប្រភេទ ឈ្មោះ និងលេខទ្រព្យ ដើម្បីបើករបាយការណ៍ទ្រព្យសម្បត្តិពេញលេញ។"
+            : "Select campus, location, category, item, and asset ID to open one complete asset record."
+        );
     }
     if (reportType === "qr_labels") {
       return qrLabelEntityType === "rental_printer"
@@ -37797,10 +37889,11 @@ export default function App() {
         : (lang === "km" ? "បោះពុម្ព QR សម្រាប់ទ្រព្យសម្បត្តិដែលបានជ្រើស។" : "Print QR labels for selected assets.");
     }
     return reportTypeGuideText;
-  }, [reportType, lang, assetMasterItemTitle, reportTypeGuideText, qrLabelEntityType]);
+  }, [reportType, lang, assetMasterItemTitle, reportTypeGuideText, qrLabelEntityType, reportAssetIdFilter]);
   const hasReportFilters = useMemo(
     () =>
       reportType === "staff_borrowing" ||
+      reportType === "asset_full_record" ||
       reportType === "asset_master" ||
       reportType === "asset_by_location" ||
       reportType === "furniture_control" ||
@@ -37834,8 +37927,12 @@ export default function App() {
   const resetReportFilters = useCallback(() => {
     if (reportType === "asset_full_record") {
       setReportAssetIdFilter("");
-      setReportSection("asset");
-      setReportType("asset_master");
+      setQrLabelEntityType("asset");
+      setQrCampusFilter(["ALL"]);
+      setQrLocationFilter(["ALL"]);
+      setQrCategoryFilter(["ALL"]);
+      setQrStatusFilter(["ALL"]);
+      setQrItemFilter(["ALL"]);
       return;
     }
     if (reportType === "asset_master") {
@@ -38108,6 +38205,11 @@ export default function App() {
       return next;
     });
   }, [qrItemFilterOptions]);
+  useEffect(() => {
+    if (reportType === "asset_full_record" && qrLabelEntityType !== "asset") {
+      setQrLabelEntityType("asset");
+    }
+  }, [reportType, qrLabelEntityType]);
   useEffect(() => {
     if (qrLabelEntityType !== "asset") {
       if (reportAssetIdFilter) setReportAssetIdFilter("");
@@ -39122,6 +39224,7 @@ export default function App() {
       by: prev.by.trim() || authUser?.displayName || authUser?.username || "",
       pageCounter: prev.pageCounter || (publicQrAsset.tonerLastPageCount ? String(publicQrAsset.tonerLastPageCount) : ""),
     }));
+    setPublicQrTonerAdvancedOpen(false);
   }, [publicQrAsset, tonerInventoryItems, authUser?.displayName, authUser?.username]);
   useEffect(() => {
     const openWorkOrder = publicQrAsset?.openWorkOrder;
@@ -39773,7 +39876,11 @@ export default function App() {
                   .map(
                     (row, index) => `<tr>
                       <td>${index + 1}</td>
-                      <td>${escapeHtml(formatDate(row.date || "-"))}</td>
+                      <td>${escapeHtml(
+                        `${formatDate(row.date || "-")}${
+                          maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""
+                        }${isMaintenanceEntryEdited(row) ? " (edited)" : ""}`
+                      )}</td>
                       <td>${escapeHtml(row.type || "-")}</td>
                       <td>${escapeHtml(row.completion || "-")}</td>
                       <td>${escapeHtml(row.condition || "-")}</td>
@@ -40957,6 +41064,7 @@ export default function App() {
     );
     setPublicQrRecordBusy(false);
     if (ok) {
+      setPublicQrTonerAdvancedOpen(false);
       setPublicQrSectionsOpen((prev) => ({ ...prev, toner: false }));
     }
   }
@@ -41029,6 +41137,18 @@ function formatTicketRequestSource(value?: string) {
   function formatPublicHistoryAction(action?: string) {
     if (String(action || "").trim().toUpperCase() === "ASSIGN") return "ASSIGNED";
     return action || "-";
+  }
+
+  function maintenanceEntryDisplayTime(entry?: Pick<MaintenanceEntry, "createdAt" | "updatedAt"> | null) {
+    const updatedAt = String(entry?.updatedAt || "").trim();
+    const createdAt = String(entry?.createdAt || "").trim();
+    return updatedAt || createdAt;
+  }
+
+  function isMaintenanceEntryEdited(entry?: Pick<MaintenanceEntry, "createdAt" | "updatedAt"> | null) {
+    const updatedAt = String(entry?.updatedAt || "").trim();
+    const createdAt = String(entry?.createdAt || "").trim();
+    return Boolean(updatedAt && createdAt && updatedAt !== createdAt);
   }
 
   function normalizePublicActivityText(value?: string) {
@@ -41966,6 +42086,9 @@ function formatTicketRequestSource(value?: string) {
                                     searchText: `${item.itemCode} ${item.itemName} ${item.unit}`,
                                   }))}
                               />
+                              <span className="tiny">
+                                Leave note empty if you want the system to auto-write a simple toner note.
+                              </span>
                             </label>
                             <label className="field">
                               <span>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</span>
@@ -41983,7 +42106,7 @@ function formatTicketRequestSource(value?: string) {
                                 placeholder={lang === "km" ? "ជ្រើសស្ថានភាព Toner" : "Select toner status"}
                                 searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាព Toner..." : "Search toner status..."}
                                 emptyText={lang === "km" ? "មិនមានស្ថានភាព Toner" : "No toner status found."}
-                                options={["Empty", "Low", "Leaking", "Defective"].map((opt) => ({
+                                options={TONER_OLD_STATUS_OPTIONS.map((opt) => ({
                                   value: opt,
                                   label: opt,
                                 }))}
@@ -41998,26 +42121,64 @@ function formatTicketRequestSource(value?: string) {
                               <input className="input" value={publicQrTonerForm.by} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, by: e.target.value }))} />
                             </label>
                             <label className="field field-wide">
-                              <span>{publicQrText.note}</span>
-                              <textarea className="input" rows={3} value={publicQrTonerForm.note} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, note: e.target.value }))} />
+                              <span>{publicQrText.note} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                              <textarea
+                                className="input"
+                                rows={3}
+                                placeholder={lang === "km" ? "ទុកទំនេរ ដើម្បីឱ្យប្រព័ន្ធសរសេរកំណត់ចំណាំសាមញ្ញ" : "Leave blank to auto-write a simple note."}
+                                value={publicQrTonerForm.note}
+                                onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, note: e.target.value }))}
+                              />
+                              <span className="tiny">
+                                {buildTonerAutoNote(
+                                  publicQrTonerForm,
+                                  tonerInventoryItems.find((item) => Number(item.id) === Number(publicQrTonerForm.itemId || 0)) || null
+                                )}
+                              </span>
                             </label>
-                            <label className="field">
-                              <span>{publicQrText.cost}</span>
-                              <input className="input" value={publicQrTonerForm.cost} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, cost: e.target.value }))} />
-                            </label>
-                            <label className="field">
-                              <span>{publicQrText.condition}</span>
-                              <input className="input" value={publicQrTonerForm.condition} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, condition: e.target.value }))} />
-                            </label>
-                            <label className="field field-wide">
-                              <span>{t.photo}</span>
-                              <input key={publicQrTonerFileKey} type="file" accept="image/*" onChange={onPublicQrTonerPhotoFile} />
-                              {publicQrTonerForm.photo ? (
-                                <img loading="lazy" decoding="async" src={publicQrTonerForm.photo} alt="toner" className="photo-preview" />
-                              ) : null}
-                            </label>
+                            <div className="field field-wide row-actions" style={{ justifyContent: "flex-start" }}>
+                              <button
+                                type="button"
+                                className="tab btn-small"
+                                onClick={() => setPublicQrTonerForm((f) => ({
+                                  ...f,
+                                  note: buildTonerAutoNote(
+                                    f,
+                                    tonerInventoryItems.find((item) => Number(item.id) === Number(f.itemId || 0)) || null
+                                  ),
+                                }))}
+                              >
+                                Use Auto Note
+                              </button>
+                              <button
+                                type="button"
+                                className="tab btn-small"
+                                onClick={() => setPublicQrTonerAdvancedOpen((prev) => !prev)}
+                              >
+                                {publicQrTonerAdvancedOpen ? "Hide More Details" : "More Details"}
+                              </button>
+                            </div>
+                            {publicQrTonerAdvancedOpen ? (
+                              <>
+                                <label className="field">
+                                  <span>{publicQrText.cost} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                                  <input className="input" value={publicQrTonerForm.cost} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, cost: e.target.value }))} />
+                                </label>
+                                <label className="field">
+                                  <span>{publicQrText.condition} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                                  <input className="input" value={publicQrTonerForm.condition} onChange={(e) => setPublicQrTonerForm((f) => ({ ...f, condition: e.target.value }))} />
+                                </label>
+                                <label className="field field-wide">
+                                  <span>{t.photo} ({lang === "km" ? "ស្រេចចិត្ត" : "Optional"})</span>
+                                  <input key={publicQrTonerFileKey} type="file" accept="image/*" onChange={onPublicQrTonerPhotoFile} />
+                                  {publicQrTonerForm.photo ? (
+                                    <img loading="lazy" decoding="async" src={publicQrTonerForm.photo} alt="toner" className="photo-preview" />
+                                  ) : null}
+                                </label>
+                              </>
+                            ) : null}
                             <div className="field field-wide">
-                              <button className="btn-primary" type="button" disabled={publicQrRecordBusy || !publicQrTonerForm.note.trim() || !publicQrTonerForm.itemId} onClick={() => void addTonerRecordFromPublicQr(asset)}>
+                              <button className="btn-primary" type="button" disabled={publicQrRecordBusy || !publicQrTonerForm.itemId} onClick={() => void addTonerRecordFromPublicQr(asset)}>
                                 {publicQrRecordBusy ? publicQrText.saving : publicQrText.saveTonerChange}
                               </button>
                             </div>
@@ -58344,7 +58505,10 @@ function formatTicketRequestSource(value?: string) {
                           <td>{row.bookNo}</td>
                           <td>
                             <strong>{formatDate(row.date || "-")}</strong>
-                            <div>{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</div>
+                            <div>
+                              {maintenanceEntryDisplayTime(row) ? formatTimeOnly(maintenanceEntryDisplayTime(row)) : "-"}
+                              {isMaintenanceEntryEdited(row) ? " edited" : ""}
+                            </div>
                           </td>
                           <td className="maintenance-logbook-task-cell">
                             <strong className="maintenance-logbook-task-type">
@@ -58544,7 +58708,10 @@ function formatTicketRequestSource(value?: string) {
                         <div className="maintenance-mobile-asset-field">
                           <div className="maintenance-mobile-asset-label-line">
                             <span>When:</span>
-                            <strong>{formatDate(row.date || "-")} ({row.createdAt ? formatTimeOnly(row.createdAt) : "-"})</strong>
+                            <strong>
+                              {formatDate(row.date || "-")} ({maintenanceEntryDisplayTime(row) ? formatTimeOnly(maintenanceEntryDisplayTime(row)) : "-"})
+                              {isMaintenanceEntryEdited(row) ? " edited" : ""}
+                            </strong>
                           </div>
                         </div>
                         <div className="maintenance-mobile-asset-field">
@@ -58640,7 +58807,10 @@ function formatTicketRequestSource(value?: string) {
                         <div className="maintenance-history-desktop-summary">
                           <div className="maintenance-history-desktop-date">
                             <span>{formatDate(row.date || "-")}</span>
-                            <strong>{row.createdAt ? formatTimeOnly(row.createdAt) : "-"}</strong>
+                            <strong>
+                              {maintenanceEntryDisplayTime(row) ? formatTimeOnly(maintenanceEntryDisplayTime(row)) : "-"}
+                              {isMaintenanceEntryEdited(row) ? " edited" : ""}
+                            </strong>
                           </div>
                           <div className="maintenance-history-desktop-asset">
                             <strong title={row.assetId}>{row.assetId}</strong>
@@ -61634,7 +61804,7 @@ function formatTicketRequestSource(value?: string) {
                         {lang === "km" ? "រួចរាល់" : "Done"}
                       </button>
                     </div>
-                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""} ${reportType === "inventory_balance" ? "report-filter-row-inventory" : ""}`}>
+                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" || reportType === "asset_full_record" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""} ${reportType === "inventory_balance" ? "report-filter-row-inventory" : ""}`}>
               {reportType === "maintenance_completion" ? (
                 <>
                   <LocationPicker
@@ -61899,7 +62069,7 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                 </>
               ) : null}
-              {reportType === "qr_labels" ? (
+              {reportType === "qr_labels" || reportType === "asset_full_record" ? (
                 <>
                   <SearchableMultiSelectPicker
                     summary={summarizeMultiFilter(qrCampusFilter, t.allCampuses, reportCampusName)}
@@ -61952,7 +62122,7 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
                     emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
                   />
-                  {qrLabelEntityType === "asset" ? (
+                  {reportType === "asset_full_record" || qrLabelEntityType === "asset" ? (
                     <>
                       <SearchableMultiSelectPicker
                         summary={summarizeMultiFilter(
@@ -62011,7 +62181,7 @@ function formatTicketRequestSource(value?: string) {
                         emptyText={lang === "km" ? "មិនមានលេខទ្រព្យ" : "No asset ID found."}
                       />
                     </>
-                  ) : (
+                  ) : reportType === "qr_labels" ? (
                     <SearchableMultiSelectPicker
                       summary={summarizeMultiFilter(
                         qrCategoryFilter,
@@ -62038,7 +62208,7 @@ function formatTicketRequestSource(value?: string) {
                       searchPlaceholder={lang === "km" ? "ស្វែងរកក្រុមហ៊ុន..." : "Search vendor..."}
                       emptyText={lang === "km" ? "មិនមានក្រុមហ៊ុន" : "No vendor found."}
                     />
-                  )}
+                  ) : null}
                 </>
               ) : null}
               {reportType === "asset_by_location" ? (
@@ -63519,7 +63689,11 @@ function formatTicketRequestSource(value?: string) {
                             assetFullRecordMaintenanceRows.map((row, index) => (
                               <tr key={`asset-full-maint-${row.id}`}>
                                 <td>{index + 1}</td>
-                                <td>{formatDate(row.date || "-")}</td>
+                                <td>
+                                  {formatDate(row.date || "-")}
+                                  {maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""}
+                                  {isMaintenanceEntryEdited(row) ? " (edited)" : ""}
+                                </td>
                                 <td>{row.type || "-"}</td>
                                 <td>{row.completion || "-"}</td>
                                 <td>{row.condition || "-"}</td>
@@ -63627,7 +63801,11 @@ function formatTicketRequestSource(value?: string) {
                     </section>
                   </section>
                 ) : (
-                  <div className="panel-note">No asset selected for this full record report.</div>
+                  <div className="panel-note">
+                    {lang === "km"
+                      ? "សូមជ្រើសសាខា ទីតាំង ប្រភេទ ឈ្មោះ និងលេខទ្រព្យ ដើម្បីបើករបាយការណ៍នេះ។"
+                      : "Select campus, location, category, item, and asset ID to open this full record report."}
+                  </div>
                 )}
               </div>
             )}

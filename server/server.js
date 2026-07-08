@@ -6467,6 +6467,7 @@ function toPublicAssetView(asset, allAssets = [], allTickets = []) {
         id: Number(entry?.id || 0),
         date: toText(entry?.date),
         createdAt: toText(entry?.createdAt),
+        updatedAt: toText(entry?.updatedAt),
         type: toText(entry?.type),
         note: toText(entry?.note),
         completion: toText(entry?.completion),
@@ -9398,6 +9399,7 @@ const server = http.createServer(async (req, res) => {
       const updated = {
         ...current,
         date: nextDate || toText(current.date),
+        updatedAt: new Date().toISOString(),
         type: nextType || toText(current.type),
         completion: nextCompletion || normalizeCompletion(current.completion),
         condition: nextCondition,

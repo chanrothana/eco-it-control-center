@@ -21583,6 +21583,39 @@ tr.row-maint-maintenance:hover td {
   border: 1px solid rgba(173, 188, 214, 0.16);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.report-formal-photo-frame .photo-thumb-btn {
+  width: 100%;
+  display: block;
+  line-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.report-formal-photo-frame .table-photo,
+.report-formal-photo-frame .photo-empty {
+  width: 100%;
+  min-height: 180px;
+  aspect-ratio: 1 / 1;
+}
+
+.report-formal-photo-frame .table-photo {
+  height: auto;
+  max-width: none;
+  border: 0;
+  border-radius: 12px;
+  display: block;
+}
+
+.report-formal-photo-frame .photo-empty {
+  display: grid;
+  place-items: center;
+  color: #9fb4d3;
+  font-weight: 700;
+  text-align: center;
+  padding: 16px;
 }
 
 .report-formal-summary-grid {
@@ -21731,6 +21764,11 @@ tr.row-maint-maintenance:hover td {
 
   .report-formal-count-card strong {
     font-size: 28px;
+  }
+
+  .report-formal-photo-frame .table-photo,
+  .report-formal-photo-frame .photo-empty {
+    min-height: 220px;
   }
 }
 
@@ -23113,6 +23151,86 @@ tr.row-maint-maintenance:hover td {
 .asset-detail-rich-block {
   display: grid;
   gap: 8px;
+}
+
+.toner-summary-card {
+  display: grid;
+  gap: 14px;
+}
+
+.toner-summary-head {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.toner-summary-head-actions {
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.toner-summary-record-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(112, 146, 201, 0.14);
+  border: 1px solid rgba(132, 165, 216, 0.28);
+}
+
+.toner-summary-report-btn {
+  white-space: nowrap;
+  min-height: 36px;
+}
+
+.toner-summary-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.toner-summary-metric-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.toner-summary-metric-value {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(124, 151, 194, 0.32);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(17, 29, 47, 0.24);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #f3f7ff;
+}
+
+.toner-summary-note {
+  padding: 10px 12px 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(124, 151, 194, 0.14);
+  border-left: 3px solid rgba(126, 168, 233, 0.52);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.toner-summary-primary-actions {
+  justify-content: stretch;
+}
+
+.toner-summary-toggle-btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 46px;
+  font-weight: 700;
 }
 
 .asset-detail-rich-value {
@@ -29792,6 +29910,71 @@ tr.row-maint-maintenance:hover td {
 
   .asset-detail-info-head span {
     display: none;
+  }
+
+  .toner-summary-card {
+    gap: 12px;
+  }
+
+  .toner-summary-head {
+    display: grid;
+    gap: 8px;
+  }
+
+  .toner-summary-head-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .toner-summary-record-count {
+    width: fit-content;
+    max-width: 100%;
+    font-size: 12px;
+    min-height: 28px;
+    padding: 0 9px;
+  }
+
+  .toner-summary-report-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 40px;
+  }
+
+  .toner-summary-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .toner-summary-metric-card {
+    gap: 6px;
+  }
+
+  .toner-summary-metric-value {
+    min-height: 52px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    font-size: 16px;
+  }
+
+  .toner-summary-note {
+    padding: 8px 10px 8px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--mobile-text-soft);
+  }
+
+  .toner-summary-primary-actions {
+    width: 100%;
+  }
+
+  .toner-summary-toggle-btn {
+    min-height: 48px;
+    border-radius: 14px;
+    font-size: 14px;
   }
 
   .asset-detail-rich-value {
