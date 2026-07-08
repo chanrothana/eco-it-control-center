@@ -6919,7 +6919,8 @@ function normalizeMaintenanceWorkflow(input: unknown): MaintenanceWorkflow {
 function createMaintenanceRecordForm(
   asset?: Asset | null,
   preferredDate = toYmd(new Date()),
-  preferredBy = ""
+  preferredBy = "",
+  scheduleSourceDate = ""
 ) {
   const now = new Date();
   const workflow = normalizeMaintenanceWorkflow({
@@ -6942,6 +6943,7 @@ function createMaintenanceRecordForm(
     beforePhotos: [] as string[],
     afterPhotos: [] as string[],
     reportFile: null as MaintenanceReportFile | null,
+    scheduleSourceDate: String(scheduleSourceDate || "").trim(),
     workflow,
   };
 }
@@ -9306,6 +9308,27 @@ export default function App() {
     const mode = String(params.get("mode") || "").toLowerCase();
     return mode === "maintenance" || mode === "staff";
   }, []);
+  const [maintenanceDeepLinkAssetId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return String(new URLSearchParams(window.location.search).get("maintenanceAssetId") || "")
+      .trim()
+      .toUpperCase();
+  });
+  const [maintenanceDeepLinkDate] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return String(
+      new URLSearchParams(window.location.search).get("maintenanceDate") ||
+      new URLSearchParams(window.location.search).get("date") ||
+      ""
+    ).trim();
+  });
+  const maintenanceDeepLinkHandledRef = useRef(false);
+  const maintenanceDeepLinkTargetRef = useRef<{
+    assetDbId: string;
+    assetCode: string;
+    campus: string;
+    preferredDate: string;
+  } | null>(null);
 
   const [tab, setTab] = useState<NavModule>("dashboard");
   const [, startTabTransition] = useTransition();
@@ -13460,6 +13483,109 @@ export default function App() {
     if (!maintenanceQuickMode) return;
     openMaintenanceQuickRecord();
   }, [maintenanceQuickMode, openMaintenanceQuickRecord]);
+
+  useEffect(() => {
+    if (maintenanceDeepLinkHandledRef.current) return;
+    if (!maintenanceDeepLinkAssetId || !authUser) return;
+    if (!canAccessMenu("maintenance.record", "maintenance")) {
+      maintenanceDeepLinkHandledRef.current = true;
+      return;
+    }
+    const targetAsset = assets.find(
+      (asset) => String(asset.assetId || "").trim().toUpperCase() === maintenanceDeepLinkAssetId
+    );
+    if (!targetAsset) return;
+    const preferredDate = /^\d{4}-\d{2}-\d{2}$/.test(maintenanceDeepLinkDate)
+      ? maintenanceDeepLinkDate
+      : toYmd(new Date());
+    const targetCampus = String(targetAsset.campus || "").trim();
+    maintenanceDeepLinkTargetRef.current = {
+      assetDbId: String(targetAsset.id),
+      assetCode: String(targetAsset.assetId || "").trim().toUpperCase(),
+      campus: targetCampus,
+      preferredDate,
+    };
+    maintenanceDeepLinkHandledRef.current = true;
+    startTabTransition(() => {
+      if (targetCampus) {
+        setCampusFilter(targetCampus);
+        setMaintenanceRecordCampusFilter(targetCampus);
+      }
+      setTab("maintenance");
+      setMaintenanceView("record");
+      setMaintenanceRecordScheduleJumpMode(true);
+      setMaintenanceQuickGeneralTask(false);
+      setMaintenanceRecordForm(
+        createMaintenanceRecordForm(targetAsset, preferredDate, currentOperatorName, preferredDate)
+      );
+    });
+  }, [
+    assets,
+    authUser,
+    canAccessMenu,
+    currentOperatorName,
+    maintenanceDeepLinkAssetId,
+    maintenanceDeepLinkDate,
+    startTabTransition,
+  ]);
+
+  useEffect(() => {
+    const deepLink = maintenanceDeepLinkTargetRef.current;
+    if (!deepLink) return;
+    const targetAsset =
+      resolvedAssets.find((asset) => String(asset.id) === deepLink.assetDbId) ||
+      resolvedAssets.find(
+        (asset) => String(asset.assetId || "").trim().toUpperCase() === deepLink.assetCode
+      ) ||
+      null;
+    if (!targetAsset) return;
+    const targetCampus = String(targetAsset.campus || "").trim() || deepLink.campus;
+    if (targetCampus && campusFilter !== targetCampus) {
+      setCampusFilter(targetCampus);
+      return;
+    }
+    if (targetCampus && maintenanceRecordCampusFilter !== targetCampus) {
+      setMaintenanceRecordCampusFilter(targetCampus);
+      return;
+    }
+    if (maintenanceQuickGeneralTask) {
+      setMaintenanceQuickGeneralTask(false);
+      return;
+    }
+    const targetInFilteredList = maintenanceRecordFilteredAssets.some(
+      (asset) => String(asset.id) === String(targetAsset.id)
+    );
+    if (!targetInFilteredList) return;
+    if (maintenanceRecordForm.assetId !== String(targetAsset.id)) {
+      setMaintenanceRecordForm((form) => ({
+        ...createMaintenanceRecordForm(
+          targetAsset,
+          deepLink.preferredDate || form.date || toYmd(new Date()),
+          form.by || currentOperatorName,
+          deepLink.preferredDate || form.scheduleSourceDate || ""
+        ),
+        by: form.by || currentOperatorName,
+        time: form.time || toHm(new Date()),
+      }));
+      return;
+    }
+    maintenanceDeepLinkTargetRef.current = null;
+    if (typeof window !== "undefined") {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("maintenanceAssetId");
+      nextUrl.searchParams.delete("maintenanceDate");
+      nextUrl.searchParams.delete("date");
+      window.history.replaceState({}, "", nextUrl.toString());
+    }
+  }, [
+    campusFilter,
+    currentOperatorName,
+    maintenanceQuickGeneralTask,
+    maintenanceRecordCampusFilter,
+    maintenanceRecordFilteredAssets,
+    maintenanceRecordForm.assetId,
+    resolvedAssets,
+  ]);
 
   useEffect(() => {
     if (authUser) {
@@ -30237,6 +30363,12 @@ export default function App() {
       let telegramAlertQueued = false;
       let duplicateSuppressed = false;
       let serverSavedAsset: Asset | null = null;
+      const scheduleCompletionTelegramMode =
+        maintenanceRecordScheduleJumpMode &&
+        entry.completion === "Done" &&
+        String(maintenanceRecordForm.scheduleSourceDate || "").trim()
+          ? "schedule_completed"
+          : "";
       try {
         if (isQuickGeneralTask) {
           const res = await requestJson<{ asset: Asset; entry: MaintenanceEntry; telegramAlertSent?: boolean; telegramAlertQueued?: boolean; duplicateSuppressed?: boolean }>(`/api/maintenance/general-record`, {
@@ -30272,6 +30404,8 @@ export default function App() {
                   }
                 : "",
               telegramPhoto: entry.telegramPhoto || "",
+              scheduleSourceDate: maintenanceRecordForm.scheduleSourceDate || "",
+              telegramAlertMode: scheduleCompletionTelegramMode,
               workflow: entry.workflow,
             }),
           });
@@ -32142,7 +32276,7 @@ export default function App() {
     setTab("maintenance");
     setMaintenanceView("record");
     setMaintenanceRecordScheduleJumpMode(true);
-    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate, currentOperatorName));
+    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate, currentOperatorName, preferredDate));
   }
 
   const inventoryTxnById = useMemo(() => {
@@ -35022,6 +35156,14 @@ export default function App() {
     const hasSelectedAsset = maintenanceRecordFilteredAssets.some(
       (a) => String(a.id) === maintenanceRecordForm.assetId
     );
+    const deepLink = maintenanceDeepLinkTargetRef.current;
+    if (
+      deepLink &&
+      maintenanceRecordForm.assetId &&
+      String(maintenanceRecordForm.assetId) === String(deepLink.assetDbId)
+    ) {
+      return;
+    }
     if (!maintenanceRecordForm.assetId || hasSelectedAsset) return;
     setMaintenanceRecordForm((f) => ({ ...f, assetId: "" }));
   }, [maintenanceRecordForm.assetId, maintenanceRecordFilteredAssets]);
@@ -35362,6 +35504,22 @@ export default function App() {
     () => scheduleByDate.get(todayYmd) || [],
     [scheduleByDate, todayYmd]
   );
+  const scheduleReviewQueueAssets = useMemo(() => {
+    const seen = new Set<number>();
+    const rows = [...overdueScheduleAssets, ...todayScheduledItems, ...upcomingScheduleAssets]
+      .filter((asset) => {
+        const id = Number(asset.id) || 0;
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      })
+      .sort((a, b) => {
+        const dateCompare = String(a.nextMaintenanceDate || "").localeCompare(String(b.nextMaintenanceDate || ""));
+        if (dateCompare !== 0) return dateCompare;
+        return String(a.assetId || "").localeCompare(String(b.assetId || ""));
+      });
+    return rows.slice(0, 10);
+  }, [overdueScheduleAssets, todayScheduledItems, upcomingScheduleAssets]);
   const selectedDateScheduleStatus = useMemo(() => {
     if (!selectedDateItems.length) return null;
     if (selectedCalendarDate < todayYmd) {
@@ -35376,6 +35534,16 @@ export default function App() {
     () => selectedDateItems.slice(0, 3),
     [selectedDateItems]
   );
+  const scheduleQueueHelperText = useMemo(() => {
+    if (scheduleReviewQueueAssets.length <= 1) {
+      return lang === "km"
+        ? "បើមានតែ 1 ទ្រព្យ សូមចុច Record ដោយផ្ទាល់ពីទីនេះ។"
+        : "If only 1 asset is due, open Record directly from here.";
+    }
+    return lang === "km"
+      ? "បើមាន 5-10 ទ្រព្យ សូមពិនិត្យបញ្ជីនេះសិន រួចកត់ត្រាតាមលំដាប់។"
+      : "If 5-10 assets are due, review this queue first, then record them one by one.";
+  }, [scheduleReviewQueueAssets.length, lang]);
   const scheduleAlertItems = useMemo(() => {
     let title = "";
     let items: Asset[] = [];
@@ -39688,6 +39856,49 @@ export default function App() {
       return columns.map(() => 100 / columns.length);
     })();
 
+    const buildPreviewColumnWidths = (headers: string[], dataRows: string[][]) => {
+      if (!headers.length) return [] as number[];
+      const weights = headers.map((header, index) => {
+        const label = String(header || "").trim().toLowerCase();
+        if (index === 0 && (label === "no." || label === "no")) return 4;
+        if (label.includes("date")) return 11;
+        if (label === "type") return 10;
+        if (label === "status") return 10;
+        if (label === "by") return 10;
+        if (label.includes("campus")) return 13;
+        if (label.includes("location")) return 14;
+        if (label.includes("staff")) return 12;
+        if (label.includes("assigned")) return 13;
+        if (label.includes("result")) return 11;
+        if (label.includes("ack")) return 8;
+        if (label.includes("condition")) return 16;
+        if (label.includes("reason")) return 20;
+        if (label.includes("note")) return 22;
+        const contentLength = dataRows.reduce((max, row) => {
+          const value = String(row[index] || "").replace(/\s+/g, " ").trim();
+          return Math.max(max, value.length);
+        }, 0);
+        return Math.min(Math.max(Math.max(header.length, contentLength * 0.55), 8), 18);
+      });
+      const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+      return weights.map((value) => (value / total) * 100);
+    };
+    const buildPreviewColgroupHtml = (widths: number[]) =>
+      widths.length ? `<colgroup>${widths.map((width) => `<col style="width:${width}%;" />`).join("")}</colgroup>` : "";
+    const buildPreviewHeadHtml = (headers: string[]) =>
+      `<thead><tr>${headers
+        .map(
+          (label, index) =>
+            `<th>${escapeHtml(label)}${
+              headers.length > 1
+                ? `<span class="preview-column-resizer${
+                    index === headers.length - 1 ? " is-left" : ""
+                  }" data-resize-index="${index === headers.length - 1 ? index - 1 : index}" aria-hidden="true"></span>`
+                : ""
+            }</th>`
+        )
+        .join("")}</tr></thead>`;
+
     const tableHtml =
       reportType === "inventory_balance"
         ? (() => {
@@ -39906,6 +40117,19 @@ export default function App() {
       reportType === "asset_full_record"
         ? (() => {
             const assetPhoto = toPrintablePhotoUrl(String(focusedReportAsset?.photo || ""));
+            const maintenanceHeaders = ["No.", "Date", "Type", "Status", "Condition", "By", "Note"];
+            const maintenanceDataRows = assetFullRecordMaintenanceRows.map((row, index) => [
+              String(index + 1),
+              `${formatDate(row.date || "-")}${
+                maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""
+              }${isMaintenanceEntryEdited(row) ? " (edited)" : ""}`,
+              row.type || "-",
+              row.completion || "-",
+              row.condition || "-",
+              row.by || "-",
+              row.note || "-",
+            ]);
+            const maintenanceColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(maintenanceHeaders, maintenanceDataRows));
             const maintenanceRowsHtml = assetFullRecordMaintenanceRows.length
               ? assetFullRecordMaintenanceRows
                   .map(
@@ -39925,6 +40149,19 @@ export default function App() {
                   )
                   .join("")
               : `<tr><td colspan="7">No maintenance history.</td></tr>`;
+            const transferHeaders = ["No.", "Date", "From Campus", "From Location", "To Campus", "To Location", "To Staff", "By", "Reason"];
+            const transferDataRows = assetFullRecordTransferRows.map((row, index) => [
+              String(index + 1),
+              formatDate(row.date || "-"),
+              reportCampusName(row.fromCampus),
+              row.fromLocation || "-",
+              reportCampusName(row.toCampus),
+              row.toLocation || "-",
+              row.toUser || "-",
+              row.by || "-",
+              row.reason || "-",
+            ]);
+            const transferColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(transferHeaders, transferDataRows));
             const transferRowsHtml = assetFullRecordTransferRows.length
               ? assetFullRecordTransferRows
                   .map(
@@ -39942,6 +40179,16 @@ export default function App() {
                   )
                   .join("")
               : `<tr><td colspan="9">No transfer history.</td></tr>`;
+            const verificationHeaders = ["No.", "Date", "Result", "Condition", "By", "Note"];
+            const verificationDataRows = assetFullRecordVerificationRows.map((row, index) => [
+              String(index + 1),
+              formatDate(row.date || "-"),
+              row.result || "-",
+              row.condition || "-",
+              row.by || "-",
+              row.note || "-",
+            ]);
+            const verificationColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(verificationHeaders, verificationDataRows));
             const verificationRowsHtml = assetFullRecordVerificationRows.length
               ? assetFullRecordVerificationRows
                   .map(
@@ -39982,8 +40229,20 @@ export default function App() {
                 <h2>Current Assignment</h2>
                 ${
                   assetFullRecordAssignmentRows.length
-                    ? `<table class="preview-report-table">
-                        <thead><tr><th>Asset ID</th><th>Item</th><th>Campus</th><th>Location</th><th>Assigned To</th><th>Since</th><th>Ack</th></tr></thead>
+                    ? (() => {
+                        const assignmentHeaders = ["Asset ID", "Item", "Campus", "Location", "Assigned To", "Since", "Ack"];
+                        const assignmentDataRows = assetFullRecordAssignmentRows.map((row) => [
+                          row.assetId,
+                          row.itemName || "-",
+                          reportCampusName(row.campus),
+                          row.location || "-",
+                          row.assignedTo || "-",
+                          formatDate(row.sinceDate || "-"),
+                          row.responsibilityAck || "-",
+                        ]);
+                        return `<table class="preview-report-table">
+                        ${buildPreviewColgroupHtml(buildPreviewColumnWidths(assignmentHeaders, assignmentDataRows))}
+                        ${buildPreviewHeadHtml(assignmentHeaders)}
                         <tbody>${assetFullRecordAssignmentRows
                           .map(
                             (row) => `<tr>
@@ -39997,28 +40256,32 @@ export default function App() {
                             </tr>`
                           )
                           .join("")}</tbody>
-                      </table>`
+                      </table>`;
+                      })()
                     : `<p>No current assignment history.</p>`
                 }
               </div>
               <div class="asset-full-print-block">
                 <h2>Maintenance History</h2>
                 <table class="preview-report-table">
-                  <thead><tr><th>No.</th><th>Date</th><th>Type</th><th>Status</th><th>Condition</th><th>By</th><th>Note</th></tr></thead>
+                  ${maintenanceColgroup}
+                  ${buildPreviewHeadHtml(maintenanceHeaders)}
                   <tbody>${maintenanceRowsHtml}</tbody>
                 </table>
               </div>
               <div class="asset-full-print-block">
                 <h2>Transfer History</h2>
                 <table class="preview-report-table">
-                  <thead><tr><th>No.</th><th>Date</th><th>From Campus</th><th>From Location</th><th>To Campus</th><th>To Location</th><th>To Staff</th><th>By</th><th>Reason</th></tr></thead>
+                  ${transferColgroup}
+                  ${buildPreviewHeadHtml(transferHeaders)}
                   <tbody>${transferRowsHtml}</tbody>
                 </table>
               </div>
               <div class="asset-full-print-block">
                 <h2>Verification History</h2>
                 <table class="preview-report-table">
-                  <thead><tr><th>No.</th><th>Date</th><th>Result</th><th>Condition</th><th>By</th><th>Note</th></tr></thead>
+                  ${verificationColgroup}
+                  ${buildPreviewHeadHtml(verificationHeaders)}
                   <tbody>${verificationRowsHtml}</tbody>
                 </table>
               </div>
@@ -40204,19 +40467,8 @@ export default function App() {
             </div>`
         : `<div class="preview-table-wrap">
           <table class="${previewTableClassName}">
-          <colgroup>${initialColumnWidths.map((width) => `<col style="width:${width}%;" />`).join("")}</colgroup>
-          <thead><tr>${columns
-            .map(
-              (c, index) =>
-                `<th>${escapeHtml(c)}${
-                  columns.length > 1 && (index < columns.length - 1 || index === columns.length - 1)
-                    ? `<span class="preview-column-resizer${
-                        index === columns.length - 1 ? " is-left" : ""
-                      }" data-resize-index="${index === columns.length - 1 ? index - 1 : index}" aria-hidden="true"></span>`
-                    : ""
-                }</th>`
-            )
-            .join("")}</tr></thead>
+          ${buildPreviewColgroupHtml(initialColumnWidths)}
+          ${buildPreviewHeadHtml(columns)}
           <tbody>${tableHtml}</tbody>
         </table></div>`;
 
@@ -40574,42 +40826,53 @@ export default function App() {
             if (printBtn) printBtn.addEventListener("click", () => window.print());
             if (closeBtn) closeBtn.addEventListener("click", () => window.close());
 
-            const table = document.querySelector(".preview-report-table");
-            if (!table) return;
-            const colgroup = table.querySelector("colgroup");
-            const cols = colgroup ? Array.from(colgroup.children) : [];
-            const headers = table.tHead && table.tHead.rows[0] ? Array.from(table.tHead.rows[0].cells) : [];
-            if (!cols.length || headers.length < 2) return;
-            const startWidths = cols.map((col) => parseFloat(col.style.width || "0"));
             if (resetBtn) {
               resetBtn.addEventListener("click", () => {
-                cols.forEach((col, index) => {
-                  col.style.width = (startWidths[index] || 0) + "%";
+                document.querySelectorAll(".preview-report-table").forEach((table) => {
+                  const cols = Array.from(table.querySelectorAll("colgroup col"));
+                  cols.forEach((col) => {
+                    const initialWidth = col.getAttribute("data-initial-width");
+                    if (!initialWidth) return;
+                    col.style.width = initialWidth + "%";
+                  });
                 });
               });
             }
             let state = null;
-            headers.forEach((header, index) => {
-              const handle = header.querySelector(".preview-column-resizer");
-              const resizeIndex = handle ? parseInt(handle.getAttribute("data-resize-index") || "", 10) : -1;
-              if (!handle || !Number.isFinite(resizeIndex) || resizeIndex < 0 || resizeIndex >= cols.length - 1) return;
-              handle.addEventListener("mousedown", (event) => {
-                event.preventDefault();
-                const wrap = table.closest(".preview-table-wrap");
-                const containerWidth = (wrap && wrap.getBoundingClientRect().width) || table.getBoundingClientRect().width || 1;
-                const minPercents = headers.map((cell) => {
-                  const label = (cell.textContent || "").trim();
-                  const px = Math.min(Math.max(label.length * 8 + 36, 72), 220);
-                  return Math.max((px / containerWidth) * 100, 5);
+            document.querySelectorAll(".preview-report-table").forEach((table) => {
+              const cols = Array.from(table.querySelectorAll("colgroup col"));
+              const headers = table.tHead && table.tHead.rows[0] ? Array.from(table.tHead.rows[0].cells) : [];
+              if (!cols.length || headers.length < 2) return;
+              cols.forEach((col) => {
+                if (!col.getAttribute("data-initial-width")) {
+                  col.setAttribute("data-initial-width", String(parseFloat(col.style.width || "0") || 0));
+                }
+              });
+              headers.forEach((header) => {
+                const handle = header.querySelector(".preview-column-resizer");
+                const resizeIndex = handle ? parseInt(handle.getAttribute("data-resize-index") || "", 10) : -1;
+                if (!handle || !Number.isFinite(resizeIndex) || resizeIndex < 0 || resizeIndex >= cols.length - 1) return;
+                handle.addEventListener("mousedown", (event) => {
+                  event.preventDefault();
+                  const wrap = table.closest(".preview-table-wrap");
+                  const containerWidth = (wrap && wrap.getBoundingClientRect().width) || table.getBoundingClientRect().width || 1;
+                  const minPercents = headers.map((cell) => {
+                    const label = (cell.textContent || "").trim();
+                    const px = Math.min(Math.max(label.length * 8 + 36, 72), 220);
+                    return Math.max((px / containerWidth) * 100, 5);
+                  });
+                  state = {
+                    table,
+                    cols,
+                    headers,
+                    index: resizeIndex,
+                    startX: event.clientX,
+                    startWidths: cols.map((col) => parseFloat(col.style.width || "0")),
+                    containerWidth,
+                    minPercents
+                  };
+                  document.body.classList.add("is-preview-resizing");
                 });
-                state = {
-                  index: resizeIndex,
-                  startX: event.clientX,
-                  startWidths: cols.map((col) => parseFloat(col.style.width || "0")),
-                  containerWidth,
-                  minPercents
-                };
-                document.body.classList.add("is-preview-resizing");
               });
             });
             window.addEventListener("mousemove", (event) => {
@@ -40620,7 +40883,7 @@ export default function App() {
               const nextMin = state.minPercents[state.index + 1] || Math.max(5, (72 / state.containerWidth) * 100);
               next[state.index] = Math.max(currentMin, state.startWidths[state.index] + deltaPercent);
               next[state.index + 1] = Math.max(nextMin, state.startWidths[state.index + 1] - deltaPercent);
-              cols.forEach((col, index) => {
+              state.cols.forEach((col, index) => {
                 col.style.width = next[index] + "%";
               });
             });
@@ -43729,6 +43992,77 @@ function formatTicketRequestSource(value?: string) {
                             ? `មើលទាំងអស់ (${selectedDateItems.length})`
                             : `View all (${selectedDateItems.length})`}
                         </button>
+                      ) : null}
+                    </div>
+                    <div className="dashboard-calendar-summary" style={{ marginTop: 12 }}>
+                      <div className="dashboard-calendar-summary-head">
+                        <div>
+                          <strong>{lang === "km" ? "ជួរការងារថ្ងៃនេះ / លើសកាលកំណត់" : "Today / Overdue Review Queue"}</strong>
+                          <div className="tiny">
+                            {scheduleReviewQueueAssets.length
+                              ? (lang === "km"
+                                ? `${scheduleReviewQueueAssets.length} ទ្រព្យសម្រាប់ពិនិត្យជាមុន`
+                                : `${scheduleReviewQueueAssets.length} assets ready for quick review`)
+                              : (lang === "km"
+                                ? "មិនមានការងារត្រូវពិនិត្យភ្លាមៗ"
+                                : "Nothing urgent to review right now.")}
+                          </div>
+                        </div>
+                        <span className="dashboard-calendar-status dashboard-calendar-status-today">
+                          {lang === "km" ? "ជួរងារ" : "Queue"}
+                        </span>
+                      </div>
+                      <div className="tiny" style={{ marginBottom: scheduleReviewQueueAssets.length ? 8 : 0 }}>
+                        {scheduleQueueHelperText}
+                      </div>
+                      {scheduleReviewQueueAssets.length ? (
+                        <div className="dashboard-calendar-summary-list">
+                          {scheduleReviewQueueAssets.map((asset) => {
+                            const dueDate = String(asset.nextMaintenanceDate || "").trim();
+                            const statusKey =
+                              dueDate < todayYmd ? "overdue" : dueDate === todayYmd ? "today" : "upcoming";
+                            const statusLabel =
+                              statusKey === "overdue"
+                                ? (lang === "km" ? "លើសកាលកំណត់" : "Overdue")
+                                : statusKey === "today"
+                                  ? (lang === "km" ? "ថ្ងៃនេះ" : "Today")
+                                  : (lang === "km" ? "នឹងមកដល់" : "Upcoming");
+                            return (
+                              <div key={`dashboard-review-queue-${asset.id}`} className="dashboard-calendar-summary-row">
+                                <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+                                  <strong>{asset.assetId}</strong>
+                                  <span>{assetItemName(asset.category, asset.type, asset.pcType || "")}</span>
+                                  <span>{campusLabel(asset.campus)} • {asset.location || "-"}</span>
+                                  <span className="tiny">
+                                    {lang === "km" ? "ថ្ងៃកំណត់" : "Due"}: {formatDate(dueDate || "-")} • {asset.scheduleNote || (lang === "km" ? "មិនមានកំណត់ចំណាំ" : "No schedule note")}
+                                  </span>
+                                </div>
+                                <div style={{ display: "grid", justifyItems: "end", gap: 8 }}>
+                                  <span className={`dashboard-calendar-status dashboard-calendar-status-${statusKey}`}>
+                                    {statusLabel}
+                                  </span>
+                                  <div className="row-actions">
+                                    <button
+                                      type="button"
+                                      className="btn-primary btn-small"
+                                      disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                      onClick={() => openMaintenanceRecordFromScheduleAsset(asset, dueDate || todayYmd)}
+                                    >
+                                      {lang === "km" ? "កត់ត្រា" : "Record"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="tab btn-small"
+                                      onClick={() => setHistoryAssetId(asset.id)}
+                                    >
+                                      {lang === "km" ? "មើល" : "View"}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       ) : null}
                     </div>
                   </article>
