@@ -9578,6 +9578,20 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: cleaned });
         return;
       }
+      const previousCampus = toText(current.campus);
+      const previousLocation = toText(current.location);
+      const nextCampus = toText(cleaned.campus);
+      const nextLocation = toText(cleaned.location);
+      const campusChanged = previousCampus !== nextCampus;
+      const campusChangeRemark = toText(body.campusChangeRemark);
+      if (campusChanged && toText(admin.role) !== "Super Admin") {
+        sendJson(res, 403, { error: "Only Super Admin can change campus" });
+        return;
+      }
+      if (campusChanged && !campusChangeRemark) {
+        sendJson(res, 400, { error: "Campus change remark is required" });
+        return;
+      }
       const serialKey = normalizeSerialKey(cleaned.serialNumber);
       if (serialKey) {
         const duplicateSerial = (Array.isArray(db.assets) ? db.assets : []).find(
@@ -9682,6 +9696,14 @@ const server = http.createServer(async (req, res) => {
         custodyStatus: nextCustodyStatus,
         name: current.assetId,
       };
+      if (campusChanged || previousLocation !== nextLocation) {
+        for (const asset of db.assets) {
+          if (!asset || Number(asset.id) === id) continue;
+          if (toText(asset.parentAssetId) !== toText(current.assetId)) continue;
+          asset.campus = nextCampus;
+          asset.location = nextLocation;
+        }
+      }
       const cascadedChildren = assignmentChanged
         ? cascadeChildAssetAssignment(db, db.assets[idx], incomingAssignedTo, {
             changedBy: statusChangeBy || toText(admin.displayName) || toText(admin.username),
@@ -9695,7 +9717,7 @@ const server = http.createServer(async (req, res) => {
         "UPDATE",
         "asset",
         db.assets[idx].assetId || String(id),
-        `${db.assets[idx].campus} | ${db.assets[idx].location}${photoChanged ? " | photo updated" : ""}${cascadedChildren ? ` | child assignment synced: ${cascadedChildren}` : ""}`
+        `${db.assets[idx].campus} | ${db.assets[idx].location}${campusChanged ? ` | campus corrected: ${campusChangeRemark}` : ""}${photoChanged ? " | photo updated" : ""}${cascadedChildren ? ` | child assignment synced: ${cascadedChildren}` : ""}`
       );
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);

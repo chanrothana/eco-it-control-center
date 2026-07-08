@@ -11176,7 +11176,9 @@ export default function App() {
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [editAssetFileKey, setEditAssetFileKey] = useState(0);
   const [assetEditForm, setAssetEditForm] = useState({
+    campus: CAMPUS_LIST[0],
     location: "",
+    campusChangeRemark: "",
     pcType: "",
     setCode: "",
     parentAssetId: "",
@@ -15201,13 +15203,13 @@ export default function App() {
     return assets
       .filter((a) => {
         if (a.id === editing.id) return false;
-        if (a.campus !== editing.campus) return false;
+        if (a.campus !== assetEditForm.campus) return false;
         if (String(a.parentAssetId || "").trim()) return false;
         if (!selectedLocation) return true;
         return String(a.location || "").trim() === selectedLocation;
       })
       .sort((a, b) => a.assetId.localeCompare(b.assetId));
-  }, [assets, editingAssetId, assetEditForm.location]);
+  }, [assets, editingAssetId, assetEditForm.campus, assetEditForm.location]);
   const inventoryLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === inventoryItemForm.campus)),
     [locations, inventoryItemForm.campus]
@@ -28268,7 +28270,9 @@ export default function App() {
           specs: parsedTablet.specs || parsedWalkie.specs || parsedAircon.specs || String(asset.specs || ""),
         };
     setAssetEditForm({
+      campus: asset.campus || CAMPUS_LIST[0],
       location: asset.location || "",
+      campusChangeRemark: "",
       pcType: asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
         ? asset.pcType || PC_TYPE_OPTIONS[0].value
         : "",
@@ -28917,6 +28921,13 @@ export default function App() {
       alert(t.pcTypeRequired);
       return;
     }
+    const nextCampusForEdit = isSuperAdmin ? String(assetEditForm.campus || "").trim() : String(editingAsset?.campus || "").trim();
+    const campusChangedInEdit = Boolean(editingAsset && nextCampusForEdit && nextCampusForEdit !== String(editingAsset.campus || "").trim());
+    const campusChangeRemark = String(assetEditForm.campusChangeRemark || "").trim();
+    if (campusChangedInEdit && !campusChangeRemark) {
+      alert("Please enter a remark for the campus change.");
+      return;
+    }
 
     const fromStatusForEdit = editingAsset?.status || "Active";
     const statusChangedInEdit = fromStatusForEdit !== assetEditForm.status;
@@ -28943,6 +28954,7 @@ export default function App() {
     }
 
     const payload = {
+      campus: nextCampusForEdit,
       location: assetEditForm.location.trim(),
       pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
       setCode: editingIsDesktop
@@ -29025,7 +29037,7 @@ export default function App() {
           action: toUser ? "ASSIGN" : "UNASSIGN",
           fromCampus: editingAsset?.campus || "",
           fromLocation: editingAsset?.location || "-",
-          toCampus: editingAsset?.campus || "",
+          toCampus: payload.campus,
           toLocation: payload.location,
           fromUser,
           toUser,
@@ -29082,6 +29094,7 @@ export default function App() {
           method: "PATCH",
           body: JSON.stringify({
             ...payload,
+            campusChangeRemark,
             custodyStatus: nextCustodyStatusForEdit,
             custodyHistory: nextCustodyHistoryForEdit,
           }),
@@ -29124,7 +29137,7 @@ export default function App() {
           if (activeCharger) {
             const updatedCharger: Asset = {
               ...activeCharger,
-              campus: editingAsset.campus,
+              campus: payload.campus,
               category: "IT",
               type: TABLET_CHARGER_TYPE_CODE,
               setCode: "",
@@ -29146,7 +29159,7 @@ export default function App() {
               await requestJson<{ asset: Asset }>("/api/assets", {
                 method: "POST",
                 body: JSON.stringify({
-                  campus: editingAsset.campus,
+                  campus: payload.campus,
                   category: "IT",
                   type: TABLET_CHARGER_TYPE_CODE,
                   setCode: "",
@@ -29158,15 +29171,15 @@ export default function App() {
             } catch (err) {
               if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
             }
-            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, "IT", TABLET_CHARGER_TYPE_CODE);
+            const childSeq = calcNextSeq(nextLocal, payload.campus, "IT", TABLET_CHARGER_TYPE_CODE);
             const newCharger: Asset = {
               id: Date.now() + Math.floor(Math.random() * 10000),
-              campus: editingAsset.campus,
+              campus: payload.campus,
               category: "IT",
               type: TABLET_CHARGER_TYPE_CODE,
               pcType: "",
               seq: childSeq,
-              assetId: buildAssetId(editingAsset.campus, "IT", TABLET_CHARGER_TYPE_CODE, childSeq),
+              assetId: buildAssetId(payload.campus, "IT", TABLET_CHARGER_TYPE_CODE, childSeq),
               name: assetItemName("IT", TABLET_CHARGER_TYPE_CODE),
               setCode: "",
               assignedTo: "",
@@ -29238,7 +29251,7 @@ export default function App() {
           if (activeCharger) {
             const updatedCharger: Asset = {
               ...activeCharger,
-              campus: editingAsset.campus,
+              campus: payload.campus,
               category: "IT",
               type: WALKIE_CHARGER_TYPE_CODE,
               location: payload.location,
@@ -29286,7 +29299,7 @@ export default function App() {
               await requestJson<{ asset: Asset }>("/api/assets", {
                 method: "POST",
                 body: JSON.stringify({
-                  campus: editingAsset.campus,
+                  campus: payload.campus,
                   category: "IT",
                   type: WALKIE_CHARGER_TYPE_CODE,
                   location: payload.location,
@@ -29312,15 +29325,15 @@ export default function App() {
             } catch (err) {
               if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
             }
-            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, "IT", WALKIE_CHARGER_TYPE_CODE);
+            const childSeq = calcNextSeq(nextLocal, payload.campus, "IT", WALKIE_CHARGER_TYPE_CODE);
             const newCharger: Asset = {
               id: Date.now() + Math.floor(Math.random() * 10000),
-              campus: editingAsset.campus,
+              campus: payload.campus,
               category: "IT",
               type: WALKIE_CHARGER_TYPE_CODE,
               pcType: "",
               seq: childSeq,
-              assetId: buildAssetId(editingAsset.campus, "IT", WALKIE_CHARGER_TYPE_CODE, childSeq),
+              assetId: buildAssetId(payload.campus, "IT", WALKIE_CHARGER_TYPE_CODE, childSeq),
               name: assetItemName("IT", WALKIE_CHARGER_TYPE_CODE),
               location: payload.location,
               setCode: "",
@@ -29434,7 +29447,7 @@ export default function App() {
           if (existingChild) {
             const updatedChild: Asset = {
               ...existingChild,
-              campus: editingAsset.campus,
+              campus: payload.campus,
               category: editingAsset.category,
               type: component.type,
               name: airconComponentLabel(component.type),
@@ -29488,8 +29501,8 @@ export default function App() {
           try {
             const created = await requestJson<{ asset: Asset }>("/api/assets", {
               method: "POST",
-              body: JSON.stringify({
-                campus: editingAsset.campus,
+                body: JSON.stringify({
+                campus: payload.campus,
                 category: editingAsset.category,
                 type: component.type,
                 location: payload.location,
@@ -29517,15 +29530,15 @@ export default function App() {
             nextLocal = [created.asset, ...nextLocal.filter((asset) => asset.id !== created.asset.id)];
           } catch (err) {
             if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
-            const childSeq = calcNextSeq(nextLocal, editingAsset.campus, editingAsset.category, component.type);
+            const childSeq = calcNextSeq(nextLocal, payload.campus, editingAsset.category, component.type);
             const newChild: Asset = {
               id: Date.now() + Math.floor(Math.random() * 10000),
-              campus: editingAsset.campus,
+              campus: payload.campus,
               category: editingAsset.category,
               type: component.type,
               pcType: "",
               seq: childSeq,
-              assetId: buildAssetId(editingAsset.campus, editingAsset.category, component.type, childSeq),
+              assetId: buildAssetId(payload.campus, editingAsset.category, component.type, childSeq),
               name: airconComponentLabel(component.type),
               location: payload.location,
               setCode: "",
@@ -29576,6 +29589,14 @@ export default function App() {
       setAssets(nextLocal);
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("UPDATE", "asset", String(editingAssetId), `location=${payload.location}`);
+      if (campusChangedInEdit) {
+        appendUiAudit(
+          "UPDATE_CAMPUS",
+          "asset",
+          String(editingAssetId),
+          `${editingAsset?.campus || "-"} -> ${payload.campus} | ${campusChangeRemark}`
+        );
+      }
       if (statusChangedInEdit) {
         const changedAsset = nextLocal.find((a) => a.id === editingAssetId);
         const changedAssetId = changedAsset?.assetId || String(editingAssetId);
@@ -33396,6 +33417,20 @@ export default function App() {
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
   );
+  const editAssetLocationOptions = useMemo(
+    () => sortLocationEntriesByName(locations.filter((l) => l.campus === assetEditForm.campus)),
+    [locations, assetEditForm.campus]
+  );
+  useEffect(() => {
+    if (!editingAssetId) return;
+    if (!editAssetLocationOptions.length) {
+      setAssetEditForm((prev) => (prev.location ? { ...prev, location: "" } : prev));
+      return;
+    }
+    if (!editAssetLocationOptions.some((loc) => loc.name === assetEditForm.location)) {
+      setAssetEditForm((prev) => ({ ...prev, location: editAssetLocationOptions[0].name }));
+    }
+  }, [editingAssetId, editAssetLocationOptions, assetEditForm.location]);
   const editingIsDesktopAio = useMemo(
     () =>
       !!editingAsset &&
@@ -47444,17 +47479,43 @@ function formatTicketRequestSource(value?: string) {
                     <h2>Edit Asset - {editingAsset.assetId}</h2>
                   </div>
                   <div className="form-grid asset-form-grid">
-                    <div className="field">
-                      <span>{t.campus}</span>
-                      <div className="detail-value">{campusLabel(editingAsset.campus)}</div>
-                    </div>
+                    {isSuperAdmin ? (
+                      <label className="field">
+                        <span>{t.campus}</span>
+                        <select
+                          className="input"
+                          value={assetEditForm.campus}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, campus: e.target.value }))}
+                        >
+                          {campusOptions.map((campus) => (
+                            <option key={`edit-asset-campus-${campus}`} value={campus}>
+                              {campusLabel(campus)}
+                            </option>
+                          ))}
+                        </select>
+                        {assetEditForm.campus !== editingAsset.campus ? (
+                          <p className="tiny">Super Admin only. Changing campus will also affect report and maintenance display for this asset.</p>
+                        ) : null}
+                      </label>
+                    ) : (
+                      <div className="field">
+                        <span>{t.campus}</span>
+                        <div className="detail-value">{campusLabel(editingAsset.campus)}</div>
+                      </div>
+                    )}
                     <label className="field">
                       <span>{t.location}</span>
                       <input
+                        list={`edit-asset-location-options-${editingAsset.id}`}
                         className="input"
                         value={assetEditForm.location}
                         onChange={(e) => setAssetEditForm((f) => ({ ...f, location: e.target.value }))}
                       />
+                      <datalist id={`edit-asset-location-options-${editingAsset.id}`}>
+                        {editAssetLocationOptions.map((loc) => (
+                          <option key={`edit-asset-location-option-${loc.id}`} value={loc.name} />
+                        ))}
+                      </datalist>
                     </label>
                     <div className="field">
                       <span>{t.category}</span>
@@ -47464,6 +47525,18 @@ function formatTicketRequestSource(value?: string) {
                       <span>{t.typeCode}</span>
                       <div className="detail-value">{editingAsset.type}</div>
                     </div>
+                    {isSuperAdmin && assetEditForm.campus !== editingAsset.campus ? (
+                      <label className="field field-wide">
+                        <span>Campus Change Remark</span>
+                        <textarea
+                          className="textarea"
+                          rows={2}
+                          placeholder="Why are you correcting this campus?"
+                          value={assetEditForm.campusChangeRemark}
+                          onChange={(e) => setAssetEditForm((f) => ({ ...f, campusChangeRemark: e.target.value }))}
+                        />
+                      </label>
+                    ) : null}
                     {editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE ? (
                       <div className="field field-wide edit-asset-inline-grid edit-asset-inline-grid-three">
                         <label className="field">
@@ -47494,7 +47567,7 @@ function formatTicketRequestSource(value?: string) {
                             <span>{t.user}</span>
                             <UserPicker
                               value={assetEditForm.assignedTo}
-                              users={staffUsersForCampus(users, editingAsset?.campus || "", assetEditForm.assignedTo)}
+                              users={staffUsersForCampus(users, assetEditForm.campus || editingAsset?.campus || "", assetEditForm.assignedTo)}
                               placeholder={t.selectUser}
                               searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
                               emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
@@ -47531,7 +47604,7 @@ function formatTicketRequestSource(value?: string) {
                           <span>{t.user}</span>
                           <UserPicker
                             value={assetEditForm.assignedTo}
-                            users={staffUsersForCampus(users, editingAsset?.campus || "", assetEditForm.assignedTo)}
+                            users={staffUsersForCampus(users, assetEditForm.campus || editingAsset?.campus || "", assetEditForm.assignedTo)}
                             placeholder={t.selectUser}
                             searchPlaceholder={lang === "km" ? "ស្វែងរកអ្នកប្រើ..." : "Search user..."}
                             emptyText={lang === "km" ? "រកមិនឃើញអ្នកប្រើ។" : "No user found."}
@@ -48595,7 +48668,7 @@ function formatTicketRequestSource(value?: string) {
                           <select className="input" value={assetEditForm.tonerItemId} onChange={(e) => setAssetEditForm((f) => ({ ...f, tonerItemId: e.target.value }))}>
                             <option value="">Select toner item</option>
                             {tonerInventoryItems
-                              .filter((item) => item.campus === editingAsset?.campus)
+                              .filter((item) => item.campus === (assetEditForm.campus || editingAsset?.campus))
                               .map((item) => (
                                 <option key={`edit-toner-item-${item.id}`} value={item.id}>
                                   {item.itemCode} - {inventoryDisplayName(item.itemName, lang)}
