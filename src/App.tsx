@@ -13530,64 +13530,6 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    const deepLink = maintenanceDeepLinkTargetRef.current;
-    if (!deepLink) return;
-    const targetAsset =
-      resolvedAssets.find((asset) => String(asset.id) === deepLink.assetDbId) ||
-      resolvedAssets.find(
-        (asset) => String(asset.assetId || "").trim().toUpperCase() === deepLink.assetCode
-      ) ||
-      null;
-    if (!targetAsset) return;
-    const targetCampus = String(targetAsset.campus || "").trim() || deepLink.campus;
-    if (targetCampus && campusFilter !== targetCampus) {
-      setCampusFilter(targetCampus);
-      return;
-    }
-    if (targetCampus && maintenanceRecordCampusFilter !== targetCampus) {
-      setMaintenanceRecordCampusFilter(targetCampus);
-      return;
-    }
-    if (maintenanceQuickGeneralTask) {
-      setMaintenanceQuickGeneralTask(false);
-      return;
-    }
-    const targetInFilteredList = maintenanceRecordFilteredAssets.some(
-      (asset) => String(asset.id) === String(targetAsset.id)
-    );
-    if (!targetInFilteredList) return;
-    if (maintenanceRecordForm.assetId !== String(targetAsset.id)) {
-      setMaintenanceRecordForm((form) => ({
-        ...createMaintenanceRecordForm(
-          targetAsset,
-          deepLink.preferredDate || form.date || toYmd(new Date()),
-          form.by || currentOperatorName,
-          deepLink.preferredDate || form.scheduleSourceDate || ""
-        ),
-        by: form.by || currentOperatorName,
-        time: form.time || toHm(new Date()),
-      }));
-      return;
-    }
-    maintenanceDeepLinkTargetRef.current = null;
-    if (typeof window !== "undefined") {
-      const nextUrl = new URL(window.location.href);
-      nextUrl.searchParams.delete("maintenanceAssetId");
-      nextUrl.searchParams.delete("maintenanceDate");
-      nextUrl.searchParams.delete("date");
-      window.history.replaceState({}, "", nextUrl.toString());
-    }
-  }, [
-    campusFilter,
-    currentOperatorName,
-    maintenanceQuickGeneralTask,
-    maintenanceRecordCampusFilter,
-    maintenanceRecordFilteredAssets,
-    maintenanceRecordForm.assetId,
-    resolvedAssets,
-  ]);
-
-  useEffect(() => {
     if (authUser) {
       trySetLocalStorage(AUTH_USER_KEY, JSON.stringify(authUser));
     } else {
@@ -35152,6 +35094,63 @@ export default function App() {
       setMaintenanceRecordLocationFilter("ALL");
     }
   }, [maintenanceRecordLocationFilter, maintenanceRecordLocationOptions]);
+  useEffect(() => {
+    const deepLink = maintenanceDeepLinkTargetRef.current;
+    if (!deepLink) return;
+    const targetAsset =
+      resolvedAssets.find((asset) => String(asset.id) === deepLink.assetDbId) ||
+      resolvedAssets.find(
+        (asset) => String(asset.assetId || "").trim().toUpperCase() === deepLink.assetCode
+      ) ||
+      null;
+    if (!targetAsset) return;
+    const targetCampus = String(targetAsset.campus || "").trim() || deepLink.campus;
+    if (targetCampus && campusFilter !== targetCampus) {
+      setCampusFilter(targetCampus);
+      return;
+    }
+    if (targetCampus && maintenanceRecordCampusFilter !== targetCampus) {
+      setMaintenanceRecordCampusFilter(targetCampus);
+      return;
+    }
+    if (maintenanceQuickGeneralTask) {
+      setMaintenanceQuickGeneralTask(false);
+      return;
+    }
+    const targetInFilteredList = maintenanceRecordFilteredAssets.some(
+      (asset) => String(asset.id) === String(targetAsset.id)
+    );
+    if (!targetInFilteredList) return;
+    if (maintenanceRecordForm.assetId !== String(targetAsset.id)) {
+      setMaintenanceRecordForm((form) => ({
+        ...createMaintenanceRecordForm(
+          targetAsset,
+          deepLink.preferredDate || form.date || toYmd(new Date()),
+          form.by || currentOperatorName,
+          deepLink.preferredDate || form.scheduleSourceDate || ""
+        ),
+        by: form.by || currentOperatorName,
+        time: form.time || toHm(new Date()),
+      }));
+      return;
+    }
+    maintenanceDeepLinkTargetRef.current = null;
+    if (typeof window !== "undefined") {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("maintenanceAssetId");
+      nextUrl.searchParams.delete("maintenanceDate");
+      nextUrl.searchParams.delete("date");
+      window.history.replaceState({}, "", nextUrl.toString());
+    }
+  }, [
+    campusFilter,
+    currentOperatorName,
+    maintenanceQuickGeneralTask,
+    maintenanceRecordCampusFilter,
+    maintenanceRecordFilteredAssets,
+    maintenanceRecordForm.assetId,
+    resolvedAssets,
+  ]);
   useEffect(() => {
     const hasSelectedAsset = maintenanceRecordFilteredAssets.some(
       (a) => String(a.id) === maintenanceRecordForm.assetId
